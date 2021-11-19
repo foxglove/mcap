@@ -1,7 +1,3 @@
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/
-
 import { isEqual } from "lodash";
 
 import { MCAP_MAGIC, RecordType } from "./constants";
@@ -147,7 +143,10 @@ export function parseRecord(
         if (!isEqual(existingInfo, record)) {
           throw new Error(`differing channel infos for ${record.id}`);
         }
-        return { record: existingInfo, usedBytes: recordEndOffset - startOffset };
+        return {
+          record: existingInfo,
+          usedBytes: recordEndOffset - startOffset,
+        };
       } else {
         channelInfosById.set(id, record);
         return { record, usedBytes: recordEndOffset - startOffset };
@@ -170,7 +169,12 @@ export function parseRecord(
       offset += 8;
       const data = view.buffer.slice(view.byteOffset + offset, view.byteOffset + recordEndOffset);
 
-      const record: McapRecord = { type: "Message", channelInfo, timestamp, data };
+      const record: McapRecord = {
+        type: "Message",
+        channelInfo,
+        timestamp,
+        data,
+      };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
 

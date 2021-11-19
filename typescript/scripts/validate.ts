@@ -1,21 +1,15 @@
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/
-
+import { parse as parseMessageDefinition, RosMsgDefinition } from "@foxglove/rosmsg";
+import { LazyMessageReader as ROS1LazyMessageReader } from "@foxglove/rosmsg-serialization";
+import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
 import { program } from "commander";
 import fs from "fs";
 import { isEqual } from "lodash";
 import { performance } from "perf_hooks";
 import decompressLZ4 from "wasm-lz4";
 
-import { parse as parseMessageDefinition, RosMsgDefinition } from "@foxglove/rosmsg";
-import { LazyMessageReader as ROS1LazyMessageReader } from "@foxglove/rosmsg-serialization";
-import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
-
 import { McapReader, McapRecord, ChannelInfo } from "../src";
 
 function log(...data: unknown[]) {
-  // eslint-disable-next-line no-restricted-syntax
   console.log(...data);
 }
 
@@ -74,7 +68,11 @@ async function validate(
         } else {
           throw new Error(`unsupported encoding ${record.encoding}`);
         }
-        channelInfoById.set(record.id, { info: record, messageDeserializer, parsedDefinitions });
+        channelInfoById.set(record.id, {
+          info: record,
+          messageDeserializer,
+          parsedDefinitions,
+        });
         break;
       }
 
