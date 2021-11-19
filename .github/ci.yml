@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["*"]
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 16.x
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+      - run: yarn workspace @foxglove/mcap lint:ci
+      - run: yarn workspace @foxglove/mcap test
