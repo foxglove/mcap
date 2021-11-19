@@ -1,7 +1,3 @@
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/
-
 import { crc32 } from "@foxglove/crc";
 
 import McapReader from "./McapReader";
@@ -209,7 +205,11 @@ describe("McapReader", () => {
         formatVersion,
       ]),
     );
-    expect(reader.nextRecord()).toEqual({ type: "Footer", indexPos: 0n, indexCrc: 0 });
+    expect(reader.nextRecord()).toEqual({
+      type: "Footer",
+      indexPos: 0n,
+      indexCrc: 0,
+    });
     expect(reader.done()).toBe(true);
   });
 
@@ -460,7 +460,11 @@ describe("McapReader", () => {
       schema: "stuff",
       data: new Uint8Array([1, 2, 3]).buffer,
     });
-    expect(reader.nextRecord()).toEqual({ type: "Footer", indexPos: 0n, indexCrc: 0 });
+    expect(reader.nextRecord()).toEqual({
+      type: "Footer",
+      indexPos: 0n,
+      indexCrc: 0,
+    });
     expect(reader.done()).toBe(true);
   });
 
@@ -504,7 +508,11 @@ describe("McapReader", () => {
       schema: "stuff",
       data: new Uint8Array([1, 2, 3]).buffer,
     });
-    expect(reader.nextRecord()).toEqual({ type: "Footer", indexPos: 0n, indexCrc: 0 });
+    expect(reader.nextRecord()).toEqual({
+      type: "Footer",
+      indexPos: 0n,
+      indexCrc: 0,
+    });
     expect(reader.done()).toBe(true);
   });
 
