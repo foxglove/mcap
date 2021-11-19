@@ -25,7 +25,6 @@
     "validate": "ts-node --files --project tsconfig.cjs.json scripts/validate.ts"
   },
   "devDependencies": {
-    "@foxglove/crc": "0.0.3",
     "@foxglove/eslint-plugin": "0.17.1",
     "@foxglove/rosmsg": "3.0.0",
     "@foxglove/rosmsg-serialization": "1.2.3",
@@ -53,7 +52,7 @@
     "wasm-lz4": "2.0.0"
   },
   "dependencies": {
-    "eventemitter3": "4.0.7",
+    "@foxglove/crc": "^0.0.3",
     "tslib": "^2"
   }
 }
