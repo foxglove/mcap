@@ -4,7 +4,7 @@ Working specification: https://docs.google.com/document/d/1NaC2v0Qlx43661XkrlVnc
 
 ## Developer quickstart
 
-### Typescript
+### TypeScript
 
 Run lint/tests:
 
