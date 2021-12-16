@@ -7,6 +7,7 @@
 import { Bag } from "@foxglove/rosbag";
 import { FileReader } from "@foxglove/rosbag/node";
 import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
+import Bzip2 from "@foxglove/wasm-bz2";
 import { program } from "commander";
 import protobufjs from "protobufjs";
 import descriptor from "protobufjs/ext/descriptor";
@@ -35,11 +36,23 @@ const BUILTIN_TYPE_MAP = new Map([
   ["duration", "ros.Duration"],
   ["uint8", "int32"],
   ["uint16", "int32"],
-  ["int8", "sint32"],
-  ["int16", "sint32"],
+  ["int8", "int32"],
+  ["int16", "int32"],
   ["float32", "float"],
   ["float64", "double"],
 ]);
+
+const scalarTypes = [
+  "float",
+  "double",
+  "uint8",
+  "int8",
+  "uint8",
+  "int16",
+  "uint16",
+  "int32",
+  "uint32",
+];
 
 function rosTypenameToProtoPath(typeName: string): string {
   return `ros.${typeName.replace("/", ".")}`;
@@ -71,8 +84,9 @@ function rosMsgDefinitionToProto(typeName: string, msgDef: string): protobufjs.R
         continue;
       }
       const lineComments: string[] = [];
+      let isPacked = false;
       const qualifiers = [];
-      if (field.type === "uint8" && field.isArray === true) {
+      if (field.isArray === true && (field.type === "uint8" || field.type === "int8")) {
         qualifiers.push("bytes");
       } else {
         if (field.isArray === true) {
@@ -90,13 +104,16 @@ function rosMsgDefinitionToProto(typeName: string, msgDef: string): protobufjs.R
           qualifiers.push(field.type);
         }
       }
+      if (scalarTypes.includes(field.type)) {
+        isPacked = true;
+      }
       if (field.arrayLength != undefined) {
         lineComments.push(`length ${field.arrayLength}`);
       }
       fields.push(
-        `${qualifiers.join(" ")} ${field.name} = ${fieldNumber++};${
-          lineComments.length > 0 ? " // " + lineComments.join(", ") : ""
-        }`,
+        `${qualifiers.join(" ")} ${field.name} = ${fieldNumber++} ${
+          isPacked ? "[packed = true]" : ""
+        };${lineComments.length > 0 ? " // " + lineComments.join(", ") : ""}`,
       );
     }
 
@@ -124,8 +141,26 @@ type TopicDetail = {
   MsgRoot: protobufjs.Type;
 };
 
+// Protobuf fromObject doesn't like being given Float64Arrays
+// We need to recursively convert all Float64Arrays into regular arrays
+function convertTypedArrays(msg: Record<string, unknown>): Record<string, unknown> {
+  for (const [key, value] of Object.entries(msg)) {
+    if (value == undefined) {
+      continue;
+    }
+    if (value instanceof Float64Array) {
+      msg[key] = Array.from(value);
+    } else if (typeof value === "object") {
+      msg[key] = convertTypedArrays(value as Record<string, unknown>);
+    }
+  }
+
+  return msg;
+}
+
 async function convert(filePath: string) {
   await decompressLZ4.isLoaded;
+  const bzip2 = await Bzip2.init();
 
   const bag = new Bag(new FileReader(filePath));
   await bag.open();
@@ -183,6 +218,7 @@ async function convert(filePath: string) {
     {
       decompress: {
         lz4: (buffer: Uint8Array, size: number) => decompressLZ4(buffer, size),
+        bz2: (buffer: Uint8Array, size: number) => bzip2.decompress(buffer, size, { small: false }),
       },
     },
     (result) => {
@@ -192,19 +228,26 @@ async function convert(filePath: string) {
       }
 
       const { channelInfo, MsgRoot } = detail;
+      try {
+        const rosMsg = convertTypedArrays(result.message as Record<string, unknown>);
+        const protoMsg = MsgRoot.fromObject(rosMsg);
+        const protoMsgBuffer = MsgRoot.encode(protoMsg).finish();
 
-      const protoMsg = MsgRoot.fromObject(result.message as Record<string, unknown>);
-      const protoMsgBuffer = MsgRoot.encode(protoMsg).finish();
+        const timestamp =
+          BigInt(result.timestamp.sec) * 1000000000n + BigInt(result.timestamp.nsec);
+        const msg: Message = {
+          type: "Message",
+          channelInfo,
+          timestamp,
+          data: protoMsgBuffer,
+        };
 
-      const timestamp = BigInt(result.timestamp.sec) * 1000000000n + BigInt(result.timestamp.nsec);
-      const msg: Message = {
-        type: "Message",
-        channelInfo,
-        timestamp,
-        data: protoMsgBuffer,
-      };
-
-      mcapMessages.push(msg);
+        mcapMessages.push(msg);
+      } catch (err) {
+        console.error(err);
+        console.log(result.message);
+        throw err;
+      }
     },
   );
 
