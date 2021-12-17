@@ -394,6 +394,11 @@
   resolved "https://registry.yarnpkg.com/@foxglove/tsconfig/-/tsconfig-1.1.0.tgz#48c37fffd6f349c3ee08a60fc62ccf636f3b59a6"
   integrity sha512-qZU4MtXVgPhDBFazSEx7yDEuEg8cPHXFQVhBaUABZkCBdcnEE9sxlgEt0gSikF4fRtY6COGIJPVRflnPJXjJKA==
 
+"@foxglove/wasm-bz2@^0.0.4":
+  version "0.0.4"
+  resolved "https://registry.yarnpkg.com/@foxglove/wasm-bz2/-/wasm-bz2-0.0.4.tgz#f34bb8ee434995e133a06e070d0e8067d2f0ea0f"
+  integrity sha512-/JLg0pVqpL2UwwObsxcIyFHD5imn4sthE7FHIThHCfI9+93ezCfKmTNo1gdn9xxWNobfcpDcv/3jJrr/RhbaNg==
+
 "@humanwhocodes/config-array@^0.5.0":
   version "0.5.0"
   resolved "https://registry.yarnpkg.com/@humanwhocodes/config-array/-/config-array-0.5.0.tgz#1407967d4c6eecd7388f83acf1eaf4d0c6e58ef9"
