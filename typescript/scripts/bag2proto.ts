@@ -42,18 +42,6 @@ const BUILTIN_TYPE_MAP = new Map([
   ["float64", "double"],
 ]);
 
-const scalarTypes = [
-  "float",
-  "double",
-  "uint8",
-  "int8",
-  "uint8",
-  "int16",
-  "uint16",
-  "int32",
-  "uint32",
-];
-
 function rosTypenameToProtoPath(typeName: string): string {
   return `ros.${typeName.replace("/", ".")}`;
 }
@@ -84,7 +72,6 @@ function rosMsgDefinitionToProto(typeName: string, msgDef: string): protobufjs.R
         continue;
       }
       const lineComments: string[] = [];
-      let isPacked = false;
       const qualifiers = [];
       if (field.isArray === true && (field.type === "uint8" || field.type === "int8")) {
         qualifiers.push("bytes");
@@ -104,16 +91,13 @@ function rosMsgDefinitionToProto(typeName: string, msgDef: string): protobufjs.R
           qualifiers.push(field.type);
         }
       }
-      if (scalarTypes.includes(field.type)) {
-        isPacked = true;
-      }
       if (field.arrayLength != undefined) {
         lineComments.push(`length ${field.arrayLength}`);
       }
       fields.push(
-        `${qualifiers.join(" ")} ${field.name} = ${fieldNumber++} ${
-          isPacked ? "[packed = true]" : ""
-        };${lineComments.length > 0 ? " // " + lineComments.join(", ") : ""}`,
+        `${qualifiers.join(" ")} ${field.name} = ${fieldNumber++};${
+          lineComments.length > 0 ? " // " + lineComments.join(", ") : ""
+        }`,
       );
     }
 
