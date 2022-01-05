@@ -27,7 +27,7 @@ type McapReaderOptions = {
 };
 
 /**
- * A streaming reader for Message Capture files.
+ * A streaming reader for MCAP files.
  *
  * Usage example:
  * ```
