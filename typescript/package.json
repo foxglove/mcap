@@ -2,7 +2,7 @@
   "name": "@foxglove/mcap",
   "version": "0.1.0",
   "description": "Message Capture file support in TypeScript",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/foxglove/mcap.git"
