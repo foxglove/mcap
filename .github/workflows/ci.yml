@@ -17,5 +17,6 @@ jobs:
           cache: yarn
 
       - run: yarn install --frozen-lockfile
+      - run: yarn run prettier docs/* --check
       - run: yarn workspace @foxglove/mcap lint:ci
       - run: yarn workspace @foxglove/mcap test

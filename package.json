@@ -4,5 +4,8 @@
     "packages": [
       "typescript"
     ]
+  },
+  "devDependencies": {
+    "prettier": "^2.5.1"
   }
 }
