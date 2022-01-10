@@ -193,7 +193,7 @@ and message records will be outside chunks, as there will be no chunks.
 
 A Chunk is a collection of compressed channel info and message records.
 
-| Bytes | Name              | Type   | Description                                                                                            |
+| Bytes | Name              | Type   | Description                                                                                            | Example                                                                                                                      |
 | ----- | ----------------- | ------ | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
 | 8     | uncompressed_size | uint64 | Uncompressed size of of the "records" section.                                                         |
 | 4     | uncompressed_crc  | uint32 | CRC32 checksum of decompressed "records" section. May be set to zero if CRC validation isn't required. |
