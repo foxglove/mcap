@@ -122,15 +122,16 @@ all cases integers are serialized little endian:
 - **String**: a uint32-prefixed UTF8 string
 - **KeyValues<T1, T2>**: A uint32 length-prefixed association of key-value pairs,
   serialized as
-- **Bytes**: refers to an array of bytes, without a length prefix. If a length
-  prefix is required a designation like "uint32 length-prefixed bytes" will be
-  used.
 
 ```
 <length><T1 (key)><T2 (value)><T1 (key)><T2 (value)>
 ```
 
 An empty KeyValues consists of a zero-value length prefix.
+
+- **Bytes**: refers to an array of bytes, without a length prefix. If a length
+  prefix is required a designation like "uint32 length-prefixed bytes" will be
+  used.
 
 #### Header (op=0x01)
 
