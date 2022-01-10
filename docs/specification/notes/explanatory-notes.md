@@ -3,6 +3,8 @@
 The following notes may be useful for users of the MCAP format, including
 implementers of readers and writers.
 
+[rfc5652 padding]: https://datatracker.ietf.org/doc/html/rfc5652#section-6.3
+
 ## Feature Explanations
 
 The format is intended to support efficient, indexed reading of messages and
@@ -125,3 +127,22 @@ details we may consider including, like references to per-channel encryption or
 compression if these features get uptake. We could also enable more interaction
 with the channel info records, such as quickly obtaining schemas from the file
 for particular topics.
+
+### Per-channel Encryption
+
+Per-channel encryption may be useful in situations where different topics are
+subject to different access controls. To encrypt a channel, the writer selects
+an encryption algorithm and generates an encryption key for that algorithm. The
+key is associated with a key ID, which is a free-form string.
+
+The key ID and algorithm are recorded in the channel info record for the
+channel to be encrypted. To read the channel, the reader must be initialized
+with a mapping from key ID to decryption key, with a key ID matching the one in
+the file.
+
+When the reader encounters a channel info record that indicates encryption will
+be required, it may decrypt messages on that channel prior to parsing them if
+it has a matching key ID, or skip over those messages if it does not.
+
+The currently-supported encryption algorithm is GCM mode AES with a 128 bit
+key.

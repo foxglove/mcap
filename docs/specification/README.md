@@ -7,6 +7,7 @@
 [diagram unchunked]: ./diagrams/unchunked.png
 [diagram chunked]: ./diagrams/chunked.png
 [feature explanations]: ./notes/explanatory-notes.md#feature-explanations
+[rfc5652 padding]: https://datatracker.ietf.org/doc/html/rfc5652#section-6.3
 
 > Status: DRAFT
 
@@ -164,9 +165,16 @@ IDs must uniquely identify a channel across the entire file.
 | 4 + N | topic_name  | String                       | Topic                                                                                                                                                                      | /diagnostics                                                                                                               |
 | 4 + N | encoding    | String                       | Message Encoding                                                                                                                                                           | cdr, cbor, ros1, protobuf, etc.                                                                                            |
 | 4 + N | schema_name | String                       | Schema Name                                                                                                                                                                | std_msgs/Header                                                                                                            |
+| 4 + N | encryption  | String                       | Encryption algorithm                                                                                                                                                       | aes-128-gcm                                                                                                                |
+| 4 + N | key_id      | String                       | Key ID                                                                                                                                                                     | "1", "2", "68354227", etc                                                                                                  |
 | 4+N   | schema      | uint32 length-prefixed bytes | Schema                                                                                                                                                                     |                                                                                                                            |
 | N     | user_data   | KeyValues<string, string>    | Metadata about this channel                                                                                                                                                | used to encode protocol-specific details like callerid, latching, QoS profiles... Refer to [supported profiles][profiles]. |
 | 4     | crc         | uint32                       | CRC checksum of preceding fields in the record. If advantageous for performance, zero may be recorded. Readers will need to skip checksum validation to parse such a file. |                                                                                                                            |
+
+Encryption and key ID are for per-channel encryption. To use these, the writer
+must associate an encryption key with a key ID, and the reader must be
+initialized with a decryption key and matching key ID. The currently-supported
+encryption algorithm is GCM mode AES with a 128 bit key.
 
 #### Message (op=0x04)
 
