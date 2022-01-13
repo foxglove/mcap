@@ -1,6 +1,6 @@
 import { crc32 } from "@foxglove/crc";
 
-import StreamBuffer from "./StreamBuffer";
+import StreamBuffer from "../StreamBuffer";
 import { MCAP_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
 import { ChannelInfo, McapRecord } from "./types";
@@ -44,7 +44,7 @@ type McapReaderOptions = {
  * });
  * ```
  */
-export default class McapReader {
+export default class McapPre0Reader {
   private buffer = new StreamBuffer(MCAP_MAGIC.length * 2);
   private decompressHandlers;
   private includeChunks;
