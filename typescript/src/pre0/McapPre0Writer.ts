@@ -1,6 +1,6 @@
 import { open, FileHandle } from "fs/promises";
 
-import Writer from "../Writer";
+import Writer from "../common/Writer";
 import { MCAP_MAGIC, RecordType } from "./constants";
 import { ChannelInfo, McapRecord, Message } from "./types";
 

@@ -1,6 +1,6 @@
 import { crc32 } from "@foxglove/crc";
 
-import McapPre0Reader from "./McapPre0Reader";
+import McapReader from "./McapPre0Reader";
 import { MCAP_MAGIC, RecordType } from "./constants";
 
 function uint32LE(n: number): Uint8Array {
@@ -39,7 +39,7 @@ const formatVersion = 1;
 describe("McapReader", () => {
   it("rejects invalid header", () => {
     for (let i = 0; i < MCAP_MAGIC.length - 1; i++) {
-      const reader = new McapPre0Reader();
+      const reader = new McapReader();
       const badMagic = MCAP_MAGIC.slice();
       badMagic[i] = 0x00;
       reader.append(new Uint8Array([...badMagic, formatVersion]));
@@ -48,7 +48,7 @@ describe("McapReader", () => {
   });
 
   it("rejects invalid footer magic", () => {
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -66,7 +66,7 @@ describe("McapReader", () => {
   });
 
   it("parses empty file", () => {
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -88,7 +88,7 @@ describe("McapReader", () => {
   });
 
   it("accepts empty chunks", () => {
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -116,7 +116,7 @@ describe("McapReader", () => {
   });
 
   it("waits patiently to parse one byte at a time, and rejects new data after read completed", () => {
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     const data = new Uint8Array([
       ...MCAP_MAGIC,
       formatVersion,
@@ -143,13 +143,13 @@ describe("McapReader", () => {
   });
 
   it("rejects unknown format version in header", () => {
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     reader.append(new Uint8Array([...MCAP_MAGIC, 2]));
     expect(() => reader.nextRecord()).toThrow("Unsupported format version 2");
   });
 
   it("rejects unknown format version in footer", () => {
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -166,7 +166,7 @@ describe("McapReader", () => {
   });
 
   it("rejects extraneous data at end of file", () => {
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -184,7 +184,7 @@ describe("McapReader", () => {
   });
 
   it("parses file with empty chunk", () => {
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -214,7 +214,7 @@ describe("McapReader", () => {
   });
 
   it("rejects chunk with incomplete record", () => {
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -240,7 +240,7 @@ describe("McapReader", () => {
   });
 
   it("rejects message at top level with no prior channel info", () => {
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -269,7 +269,7 @@ describe("McapReader", () => {
       ...uint32LE(42), // channel id
       ...uint64LE(0n), // timestamp
     ]);
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -308,7 +308,7 @@ describe("McapReader", () => {
       ...uint32LE(42), // channel id
       ...uint64LE(1n), // timestamp
     ]);
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -371,7 +371,7 @@ describe("McapReader", () => {
       ...uint32LE(42), // channel id
       ...uint64LE(1n), // timestamp
     ]);
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -428,7 +428,7 @@ describe("McapReader", () => {
   });
 
   it("parses channel info at top level", () => {
-    const reader = new McapPre0Reader();
+    const reader = new McapReader();
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -478,7 +478,7 @@ describe("McapReader", () => {
       ...[1, 2, 3], // channel data
     ]);
     const decompressHandlers = { xyz: () => channelInfo };
-    const reader = new McapPre0Reader(compressed ? { decompressHandlers } : undefined);
+    const reader = new McapReader(compressed ? { decompressHandlers } : undefined);
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -584,7 +584,7 @@ describe("McapReader", () => {
           ...string("stuff"), // schema
           ...[1, 2, 3], // channel data
         ]);
-        const reader = new McapPre0Reader();
+        const reader = new McapReader();
         reader.append(
           new Uint8Array([
             ...MCAP_MAGIC,

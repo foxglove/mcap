@@ -13,7 +13,8 @@ import protobufjs from "protobufjs";
 import descriptor from "protobufjs/ext/descriptor";
 import decompressLZ4 from "wasm-lz4";
 
-import { McapWriter, ChannelInfo, Message } from "../src";
+import McapWriter from "../src/pre0/McapPre0Writer";
+import { ChannelInfo, Message } from "../src/pre0/types";
 
 const builtinSrc = `
 syntax = "proto3";
