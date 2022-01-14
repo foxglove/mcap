@@ -1,8 +1,8 @@
-import { ChannelInfo, McapStreamReader, McapRecord } from "../v0/types";
+import { McapStreamReader, TypedMcapRecord } from "../v0/types";
 import McapPre0Reader from "./McapPre0Reader";
 import { McapRecord as McapPre0Record } from "./types";
 
-function translateRecord(record: McapPre0Record): McapRecord {
+function translateRecord(record: McapPre0Record): TypedMcapRecord {
   switch (record.type) {
     case "ChannelInfo":
       return {
@@ -17,11 +17,11 @@ function translateRecord(record: McapPre0Record): McapRecord {
     case "Message":
       return {
         type: "Message",
-        channelInfo: translateRecord(record.channelInfo) as ChannelInfo,
+        channelId: record.channelInfo.id,
         sequence: 0,
         publishTime: record.timestamp,
         recordTime: record.timestamp,
-        messageData: record.data,
+        messageData: new Uint8Array(record.data),
       };
     case "Chunk":
       return {
@@ -29,7 +29,7 @@ function translateRecord(record: McapPre0Record): McapRecord {
         uncompressedSize: record.decompressedSize,
         uncompressedCrc: record.decompressedCrc,
         compression: record.compression,
-        records: record.data,
+        records: new Uint8Array(record.data),
       };
     case "Footer":
       return {
@@ -62,7 +62,7 @@ export default class McapPre0To0StreamReader implements McapStreamReader {
     this.reader.append(data);
   }
 
-  nextRecord(): McapRecord | undefined {
+  nextRecord(): TypedMcapRecord | undefined {
     const record = this.reader.nextRecord();
     if (!record) {
       return undefined;

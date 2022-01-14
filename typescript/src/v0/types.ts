@@ -1,5 +1,4 @@
 export type McapMagic = {
-  type: "Magic";
   specVersion: "0";
 };
 export type Header = {
@@ -68,27 +67,37 @@ export type Statistics = {
   channelMessageCounts: Map<number, bigint>;
 };
 export type UnknownRecord = {
-  type: "Unknown";
   opcode: number;
   data: Uint8Array;
 };
 
-export type McapRecord =
-  | Header
-  | Footer
-  | ChannelInfo
-  | Message
-  | Chunk
-  | MessageIndex
-  | ChunkIndex
-  | Attachment
-  | AttachmentIndex
-  | Statistics
-  | UnknownRecord;
+export type McapRecords = {
+  Header: Header;
+  Footer: Footer;
+  ChannelInfo: ChannelInfo;
+  Message: Message;
+  Chunk: Chunk;
+  MessageIndex: MessageIndex;
+  ChunkIndex: ChunkIndex;
+  Attachment: Attachment;
+  AttachmentIndex: AttachmentIndex;
+  Statistics: Statistics;
+  Unknown: UnknownRecord;
+};
+
+export type TypedMcapRecords = {
+  [R in keyof McapRecords]: {
+    [K in keyof McapRecords[R] | "type"]: K extends keyof McapRecords[R] ? McapRecords[R][K] : R;
+  };
+};
+
+type Values<T> = T[keyof T];
+export type TypedMcapRecord = Values<TypedMcapRecords>;
+export type McapRecord = Values<McapRecords>;
 
 export interface McapStreamReader {
   done(): boolean;
   bytesRemaining(): number;
   append(data: Uint8Array): void;
-  nextRecord(): McapRecord | undefined;
+  nextRecord(): TypedMcapRecord | undefined;
 }
