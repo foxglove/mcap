@@ -2,8 +2,8 @@ import { crc32 } from "@foxglove/crc";
 import { isEqual } from "lodash";
 
 import Reader from "../common/Reader";
-import { MCAP0_MAGIC, Opcode } from "./constants";
-import { McapMagic, McapRecord, ChannelInfo } from "./types";
+import { isKnownOpcode, MCAP0_MAGIC, Opcode } from "./constants";
+import { McapMagic, McapRecord, ChannelInfo, UnknownRecord } from "./types";
 
 /**
  * Parse a MCAP magic string at `startOffset` in `view`.
@@ -56,12 +56,7 @@ export function parseRecord({
   }
   const headerReader = new Reader(view, startOffset);
 
-  const opcodeByte = headerReader.uint8();
-  if (opcodeByte < Opcode.MIN || opcodeByte > Opcode.MAX) {
-    //FIXME: allow Unknown record type? allow only in v1?
-    throw new Error(`Invalid record type ${opcodeByte}`);
-  }
-  const opcode = opcodeByte as Opcode;
+  const opcode = headerReader.uint8();
 
   const recordLength = headerReader.uint64();
   if (recordLength > Number.MAX_SAFE_INTEGER) {
@@ -70,6 +65,19 @@ export function parseRecord({
   const recordEndOffset = headerReader.offset + Number(recordLength);
   if (recordEndOffset > view.byteLength) {
     return { usedBytes: 0 };
+  }
+
+  if (!isKnownOpcode(opcode)) {
+    const record: UnknownRecord = {
+      type: "Unknown",
+      opcode,
+      data: new Uint8Array(
+        view.buffer,
+        view.byteOffset + headerReader.offset,
+        Number(recordLength),
+      ),
+    };
+    return { record, usedBytes: recordEndOffset - startOffset };
   }
 
   const recordView = new DataView(

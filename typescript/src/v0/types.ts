@@ -77,6 +77,11 @@ export type Statistics = {
   chunkCount: number;
   channelMessageCounts: Map<number, bigint>;
 };
+export type UnknownRecord = {
+  type: "Unknown";
+  opcode: number;
+  data: Uint8Array;
+};
 
 export type McapRecord =
   | Header
@@ -88,7 +93,8 @@ export type McapRecord =
   | ChunkIndex
   | Attachment
   | AttachmentIndex
-  | Statistics;
+  | Statistics
+  | UnknownRecord;
 
 export interface McapStreamReader {
   done(): boolean;

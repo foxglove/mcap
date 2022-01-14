@@ -15,3 +15,7 @@ export enum Opcode {
   STATISTICS = 0x0a,
   MAX = 0x0a,
 }
+
+export function isKnownOpcode(opcode: number): opcode is Opcode {
+  return opcode >= Opcode.MIN && opcode <= Opcode.MAX;
+}

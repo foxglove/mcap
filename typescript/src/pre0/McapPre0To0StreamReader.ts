@@ -18,7 +18,7 @@ function translateRecord(record: McapPre0Record): McapRecord {
       return {
         type: "Message",
         channelInfo: translateRecord(record.channelInfo) as ChannelInfo,
-        sequence: 0, //FIXME?
+        sequence: 0,
         publishTime: record.timestamp,
         recordTime: record.timestamp,
         messageData: record.data,

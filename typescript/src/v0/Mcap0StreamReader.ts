@@ -185,11 +185,13 @@ export default class Mcap0StreamReader implements McapStreamReader {
               case "Attachment":
               case "AttachmentIndex":
               case "Statistics":
-                //FIXME: ignore? only ignore in v1?
                 throw new Error(`${chunkResult.record.type} record not allowed inside a chunk`);
               case "ChannelInfo":
               case "Message":
                 yield chunkResult.record;
+                break;
+              case "Unknown":
+                break;
             }
           }
           if (chunkOffset !== buffer.byteLength) {
