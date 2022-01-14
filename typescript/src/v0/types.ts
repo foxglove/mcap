@@ -3,18 +3,15 @@ export type McapMagic = {
   specVersion: "0";
 };
 export type Header = {
-  type: "Header";
   profile: string;
   library: string;
   metadata: [key: string, value: string][];
 };
 export type Footer = {
-  type: "Footer";
   indexOffset: bigint;
   indexCrc: number;
 };
 export type ChannelInfo = {
-  type: "ChannelInfo";
   channelId: number;
   topicName: string;
   encoding: string;
@@ -23,28 +20,24 @@ export type ChannelInfo = {
   userData: [key: string, value: string][];
 };
 export type Message = {
-  type: "Message";
-  channelInfo: ChannelInfo;
+  channelId: number;
   sequence: number;
   publishTime: bigint;
   recordTime: bigint;
-  messageData: ArrayBuffer;
+  messageData: Uint8Array;
 };
 export type Chunk = {
-  type: "Chunk";
   uncompressedSize: bigint;
   uncompressedCrc: number;
   compression: string;
-  records: ArrayBuffer;
+  records: Uint8Array;
 };
 export type MessageIndex = {
-  type: "MessageIndex";
   channelId: number;
   count: number;
   records: [recordTime: bigint, offset: bigint][];
 };
 export type ChunkIndex = {
-  type: "ChunkIndex";
   startTime: bigint;
   endTime: bigint;
   chunkOffset: bigint;
@@ -55,14 +48,12 @@ export type ChunkIndex = {
   uncompressedSize: bigint;
 };
 export type Attachment = {
-  type: "Attachment";
   name: string;
   recordTime: bigint;
   contentType: string;
-  data: ArrayBuffer;
+  data: Uint8Array;
 };
 export type AttachmentIndex = {
-  type: "AttachmentIndex";
   recordTime: bigint;
   attachmentSize: bigint;
   name: string;
@@ -70,7 +61,6 @@ export type AttachmentIndex = {
   offset: bigint;
 };
 export type Statistics = {
-  type: "Statistics";
   messageCount: bigint;
   channelCount: number;
   attachmentCount: number;

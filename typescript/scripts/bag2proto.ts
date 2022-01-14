@@ -9,12 +9,12 @@ import { FileReader } from "@foxglove/rosbag/node";
 import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import Bzip2 from "@foxglove/wasm-bz2";
 import { program } from "commander";
+import { open, FileHandle } from "fs/promises";
 import protobufjs from "protobufjs";
 import descriptor from "protobufjs/ext/descriptor";
 import decompressLZ4 from "wasm-lz4";
 
-import McapWriter from "../src/pre0/McapPre0Writer";
-import { ChannelInfo, Message } from "../src/pre0/types";
+import { Mcap0UnindexedWriter, IWritable, ChannelInfo, Message } from "../src/v0";
 
 const builtinSrc = `
 syntax = "proto3";
@@ -122,7 +122,7 @@ function rosMsgDefinitionToProto(typeName: string, msgDef: string): protobufjs.R
 }
 
 type TopicDetail = {
-  channelInfo: ChannelInfo;
+  channelId: number;
   MsgRoot: protobufjs.Type;
 };
 
@@ -143,6 +143,18 @@ function convertTypedArrays(msg: Record<string, unknown>): Record<string, unknow
   return msg;
 }
 
+// IWrtiable interface for FileHandle
+class FileHandleWritable implements IWritable {
+  private handle: FileHandle;
+  constructor(handle: FileHandle) {
+    this.handle = handle;
+  }
+
+  async write(buffer: Uint8Array): Promise<void> {
+    await this.handle.write(buffer);
+  }
+}
+
 async function convert(filePath: string) {
   await decompressLZ4.isLoaded;
   const bzip2 = await Bzip2.init();
@@ -153,8 +165,25 @@ async function convert(filePath: string) {
   const mcapFilePath = filePath.replace(".bag", ".mcap");
   console.debug(`Writing to ${mcapFilePath}`);
 
-  const mcapFile = new McapWriter();
-  await mcapFile.open(mcapFilePath);
+  const fileHandle = await open(mcapFilePath, "w");
+  const fileHandleWritable = new FileHandleWritable(fileHandle);
+
+  const mcapFile = new Mcap0UnindexedWriter(fileHandleWritable);
+
+  await mcapFile.start({
+    profile: "",
+    library: "mcap typescript bag2proto",
+    metadata: [["original path", mcapFilePath]],
+  });
+
+  const now = BigInt(Date.now()) * 1000000n;
+  await mcapFile.addAttachment({
+    name: "Sample Attachment",
+    contentType: "text/plain",
+    recordTime: now,
+    // Array.from("Hello World!", (c) => c.charCodeAt(0))
+    data: new Uint8Array([72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33]),
+  });
 
   const topicToDetailMap = new Map<string, TopicDetail>();
 
@@ -177,10 +206,8 @@ async function convert(filePath: string) {
 
     const descriptorMsgEncoded = descriptor.FileDescriptorSet.encode(descriptorMsg).finish();
 
-    const channelInfo: ChannelInfo = {
-      type: "ChannelInfo",
-      id: topicToDetailMap.size,
-      topic: connection.topic,
+    const channelInfo: Omit<ChannelInfo, "channelId"> = {
+      topicName: connection.topic,
       encoding: "protobuf",
       schemaName,
       schema: protobufjs.util.base64.encode(
@@ -188,14 +215,15 @@ async function convert(filePath: string) {
         0,
         descriptorMsgEncoded.byteLength,
       ),
-      data: new ArrayBuffer(0),
+      userData: [],
     };
 
+    const channelId = await mcapFile.registerChannel(channelInfo);
+
     topicToDetailMap.set(connection.topic, {
-      channelInfo,
+      channelId,
       MsgRoot,
     });
-    await mcapFile.write(channelInfo);
   }
 
   const mcapMessages: Array<Message> = [];
@@ -212,7 +240,7 @@ async function convert(filePath: string) {
         return;
       }
 
-      const { channelInfo, MsgRoot } = detail;
+      const { channelId, MsgRoot } = detail;
       try {
         const rosMsg = convertTypedArrays(result.message as Record<string, unknown>);
         const protoMsg = MsgRoot.fromObject(rosMsg);
@@ -221,10 +249,11 @@ async function convert(filePath: string) {
         const timestamp =
           BigInt(result.timestamp.sec) * 1000000000n + BigInt(result.timestamp.nsec);
         const msg: Message = {
-          type: "Message",
-          channelInfo,
-          timestamp,
-          data: protoMsgBuffer,
+          channelId,
+          sequence: 0,
+          publishTime: timestamp,
+          recordTime: timestamp,
+          messageData: protoMsgBuffer,
         };
 
         mcapMessages.push(msg);
@@ -237,7 +266,7 @@ async function convert(filePath: string) {
   );
 
   for (const msg of mcapMessages) {
-    await mcapFile.write(msg);
+    await mcapFile.addMessage(msg);
   }
 
   await mcapFile.end();
