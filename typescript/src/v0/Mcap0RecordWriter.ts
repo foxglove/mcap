@@ -1,5 +1,5 @@
-import Writer from "../common/Writer";
-import { IWritable } from "./IWritable";
+import { BufferedWriter } from "../common/BufferedWriter";
+import { IWritable } from "../common/IWritable";
 import { MCAP0_MAGIC, Opcode } from "./constants";
 import { ChannelInfo, Header, Footer, Message, Attachment } from "./types";
 
@@ -13,9 +13,13 @@ import { ChannelInfo, Header, Footer, Message, Attachment } from "./types";
  * the higher level writer interfaces.
  */
 export class Mcap0RecordWriter {
+  private recordPrefixWriter: BufferedWriter;
+  private bufferedWriter: BufferedWriter;
   private writable: IWritable;
 
   constructor(writable: IWritable) {
+    this.recordPrefixWriter = new BufferedWriter();
+    this.bufferedWriter = new BufferedWriter();
     this.writable = writable;
   }
 
@@ -24,67 +28,60 @@ export class Mcap0RecordWriter {
   }
 
   async writeHeader(header: Header): Promise<void> {
-    const serializer = new Writer();
-    serializer.uint8(Opcode.HEADER);
-    serializer.string(header.profile);
-    serializer.string(header.library);
+    this.bufferedWriter.uint8(Opcode.HEADER);
+    this.bufferedWriter.string(header.profile);
+    this.bufferedWriter.string(header.library);
+
+    await this.bufferedWriter.flush(this.writable);
     //fixme - header metadata
-    await this.writable.write(serializer.toUint8());
   }
 
   async writeFooter(footer: Footer): Promise<void> {
-    const serializer = new Writer();
-    serializer.uint8(Opcode.FOOTER);
-    serializer.uint64(footer.indexOffset);
-    serializer.uint32(footer.indexCrc);
-    await this.writable.write(serializer.toUint8());
+    this.bufferedWriter.uint8(Opcode.FOOTER);
+    this.bufferedWriter.uint64(footer.indexOffset);
+    this.bufferedWriter.uint32(footer.indexCrc);
+
+    await this.bufferedWriter.flush(this.writable);
   }
 
   async writeChannelInfo(info: ChannelInfo): Promise<void> {
-    const serializer = new Writer();
-    serializer.uint32(info.channelId);
-    serializer.string(info.topicName);
-    serializer.string(info.encoding);
-    serializer.string(info.schemaName);
-    serializer.string(info.schema);
+    this.bufferedWriter.uint32(info.channelId);
+    this.bufferedWriter.string(info.topicName);
+    this.bufferedWriter.string(info.encoding);
+    this.bufferedWriter.string(info.schemaName);
+    this.bufferedWriter.string(info.schema);
 
-    const preamble = new Writer();
-    preamble.uint8(Opcode.CHANNEL_INFO);
-    preamble.uint32(serializer.size());
+    this.recordPrefixWriter.uint8(Opcode.CHANNEL_INFO);
+    this.recordPrefixWriter.uint32(this.bufferedWriter.size());
 
-    await this.writable.write(preamble.toUint8());
-    await this.writable.write(serializer.toUint8());
+    await this.recordPrefixWriter.flush(this.writable);
+    await this.bufferedWriter.flush(this.writable);
   }
 
   async writeMessage(message: Message): Promise<void> {
-    const serializer = new Writer();
-    serializer.uint16(message.channelId);
-    serializer.uint32(message.sequence);
-    serializer.uint64(message.publishTime);
-    serializer.uint64(message.recordTime);
+    this.bufferedWriter.uint16(message.channelId);
+    this.bufferedWriter.uint32(message.sequence);
+    this.bufferedWriter.uint64(message.publishTime);
+    this.bufferedWriter.uint64(message.recordTime);
 
-    const preamble = new Writer();
-    preamble.uint8(Opcode.MESSAGE);
-    preamble.uint32(serializer.size() + message.messageData.byteLength);
+    this.recordPrefixWriter.uint8(Opcode.MESSAGE);
+    this.recordPrefixWriter.uint32(this.bufferedWriter.size() + message.messageData.byteLength);
 
-    await this.writable.write(preamble.toUint8());
-    await this.writable.write(serializer.toUint8());
+    await this.recordPrefixWriter.flush(this.writable);
+    await this.bufferedWriter.flush(this.writable);
     await this.writable.write(message.messageData);
   }
 
   async writeAttachment(attachment: Attachment): Promise<void> {
-    const serializer = new Writer();
+    this.bufferedWriter.string(attachment.name);
+    this.bufferedWriter.uint64(attachment.recordTime);
+    this.bufferedWriter.string(attachment.contentType);
 
-    serializer.string(attachment.name);
-    serializer.uint64(attachment.recordTime);
-    serializer.string(attachment.contentType);
+    this.recordPrefixWriter.uint8(Opcode.CHANNEL_INFO);
+    this.recordPrefixWriter.uint32(this.bufferedWriter.size() + attachment.data.byteLength);
 
-    const preamble = new Writer();
-    preamble.uint8(Opcode.CHANNEL_INFO);
-    preamble.uint32(serializer.size() + attachment.data.byteLength);
-
-    await this.writable.write(preamble.toUint8());
-    await this.writable.write(serializer.toUint8());
+    await this.recordPrefixWriter.flush(this.writable);
+    await this.bufferedWriter.flush(this.writable);
     await this.writable.write(attachment.data);
   }
 }

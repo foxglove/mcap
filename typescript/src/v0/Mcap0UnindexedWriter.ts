@@ -1,4 +1,4 @@
-import { IWritable } from "./IWritable";
+import { IWritable } from "../common/IWritable";
 import { Mcap0RecordWriter } from "./Mcap0RecordWriter";
 import { ChannelInfo, Message, Header, Attachment } from "./types";
 

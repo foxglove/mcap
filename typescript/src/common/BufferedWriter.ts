@@ -1,14 +1,15 @@
+import { IWritable } from "../v0";
+
 const LITTLE_ENDIAN = true;
 
-export default class Writer {
-  buffer: ArrayBuffer;
+export class BufferedWriter {
+  private buffer = new Uint8Array(4096);
   private view: DataView;
-  private offset = 0;
   private textEncoder = new TextEncoder();
+  private offset = 0;
 
-  constructor(scratchBuffer?: ArrayBuffer) {
-    this.buffer = scratchBuffer ?? new ArrayBuffer(4096);
-    this.view = new DataView(this.buffer);
+  constructor() {
+    this.view = new DataView(this.buffer.buffer);
   }
 
   size(): number {
@@ -17,12 +18,14 @@ export default class Writer {
 
   ensureCapacity(capacity: number): void {
     if (this.offset + capacity >= this.buffer.byteLength) {
-      const newBuffer = new ArrayBuffer(this.buffer.byteLength * 2);
-      new Uint8Array(newBuffer).set(new Uint8Array(this.buffer));
+      const newBuffer = new Uint8Array(this.buffer.byteLength * 2);
+      newBuffer.set(this.buffer);
+
       this.buffer = newBuffer;
-      this.view = new DataView(newBuffer);
+      this.view = new DataView(this.buffer.buffer);
     }
   }
+
   int8(value: number): void {
     this.ensureCapacity(1);
     this.view.setInt8(this.offset, value);
@@ -71,7 +74,12 @@ export default class Writer {
     this.offset += stringBytes.length;
   }
 
-  toUint8(): Uint8Array {
-    return new Uint8Array(this.buffer, 0, this.size());
+  async flush(writable: IWritable): Promise<void> {
+    if (this.offset === 0) {
+      return;
+    }
+
+    this.offset = 0;
+    await writable.write(new Uint8Array(this.buffer, 0, this.offset));
   }
 }

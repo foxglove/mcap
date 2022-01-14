@@ -7,6 +7,7 @@
 import { Bag } from "@foxglove/rosbag";
 import { FileReader } from "@foxglove/rosbag/node";
 import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
+import { Time } from "@foxglove/rosmsg-serialization";
 import Bzip2 from "@foxglove/wasm-bz2";
 import { program } from "commander";
 import { open, FileHandle } from "fs/promises";
@@ -226,7 +227,7 @@ async function convert(filePath: string) {
     });
   }
 
-  const mcapMessages: Array<Message> = [];
+  const readResults: Array<{ topic: string; message: unknown; timestamp: Time }> = [];
   await bag.readMessages(
     {
       decompress: {
@@ -235,38 +236,37 @@ async function convert(filePath: string) {
       },
     },
     (result) => {
-      const detail = topicToDetailMap.get(result.topic);
-      if (!detail) {
-        return;
-      }
-
-      const { channelId, MsgRoot } = detail;
-      try {
-        const rosMsg = convertTypedArrays(result.message as Record<string, unknown>);
-        const protoMsg = MsgRoot.fromObject(rosMsg);
-        const protoMsgBuffer = MsgRoot.encode(protoMsg).finish();
-
-        const timestamp =
-          BigInt(result.timestamp.sec) * 1000000000n + BigInt(result.timestamp.nsec);
-        const msg: Message = {
-          channelId,
-          sequence: 0,
-          publishTime: timestamp,
-          recordTime: timestamp,
-          messageData: protoMsgBuffer,
-        };
-
-        mcapMessages.push(msg);
-      } catch (err) {
-        console.error(err);
-        console.log(result.message);
-        throw err;
-      }
+      readResults.push(result);
     },
   );
 
-  for (const msg of mcapMessages) {
-    await mcapFile.addMessage(msg);
+  for (const result of readResults) {
+    const detail = topicToDetailMap.get(result.topic);
+    if (!detail) {
+      return;
+    }
+
+    const { channelId, MsgRoot } = detail;
+    try {
+      const rosMsg = convertTypedArrays(result.message as Record<string, unknown>);
+      const protoMsg = MsgRoot.fromObject(rosMsg);
+      const protoMsgBuffer = MsgRoot.encode(protoMsg).finish();
+
+      const timestamp = BigInt(result.timestamp.sec) * 1000000000n + BigInt(result.timestamp.nsec);
+      const msg: Message = {
+        channelId,
+        sequence: 0,
+        publishTime: timestamp,
+        recordTime: timestamp,
+        messageData: protoMsgBuffer,
+      };
+
+      await mcapFile.addMessage(msg);
+    } catch (err) {
+      console.error(err);
+      console.log(result.message);
+      throw err;
+    }
   }
 
   await mcapFile.end();
