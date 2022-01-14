@@ -122,7 +122,7 @@ Identifies a stream of messages on a particular topic and includes information a
 
 | Bytes | Name | Type | Description | Example |
 | --- | --- | --- | --- | --- |
-| 2 | channel_id | uint16 | Channel ID 1 | 1 |
+| 2 | id | uint16 | Channel ID 1 | 1 |
 | 4 + N | topic_name | String | Topic | /diagnostics |
 | 4 + N | encoding | String | Message Encoding | cdr, cbor, ros1, protobuf, etc. |
 | 4 + N | schema_name | String | Schema Name | std_msgs/Header |
@@ -174,7 +174,7 @@ The Chunk Index records form a coarse index of timestamps to chunk offsets, alon
 | --- | --- | --- | --- |
 | 8 | start_time | Timestamp | First message record timestamp in the chunk. |
 | 8 | end_time | Timestamp | Last message record timestamp in the chunk. |
-| 8 | chunk_offset | uint64 | Offset to the chunk record from the start of the file. |
+| 8 | offset | uint64 | Offset to the chunk record from the start of the file. |
 | N | message_index_offsets | KeyValues<uint16, uint64> | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. Duplicate keys are not allowed. |
 | 8 | message_index_length | uint64 | Total length in bytes of the message index records after the chunk, including lengths and opcodes. |
 | 4 + N | compression | String | The compression used on this chunk. Refer to [supported compression formats][compression formats]. |
@@ -201,7 +201,7 @@ The attachment index is an index to named attachments within the file. One recor
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 8 | record_time | Timestamp | Timestamp at which the attachment was recorded. |
-| 8 | attachment_size | uint64 | Size of the attachment. |
+| 8 | size | uint64 | Size of the attachment. |
 | 4 + N | name | String | Name of the attachment. |
 | 4 + N | content_type | String | MIME type of the attachment. |
 | 8 | offset | uint64 | Byte offset to the attachment, from the start of the file. |
