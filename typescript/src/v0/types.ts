@@ -86,9 +86,7 @@ export type McapRecords = {
 };
 
 export type TypedMcapRecords = {
-  [R in keyof McapRecords]: {
-    [K in keyof McapRecords[R] | "type"]: K extends keyof McapRecords[R] ? McapRecords[R][K] : R;
-  };
+  [R in keyof McapRecords]: McapRecords[R] & { type: R };
 };
 
 type Values<T> = T[keyof T];
