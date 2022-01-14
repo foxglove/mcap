@@ -14,7 +14,7 @@ import detectVersion, {
 } from "../src/common/detectVersion";
 import McapPre0To0StreamReader from "../src/pre0/McapPre0To0StreamReader";
 import Mcap0StreamReader from "../src/v0/Mcap0StreamReader";
-import { McapRecord, ChannelInfo, McapStreamReader } from "../src/v0/types";
+import { ChannelInfo, McapStreamReader, TypedMcapRecord } from "../src/v0/types";
 
 function log(...data: unknown[]) {
   console.log(...data);
@@ -37,7 +37,7 @@ async function validate(
 ) {
   await decompressLZ4.isLoaded;
 
-  const recordCounts = new Map<McapRecord["type"], number>();
+  const recordCounts = new Map<TypedMcapRecord["type"], number>();
   const channelInfoById = new Map<
     number,
     {
@@ -47,7 +47,7 @@ async function validate(
     }
   >();
 
-  function processRecord(record: McapRecord) {
+  function processRecord(record: TypedMcapRecord) {
     recordCounts.set(record.type, (recordCounts.get(record.type) ?? 0) + 1);
 
     switch (record.type) {
@@ -84,26 +84,22 @@ async function validate(
       }
 
       case "Message": {
-        const channelInfo = channelInfoById.get(record.channelInfo.channelId);
+        const channelInfo = channelInfoById.get(record.channelId);
         if (!channelInfo) {
-          throw new Error(
-            `message for channel ${record.channelInfo.channelId} with no prior channel info`,
-          );
+          throw new Error(`message for channel ${record.channelId} with no prior channel info`);
         }
         if (deserialize) {
           let message: unknown;
           if (channelInfo.messageDeserializer instanceof ROS1LazyMessageReader) {
-            const size = channelInfo.messageDeserializer.size(new DataView(record.messageData));
+            const size = channelInfo.messageDeserializer.size(record.messageData);
             if (size !== record.messageData.byteLength) {
               throw new Error(
                 `Message size ${size} should match buffer length ${record.messageData.byteLength}`,
               );
             }
-            message = channelInfo.messageDeserializer
-              .readMessage(new DataView(record.messageData))
-              .toJSON();
+            message = channelInfo.messageDeserializer.readMessage(record.messageData).toJSON();
           } else {
-            message = channelInfo.messageDeserializer.readMessage(new DataView(record.messageData));
+            message = channelInfo.messageDeserializer.readMessage(record.messageData);
           }
           if (dump) {
             log(message);

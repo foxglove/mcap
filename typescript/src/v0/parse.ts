@@ -1,9 +1,10 @@
 import { crc32 } from "@foxglove/crc";
 import { isEqual } from "lodash";
 
+import { TypedMcapRecords } from ".";
 import Reader from "../common/Reader";
 import { isKnownOpcode, MCAP0_MAGIC, Opcode } from "./constants";
-import { McapMagic, McapRecord, ChannelInfo, UnknownRecord } from "./types";
+import { McapMagic, TypedMcapRecord } from "./types";
 
 /**
  * Parse a MCAP magic string at `startOffset` in `view`.
@@ -25,7 +26,7 @@ export function parseMagic(
     );
   }
   return {
-    magic: { type: "Magic", specVersion: "0" },
+    magic: { specVersion: "0" },
     usedBytes: MCAP0_MAGIC.length,
   };
 }
@@ -47,10 +48,10 @@ export function parseRecord({
 }: {
   view: DataView;
   startOffset: number;
-  channelInfosById: Map<number, ChannelInfo>;
+  channelInfosById: Map<number, TypedMcapRecords["ChannelInfo"]>;
   channelInfosSeenInThisChunk: Set<number>;
   validateCrcs: boolean;
-}): { record: McapRecord; usedBytes: number } | { record?: undefined; usedBytes: 0 } {
+}): { record: TypedMcapRecord; usedBytes: number } | { record?: undefined; usedBytes: 0 } {
   if (startOffset + 5 >= view.byteLength) {
     return { usedBytes: 0 };
   }
@@ -68,7 +69,7 @@ export function parseRecord({
   }
 
   if (!isKnownOpcode(opcode)) {
-    const record: UnknownRecord = {
+    const record: TypedMcapRecord = {
       type: "Unknown",
       opcode,
       data: new Uint8Array(
@@ -95,14 +96,14 @@ export function parseRecord({
         (r) => r.string(),
         (r) => r.string(),
       );
-      const record: McapRecord = { type: "Header", profile, library, metadata };
+      const record: TypedMcapRecord = { type: "Header", profile, library, metadata };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
 
     case Opcode.FOOTER: {
       const indexOffset = reader.uint64();
       const indexCrc = reader.uint32();
-      const record: McapRecord = { type: "Footer", indexOffset, indexCrc };
+      const record: TypedMcapRecord = { type: "Footer", indexOffset, indexCrc };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
 
@@ -127,7 +128,7 @@ export function parseRecord({
         }
       }
 
-      const record: McapRecord = {
+      const record: TypedMcapRecord = {
         type: "ChannelInfo",
         channelId,
         topicName,
@@ -166,13 +167,15 @@ export function parseRecord({
       const sequence = reader.uint32();
       const publishTime = reader.uint64();
       const recordTime = reader.uint64();
-      const messageData = recordView.buffer.slice(
-        recordView.byteOffset + reader.offset,
-        recordView.byteOffset + recordView.byteLength,
+      const messageData = new Uint8Array(
+        recordView.buffer.slice(
+          recordView.byteOffset + reader.offset,
+          recordView.byteOffset + recordView.byteLength,
+        ),
       );
-      const record: McapRecord = {
+      const record: TypedMcapRecord = {
         type: "Message",
-        channelInfo,
+        channelId,
         sequence,
         publishTime,
         recordTime,
@@ -185,11 +188,13 @@ export function parseRecord({
       const uncompressedSize = reader.uint64();
       const uncompressedCrc = reader.uint32();
       const compression = reader.string();
-      const records = recordView.buffer.slice(
-        recordView.byteOffset + reader.offset,
-        recordView.byteOffset + recordView.byteLength,
+      const records = new Uint8Array(
+        recordView.buffer.slice(
+          recordView.byteOffset + reader.offset,
+          recordView.byteOffset + recordView.byteLength,
+        ),
       );
-      const record: McapRecord = {
+      const record: TypedMcapRecord = {
         type: "Chunk",
         compression,
         uncompressedSize,
@@ -217,7 +222,7 @@ export function parseRecord({
           );
         }
       }
-      const record: McapRecord = {
+      const record: TypedMcapRecord = {
         type: "MessageIndex",
         channelId,
         count,
@@ -247,7 +252,7 @@ export function parseRecord({
           );
         }
       }
-      const record: McapRecord = {
+      const record: TypedMcapRecord = {
         type: "ChunkIndex",
         startTime,
         endTime,
@@ -268,9 +273,11 @@ export function parseRecord({
       if (BigInt(recordView.byteOffset + reader.offset) + dataLen > Number.MAX_SAFE_INTEGER) {
         throw new Error(`Attachment too large: ${dataLen}`);
       }
-      const data = recordView.buffer.slice(
-        recordView.byteOffset + reader.offset,
-        recordView.byteOffset + reader.offset + Number(dataLen),
+      const data = new Uint8Array(
+        recordView.buffer.slice(
+          recordView.byteOffset + reader.offset,
+          recordView.byteOffset + reader.offset + Number(dataLen),
+        ),
       );
       reader.offset += Number(dataLen);
       const crcLength = reader.offset;
@@ -286,7 +293,7 @@ export function parseRecord({
         }
       }
 
-      const record: McapRecord = {
+      const record: TypedMcapRecord = {
         type: "Attachment",
         name,
         recordTime,
@@ -302,7 +309,7 @@ export function parseRecord({
       const contentType = reader.string();
       const attachmentOffset = reader.uint64();
 
-      const record: McapRecord = {
+      const record: TypedMcapRecord = {
         type: "AttachmentIndex",
         recordTime,
         attachmentSize,
@@ -322,7 +329,7 @@ export function parseRecord({
         (r) => r.uint64(),
       );
 
-      const record: McapRecord = {
+      const record: TypedMcapRecord = {
         type: "Statistics",
         messageCount,
         channelCount,

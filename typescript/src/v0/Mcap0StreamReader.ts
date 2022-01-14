@@ -1,9 +1,10 @@
 import { crc32 } from "@foxglove/crc";
 
+import { TypedMcapRecords } from ".";
 import StreamBuffer from "../common/StreamBuffer";
 import { MCAP0_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
-import { ChannelInfo, McapStreamReader, McapRecord } from "./types";
+import { McapStreamReader, TypedMcapRecord } from "./types";
 
 type McapReaderOptions = {
   /**
@@ -90,7 +91,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
    * This function may throw any errors encountered during parsing. If an error is thrown, the
    * reader is in an unspecified state and should no longer be used.
    */
-  nextRecord(): McapRecord | undefined {
+  nextRecord(): TypedMcapRecord | undefined {
     if (this.doneReading) {
       return undefined;
     }
@@ -101,8 +102,8 @@ export default class Mcap0StreamReader implements McapStreamReader {
     return result.value;
   }
 
-  private *read(): Generator<McapRecord | undefined, McapRecord | undefined, void> {
-    const channelInfosById = new Map<number, ChannelInfo>();
+  private *read(): Generator<TypedMcapRecord | undefined, TypedMcapRecord | undefined, void> {
+    const channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
     const channelInfosSeenInThisChunk = new Set<number>();
     {
       let magic, usedBytes;
@@ -148,8 +149,8 @@ export default class Mcap0StreamReader implements McapStreamReader {
           if (this.includeChunks) {
             yield record;
           }
-          let buffer = new Uint8Array(record.records);
-          if (record.compression !== "" && record.records.byteLength > 0) {
+          let buffer = record.records;
+          if (record.compression !== "" && buffer.byteLength > 0) {
             const decompress = this.decompressHandlers[record.compression];
             if (!decompress) {
               throw new Error(`Unsupported compression ${record.compression}`);
