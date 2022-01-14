@@ -1,6 +1,6 @@
 import { isEqual } from "lodash";
 
-import { getBigUint64 } from "../getBigUint64";
+import { getBigUint64 } from "../common/getBigUint64";
 import { MCAP_MAGIC, RecordType } from "./constants";
 import { McapMagic, McapRecord, ChannelInfo } from "./types";
 

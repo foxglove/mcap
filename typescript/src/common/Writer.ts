@@ -1,4 +1,4 @@
-export const LITTLE_ENDIAN = true;
+const LITTLE_ENDIAN = true;
 
 export default class Writer {
   buffer: ArrayBuffer;

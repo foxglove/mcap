@@ -8,10 +8,13 @@ import { isEqual } from "lodash";
 import { performance } from "perf_hooks";
 import decompressLZ4 from "wasm-lz4";
 
-import detectVersion, { DETECT_VERSION_BYTES_REQUIRED, McapVersion } from "../src/detectVersion";
-import McapPre0LatestStreamReader from "../src/latest/McapPre0LatestStreamReader";
-import { McapRecord, ChannelInfo, McapLatestStreamReader } from "../src/latest/types";
+import detectVersion, {
+  DETECT_VERSION_BYTES_REQUIRED,
+  McapVersion,
+} from "../src/common/detectVersion";
+import McapPre0To0StreamReader from "../src/pre0/McapPre0To0StreamReader";
 import Mcap0StreamReader from "../src/v0/Mcap0StreamReader";
+import { McapRecord, ChannelInfo, McapStreamReader } from "../src/v0/types";
 
 function log(...data: unknown[]) {
   console.log(...data);
@@ -135,10 +138,10 @@ async function validate(
     await handle.close();
   }
 
-  let reader: McapLatestStreamReader;
+  let reader: McapStreamReader;
   switch (mcapVersion) {
     case "pre0":
-      reader = new McapPre0LatestStreamReader({
+      reader = new McapPre0To0StreamReader({
         includeChunks: true,
         decompressHandlers: {
           lz4: (buffer, decompressedSize) => decompressLZ4(buffer, Number(decompressedSize)),

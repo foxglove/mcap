@@ -1,5 +1,5 @@
-import { MCAP_MAGIC } from "./pre0/constants";
-import { MCAP0_MAGIC } from "./v0/constants";
+import { MCAP_MAGIC } from "../pre0/constants";
+import { MCAP0_MAGIC } from "../v0/constants";
 
 export type McapVersion = "pre0" | "0";
 

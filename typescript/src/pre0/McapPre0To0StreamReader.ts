@@ -1,6 +1,6 @@
-import McapPre0Reader from "../pre0/McapPre0Reader";
-import { McapRecord as McapPre0Record } from "../pre0/types";
-import { ChannelInfo, McapLatestStreamReader, McapRecord } from "./types";
+import { ChannelInfo, McapStreamReader, McapRecord } from "../v0/types";
+import McapPre0Reader from "./McapPre0Reader";
+import { McapRecord as McapPre0Record } from "./types";
 
 function translateRecord(record: McapPre0Record): McapRecord {
   switch (record.type) {
@@ -41,9 +41,9 @@ function translateRecord(record: McapPre0Record): McapRecord {
 }
 
 /**
- * Stream reader which translates pre0 records to the latest record format.
+ * Stream reader which translates pre0 records to the v0 record format.
  */
-export default class McapPre0LatestStreamReader implements McapLatestStreamReader {
+export default class McapPre0To0StreamReader implements McapStreamReader {
   private reader: McapPre0Reader;
 
   constructor(...params: ConstructorParameters<typeof McapPre0Reader>) {

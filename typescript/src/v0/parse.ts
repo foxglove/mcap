@@ -1,7 +1,7 @@
 import { crc32 } from "@foxglove/crc";
 import { isEqual } from "lodash";
 
-import Reader from "../Reader";
+import Reader from "../common/Reader";
 import { MCAP0_MAGIC, Opcode } from "./constants";
 import { McapMagic, McapRecord, ChannelInfo } from "./types";
 

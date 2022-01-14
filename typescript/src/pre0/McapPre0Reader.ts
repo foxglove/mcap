@@ -1,6 +1,6 @@
 import { crc32 } from "@foxglove/crc";
 
-import StreamBuffer from "../StreamBuffer";
+import StreamBuffer from "../common/StreamBuffer";
 import { MCAP_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
 import { ChannelInfo, McapRecord } from "./types";
