@@ -43,9 +43,23 @@ describe("Mcap0RecordWriter", () => {
     });
     expect(memoryWritable.buffer).toEqual(
       new Uint8Array([
-        1, 3, 0, 0, 0, 102, 111, 111, 3, 0, 0, 0, 98, 97, 114, 24, 0, 0, 0, 9, 0, 0, 0, 115, 111,
-        109, 101, 116, 104, 105, 110, 103, 7, 0, 0, 0, 109, 97, 103, 105, 99, 97, 108,
+        1, 42, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 102, 111, 111, 3, 0, 0, 0, 98, 97, 114, 24, 0, 0, 0,
+        9, 0, 0, 0, 115, 111, 109, 101, 116, 104, 105, 110, 103, 7, 0, 0, 0, 109, 97, 103, 105, 99,
+        97, 108,
       ]),
+    );
+  });
+
+  it("writes footer", async () => {
+    const memoryWritable = new MemoryWritable();
+    const writer = new Mcap0RecordWriter(memoryWritable);
+
+    await writer.writeFooter({
+      indexOffset: 0n,
+      indexCrc: 0,
+    });
+    expect(memoryWritable.buffer).toEqual(
+      new Uint8Array([2, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     );
   });
 });

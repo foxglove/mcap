@@ -28,28 +28,33 @@ export class Mcap0RecordWriter {
   }
 
   async writeHeader(header: Header): Promise<void> {
-    this.recordPrefixWriter.uint8(Opcode.HEADER);
-    this.recordPrefixWriter.string(header.profile);
-    this.recordPrefixWriter.string(header.library);
+    this.bufferedWriter.string(header.profile);
+    this.bufferedWriter.string(header.library);
 
+    const keyValueWriter = new BufferedWriter();
     for (const item of header.metadata) {
       const [key, value] = item;
-      this.bufferedWriter.string(key);
-      this.bufferedWriter.string(value);
+      keyValueWriter.string(key);
+      keyValueWriter.string(value);
     }
 
-    this.recordPrefixWriter.uint32(this.bufferedWriter.length);
+    this.bufferedWriter.uint32(keyValueWriter.length);
+
+    this.recordPrefixWriter.uint8(Opcode.HEADER);
+    this.recordPrefixWriter.uint64(BigInt(this.bufferedWriter.length + keyValueWriter.length));
 
     await this.recordPrefixWriter.flush(this.writable);
     await this.bufferedWriter.flush(this.writable);
+    await keyValueWriter.flush(this.writable);
   }
 
   async writeFooter(footer: Footer): Promise<void> {
-    this.bufferedWriter.uint8(Opcode.FOOTER);
-    this.bufferedWriter.uint64(footer.indexOffset);
-    this.bufferedWriter.uint32(footer.indexCrc);
+    this.recordPrefixWriter.uint8(Opcode.FOOTER);
+    this.recordPrefixWriter.uint64(12n); // footer is fixed length
+    this.recordPrefixWriter.uint64(footer.indexOffset);
+    this.recordPrefixWriter.uint32(footer.indexCrc);
 
-    await this.bufferedWriter.flush(this.writable);
+    await this.recordPrefixWriter.flush(this.writable);
   }
 
   async writeChannelInfo(info: ChannelInfo): Promise<void> {
@@ -60,7 +65,7 @@ export class Mcap0RecordWriter {
     this.bufferedWriter.string(info.schema);
 
     this.recordPrefixWriter.uint8(Opcode.CHANNEL_INFO);
-    this.recordPrefixWriter.uint32(this.bufferedWriter.length);
+    this.recordPrefixWriter.uint64(BigInt(this.bufferedWriter.length));
 
     await this.recordPrefixWriter.flush(this.writable);
     await this.bufferedWriter.flush(this.writable);
@@ -73,7 +78,9 @@ export class Mcap0RecordWriter {
     this.bufferedWriter.uint64(message.recordTime);
 
     this.recordPrefixWriter.uint8(Opcode.MESSAGE);
-    this.recordPrefixWriter.uint32(this.bufferedWriter.length + message.messageData.byteLength);
+    this.recordPrefixWriter.uint64(
+      BigInt(this.bufferedWriter.length + message.messageData.byteLength),
+    );
 
     await this.recordPrefixWriter.flush(this.writable);
     await this.bufferedWriter.flush(this.writable);
@@ -86,7 +93,7 @@ export class Mcap0RecordWriter {
     this.bufferedWriter.string(attachment.contentType);
 
     this.recordPrefixWriter.uint8(Opcode.CHANNEL_INFO);
-    this.recordPrefixWriter.uint32(this.bufferedWriter.length + attachment.data.byteLength);
+    this.recordPrefixWriter.uint64(BigInt(this.bufferedWriter.length + attachment.data.byteLength));
 
     await this.recordPrefixWriter.flush(this.writable);
     await this.bufferedWriter.flush(this.writable);
