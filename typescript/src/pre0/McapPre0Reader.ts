@@ -132,8 +132,6 @@ export default class McapPre0Reader {
       switch (record.type) {
         case "ChannelInfo":
         case "Message":
-        case "IndexData":
-        case "ChunkInfo":
           yield record;
           break;
 
@@ -172,8 +170,6 @@ export default class McapPre0Reader {
           ) {
             switch (chunkResult.record.type) {
               case "Chunk":
-              case "IndexData":
-              case "ChunkInfo":
               case "Footer":
                 throw new Error(`${chunkResult.record.type} record not allowed inside a chunk`);
               case "ChannelInfo":
