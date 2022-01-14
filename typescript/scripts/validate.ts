@@ -2,12 +2,16 @@ import { parse as parseMessageDefinition, RosMsgDefinition } from "@foxglove/ros
 import { LazyMessageReader as ROS1LazyMessageReader } from "@foxglove/rosmsg-serialization";
 import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
 import { program } from "commander";
-import fs from "fs";
+import { createReadStream } from "fs";
+import fs from "fs/promises";
 import { isEqual } from "lodash";
 import { performance } from "perf_hooks";
 import decompressLZ4 from "wasm-lz4";
 
-import { McapReader, McapRecord, ChannelInfo } from "../src";
+import detectVersion, { DETECT_VERSION_BYTES_REQUIRED, McapVersion } from "../src/detectVersion";
+import McapPre0LatestStreamReader from "../src/latest/McapPre0LatestStreamReader";
+import { McapRecord, ChannelInfo, McapLatestStreamReader } from "../src/latest/types";
+import Mcap0StreamReader from "../src/v0/Mcap0StreamReader";
 
 function log(...data: unknown[]) {
   console.log(...data);
@@ -48,10 +52,10 @@ async function validate(
         break;
 
       case "ChannelInfo": {
-        const existingInfo = channelInfoById.get(record.id);
+        const existingInfo = channelInfoById.get(record.channelId);
         if (existingInfo) {
           if (!isEqual(existingInfo.info, record)) {
-            throw new Error(`differing channel infos for ${record.id}`);
+            throw new Error(`differing channel infos for ${record.channelId}`);
           }
           break;
         }
@@ -68,7 +72,7 @@ async function validate(
         } else {
           throw new Error(`unsupported encoding ${record.encoding}`);
         }
-        channelInfoById.set(record.id, {
+        channelInfoById.set(record.channelId, {
           info: record,
           messageDeserializer,
           parsedDefinitions,
@@ -77,26 +81,26 @@ async function validate(
       }
 
       case "Message": {
-        const channelInfo = channelInfoById.get(record.channelInfo.id);
+        const channelInfo = channelInfoById.get(record.channelInfo.channelId);
         if (!channelInfo) {
           throw new Error(
-            `message for channel ${record.channelInfo.id} with no prior channel info`,
+            `message for channel ${record.channelInfo.channelId} with no prior channel info`,
           );
         }
         if (deserialize) {
           let message: unknown;
           if (channelInfo.messageDeserializer instanceof ROS1LazyMessageReader) {
-            const size = channelInfo.messageDeserializer.size(new DataView(record.data));
-            if (size !== record.data.byteLength) {
+            const size = channelInfo.messageDeserializer.size(new DataView(record.messageData));
+            if (size !== record.messageData.byteLength) {
               throw new Error(
-                `Message size ${size} should match buffer length ${record.data.byteLength}`,
+                `Message size ${size} should match buffer length ${record.messageData.byteLength}`,
               );
             }
             message = channelInfo.messageDeserializer
-              .readMessage(new DataView(record.data))
+              .readMessage(new DataView(record.messageData))
               .toJSON();
           } else {
-            message = channelInfo.messageDeserializer.readMessage(new DataView(record.data));
+            message = channelInfo.messageDeserializer.readMessage(new DataView(record.messageData));
           }
           if (dump) {
             log(message);
@@ -108,17 +112,56 @@ async function validate(
   }
 
   log("Reading", filePath);
+
+  let mcapVersion: McapVersion | undefined;
+  const handle = await fs.open(filePath, "r");
+  try {
+    const buffer = new Uint8Array(DETECT_VERSION_BYTES_REQUIRED);
+    const readResult = await handle.read({
+      buffer,
+      offset: 0,
+      length: DETECT_VERSION_BYTES_REQUIRED,
+    });
+    mcapVersion = detectVersion(new DataView(buffer.buffer, 0, readResult.bytesRead));
+    if (mcapVersion == undefined) {
+      throw new Error(
+        `Not a valid MCAP file: unable to detect version with file header ${Array.from(buffer)
+          .map((val) => val.toString(16).padStart(2, "0"))
+          .join(" ")}`,
+      );
+    }
+    log("Detected MCAP version:", mcapVersion);
+  } finally {
+    await handle.close();
+  }
+
+  let reader: McapLatestStreamReader;
+  switch (mcapVersion) {
+    case "pre0":
+      reader = new McapPre0LatestStreamReader({
+        includeChunks: true,
+        decompressHandlers: {
+          lz4: (buffer, decompressedSize) => decompressLZ4(buffer, Number(decompressedSize)),
+        },
+      });
+      break;
+
+    case "0":
+      reader = new Mcap0StreamReader({
+        includeChunks: true,
+        decompressHandlers: {
+          lz4: (buffer, decompressedSize) => decompressLZ4(buffer, Number(decompressedSize)),
+        },
+        validateCrcs: true,
+      });
+      break;
+  }
+
   const startTime = performance.now();
   let readBytes = 0n;
-  const reader = new McapReader({
-    includeChunks: true,
-    decompressHandlers: {
-      lz4: (buffer, decompressedSize) => decompressLZ4(buffer, Number(decompressedSize)),
-    },
-  });
 
   await new Promise<void>((resolve, reject) => {
-    const stream = fs.createReadStream(filePath);
+    const stream = createReadStream(filePath);
     stream.on("data", (data) => {
       try {
         if (typeof data === "string") {
