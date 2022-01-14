@@ -5,6 +5,9 @@
       "typescript"
     ]
   },
+  "scripts": {
+    "lint:docs": "prettier docs --check"
+  },
   "devDependencies": {
     "prettier": "^2.5.1"
   }
