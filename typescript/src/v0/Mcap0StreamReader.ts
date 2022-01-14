@@ -131,6 +131,8 @@ export default class Mcap0StreamReader implements McapStreamReader {
         this.buffer.consume(usedBytes);
       }
       switch (record.type) {
+        case "Unknown":
+          break;
         case "Header":
         case "ChannelInfo":
         case "Message":
@@ -177,6 +179,8 @@ export default class Mcap0StreamReader implements McapStreamReader {
             chunkOffset += chunkResult.usedBytes
           ) {
             switch (chunkResult.record.type) {
+              case "Unknown":
+                break;
               case "Header":
               case "Footer":
               case "Chunk":
@@ -189,8 +193,6 @@ export default class Mcap0StreamReader implements McapStreamReader {
               case "ChannelInfo":
               case "Message":
                 yield chunkResult.record;
-                break;
-              case "Unknown":
                 break;
             }
           }
