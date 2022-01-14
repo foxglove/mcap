@@ -201,7 +201,7 @@ The attachment index is an index to named attachments within the file. One recor
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 8 | record_time | Timestamp | Timestamp at which the attachment was recorded. |
-| 8 | size | uint64 | Size of the attachment. |
+| 8 | data_size | uint64 | Size of the attachment data. |
 | 4 + N | name | String | Name of the attachment. |
 | 4 + N | content_type | String | MIME type of the attachment. |
 | 8 | offset | uint64 | Byte offset to the attachment, from the start of the file. |
