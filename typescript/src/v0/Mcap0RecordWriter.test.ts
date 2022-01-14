@@ -62,4 +62,43 @@ describe("Mcap0RecordWriter", () => {
       new Uint8Array([2, 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     );
   });
+
+  it("writes channel info", async () => {
+    const memoryWritable = new MemoryWritable();
+    const writer = new Mcap0RecordWriter(memoryWritable);
+
+    await writer.writeChannelInfo({
+      channelId: 1,
+      topicName: "topic",
+      encoding: "enc",
+      schemaName: "foo",
+      schema: "bar",
+      userData: [],
+    });
+    expect(memoryWritable.buffer).toEqual(
+      new Uint8Array([
+        3, 42, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 5, 0, 0, 0, 116, 111, 112, 105, 99, 3, 0, 0, 0, 101,
+        110, 99, 3, 0, 0, 0, 102, 111, 111, 3, 0, 0, 0, 98, 97, 114, 0, 0, 0, 0, 0, 0, 0, 0,
+      ]),
+    );
+  });
+
+  it("writes messages", async () => {
+    const memoryWritable = new MemoryWritable();
+    const writer = new Mcap0RecordWriter(memoryWritable);
+
+    await writer.writeMessage({
+      channelId: 1,
+      publishTime: 3n,
+      recordTime: 5n,
+      sequence: 7,
+      messageData: new Uint8Array(),
+    });
+    expect(memoryWritable.buffer).toEqual(
+      new Uint8Array([
+        4, 22, 0, 0, 0, 0, 0, 0, 0, 1, 0, 7, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0,
+        0,
+      ]),
+    );
+  });
 });

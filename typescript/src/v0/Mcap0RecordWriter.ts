@@ -64,11 +64,25 @@ export class Mcap0RecordWriter {
     this.bufferedWriter.string(info.schemaName);
     this.bufferedWriter.string(info.schema);
 
+    const keyValueWriter = new BufferedWriter();
+    for (const item of info.userData) {
+      const [key, value] = item;
+      keyValueWriter.string(key);
+      keyValueWriter.string(value);
+    }
+
+    this.bufferedWriter.uint32(keyValueWriter.length);
+
+    // Add crc to keyValueWriter after adding the length of key/values to the bufferWriter
+    // This allows the crc to serialize our with the keyValueWriter
+    keyValueWriter.uint32(0);
+
     this.recordPrefixWriter.uint8(Opcode.CHANNEL_INFO);
-    this.recordPrefixWriter.uint64(BigInt(this.bufferedWriter.length));
+    this.recordPrefixWriter.uint64(BigInt(this.bufferedWriter.length + keyValueWriter.length));
 
     await this.recordPrefixWriter.flush(this.writable);
     await this.bufferedWriter.flush(this.writable);
+    await keyValueWriter.flush(this.writable);
   }
 
   async writeMessage(message: Message): Promise<void> {
