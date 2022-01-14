@@ -28,12 +28,20 @@ export class Mcap0RecordWriter {
   }
 
   async writeHeader(header: Header): Promise<void> {
-    this.bufferedWriter.uint8(Opcode.HEADER);
-    this.bufferedWriter.string(header.profile);
-    this.bufferedWriter.string(header.library);
+    this.recordPrefixWriter.uint8(Opcode.HEADER);
+    this.recordPrefixWriter.string(header.profile);
+    this.recordPrefixWriter.string(header.library);
 
+    for (const item of header.metadata) {
+      const [key, value] = item;
+      this.bufferedWriter.string(key);
+      this.bufferedWriter.string(value);
+    }
+
+    this.recordPrefixWriter.uint32(this.bufferedWriter.length);
+
+    await this.recordPrefixWriter.flush(this.writable);
     await this.bufferedWriter.flush(this.writable);
-    //fixme - header metadata
   }
 
   async writeFooter(footer: Footer): Promise<void> {
@@ -52,7 +60,7 @@ export class Mcap0RecordWriter {
     this.bufferedWriter.string(info.schema);
 
     this.recordPrefixWriter.uint8(Opcode.CHANNEL_INFO);
-    this.recordPrefixWriter.uint32(this.bufferedWriter.size());
+    this.recordPrefixWriter.uint32(this.bufferedWriter.length);
 
     await this.recordPrefixWriter.flush(this.writable);
     await this.bufferedWriter.flush(this.writable);
@@ -65,7 +73,7 @@ export class Mcap0RecordWriter {
     this.bufferedWriter.uint64(message.recordTime);
 
     this.recordPrefixWriter.uint8(Opcode.MESSAGE);
-    this.recordPrefixWriter.uint32(this.bufferedWriter.size() + message.messageData.byteLength);
+    this.recordPrefixWriter.uint32(this.bufferedWriter.length + message.messageData.byteLength);
 
     await this.recordPrefixWriter.flush(this.writable);
     await this.bufferedWriter.flush(this.writable);
@@ -78,7 +86,7 @@ export class Mcap0RecordWriter {
     this.bufferedWriter.string(attachment.contentType);
 
     this.recordPrefixWriter.uint8(Opcode.CHANNEL_INFO);
-    this.recordPrefixWriter.uint32(this.bufferedWriter.size() + attachment.data.byteLength);
+    this.recordPrefixWriter.uint32(this.bufferedWriter.length + attachment.data.byteLength);
 
     await this.recordPrefixWriter.flush(this.writable);
     await this.bufferedWriter.flush(this.writable);

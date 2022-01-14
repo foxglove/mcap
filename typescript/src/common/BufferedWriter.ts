@@ -12,7 +12,7 @@ export class BufferedWriter {
     this.view = new DataView(this.buffer.buffer);
   }
 
-  size(): number {
+  get length(): number {
     return this.offset;
   }
 
@@ -67,10 +67,10 @@ export class BufferedWriter {
     this.offset += 8;
   }
   string(value: string): void {
-    this.uint32(value.length);
     const stringBytes = this.textEncoder.encode(value);
-    this.ensureCapacity(stringBytes.byteLength);
-    new Uint8Array(this.buffer, this.offset, stringBytes.byteLength).set(stringBytes);
+    this.ensureCapacity(stringBytes.byteLength + 4);
+    this.uint32(value.length);
+    this.buffer.set(stringBytes, this.offset);
     this.offset += stringBytes.length;
   }
 
@@ -79,7 +79,10 @@ export class BufferedWriter {
       return;
     }
 
-    this.offset = 0;
-    await writable.write(new Uint8Array(this.buffer, 0, this.offset));
+    try {
+      await writable.write(this.buffer.slice(0, this.offset));
+    } finally {
+      this.offset = 0;
+    }
   }
 }
