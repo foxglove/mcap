@@ -177,15 +177,6 @@ async function convert(filePath: string) {
     metadata: [["original path", mcapFilePath]],
   });
 
-  const now = BigInt(Date.now()) * 1000000n;
-  await mcapFile.addAttachment({
-    name: "Sample Attachment",
-    contentType: "text/plain",
-    recordTime: now,
-    // Array.from("Hello World!", (c) => c.charCodeAt(0))
-    data: new Uint8Array([72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33]),
-  });
-
   const topicToDetailMap = new Map<string, TopicDetail>();
 
   for (const [, connection] of bag.connections) {

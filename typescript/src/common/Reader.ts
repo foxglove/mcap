@@ -55,9 +55,7 @@ export default class Reader {
     const endOffset = this.offset + length;
     try {
       while (this.offset < endOffset) {
-        for (let i = 0; i < length; i++) {
-          result.push([readKey(this), readValue(this)]);
-        }
+        result.push([readKey(this), readValue(this)]);
       }
     } catch (err) {
       throw new Error(`Error reading key-value pairs: ${(err as Error).message}`);
@@ -81,17 +79,15 @@ export default class Reader {
     const endOffset = this.offset + length;
     try {
       while (this.offset < endOffset) {
-        for (let i = 0; i < length; i++) {
-          const key = readKey(this);
-          const value = readValue(this);
-          const existingValue = result.get(key);
-          if (existingValue != undefined) {
-            throw new Error(
-              `Duplicate key ${String(key)} (${String(existingValue)} vs ${String(value)})`,
-            );
-          }
-          result.set(key, value);
+        const key = readKey(this);
+        const value = readValue(this);
+        const existingValue = result.get(key);
+        if (existingValue != undefined) {
+          throw new Error(
+            `Duplicate key ${String(key)} (${String(existingValue)} vs ${String(value)})`,
+          );
         }
+        result.set(key, value);
       }
     } catch (err) {
       throw new Error(`Error reading map: ${(err as Error).message}`);

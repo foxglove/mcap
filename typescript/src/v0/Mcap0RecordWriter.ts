@@ -58,7 +58,7 @@ export class Mcap0RecordWriter {
   }
 
   async writeChannelInfo(info: ChannelInfo): Promise<void> {
-    this.bufferedWriter.uint32(info.channelId);
+    this.bufferedWriter.uint16(info.channelId);
     this.bufferedWriter.string(info.topicName);
     this.bufferedWriter.string(info.encoding);
     this.bufferedWriter.string(info.schemaName);

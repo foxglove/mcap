@@ -42,8 +42,8 @@ async function validate(
     number,
     {
       info: ChannelInfo;
-      messageDeserializer: ROS2MessageReader | ROS1LazyMessageReader;
-      parsedDefinitions: RosMsgDefinition[];
+      messageDeserializer?: ROS2MessageReader | ROS1LazyMessageReader;
+      parsedDefinitions?: RosMsgDefinition[];
     }
   >();
 
@@ -72,6 +72,9 @@ async function validate(
             ros2: true,
           });
           messageDeserializer = new ROS2MessageReader(parsedDefinitions);
+        } else if (record.encoding === "protobuf") {
+          messageDeserializer = undefined;
+          parsedDefinitions = undefined;
         } else {
           throw new Error(`unsupported encoding ${record.encoding}`);
         }
@@ -99,6 +102,11 @@ async function validate(
             }
             message = channelInfo.messageDeserializer.readMessage(record.messageData).toJSON();
           } else {
+            if (channelInfo.messageDeserializer == undefined) {
+              throw new Error(
+                `No deserializer available for channel id: ${channelInfo.info.channelId} ${channelInfo.info.encoding}`,
+              );
+            }
             message = channelInfo.messageDeserializer.readMessage(record.messageData);
           }
           if (dump) {

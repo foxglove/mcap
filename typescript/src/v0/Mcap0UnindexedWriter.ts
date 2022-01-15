@@ -22,6 +22,7 @@ export class Mcap0UnindexedWriter {
       indexOffset: 0n,
       indexCrc: 0,
     });
+    await this.recordWriter.writeMagic();
   }
 
   /**
