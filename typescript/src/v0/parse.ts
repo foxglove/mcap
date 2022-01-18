@@ -160,6 +160,7 @@ export function parseRecord({
         throw new Error(`Encountered message on channel ${channelId} without prior channel info`);
       }
       if (!channelInfosSeenInThisChunk.has(channelId)) {
+        //FIXME: not the same requirement in v0
         throw new Error(
           `Encountered message on channel ${channelId} without prior channel info in this chunk; channel info must be repeated within each chunk where the channel is used`,
         );

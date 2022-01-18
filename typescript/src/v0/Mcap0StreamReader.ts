@@ -157,7 +157,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
             }
             buffer = decompress(buffer, record.uncompressedSize);
           }
-          if (this.validateCrcs) {
+          if (this.validateCrcs && record.uncompressedCrc !== 0) {
             const chunkCrc = crc32(buffer);
             if (chunkCrc !== record.uncompressedCrc) {
               throw new Error(

@@ -60,6 +60,7 @@
   },
   "dependencies": {
     "@foxglove/crc": "^0.0.3",
+    "heap-js": "^2.1.6",
     "tslib": "^2"
   }
 }
