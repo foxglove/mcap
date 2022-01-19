@@ -1,6 +1,6 @@
 import { crc32 } from "@foxglove/crc";
 
-import McapReader from "./McapReader";
+import McapReader from "./McapPre0Reader";
 import { MCAP_MAGIC, RecordType } from "./constants";
 
 function uint32LE(n: number): Uint8Array {

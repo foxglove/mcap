@@ -24,16 +24,10 @@ export type Chunk = {
   decompressedCrc: number;
   data: ArrayBuffer;
 };
-export type IndexData = {
-  type: "IndexData";
-};
-export type ChunkInfo = {
-  type: "ChunkInfo";
-};
 export type Footer = {
   type: "Footer";
   indexPos: bigint;
   indexCrc: number;
 };
 
-export type McapRecord = ChannelInfo | Message | Chunk | IndexData | ChunkInfo | Footer;
+export type McapRecord = ChannelInfo | Message | Chunk | Footer;

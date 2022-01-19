@@ -7,13 +7,15 @@
 import { Bag } from "@foxglove/rosbag";
 import { FileReader } from "@foxglove/rosbag/node";
 import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
+import { Time } from "@foxglove/rosmsg-serialization";
 import Bzip2 from "@foxglove/wasm-bz2";
 import { program } from "commander";
+import { open, FileHandle } from "fs/promises";
 import protobufjs from "protobufjs";
 import descriptor from "protobufjs/ext/descriptor";
 import decompressLZ4 from "wasm-lz4";
 
-import { McapWriter, ChannelInfo, Message } from "../src";
+import { Mcap0UnindexedWriter, IWritable, ChannelInfo, Message } from "../src/v0";
 
 const builtinSrc = `
 syntax = "proto3";
@@ -121,7 +123,7 @@ function rosMsgDefinitionToProto(typeName: string, msgDef: string): protobufjs.R
 }
 
 type TopicDetail = {
-  channelInfo: ChannelInfo;
+  channelId: number;
   MsgRoot: protobufjs.Type;
 };
 
@@ -142,6 +144,18 @@ function convertTypedArrays(msg: Record<string, unknown>): Record<string, unknow
   return msg;
 }
 
+// IWrtiable interface for FileHandle
+class FileHandleWritable implements IWritable {
+  private handle: FileHandle;
+  constructor(handle: FileHandle) {
+    this.handle = handle;
+  }
+
+  async write(buffer: Uint8Array): Promise<void> {
+    await this.handle.write(buffer);
+  }
+}
+
 async function convert(filePath: string) {
   await decompressLZ4.isLoaded;
   const bzip2 = await Bzip2.init();
@@ -152,8 +166,16 @@ async function convert(filePath: string) {
   const mcapFilePath = filePath.replace(".bag", ".mcap");
   console.debug(`Writing to ${mcapFilePath}`);
 
-  const mcapFile = new McapWriter();
-  await mcapFile.open(mcapFilePath);
+  const fileHandle = await open(mcapFilePath, "w");
+  const fileHandleWritable = new FileHandleWritable(fileHandle);
+
+  const mcapFile = new Mcap0UnindexedWriter(fileHandleWritable);
+
+  await mcapFile.start({
+    profile: "",
+    library: "mcap typescript bag2proto",
+    metadata: [["original path", mcapFilePath]],
+  });
 
   const topicToDetailMap = new Map<string, TopicDetail>();
 
@@ -176,10 +198,8 @@ async function convert(filePath: string) {
 
     const descriptorMsgEncoded = descriptor.FileDescriptorSet.encode(descriptorMsg).finish();
 
-    const channelInfo: ChannelInfo = {
-      type: "ChannelInfo",
-      id: topicToDetailMap.size,
-      topic: connection.topic,
+    const channelInfo: Omit<ChannelInfo, "channelId"> = {
+      topicName: connection.topic,
       encoding: "protobuf",
       schemaName,
       schema: protobufjs.util.base64.encode(
@@ -187,17 +207,18 @@ async function convert(filePath: string) {
         0,
         descriptorMsgEncoded.byteLength,
       ),
-      data: new ArrayBuffer(0),
+      userData: [],
     };
 
+    const channelId = await mcapFile.registerChannel(channelInfo);
+
     topicToDetailMap.set(connection.topic, {
-      channelInfo,
+      channelId,
       MsgRoot,
     });
-    await mcapFile.write(channelInfo);
   }
 
-  const mcapMessages: Array<Message> = [];
+  const readResults: Array<{ topic: string; message: unknown; timestamp: Time }> = [];
   await bag.readMessages(
     {
       decompress: {
@@ -206,37 +227,37 @@ async function convert(filePath: string) {
       },
     },
     (result) => {
-      const detail = topicToDetailMap.get(result.topic);
-      if (!detail) {
-        return;
-      }
-
-      const { channelInfo, MsgRoot } = detail;
-      try {
-        const rosMsg = convertTypedArrays(result.message as Record<string, unknown>);
-        const protoMsg = MsgRoot.fromObject(rosMsg);
-        const protoMsgBuffer = MsgRoot.encode(protoMsg).finish();
-
-        const timestamp =
-          BigInt(result.timestamp.sec) * 1000000000n + BigInt(result.timestamp.nsec);
-        const msg: Message = {
-          type: "Message",
-          channelInfo,
-          timestamp,
-          data: protoMsgBuffer,
-        };
-
-        mcapMessages.push(msg);
-      } catch (err) {
-        console.error(err);
-        console.log(result.message);
-        throw err;
-      }
+      readResults.push(result);
     },
   );
 
-  for (const msg of mcapMessages) {
-    await mcapFile.write(msg);
+  for (const result of readResults) {
+    const detail = topicToDetailMap.get(result.topic);
+    if (!detail) {
+      return;
+    }
+
+    const { channelId, MsgRoot } = detail;
+    try {
+      const rosMsg = convertTypedArrays(result.message as Record<string, unknown>);
+      const protoMsg = MsgRoot.fromObject(rosMsg);
+      const protoMsgBuffer = MsgRoot.encode(protoMsg).finish();
+
+      const timestamp = BigInt(result.timestamp.sec) * 1000000000n + BigInt(result.timestamp.nsec);
+      const msg: Message = {
+        channelId,
+        sequence: 0,
+        publishTime: timestamp,
+        recordTime: timestamp,
+        messageData: protoMsgBuffer,
+      };
+
+      await mcapFile.addMessage(msg);
+    } catch (err) {
+      console.error(err);
+      console.log(result.message);
+      throw err;
+    }
   }
 
   await mcapFile.end();

@@ -1990,6 +1990,11 @@ has@^1.0.3:
   dependencies:
     function-bind "^1.1.1"
 
+heap-js@^2.1.6:
+  version "2.1.6"
+  resolved "https://registry.yarnpkg.com/heap-js/-/heap-js-2.1.6.tgz#817021e6d252ad6ba9a11ea65988cc4e6207782d"
+  integrity sha512-xQxyJg7VcgveAZtY0eAu7iCn+2VCqLBkQoz7G4RnOIEsmP82J/LnRdr0I2Mi/pThkP5tviL8yFq5utE3yOPYpQ==
+
 heap@^0.2.6:
   version "0.2.6"
   resolved "https://registry.yarnpkg.com/heap/-/heap-0.2.6.tgz#087e1f10b046932fc8594dd9e6d378afc9d1e5ac"
