@@ -15,7 +15,12 @@ import detectVersion, {
 import McapPre0To0StreamReader from "../src/pre0/McapPre0To0StreamReader";
 import Mcap0IndexedReader from "../src/v0/Mcap0IndexedReader";
 import Mcap0StreamReader from "../src/v0/Mcap0StreamReader";
-import { ChannelInfo, McapStreamReader, TypedMcapRecord } from "../src/v0/types";
+import {
+  ChannelInfo,
+  DecompressHandlers,
+  McapStreamReader,
+  TypedMcapRecord,
+} from "../src/v0/types";
 
 function log(...data: unknown[]) {
   console.log(...data);
@@ -78,10 +83,7 @@ async function validate(
   { deserialize, dump, stream }: { deserialize: boolean; dump: boolean; stream: boolean },
 ) {
   await decompressLZ4.isLoaded;
-  const decompressHandlers: {
-    //FIXME: move to common types?
-    [compression: string]: (buffer: Uint8Array, decompressedSize: bigint) => Uint8Array;
-  } = {
+  const decompressHandlers: DecompressHandlers = {
     lz4: (buffer, decompressedSize) => decompressLZ4(buffer, Number(decompressedSize)),
   };
 
@@ -205,6 +207,7 @@ async function validate(
       if (!stream) {
         const handle = await fs.open(filePath, "r");
         try {
+          let buffer = new ArrayBuffer(4096);
           const reader = await Mcap0IndexedReader.Initialize({
             readable: {
               size: async () => BigInt((await handle.stat()).size),
@@ -212,12 +215,12 @@ async function validate(
                 if (offset > Number.MAX_SAFE_INTEGER || length > Number.MAX_SAFE_INTEGER) {
                   throw new Error(`Read too large: offset ${offset}, length ${length}`);
                 }
-                // FIXME: reduce allocations
-                const buffer = new Uint8Array(Number(length));
+                if (length > buffer.byteLength) {
+                  buffer = new ArrayBuffer(Number(length * 2n));
+                }
                 const result = await handle.read({
-                  buffer,
+                  buffer: new DataView(buffer, 0, Number(length)),
                   position: Number(offset),
-                  // length: Number(length),
                 });
                 if (result.bytesRead !== Number(length)) {
                   throw new Error(

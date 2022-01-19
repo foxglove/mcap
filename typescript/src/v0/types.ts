@@ -99,3 +99,7 @@ export interface McapStreamReader {
   append(data: Uint8Array): void;
   nextRecord(): TypedMcapRecord | undefined;
 }
+
+export type DecompressHandlers = {
+  [compression: string]: (buffer: Uint8Array, decompressedSize: bigint) => Uint8Array;
+};

@@ -5,11 +5,7 @@ import { getBigUint64 } from "../common/getBigUint64";
 import { IReadable } from "./IReadable";
 import { MCAP0_MAGIC, Opcode } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
-import { TypedMcapRecords } from "./types";
-
-type DecompressHandlers = {
-  [compression: string]: (buffer: Uint8Array, decompressedSize: bigint) => Uint8Array;
-};
+import { DecompressHandlers, TypedMcapRecords } from "./types";
 
 export default class Mcap0IndexedReader {
   readonly chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
