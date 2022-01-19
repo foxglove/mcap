@@ -306,7 +306,7 @@ export default class Mcap0IndexedReader {
           (channelIds == undefined || channelIds.has(result.record.channelId))
         ) {
           for (let i = 0; i + 1 < result.record.records.length; i++) {
-            if (result.record.records[i]![0] >= result.record.records[i + 1]![0]) {
+            if (result.record.records[i]![0] > result.record.records[i + 1]![0]) {
               throw new Error(
                 `Message index entries for channel ${result.record.channelId} in chunk at offset ${chunkIndex.chunkOffset} must be sorted by recordTime`,
               );
