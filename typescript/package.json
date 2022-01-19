@@ -21,6 +21,7 @@
   ],
   "scripts": {
     "prepack": "tsc -b tsconfig.json tsconfig.cjs.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
     "test": "jest",
@@ -59,6 +60,7 @@
   },
   "dependencies": {
     "@foxglove/crc": "^0.0.3",
+    "heap-js": "^2.1.6",
     "tslib": "^2"
   }
 }
