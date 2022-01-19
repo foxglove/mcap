@@ -52,7 +52,7 @@ export function parseRecord({
   channelInfosSeenInThisChunk: Set<number>;
   validateCrcs: boolean;
 }): { record: TypedMcapRecord; usedBytes: number } | { record?: undefined; usedBytes: 0 } {
-  if (startOffset + 5 >= view.byteLength) {
+  if (startOffset + /*opcode*/ 1 + /*record length*/ 8 >= view.byteLength) {
     return { usedBytes: 0 };
   }
   const headerReader = new Reader(view, startOffset);
