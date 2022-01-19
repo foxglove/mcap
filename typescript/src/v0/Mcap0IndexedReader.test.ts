@@ -381,4 +381,99 @@ describe("Mcap0IndexedReader", () => {
       "Overlapping chunks are not currently supported",
     );
   });
+
+  it.each<{ records: [bigint, bigint][]; shouldThrow: boolean }>([
+    {
+      records: [
+        [0n, 0n],
+        [0n, 0n],
+        [0n, 0n],
+      ],
+      shouldThrow: false,
+    },
+    {
+      records: [
+        [0n, 0n],
+        [1n, 0n],
+        [1n, 0n],
+      ],
+      shouldThrow: false,
+    },
+    {
+      records: [
+        [0n, 0n],
+        [2n, 0n],
+        [1n, 0n],
+      ],
+      shouldThrow: true,
+    },
+  ])(
+    "requires message index offsets to be in order of recordTime",
+    async ({ records, shouldThrow }) => {
+      const data = [
+        ...MCAP0_MAGIC,
+        ...record(Opcode.HEADER, [
+          ...string(""), // profile
+          ...string(""), // library
+          ...keyValues(string, string, []), // metadata
+        ]),
+      ];
+      const chunkOffset = BigInt(data.length);
+      data.push(
+        ...record(Opcode.CHUNK, [
+          ...uint64LE(0n), // decompressed size
+          ...uint32LE(crc32(new Uint8Array([]))), // decompressed crc32
+          ...string(""), // compression
+        ]),
+      );
+      const messageIndexOffset = BigInt(data.length);
+      data.push(
+        ...record(
+          Opcode.MESSAGE_INDEX,
+          crcSuffix([
+            ...uint16LE(42), // channel id
+            ...uint32LE(1), // count
+            ...keyValues(uint64LE, uint64LE, records), // records
+          ]),
+        ),
+      );
+      const messageIndexLength = BigInt(data.length) - messageIndexOffset;
+      const indexOffset = BigInt(data.length);
+      data.push(
+        ...record(
+          Opcode.CHUNK_INDEX,
+          crcSuffix([
+            ...uint64LE(0n), // start time
+            ...uint64LE(100n), // end time
+            ...uint64LE(chunkOffset), // offset
+            ...keyValues(uint16LE, uint64LE, [[42, messageIndexOffset]]), // message index offsets
+            ...uint64LE(messageIndexLength), // message index length
+            ...string(""), // compression
+            ...uint64LE(BigInt(0n)), // compressed size
+            ...uint64LE(BigInt(0n)), // uncompressed size
+          ]),
+        ),
+        ...record(Opcode.FOOTER, [
+          ...uint64LE(indexOffset), // index offset
+          ...uint32LE(crc32(new Uint8Array(0))), // index crc
+        ]),
+        ...MCAP0_MAGIC,
+      );
+      const reader = await Mcap0IndexedReader.Initialize({
+        readable: makeReadable(new Uint8Array(data)),
+      });
+      if (shouldThrow) {
+        // eslint-disable-next-line jest/no-conditional-expect
+        await expect(collect(reader.readMessages())).rejects.toThrow(
+          /Message index entries for channel 42 .+ must be sorted by recordTime/,
+        );
+      } else {
+        // Still fails because messages are not actually present in the chunk
+        // eslint-disable-next-line jest/no-conditional-expect
+        await expect(collect(reader.readMessages())).rejects.toThrow(
+          "Unable to parse record at offset",
+        );
+      }
+    },
+  );
 });
