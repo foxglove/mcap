@@ -14,7 +14,7 @@ using ByteOffset = uint64_t;
 using KeyValueMap = std::unordered_map<std::string, std::string>;
 using ByteArray = std::vector<uint8_t>;
 
-enum struct OpCode: uint8_t {
+enum struct OpCode : uint8_t {
   Header = 0x01,
   Footer = 0x02,
   ChannelInfo = 0x03,
@@ -108,4 +108,4 @@ struct UnknownRecord {
   mcap::ByteArray data;
 };
 
-} // namespace mcap
+}  // namespace mcap
