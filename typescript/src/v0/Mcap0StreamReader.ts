@@ -1,6 +1,6 @@
 import { crc32 } from "@foxglove/crc";
 
-import { TypedMcapRecords } from ".";
+import { DecompressHandlers, TypedMcapRecords } from ".";
 import StreamBuffer from "../common/StreamBuffer";
 import { MCAP0_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
@@ -17,9 +17,7 @@ type McapReaderOptions = {
    * When a compressed chunk is encountered, the entry in `decompressHandlers` corresponding to the
    * compression will be called to decompress the chunk data.
    */
-  decompressHandlers?: {
-    [compression: string]: (buffer: Uint8Array, decompressedSize: bigint) => Uint8Array;
-  };
+  decompressHandlers?: DecompressHandlers;
 
   /**
    * When set to true (the default), chunk CRCs will be validated. Set to false to improve performance.
@@ -104,7 +102,6 @@ export default class Mcap0StreamReader implements McapStreamReader {
 
   private *read(): Generator<TypedMcapRecord | undefined, TypedMcapRecord | undefined, void> {
     const channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
-    const channelInfosSeenInThisChunk = new Set<number>();
     {
       let magic, usedBytes;
       while ((({ magic, usedBytes } = parseMagic(this.buffer.view, 0)), !magic)) {
@@ -122,7 +119,6 @@ export default class Mcap0StreamReader implements McapStreamReader {
             view: this.buffer.view,
             startOffset: 0,
             channelInfosById,
-            channelInfosSeenInThisChunk,
             validateCrcs: this.validateCrcs,
           })),
           !record)
@@ -173,7 +169,6 @@ export default class Mcap0StreamReader implements McapStreamReader {
               view,
               startOffset: chunkOffset,
               channelInfosById,
-              channelInfosSeenInThisChunk,
               validateCrcs: this.validateCrcs,
             })),
               chunkResult.record;

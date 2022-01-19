@@ -2,7 +2,7 @@ import { crc32 } from "@foxglove/crc";
 import { isEqual } from "lodash";
 
 import { TypedMcapRecords } from ".";
-import Reader from "../common/Reader";
+import Reader from "./Reader";
 import { isKnownOpcode, MCAP0_MAGIC, Opcode } from "./constants";
 import { McapMagic, TypedMcapRecord } from "./types";
 
@@ -36,23 +36,19 @@ export function parseMagic(
  *
  * @param channelInfosById Used to track ChannelInfo objects across calls to `parseRecord` and
  * associate them with newly parsed Message records.
- * @param channelInfosSeenInThisChunk Used to validate that messages are preceded by a corresponding
- * ChannelInfo within the same chunk.
  */
 export function parseRecord({
   view,
   startOffset,
   channelInfosById,
-  channelInfosSeenInThisChunk,
   validateCrcs,
 }: {
   view: DataView;
   startOffset: number;
   channelInfosById: Map<number, TypedMcapRecords["ChannelInfo"]>;
-  channelInfosSeenInThisChunk: Set<number>;
   validateCrcs: boolean;
 }): { record: TypedMcapRecord; usedBytes: number } | { record?: undefined; usedBytes: 0 } {
-  if (startOffset + 5 >= view.byteLength) {
+  if (startOffset + /*opcode*/ 1 + /*record length*/ 8 >= view.byteLength) {
     return { usedBytes: 0 };
   }
   const headerReader = new Reader(view, startOffset);
@@ -137,7 +133,6 @@ export function parseRecord({
         schema,
         userData,
       };
-      channelInfosSeenInThisChunk.add(channelId);
       const existingInfo = channelInfosById.get(channelId);
       if (existingInfo) {
         if (!isEqual(existingInfo, record)) {
@@ -158,12 +153,6 @@ export function parseRecord({
       const channelInfo = channelInfosById.get(channelId);
       if (!channelInfo) {
         throw new Error(`Encountered message on channel ${channelId} without prior channel info`);
-      }
-      if (!channelInfosSeenInThisChunk.has(channelId)) {
-        //FIXME: not the same requirement in v0
-        throw new Error(
-          `Encountered message on channel ${channelId} without prior channel info in this chunk; channel info must be repeated within each chunk where the channel is used`,
-        );
       }
       const sequence = reader.uint32();
       const publishTime = reader.uint64();
@@ -202,7 +191,6 @@ export function parseRecord({
         uncompressedCrc,
         records,
       };
-      channelInfosSeenInThisChunk.clear();
       return { record, usedBytes: recordEndOffset - startOffset };
     }
 
