@@ -14,9 +14,10 @@ type DecompressHandlers = {
 export default class Mcap0IndexedReader {
   private readable: IReadable;
   // private size: bigint;//FIXME
-  private chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
+  chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
   private decompressHandlers?: DecompressHandlers;
-  private channelInfosById: ReadonlyMap<number, TypedMcapRecords["ChannelInfo"]>;
+  channelInfosById: ReadonlyMap<number, TypedMcapRecords["ChannelInfo"]>;
+  private readwriteChannelInfosById: Map<number, TypedMcapRecords["ChannelInfo"]>;
 
   private startTime: bigint | undefined;
   private endTime: bigint | undefined;
@@ -32,13 +33,14 @@ export default class Mcap0IndexedReader {
     // size: bigint;
     chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
     decompressHandlers?: DecompressHandlers;
-    channelInfosById: ReadonlyMap<number, TypedMcapRecords["ChannelInfo"]>;
+    channelInfosById: Map<number, TypedMcapRecords["ChannelInfo"]>;
   }) {
     this.readable = readable;
     // this.size = size;
     this.chunkIndexes = chunkIndexes;
     this.decompressHandlers = decompressHandlers;
     this.channelInfosById = channelInfosById;
+    this.readwriteChannelInfosById = channelInfosById;
 
     for (const chunk of chunkIndexes) {
       if (this.startTime == undefined || chunk.startTime < this.startTime) {
@@ -225,7 +227,7 @@ export default class Mcap0IndexedReader {
     }
   }
 
-  async *readChunk({
+  private async *readChunk({
     chunkIndex,
     channelIds,
     startTime,
@@ -278,7 +280,7 @@ export default class Mcap0IndexedReader {
     });
 
     // FIXME: make these optional params?
-    const channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
+    // const channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
     const channelInfosSeenInThisChunk = new Set<number>();
 
     {
@@ -286,7 +288,7 @@ export default class Mcap0IndexedReader {
       const chunkResult = parseRecord({
         view: chunkAndMessageIndexesView,
         startOffset: offset,
-        channelInfosById,
+        channelInfosById: this.readwriteChannelInfosById,
         channelInfosSeenInThisChunk,
         validateCrcs: true,
       });
@@ -303,7 +305,7 @@ export default class Mcap0IndexedReader {
         (result = parseRecord({
           view: chunkAndMessageIndexesView,
           startOffset: offset,
-          channelInfosById,
+          channelInfosById: this.readwriteChannelInfosById,
           channelInfosSeenInThisChunk,
           validateCrcs: true,
         })),
@@ -349,11 +351,11 @@ export default class Mcap0IndexedReader {
     let cursor;
     while ((cursor = messageIndexCursors.peek())) {
       const [recordTime, offset] = cursor.records[cursor.index]!;
-      if (recordTime >= startTime && recordTime < endTime) {
+      if (recordTime >= startTime && recordTime <= endTime) {
         const result = parseRecord({
           view: recordsView,
           startOffset: Number(offset), // FIXME: conversion should not happen here
-          channelInfosById,
+          channelInfosById: this.readwriteChannelInfosById,
           channelInfosSeenInThisChunk,
           validateCrcs: true,
         });
@@ -375,7 +377,7 @@ export default class Mcap0IndexedReader {
         yield result.record;
       }
 
-      if (cursor.index + 1 < cursor.records.length && recordTime < endTime) {
+      if (cursor.index + 1 < cursor.records.length && recordTime <= endTime) {
         cursor.index++;
         messageIndexCursors.replace(cursor);
       } else {

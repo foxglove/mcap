@@ -159,12 +159,6 @@ export function parseRecord({
       if (!channelInfo) {
         throw new Error(`Encountered message on channel ${channelId} without prior channel info`);
       }
-      if (!channelInfosSeenInThisChunk.has(channelId)) {
-        //FIXME: not the same requirement in v0
-        throw new Error(
-          `Encountered message on channel ${channelId} without prior channel info in this chunk; channel info must be repeated within each chunk where the channel is used`,
-        );
-      }
       const sequence = reader.uint32();
       const publishTime = reader.uint64();
       const recordTime = reader.uint64();
