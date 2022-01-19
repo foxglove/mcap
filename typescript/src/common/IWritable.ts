@@ -2,5 +2,5 @@
  * IWritable describes a writer interface.
  */
 export interface IWritable {
-  write(buffer: Uint8Array): Promise<void>;
+  write(buffer: Uint8Array): Promise<unknown>;
 }
