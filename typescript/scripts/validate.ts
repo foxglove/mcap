@@ -236,6 +236,7 @@ async function validate(
           for await (const message of reader.readMessages()) {
             processRecord(message);
           }
+          break;
         } catch (error) {
           log(
             "Unable to read file as indexed; falling back to streaming:",

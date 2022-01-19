@@ -62,7 +62,6 @@ export default class Mcap0IndexedReader {
      */
     decompressHandlers?: DecompressHandlers;
   }): Promise<Mcap0IndexedReader> {
-    debugger;
     const size = await readable.size();
     let footerOffset: bigint;
     let footerView: DataView;
@@ -206,8 +205,9 @@ export default class Mcap0IndexedReader {
       return;
     }
 
-    const relevantChannels = new Set<number>();
+    let relevantChannels: Set<number> | undefined;
     if (topics) {
+      relevantChannels = new Set();
       for (const channelInfo of this.channelInfosById.values()) {
         if (topics.includes(channelInfo.topicName)) {
           relevantChannels.add(channelInfo.channelId);
@@ -216,7 +216,7 @@ export default class Mcap0IndexedReader {
     }
 
     const relevantChunks = this.chunkIndexes.filter(
-      (chunk) => chunk.startTime <= startTime && chunk.endTime >= endTime,
+      (chunk) => chunk.startTime <= endTime && chunk.endTime >= startTime,
     );
 
     // FIXME: merge overlapping chunks
@@ -232,7 +232,7 @@ export default class Mcap0IndexedReader {
     endTime,
   }: {
     chunkIndex: TypedMcapRecords["ChunkIndex"];
-    channelIds: ReadonlySet<number>;
+    channelIds: ReadonlySet<number> | undefined;
     startTime: bigint;
     endTime: bigint;
   }): AsyncGenerator<TypedMcapRecords["Message"], void, void> {
@@ -313,7 +313,10 @@ export default class Mcap0IndexedReader {
         if (result.record.type !== "MessageIndex") {
           throw new Error(`Unexpected record type ${result.record.type} in message index section`);
         }
-        if (channelIds.has(result.record.channelId) && result.record.records.length > 0) {
+        if (
+          result.record.records.length > 0 &&
+          (channelIds == undefined || channelIds.has(result.record.channelId))
+        ) {
           messageIndexCursors.push({ index: 0, records: result.record.records });
         }
       }
