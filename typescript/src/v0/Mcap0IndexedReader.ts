@@ -12,11 +12,11 @@ type DecompressHandlers = {
 };
 
 export default class Mcap0IndexedReader {
+  readonly chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
+  readonly channelInfosById: ReadonlyMap<number, TypedMcapRecords["ChannelInfo"]>;
+
   private readable: IReadable;
-  // private size: bigint;//FIXME
-  chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
   private decompressHandlers?: DecompressHandlers;
-  channelInfosById: ReadonlyMap<number, TypedMcapRecords["ChannelInfo"]>;
   private readwriteChannelInfosById: Map<number, TypedMcapRecords["ChannelInfo"]>;
 
   private startTime: bigint | undefined;
@@ -24,19 +24,16 @@ export default class Mcap0IndexedReader {
 
   private constructor({
     readable,
-    // size,
     chunkIndexes,
     decompressHandlers,
     channelInfosById,
   }: {
     readable: IReadable;
-    // size: bigint;
     chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
     decompressHandlers?: DecompressHandlers;
     channelInfosById: Map<number, TypedMcapRecords["ChannelInfo"]>;
   }) {
     this.readable = readable;
-    // this.size = size;
     this.chunkIndexes = chunkIndexes;
     this.decompressHandlers = decompressHandlers;
     this.channelInfosById = channelInfosById;
@@ -97,13 +94,11 @@ export default class Mcap0IndexedReader {
     void parseMagic(footerView, footerView.byteLength - MCAP0_MAGIC.length);
 
     const channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
-    const channelInfosSeenInThisChunk = new Set<number>();
 
     const footer = parseRecord({
       view: footerView,
       startOffset: 0,
       channelInfosById: new Map(),
-      channelInfosSeenInThisChunk: new Set(),
       validateCrcs: true,
     }).record;
     if (footer?.type !== "Footer") {
@@ -117,7 +112,7 @@ export default class Mcap0IndexedReader {
       throw new Error("File is not indexed");
     }
 
-    //FIXME: avoid holding whole index blob in memory at once?
+    // Future optimization: avoid holding whole index blob in memory at once
     const indexData = await readable.read(footer.indexOffset, footerOffset - footer.indexOffset);
     if (footer.indexCrc !== 0) {
       let indexCrc = crc32Init();
@@ -149,7 +144,6 @@ export default class Mcap0IndexedReader {
         view: indexView,
         startOffset: offset,
         channelInfosById,
-        channelInfosSeenInThisChunk,
         validateCrcs: true,
       })),
         result.record;
@@ -157,11 +151,7 @@ export default class Mcap0IndexedReader {
     ) {
       switch (result.record.type) {
         case "ChannelInfo":
-          // FIXME: done in parseRecord - is that ok?
-          // if (channelInfosById.has(result.record.channelId)) {
-          //   throw new Error(`Duplicate ChannelInfo for channel id ${result.record.channelId}`);
-          // }
-          // channelInfosById.set(result.record.channelId, result.record);
+          // detection of duplicates is done in parseRecord
           break;
         case "ChunkIndex":
           chunkIndexes.push(result.record);
@@ -187,7 +177,6 @@ export default class Mcap0IndexedReader {
 
     return new Mcap0IndexedReader({
       readable,
-      // size,
       chunkIndexes,
       decompressHandlers,
       channelInfosById,
@@ -221,7 +210,11 @@ export default class Mcap0IndexedReader {
       (chunk) => chunk.startTime <= endTime && chunk.endTime >= startTime,
     );
 
-    // FIXME: merge overlapping chunks
+    for (let i = 0; i + 1 < relevantChunks.length; i++) {
+      if (relevantChunks[i]!.endTime >= relevantChunks[i + 1]!.startTime) {
+        throw new Error("Overlapping chunks are not currently supported");
+      }
+    }
     for (const chunkIndex of relevantChunks) {
       yield* this.readChunk({ chunkIndex, channelIds: relevantChannels, startTime, endTime });
     }
@@ -253,7 +246,7 @@ export default class Mcap0IndexedReader {
     }
     const chunkRecordLength = getBigUint64.call(chunkOpcodeAndLengthView, 1, true);
 
-    // FIXME: read only message indexes for given channelIds? more requests = more latency
+    // Future optimization: read only message indexes for given channelIds, not all message indexes for the chunk
     const chunkAndMessageIndexes = await this.readable.read(
       chunkIndex.chunkOffset,
       1n + 8n + chunkRecordLength + chunkIndex.messageIndexLength,
@@ -267,6 +260,7 @@ export default class Mcap0IndexedReader {
     let chunk: TypedMcapRecords["Chunk"];
     const messageIndexCursors = new Heap<{
       index: number;
+      channelId: number;
       records: TypedMcapRecords["MessageIndex"]["records"];
     }>((a, b) => {
       const recordTimeA = a.records[a.index]?.[0];
@@ -279,23 +273,20 @@ export default class Mcap0IndexedReader {
       return Number(recordTimeA - recordTimeB);
     });
 
-    // FIXME: make these optional params?
-    // const channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
-    const channelInfosSeenInThisChunk = new Set<number>();
-
     {
       let offset = 0;
       const chunkResult = parseRecord({
         view: chunkAndMessageIndexesView,
         startOffset: offset,
         channelInfosById: this.readwriteChannelInfosById,
-        channelInfosSeenInThisChunk,
         validateCrcs: true,
       });
       offset += chunkResult.usedBytes;
       if (chunkResult.record?.type !== "Chunk") {
         throw new Error(
-          `Chunk index offset does not point to chunk record (found ${chunkResult.record?.type})`,
+          `Chunk index offset does not point to chunk record (found ${String(
+            chunkResult.record?.type,
+          )})`,
         );
       }
       chunk = chunkResult.record;
@@ -306,7 +297,6 @@ export default class Mcap0IndexedReader {
           view: chunkAndMessageIndexesView,
           startOffset: offset,
           channelInfosById: this.readwriteChannelInfosById,
-          channelInfosSeenInThisChunk,
           validateCrcs: true,
         })),
           result.record;
@@ -319,7 +309,18 @@ export default class Mcap0IndexedReader {
           result.record.records.length > 0 &&
           (channelIds == undefined || channelIds.has(result.record.channelId))
         ) {
-          messageIndexCursors.push({ index: 0, records: result.record.records });
+          for (let i = 0; i + 1 < result.record.records.length; i++) {
+            if (result.record.records[i]![0] >= result.record.records[i + 1]![0]) {
+              throw new Error(
+                `Message index entries for channel ${result.record.channelId} in chunk at offset ${chunkIndex.chunkOffset} must be sorted by recordTime`,
+              );
+            }
+          }
+          messageIndexCursors.push({
+            index: 0,
+            channelId: result.record.channelId,
+            records: result.record.records,
+          });
         }
       }
       if (offset !== chunkAndMessageIndexesView.byteLength) {
@@ -352,11 +353,15 @@ export default class Mcap0IndexedReader {
     while ((cursor = messageIndexCursors.peek())) {
       const [recordTime, offset] = cursor.records[cursor.index]!;
       if (recordTime >= startTime && recordTime <= endTime) {
+        if (BigInt(recordsView.byteOffset) + offset >= Number.MAX_SAFE_INTEGER) {
+          throw new Error(
+            `Message offset too large (recordTime ${recordTime}, offset ${offset}) in channel ${cursor.channelId} in chunk at offset ${chunkIndex.chunkOffset}`,
+          );
+        }
         const result = parseRecord({
           view: recordsView,
-          startOffset: Number(offset), // FIXME: conversion should not happen here
+          startOffset: Number(offset),
           channelInfosById: this.readwriteChannelInfosById,
-          channelInfosSeenInThisChunk,
           validateCrcs: true,
         });
         if (!result.record) {

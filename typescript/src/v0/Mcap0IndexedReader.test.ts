@@ -330,4 +330,55 @@ describe("Mcap0IndexedReader", () => {
       },
     );
   });
+
+  it("does not yet support overlapping chunks", async () => {
+    const data = [
+      ...MCAP0_MAGIC,
+      ...record(Opcode.HEADER, [
+        ...string(""), // profile
+        ...string(""), // library
+        ...keyValues(string, string, []), // metadata
+      ]),
+    ];
+    const indexOffset = BigInt(data.length);
+    data.push(
+      ...record(
+        Opcode.CHUNK_INDEX,
+        crcSuffix([
+          ...uint64LE(0n), // start time
+          ...uint64LE(1n), // end time
+          ...uint64LE(0n), // offset
+          ...keyValues(uint16LE, uint64LE, []), // message index offsets
+          ...uint64LE(0n), // message index length
+          ...string(""), // compression
+          ...uint64LE(BigInt(0n)), // compressed size
+          ...uint64LE(BigInt(0n)), // uncompressed size
+        ]),
+      ),
+      ...record(
+        Opcode.CHUNK_INDEX,
+        crcSuffix([
+          ...uint64LE(1n), // start time
+          ...uint64LE(2n), // end time
+          ...uint64LE(0n), // offset
+          ...keyValues(uint16LE, uint64LE, []), // message index offsets
+          ...uint64LE(0n), // message index length
+          ...string(""), // compression
+          ...uint64LE(BigInt(0n)), // compressed size
+          ...uint64LE(BigInt(0n)), // uncompressed size
+        ]),
+      ),
+      ...record(Opcode.FOOTER, [
+        ...uint64LE(BigInt(indexOffset)), // index offset
+        ...uint32LE(crc32(new Uint8Array(0))), // index crc
+      ]),
+      ...MCAP0_MAGIC,
+    );
+    const reader = await Mcap0IndexedReader.Initialize({
+      readable: makeReadable(new Uint8Array(data)),
+    });
+    await expect(collect(reader.readMessages())).rejects.toThrow(
+      "Overlapping chunks are not currently supported",
+    );
+  });
 });

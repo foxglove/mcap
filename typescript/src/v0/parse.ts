@@ -36,20 +36,16 @@ export function parseMagic(
  *
  * @param channelInfosById Used to track ChannelInfo objects across calls to `parseRecord` and
  * associate them with newly parsed Message records.
- * @param channelInfosSeenInThisChunk Used to validate that messages are preceded by a corresponding
- * ChannelInfo within the same chunk.
  */
 export function parseRecord({
   view,
   startOffset,
   channelInfosById,
-  channelInfosSeenInThisChunk,
   validateCrcs,
 }: {
   view: DataView;
   startOffset: number;
   channelInfosById: Map<number, TypedMcapRecords["ChannelInfo"]>;
-  channelInfosSeenInThisChunk: Set<number>;
   validateCrcs: boolean;
 }): { record: TypedMcapRecord; usedBytes: number } | { record?: undefined; usedBytes: 0 } {
   if (startOffset + /*opcode*/ 1 + /*record length*/ 8 >= view.byteLength) {
@@ -137,7 +133,6 @@ export function parseRecord({
         schema,
         userData,
       };
-      channelInfosSeenInThisChunk.add(channelId);
       const existingInfo = channelInfosById.get(channelId);
       if (existingInfo) {
         if (!isEqual(existingInfo, record)) {
@@ -196,7 +191,6 @@ export function parseRecord({
         uncompressedCrc,
         records,
       };
-      channelInfosSeenInThisChunk.clear();
       return { record, usedBytes: recordEndOffset - startOffset };
     }
 
