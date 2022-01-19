@@ -44,8 +44,8 @@ COPY ./.clang-format /src/
 RUN conan editable add ./mcap mcap/0.0.1
 RUN conan install examples --install-folder examples/build --build=zlib --build=zstd
 
-FROM build_bac2mcap AS bag2mcap
+FROM build_bag2mcap AS bag2mcap
 COPY --from=build_bag2mcap /src /src
 COPY --from=build_bag2mcap /src/examples/build/ /src/examples/build/
 RUN conan build examples --build-folder examples/build
-ENTRYPOINT ["examples/build/bin/bac2mcap"]
+ENTRYPOINT ["examples/build/bin/bag2mcap"]
