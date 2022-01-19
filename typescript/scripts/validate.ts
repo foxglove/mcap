@@ -1,4 +1,4 @@
-import { parse as parseMessageDefinition, RosMsgDefinition } from "@foxglove/rosmsg";
+import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import { LazyMessageReader as ROS1LazyMessageReader } from "@foxglove/rosmsg-serialization";
 import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
 import { program } from "commander";
@@ -6,6 +6,8 @@ import { createReadStream } from "fs";
 import fs from "fs/promises";
 import { isEqual } from "lodash";
 import { performance } from "perf_hooks";
+import protobufjs from "protobufjs";
+import { FileDescriptorSet } from "protobufjs/ext/descriptor";
 import decompressLZ4 from "wasm-lz4";
 
 import detectVersion, {
@@ -92,8 +94,7 @@ async function validate(
     number,
     {
       info: ChannelInfo;
-      messageDeserializer?: ROS2MessageReader | ROS1LazyMessageReader;
-      parsedDefinitions?: RosMsgDefinition[];
+      messageDeserializer?: (data: ArrayBufferView) => unknown;
     }
   >();
 
@@ -112,27 +113,38 @@ async function validate(
           }
           break;
         }
-        let parsedDefinitions;
-        let messageDeserializer;
+        let messageDeserializer: (data: ArrayBufferView) => unknown;
         if (record.encoding === "ros1") {
-          parsedDefinitions = parseMessageDefinition(record.schema);
-          messageDeserializer = new ROS1LazyMessageReader(parsedDefinitions);
+          const reader = new ROS1LazyMessageReader(parseMessageDefinition(record.schema));
+          messageDeserializer = (data) => {
+            const size = reader.size(data);
+            if (size !== data.byteLength) {
+              throw new Error(`Message size ${size} should match buffer length ${data.byteLength}`);
+            }
+            return reader.readMessage(data).toJSON();
+          };
         } else if (record.encoding === "ros2") {
-          parsedDefinitions = parseMessageDefinition(record.schema, {
-            ros2: true,
-          });
-          messageDeserializer = new ROS2MessageReader(parsedDefinitions);
+          const reader = new ROS2MessageReader(
+            parseMessageDefinition(record.schema, {
+              ros2: true,
+            }),
+          );
+          messageDeserializer = (data) => reader.readMessage(data);
         } else if (record.encoding === "protobuf") {
-          messageDeserializer = undefined;
-          parsedDefinitions = undefined;
+          const root = protobufjs.Root.fromDescriptor(
+            FileDescriptorSet.decode(Buffer.from(record.schema, "base64")),
+          );
+          const type = root.lookupType(record.schemaName);
+
+          messageDeserializer = (data) =>
+            type.decode(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+        } else if (record.encoding === "json") {
+          const textDecoder = new TextDecoder();
+          messageDeserializer = (data) => JSON.parse(textDecoder.decode(data));
         } else {
           throw new Error(`unsupported encoding ${record.encoding}`);
         }
-        channelInfoById.set(record.channelId, {
-          info: record,
-          messageDeserializer,
-          parsedDefinitions,
-        });
+        channelInfoById.set(record.channelId, { info: record, messageDeserializer });
         break;
       }
 
@@ -142,23 +154,12 @@ async function validate(
           throw new Error(`message for channel ${record.channelId} with no prior channel info`);
         }
         if (deserialize) {
-          let message: unknown;
-          if (channelInfo.messageDeserializer instanceof ROS1LazyMessageReader) {
-            const size = channelInfo.messageDeserializer.size(record.messageData);
-            if (size !== record.messageData.byteLength) {
-              throw new Error(
-                `Message size ${size} should match buffer length ${record.messageData.byteLength}`,
-              );
-            }
-            message = channelInfo.messageDeserializer.readMessage(record.messageData).toJSON();
-          } else {
-            if (channelInfo.messageDeserializer == undefined) {
-              throw new Error(
-                `No deserializer available for channel id: ${channelInfo.info.channelId} ${channelInfo.info.encoding}`,
-              );
-            }
-            message = channelInfo.messageDeserializer.readMessage(record.messageData);
+          if (channelInfo.messageDeserializer == undefined) {
+            throw new Error(
+              `No deserializer available for channel id: ${channelInfo.info.channelId} ${channelInfo.info.encoding}`,
+            );
           }
+          const message = channelInfo.messageDeserializer(record.messageData);
           if (dump) {
             log(message);
           }
