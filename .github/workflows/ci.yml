@@ -19,6 +19,16 @@ jobs:
       - run: yarn install --frozen-lockfile
       - run: yarn run prettier docs --check
 
+  cpp:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cpp
+    steps:
+      - uses: actions/checkout@v2
+      - run: make format-check
+      - run: make build
+
   typescript:
     runs-on: ubuntu-latest
     steps:
