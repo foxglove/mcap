@@ -20,8 +20,7 @@ RUN echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main" >> /etc/a
   apt-get update && \
   apt-get install -y --no-install-recommends --no-install-suggests \
   clang-13 \
-  clang-format-13 \
-  libc++1
+  clang-format-13
 
 RUN update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-13 100
 RUN update-alternatives --install /usr/bin/git-clang-format git-clang-format /usr/bin/git-clang-format-13 100
@@ -36,15 +35,14 @@ RUN pip --no-cache-dir install conan
 
 ENV CONAN_V2_MODE=1
 RUN conan config init
-RUN conan profile update settings.compiler.cppstd=17 default
-RUN conan profile update settings.compiler.libcxx=libc++ default
 
 FROM build as build_bag2mcap
 COPY ./examples /src/examples/
 COPY ./mcap /src/mcap/
 COPY ./.clang-format /src/
 RUN conan editable add ./mcap mcap/0.0.1
-RUN conan install examples --install-folder examples/build --build=zlib --build=zstd
+RUN conan install examples --install-folder examples/build \
+  -s compiler.cppstd=17 --build=zlib --build=zstd
 
 FROM build_bag2mcap AS bag2mcap
 COPY --from=build_bag2mcap /src /src

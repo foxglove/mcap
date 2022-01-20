@@ -2,6 +2,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstring>
 #include <fstream>
 
 constexpr char StringSchema[] = "string data";
