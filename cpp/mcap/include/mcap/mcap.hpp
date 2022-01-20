@@ -1,12 +1,21 @@
 #pragma once
 
+#include "errors.hpp"
+#include <iostream>
+#include <limits>
 #include <string>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace mcap {
 
-constexpr char SpecVersionChar = '0';
+#define LIBRARY_VERSION "0.0.1"
+
+constexpr char SpecVersion = '0';
+constexpr char LibraryVersion[] = LIBRARY_VERSION;
+constexpr char Magic[] = {char(137), 77, 67, 65, 80, SpecVersion, 13, 10};  // "\x89MCAP0\r\n"
 
 using ChannelId = uint16_t;
 using Timestamp = uint64_t;
@@ -45,6 +54,13 @@ struct ChannelInfo {
   std::string schemaName;
   std::string schema;
   mcap::KeyValueMap userData;
+
+  ChannelInfo(const std::string_view topicName, const std::string_view encoding,
+              const std::string_view schemaName, const std::string_view schema)
+      : topicName(topicName)
+      , encoding(encoding)
+      , schemaName(schemaName)
+      , schema(schema) {}
 };
 
 struct Message {
@@ -52,7 +68,8 @@ struct Message {
   uint32_t sequence;
   mcap::Timestamp publishTime;
   mcap::Timestamp recordTime;
-  mcap::ByteArray data;
+  uint64_t dataSize;
+  std::byte* data = nullptr;
 };
 
 struct Chunk {
@@ -84,7 +101,8 @@ struct Attachment {
   std::string name;
   mcap::Timestamp recordTime;
   std::string contentType;
-  mcap::ByteArray data;
+  uint64_t dataSize;
+  std::byte* data = nullptr;
 };
 
 struct AttachmentIndex {
@@ -108,4 +126,78 @@ struct UnknownRecord {
   mcap::ByteArray data;
 };
 
+struct McapWriterOptions {
+  bool indexed;
+  std::string profile;
+  std::string library;
+  mcap::KeyValueMap metadata;
+
+  McapWriterOptions(const std::string_view profile)
+      : indexed(false)
+      , profile(profile)
+      , library("libmcap " LIBRARY_VERSION) {}
+};
+
+class McapWriter final {
+public:
+  ~McapWriter();
+
+  /**
+   * @brief Open a new MCAP file for writing and write the header.
+   *
+   * @param stream Output stream to write to.
+   */
+  void open(std::ostream& stream, const McapWriterOptions& options);
+
+  /**
+   * @brief Write the MCAP footer and close the output stream.
+   */
+  void close();
+
+  /**
+   * @brief Add channel info and set `info.channelId` to a generated channel id.
+   * The channel id is used when adding messages.
+   *
+   * @param info Description of the channel to register. The `channelId` value
+   *   is ignored and will be set to a generated channel id.
+   */
+  void addChannel(mcap::ChannelInfo& info);
+
+  /**
+   * @brief Write a message to the output stream.
+   *
+   * @param msg Message to add.
+   * @return A non-zero error code on failure.
+   */
+  std::error_code write(const mcap::Message& message);
+
+  /**
+   * @brief Write an attachment to the output stream.
+   *
+   * @param attachment Attachment to add.
+   * @return A non-zero error code on failure.
+   */
+  std::error_code write(const mcap::Attachment& attachment);
+
+private:
+  std::ostream* stream_ = nullptr;
+  std::vector<mcap::ChannelInfo> channels_;
+  std::unordered_set<mcap::ChannelId> writtenChannels_;
+
+  void writeMagic();
+
+  void write(const mcap::Header& header);
+  void write(const mcap::Footer& footer);
+  void write(const mcap::ChannelInfo& info);
+  void write(const std::string_view str);
+  void write(OpCode value);
+  void write(uint16_t value);
+  void write(uint32_t value);
+  void write(uint64_t value);
+  void write(std::byte* data, uint64_t size);
+  void write(const KeyValueMap& map, uint32_t size = 0);
+};
+
 }  // namespace mcap
+
+#include "mcap.inl"

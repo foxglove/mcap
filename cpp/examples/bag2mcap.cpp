@@ -1,15 +1,42 @@
 #include <mcap/mcap.hpp>
 
-#include <iostream>
+#include <array>
+#include <chrono>
+#include <cstring>
+#include <fstream>
+
+constexpr char StringSchema[] = "string data";
+
+mcap::Timestamp now() {
+  const auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::system_clock::now().time_since_epoch());
+  return mcap::Timestamp(timestamp.count());
+}
 
 int main() {
-  mcap::Message msg;
-  msg.channelId = 1;
-  msg.sequence = 2;
-  msg.publishTime = 3;
-  msg.recordTime = 4;
-  msg.data.push_back(5);
+  mcap::McapWriter writer;
 
-  std::cout << "msg.channelId = " << msg.channelId << "\n";
+  std::ofstream out("output.mcap", std::ios::binary);
+  writer.open(out, mcap::McapWriterOptions("ros1"));
+
+  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  writer.addChannel(topic);
+
+  std::array<std::byte, 4 + 13> payload;
+  const uint32_t length = 13;
+  std::memcpy(payload.data(), &length, 4);
+  std::memcpy(payload.data() + 4, "Hello, world!", 13);
+
+  mcap::Message msg;
+  msg.channelId = topic.channelId;
+  msg.sequence = 0;
+  msg.publishTime = now();
+  msg.recordTime = msg.publishTime;
+  msg.data = payload.data();
+  msg.dataSize = payload.size();
+
+  writer.write(msg);
+  writer.close();
+
   return 0;
 }
