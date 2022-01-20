@@ -32,14 +32,14 @@ void McapWriter::registerChannel(mcap::ChannelInfo& info) {
 
 std::optional<std::error_code> McapWriter::write(const mcap::Message& message) {
   if (!stream_) {
-    return std::make_optional(make_error_code(ErrorCode::NotOpen));
+    return make_error_code(ErrorCode::NotOpen);
   }
 
   // Write out channel info if we have not yet done so
   if (writtenChannels_.find(message.channelId) == writtenChannels_.end()) {
     const size_t index = message.channelId - 1;
     if (index >= channels_.size()) {
-      return std::make_optional(make_error_code(ErrorCode::InvalidChannelId));
+      return make_error_code(ErrorCode::InvalidChannelId);
     }
 
     write(channels_[index]);
@@ -61,7 +61,7 @@ std::optional<std::error_code> McapWriter::write(const mcap::Message& message) {
 
 std::optional<std::error_code> McapWriter::write(const mcap::Attachment& attachment) {
   if (!stream_) {
-    return std::make_optional(make_error_code(ErrorCode::NotOpen));
+    return make_error_code(ErrorCode::NotOpen);
   }
 
   const uint64_t recordSize =

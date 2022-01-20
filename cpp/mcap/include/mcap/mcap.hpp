@@ -70,7 +70,7 @@ struct Message {
   mcap::Timestamp publishTime;
   mcap::Timestamp recordTime;
   uint64_t dataSize;
-  uint8_t* data;
+  uint8_t* data = nullptr;
 };
 
 struct Chunk {
@@ -103,7 +103,7 @@ struct Attachment {
   mcap::Timestamp recordTime;
   std::string contentType;
   uint64_t dataSize;
-  uint8_t* data;
+  uint8_t* data = nullptr;
 };
 
 struct AttachmentIndex {
@@ -139,7 +139,7 @@ struct McapWriterOptions {
       , library("libmcap " LIBRARY_VERSION) {}
 };
 
-class McapWriter {
+class McapWriter final {
 public:
   ~McapWriter();
 

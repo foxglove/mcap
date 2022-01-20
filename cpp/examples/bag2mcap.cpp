@@ -31,7 +31,7 @@ int main() {
   msg.sequence = 0;
   msg.publishTime = now();
   msg.recordTime = msg.publishTime;
-  msg.data = reinterpret_cast<uint8_t*>(payload.data());
+  msg.data = payload.data();
   msg.dataSize = payload.size();
 
   writer.write(msg);
