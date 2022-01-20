@@ -1,6 +1,6 @@
 ---
 Language: Cpp
-Standard: Cpp17
+Standard: C++17
 BasedOnStyle: Google
 
 AllowShortFunctionsOnASingleLine: Empty
