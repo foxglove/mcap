@@ -19,9 +19,9 @@ int main() {
   writer.open(out, mcap::McapWriterOptions("ros1"));
 
   mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
-  writer.registerChannel(topic);
+  writer.addChannel(topic);
 
-  std::array<uint8_t, 4 + 13> payload;
+  std::array<std::byte, 4 + 13> payload;
   const uint32_t length = 13;
   std::memcpy(payload.data(), &length, 4);
   std::memcpy(payload.data() + 4, "Hello, world!", 13);

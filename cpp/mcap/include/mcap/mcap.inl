@@ -1,5 +1,5 @@
 // Do not compile on systems with non-8-bit bytes
-static_assert(CHAR_BIT == 8);
+static_assert(std::numeric_limits<unsigned char>::digits == 8);
 
 namespace mcap {
 
@@ -25,12 +25,12 @@ void McapWriter::close() {
   stream_ = nullptr;
 }
 
-void McapWriter::registerChannel(mcap::ChannelInfo& info) {
+void McapWriter::addChannel(mcap::ChannelInfo& info) {
   info.channelId = uint16_t(channels_.size() + 1);
   channels_.push_back(info);
 }
 
-std::optional<std::error_code> McapWriter::write(const mcap::Message& message) {
+std::error_code McapWriter::write(const mcap::Message& message) {
   if (!stream_) {
     return make_error_code(ErrorCode::NotOpen);
   }
@@ -56,10 +56,10 @@ std::optional<std::error_code> McapWriter::write(const mcap::Message& message) {
   write(message.recordTime);
   write(message.data, message.dataSize);
 
-  return std::nullopt;
+  return ErrorCode::Success;
 }
 
-std::optional<std::error_code> McapWriter::write(const mcap::Attachment& attachment) {
+std::error_code McapWriter::write(const mcap::Attachment& attachment) {
   if (!stream_) {
     return make_error_code(ErrorCode::NotOpen);
   }
@@ -74,7 +74,7 @@ std::optional<std::error_code> McapWriter::write(const mcap::Attachment& attachm
   write(attachment.contentType);
   write(attachment.data, attachment.dataSize);
 
-  return std::nullopt;
+  return ErrorCode::Success;
 }
 
 // Private methods /////////////////////////////////////////////////////////////
@@ -153,7 +153,7 @@ void McapWriter::write(uint64_t value) {
   stream_->write(reinterpret_cast<const char*>(&value), sizeof(value));
 }
 
-void McapWriter::write(uint8_t* data, uint64_t size) {
+void McapWriter::write(std::byte* data, uint64_t size) {
   stream_->write(reinterpret_cast<const char*>(data), size);
 }
 

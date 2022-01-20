@@ -1,9 +1,8 @@
 #pragma once
 
 #include "errors.hpp"
-#include <climits>
 #include <iostream>
-#include <optional>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -70,7 +69,7 @@ struct Message {
   mcap::Timestamp publishTime;
   mcap::Timestamp recordTime;
   uint64_t dataSize;
-  uint8_t* data = nullptr;
+  std::byte* data = nullptr;
 };
 
 struct Chunk {
@@ -103,7 +102,7 @@ struct Attachment {
   mcap::Timestamp recordTime;
   std::string contentType;
   uint64_t dataSize;
-  uint8_t* data = nullptr;
+  std::byte* data = nullptr;
 };
 
 struct AttachmentIndex {
@@ -162,23 +161,23 @@ public:
    * @param info Description of the channel to register. The `channelId` value
    *   is ignored and will be set to a generated channel id.
    */
-  void registerChannel(mcap::ChannelInfo& info);
+  void addChannel(mcap::ChannelInfo& info);
 
   /**
    * @brief Write a message to the output stream.
    *
    * @param msg Message to add.
-   * @return An error code on failure.
+   * @return A non-zero error code on failure.
    */
-  std::optional<std::error_code> write(const mcap::Message& message);
+  std::error_code write(const mcap::Message& message);
 
   /**
    * @brief Write an attachment to the output stream.
    *
    * @param attachment Attachment to add.
-   * @return An error code on failure.
+   * @return A non-zero error code on failure.
    */
-  std::optional<std::error_code> write(const mcap::Attachment& attachment);
+  std::error_code write(const mcap::Attachment& attachment);
 
 private:
   std::ostream* stream_ = nullptr;
@@ -195,7 +194,7 @@ private:
   void write(uint16_t value);
   void write(uint32_t value);
   void write(uint64_t value);
-  void write(uint8_t* data, uint64_t size);
+  void write(std::byte* data, uint64_t size);
   void write(const KeyValueMap& map, uint32_t size = 0);
 };
 
