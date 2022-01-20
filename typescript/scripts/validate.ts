@@ -237,6 +237,9 @@ async function validate(
             },
             decompressHandlers,
           });
+          for (const channelInfo of reader.channelInfosById.values()) {
+            processRecord(channelInfo);
+          }
           for await (const message of reader.readMessages()) {
             processRecord(message);
           }
