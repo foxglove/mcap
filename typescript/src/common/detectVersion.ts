@@ -9,7 +9,7 @@ export const DETECT_VERSION_BYTES_REQUIRED = 8;
  * Detect MCAP version from file prefix. At least `DETECT_VERSION_BYTES_REQUIRED` bytes must be
  * provided for the version to be detectable.
  */
-export default function detectVersion(prefix: DataView): McapVersion | undefined {
+export function detectVersion(prefix: DataView): McapVersion | undefined {
   if (prefix.byteLength < DETECT_VERSION_BYTES_REQUIRED) {
     return undefined;
   }
