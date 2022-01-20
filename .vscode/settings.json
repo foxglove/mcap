@@ -1,10 +1,14 @@
 {
   "editor.formatOnSave": true,
+
   "typescript.tsdk": "node_modules/typescript/lib",
   "prettier.prettierPath": "./node_modules/prettier",
   "eslint.packageManager": "yarn",
   "eslint.options": {
     "reportUnusedDisableDirectives": true
   },
-  "jest.jestCommandLine": "yarn workspace @foxglove/mcap test"
+  "jest.jestCommandLine": "yarn workspace @foxglove/mcap test",
+
+  // https://github.com/microsoft/vscode-cpptools/issues/722
+  "C_Cpp.autoAddFileAssociations": false
 }
