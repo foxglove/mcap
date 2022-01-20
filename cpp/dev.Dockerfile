@@ -20,7 +20,8 @@ RUN echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main" >> /etc/a
   apt-get update && \
   apt-get install -y --no-install-recommends --no-install-suggests \
   clang-13 \
-  clang-format-13 
+  clang-format-13 \
+  libc++1
 
 RUN update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-13 100
 RUN update-alternatives --install /usr/bin/git-clang-format git-clang-format /usr/bin/git-clang-format-13 100
