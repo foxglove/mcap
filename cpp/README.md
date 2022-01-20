@@ -1,4 +1,4 @@
-# C++ implementation of the MCAP (Message Capture) library
+# C++ implementation of the MCAP file format
 
 ## Instructions
 
