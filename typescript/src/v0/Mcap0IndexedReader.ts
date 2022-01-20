@@ -9,7 +9,9 @@ import { DecompressHandlers, TypedMcapRecords } from "./types";
 
 export default class Mcap0IndexedReader {
   readonly chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
+  readonly attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
   readonly channelInfosById: ReadonlyMap<number, TypedMcapRecords["ChannelInfo"]>;
+  readonly statistics: TypedMcapRecords["Statistics"] | undefined;
 
   private readable: IReadable;
   private decompressHandlers?: DecompressHandlers;
@@ -21,16 +23,22 @@ export default class Mcap0IndexedReader {
   private constructor({
     readable,
     chunkIndexes,
+    attachmentIndexes,
+    statistics,
     decompressHandlers,
     channelInfosById,
   }: {
     readable: IReadable;
     chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
+    attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
+    statistics: TypedMcapRecords["Statistics"] | undefined;
     decompressHandlers?: DecompressHandlers;
     channelInfosById: Map<number, TypedMcapRecords["ChannelInfo"]>;
   }) {
     this.readable = readable;
     this.chunkIndexes = chunkIndexes;
+    this.attachmentIndexes = attachmentIndexes;
+    this.statistics = statistics;
     this.decompressHandlers = decompressHandlers;
     this.channelInfosById = channelInfosById;
     this.readwriteChannelInfosById = channelInfosById;
@@ -174,6 +182,8 @@ export default class Mcap0IndexedReader {
     return new Mcap0IndexedReader({
       readable,
       chunkIndexes,
+      attachmentIndexes,
+      statistics,
       decompressHandlers,
       channelInfosById,
     });
