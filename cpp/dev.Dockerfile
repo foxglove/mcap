@@ -36,6 +36,7 @@ RUN pip --no-cache-dir install conan
 ENV CONAN_V2_MODE=1
 RUN conan config init
 RUN conan profile update settings.compiler.cppstd=17 default
+RUN conan profile update settings.compiler.libcxx=libc++ default
 
 FROM build as build_bag2mcap
 COPY ./examples /src/examples/
