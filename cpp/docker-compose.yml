@@ -1,0 +1,18 @@
+services:
+  base:
+    build:
+      context: .
+      dockerfile: dev.Dockerfile
+      target: base
+
+  build:
+    build:
+      context: .
+      dockerfile: dev.Dockerfile
+      target: build
+
+  bag2mcap:
+    build:
+      context: .
+      dockerfile: dev.Dockerfile
+      target: bag2mcap

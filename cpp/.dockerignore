@@ -1,0 +1,10 @@
+.DS_Store
+Dockerfile
+*.Dockerfile
+.dockerignore
+docker-compose.yml
+Makefile
+README.md
+**/build
+*.profdata
+*.profraw
