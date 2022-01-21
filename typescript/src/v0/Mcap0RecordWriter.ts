@@ -163,10 +163,10 @@ export class Mcap0RecordWriter {
       arrayWriter.uint64(record[1]);
     }
 
+    this.bufferedWriter.uint32(arrayWriter.length);
+
     // crc
     arrayWriter.uint32(0);
-
-    this.bufferedWriter.uint32(arrayWriter.length);
 
     this.recordPrefixWriter.uint8(Opcode.MESSAGE_INDEX);
     this.recordPrefixWriter.uint64(BigInt(this.bufferedWriter.length + arrayWriter.length));
