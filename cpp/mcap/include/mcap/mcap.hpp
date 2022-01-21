@@ -3,6 +3,7 @@
 #include "errors.hpp"
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -15,7 +16,7 @@ namespace mcap {
 
 constexpr char SpecVersion = '0';
 constexpr char LibraryVersion[] = LIBRARY_VERSION;
-constexpr char Magic[] = {char(137), 77, 67, 65, 80, SpecVersion, 13, 10};  // "\x89MCAP0\r\n"
+constexpr uint8_t Magic[] = {137, 77, 67, 65, 80, SpecVersion, 13, 10};  // "\x89MCAP0\r\n"
 
 using ChannelId = uint16_t;
 using Timestamp = uint64_t;
@@ -138,6 +139,22 @@ struct McapWriterOptions {
       , library("libmcap " LIBRARY_VERSION) {}
 };
 
+struct IWritable {
+  virtual inline ~IWritable() = default;
+
+  virtual void write(const std::byte* data, uint64_t size) = 0;
+  virtual void end() = 0;
+};
+
+struct IReadable {
+  virtual inline ~IReadable() = default;
+
+  virtual uint64_t size() const = 0;
+  virtual uint64_t read(std::byte* output, uint64_t size) = 0;
+};
+
+class StreamWriter;
+
 class McapWriter final {
 public:
   ~McapWriter();
@@ -145,7 +162,17 @@ public:
   /**
    * @brief Open a new MCAP file for writing and write the header.
    *
+   * @param writer An implementation of the IWritable interface. Output bytes
+   *   will be written to this object.
+   * @param options Options for MCAP writing. `profile` is required.
+   */
+  void open(mcap::IWritable& writer, const McapWriterOptions& options);
+
+  /**
+   * @brief Open a new MCAP file for writing and write the header.
+   *
    * @param stream Output stream to write to.
+   * @param options Options for MCAP writing. `profile` is required.
    */
   void open(std::ostream& stream, const McapWriterOptions& options);
 
@@ -169,7 +196,7 @@ public:
    * @param msg Message to add.
    * @return A non-zero error code on failure.
    */
-  std::error_code write(const mcap::Message& message);
+  mcap::Status write(const mcap::Message& message);
 
   /**
    * @brief Write an attachment to the output stream.
@@ -177,10 +204,11 @@ public:
    * @param attachment Attachment to add.
    * @return A non-zero error code on failure.
    */
-  std::error_code write(const mcap::Attachment& attachment);
+  mcap::Status write(const mcap::Attachment& attachment);
 
 private:
-  std::ostream* stream_ = nullptr;
+  mcap::IWritable* output_ = nullptr;
+  std::unique_ptr<mcap::StreamWriter> streamOutput_;
   std::vector<mcap::ChannelInfo> channels_;
   std::unordered_set<mcap::ChannelId> writtenChannels_;
 
@@ -196,6 +224,23 @@ private:
   void write(uint64_t value);
   void write(std::byte* data, uint64_t size);
   void write(const KeyValueMap& map, uint32_t size = 0);
+};
+
+/**
+ * @brief Implements the IWritable interface used by McapWriter by wrapping a
+ * std::ostream stream.
+ */
+class StreamWriter final : public IWritable {
+public:
+  StreamWriter(std::ostream& stream);
+  ~StreamWriter() override = default;
+
+  void write(const std::byte* data, uint64_t size) override;
+  void end() override;
+
+private:
+  std::ostream& stream_;
+  std::vector<std::byte> buffer_;
 };
 
 }  // namespace mcap

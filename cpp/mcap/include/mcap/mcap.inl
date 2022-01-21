@@ -9,20 +9,26 @@ McapWriter::~McapWriter() {
   close();
 }
 
-void McapWriter::open(std::ostream& stream, const McapWriterOptions& options) {
-  stream_ = &stream;
+void McapWriter::open(mcap::IWritable& writer, const McapWriterOptions& options) {
+  output_ = &writer;
   writeMagic();
   write(Header{options.profile, options.library, options.metadata});
 }
 
+void McapWriter::open(std::ostream& stream, const McapWriterOptions& options) {
+  streamOutput_ = std::make_unique<mcap::StreamWriter>(stream);
+  open(*streamOutput_, options);
+}
+
 void McapWriter::close() {
-  if (!stream_) {
+  if (!output_) {
     return;
   }
   write(mcap::Footer{0, 0});
   writeMagic();
-  stream_->flush();
-  stream_ = nullptr;
+  output_->end();
+  output_ = nullptr;
+  streamOutput_.reset();
 }
 
 void McapWriter::addChannel(mcap::ChannelInfo& info) {
@@ -30,16 +36,16 @@ void McapWriter::addChannel(mcap::ChannelInfo& info) {
   channels_.push_back(info);
 }
 
-std::error_code McapWriter::write(const mcap::Message& message) {
-  if (!stream_) {
-    return make_error_code(ErrorCode::NotOpen);
+mcap::Status McapWriter::write(const mcap::Message& message) {
+  if (!output_) {
+    return StatusCode::NotOpen;
   }
 
   // Write out channel info if we have not yet done so
   if (writtenChannels_.find(message.channelId) == writtenChannels_.end()) {
     const size_t index = message.channelId - 1;
     if (index >= channels_.size()) {
-      return make_error_code(ErrorCode::InvalidChannelId);
+      return StatusCode::InvalidChannelId;
     }
 
     write(channels_[index]);
@@ -56,12 +62,12 @@ std::error_code McapWriter::write(const mcap::Message& message) {
   write(message.recordTime);
   write(message.data, message.dataSize);
 
-  return ErrorCode::Success;
+  return StatusCode::Success;
 }
 
-std::error_code McapWriter::write(const mcap::Attachment& attachment) {
-  if (!stream_) {
-    return make_error_code(ErrorCode::NotOpen);
+mcap::Status McapWriter::write(const mcap::Attachment& attachment) {
+  if (!output_) {
+    return StatusCode::NotOpen;
   }
 
   const uint64_t recordSize =
@@ -74,7 +80,7 @@ std::error_code McapWriter::write(const mcap::Attachment& attachment) {
   write(attachment.contentType);
   write(attachment.data, attachment.dataSize);
 
-  return ErrorCode::Success;
+  return StatusCode::Success;
 }
 
 // Private methods /////////////////////////////////////////////////////////////
@@ -92,7 +98,7 @@ uint32_t KeyValueMapSize(const KeyValueMap& map) {
 }  // namespace internal
 
 void McapWriter::writeMagic() {
-  stream_->write(Magic, sizeof(Magic));
+  output_->write(reinterpret_cast<const std::byte*>(Magic), sizeof(Magic));
 }
 
 void McapWriter::write(const mcap::Header& header) {
@@ -134,27 +140,27 @@ void McapWriter::write(const mcap::ChannelInfo& info) {
 
 void McapWriter::write(const std::string_view str) {
   write(uint32_t(str.size()));
-  stream_->write(str.data(), str.size());
+  output_->write(reinterpret_cast<const std::byte*>(str.data()), str.size());
 }
 
 void McapWriter::write(OpCode value) {
-  stream_->write(reinterpret_cast<const char*>(&value), sizeof(value));
+  output_->write(reinterpret_cast<const std::byte*>(&value), sizeof(value));
 }
 
 void McapWriter::write(uint16_t value) {
-  stream_->write(reinterpret_cast<const char*>(&value), sizeof(value));
+  output_->write(reinterpret_cast<const std::byte*>(&value), sizeof(value));
 }
 
 void McapWriter::write(uint32_t value) {
-  stream_->write(reinterpret_cast<const char*>(&value), sizeof(value));
+  output_->write(reinterpret_cast<const std::byte*>(&value), sizeof(value));
 }
 
 void McapWriter::write(uint64_t value) {
-  stream_->write(reinterpret_cast<const char*>(&value), sizeof(value));
+  output_->write(reinterpret_cast<const std::byte*>(&value), sizeof(value));
 }
 
 void McapWriter::write(std::byte* data, uint64_t size) {
-  stream_->write(reinterpret_cast<const char*>(data), size);
+  output_->write(reinterpret_cast<const std::byte*>(data), size);
 }
 
 void McapWriter::write(const KeyValueMap& map, uint32_t size) {
@@ -163,6 +169,19 @@ void McapWriter::write(const KeyValueMap& map, uint32_t size) {
     write(key);
     write(value);
   }
+}
+
+// StreamWriter ////////////////////////////////////////////////////////////////
+
+StreamWriter::StreamWriter(std::ostream& stream)
+    : stream_(stream) {}
+
+void StreamWriter::write(const std::byte* data, uint64_t size) {
+  stream_.write(reinterpret_cast<const char*>(data), std::streamsize(size));
+}
+
+void StreamWriter::end() {
+  stream_.flush();
 }
 
 }  // namespace mcap
