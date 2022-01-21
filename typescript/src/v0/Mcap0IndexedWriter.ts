@@ -7,12 +7,13 @@ class ChunkBuilder {
   private memoryWritable = new MemoryWritable();
   private recordWriter: Mcap0MemoryRecordWriter;
   private messageIndices = new Map<number, MessageIndex>();
+  private totalMessageCount = 0;
 
   startTime = 0n;
   endTime = 0n;
 
   get numMessages(): number {
-    return 0;
+    return this.totalMessageCount;
   }
 
   get buffer(): Uint8Array {
@@ -44,19 +45,25 @@ class ChunkBuilder {
     }
     this.endTime = message.recordTime;
 
-    const messageIndex = this.messageIndices.get(message.channelId);
-    if (!messageIndex) {
-      // fixme - should I make a new empty message index instead? that seems valid and better
-      throw new Error("Unable to find message index");
-    }
+    const messageIndex = this.messageIndices.get(message.channelId) ?? {
+      channelId: message.channelId,
+      count: 0,
+      records: [],
+    };
+
+    this.messageIndices.set(message.channelId, messageIndex);
 
     messageIndex.count += 1;
     messageIndex.records.push([message.recordTime, BigInt(this.memoryWritable.length)]);
 
+    this.totalMessageCount += 1;
     this.recordWriter.writeMessage(message);
   }
 
   reset(): void {
+    this.startTime = 0n;
+    this.endTime = 0n;
+    this.totalMessageCount = 0;
     this.memoryWritable.reset();
     this.messageIndices.clear();
   }
@@ -185,6 +192,9 @@ export class Mcap0IndexedWriter {
     chunkIndex.messageIndexLength = this.writable.position() - startPosition;
 
     this.chunkIndices.push(chunkIndex);
-    this.chunkBuilder.reset();
+
+    // fixme - reset should work here
+    //this.chunkBuilder.reset();
+    this.chunkBuilder = new ChunkBuilder();
   }
 }
