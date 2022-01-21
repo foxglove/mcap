@@ -21,6 +21,10 @@ class MemoryWritable implements IWritable {
     this.fullBuffer.set(buffer, this.offset);
     this.offset += buffer.length;
   }
+
+  position(): bigint {
+    return BigInt(this.offset);
+  }
 }
 
 describe("Mcap0RecordWriter", () => {

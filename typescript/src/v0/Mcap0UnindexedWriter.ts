@@ -2,6 +2,14 @@ import { IWritable } from "../common/IWritable";
 import { Mcap0RecordWriter } from "./Mcap0RecordWriter";
 import { ChannelInfo, Message, Header, Attachment } from "./types";
 
+/**
+ * Mcap0UnindexedWriter provides an interface for writing messages
+ * to unindexed mcap files.
+ *
+ * NOTE: callers must wait on any method call to complete before calling another
+ * method. Calling a method before another has completed will result in a corrupt
+ * mcap file.
+ */
 export class Mcap0UnindexedWriter {
   private recordWriter: Mcap0RecordWriter;
 

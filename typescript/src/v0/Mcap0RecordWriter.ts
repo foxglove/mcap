@@ -1,7 +1,16 @@
 import { BufferedWriter } from "../common/BufferedWriter";
 import { IWritable } from "../common/IWritable";
 import { MCAP0_MAGIC, Opcode } from "./constants";
-import { ChannelInfo, Header, Footer, Message, Attachment } from "./types";
+import {
+  ChannelInfo,
+  Header,
+  Footer,
+  Message,
+  Attachment,
+  Chunk,
+  MessageIndex,
+  ChunkIndex,
+} from "./types";
 
 /**
  * Mcap0RecordWriter provides methods to serialize mcap records to an IWritable.
@@ -43,9 +52,12 @@ export class Mcap0RecordWriter {
     this.recordPrefixWriter.uint8(Opcode.HEADER);
     this.recordPrefixWriter.uint64(BigInt(this.bufferedWriter.length + keyValueWriter.length));
 
-    await this.recordPrefixWriter.flush(this.writable);
-    await this.bufferedWriter.flush(this.writable);
-    await keyValueWriter.flush(this.writable);
+    await this.writable.write(this.recordPrefixWriter.buffer);
+    await this.writable.write(this.bufferedWriter.buffer);
+    await this.writable.write(keyValueWriter.buffer);
+
+    this.recordPrefixWriter.reset();
+    this.bufferedWriter.reset();
   }
 
   async writeFooter(footer: Footer): Promise<void> {
@@ -54,7 +66,9 @@ export class Mcap0RecordWriter {
     this.recordPrefixWriter.uint64(footer.indexOffset);
     this.recordPrefixWriter.uint32(footer.indexCrc);
 
-    await this.recordPrefixWriter.flush(this.writable);
+    await this.writable.write(this.recordPrefixWriter.buffer);
+
+    this.recordPrefixWriter.reset();
   }
 
   async writeChannelInfo(info: ChannelInfo): Promise<void> {
@@ -80,9 +94,12 @@ export class Mcap0RecordWriter {
     this.recordPrefixWriter.uint8(Opcode.CHANNEL_INFO);
     this.recordPrefixWriter.uint64(BigInt(this.bufferedWriter.length + keyValueWriter.length));
 
-    await this.recordPrefixWriter.flush(this.writable);
-    await this.bufferedWriter.flush(this.writable);
-    await keyValueWriter.flush(this.writable);
+    await this.writable.write(this.recordPrefixWriter.buffer);
+    await this.writable.write(this.bufferedWriter.buffer);
+    await this.writable.write(keyValueWriter.buffer);
+
+    this.recordPrefixWriter.reset();
+    this.bufferedWriter.reset();
   }
 
   async writeMessage(message: Message): Promise<void> {
@@ -96,9 +113,12 @@ export class Mcap0RecordWriter {
       BigInt(this.bufferedWriter.length + message.messageData.byteLength),
     );
 
-    await this.recordPrefixWriter.flush(this.writable);
-    await this.bufferedWriter.flush(this.writable);
+    await this.writable.write(this.recordPrefixWriter.buffer);
+    await this.writable.write(this.bufferedWriter.buffer);
     await this.writable.write(message.messageData);
+
+    this.recordPrefixWriter.reset();
+    this.bufferedWriter.reset();
   }
 
   async writeAttachment(attachment: Attachment): Promise<void> {
@@ -109,8 +129,85 @@ export class Mcap0RecordWriter {
     this.recordPrefixWriter.uint8(Opcode.CHANNEL_INFO);
     this.recordPrefixWriter.uint64(BigInt(this.bufferedWriter.length + attachment.data.byteLength));
 
-    await this.recordPrefixWriter.flush(this.writable);
-    await this.bufferedWriter.flush(this.writable);
+    await this.writable.write(this.recordPrefixWriter.buffer);
+    await this.writable.write(this.bufferedWriter.buffer);
     await this.writable.write(attachment.data);
+
+    this.recordPrefixWriter.reset();
+    this.bufferedWriter.reset();
+  }
+
+  async writeChunk(chunk: Chunk): Promise<void> {
+    this.bufferedWriter.uint64(chunk.uncompressedSize);
+    this.bufferedWriter.uint32(chunk.uncompressedCrc);
+    this.bufferedWriter.string(chunk.compression);
+
+    this.recordPrefixWriter.uint8(Opcode.CHUNK);
+    this.recordPrefixWriter.uint64(BigInt(this.bufferedWriter.length + chunk.records.byteLength));
+
+    await this.writable.write(this.recordPrefixWriter.buffer);
+    await this.writable.write(this.bufferedWriter.buffer);
+    await this.writable.write(chunk.records);
+
+    this.recordPrefixWriter.reset();
+    this.bufferedWriter.reset();
+  }
+
+  async writeMessageIndex(messageIndex: MessageIndex): Promise<void> {
+    this.bufferedWriter.uint16(messageIndex.channelId);
+    this.bufferedWriter.uint32(messageIndex.count);
+
+    const arrayWriter = new BufferedWriter();
+    for (const record of messageIndex.records) {
+      arrayWriter.uint64(record[0]);
+      arrayWriter.uint64(record[1]);
+    }
+
+    // crc
+    arrayWriter.uint32(0);
+
+    this.bufferedWriter.uint32(arrayWriter.length);
+
+    this.recordPrefixWriter.uint8(Opcode.MESSAGE_INDEX);
+    this.recordPrefixWriter.uint64(BigInt(this.bufferedWriter.length + arrayWriter.length));
+
+    await this.writable.write(this.recordPrefixWriter.buffer);
+    await this.writable.write(this.bufferedWriter.buffer);
+    await this.writable.write(arrayWriter.buffer);
+
+    this.recordPrefixWriter.reset();
+    this.bufferedWriter.reset();
+  }
+
+  async writeChunkIndex(chunkIndex: ChunkIndex): Promise<void> {
+    this.bufferedWriter.uint64(chunkIndex.startTime);
+    this.bufferedWriter.uint64(chunkIndex.endTime);
+    this.bufferedWriter.uint64(chunkIndex.chunkOffset);
+
+    const arrayWriter = new BufferedWriter();
+    for (const [channelId, offset] of chunkIndex.messageIndexOffsets) {
+      arrayWriter.uint16(channelId);
+      arrayWriter.uint64(offset);
+    }
+
+    this.bufferedWriter.uint32(arrayWriter.length);
+    this.bufferedWriter.bytes(arrayWriter.buffer);
+
+    this.bufferedWriter.uint64(chunkIndex.messageIndexLength);
+    this.bufferedWriter.string(chunkIndex.compression);
+    this.bufferedWriter.uint64(chunkIndex.compressedSize);
+    this.bufferedWriter.uint64(chunkIndex.uncompressedSize);
+
+    // crc
+    this.bufferedWriter.uint32(0);
+
+    this.recordPrefixWriter.uint8(Opcode.CHUNK_INDEX);
+    this.recordPrefixWriter.uint64(BigInt(this.bufferedWriter.length));
+
+    await this.writable.write(this.recordPrefixWriter.buffer);
+    await this.writable.write(this.bufferedWriter.buffer);
+
+    this.recordPrefixWriter.reset();
+    this.bufferedWriter.reset();
   }
 }

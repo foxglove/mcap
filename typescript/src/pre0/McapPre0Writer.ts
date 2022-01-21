@@ -40,7 +40,8 @@ export default class McapPre0Writer {
     serializer.uint8(RecordType.FOOTER);
     serializer.uint64(0n);
     serializer.uint32(0);
-    await serializer.flush(this.writeStream);
+
+    await this.writeStream.write(serializer.buffer);
 
     await this.writeStream?.close();
   }
@@ -60,8 +61,8 @@ export default class McapPre0Writer {
     preamble.uint8(RecordType.CHANNEL_INFO);
     preamble.uint32(serializer.length);
 
-    await preamble.flush(this.writeStream);
-    await serializer.flush(this.writeStream);
+    await this.writeStream.write(preamble.buffer);
+    await this.writeStream.write(serializer.buffer);
   }
 
   private async writeMessageRecord(message: Message): Promise<void> {
@@ -76,8 +77,8 @@ export default class McapPre0Writer {
     preamble.uint8(RecordType.MESSAGE);
     preamble.uint32(serializer.length + message.data.byteLength);
 
-    await preamble.flush(this.writeStream);
-    await serializer.flush(this.writeStream);
+    await this.writeStream.write(preamble.buffer);
+    await this.writeStream.write(serializer.buffer);
     await this.writeStream?.write(new Uint8Array(message.data));
   }
 }
