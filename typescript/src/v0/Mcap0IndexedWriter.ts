@@ -1,73 +1,7 @@
 import { IWritable } from "../common/IWritable";
-import { Mcap0MemoryRecordWriter, MemoryWritable } from "./Mcap0MemoryRecordWriter";
-import { Mcap0RecordWriter } from "./Mcap0RecordWriter";
-import { ChannelInfo, Message, Header, Attachment, Chunk, MessageIndex, ChunkIndex } from "./types";
-
-class ChunkBuilder {
-  private memoryWritable = new MemoryWritable();
-  private recordWriter: Mcap0MemoryRecordWriter;
-  private messageIndices = new Map<number, MessageIndex>();
-  private totalMessageCount = 0;
-
-  startTime = 0n;
-  endTime = 0n;
-
-  get numMessages(): number {
-    return this.totalMessageCount;
-  }
-
-  get buffer(): Uint8Array {
-    return this.memoryWritable.buffer;
-  }
-
-  get indices(): IterableIterator<MessageIndex> {
-    return this.messageIndices.values();
-  }
-
-  constructor() {
-    this.recordWriter = new Mcap0MemoryRecordWriter(this.memoryWritable);
-  }
-
-  addChannelInfo(info: ChannelInfo): void {
-    if (!this.messageIndices.has(info.channelId)) {
-      this.messageIndices.set(info.channelId, {
-        channelId: info.channelId,
-        count: 0,
-        records: [],
-      });
-    }
-    this.recordWriter.writeChannelInfo(info);
-  }
-
-  addMessage(message: Message): void {
-    if (this.startTime === 0n) {
-      this.startTime = message.recordTime;
-    }
-    this.endTime = message.recordTime;
-
-    const messageIndex = this.messageIndices.get(message.channelId) ?? {
-      channelId: message.channelId,
-      count: 0,
-      records: [],
-    };
-
-    this.messageIndices.set(message.channelId, messageIndex);
-
-    messageIndex.count += 1;
-    messageIndex.records.push([message.recordTime, BigInt(this.memoryWritable.length)]);
-
-    this.totalMessageCount += 1;
-    this.recordWriter.writeMessage(message);
-  }
-
-  reset(): void {
-    this.startTime = 0n;
-    this.endTime = 0n;
-    this.totalMessageCount = 0;
-    this.memoryWritable.reset();
-    this.messageIndices.clear();
-  }
-}
+import { ChunkBuilder } from "./ChunkBuilder";
+import { Mcap0BufferRecordWriter } from "./Mcap0BufferRecordWriter";
+import { ChannelInfo, Message, Header, Attachment, Chunk, ChunkIndex } from "./types";
 
 /**
  * Mcap0IndexedWriter provides an interface for writing messages
@@ -79,7 +13,7 @@ class ChunkBuilder {
  */
 export class Mcap0IndexedWriter {
   private writable: IWritable;
-  private recordWriter: Mcap0RecordWriter;
+  private recordWriter = new Mcap0BufferRecordWriter();
   private channelInfos = new Map<number, ChannelInfo>();
   private writtenChannelIds = new Set<number>();
   private chunkIndices: ChunkIndex[] = [];
@@ -87,12 +21,14 @@ export class Mcap0IndexedWriter {
 
   constructor(writable: IWritable) {
     this.writable = writable;
-    this.recordWriter = new Mcap0RecordWriter(writable);
   }
 
   async start(header: Header): Promise<void> {
-    await this.recordWriter.writeMagic();
-    await this.recordWriter.writeHeader(header);
+    this.recordWriter.writeMagic();
+    this.recordWriter.writeHeader(header);
+
+    await this.writable.write(this.recordWriter.buffer);
+    this.recordWriter.reset();
   }
 
   async end(): Promise<void> {
@@ -101,21 +37,28 @@ export class Mcap0IndexedWriter {
     const position = this.writable.position();
 
     for (const channelInfo of this.channelInfos.values()) {
-      await this.recordWriter.writeChannelInfo(channelInfo);
+      this.recordWriter.writeChannelInfo(channelInfo);
     }
+
+    await this.writable.write(this.recordWriter.buffer);
+    this.recordWriter.reset();
 
     for (const chunkIndex of this.chunkIndices) {
-      await this.recordWriter.writeChunkIndex(chunkIndex);
+      this.recordWriter.writeChunkIndex(chunkIndex);
     }
 
-    // fixme - write the attachment index records
+    await this.writable.write(this.recordWriter.buffer);
+    this.recordWriter.reset();
 
-    await this.recordWriter.writeFooter({
+    this.recordWriter.writeFooter({
       indexOffset: position,
       indexCrc: 0,
     });
 
-    await this.recordWriter.writeMagic();
+    this.recordWriter.writeMagic();
+
+    await this.writable.write(this.recordWriter.buffer);
+    this.recordWriter.reset();
   }
 
   /**
@@ -153,7 +96,10 @@ export class Mcap0IndexedWriter {
   }
 
   async addAttachment(attachment: Attachment): Promise<void> {
-    await this.recordWriter.writeAttachment(attachment);
+    this.recordWriter.writeAttachment(attachment);
+
+    await this.writable.write(this.recordWriter.buffer);
+    this.recordWriter.reset();
   }
 
   private async finalizeChunk(): Promise<void> {
@@ -181,20 +127,20 @@ export class Mcap0IndexedWriter {
       uncompressedSize: chunkRecord.uncompressedSize,
     };
 
-    await this.recordWriter.writeChunk(chunkRecord);
+    this.recordWriter.writeChunk(chunkRecord);
 
     const startPosition = this.writable.position();
     for (const messageIndex of this.chunkBuilder.indices) {
       chunkIndex.messageIndexOffsets.set(messageIndex.channelId, this.writable.position());
-      await this.recordWriter.writeMessageIndex(messageIndex);
+      this.recordWriter.writeMessageIndex(messageIndex);
     }
 
     chunkIndex.messageIndexLength = this.writable.position() - startPosition;
 
     this.chunkIndices.push(chunkIndex);
+    this.chunkBuilder.reset();
 
-    // fixme - reset should work here
-    //this.chunkBuilder.reset();
-    this.chunkBuilder = new ChunkBuilder();
+    await this.writable.write(this.recordWriter.buffer);
+    this.recordWriter.reset();
   }
 }

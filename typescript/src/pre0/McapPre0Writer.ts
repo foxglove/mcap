@@ -1,6 +1,6 @@
 import { open, FileHandle } from "fs/promises";
 
-import { BufferedWriter } from "../common/BufferedWriter";
+import { BufferBuilder } from "./BufferBuilder";
 import { MCAP_MAGIC, RecordType } from "./constants";
 import { ChannelInfo, McapRecord, Message } from "./types";
 
@@ -36,7 +36,7 @@ export default class McapPre0Writer {
       return;
     }
     // write the footer
-    const serializer = new BufferedWriter();
+    const serializer = new BufferBuilder();
     serializer.uint8(RecordType.FOOTER);
     serializer.uint64(0n);
     serializer.uint32(0);
@@ -50,14 +50,14 @@ export default class McapPre0Writer {
     if (!this.writeStream) {
       return;
     }
-    const serializer = new BufferedWriter();
+    const serializer = new BufferBuilder();
     serializer.uint32(info.id);
     serializer.string(info.topic);
     serializer.string(info.encoding);
     serializer.string(info.schemaName);
     serializer.string(info.schema);
 
-    const preamble = new BufferedWriter();
+    const preamble = new BufferBuilder();
     preamble.uint8(RecordType.CHANNEL_INFO);
     preamble.uint32(serializer.length);
 
@@ -69,11 +69,11 @@ export default class McapPre0Writer {
     if (!this.writeStream) {
       return;
     }
-    const serializer = new BufferedWriter();
+    const serializer = new BufferBuilder();
     serializer.uint32(message.channelInfo.id);
     serializer.uint64(message.timestamp);
 
-    const preamble = new BufferedWriter();
+    const preamble = new BufferBuilder();
     preamble.uint8(RecordType.MESSAGE);
     preamble.uint32(serializer.length + message.data.byteLength);
 

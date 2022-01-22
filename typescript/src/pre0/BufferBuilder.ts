@@ -1,6 +1,6 @@
 const LITTLE_ENDIAN = true;
 
-export class BufferedWriter {
+export class BufferBuilder {
   private fullBuffer = new Uint8Array(4096);
   private view: DataView;
   private textEncoder = new TextEncoder();
