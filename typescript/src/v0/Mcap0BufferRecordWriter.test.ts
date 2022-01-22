@@ -67,15 +67,16 @@ describe("Mcap0BufferRecordWriter", () => {
     const buffer = new BufferBuilder();
     buffer
       .uint8(3) // opcode
-      .uint64(BigInt(53)) // record byte length
+      .uint64(BigInt(57)) // record byte length
       .uint16(1)
       .string("/topic")
       .string("encoding")
       .string("schema name")
       .string("schema")
-      .uint32(0); // user data length
+      .uint32(0) // user data length
+      .uint32(0); // crc
 
-    expect(buffer.length).toEqual(53 + 9);
+    expect(buffer.length).toEqual(57 + 9);
     expect(writer.buffer).toEqual(buffer.buffer);
   });
 

@@ -75,7 +75,8 @@ export class Mcap0BufferRecordWriter {
       .string(info.encoding)
       .string(info.schemaName)
       .string(info.schema)
-      .array(info.userData);
+      .array(info.userData)
+      .uint32(0); // crc
 
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder
