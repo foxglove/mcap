@@ -1,61 +1,69 @@
 import { IWritable } from "../common/IWritable";
-import { Mcap0RecordWriter } from "./Mcap0RecordWriter";
+import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
 import { ChannelInfo, Message, Header, Attachment } from "./types";
 
+/**
+ * Mcap0UnindexedWriter provides an interface for writing messages
+ * to unindexed mcap files.
+ *
+ * NOTE: callers must wait on any method call to complete before calling another
+ * method. Calling a method before another has completed will result in a corrupt
+ * mcap file.
+ */
 export class Mcap0UnindexedWriter {
-  private recordWriter: Mcap0RecordWriter;
+  private bufferRecordBuilder: Mcap0RecordBuilder;
+  private writable: IWritable;
 
-  private channelInfos = new Map<number, ChannelInfo>();
-  private writtenChannelIds = new Set<number>();
+  private nextChannelId = 1;
 
   constructor(writable: IWritable) {
-    this.recordWriter = new Mcap0RecordWriter(writable);
+    this.writable = writable;
+    this.bufferRecordBuilder = new Mcap0RecordBuilder();
   }
 
   async start(header: Header): Promise<void> {
-    await this.recordWriter.writeMagic();
-    await this.recordWriter.writeHeader(header);
+    this.bufferRecordBuilder.writeMagic();
+    this.bufferRecordBuilder.writeHeader(header);
+
+    await this.writable.write(this.bufferRecordBuilder.buffer);
+    this.bufferRecordBuilder.reset();
   }
 
   async end(): Promise<void> {
-    await this.recordWriter.writeFooter({
+    this.bufferRecordBuilder.writeFooter({
       indexOffset: 0n,
       indexCrc: 0,
     });
-    await this.recordWriter.writeMagic();
+    await this.writable.write(this.bufferRecordBuilder.buffer);
+    this.bufferRecordBuilder.reset();
   }
 
   /**
    * Add channel info and return a generated channel id. The channel id is used when adding messages.
    */
   async registerChannel(info: Omit<ChannelInfo, "channelId">): Promise<number> {
-    const channelId = this.channelInfos.size + 1;
-    this.channelInfos.set(channelId, {
+    const channelId = this.nextChannelId;
+    this.bufferRecordBuilder.writeChannelInfo({
       ...info,
       channelId,
     });
 
+    await this.writable.write(this.bufferRecordBuilder.buffer);
+    this.bufferRecordBuilder.reset();
+
+    this.nextChannelId += 1;
     return channelId;
   }
 
   async addMessage(message: Message): Promise<void> {
-    // write out channel id if we have not yet done so
-    if (!this.writtenChannelIds.has(message.channelId)) {
-      const channelInfo = this.channelInfos.get(message.channelId);
-      if (!channelInfo) {
-        throw new Error(
-          `Mcap0UnindexedWriter#addMessage failed: missing channel info for id ${message.channelId}`,
-        );
-      }
-
-      await this.recordWriter.writeChannelInfo(channelInfo);
-      this.writtenChannelIds.add(message.channelId);
-    }
-
-    await this.recordWriter.writeMessage(message);
+    this.bufferRecordBuilder.writeMessage(message);
+    await this.writable.write(this.bufferRecordBuilder.buffer);
+    this.bufferRecordBuilder.reset();
   }
 
   async addAttachment(attachment: Attachment): Promise<void> {
-    await this.recordWriter.writeAttachment(attachment);
+    this.bufferRecordBuilder.writeAttachment(attachment);
+    await this.writable.write(this.bufferRecordBuilder.buffer);
+    this.bufferRecordBuilder.reset();
   }
 }

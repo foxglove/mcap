@@ -346,7 +346,7 @@ describe("Mcap0IndexedReader", () => {
         Opcode.CHUNK_INDEX,
         crcSuffix([
           ...uint64LE(0n), // start time
-          ...uint64LE(1n), // end time
+          ...uint64LE(2n), // end time
           ...uint64LE(0n), // offset
           ...keyValues(uint16LE, uint64LE, []), // message index offsets
           ...uint64LE(0n), // message index length
@@ -359,7 +359,7 @@ describe("Mcap0IndexedReader", () => {
         Opcode.CHUNK_INDEX,
         crcSuffix([
           ...uint64LE(1n), // start time
-          ...uint64LE(2n), // end time
+          ...uint64LE(3n), // end time
           ...uint64LE(0n), // offset
           ...keyValues(uint16LE, uint64LE, []), // message index offsets
           ...uint64LE(0n), // message index length

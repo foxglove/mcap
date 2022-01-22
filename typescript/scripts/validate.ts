@@ -10,19 +10,20 @@ import protobufjs from "protobufjs";
 import { FileDescriptorSet } from "protobufjs/ext/descriptor";
 import decompressLZ4 from "wasm-lz4";
 
-import detectVersion, {
+import {
+  detectVersion,
   DETECT_VERSION_BYTES_REQUIRED,
   McapVersion,
-} from "../src/common/detectVersion";
-import McapPre0To0StreamReader from "../src/pre0/McapPre0To0StreamReader";
-import Mcap0IndexedReader from "../src/v0/Mcap0IndexedReader";
-import Mcap0StreamReader from "../src/v0/Mcap0StreamReader";
-import {
-  ChannelInfo,
-  DecompressHandlers,
-  McapStreamReader,
-  TypedMcapRecord,
-} from "../src/v0/types";
+  McapPre0To0StreamReader,
+  Mcap0IndexedReader,
+  Mcap0StreamReader,
+  Mcap0Types,
+} from "../src";
+
+type ChannelInfo = Mcap0Types.ChannelInfo;
+type DecompressHandlers = Mcap0Types.DecompressHandlers;
+type McapStreamReader = Mcap0Types.McapStreamReader;
+type TypedMcapRecord = Mcap0Types.TypedMcapRecord;
 
 function log(...data: unknown[]) {
   console.log(...data);
@@ -245,11 +246,7 @@ async function validate(
           }
           break;
         } catch (error) {
-          log(
-            "Unable to read file as indexed; falling back to streaming:",
-            (error as Error).message,
-            error,
-          );
+          log("Unable to read file as indexed; falling back to streaming:", error);
         } finally {
           await handle.close();
         }
