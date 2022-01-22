@@ -62,6 +62,7 @@ static void BM_McapWriterBufferedWriterChunked(benchmark::State& state) {
   mcap::McapWriter writer;
   auto options = mcap::McapWriterOptions("ros1");
   options.chunked = true;
+  options.chunkSize = uint64_t(state.range(1));
 
   // Open an output memory buffer and write the file header
   mcap::BufferedWriter out{};
@@ -147,6 +148,7 @@ static void BM_McapWriterStreamWriterChunked(benchmark::State& state) {
   mcap::McapWriter writer;
   auto options = mcap::McapWriterOptions("ros1");
   options.chunked = true;
+  options.chunkSize = uint64_t(state.range(1));
 
   // Open an output file stream and write the file header
   std::ofstream out("benchmark.mcap", std::ios::binary);
@@ -185,13 +187,26 @@ int main(int argc, char* argv[]) {
     ->Arg(10000);
   benchmark::RegisterBenchmark("BM_McapWriterBufferedWriterChunked",
                                BM_McapWriterBufferedWriterChunked)
-    ->Arg(10000);
+    ->Args({10000, 1})
+    ->Args({10000, 10})
+    ->Args({10000, 100})
+    ->Args({10000, 1000})
+    ->Args({10000, 10000})
+    ->Args({10000, 100000})
+    ->Args({10000, 1000000})
+    ->Args({10000, 10000000});
   benchmark::RegisterBenchmark("BM_McapWriterStreamWriterUnchunked",
                                BM_McapWriterStreamWriterUnchunked)
     ->Arg(10000);
-  benchmark::RegisterBenchmark("BM_McapWriterStreamWriterChunked",
-                               BM_McapWriterStreamWriterChunked)
-    ->Arg(10000);
+  benchmark::RegisterBenchmark("BM_McapWriterStreamWriterChunked", BM_McapWriterStreamWriterChunked)
+    ->Args({10000, 1})
+    ->Args({10000, 10})
+    ->Args({10000, 100})
+    ->Args({10000, 1000})
+    ->Args({10000, 10000})
+    ->Args({10000, 100000})
+    ->Args({10000, 1000000})
+    ->Args({10000, 10000000});
   benchmark::Initialize(&argc, argv);
   benchmark::RunSpecifiedBenchmarks();
 
