@@ -1,8 +1,8 @@
-import { Mcap0BufferRecordBuilder } from "./Mcap0BufferedRecordBuilder";
+import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
 import { ChannelInfo, Message, MessageIndex } from "./types";
 
 class ChunkBuilder {
-  private recordWriter = new Mcap0BufferRecordBuilder();
+  private recordWriter = new Mcap0RecordBuilder();
   private messageIndices = new Map<number, MessageIndex>();
   private totalMessageCount = 0;
 

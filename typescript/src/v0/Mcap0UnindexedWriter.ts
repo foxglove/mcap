@@ -1,5 +1,5 @@
 import { IWritable } from "../common/IWritable";
-import { Mcap0BufferRecordBuilder } from "./Mcap0BufferedRecordBuilder";
+import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
 import { ChannelInfo, Message, Header, Attachment } from "./types";
 
 /**
@@ -11,14 +11,14 @@ import { ChannelInfo, Message, Header, Attachment } from "./types";
  * mcap file.
  */
 export class Mcap0UnindexedWriter {
-  private bufferRecordBuilder: Mcap0BufferRecordBuilder;
+  private bufferRecordBuilder: Mcap0RecordBuilder;
   private writable: IWritable;
 
   private nextChannelId = 1;
 
   constructor(writable: IWritable) {
     this.writable = writable;
-    this.bufferRecordBuilder = new Mcap0BufferRecordBuilder();
+    this.bufferRecordBuilder = new Mcap0RecordBuilder();
   }
 
   async start(header: Header): Promise<void> {

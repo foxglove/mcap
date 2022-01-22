@@ -1,6 +1,6 @@
 import { IWritable } from "../common/IWritable";
 import { ChunkBuilder } from "./ChunkBuilder";
-import { Mcap0BufferRecordBuilder } from "./Mcap0BufferedRecordBuilder";
+import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
 import { ChannelInfo, Message, Header, Attachment, Chunk, ChunkIndex } from "./types";
 
 /**
@@ -13,7 +13,7 @@ import { ChannelInfo, Message, Header, Attachment, Chunk, ChunkIndex } from "./t
  */
 export class Mcap0IndexedWriter {
   private writable: IWritable;
-  private recordWriter = new Mcap0BufferRecordBuilder();
+  private recordWriter = new Mcap0RecordBuilder();
   private channelInfos = new Map<number, ChannelInfo>();
   private writtenChannelIds = new Set<number>();
   private chunkIndices: ChunkIndex[] = [];
