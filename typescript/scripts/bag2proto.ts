@@ -16,6 +16,7 @@ import descriptor from "protobufjs/ext/descriptor";
 import decompressLZ4 from "wasm-lz4";
 
 import { Mcap0UnindexedWriter, IWritable, ChannelInfo, Message } from "../src/v0";
+import { Mcap0IndexedWriter } from "../src/v0/Mcap0IndexedWriter";
 
 const builtinSrc = `
 syntax = "proto3";
@@ -147,16 +148,23 @@ function convertTypedArrays(msg: Record<string, unknown>): Record<string, unknow
 // IWrtiable interface for FileHandle
 class FileHandleWritable implements IWritable {
   private handle: FileHandle;
+  private totalBytesWritten = 0;
+
   constructor(handle: FileHandle) {
     this.handle = handle;
   }
 
   async write(buffer: Uint8Array): Promise<void> {
-    await this.handle.write(buffer);
+    const written = await this.handle.write(buffer);
+    this.totalBytesWritten += written.bytesWritten;
+  }
+
+  position(): bigint {
+    return BigInt(this.totalBytesWritten);
   }
 }
 
-async function convert(filePath: string) {
+async function convert(filePath: string, options: { indexed: boolean }) {
   await decompressLZ4.isLoaded;
   const bzip2 = await Bzip2.init();
 
@@ -169,7 +177,13 @@ async function convert(filePath: string) {
   const fileHandle = await open(mcapFilePath, "w");
   const fileHandleWritable = new FileHandleWritable(fileHandle);
 
-  const mcapFile = new Mcap0UnindexedWriter(fileHandleWritable);
+  let mcapFile: Mcap0UnindexedWriter | Mcap0IndexedWriter;
+
+  if (options.indexed) {
+    mcapFile = new Mcap0IndexedWriter(fileHandleWritable);
+  } else {
+    mcapFile = new Mcap0UnindexedWriter(fileHandleWritable);
+  }
 
   await mcapFile.start({
     profile: "",
@@ -268,7 +282,7 @@ program
   .description("Convert a ROS1 .bag file to a mcap file with protobuf messages")
   .action(async (files: string[]) => {
     for (const file of files) {
-      await convert(file).catch(console.error);
+      await convert(file, { indexed: true }).catch(console.error);
     }
   })
   .parse();
