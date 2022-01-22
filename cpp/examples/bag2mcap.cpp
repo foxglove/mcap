@@ -16,8 +16,11 @@ mcap::Timestamp now() {
 int main() {
   mcap::McapWriter writer;
 
+  auto options = mcap::McapWriterOptions("ros1");
+  options.chunked = true;  // set this to false to write an unchunked file
+
   std::ofstream out("output.mcap", std::ios::binary);
-  writer.open(out, mcap::McapWriterOptions("ros1"));
+  writer.open(out, options);
 
   mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
   writer.addChannel(topic);
