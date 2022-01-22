@@ -12,7 +12,7 @@ import {
 } from "./types";
 
 /**
- * Mcap0BufferRecordWriter provides methods to serialize mcap records to a buffer in memory.
+ * Mcap0BufferRecordBuilder provides methods to serialize mcap records to a buffer in memory.
  *
  * It makes no effort to ensure spec compatability on the order of records, this is the responsibility
  * of the caller.
@@ -20,7 +20,7 @@ import {
  * You'll likely want to use one of the higher level writer interfaces unless you are building your
  * own higher level writing interface.
  */
-export class Mcap0BufferRecordWriter {
+export class Mcap0BufferRecordBuilder {
   private bufferBuilder = new BufferBuilder();
 
   get length(): number {

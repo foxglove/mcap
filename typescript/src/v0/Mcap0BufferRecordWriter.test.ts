@@ -1,16 +1,16 @@
 import { BufferBuilder } from "./BufferBuilder";
-import { Mcap0BufferRecordWriter } from "./Mcap0BufferRecordWriter";
+import { Mcap0BufferRecordBuilder } from "./Mcap0BufferedRecordBuilder";
 
-describe("Mcap0BufferRecordWriter", () => {
+describe("Mcap0BufferRecordBuilder", () => {
   it("writes magic", async () => {
-    const writer = new Mcap0BufferRecordWriter();
+    const writer = new Mcap0BufferRecordBuilder();
 
     writer.writeMagic();
     expect(writer.buffer).toEqual(new Uint8Array([137, 77, 67, 65, 80, 48, 13, 10]));
   });
 
   it("writes header", async () => {
-    const writer = new Mcap0BufferRecordWriter();
+    const writer = new Mcap0BufferRecordBuilder();
 
     writer.writeHeader({
       profile: "foo",
@@ -34,7 +34,7 @@ describe("Mcap0BufferRecordWriter", () => {
   });
 
   it("writes footer", async () => {
-    const writer = new Mcap0BufferRecordWriter();
+    const writer = new Mcap0BufferRecordBuilder();
 
     writer.writeFooter({
       indexOffset: 0n,
@@ -53,7 +53,7 @@ describe("Mcap0BufferRecordWriter", () => {
   });
 
   it("writes channel info", async () => {
-    const writer = new Mcap0BufferRecordWriter();
+    const writer = new Mcap0BufferRecordBuilder();
 
     writer.writeChannelInfo({
       channelId: 1,
@@ -81,7 +81,7 @@ describe("Mcap0BufferRecordWriter", () => {
   });
 
   it("writes messages", async () => {
-    const writer = new Mcap0BufferRecordWriter();
+    const writer = new Mcap0BufferRecordBuilder();
 
     writer.writeMessage({
       channelId: 1,
