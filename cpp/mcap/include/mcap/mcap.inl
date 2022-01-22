@@ -175,6 +175,7 @@ void McapWriter::writeChunk(mcap::IWritable& output, const mcap::BufferedWriter&
     chunkIndexRecord.messageIndexOffsets.emplace(channelId, output.size());
     write(output, messageIndex);
   }
+  currentMessageIndex_.clear();
   const uint64_t messageIndexLength = output.size() - messageIndexOffset;
 
   chunkIndexRecord.startTime = currentChunkStart_;
