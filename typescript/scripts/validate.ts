@@ -246,11 +246,7 @@ async function validate(
           }
           break;
         } catch (error) {
-          log(
-            "Unable to read file as indexed; falling back to streaming:",
-            (error as Error).message,
-            error,
-          );
+          log("Unable to read file as indexed; falling back to streaming:", error);
         } finally {
           await handle.close();
         }

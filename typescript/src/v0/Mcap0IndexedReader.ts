@@ -217,8 +217,14 @@ export default class Mcap0IndexedReader {
     );
 
     for (let i = 0; i + 1 < relevantChunks.length; i++) {
-      if (relevantChunks[i]!.endTime >= relevantChunks[i + 1]!.startTime) {
-        throw new Error("Overlapping chunks are not currently supported");
+      if (relevantChunks[i]!.endTime > relevantChunks[i + 1]!.startTime) {
+        throw new Error(
+          `Overlapping chunks are not currently supported; chunk at offset ${
+            relevantChunks[i]!.chunkOffset
+          } ends at ${relevantChunks[i]!.endTime} and chunk at offset ${
+            relevantChunks[i + 1]!.chunkOffset
+          } starts at ${relevantChunks[i + 1]!.startTime}`,
+        );
       }
     }
     for (const chunkIndex of relevantChunks) {
