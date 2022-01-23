@@ -10,7 +10,8 @@ McapWriter::~McapWriter() {
 }
 
 void McapWriter::open(mcap::IWritable& writer, const McapWriterOptions& options) {
-  chunkSize_ = options.chunked ? options.chunkSize : 0;
+  chunkSize_ = options.noChunking ? 0 : options.chunkSize;
+  indexing_ = !options.noIndexing;
   output_ = &writer;
   writeMagic(writer);
   write(writer, Header{options.profile, options.library, options.metadata});
@@ -33,29 +34,33 @@ void McapWriter::close() {
     currentChunk_.end();
   }
 
-  // Get the offset of the End Of File section
-  const auto indexOffset = output.size();
+  uint64_t indexOffset = 0;
+  uint32_t indexCrc = 0;
 
-  // Write all channel info records
-  for (const auto& channel : channels_) {
-    write(output, channel);
+  if (indexing_) {
+    // Get the offset of the End Of File section
+    indexOffset = output.size();
+
+    // Write all channel info records
+    for (const auto& channel : channels_) {
+      write(output, channel);
+    }
+
+    // Write chunk index records
+    for (const auto& chunkIndexRecord : chunkIndex_) {
+      write(output, chunkIndexRecord);
+    }
+
+    // Write attachment index records
+    for (const auto& attachmentIndexRecord : attachmentIndex_) {
+      write(output, attachmentIndexRecord);
+    }
+
+    // Write the statistics record
+    write(output, statistics_);
   }
 
-  // Write chunk index records
-  for (const auto& chunkIndexRecord : chunkIndex_) {
-    write(output, chunkIndexRecord);
-  }
-
-  // Write attachment index records
-  for (const auto& attachmentIndexRecord : attachmentIndex_) {
-    write(output, attachmentIndexRecord);
-  }
-
-  // Write the statistics record
-  write(output, statistics_);
-
-  // Calculate the index CRC
-  const uint32_t indexCrc = 0;
+  // TODO: Calculate the index CRC
 
   // Write the footer and trailing magic
   write(output, mcap::Footer{indexOffset, indexCrc});
@@ -92,21 +97,27 @@ mcap::Status McapWriter::write(const mcap::Message& message) {
 
   const uint64_t messageOffset = output.size();
 
-  // Write the message and update statistics
+  // Write the message
   write(output, message);
-  ++statistics_.messageCount;
-  channelMessageCounts[message.channelId] += 1;
+
+  // Update statistics
+  if (indexing_) {
+    ++statistics_.messageCount;
+    channelMessageCounts[message.channelId] += 1;
+  }
 
   if (chunkSize_ > 0) {
-    // Update the message index
-    auto& messageIndex = currentMessageIndex_[message.channelId];
-    messageIndex.channelId = message.channelId;
-    ++messageIndex.count;
-    messageIndex.records.emplace_back(message.recordTime, messageOffset);
+    if (indexing_) {
+      // Update the message index
+      auto& messageIndex = currentMessageIndex_[message.channelId];
+      messageIndex.channelId = message.channelId;
+      ++messageIndex.count;
+      messageIndex.records.emplace_back(message.recordTime, messageOffset);
 
-    // Update the chunk index start/end times
-    currentChunkStart_ = std::min(currentChunkStart_, message.recordTime);
-    currentChunkEnd_ = std::max(currentChunkEnd_, message.recordTime);
+      // Update the chunk index start/end times
+      currentChunkStart_ = std::min(currentChunkStart_, message.recordTime);
+      currentChunkEnd_ = std::max(currentChunkEnd_, message.recordTime);
+    }
 
     // Check if the current chunk is ready to close
     if (currentChunk_.size() >= chunkSize_) {
@@ -125,7 +136,7 @@ mcap::Status McapWriter::write(const mcap::Attachment& attachment) {
   auto& output = *output_;
 
   // Check if we have an open chunk that needs to be closed
-  if (chunkSize_ > 0 && currentChunk_.size() > 0) {
+  if (currentChunk_.size() > 0) {
     writeChunk(output, currentChunk_);
     currentChunk_.end();
   }
@@ -133,8 +144,11 @@ mcap::Status McapWriter::write(const mcap::Attachment& attachment) {
   const uint64_t fileOffset = output.size();
 
   write(output, attachment);
-  ++statistics_.attachmentCount;
-  attachmentIndex_.emplace_back(attachment, fileOffset);
+
+  if (indexing_) {
+    ++statistics_.attachmentCount;
+    attachmentIndex_.emplace_back(attachment, fileOffset);
+  }
 
   return StatusCode::Success;
 }
@@ -163,33 +177,37 @@ void McapWriter::writeChunk(mcap::IWritable& output, const mcap::BufferedWriter&
   // Write the chunk
   const uint64_t chunkOffset = output.size();
   write(output, Chunk{uncompressedSize, uncompressedCrc, compression, recordsSize, records});
-  const uint64_t chunkSize = output.size() - chunkOffset;
-  ++statistics_.chunkCount;
 
-  // Create a chunk index record
-  auto& chunkIndexRecord = chunkIndex_.emplace_back();
+  if (indexing_) {
+    // Update statistics
+    const uint64_t chunkSize = output.size() - chunkOffset;
+    ++statistics_.chunkCount;
 
-  // Write the message index records
-  const uint64_t messageIndexOffset = output.size();
-  for (const auto& [channelId, messageIndex] : currentMessageIndex_) {
-    chunkIndexRecord.messageIndexOffsets.emplace(channelId, output.size());
-    write(output, messageIndex);
+    // Create a chunk index record
+    auto& chunkIndexRecord = chunkIndex_.emplace_back();
+
+    // Write the message index records
+    const uint64_t messageIndexOffset = output.size();
+    for (const auto& [channelId, messageIndex] : currentMessageIndex_) {
+      chunkIndexRecord.messageIndexOffsets.emplace(channelId, output.size());
+      write(output, messageIndex);
+    }
+    currentMessageIndex_.clear();
+    const uint64_t messageIndexLength = output.size() - messageIndexOffset;
+
+    chunkIndexRecord.startTime = currentChunkStart_;
+    chunkIndexRecord.endTime = currentChunkEnd_;
+    chunkIndexRecord.chunkOffset = chunkOffset;
+    chunkIndexRecord.messageIndexLength = messageIndexLength;
+    chunkIndexRecord.compression = compression;
+    chunkIndexRecord.compressedSize = recordsSize;
+    chunkIndexRecord.uncompressedSized = uncompressedSize;
+    chunkIndexRecord.crc = 0;
+
+    // Reset start/end times for the next chunk
+    currentChunkStart_ = std::numeric_limits<uint64_t>::max();
+    currentChunkEnd_ = std::numeric_limits<uint64_t>::min();
   }
-  currentMessageIndex_.clear();
-  const uint64_t messageIndexLength = output.size() - messageIndexOffset;
-
-  chunkIndexRecord.startTime = currentChunkStart_;
-  chunkIndexRecord.endTime = currentChunkEnd_;
-  chunkIndexRecord.chunkOffset = chunkOffset;
-  chunkIndexRecord.messageIndexLength = messageIndexLength;
-  chunkIndexRecord.compression = compression;
-  chunkIndexRecord.compressedSize = recordsSize;
-  chunkIndexRecord.uncompressedSized = uncompressedSize;
-  chunkIndexRecord.crc = 0;
-
-  // Reset start/end times for the next chunk
-  currentChunkStart_ = std::numeric_limits<uint64_t>::max();
-  currentChunkEnd_ = std::numeric_limits<uint64_t>::min();
 }
 
 void McapWriter::writeMagic(mcap::IWritable& output) {

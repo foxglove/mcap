@@ -17,7 +17,6 @@ int main() {
   mcap::McapWriter writer;
 
   auto options = mcap::McapWriterOptions("ros1");
-  options.chunked = true;  // set this to false to write an unchunked file
 
   std::ofstream out("output.mcap", std::ios::binary);
   writer.open(out, options);
