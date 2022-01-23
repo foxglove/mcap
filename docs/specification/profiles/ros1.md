@@ -1,8 +1,19 @@
-## ROS1 Profile
+## ROS1
 
-Profile name: "ros1".
+Profile: **ros1**
 
-Channel info records serialized with the "ros1" profile may include the following fields:
+The `ros1` profile describes how to create mcap files for v1 of the [ROS](https://ros.org/) framework.
+
+### Channel Info
+
+| field       | value            |
+| ----------- | ---------------- |
+| encoding    | ros1             |
+| schema      | .MSG             |
+| schema_name | package/datatype |
+| user_data   | See below        |
+
+#### user_data
 
 - callerid (optional, string)
 - latching (optional, bool stringified as "true" or "false")

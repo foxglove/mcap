@@ -101,7 +101,7 @@ The first record in every MCAP file is a header.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 4 + N | profile | String | The profile to use for interpretation of channel info user data. If the value matches one of the [supported profiles][profiles], the channel info user data section should be structured to match the description in the corresponding profile. This field may also be supplied empty, or containing a framework that is not one of those recognized. |
+| 4 + N | profile | String | The profile to use for interpretation of open-ended fields within records (i.e. encoding, user data, schema, etc). If the value matches one of the [supported profiles][profiles], the file should conform to the profile. This field may also be supplied empty or containing a framework that is not one of those recognized. When specifying a custom profile prefer the `x-` prefix to avoid conflict with future supported profiles. |
 | N | library | String | freeform string for writer to specify its name, version, or other information for use in debugging |
 | N | metadata | KeyValues<string, string> | Example keys: robot_id, git_sha, timezone, run_id. |
 
@@ -127,7 +127,7 @@ Identifies a stream of messages on a particular topic and includes information a
 | 4 + N | encoding | String | Message Encoding | cdr, cbor, ros1, protobuf, etc. |
 | 4 + N | schema_name | String | Schema Name | std_msgs/Header |
 | 4 + N | schema | uint32 length-prefixed bytes | Schema |  |
-| N | user_data | KeyValues<string, string> | Metadata about this channel | used to encode protocol-specific details like callerid, latching, QoS profiles... Refer to [supported profiles][profiles]. |
+| N | user_data | KeyValues<string, string> | Metadata about this channel | user specifed data |
 | 4 | crc | uint32 | CRC32 checksum of preceding fields in the record (not including the record opcode and length prefix). A value of zero indicates that CRC validation should not be performed. |  |
 
 #### Message (op=0x04)
