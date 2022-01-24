@@ -25,6 +25,12 @@ using ByteOffset = uint64_t;
 using KeyValueMap = std::unordered_map<std::string, std::string>;
 using ByteArray = std::vector<uint8_t>;
 
+enum struct Compression {
+  None,
+  Lz4,
+  Zstd,
+};
+
 enum struct OpCode : uint8_t {
   Header = 0x01,
   Footer = 0x02,
@@ -138,15 +144,19 @@ struct UnknownRecord {
 };
 
 struct McapWriterOptions {
-  bool chunked;
+  bool noChunking;
+  bool noIndexing;
   uint64_t chunkSize;
+  Compression compression;
   std::string profile;
   std::string library;
   mcap::KeyValueMap metadata;
 
   McapWriterOptions(const std::string_view profile)
-      : chunked(true)
+      : noChunking(false)
+      , noIndexing(false)
       , chunkSize(DefaultChunkSize)
+      , compression(Compression::None)
       , profile(profile)
       , library("libmcap " LIBRARY_VERSION) {}
 };
@@ -261,6 +271,7 @@ private:
   std::unordered_map<mcap::ChannelId, mcap::MessageIndex> currentMessageIndex_;
   uint64_t currentChunkStart_ = std::numeric_limits<uint64_t>::max();
   uint64_t currentChunkEnd_ = std::numeric_limits<uint64_t>::min();
+  bool indexing_ = true;
 
   void writeChunk(mcap::IWritable& output, const mcap::BufferedWriter& chunkData);
 
