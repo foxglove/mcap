@@ -85,13 +85,19 @@ The section below uses the following data types and serialization choices. In al
 
 - **Timestamp**: uint64 nanoseconds since a user-understood epoch (i.e unix epoch, robot boot time, etc)
 - **String**: a uint32-prefixed UTF8 string
-- **KeyValues<T1, T2>**: A uint32 length-prefixed association of key-value pairs, serialized as
+- **KeyValues<T1, T2>**: A uint32 length-prefixed association of key-value pairs
 
 ```
 <length><T1 (key)><T2 (value)><T1 (key)><T2 (value)>
 ```
 
-An empty KeyValues consists of a zero-value length prefix.
+- **Array<T>**: A uint32 length-prefixed array.
+
+```
+<length><T><T><T>
+```
+
+An empty Array consists of a zero-value length prefix.
 
 - **Bytes**: refers to an array of bytes, without a length prefix. If a length prefix is required a designation like "uint32 length-prefixed bytes" will be used.
 
@@ -162,8 +168,7 @@ The Message Index record maps timestamps to message offsets. One message index r
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 2 | channel_id | uint16 | Channel ID. |
-| 4 | count | uint32 | Number of records in the chunk, on this channel. |
-| N | records | KeyValues<Timestamp, uint64> | Array of record_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
+| N | records | Array<{ Timestamp, uint64 }> | Array of record_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
 | 4 | crc | uint32 | CRC32 checksum of preceding fields in the record (not including the record opcode and length prefix). A value of zero indicates that CRC validation should not be performed. |
 
 #### Chunk Index (op=0x07)
