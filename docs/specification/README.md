@@ -124,7 +124,7 @@ Identifies a stream of messages on a particular topic and includes information a
 | --- | --- | --- | --- | --- |
 | 2 | id | uint16 | Channel ID 1 | 1 |
 | 4 + N | topic_name | String | Topic | /diagnostics |
-| 4 + N | encoding | String | Message Encoding | cdr, cbor, ros1, protobuf, etc. |
+| 4 + N | encoding | String | A string indicating the message encoding. If using a custom encoding prefix the string with `x-` to avoid namespace collisions with future well-known encodings. | [Well-known encodings](./encoding/index.md) |
 | 4 + N | schema_name | String | Schema Name | std_msgs/Header |
 | 4 + N | schema | uint32 length-prefixed bytes | Schema |  |
 | N | user_data | KeyValues<string, string> | Metadata about this channel | used to encode protocol-specific details like callerid, latching, QoS profiles... Refer to [supported profiles][profiles]. |
