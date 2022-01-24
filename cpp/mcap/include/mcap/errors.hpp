@@ -8,6 +8,7 @@ enum class StatusCode {
   Success = 0,
   NotOpen = 1,
   InvalidChannelId = 2,
+  CompressionError = 3,
 };
 
 struct Status {
@@ -33,6 +34,10 @@ struct Status {
         break;
     }
   }
+
+  Status(StatusCode code, const std::string& message)
+      : code(code)
+      , message(message) {}
 
   bool ok() const {
     return code == StatusCode::Success;
