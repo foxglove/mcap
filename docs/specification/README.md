@@ -128,7 +128,6 @@ Identifies a stream of messages on a particular topic and includes information a
 | 4 + N | schema_name | String | Schema Name | std_msgs/Header |
 | 4 + N | schema | uint32 length-prefixed bytes | Schema |  |
 | N | user_data | KeyValues<string, string> | Metadata about this channel | user specifed data |
-| 4 | crc | uint32 | CRC32 checksum of preceding fields in the record (not including the record opcode and length prefix). A value of zero indicates that CRC validation should not be performed. |  |
 
 #### Message (op=0x04)
 
@@ -164,7 +163,6 @@ The Message Index record maps timestamps to message offsets. One message index r
 | 2 | channel_id | uint16 | Channel ID. |
 | 4 | count | uint32 | Number of records in the chunk, on this channel. |
 | N | records | KeyValues<Timestamp, uint64> | Array of record_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
-| 4 | crc | uint32 | CRC32 checksum of preceding fields in the record (not including the record opcode and length prefix). A value of zero indicates that CRC validation should not be performed. |
 
 #### Chunk Index (op=0x07)
 
@@ -180,7 +178,6 @@ The Chunk Index records form a coarse index of timestamps to chunk offsets, alon
 | 4 + N | compression | String | The compression used on this chunk. Refer to [supported compression formats][compression formats]. |
 | 8 | compressed_size | uint64 | The compressed size of the chunk. |
 | 8 | uncompressed_size | uint64 | The uncompressed size of the chunk. |
-| 4 | crc | uint32 | CRC32 checksum of the preceding fields within the record (not including the record opcode and length prefix). A value of zero indicates that CRC validation should not be performed. |
 
 #### Attachment (op=0x08)
 
