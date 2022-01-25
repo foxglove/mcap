@@ -2,6 +2,35 @@
 
 The following notes may be useful for users of the MCAP format, including implementers of readers and writers.
 
+
+###
+MCAP is a container file format for append-only storage of heterogeneously-schematized data. It is inspired by the ROS1 bag format and is intended to support flexible serialization options, while also generalizing to non-ROS systems and retaining characteristics such as self-containment and chunk compression. Features include:
+
+- Single-pass, indexed writes (no backward seeking)
+- Flexible message serialization options (e.g. ros1, protobuf, …)
+- Self-contained (message schemas are included in the file)
+- Fast remote file summarization
+- File attachments
+- Optional chunk compression
+- Optional CRC integrity checks
+
+Some helpful terms to understand in the following sections are:
+- **Topic**: A named message type and associated schema.
+- **Channel**: A logical stream that contains messages on a single topic. Channels are associated with a numeric ID by the recorder - the **Channel ID**.
+- **Channel Info**: A type of record describing information about a channel, notably containing the name and schema of the topic.
+- **Message**: A type of record representing a timestamped message on a channel (and therefore associated with a topic/schema). A message can be parsed by a reader that has also read the channel info for the channel on which the message appears.
+- **Chunk**: A record type that wraps a compressed set of channel info and message records.
+- **Attachment**: Extra data that may be included in the file, outside the chunks. Attachments may be quickly listed and accessed via an index at the end of the file.
+- **Index**: The format contains indexes for both messages and attachments. For messages, there are two levels of indexing - a **Chunk Index** at the end of the file points to chunks by offset, enabling fast location of chunks based on channel and timerange. A second index - the **Message Index** - after each chunk contains, for each channel in the chunk, and offset and timestamp for every message to allow fast location of messages within the uncompressed chunk data. The attachment index at the end of the file allows for fast listing and location of attachments based on name, timestamp, or attachment type.
+- **Statistics**: A type of record at the end of the file, used to support fast summarization of file contents.
+- **Message Data Section**: Used in this doc to refer to the first portion of the file that contains chunks and message data. To be distinguished from the **Index Data Section**.
+- **Index Data Section**: The last part of the file, containing records used for searching and summarizing the file. The Index Data section is split into a **channel info portion**, **chunk index portion**, and **attachment index portion** each containing contiguous runs of the corresponding record type, followed by a **Statistics** record. All portions of the index data section are optional, subject to constraints and tradeoffs described below. There are no other record types in the index data section.
+
+
+
+
+
+
 ## Feature Explanations
 
 The format is intended to support efficient, indexed reading of messages and generation of summary data in both local and remote contexts. "Seeking" should be imagined to incur either a disk seek or an HTTP range request to an object store -- the latter being significantly more costly. In both random access and summarization, features may be unsupported due to choices taken by the writer of the file. For instance, statistics may not include channel message counts, or there may be no message index present. If the index data section is empty, the index_offset in the file footer will be set to zero.
