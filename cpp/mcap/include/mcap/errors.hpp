@@ -34,6 +34,10 @@ struct Status {
     }
   }
 
+  Status(StatusCode code, const std::string& message)
+      : code(code)
+      , message(message) {}
+
   bool ok() const {
     return code == StatusCode::Success;
   }

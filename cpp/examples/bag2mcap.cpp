@@ -17,6 +17,7 @@ int main() {
   mcap::McapWriter writer;
 
   auto options = mcap::McapWriterOptions("ros1");
+  options.compression = mcap::Compression::Zstd;
 
   std::ofstream out("output.mcap", std::ios::binary);
   writer.open(out, options);
@@ -37,7 +38,15 @@ int main() {
   msg.data = payload.data();
   msg.dataSize = payload.size();
 
-  writer.write(msg);
+  const auto res = writer.write(msg);
+  if (!res.ok()) {
+    std::cerr << "Failed to write message: " << res.message << "\n";
+    writer.terminate();
+    out.close();
+    std::remove("output.mcap");
+    return 1;
+  }
+
   writer.close();
 
   return 0;
