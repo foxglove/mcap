@@ -47,10 +47,10 @@ void McapWriter::open(mcap::IWritable& writer, const McapWriterOptions& options)
       uncompressedChunk_ = std::make_unique<mcap::BufferedWriter>();
       break;
     case Compression::Lz4:
-      // FIXME
+      lz4Chunk_ = std::make_unique<mcap::LZ4Writer>(options.compressionLevel, chunkSize_);
       break;
     case Compression::Zstd:
-      zstdChunk_ = std::make_unique<mcap::ZStdWriter>(options.chunkSize, options.compressionLevel);
+      zstdChunk_ = std::make_unique<mcap::ZStdWriter>(options.compressionLevel, chunkSize_);
       break;
   }
   output_ = &writer;
@@ -150,15 +150,17 @@ mcap::Status McapWriter::write(const mcap::Message& message) {
     }
 
     // Write the channel info record
-    write(output, channels_[index]);
+    uncompressedSize_ += write(output, channels_[index]);
 
     // Update channel statistics
     channelMessageCounts.emplace(message.channelId, 0);
     ++statistics_.channelCount;
   }
 
+  const uint64_t messageOffset = uncompressedSize_;
+
   // Write the message
-  write(output, message);
+  uncompressedSize_ += write(output, message);
 
   // Update message statistics
   if (indexing_) {
@@ -173,17 +175,12 @@ mcap::Status McapWriter::write(const mcap::Message& message) {
       auto& messageIndex = currentMessageIndex_[message.channelId];
       messageIndex.channelId = message.channelId;
       ++messageIndex.count;
-      messageIndex.records.emplace_back(message.recordTime, uncompressedSize_);
+      messageIndex.records.emplace_back(message.recordTime, messageOffset);
 
       // Update the chunk index start/end times
       currentChunkStart_ = std::min(currentChunkStart_, message.recordTime);
       currentChunkEnd_ = std::max(currentChunkEnd_, message.recordTime);
     }
-
-    uncompressedSize_ += message.dataSize;
-
-    // TODO
-    uncompressedCrc_ = 0;
 
     // Check if the current chunk is ready to close
     if (uncompressedSize_ >= chunkSize_) {
@@ -231,8 +228,7 @@ mcap::IWritable& McapWriter::getOutput() {
     case Compression::None:
       return *uncompressedChunk_;
     case Compression::Lz4:
-      // FIXME
-      return *zstdChunk_;
+      return *lz4Chunk_;
     case Compression::Zstd:
       return *zstdChunk_;
   }
@@ -243,8 +239,7 @@ mcap::IChunkWriter* McapWriter::getChunkWriter() {
     case Compression::None:
       return uncompressedChunk_.get();
     case Compression::Lz4:
-      // FIXME
-      return nullptr;
+      return lz4Chunk_.get();
     case Compression::Zstd:
       return zstdChunk_.get();
   }
@@ -258,10 +253,11 @@ void McapWriter::writeChunk(mcap::IWritable& output, mcap::IChunkWriter& chunkDa
 
   const uint64_t compressedSize = chunkData.size();
   const std::byte* data = chunkData.data();
+  const uint32_t uncompressedCrc = 0;
 
   // Write the chunk
   const uint64_t chunkOffset = output.size();
-  write(output, Chunk{uncompressedSize_, uncompressedCrc_, compression, compressedSize, data});
+  write(output, Chunk{uncompressedSize_, uncompressedCrc, compression, compressedSize, data});
 
   if (indexing_) {
     // Update statistics
@@ -302,7 +298,7 @@ void McapWriter::writeMagic(mcap::IWritable& output) {
   write(output, reinterpret_cast<const std::byte*>(Magic), sizeof(Magic));
 }
 
-void McapWriter::write(mcap::IWritable& output, const mcap::Header& header) {
+uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Header& header) {
   const uint32_t metadataSize = internal::KeyValueMapSize(header.metadata);
   const uint64_t recordSize =
     4 + header.profile.size() + 4 + header.library.size() + 4 + metadataSize;
@@ -312,16 +308,22 @@ void McapWriter::write(mcap::IWritable& output, const mcap::Header& header) {
   write(output, header.profile);
   write(output, header.library);
   write(output, header.metadata, metadataSize);
+
+  return 9 + recordSize;
 }
 
-void McapWriter::write(mcap::IWritable& output, const mcap::Footer& footer) {
+uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Footer& footer) {
+  const uint64_t recordSize = 12;
+
   write(output, OpCode::Footer);
-  write(output, uint64_t(12));
+  write(output, recordSize);
   write(output, footer.indexOffset);
   write(output, footer.indexCrc);
+
+  return 9 + recordSize;
 }
 
-void McapWriter::write(mcap::IWritable& output, const mcap::ChannelInfo& info) {
+uint64_t McapWriter::write(mcap::IWritable& output, const mcap::ChannelInfo& info) {
   const uint32_t userDataSize = internal::KeyValueMapSize(info.userData);
   const uint64_t recordSize = 2 + 4 + info.topicName.size() + 4 + info.encoding.size() + 4 +
                               info.schemaName.size() + 4 + info.schema.size() + 4 + userDataSize +
@@ -337,9 +339,11 @@ void McapWriter::write(mcap::IWritable& output, const mcap::ChannelInfo& info) {
   write(output, info.schema);
   write(output, info.userData, userDataSize);
   write(output, crc);
+
+  return 9 + recordSize;
 }
 
-void McapWriter::write(mcap::IWritable& output, const mcap::Message& message) {
+uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Message& message) {
   const uint64_t recordSize = 2 + 4 + 8 + 8 + message.dataSize;
 
   write(output, OpCode::Message);
@@ -349,9 +353,11 @@ void McapWriter::write(mcap::IWritable& output, const mcap::Message& message) {
   write(output, message.publishTime);
   write(output, message.recordTime);
   write(output, message.data, message.dataSize);
+
+  return 9 + recordSize;
 }
 
-void McapWriter::write(mcap::IWritable& output, const mcap::Attachment& attachment) {
+uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Attachment& attachment) {
   const uint64_t recordSize =
     4 + attachment.name.size() + 8 + 4 + attachment.contentType.size() + attachment.dataSize;
 
@@ -361,9 +367,11 @@ void McapWriter::write(mcap::IWritable& output, const mcap::Attachment& attachme
   write(output, attachment.recordTime);
   write(output, attachment.contentType);
   write(output, attachment.data, attachment.dataSize);
+
+  return 9 + recordSize;
 }
 
-void McapWriter::write(mcap::IWritable& output, const mcap::Chunk& chunk) {
+uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Chunk& chunk) {
   const uint64_t recordSize = 8 + 4 + 4 + chunk.compression.size() + chunk.recordsSize;
 
   write(output, OpCode::Chunk);
@@ -372,9 +380,11 @@ void McapWriter::write(mcap::IWritable& output, const mcap::Chunk& chunk) {
   write(output, chunk.uncompressedCrc);
   write(output, chunk.compression);
   write(output, chunk.records, chunk.recordsSize);
+
+  return 9 + recordSize;
 }
 
-void McapWriter::write(mcap::IWritable& output, const mcap::MessageIndex& index) {
+uint64_t McapWriter::write(mcap::IWritable& output, const mcap::MessageIndex& index) {
   const uint32_t recordsSize = index.records.size() * 16;
   const uint64_t recordSize = 2 + 4 + 4 + recordsSize + 4;
   const uint32_t crc = 0;
@@ -391,9 +401,11 @@ void McapWriter::write(mcap::IWritable& output, const mcap::MessageIndex& index)
   }
 
   write(output, crc);
+
+  return 9 + recordSize;
 }
 
-void McapWriter::write(mcap::IWritable& output, const mcap::ChunkIndex& index) {
+uint64_t McapWriter::write(mcap::IWritable& output, const mcap::ChunkIndex& index) {
   const uint32_t messageIndexOffsetsSize = index.messageIndexOffsets.size() * 10;
   const uint64_t recordSize =
     8 + 8 + 8 + 4 + messageIndexOffsetsSize + 8 + 4 + index.compression.size() + 8 + 8 + 4;
@@ -416,9 +428,11 @@ void McapWriter::write(mcap::IWritable& output, const mcap::ChunkIndex& index) {
   write(output, index.compressedSize);
   write(output, index.uncompressedSized);
   write(output, crc);
+
+  return 9 + recordSize;
 }
 
-void McapWriter::write(mcap::IWritable& output, const mcap::AttachmentIndex& index) {
+uint64_t McapWriter::write(mcap::IWritable& output, const mcap::AttachmentIndex& index) {
   const uint64_t recordSize = 8 + 8 + 4 + index.name.size() + 4 + index.contentType.size() + 8;
 
   write(output, OpCode::AttachmentIndex);
@@ -428,9 +442,11 @@ void McapWriter::write(mcap::IWritable& output, const mcap::AttachmentIndex& ind
   write(output, index.name);
   write(output, index.contentType);
   write(output, index.offset);
+
+  return 9 + recordSize;
 }
 
-void McapWriter::write(mcap::IWritable& output, const mcap::Statistics& stats) {
+uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Statistics& stats) {
   const uint32_t channelMessageCountsSize = stats.channelMessageCounts.size() * 10;
   const uint64_t recordSize = 8 + 4 + 4 + 4 + 4 + channelMessageCountsSize;
 
@@ -446,12 +462,16 @@ void McapWriter::write(mcap::IWritable& output, const mcap::Statistics& stats) {
     write(output, channelId);
     write(output, messageCount);
   }
+
+  return 9 + recordSize;
 }
 
-void McapWriter::write(mcap::IWritable& output, const mcap::UnknownRecord& record) {
+uint64_t McapWriter::write(mcap::IWritable& output, const mcap::UnknownRecord& record) {
   write(output, mcap::OpCode(record.opcode));
   write(output, record.dataSize);
   write(output, record.data, record.dataSize);
+
+  return 9 + record.dataSize;
 }
 
 void McapWriter::write(mcap::IWritable& output, const std::string_view str) {
@@ -532,6 +552,61 @@ uint64_t StreamWriter::size() const {
   return size_;
 }
 
+// LZ4Writer ///////////////////////////////////////////////////////////////////
+
+namespace internal {
+
+int LZ4AccelerationLevel(CompressionLevel level) {
+  switch (level) {
+    case CompressionLevel::Fastest:
+      return 65537;
+    case CompressionLevel::Fast:
+      return 32768;
+    case CompressionLevel::Default:
+    case CompressionLevel::Slow:
+    case CompressionLevel::Slowest:
+      return 1;
+  }
+}
+
+}  // namespace internal
+
+LZ4Writer::LZ4Writer(CompressionLevel compressionLevel, uint64_t chunkSize) {
+  acceleration_ = internal::LZ4AccelerationLevel(compressionLevel);
+  preEndBuffer_.reserve(chunkSize);
+}
+
+void LZ4Writer::write(const std::byte* data, uint64_t size) {
+  preEndBuffer_.insert(preEndBuffer_.end(), data, data + size);
+}
+
+void LZ4Writer::end() {
+  const auto dstCapacity = LZ4_compressBound(preEndBuffer_.size());
+  buffer_.resize(dstCapacity);
+  const int dstSize = LZ4_compress_fast(reinterpret_cast<const char*>(preEndBuffer_.data()),
+                                        reinterpret_cast<char*>(buffer_.data()),
+                                        preEndBuffer_.size(), dstCapacity, acceleration_);
+  buffer_.resize(dstSize);
+  preEndBuffer_.clear();
+}
+
+uint64_t LZ4Writer::size() const {
+  return buffer_.size();
+}
+
+bool LZ4Writer::empty() const {
+  return buffer_.empty() && preEndBuffer_.empty();
+}
+
+void LZ4Writer::clear() {
+  preEndBuffer_.clear();
+  buffer_.clear();
+}
+
+const std::byte* LZ4Writer::data() const {
+  return buffer_.data();
+}
+
 // ZStdWriter //////////////////////////////////////////////////////////////////
 
 namespace internal {
@@ -539,58 +614,51 @@ namespace internal {
 int ZStdCompressionLevel(CompressionLevel level) {
   switch (level) {
     case CompressionLevel::Fastest:
-      return ZSTD_minCLevel();
+      return -5;
     case CompressionLevel::Fast:
       return -3;
     case CompressionLevel::Default:
       return 1;
     case CompressionLevel::Slow:
-      return 3;
+      return 5;
     case CompressionLevel::Slowest:
-      return ZSTD_maxCLevel();
+      return 19;
   }
 }
 
 }  // namespace internal
 
-ZStdWriter::ZStdWriter(uint64_t bufferSize, CompressionLevel compressionLevel) {
-  preWriteBuffer_.resize(bufferSize);
-  zstdContext_ = ZSTD_createCStream();
-  ZSTD_CCtx_setParameter(zstdContext_, ZSTD_c_stableOutBuffer, 1);
+// ZStdWriter //////////////////////////////////////////////////////////////////
+
+ZStdWriter::ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize) {
+  zstdContext_ = ZSTD_createCCtx();
   ZSTD_CCtx_setParameter(zstdContext_, ZSTD_c_compressionLevel,
                          internal::ZStdCompressionLevel(compressionLevel));
+  preEndBuffer_.reserve(chunkSize);
 }
 
 ZStdWriter::~ZStdWriter() {
-  ZSTD_freeCStream(zstdContext_);
+  ZSTD_freeCCtx(zstdContext_);
 }
 
 void ZStdWriter::write(const std::byte* data, uint64_t size) {
-  ZSTD_inBuffer in{data, size, 0};
-  size_t result;
-
-  do {
-    ZSTD_outBuffer out{preWriteBuffer_.data(), preWriteBuffer_.size(), 0};
-    result = ZSTD_compressStream2(zstdContext_, &out, &in, ZSTD_e_continue);
-    assert(!ZSTD_isError(result) && ZSTD_getErrorString(ZSTD_getErrorCode(result)));
-    buffer_.insert(buffer_.end(), preWriteBuffer_.begin(), preWriteBuffer_.begin() + out.pos);
-  } while (in.pos != in.size);
-
-  hasUnflushedData_ = true;
+  preEndBuffer_.insert(preEndBuffer_.end(), data, data + size);
 }
 
 void ZStdWriter::end() {
-  ZSTD_inBuffer in{nullptr, 0, 0};
-  size_t result;
-
-  do {
-    ZSTD_outBuffer out{preWriteBuffer_.data(), preWriteBuffer_.size(), 0};
-    result = ZSTD_compressStream2(zstdContext_, &out, &in, ZSTD_e_end);
-    assert(!ZSTD_isError(result) && ZSTD_getErrorString(ZSTD_getErrorCode(result)));
-    buffer_.insert(buffer_.end(), preWriteBuffer_.begin(), preWriteBuffer_.begin() + out.pos);
-  } while (result != 0);
-
-  hasUnflushedData_ = false;
+  const auto dstCapacity = ZSTD_compressBound(preEndBuffer_.size());
+  buffer_.resize(dstCapacity);
+  const int dstSize = ZSTD_compress2(zstdContext_, buffer_.data(), dstCapacity,
+                                     preEndBuffer_.data(), preEndBuffer_.size());
+  if (ZSTD_isError(dstSize)) {
+    const auto errCode = ZSTD_getErrorCode(dstSize);
+    std::cerr << "ZSTD_compress2 failed: " << ZSTD_getErrorName(dstSize) << " ("
+              << ZSTD_getErrorString(errCode) << ")\n";
+    std::abort();
+  }
+  ZSTD_CCtx_reset(zstdContext_, ZSTD_reset_session_only);
+  buffer_.resize(dstSize);
+  preEndBuffer_.clear();
 }
 
 uint64_t ZStdWriter::size() const {
@@ -598,13 +666,12 @@ uint64_t ZStdWriter::size() const {
 }
 
 bool ZStdWriter::empty() const {
-  return buffer_.empty() && !hasUnflushedData_;
+  return buffer_.empty() && preEndBuffer_.empty();
 }
 
 void ZStdWriter::clear() {
+  preEndBuffer_.clear();
   buffer_.clear();
-  ZSTD_CCtx_reset(zstdContext_, ZSTD_reset_session_only);
-  hasUnflushedData_ = false;
 }
 
 const std::byte* ZStdWriter::data() const {

@@ -1,9 +1,10 @@
 #pragma once
 
 #include "errors.hpp"
-#include <assert.h>
+#include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <lz4.h>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -203,7 +204,8 @@ struct IChunkWriter {
 };
 
 /**
- * @brief An in-memory IWritable implementation backed by a growable buffer.
+ * @brief An in-memory IWritable/IChunkWriter implementation backed by a
+ * growable buffer.
  */
 class BufferedWriter final : public IWritable, public IChunkWriter {
 public:
@@ -236,9 +238,35 @@ private:
   uint64_t size_ = 0;
 };
 
+/**
+ * @brief An in-memory IWritable/IChunkWriter implementation that holds data in
+ * a temporary buffer before flushing to an LZ4-compressed buffer.
+ */
+class LZ4Writer final : public IWritable, public IChunkWriter {
+public:
+  LZ4Writer(CompressionLevel compressionLevel, uint64_t chunkSize);
+  ~LZ4Writer() override = default;
+
+  void write(const std::byte* data, uint64_t size) override;
+  void end() override;
+  uint64_t size() const override;
+  bool empty() const override;
+  void clear() override;
+  const std::byte* data() const override;
+
+private:
+  std::vector<std::byte> preEndBuffer_;
+  std::vector<std::byte> buffer_;
+  int acceleration_ = 1;
+};
+
+/**
+ * @brief An in-memory IWritable/IChunkWriter implementation that holds data in
+ * a temporary buffer before flushing to an ZStandard-compressed buffer.
+ */
 class ZStdWriter final : public IWritable, public IChunkWriter {
 public:
-  ZStdWriter(uint64_t bufferSize, CompressionLevel compressionLevel);
+  ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize);
   ~ZStdWriter() override;
 
   void write(const std::byte* data, uint64_t size) override;
@@ -249,10 +277,9 @@ public:
   const std::byte* data() const override;
 
 private:
-  std::vector<std::byte> preWriteBuffer_;
+  std::vector<std::byte> preEndBuffer_;
   std::vector<std::byte> buffer_;
   ZSTD_CCtx* zstdContext_ = nullptr;
-  bool hasUnflushedData_ = false;
 };
 
 class McapWriter final {
@@ -319,6 +346,7 @@ private:
   mcap::IWritable* output_ = nullptr;
   std::unique_ptr<mcap::StreamWriter> streamOutput_;
   std::unique_ptr<mcap::BufferedWriter> uncompressedChunk_;
+  std::unique_ptr<mcap::LZ4Writer> lz4Chunk_;
   std::unique_ptr<mcap::ZStdWriter> zstdChunk_;
   std::vector<mcap::ChannelInfo> channels_;
   std::vector<mcap::AttachmentIndex> attachmentIndex_;
@@ -329,7 +357,6 @@ private:
   uint64_t currentChunkEnd_ = std::numeric_limits<uint64_t>::min();
   Compression compression_ = Compression::None;
   uint64_t uncompressedSize_ = 0;
-  uint32_t uncompressedCrc_ = 0;
   bool indexing_ = true;
   bool opened_ = false;
 
@@ -339,17 +366,17 @@ private:
 
   static void writeMagic(mcap::IWritable& output);
 
-  static void write(mcap::IWritable& output, const mcap::Header& header);
-  static void write(mcap::IWritable& output, const mcap::Footer& footer);
-  static void write(mcap::IWritable& output, const mcap::ChannelInfo& info);
-  static void write(mcap::IWritable& output, const mcap::Message& message);
-  static void write(mcap::IWritable& output, const mcap::Attachment& attachment);
-  static void write(mcap::IWritable& output, const mcap::Chunk& chunk);
-  static void write(mcap::IWritable& output, const mcap::MessageIndex& index);
-  static void write(mcap::IWritable& output, const mcap::ChunkIndex& index);
-  static void write(mcap::IWritable& output, const mcap::AttachmentIndex& index);
-  static void write(mcap::IWritable& output, const mcap::Statistics& stats);
-  static void write(mcap::IWritable& output, const mcap::UnknownRecord& record);
+  static uint64_t write(mcap::IWritable& output, const mcap::Header& header);
+  static uint64_t write(mcap::IWritable& output, const mcap::Footer& footer);
+  static uint64_t write(mcap::IWritable& output, const mcap::ChannelInfo& info);
+  static uint64_t write(mcap::IWritable& output, const mcap::Message& message);
+  static uint64_t write(mcap::IWritable& output, const mcap::Attachment& attachment);
+  static uint64_t write(mcap::IWritable& output, const mcap::Chunk& chunk);
+  static uint64_t write(mcap::IWritable& output, const mcap::MessageIndex& index);
+  static uint64_t write(mcap::IWritable& output, const mcap::ChunkIndex& index);
+  static uint64_t write(mcap::IWritable& output, const mcap::AttachmentIndex& index);
+  static uint64_t write(mcap::IWritable& output, const mcap::Statistics& stats);
+  static uint64_t write(mcap::IWritable& output, const mcap::UnknownRecord& record);
 
   static void write(mcap::IWritable& output, const std::string_view str);
   static void write(mcap::IWritable& output, OpCode value);
