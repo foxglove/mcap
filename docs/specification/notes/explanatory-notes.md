@@ -4,7 +4,7 @@ The following notes may be useful for users of the MCAP format, including implem
 
 ## Feature Explanations
 
-The format is intended to support efficient, indexed reading of messages and generation of summary data in both local and remote contexts. "Seeking" should be imagined to incur either a disk seek or an HTTP range request to an object store -- the latter being significantly more costly.
+The format is intended to support efficient, indexed reading of messages and generation of summary data in both local and remote contexts. "Seeking" should be imagined to incur either a disk seek or an HTTP range request to an object store -- the latter being significantly more costly. In both random access and summarization, features may be unsupported due to choices taken by the writer of the file. For instance, statistics may not include channel message counts, or there may be no message index present. If the index data section is empty, the index_offset in the file footer will be set to zero.
 
 ### Scanning for records on specific topics within an interval
 

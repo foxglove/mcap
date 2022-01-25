@@ -33,9 +33,10 @@ Some helpful terms to understand in the following sections are:
 - **Message**: A type of record representing a timestamped message on a channel (and therefore associated with a topic/schema). A message can be parsed by a reader that has also read the channel info for the channel on which the message appears.
 - **Chunk**: A record type that wraps a compressed set of channel info and message records.
 - **Attachment**: Extra data that may be included in the file, outside the chunks. Attachments may be quickly listed and accessed via an index at the end of the file.
-- **Index**: The format contains indexes for both messages and attachments. For messages, there are two levels of indexing - a **Chunk Index** at the end of the file points to chunks by offset, enabling fast location of chunks based on topic and timerange. A second index - the **Message Index** - after each chunk contains, for each channel in the chunk, and offset and timestamp for every message to allow fast location of messages within the uncompressed chunk data.
-
-  The attachment index at the end of the file allows for fast listing and location of attachments based on name, timestamp, or attachment type.
+- **Index**: The format contains indexes for both messages and attachments. For messages, there are two levels of indexing - a **Chunk Index** at the end of the file points to chunks by offset, enabling fast location of chunks based on channel and timerange. A second index - the **Message Index** - after each chunk contains, for each channel in the chunk, and offset and timestamp for every message to allow fast location of messages within the uncompressed chunk data. The attachment index at the end of the file allows for fast listing and location of attachments based on name, timestamp, or attachment type.
+- **Statistics**: A type of record at the end of the file, used to support fast summarization of file contents.
+- **Message Data Section**: Used in this doc to refer to the first portion of the file that contains chunks and message data. To be distinguished from the **Index Data Section**.
+- **Index Data Section**: The last part of the file, containing records used for searching and summarizing the file. The Index Data section is split into a **channel info portion**, **chunk index portion**, and **attachment index portion** each containing contiguous runs of the corresponding record type, followed by a **Statistics** record. All portions of the index data section are optional, subject to constraints and tradeoffs described below. There are no other record types in the index data section.
 
 ## Format Description
 
@@ -51,29 +52,13 @@ These are the magic bytes:
 
 The first record in every file must be a Header (op=0x01) and the last record must be a Footer (op=0x02).
 
-MCAP files may be **"chunked"** or **"unchunked"**. Chunked and unchunked files have different constraints on the layout of record types in the file. In chunked files, messages are grouped into optionally-compressed blocks of data before being written to disk. In an unchunked file, each message is written out uncompressed. See the diagrams below for clarity (the record types shown are described in the following section):
+MCAP files may contain a variety of record types. Specific constraints on valid usage of the record types is explained in the sections below, but in general record types may be used or not depending on the feature requirements of the consumer.
 
-#### Chunked
+The diagrams below show two possible variants - a file that is chunked and indexed, i.e making full use of the features, and one that is unchunked but contains statistics.
 
 ![Chunked][diagram chunked]
 
-#### Unchunked
-
 ![Unchunked][diagram unchunked]
-
-Benefits of chunked files include:
-
-- Support for random access via time- and topic-based indexing.
-- Reduced storage requirements when recording or processing data.
-- Reduced bandwidth requirements when transferring over a network.
-- Possibly higher write performance if the cost of IO outweighs the cost of compression.
-
-Benefits of unchunked files include:
-
-- Higher write performance on CPU-constrained systems.
-- Less potential for data los in case of a recording crash. No "to-be-compressed" buffer is dropped by the recorder -- though the protocol makes no specification on how the process syncs unchunked messages to disk.
-
-Unchunked files are less friendly to readers than chunked files due to their lack of an index and greater size. When unchunked files are in use, they may be converted to chunked files in post-processing to mitigate this.
 
 ### Record Types
 
@@ -85,13 +70,19 @@ The section below uses the following data types and serialization choices. In al
 
 - **Timestamp**: uint64 nanoseconds since a user-understood epoch (i.e unix epoch, robot boot time, etc)
 - **String**: a uint32-prefixed UTF8 string
-- **KeyValues<T1, T2>**: A uint32 length-prefixed association of key-value pairs, serialized as
+- **KeyValues<T1, T2>**: A uint32 length-prefixed association of key-value pairs
 
 ```
 <length><T1 (key)><T2 (value)><T1 (key)><T2 (value)>
 ```
 
-An empty KeyValues consists of a zero-value length prefix.
+- **Array<T>**: A uint32 length-prefixed array.
+
+```
+<length><T><T><T>
+```
+
+An empty Array consists of a zero-value length prefix.
 
 - **Bytes**: refers to an array of bytes, without a length prefix. If a length prefix is required a designation like "uint32 length-prefixed bytes" will be used.
 
@@ -118,7 +109,7 @@ A file without a footer is **corrupt**, indicating the writer process encountere
 
 #### Channel Info (op=0x03)
 
-Identifies a stream of messages on a particular topic and includes information about how the messages should be decoded by readers. A channel info record must occur in the file prior to any message that references its Channel ID. Channel IDs must uniquely identify a channel across the entire file.
+Identifies a stream of messages on a particular topic and includes information about how the messages should be decoded by readers. A channel info record must occur in the file prior to any message that references its Channel ID. Channel IDs must uniquely identify a channel across the entire file. If message indexing is in use, the Channel Info section of the index data section must also be in use.
 
 | Bytes | Name | Type | Description | Example |
 | --- | --- | --- | --- | --- |
@@ -131,9 +122,7 @@ Identifies a stream of messages on a particular topic and includes information a
 
 #### Message (op=0x04)
 
-A message record encodes a single timestamped message on a particular channel. Message records may occur inside a Chunk, or outside the chunk in the case of an unchunked file. A chunked file may not have messages outside the chunks.
-
-Message records must be preceded by a Channel Info record for the given channel ID. That Channel Info record may appear inside the same chunk as the message, or in an earlier chunk in the file. In an unchunked file, both the channel info and message records will be outside chunks, as there will be no chunks.
+A message record encodes a single timestamped message on a particular channel. In a given file, messages must appear either inside Chunks, or outside Chunks. A file may not contain both chunked and unchunked messages.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -145,7 +134,7 @@ Message records must be preceded by a Channel Info record for the given channel 
 
 #### Chunk (op=0x05)
 
-A Chunk is a collection of compressed channel info and message records.
+A Chunk is a collection of compressed channel info and message records. If message indexing is in use, Chunks are required.
 
 | Bytes | Name | Type | Description | Example |
 | --- | --- | --- | --- | --- |
@@ -156,17 +145,16 @@ A Chunk is a collection of compressed channel info and message records.
 
 #### Message Index (op=0x06)
 
-The Message Index record maps timestamps to message offsets. One message index record is written for each channel in the preceding chunk. All message index records for a chunk must immediately follow the chunk.
+The Message Index record maps timestamps to message offsets. If message indexing is in use, following each chunk, a message index record is written for each channel in the chunk preceding. All message index records for a chunk must immediately follow the chunk in a contiguous run of records.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 2 | channel_id | uint16 | Channel ID. |
-| 4 | count | uint32 | Number of records in the chunk, on this channel. |
-| N | records | KeyValues<Timestamp, uint64> | Array of record_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
+| N | records | Array<{ Timestamp, uint64 }> | Array of record_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
 
 #### Chunk Index (op=0x07)
 
-The Chunk Index records form a coarse index of timestamps to chunk offsets, along with the locations of the message index records associatiated with those chunks.
+The Chunk Index records form a coarse index of timestamps to chunk offsets, along with the locations of the message index records associated with those chunks. They are found in the chunk index portion of the index data section. If message indexing is in use, Chunk Indexes are required. A Chunk Index record must be preceded in the index data section by Channel Info records for any channels that it references.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -193,7 +181,7 @@ Attachments can be used to attach artifacts such as calibration data, text, or c
 
 #### Attachment Index (op=0x09)
 
-The attachment index is an index to named attachments within the file. One record is recorded per attachment in the file.
+The attachment index is an index to named attachments within the file. One record is recorded per attachment in the file. The attachment index records are written to the attachment index portion of the message data section.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -205,7 +193,7 @@ The attachment index is an index to named attachments within the file. One recor
 
 #### Statistics (op=0x0A)
 
-The statistics record contains statistics about the recorded data. It is the last record in the file before the footer.
+The statistics record contains statistics about the recorded data. It is the last record in the file before the footer. The record must be preceded in the index data section by Channel Info records for any channels referenced in the `channel_message_counts` field. If this is undesirable but some statistics are still desired, the field may be set to a zero-length map. The statistics record is optional.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
