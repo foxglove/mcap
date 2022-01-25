@@ -363,16 +363,14 @@ int main(int argc, char* argv[]) {
     ->Arg(100000)
     ->Arg(1000000)
     ->Arg(10000000);
-  benchmark::RegisterBenchmark("BM_McapWriterBufferedWriterLZ4",
-                               BM_McapWriterBufferedWriterLZ4)
+  benchmark::RegisterBenchmark("BM_McapWriterBufferedWriterLZ4", BM_McapWriterBufferedWriterLZ4)
     ->Args({1, 0})
     ->Args({1, 1})
     ->Args({1, 2})
     ->Args({100000, 0})
     ->Args({100000, 1})
     ->Args({100000, 2});
-  benchmark::RegisterBenchmark("BM_McapWriterBufferedWriterZStd",
-                               BM_McapWriterBufferedWriterZStd)
+  benchmark::RegisterBenchmark("BM_McapWriterBufferedWriterZStd", BM_McapWriterBufferedWriterZStd)
     ->Args({1, 0})
     ->Args({1, 1})
     ->Args({1, 2})
