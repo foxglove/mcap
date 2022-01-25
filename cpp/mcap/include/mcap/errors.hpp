@@ -8,7 +8,6 @@ enum class StatusCode {
   Success = 0,
   NotOpen = 1,
   InvalidChannelId = 2,
-  CompressionError = 3,
 };
 
 struct Status {
