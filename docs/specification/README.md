@@ -94,7 +94,7 @@ The first record in every MCAP file is a header.
 | --- | --- | --- | --- |
 | 4 + N | profile | String | The profile to use for interpretation of channel info user data. If the value matches one of the [supported profiles][profiles], the channel info user data section should be structured to match the description in the corresponding profile. This field may also be supplied empty, or containing a framework that is not one of those recognized. |
 | N | library | String | freeform string for writer to specify its name, version, or other information for use in debugging |
-| N | metadata | KeyValues<string, string> | Example keys: robot_id, git_sha, timezone, run_id. |
+| 4 + N | metadata | KeyValues<string, string> | Example keys: robot_id, git_sha, timezone, run_id. |
 
 #### Footer (op=0x02)
 
@@ -118,7 +118,7 @@ Identifies a stream of messages on a particular topic and includes information a
 | 4 + N | encoding | String | Message Encoding | cdr, cbor, ros1, protobuf, etc. |
 | 4 + N | schema_name | String | Schema Name | std_msgs/Header |
 | 4 + N | schema | uint32 length-prefixed bytes | Schema |  |
-| N | user_data | KeyValues<string, string> | Metadata about this channel | used to encode protocol-specific details like callerid, latching, QoS profiles... Refer to [supported profiles][profiles]. |
+| 4 + N | user_data | KeyValues<string, string> | Metadata about this channel | used to encode protocol-specific details like callerid, latching, QoS profiles... Refer to [supported profiles][profiles]. |
 
 #### Message (op=0x04)
 
@@ -150,7 +150,7 @@ The Message Index record maps timestamps to message offsets. If message indexing
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 2 | channel_id | uint16 | Channel ID. |
-| N | records | Array<{ Timestamp, uint64 }> | Array of record_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
+| 4 + N | records | Array<{ Timestamp, uint64 }> | Array of record_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
 
 #### Chunk Index (op=0x07)
 
@@ -161,7 +161,7 @@ The Chunk Index records form a coarse index of timestamps to chunk offsets, alon
 | 8 | start_time | Timestamp | First message record timestamp in the chunk. |
 | 8 | end_time | Timestamp | Last message record timestamp in the chunk. |
 | 8 | offset | uint64 | Offset to the chunk record from the start of the file. |
-| N | message_index_offsets | KeyValues<uint16, uint64> | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. Duplicate keys are not allowed. |
+| 4 + N | message_index_offsets | KeyValues<uint16, uint64> | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. Duplicate keys are not allowed. |
 | 8 | message_index_length | uint64 | Total length in bytes of the message index records after the chunk, including lengths and opcodes. |
 | 4 + N | compression | String | The compression used on this chunk. Refer to [supported compression formats][compression formats]. |
 | 8 | compressed_size | uint64 | The compressed size of the chunk. |
@@ -193,7 +193,7 @@ The attachment index is an index to named attachments within the file. One recor
 
 #### Statistics (op=0x0A)
 
-The statistics record contains statistics about the recorded data. It is the last record in the file before the footer. The record must be preceded in the index data section by Channel Info records for any channels referenced in the `channel_message_counts` field. If this is undesirable but some statistics are still desired, the field may be set to a zero-length map. The statistics record is optional.
+The statistics record contains statistics about the recorded data. It is the last record in the file before the footer. The record must be preceded in the index data section by Channel Info records for any channels referenced in the `channel_message_counts` field. If this is undesirable but some statistics are still desired, the `channel_message_counts` field may be set to a zero-length map. The statistics record is optional.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -201,7 +201,7 @@ The statistics record contains statistics about the recorded data. It is the las
 | 4 | channel_count | uint32 | Number of channels in the file across all topics. |
 | 4 | attachment_count | uint32 | Number of attachments in the file. |
 | 4 | chunk_count | uint32 | Number of chunks in the file. |
-| N | channel_message_counts | KeyValues<uint16, uint64> | Mapping from channel ID to total message count for the channel. Duplicate keys are not allowed. |
+| 4 + N | channel_message_counts | KeyValues<uint16, uint64> | Mapping from channel ID to total message count for the channel. Duplicate keys are not allowed. Optional (can be set to zero-length). |
 
 ## Further Reading
 
