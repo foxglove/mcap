@@ -51,6 +51,9 @@ Report summary statistics on an mcap file:
     	(5) /radar/tracks: 156 msgs
     	(6) /velodyne_points: 78 msgs
     attachments: 0
+
+Echo messages to stdout using the end of file index:
+
     [~/work/mcap/go/mcap] (task/mcap-client) $ mcap cat demo.mcap --topics /tf,/diagnostics | head -n 10
     1490149580103843113 /diagnostics [42 10 0 0 204 224 209 88 99 250]...
     1490149580103843113 /tf [1 0 0 0 0 0 0 0 204 224]...
