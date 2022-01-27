@@ -55,7 +55,7 @@ export class Mcap0IndexedWriter {
     summaryOffsets.push({
       groupOpcode: Opcode.CHANNEL_INFO,
       groupStart: channelInfoStart,
-      groupEnd: channelInfoStart + channelInfoLength,
+      groupLength: channelInfoStart + channelInfoLength,
     });
 
     await this.writable.write(this.recordWriter.buffer);
@@ -69,7 +69,7 @@ export class Mcap0IndexedWriter {
     summaryOffsets.push({
       groupOpcode: Opcode.CHUNK_INDEX,
       groupStart: chunkIndexStart,
-      groupEnd: chunkIndexStart + chunkIndexLength,
+      groupLength: chunkIndexStart + chunkIndexLength,
     });
 
     await this.writable.write(this.recordWriter.buffer);
@@ -159,7 +159,7 @@ export class Mcap0IndexedWriter {
       startTime: chunkRecord.startTime,
       endTime: chunkRecord.endTime,
       chunkStart,
-      chunkEnd,
+      chunkLength: chunkEnd,
       messageIndexOffsets: new Map(),
       messageIndexLength: 0n,
       compression: chunkRecord.compression,

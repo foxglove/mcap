@@ -230,7 +230,7 @@ export function parseRecord({
       const startTime = reader.uint64();
       const endTime = reader.uint64();
       const chunkStart = reader.uint64();
-      const chunkEnd = reader.uint64();
+      const chunkLength = reader.uint64();
       const messageIndexOffsets = reader.map(
         (r) => r.uint16(),
         (r) => r.uint64(),
@@ -254,7 +254,7 @@ export function parseRecord({
         startTime,
         endTime,
         chunkStart,
-        chunkEnd,
+        chunkLength,
         messageIndexOffsets,
         messageIndexLength,
         compression,
@@ -345,16 +345,27 @@ export function parseRecord({
       const record: TypedMcapRecord = { type: "Metadata", metadata };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
+    case Opcode.METADATA_INDEX: {
+      const offset = reader.uint64();
+      const length = reader.uint64();
+
+      const record: TypedMcapRecord = {
+        type: "MetadataIndex",
+        offset,
+        length,
+      };
+      return { record, usedBytes: recordEndOffset - startOffset };
+    }
     case Opcode.SUMMARY_OFFSET: {
       const groupOpcode = reader.uint8();
       const groupStart = reader.uint64();
-      const groupEnd = reader.uint64();
+      const groupLength = reader.uint64();
 
       const record: TypedMcapRecord = {
         type: "SummaryOffset",
         groupOpcode,
         groupStart,
-        groupEnd,
+        groupLength,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }

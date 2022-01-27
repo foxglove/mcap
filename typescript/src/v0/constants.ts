@@ -2,22 +2,21 @@
 export const MCAP0_MAGIC = Object.freeze([137, 77, 67, 65, 80, 48, 13, 10]);
 
 export enum Opcode {
-  MIN = 0x00,
-  HEADER = 0x00,
-  FOOTER = 0x7f,
-  CHANNEL_INFO = 0x01,
-  MESSAGE = 0x02,
-  CHUNK = 0x03,
-  MESSAGE_INDEX = 0x04,
-  CHUNK_INDEX = 0x05,
-  ATTACHMENT = 0x06,
-  ATTACHMENT_INDEX = 0x07,
-  STATISTICS = 0x08,
-  METADATA = 0x09,
-  SUMMARY_OFFSET = 0x0a,
-
-  // max opcode excluding footer
-  MAX = 0x0a,
+  MIN = 0x01,
+  HEADER = 0x01,
+  FOOTER = 0x02,
+  CHANNEL_INFO = 0x03,
+  MESSAGE = 0x04,
+  CHUNK = 0x05,
+  MESSAGE_INDEX = 0x06,
+  CHUNK_INDEX = 0x07,
+  ATTACHMENT = 0x08,
+  ATTACHMENT_INDEX = 0x09,
+  STATISTICS = 0x0a,
+  METADATA = 0x0b,
+  METADATA_INDEX = 0x0c,
+  SUMMARY_OFFSET = 0x0d,
+  MAX = 0x0d,
 }
 
 export function isKnownOpcode(opcode: number): opcode is Opcode {

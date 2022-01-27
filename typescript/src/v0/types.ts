@@ -44,7 +44,7 @@ export type ChunkIndex = {
   startTime: bigint;
   endTime: bigint;
   chunkStart: bigint;
-  chunkEnd: bigint;
+  chunkLength: bigint;
   messageIndexOffsets: Map<number, bigint>;
   messageIndexLength: bigint;
   compression: string;
@@ -74,10 +74,14 @@ export type Statistics = {
 export type Metadata = {
   metadata: [key: string, value: string][];
 };
+export type MetadataIndex = {
+  offset: bigint;
+  length: bigint;
+};
 export type SummaryOffset = {
   groupOpcode: number;
   groupStart: bigint;
-  groupEnd: bigint;
+  groupLength: bigint;
 };
 export type UnknownRecord = {
   opcode: number;
@@ -96,6 +100,7 @@ export type McapRecords = {
   AttachmentIndex: AttachmentIndex;
   Statistics: Statistics;
   Metadata: Metadata;
+  MetadataIndex: MetadataIndex;
   SummaryOffset: SummaryOffset;
   Unknown: UnknownRecord;
 };

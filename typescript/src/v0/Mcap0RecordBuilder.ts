@@ -149,7 +149,7 @@ export class Mcap0RecordBuilder {
       .uint64(chunkIndex.startTime)
       .uint64(chunkIndex.endTime)
       .uint64(chunkIndex.chunkStart)
-      .uint64(chunkIndex.chunkEnd)
+      .uint64(chunkIndex.chunkLength)
       .uint32(chunkIndex.messageIndexOffsets.size * 10);
 
     for (const [channelId, offset] of chunkIndex.messageIndexOffsets) {
@@ -193,7 +193,7 @@ export class Mcap0RecordBuilder {
       .uint8(Opcode.SUMMARY_OFFSET)
       .uint8(summaryOffset.groupOpcode)
       .uint64(summaryOffset.groupStart)
-      .uint64(summaryOffset.groupEnd);
+      .uint64(summaryOffset.groupLength);
 
     return 24n;
   }
