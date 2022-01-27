@@ -63,7 +63,6 @@ describe("Mcap0BufferRecordBuilder", () => {
       topicName: "/topic",
       messageEncoding: "encoding",
       schemaFormat: "someformat",
-      schemaVersion: "",
       schemaName: "schema name",
       schema: "schema",
       userData: [],

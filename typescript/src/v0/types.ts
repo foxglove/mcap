@@ -17,7 +17,6 @@ export type ChannelInfo = {
   messageEncoding: string;
   schemaFormat: string;
   schema: string;
-  schemaVersion: string;
   schemaName: string;
   userData: [key: string, value: string][];
 };

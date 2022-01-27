@@ -10,7 +10,6 @@ import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import { Time } from "@foxglove/rosmsg-serialization";
 import Bzip2 from "@foxglove/wasm-bz2";
 import { program } from "commander";
-import { createHash } from "crypto";
 import { open, FileHandle } from "fs/promises";
 import protobufjs from "protobufjs";
 import descriptor from "protobufjs/ext/descriptor";
@@ -213,13 +212,10 @@ async function convert(filePath: string, options: { indexed: boolean }) {
 
     const descriptorMsgEncoded = descriptor.FileDescriptorSet.encode(descriptorMsg).finish();
 
-    const schemaVersion = createHash("sha256").update(descriptorMsgEncoded).digest("hex");
-
     const channelInfo: Omit<ChannelInfo, "channelId"> = {
       topicName: connection.topic,
       messageEncoding: "protobuf",
       schemaFormat: "proto-set",
-      schemaVersion,
       schemaName,
       schema: protobufjs.util.base64.encode(
         descriptorMsgEncoded,

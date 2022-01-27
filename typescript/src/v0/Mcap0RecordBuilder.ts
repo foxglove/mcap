@@ -77,7 +77,6 @@ export class Mcap0RecordBuilder {
       .string(info.messageEncoding)
       .string(info.schemaFormat)
       .string(info.schema)
-      .string(info.schemaVersion)
       .string(info.schemaName)
       .array(info.userData);
 

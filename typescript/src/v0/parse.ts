@@ -109,7 +109,6 @@ export function parseRecord({
       const topicName = reader.string();
       const messageEncoding = reader.string();
       const schemaFormat = reader.string();
-      const schemaVersion = reader.string();
       const schema = reader.string();
       const schemaName = reader.string();
       const userData = reader.keyValuePairs(
@@ -133,7 +132,6 @@ export function parseRecord({
         topicName,
         messageEncoding,
         schemaFormat,
-        schemaVersion,
         schemaName,
         schema,
         userData,
