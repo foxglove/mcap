@@ -41,18 +41,12 @@ func (t TokenType) String() string {
 		return "statistics"
 	case TokenMessageIndex:
 		return "message index"
-	case TokenError:
-		return "error"
-	case TokenEOF:
-		return "eof"
 	}
 	return "unknown"
 }
 
 func (t Token) String() string {
 	switch t.TokenType {
-	case TokenError:
-		return fmt.Sprintf("error: %s", string(t.bytes()))
 	default:
 		return t.TokenType.String()
 	}
@@ -69,8 +63,6 @@ const (
 	TokenStatistics
 	TokenChunk
 	TokenMessageIndex
-	TokenEOF
-	TokenError
 )
 
 type Token struct {
@@ -85,8 +77,6 @@ func (t Token) bytes() []byte {
 	return data
 }
 
-type stateFn func(*lexer) stateFn
-
 type decoders struct {
 	lz4  *lz4.Reader
 	zstd *zstd.Decoder
@@ -94,64 +84,26 @@ type decoders struct {
 }
 
 type lexer struct {
-	state       stateFn
-	basereader  io.Reader
-	chunkreader io.Reader
-	reader      io.Reader
-	chunkReader ResettableWriteCloser
-	tokens      chan Token
-	emitChunks  bool
+	basereader io.Reader
+	reader     io.Reader
+	emitChunks bool
 
-	compressedChunk []byte
-	chunk           []byte
-	skipbuf         []byte
-	decoders        decoders
-	inChunk         bool
-	buf             []byte
-	validateCRC     bool
+	decoders    decoders
+	inChunk     bool
+	buf         []byte
+	validateCRC bool
 }
 
-func (l *lexer) SetLexNext() {
-	l.state = lexNext
-}
-
-func (l *lexer) Next() Token {
-	if l.state == nil {
-		return Token{TokenEOF, 0, bytes.NewReader(nil)}
-	}
-	for {
-		select {
-		case token := <-l.tokens:
-			return token
-		default:
-			l.state = l.state(l)
-		}
-	}
-}
-
-func (l *lexer) emit(t TokenType, n int64, data io.Reader) {
-	l.tokens <- Token{t, n, data}
-}
-
-func (l *lexer) error(err error) stateFn {
-	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-		l.emit(TokenEOF, 0, bytes.NewReader(nil))
-	} else {
-		l.emit(TokenError, int64(len(err.Error())), bytes.NewReader([]byte(err.Error())))
-	}
-	return nil
-}
-
-func lexMagic(l *lexer) stateFn {
+func validateMagic(r io.Reader) error {
 	magic := make([]byte, len(Magic))
-	_, err := l.reader.Read(magic)
+	_, err := io.ReadFull(r, magic)
 	if err != nil {
-		return l.error(err)
+		return ErrBadMagic
 	}
 	if !bytes.Equal(magic, Magic) {
-		return l.error(ErrBadMagic)
+		return ErrBadMagic
 	}
-	return lexNext
+	return nil
 }
 
 func (l *lexer) setNoneDecoder(buf []byte) {
@@ -189,37 +141,26 @@ func (l *lexer) setZSTDDecoder(r io.Reader) error {
 	return nil
 }
 
-func skip(l *lexer, n uint64) stateFn {
-	if n > uint64(len(l.skipbuf)) {
-		l.skipbuf = make([]byte, 2*n)
-	}
-	_, err := l.reader.Read(l.skipbuf[:n])
-	if err != nil {
-		return l.error(err)
-	}
-	return lexNext
-}
-
-func lexChunk(l *lexer, recordSize uint64) stateFn {
+func loadChunk(l *lexer, recordSize int64) error {
 	if l.inChunk {
-		return l.error(ErrNestedChunk)
+		return ErrNestedChunk
 	}
-	_, err := l.reader.Read(l.buf[:8+4+4])
+	_, err := io.ReadFull(l.reader, l.buf[:8+4+4])
 	if err != nil {
-		return l.error(err)
+		return err
 	}
 	// Skip the uncompressed size; the lexer will read messages out of the
 	// reader incrementally.
 	_ = binary.LittleEndian.Uint64(l.buf[:8])
 	uncompressedCRC := binary.LittleEndian.Uint32(l.buf[8:12])
 	compressionLen := binary.LittleEndian.Uint32(l.buf[12:16])
-	_, err = l.reader.Read(l.buf[:compressionLen])
+	_, err = io.ReadFull(l.reader, l.buf[:compressionLen])
 	if err != nil {
-		return l.error(err)
+		return err
 	}
 	compression := l.buf[:compressionLen]
 	// will eof at the end of the chunk
-	lr := io.LimitReader(l.reader, int64(recordSize-16-uint64(compressionLen)))
+	lr := io.LimitReader(l.reader, int64(uint64(recordSize)-16-uint64(compressionLen)))
 	switch CompressionFormat(compression) {
 	case CompressionNone:
 		l.reader = lr
@@ -228,10 +169,10 @@ func lexChunk(l *lexer, recordSize uint64) stateFn {
 	case CompressionZSTD:
 		err = l.setZSTDDecoder(lr)
 		if err != nil {
-			return l.error(err)
+			return err
 		}
 	default:
-		return l.error(fmt.Errorf("unsupported compression: %s", string(compression)))
+		return fmt.Errorf("unsupported compression: %s", string(compression))
 	}
 
 	// if we are validating the CRC, we need to fully decompress the chunk right
@@ -242,85 +183,109 @@ func lexChunk(l *lexer, recordSize uint64) stateFn {
 	if l.validateCRC {
 		uncompressed, err := io.ReadAll(l.reader)
 		if err != nil {
-			return l.error(err)
+			return err
 		}
 		crc := crc32.ChecksumIEEE(uncompressed)
 		if crc != uncompressedCRC {
-			return l.error(fmt.Errorf("invalid CRC: %x != %x", crc, uncompressedCRC))
+			return fmt.Errorf("invalid CRC: %x != %x", crc, uncompressedCRC)
 		}
 		l.setNoneDecoder(uncompressed)
 	}
 	l.inChunk = true
-	return lexNext
+	return nil
 }
 
-func lexNext(l *lexer) stateFn {
-	_, err := io.ReadFull(l.reader, l.buf[:9])
-	if err != nil {
-		if l.inChunk && (errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF)) { // todo what's going on here
-			l.inChunk = false
-			l.reader = l.basereader
-			return lexNext
+func (l *lexer) Next() (Token, error) {
+	for {
+		_, err := io.ReadFull(l.reader, l.buf[:9])
+		if err != nil {
+			unexpectedEOF := errors.Is(err, io.ErrUnexpectedEOF)
+			eof := errors.Is(err, io.EOF)
+			if l.inChunk && eof {
+				l.inChunk = false
+				l.reader = l.basereader
+				continue
+			}
+			if unexpectedEOF || eof {
+				return Token{}, io.EOF
+			}
+			return Token{}, err
 		}
-		return l.error(err)
+		opcode := OpCode(l.buf[0])
+		recordLen := int64(binary.LittleEndian.Uint64(l.buf[1:9]))
+		switch opcode {
+		case OpHeader:
+			return Token{TokenHeader, recordLen, l.reader}, nil
+		case OpChannelInfo:
+			return Token{TokenChannelInfo, recordLen, l.reader}, nil
+		case OpFooter:
+			return Token{TokenFooter, recordLen, l.reader}, nil
+		case OpMessage:
+			return Token{TokenMessage, recordLen, l.reader}, nil
+		case OpAttachment:
+			return Token{TokenAttachment, recordLen, l.reader}, nil
+		case OpAttachmentIndex:
+			return Token{TokenAttachmentIndex, recordLen, l.reader}, nil
+		case OpChunkIndex:
+			if !l.emitChunks {
+				_, err := io.CopyN(io.Discard, l.reader, recordLen)
+				if err != nil {
+					return Token{}, err
+				}
+				continue
+			}
+			return Token{TokenChunkIndex, recordLen, l.reader}, nil
+		case OpStatistics:
+			return Token{TokenStatistics, recordLen, l.reader}, nil
+		case OpMessageIndex:
+			if !l.emitChunks {
+				_, err := io.CopyN(io.Discard, l.reader, recordLen)
+				if err != nil {
+					return Token{}, err
+				}
+				continue
+			}
+			return Token{TokenMessageIndex, recordLen, l.reader}, nil
+		case OpChunk:
+			if !l.emitChunks {
+				err := loadChunk(l, recordLen)
+				if err != nil {
+					return Token{}, err
+				}
+				continue
+			}
+			return Token{TokenChunk, recordLen, l.reader}, nil
+		default:
+			continue // skip unrecognized opcodes
+		}
 	}
-	opcode := OpCode(l.buf[0])
-	recordLen := binary.LittleEndian.Uint64(l.buf[1:9])
-	switch opcode {
-	case OpHeader:
-		l.emit(TokenHeader, int64(recordLen), l.reader)
-	case OpChannelInfo:
-		l.emit(TokenChannelInfo, int64(recordLen), l.reader)
-	case OpFooter:
-		l.emit(TokenFooter, int64(recordLen), l.reader)
-		return lexMagic
-	case OpMessage:
-		l.emit(TokenMessage, int64(recordLen), l.reader)
-	case OpAttachment:
-		l.emit(TokenAttachment, int64(recordLen), l.reader)
-	case OpAttachmentIndex:
-		l.emit(TokenAttachmentIndex, int64(recordLen), l.reader)
-	case OpChunkIndex:
-		if !l.emitChunks {
-			return skip(l, recordLen)
-		}
-		l.emit(TokenChunkIndex, int64(recordLen), l.reader)
-	case OpStatistics:
-		l.emit(TokenStatistics, int64(recordLen), l.reader)
-	case OpMessageIndex:
-		if !l.emitChunks {
-			return skip(l, recordLen)
-		}
-		l.emit(TokenMessageIndex, int64(recordLen), l.reader)
-	case OpChunk:
-		if !l.emitChunks {
-			return lexChunk(l, recordLen)
-		}
-		l.emit(TokenChunk, int64(recordLen), l.reader)
-	default:
-		return skip(l, recordLen)
-	}
-	return lexNext
 }
 
-type lexOpts struct {
-	validateCRC bool
-	emitChunks  bool
+type LexOpts struct {
+	SkipMagic   bool
+	ValidateCRC bool
+	EmitChunks  bool
 }
 
-func NewLexer(r io.Reader, opts ...*lexOpts) *lexer {
-	var validateCRC, emitChunks bool
+func NewLexer(r io.Reader, opts ...*LexOpts) (*lexer, error) {
+	var validateCRC, emitChunks, skipMagic bool
 	if len(opts) > 0 {
-		validateCRC = opts[0].validateCRC
-		emitChunks = opts[0].emitChunks
+		validateCRC = opts[0].ValidateCRC
+		emitChunks = opts[0].EmitChunks
+		skipMagic = opts[0].SkipMagic
+	}
+
+	if !skipMagic {
+		err := validateMagic(r)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &lexer{
 		basereader:  r,
 		reader:      r,
-		tokens:      make(chan Token, 1), // why
 		buf:         make([]byte, 32),
-		state:       lexMagic,
 		validateCRC: validateCRC,
 		emitChunks:  emitChunks,
-	}
+	}, nil
 }

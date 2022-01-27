@@ -302,7 +302,7 @@ func (i Info) String() string {
 		compressionRatio := 100 * (1 - float64(v.compressedSize)/float64(v.uncompressedSize))
 		fmt.Fprintf(buf, "\t%s: [%d/%d chunks] (%.2f%%) \n", k, v.count, chunkCount, compressionRatio)
 	}
-	fmt.Fprintf(buf, "channels\n")
+	fmt.Fprintf(buf, "channels:\n")
 
 	chanIDs := []uint16{}
 	for chanID := range i.Channels {

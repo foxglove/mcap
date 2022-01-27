@@ -141,7 +141,8 @@ func TestMessageReading(t *testing.T) {
 					w.Close()
 					t.Run("read all messages", func(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
-						r := NewReader(reader)
+						r, err := NewReader(reader)
+						assert.Nil(t, err)
 						it, err := r.Messages(0, 10000, []string{}, useIndex)
 						assert.Nil(t, err)
 						c := 0
@@ -160,7 +161,8 @@ func TestMessageReading(t *testing.T) {
 					})
 					t.Run("read messages on one topic", func(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
-						r := NewReader(reader)
+						r, err := NewReader(reader)
+						assert.Nil(t, err)
 						it, err := r.Messages(0, 10000, []string{"/test1"}, useIndex)
 						assert.Nil(t, err)
 						c := 0
@@ -179,7 +181,8 @@ func TestMessageReading(t *testing.T) {
 					})
 					t.Run("read messages on multiple topics", func(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
-						r := NewReader(reader)
+						r, err := NewReader(reader)
+						assert.Nil(t, err)
 						it, err := r.Messages(0, 10000, []string{"/test1", "/test2"}, useIndex)
 						assert.Nil(t, err)
 						c := 0
@@ -198,7 +201,8 @@ func TestMessageReading(t *testing.T) {
 					})
 					t.Run("read messages in time range", func(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
-						r := NewReader(reader)
+						r, err := NewReader(reader)
+						assert.Nil(t, err)
 						it, err := r.Messages(100, 200, []string{}, useIndex)
 						assert.Nil(t, err)
 						c := 0
@@ -227,7 +231,8 @@ func TestReaderCounting(t *testing.T) {
 			mcapfile := &bytes.Buffer{}
 			err = Bag2MCAP(bagfile, mcapfile)
 			assert.Nil(t, err)
-			r := NewReader(bytes.NewReader(mcapfile.Bytes()))
+			r, err := NewReader(bytes.NewReader(mcapfile.Bytes()))
+			assert.Nil(t, err)
 			it, err := r.Messages(0, time.Now().UnixNano(), []string{}, indexed)
 			assert.Nil(t, err)
 			c := 0
@@ -251,7 +256,8 @@ func TestMCAPInfo(t *testing.T) {
 	mcapfile := &bytes.Buffer{}
 	err = Bag2MCAP(bagfile, mcapfile)
 	assert.Nil(t, err)
-	r := NewReader(bytes.NewReader(mcapfile.Bytes()))
+	r, err := NewReader(bytes.NewReader(mcapfile.Bytes()))
+	assert.Nil(t, err)
 	info, err := r.Info()
 	assert.Nil(t, err)
 	assert.Equal(t, uint64(1606), info.Statistics.MessageCount)
