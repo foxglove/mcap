@@ -2,7 +2,9 @@ package libmcap
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"testing"
 	"time"
@@ -20,7 +22,8 @@ func TestLexUnchunkedFile(t *testing.T) {
 		attachment(),
 		footer(),
 	)
-	lexer := NewLexer(bytes.NewReader(file))
+	lexer, err := NewLexer(bytes.NewReader(file))
+	assert.Nil(t, err)
 	expected := []TokenType{
 		TokenHeader,
 		TokenChannelInfo,
@@ -31,7 +34,9 @@ func TestLexUnchunkedFile(t *testing.T) {
 		TokenFooter,
 	}
 	for _, tt := range expected {
-		tk := lexer.Next()
+		tk, err := lexer.Next()
+		assert.Nil(t, err)
+		tk.bytes()
 		assert.Equal(t, tt, tk.TokenType)
 	}
 }
@@ -40,10 +45,10 @@ func TestRejectsUnsupportedCompression(t *testing.T) {
 	file := file(
 		chunk(t, CompressionFormat("unknown"), chunk(t, CompressionLZ4, channelInfo(), message(), message())),
 	)
-	lexer := NewLexer(bytes.NewReader(file))
-	token := lexer.Next()
-	assert.Equal(t, TokenError, token.TokenType)
-	assert.Equal(t, "unsupported compression: unknown", string(token.bytes()))
+	lexer, err := NewLexer(bytes.NewReader(file))
+	assert.Nil(t, err)
+	_, err = lexer.Next()
+	assert.Equal(t, "unsupported compression: unknown", err.Error())
 }
 
 func TestRejectsNestedChunks(t *testing.T) {
@@ -52,17 +57,14 @@ func TestRejectsNestedChunks(t *testing.T) {
 		chunk(t, CompressionLZ4, chunk(t, CompressionLZ4, channelInfo(), message(), message())),
 		footer(),
 	)
-	lexer := NewLexer(bytes.NewReader(file))
-	expected := []TokenType{
-		TokenHeader,
-		TokenError,
-	}
-	var tk Token
-	for _, tt := range expected {
-		tk = lexer.Next()
-		assert.Equal(t, tt, tk.TokenType)
-	}
-	assert.Equal(t, ErrNestedChunk.Error(), string(tk.bytes()))
+	lexer, err := NewLexer(bytes.NewReader(file))
+	assert.Nil(t, err)
+	// header, then error
+	tk, err := lexer.Next()
+	assert.Nil(t, err)
+	assert.Equal(t, tk.TokenType, TokenHeader)
+	tk, err = lexer.Next()
+	assert.ErrorIs(t, ErrNestedChunk, err)
 }
 
 func TestBadMagic(t *testing.T) {
@@ -81,27 +83,24 @@ func TestBadMagic(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
-			lexer := NewLexer(bytes.NewReader(c.magic))
-			tk := lexer.Next()
-			assert.Equal(t, TokenError, tk.TokenType)
-			assert.Equal(t, ErrBadMagic.Error(), string(tk.bytes()))
+			_, err := NewLexer(bytes.NewReader(c.magic))
+			assert.ErrorIs(t, err, ErrBadMagic)
 		})
 	}
 }
 
 func TestShortMagicResultsCorrectError(t *testing.T) {
-	lexer := NewLexer(bytes.NewReader(make([]byte, 4)))
-	tk := lexer.Next()
-	assert.Equal(t, TokenError, tk.TokenType)
-	assert.Equal(t, ErrBadMagic.Error(), string(tk.bytes()))
+	_, err := NewLexer(bytes.NewReader(make([]byte, 4)))
+	assert.ErrorIs(t, err, ErrBadMagic)
 }
 
 func TestReturnsEOFOnSuccessiveCalls(t *testing.T) {
-	lexer := NewLexer(bytes.NewReader(file()))
-	tk := lexer.Next()
-	assert.Equal(t, TokenEOF, tk.TokenType)
-	tk = lexer.Next()
-	assert.Equal(t, TokenEOF, tk.TokenType)
+	lexer, err := NewLexer(bytes.NewReader(file()))
+	assert.Nil(t, err)
+	_, err = lexer.Next()
+	assert.ErrorIs(t, err, io.EOF)
+	_, err = lexer.Next()
+	assert.ErrorIs(t, err, io.EOF)
 }
 
 func TestLexChunkedFile(t *testing.T) {
@@ -120,9 +119,10 @@ func TestLexChunkedFile(t *testing.T) {
 						attachment(), attachment(),
 						footer(),
 					)
-					lexer := NewLexer(bytes.NewReader(file), &lexOpts{
-						validateCRC: validateCRC,
+					lexer, err := NewLexer(bytes.NewReader(file), &LexOpts{
+						ValidateCRC: validateCRC,
 					})
+					assert.Nil(t, err)
 					expected := []TokenType{
 						TokenHeader,
 						TokenChannelInfo,
@@ -134,12 +134,18 @@ func TestLexChunkedFile(t *testing.T) {
 						TokenAttachment,
 						TokenAttachment,
 						TokenFooter,
-						TokenEOF,
 					}
 					for i, tt := range expected {
-						tk := lexer.Next()
+						tk, err := lexer.Next()
+						tk.bytes()
+						assert.Nil(t, err)
 						assert.Equal(t, tt, tk.TokenType, fmt.Sprintf("mismatch element %d", i))
 					}
+
+					// now we are eof
+					tk, err := lexer.Next()
+					tk.bytes()
+					assert.ErrorIs(t, io.EOF, err)
 				})
 			}
 		})
@@ -154,10 +160,11 @@ func TestSkipsUnknownOpcodes(t *testing.T) {
 		unrecognized,
 		message(),
 	)
-	lexer := NewLexer(bytes.NewReader(file))
+	lexer, err := NewLexer(bytes.NewReader(file))
+	assert.Nil(t, err)
 	expected := []TokenType{TokenHeader, TokenMessage}
 	for i, tt := range expected {
-		tk := lexer.Next()
+		tk, _ := lexer.Next()
 		_ = tk.bytes()
 		assert.Equal(t, tt, tk.TokenType, fmt.Sprintf("mismatch element %d", i))
 	}
@@ -172,9 +179,10 @@ func TestChunkCRCValidation(t *testing.T) {
 			attachment(), attachment(),
 			footer(),
 		)
-		lexer := NewLexer(bytes.NewReader(file), &lexOpts{
-			validateCRC: true,
+		lexer, err := NewLexer(bytes.NewReader(file), &LexOpts{
+			ValidateCRC: true,
 		})
+		assert.Nil(t, err)
 		expected := []TokenType{
 			TokenHeader,
 			TokenChannelInfo,
@@ -186,10 +194,10 @@ func TestChunkCRCValidation(t *testing.T) {
 			TokenAttachment,
 			TokenAttachment,
 			TokenFooter,
-			TokenEOF,
 		}
 		for i, tt := range expected {
-			tk := lexer.Next()
+			tk, err := lexer.Next()
+			assert.Nil(t, err)
 			_ = tk.bytes() // always must consume the reader
 			assert.Equal(t, tt, tk.TokenType, fmt.Sprintf("mismatch element %d", i))
 		}
@@ -204,24 +212,24 @@ func TestChunkCRCValidation(t *testing.T) {
 			attachment(), attachment(),
 			footer(),
 		)
-		lexer := NewLexer(bytes.NewReader(file), &lexOpts{
-			validateCRC: true,
+		lexer, err := NewLexer(bytes.NewReader(file), &LexOpts{
+			ValidateCRC: true,
 		})
+		assert.Nil(t, err)
 		expected := []TokenType{
 			TokenHeader,
 			TokenChannelInfo,
 			TokenMessage,
 			TokenMessage,
-			TokenError,
 		}
 		for i, tt := range expected {
-			tk := lexer.Next()
-			data := tk.bytes() // always must consume the reader
-			if tt == TokenError {
-				assert.Equal(t, "invalid CRC: ffaaf97a != aaf97a", string(data))
-			}
+			tk, err := lexer.Next()
+			assert.Nil(t, err)
+			_ = tk.bytes() // always must consume the reader
 			assert.Equal(t, tt, tk.TokenType, fmt.Sprintf("mismatch element %d", i))
 		}
+		_, err = lexer.Next()
+		assert.Equal(t, "invalid CRC: ffaaf97a != aaf97a", err.Error())
 	})
 }
 
@@ -244,10 +252,11 @@ func TestChunkEmission(t *testing.T) {
 						attachment(), attachment(),
 						footer(),
 					)
-					lexer := NewLexer(bytes.NewReader(file), &lexOpts{
-						validateCRC: validateCRC,
-						emitChunks:  true,
+					lexer, err := NewLexer(bytes.NewReader(file), &LexOpts{
+						ValidateCRC: validateCRC,
+						EmitChunks:  true,
 					})
+					assert.Nil(t, err)
 					expected := []TokenType{
 						TokenHeader,
 						TokenChunk,
@@ -255,13 +264,15 @@ func TestChunkEmission(t *testing.T) {
 						TokenAttachment,
 						TokenAttachment,
 						TokenFooter,
-						TokenEOF,
 					}
 					for i, tt := range expected {
-						tk := lexer.Next()
+						tk, err := lexer.Next()
+						assert.Nil(t, err)
 						_ = tk.bytes() // always must consume the reader
 						assert.Equal(t, tt, tk.TokenType, fmt.Sprintf("mismatch element %d", i))
 					}
+					_, err = lexer.Next()
+					assert.ErrorIs(t, err, io.EOF)
 				})
 			}
 		})
@@ -291,20 +302,19 @@ func BenchmarkLexer(b *testing.B) {
 		assert.Nil(b, err)
 		reader := &bytes.Reader{}
 		b.ResetTimer()
-
 		msg := make([]byte, 1024*1024)
 		b.Run(c.assertion, func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
 				t0 := time.Now()
 				var tokens, bytecount int64
 				reader.Reset(input)
-				lexer := NewLexer(reader)
+				lexer, err := NewLexer(reader)
+				assert.Nil(b, err)
 				for {
-					tok := lexer.Next()
-					if tok.TokenType == TokenEOF {
+					tok, err := lexer.Next()
+					if errors.Is(err, io.EOF) {
 						break
 					}
-
 					if int64(len(msg)) < tok.ByteCount {
 						msg = make([]byte, tok.ByteCount)
 					}

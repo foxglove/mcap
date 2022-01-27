@@ -65,7 +65,6 @@ func (it *indexedMessageIterator) parseIndexSection() error {
 	if err != nil {
 		return err
 	}
-	it.lexer.SetLexNext()
 	var msg []byte
 	defer func() {
 		it.chunksets = sortOverlappingChunks(it.chunkIndexes)
@@ -75,7 +74,10 @@ func (it *indexedMessageIterator) parseIndexSection() error {
 	// populating the index fields.
 Top:
 	for {
-		tok := it.lexer.Next()
+		tok, err := it.lexer.Next()
+		if err != nil {
+			return fmt.Errorf("lexer error: %w", err)
+		}
 		msg = tok.bytes()
 		switch tok.TokenType {
 		case TokenChunkIndex:
@@ -108,8 +110,6 @@ Top:
 			if len(it.topics) == 0 || it.topics[channelInfo.TopicName] {
 				it.channels[channelInfo.ChannelID] = channelInfo
 			}
-		case TokenEOF:
-			return io.EOF
 		case TokenStatistics:
 			stats := parseStatisticsRecord(msg)
 			it.statistics = stats
@@ -171,7 +171,10 @@ func (it *indexedMessageIterator) loadChunk(index int) error {
 	if err != nil {
 		return err
 	}
-	tok := it.lexer.Next()
+	tok, err := it.lexer.Next()
+	if err != nil {
+		return err
+	}
 	var chunk *Chunk
 	switch tok.TokenType {
 	case TokenChunk:
@@ -210,8 +213,12 @@ func (it *indexedMessageIterator) loadChunk(index int) error {
 	}
 
 	it.activeChunkIndex = index
-	it.activeChunkLexer = NewLexer(it.activeChunkReader)
-	it.activeChunkLexer.SetLexNext()
+	it.activeChunkLexer, err = NewLexer(it.activeChunkReader, &LexOpts{
+		SkipMagic: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to lex chunk: %s", err)
+	}
 	return nil
 }
 
@@ -230,7 +237,10 @@ func (it *indexedMessageIterator) loadNextChunkset() error {
 			}
 			// now we're at the message index implicated by the chunk; parse one record
 			var messageIndex *MessageIndex
-			tok := it.lexer.Next()
+			tok, err := it.lexer.Next()
+			if err != nil {
+				return err
+			}
 			switch tok.TokenType {
 			case TokenMessageIndex:
 				messageIndex = parseMessageIndex(tok.bytes())
@@ -306,15 +316,17 @@ func (it *indexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	tok := it.activeChunkLexer.Next()
+	tok, err := it.activeChunkLexer.Next()
+	if err != nil {
+		return nil, nil, err
+	}
 	switch tok.TokenType {
 	case TokenMessage:
-		msg := parseMessage(tok.bytes())
+		msg, err := parseMessage(tok.bytes())
+		if err != nil {
+			return nil, nil, err
+		}
 		return it.channels[msg.ChannelID], msg, nil
-	case TokenError:
-		return nil, nil, fmt.Errorf("error: %s", tok.bytes())
-	case TokenEOF: // end of chunk
-		return nil, nil, io.EOF
 	default:
 		_ = tok.bytes()
 		return nil, nil, fmt.Errorf("unexpected token %s in message section", tok)

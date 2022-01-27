@@ -15,8 +15,10 @@ func TestMCAPReadWrite(t *testing.T) {
 		assert.Nil(t, err)
 		err = w.WriteHeader("ros1", "", map[string]string{"foo": "bar"})
 		assert.Nil(t, err)
-		lexer := NewLexer(buf)
-		token := lexer.Next()
+		lexer, err := NewLexer(buf)
+		assert.Nil(t, err)
+		token, err := lexer.Next()
+		assert.Nil(t, err)
 		// body of the header is the profile, followed by the metadata map
 		offset := 0
 		data := token.bytes()
@@ -75,7 +77,8 @@ func TestChunkedReadWrite(t *testing.T) {
 			})
 			assert.Nil(t, w.Close())
 			assert.Nil(t, err)
-			lexer := NewLexer(buf)
+			lexer, err := NewLexer(buf)
+			assert.Nil(t, err)
 			for i, expected := range []TokenType{
 				TokenHeader,
 				TokenChannelInfo,
@@ -83,9 +86,9 @@ func TestChunkedReadWrite(t *testing.T) {
 				TokenChannelInfo,
 				TokenStatistics,
 				TokenFooter,
-				TokenEOF,
 			} {
-				tok := lexer.Next()
+				tok, err := lexer.Next()
+				assert.Nil(t, err)
 				_ = tok.bytes() // need to read the data
 				assert.Equal(t, expected, tok.TokenType, fmt.Sprintf("want %s got %s at %d", Token{expected, 0, nil}, tok.TokenType, i))
 			}
@@ -131,9 +134,10 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		Data:        []byte{0x01, 0x02, 0x03, 0x04},
 	})
 	assert.Nil(t, err)
-	w.Close()
+	assert.Nil(t, w.Close())
 
-	lexer := NewLexer(buf)
+	lexer, err := NewLexer(buf)
+	assert.Nil(t, err)
 	for _, expected := range []TokenType{
 		TokenHeader,
 		TokenChannelInfo,
@@ -143,9 +147,9 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		TokenAttachmentIndex,
 		TokenStatistics,
 		TokenFooter,
-		TokenEOF,
 	} {
-		tok := lexer.Next()
+		tok, err := lexer.Next()
+		assert.Nil(t, err)
 		_ = tok.bytes()
 		assert.Equal(t, expected, tok.TokenType, fmt.Sprintf("want %s got %s", Token{expected, 0, nil}, tok))
 	}

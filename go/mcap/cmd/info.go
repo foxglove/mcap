@@ -20,7 +20,10 @@ var infoCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		reader := libmcap.NewReader(r)
+		reader, err := libmcap.NewReader(r)
+		if err != nil {
+			log.Fatal(err)
+		}
 		info, err := reader.Info()
 		if err != nil {
 			log.Fatal(err)
