@@ -20,7 +20,8 @@ func BenchmarkMessageIteration(b *testing.B) {
 		mcapfile := &bytes.Buffer{}
 		err = Bag2MCAP(bagfile, mcapfile)
 		assert.Nil(b, err)
-		r := NewReader(bytes.NewReader(mcapfile.Bytes()))
+		r, err := NewReader(bytes.NewReader(mcapfile.Bytes()))
+		assert.Nil(b, err)
 		it, err := r.Messages(0, time.Now().UnixNano(), []string{}, true)
 		assert.Nil(b, err)
 		c := 0

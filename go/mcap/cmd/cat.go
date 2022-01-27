@@ -26,7 +26,10 @@ var catCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		reader := libmcap.NewReader(f)
+		reader, err := libmcap.NewReader(f)
+		if err != nil {
+			log.Fatal(err)
+		}
 		it, err := reader.Messages(start, end, topics, true)
 		if err != nil {
 			log.Fatal(err)

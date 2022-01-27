@@ -90,7 +90,10 @@ func parseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
 	}, nil
 }
 
-func parseMessage(buf []byte) *Message {
+func parseMessage(buf []byte) (*Message, error) {
+	if len(buf) < 2+4+8+8 {
+		return nil, io.ErrShortBuffer
+	}
 	channelID, offset := getUint16(buf, 0)
 	sequence, offset := getUint32(buf, offset)
 	publishTime, offset := getUint64(buf, offset)
@@ -102,7 +105,7 @@ func parseMessage(buf []byte) *Message {
 		RecordTime:  recordTime,
 		PublishTime: publishTime,
 		Data:        data,
-	}
+	}, nil
 }
 
 func parseChunkIndex(buf []byte) (*ChunkIndex, error) {
@@ -294,17 +297,21 @@ func (r *Reader) Info() (*Info, error) {
 	}, nil
 }
 
-func NewReader(r io.Reader) *Reader {
+func NewReader(r io.Reader) (*Reader, error) {
 	var rs io.ReadSeeker
 	if readseeker, ok := r.(io.ReadSeeker); ok {
 		rs = readseeker
 	}
+	lexer, err := NewLexer(r, &LexOpts{
+		EmitChunks: true,
+	})
+	if err != nil {
+		return nil, err
+	}
 	return &Reader{
-		l: NewLexer(r, &lexOpts{
-			emitChunks: true,
-		}),
+		l:        lexer,
 		r:        r,
 		rs:       rs,
 		channels: make(map[uint16]*ChannelInfo),
-	}
+	}, nil
 }

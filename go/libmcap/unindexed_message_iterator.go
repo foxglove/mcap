@@ -15,12 +15,11 @@ type unindexedMessageIterator struct {
 
 func (it *unindexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 	for {
-		token := it.lexer.Next()
+		token, err := it.lexer.Next()
+		if err != nil {
+			return nil, nil, err
+		}
 		switch token.TokenType {
-		case TokenError:
-			return nil, nil, fmt.Errorf("%s", token.bytes())
-		case TokenEOF:
-			return nil, nil, io.EOF
 		case TokenChannelInfo:
 			channelInfo, err := parseChannelInfo(token.bytes())
 			if err != nil {
@@ -32,7 +31,10 @@ func (it *unindexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 				}
 			}
 		case TokenMessage:
-			message := parseMessage(token.bytes())
+			message, err := parseMessage(token.bytes())
+			if err != nil {
+				return nil, nil, err
+			}
 			if _, ok := it.channels[message.ChannelID]; !ok {
 				// skip messages on channels we don't know about. Note that if
 				// an unindexed reader encounters a message it would be
