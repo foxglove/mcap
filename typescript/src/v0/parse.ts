@@ -97,18 +97,21 @@ export function parseRecord({
     }
 
     case Opcode.FOOTER: {
-      const indexOffset = reader.uint64();
-      const indexCrc = reader.uint32();
-      const record: TypedMcapRecord = { type: "Footer", indexOffset, indexCrc };
+      const summaryStart = reader.uint64();
+      const summaryOffsetStart = reader.uint64();
+      const crc = reader.uint32();
+      const record: TypedMcapRecord = { type: "Footer", summaryStart, summaryOffsetStart, crc };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
 
     case Opcode.CHANNEL_INFO: {
       const channelId = reader.uint16();
       const topicName = reader.string();
-      const encoding = reader.string();
-      const schemaName = reader.string();
+      const messageEncoding = reader.string();
+      const schemaFormat = reader.string();
+      const schemaVersion = reader.string();
       const schema = reader.string();
+      const schemaName = reader.string();
       const userData = reader.keyValuePairs(
         (r) => r.string(),
         (r) => r.string(),
@@ -128,7 +131,9 @@ export function parseRecord({
         type: "ChannelInfo",
         channelId,
         topicName,
-        encoding,
+        messageEncoding,
+        schemaFormat,
+        schemaVersion,
         schemaName,
         schema,
         userData,
@@ -175,6 +180,8 @@ export function parseRecord({
     }
 
     case Opcode.CHUNK: {
+      const startTime = reader.uint64();
+      const endTime = reader.uint64();
       const uncompressedSize = reader.uint64();
       const uncompressedCrc = reader.uint32();
       const compression = reader.string();
@@ -186,6 +193,8 @@ export function parseRecord({
       );
       const record: TypedMcapRecord = {
         type: "Chunk",
+        startTime,
+        endTime,
         compression,
         uncompressedSize,
         uncompressedCrc,
@@ -222,7 +231,8 @@ export function parseRecord({
     case Opcode.CHUNK_INDEX: {
       const startTime = reader.uint64();
       const endTime = reader.uint64();
-      const chunkOffset = reader.uint64();
+      const chunkStart = reader.uint64();
+      const chunkEnd = reader.uint64();
       const messageIndexOffsets = reader.map(
         (r) => r.uint16(),
         (r) => r.uint64(),
@@ -245,7 +255,8 @@ export function parseRecord({
         type: "ChunkIndex",
         startTime,
         endTime,
-        chunkOffset,
+        chunkStart,
+        chunkEnd,
         messageIndexOffsets,
         messageIndexLength,
         compression,
@@ -325,6 +336,27 @@ export function parseRecord({
         attachmentCount,
         chunkCount,
         channelMessageCounts,
+      };
+      return { record, usedBytes: recordEndOffset - startOffset };
+    }
+    case Opcode.METADATA: {
+      const metadata = reader.keyValuePairs(
+        (r) => r.string(),
+        (r) => r.string(),
+      );
+      const record: TypedMcapRecord = { type: "Metadata", metadata };
+      return { record, usedBytes: recordEndOffset - startOffset };
+    }
+    case Opcode.SUMMARY_OFFSET: {
+      const groupOpcode = reader.uint8();
+      const groupStart = reader.uint64();
+      const groupEnd = reader.uint64();
+
+      const record: TypedMcapRecord = {
+        type: "SummaryOffset",
+        groupOpcode,
+        groupStart,
+        groupEnd,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }

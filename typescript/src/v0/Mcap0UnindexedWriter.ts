@@ -14,7 +14,8 @@ export class Mcap0UnindexedWriter {
   private bufferRecordBuilder: Mcap0RecordBuilder;
   private writable: IWritable;
 
-  private nextChannelId = 1;
+  // Channel Ids start at 0
+  private nextChannelId = 0;
 
   constructor(writable: IWritable) {
     this.writable = writable;
@@ -31,8 +32,9 @@ export class Mcap0UnindexedWriter {
 
   async end(): Promise<void> {
     this.bufferRecordBuilder.writeFooter({
-      indexOffset: 0n,
-      indexCrc: 0,
+      summaryStart: 0n,
+      summaryOffsetStart: 0n,
+      crc: 0,
     });
     await this.writable.write(this.bufferRecordBuilder.buffer);
     this.bufferRecordBuilder.reset();

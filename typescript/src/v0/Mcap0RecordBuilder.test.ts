@@ -12,7 +12,7 @@ describe("Mcap0BufferRecordBuilder", () => {
   it("writes header", async () => {
     const writer = new Mcap0RecordBuilder();
 
-    writer.writeHeader({
+    const written = writer.writeHeader({
       profile: "foo",
       library: "bar",
       metadata: [["something", "magical"]],
@@ -31,20 +31,23 @@ describe("Mcap0BufferRecordBuilder", () => {
 
     expect(buffer.length).toEqual(byteLength + 9);
     expect(writer.buffer).toEqual(buffer.buffer);
+    expect(written).toEqual(buffer.length);
   });
 
   it("writes footer", async () => {
     const writer = new Mcap0RecordBuilder();
 
     writer.writeFooter({
-      indexOffset: 0n,
-      indexCrc: 0,
+      summaryStart: 0n,
+      summaryOffsetStart: 0n,
+      crc: 0,
     });
 
     const buffer = new BufferBuilder();
     buffer
       .uint8(2) // opcode
-      .uint64(BigInt(12)) // record byte length
+      .uint64(BigInt(20)) // record byte length
+      .uint64(0n)
       .uint64(0n)
       .uint32(0);
 
@@ -55,10 +58,12 @@ describe("Mcap0BufferRecordBuilder", () => {
   it("writes channel info", async () => {
     const writer = new Mcap0RecordBuilder();
 
-    writer.writeChannelInfo({
+    const written = writer.writeChannelInfo({
       channelId: 1,
       topicName: "/topic",
-      encoding: "encoding",
+      messageEncoding: "encoding",
+      schemaFormat: "someformat",
+      schemaVersion: "",
       schemaName: "schema name",
       schema: "schema",
       userData: [],
@@ -71,13 +76,16 @@ describe("Mcap0BufferRecordBuilder", () => {
       .uint16(1)
       .string("/topic")
       .string("encoding")
-      .string("schema name")
+      .string("someformat")
+      .string("")
       .string("schema")
+      .string("schema name")
       .uint32(0) // user data length
       .uint32(0); // crc
 
     expect(buffer.length).toEqual(57 + 9);
     expect(writer.buffer).toEqual(buffer.buffer);
+    expect(written).toEqual(buffer.length);
   });
 
   it("writes messages", async () => {

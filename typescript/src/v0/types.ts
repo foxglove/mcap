@@ -7,15 +7,18 @@ export type Header = {
   metadata: [key: string, value: string][];
 };
 export type Footer = {
-  indexOffset: bigint;
-  indexCrc: number;
+  summaryStart: bigint;
+  summaryOffsetStart: bigint;
+  crc: number;
 };
 export type ChannelInfo = {
   channelId: number;
   topicName: string;
-  encoding: string;
-  schemaName: string;
+  messageEncoding: string;
+  schemaFormat: string;
   schema: string;
+  schemaVersion: string;
+  schemaName: string;
   userData: [key: string, value: string][];
 };
 export type Message = {
@@ -26,6 +29,8 @@ export type Message = {
   messageData: Uint8Array;
 };
 export type Chunk = {
+  startTime: bigint;
+  endTime: bigint;
   uncompressedSize: bigint;
   uncompressedCrc: number;
   compression: string;
@@ -39,7 +44,8 @@ export type MessageIndex = {
 export type ChunkIndex = {
   startTime: bigint;
   endTime: bigint;
-  chunkOffset: bigint;
+  chunkStart: bigint;
+  chunkEnd: bigint;
   messageIndexOffsets: Map<number, bigint>;
   messageIndexLength: bigint;
   compression: string;
@@ -66,6 +72,14 @@ export type Statistics = {
   chunkCount: number;
   channelMessageCounts: Map<number, bigint>;
 };
+export type Metadata = {
+  metadata: [key: string, value: string][];
+};
+export type SummaryOffset = {
+  groupOpcode: number;
+  groupStart: bigint;
+  groupEnd: bigint;
+};
 export type UnknownRecord = {
   opcode: number;
   data: Uint8Array;
@@ -82,6 +96,8 @@ export type McapRecords = {
   Attachment: Attachment;
   AttachmentIndex: AttachmentIndex;
   Statistics: Statistics;
+  Metadata: Metadata;
+  SummaryOffset: SummaryOffset;
   Unknown: UnknownRecord;
 };
 

@@ -112,13 +112,13 @@ export default class Mcap0IndexedReader {
         }`,
       );
     }
-    if (footer.indexOffset === 0n) {
+    if (footer.summaryStart === 0n) {
       throw new Error("File is not indexed");
     }
 
     // Future optimization: avoid holding whole index blob in memory at once
-    const indexData = await readable.read(footer.indexOffset, footerOffset - footer.indexOffset);
-    if (footer.indexCrc !== 0) {
+    const indexData = await readable.read(footer.summaryStart, footerOffset + 16n);
+    if (footer.crc !== 0) {
       let indexCrc = crc32Init();
       indexCrc = crc32Update(indexCrc, indexData);
       indexCrc = crc32Update(
@@ -130,8 +130,8 @@ export default class Mcap0IndexedReader {
         ),
       );
       indexCrc = crc32Final(indexCrc);
-      if (indexCrc !== footer.indexCrc) {
-        throw new Error(`Incorrect index CRC ${indexCrc} (expected ${footer.indexCrc})`);
+      if (indexCrc !== footer.crc) {
+        throw new Error(`Incorrect index CRC ${indexCrc} (expected ${footer.crc})`);
       }
     }
 
@@ -220,9 +220,9 @@ export default class Mcap0IndexedReader {
       if (relevantChunks[i]!.endTime > relevantChunks[i + 1]!.startTime) {
         throw new Error(
           `Overlapping chunks are not currently supported; chunk at offset ${
-            relevantChunks[i]!.chunkOffset
+            relevantChunks[i]!.chunkStart
           } ends at ${relevantChunks[i]!.endTime} and chunk at offset ${
-            relevantChunks[i + 1]!.chunkOffset
+            relevantChunks[i + 1]!.chunkStart
           } starts at ${relevantChunks[i + 1]!.startTime}`,
         );
       }
@@ -243,7 +243,7 @@ export default class Mcap0IndexedReader {
     startTime: bigint;
     endTime: bigint;
   }): AsyncGenerator<TypedMcapRecords["Message"], void, void> {
-    const chunkOpcodeAndLength = await this.readable.read(chunkIndex.chunkOffset, 1n + 8n);
+    const chunkOpcodeAndLength = await this.readable.read(chunkIndex.chunkStart, 1n + 8n);
     const chunkOpcodeAndLengthView = new DataView(
       chunkOpcodeAndLength.buffer,
       chunkOpcodeAndLength.byteOffset,
@@ -260,7 +260,7 @@ export default class Mcap0IndexedReader {
 
     // Future optimization: read only message indexes for given channelIds, not all message indexes for the chunk
     const chunkAndMessageIndexes = await this.readable.read(
-      chunkIndex.chunkOffset,
+      chunkIndex.chunkStart,
       1n + 8n + chunkRecordLength + chunkIndex.messageIndexLength,
     );
     const chunkAndMessageIndexesView = new DataView(
@@ -324,7 +324,7 @@ export default class Mcap0IndexedReader {
           for (let i = 0; i + 1 < result.record.records.length; i++) {
             if (result.record.records[i]![0] > result.record.records[i + 1]![0]) {
               throw new Error(
-                `Message index entries for channel ${result.record.channelId} in chunk at offset ${chunkIndex.chunkOffset} must be sorted by recordTime`,
+                `Message index entries for channel ${result.record.channelId} in chunk at offset ${chunkIndex.chunkStart} must be sorted by recordTime`,
               );
             }
           }
@@ -367,7 +367,7 @@ export default class Mcap0IndexedReader {
       if (recordTime >= startTime && recordTime <= endTime) {
         if (BigInt(recordsView.byteOffset) + offset >= Number.MAX_SAFE_INTEGER) {
           throw new Error(
-            `Message offset too large (recordTime ${recordTime}, offset ${offset}) in channel ${cursor.channelId} in chunk at offset ${chunkIndex.chunkOffset}`,
+            `Message offset too large (recordTime ${recordTime}, offset ${offset}) in channel ${cursor.channelId} in chunk at offset ${chunkIndex.chunkStart}`,
           );
         }
         const result = parseRecord({
@@ -378,17 +378,17 @@ export default class Mcap0IndexedReader {
         });
         if (!result.record) {
           throw new Error(
-            `Unable to parse record at offset ${offset} in chunk at offset ${chunkIndex.chunkOffset}`,
+            `Unable to parse record at offset ${offset} in chunk at offset ${chunkIndex.chunkStart}`,
           );
         }
         if (result.record.type !== "Message") {
           throw new Error(
-            `Unexpected record type ${result.record.type} in message index (time ${recordTime}, offset ${offset} in chunk at offset ${chunkIndex.chunkOffset})`,
+            `Unexpected record type ${result.record.type} in message index (time ${recordTime}, offset ${offset} in chunk at offset ${chunkIndex.chunkStart})`,
           );
         }
         if (result.record.recordTime !== recordTime) {
           throw new Error(
-            `Message recordTime ${result.record.recordTime} did not match message index entry (${recordTime} at offset ${offset} in chunk at offset ${chunkIndex.chunkOffset})`,
+            `Message recordTime ${result.record.recordTime} did not match message index entry (${recordTime} at offset ${offset} in chunk at offset ${chunkIndex.chunkStart})`,
           );
         }
         yield result.record;

@@ -9,7 +9,7 @@ function translateRecord(record: McapPre0Record): TypedMcapRecord {
         type: "ChannelInfo",
         channelId: record.id,
         topicName: record.topic,
-        encoding: record.encoding,
+        messageEncoding: record.encoding,
         schemaName: record.schemaName,
         schema: record.schema,
         userData: [],

@@ -183,8 +183,10 @@ describe("Mcap0IndexedReader", () => {
           {
             type: "ChannelInfo",
             channelId: 42,
+            schemaFormat: "myformat",
+            schemaVersion: "version",
             topicName: "mytopic",
-            encoding: "utf12",
+            messageEncoding: "utf12",
             schemaName: "some data",
             schema: "stuff",
             userData: [["foo", "bar"]],

@@ -214,7 +214,10 @@ async function convert(filePath: string, options: { indexed: boolean }) {
 
     const channelInfo: Omit<ChannelInfo, "channelId"> = {
       topicName: connection.topic,
-      encoding: "protobuf",
+      messageEncoding: "protobuf",
+      schemaFormat: "proto-set",
+      // fixme - why do I need to come up with a value for this?
+      schemaVersion: "",
       schemaName,
       schema: protobufjs.util.base64.encode(
         descriptorMsgEncoded,
