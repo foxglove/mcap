@@ -256,6 +256,7 @@ A metadata record contains arbitrary user data in key-value pairs.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
+| 4 + N | name | String | Example: `map_metadata`. |
 | 4 + N | metadata | Array<Tuple<string, string>> | Example keys: `robot_id`, `git_sha`, `timezone`, `run_id`. |
 
 ### Metadata Index (op=0x0C)
@@ -266,6 +267,7 @@ A metadata record contains arbitrary user data in key-value pairs.
 | --- | --- | --- | --- |
 | 8 | offset | uint64 | Byte offset from the start of the file to the metadata record. |
 | 8 | length | uint64 | Total byte length of the record. |
+| 4 + N | name | String | Name of the metadata record. |
 
 ### Summary Offset (op=0x0D)
 
