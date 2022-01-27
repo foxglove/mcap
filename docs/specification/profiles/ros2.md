@@ -1,7 +1,19 @@
-## ROS2 Profile
+## ROS2
 
-Profile name: "ros2"
+Profile: **`ros2`**
 
-Channel info records serialized with the "ros1" profile may include the following fields:
+The `ros2` profile describes how to create MCAP files for v2 of the [ROS](https://ros.org/) framework.
+
+### Channel Info
+
+#### message_encoding
+
+MUST be `cdr`
+
+#### schema_format
+
+MUST be `ros2msg`
+
+#### user_data
 
 - offered_qos_profiles (required, string)

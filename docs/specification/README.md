@@ -1,128 +1,153 @@
 # MCAP File Format Specification
 
-[tlv wiki]: https://en.wikipedia.org/wiki/Type-length-value
-[profiles]: ./profiles
-[compression formats]: ./compression/supported-compression-formats.md
-[explanatory notes]: ./notes/explanatory-notes.md
-[diagram unchunked]: ./diagrams/unchunked.png
-[diagram chunked]: ./diagrams/chunked.png
-[feature explanations]: ./notes/explanatory-notes.md#feature-explanations
-
 > Status: DRAFT
 
 ## Overview
 
-MCAP is a container file format for append-only storage of heterogeneously-schematized data. It is inspired by the ROS1 bag format and is intended to support flexible serialization options, while also generalizing to non-ROS systems and retaining characteristics such as self-containment and chunk compression. Features include:
+MCAP is a modular container file format for recording timestamped [pub/sub](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) messages with arbitrary serialization formats.
 
-- Single-pass, indexed writes (no backward seeking)
-- Flexible message serialization options (e.g. ros1, protobuf, …)
-- Self-contained (message schemas are included in the file)
-- Fast remote file summarization
-- File attachments
-- Optional chunk compression
-- Optional CRC integrity checks
+MCAP files are designed to work well under various workloads, resource constraints, and durability requirements.
 
-### Glossary
+- [Structure](#file-structure)
+  - [Header](#header)
+  - [Footer](#footer)
+  - [Data Section](#data-section)
+  - [Summary Section](#summary-section)
+- [Records](#records)
+  - [Header](#header-op0x01)
+  - [Footer](#footer-op0x02)
+  - [Channel Info](#channel-info-op0x03)
+  - [Message](#message-op0x04)
+  - [Chunk](#chunk-op0x05)
+  - [Message Index](#message-index-op0x06)
+  - [Chunk Index](#chunk-index-op0x07)
+  - [Attachment](#attachment-op0x08)
+  - [Attachment Index](#attachment-index-op0x09)
+  - [Statistics](#statistics-op0x0A)
+  - [Metadata](#metadata-op0x0B)
+  - [Metadata Index](#metadata-op0x0C)
+  - [Summary Offset](#summary-offset-op0x0D)
+- [Serialization](#serialization)
 
-Some helpful terms to understand in the following sections are:
+## File Structure
 
-- **Record**: A [TLV triplet][tlv wiki] with type and value corresponding to one of the opcodes and schemas below.
-- **Topic**: A named message type and associated schema.
-- **Channel**: A logical stream that contains messages on a single topic. Channels are associated with a numeric ID by the recorder - the **Channel ID**.
-- **Channel Info**: A type of record describing information about a channel, notably containing the name and schema of the topic.
-- **Message**: A type of record representing a timestamped message on a channel (and therefore associated with a topic/schema). A message can be parsed by a reader that has also read the channel info for the channel on which the message appears.
-- **Chunk**: A record type that wraps a compressed set of channel info and message records.
-- **Attachment**: Extra data that may be included in the file, outside the chunks. Attachments may be quickly listed and accessed via an index at the end of the file.
-- **Index**: The format contains indexes for both messages and attachments. For messages, there are two levels of indexing - a **Chunk Index** at the end of the file points to chunks by offset, enabling fast location of chunks based on channel and timerange. A second index - the **Message Index** - after each chunk contains, for each channel in the chunk, and offset and timestamp for every message to allow fast location of messages within the uncompressed chunk data. The attachment index at the end of the file allows for fast listing and location of attachments based on name, timestamp, or attachment type.
-- **Statistics**: A type of record at the end of the file, used to support fast summarization of file contents.
-- **Message Data Section**: Used in this doc to refer to the first portion of the file that contains chunks and message data. To be distinguished from the **Index Data Section**.
-- **Index Data Section**: The last part of the file, containing records used for searching and summarizing the file. The Index Data section is split into a **channel info portion**, **chunk index portion**, and **attachment index portion** each containing contiguous runs of the corresponding record type, followed by a **Statistics** record. All portions of the index data section are optional, subject to constraints and tradeoffs described below. There are no other record types in the index data section.
+A valid MCAP file is structured as follows. The Summary and Summary Offset sections are optional.
 
-## Format Description
+    <Magic><Header><Data section>[<Summary section>][<Summary Offset section>]<Footer><Magic>
 
-An MCAP file is physically structured as a series of concatenated **"records"**, each prefixed with a uint8 type and uint64 length, capped on each end with magic bytes:
+The Data, Summary, and Summary Offset sections are structured as sequences of **records**:
 
-    <MAGIC>[<record type><record len><record>...]<MAGIC>
+    [<record type><record content length><record><record type><record content length><record>...]
 
-These are the magic bytes:
+Files not conforming to this structure are considered malformed.
+
+### Magic
+
+An MCAP file must begin and end with the following [magic bytes](https://en.wikipedia.org/wiki/File_format#Magic_number):
 
     0x89, M, C, A, P, 0x30, \r, \n
 
 > Note: The version byte (ASCII zero 0x30) following "MCAP" will be updated to 1 (0x31) upon ratification of this specification. Until then, backward compatibility is not guaranteed.
 
-The first record in every file must be a Header (op=0x01) and the last record must be a Footer (op=0x02).
+### Header
 
-MCAP files may contain a variety of record types. Specific constraints on valid usage of the record types is explained in the sections below, but in general record types may be used or not depending on the feature requirements of the consumer.
+The first record after the leading magic bytes is the [Header](#header) record.
 
-The diagrams below show two possible variants - a file that is chunked and indexed, i.e making full use of the features, and one that is unchunked but contains statistics.
+    <0x01><record content length><record>
 
-![Chunked][diagram chunked]
+### Footer
 
-![Unchunked][diagram unchunked]
+The last record before the trailing magic bytes is the [Footer](#footer) record.
 
-### Record Types
+    <0x02><record content length><record>
 
-Record types are identified by single-byte **opcodes**. Record opcodes in the range 0x01-0x7F are reserved for future MCAP format usage. 0x80-0xFF are reserved for application extensions and user proposals.
+### Data Section
 
-##### Serialization and Notation
+The data section contains records with message data, attachments, and supporting records.
 
-The section below uses the following data types and serialization choices. In all cases integers are serialized little endian:
+- Channel Info
+- Message
+- Attachment
+- Chunk
+- Message Index
+- Metadata
 
-- **Timestamp**: uint64 nanoseconds since a user-understood epoch (i.e unix epoch, robot boot time, etc)
-- **String**: a uint32-prefixed UTF8 string
-- **KeyValues<T1, T2>**: A uint32 length-prefixed association of key-value pairs
+### Summary Section
 
-```
-<length><T1 (key)><T2 (value)><T1 (key)><T2 (value)>
-```
+The optional summary section contains records for fast lookup of file information or other top-level records.
 
-- **Array<T>**: A uint32 length-prefixed array.
+- Channel Info
+- Chunk Index
+- Attachment Index
+- Statistics
+- Metadata Index
 
-```
-<length><T><T><T>
-```
+All records in the summary section MUST be grouped by opcode.
 
-An empty Array consists of a zero-value length prefix.
+> Why? Grouping Summary records by record opcode enables more efficient indexing of the summary in the Summary Offset section.
 
-- **Bytes**: refers to an array of bytes, without a length prefix. If a length prefix is required a designation like "uint32 length-prefixed bytes" will be used.
+Channel Info records in the summary are duplicates of Channel Info records throughout the Data section.
 
-#### Header (op=0x01)
+### Summary Offset Section
 
-The first record in every MCAP file is a header.
+The optional summary offset section contains [Summary Offset](#summary-offset-op0x0D) records referencing records in the summary section.
+
+The summary offset section aids random access reading.
+
+## Records
+
+MCAP files may contain a variety of records. Records are identified by a single-byte **opcode**. Record opcodes in the range 0x01-0x7F are reserved for future MCAP format usage. 0x80-0xFF are reserved for application extensions and user proposals.
+
+All MCAP records are serialized as follows:
+
+    <record type><record content length><record content>
+
+Record type is a single byte opcode, and record content length is a uint64 value.
+
+Records may be extended by adding new fields at the end of existing fields. Readers should ignore any unknown fields.
+
+The Footer record will not be extended.
+
+### Header (op=0x01)
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 4 + N | profile | String | The profile to use for interpretation of channel info user data. If the value matches one of the [supported profiles][profiles], the channel info user data section should be structured to match the description in the corresponding profile. This field may also be supplied empty, or containing a framework that is not one of those recognized. |
-| N | library | String | freeform string for writer to specify its name, version, or other information for use in debugging |
-| N | metadata | KeyValues<string, string> | Example keys: robot_id, git_sha, timezone, run_id. |
+| 4 + N | profile | String | The profile is used for indicating requirements for fields throughout the file (encoding, user_data, etc). If the value matches one of the [well-known profiles][profiles], the file should conform to the profile. This field may also be supplied empty or containing a framework that is not one of those recognized. When specifying a custom profile, prefer the `x-` prefix to avoid conflict with future well-known profiles. |
+| 4 + N | library | String | Free-form string for writer to specify its name, version, or other information for use in debugging |
 
-#### Footer (op=0x02)
+### Footer (op=0x02)
 
-The last record in every MCAP file is a footer.
+A Footer record contains end-of-file information. It must be the last record in the file. Readers using the index to read the file will begin with by reading the footer and trailing magic.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 8 | index_offset | uint64 | Pointer to start of index section. If there are no records in the index section, this should be zero. |
-| 4 | index_crc | uint32 | CRC32 checksum of all data from index_offset through the byte immediately preceding this CRC. A value of zero indicates that CRC validation should not be performed. |
+| 8 | summary_start | uint64 | Byte offset of the start of file to the first record in the summary section. If there are no records in the summary section this should be 0. |
+| 8 | summary_offset_start | uint64 | Byte offset from the start of the first record in the summary offset section. If there are no Summary Offset records this value should be 0. |
+| 4 | summary_crc | uint32 | A CRC32 of all bytes from the start of the Summary section up through the end of the previous field in the footer record. |
 
-A file without a footer is **corrupt**, indicating the writer process encountered an unclean shutdown. It may be possible to recover data from a corrupt file.
+### Channel Info (op=0x03)
 
-#### Channel Info (op=0x03)
+A Channel Info record defines an encoded stream of messages on a topic.
 
-Identifies a stream of messages on a particular topic and includes information about how the messages should be decoded by readers. A channel info record must occur in the file prior to any message that references its Channel ID. Channel IDs must uniquely identify a channel across the entire file. If message indexing is in use, the Channel Info section of the index data section must also be in use.
+Channel Info records are uniquely identified within a file by their channel ID. A Channel Info record must occur at least once in the file prior to any message referring to its channel ID.
 
-| Bytes | Name | Type | Description | Example |
-| --- | --- | --- | --- | --- |
-| 2 | id | uint16 | Channel ID 1 | 1 |
-| 4 + N | topic_name | String | Topic | /diagnostics |
-| 4 + N | encoding | String | Message Encoding | cdr, cbor, ros1, protobuf, etc. |
-| 4 + N | schema_name | String | Schema Name | std_msgs/Header |
-| 4 + N | schema | uint32 length-prefixed bytes | Schema |  |
-| N | user_data | KeyValues<string, string> | Metadata about this channel | used to encode protocol-specific details like callerid, latching, QoS profiles... Refer to [supported profiles][profiles]. |
+| Bytes | Name | Type | Description |
+| --- | --- | --- | --- |
+| 2 | id | uint16 | A unique identifier for this channel within the file. |
+| 4 + N | topic | String | The channel topic. |
+| 4 + N | message_encoding | String | Encoding for messages on this channel. The value should be one of the [well-known message encodings](./well-known-encodings.md). Custom values should use `x-` prefix. |
+| 4 + N | schema_encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. |
+| 4 + N | schema | uint32 lengh prefixed Bytes | Schema should conform to the schema_encoding. |
+| 4 + N | schema_name | String | An identifier for the schema. The schema name should conform to any schema_encoding requirements. |
+| 4 + N | metadata | Array<Tuple<string, string>> | Metadata about this channel |
 
-#### Message (op=0x04)
+Channel Info records may be duplicated in the summary section.
 
-A message record encodes a single timestamped message on a particular channel. In a given file, messages must appear either inside Chunks, or outside Chunks. A file may not contain both chunked and unchunked messages.
+### Message (op=0x04)
+
+A message record encodes a single timestamped message on a channel.
+
+The message encoding must match that of the channel info record corresponding to the message's channel ID.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -132,56 +157,74 @@ A message record encodes a single timestamped message on a particular channel. I
 | 8 | record_time | Timestamp | Time at which the message was recorded by the recorder process. |
 | N | message_data | Bytes | Message data, to be decoded according to the schema of the channel. |
 
-#### Chunk (op=0x05)
+### Chunk (op=0x05)
 
-A Chunk is a collection of compressed channel info and message records. If message indexing is in use, Chunks are required.
+A Chunk contains a batch of channel info and message records. The batch of records contained in a chunk may be compressed or uncompressed.
 
-| Bytes | Name | Type | Description | Example |
-| --- | --- | --- | --- | --- |
-| 8 | uncompressed_size | uint64 | Uncompressed size of of the "records" section. |
-| 4 | uncompressed_crc | uint32 | CRC32 checksum of uncompressed "records" section. A value of zero indicates that CRC validation should not be performed. |
-| 4 + N | compression | String | compression algorithm | lz4, zstd, "". A zero-length string indicates no compression. Refer to [supported compression formats][compression formats]. |
-| N | records | Bytes | Concatenated records, compressed with the algorithm in the "compression" field. |
+All messages in the chunk must reference channel infos recorded earlier in the file (in a previous chunk or earlier in the current chunk).
 
-#### Message Index (op=0x06)
+| Bytes | Name | Type | Description |
+| --- | --- | --- | --- |
+| 8 | start_time | Timestamp | Earliest message record_time in the chunk. |
+| 8 | end_time | Timestamp | Latest message record_time in the chunk. |
+| 8 | uncompressed_size | uint64 | Uncompressed size of the `records` field. |
+| 4 | uncompressed_crc | uint32 | CRC32 checksum of uncompressed `records` field. A value of zero indicates that CRC validation should not be performed. |
+| 4 + N | compression | String | compression algorithm. i.e. `lz4`, `zstd`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression formats]. |
+| N | records | Bytes | Repeating sequences of `<record type><record content length><record content>`. Compressed with the algorithm in the `compression` field. |
 
-The Message Index record maps timestamps to message offsets. If message indexing is in use, following each chunk, a message index record is written for each channel in the chunk preceding. All message index records for a chunk must immediately follow the chunk in a contiguous run of records.
+### Message Index (op=0x06)
+
+A Message Index record allows readers to locate individual message records within a chunk by their timestamp.
+
+A sequence of Message Index records occurs immediately after each chunk. Exactly one Message Index record must exist in the sequence for every channel on which a message occurs inside the chunk.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 2 | channel_id | uint16 | Channel ID. |
-| N | records | Array<{ Timestamp, uint64 }> | Array of record_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
+| 4 + N | records | Array<Tuple<Timestamp, uint64>> | Array of record_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
 
-#### Chunk Index (op=0x07)
+Messages outside of chunks cannot be indexed.
 
-The Chunk Index records form a coarse index of timestamps to chunk offsets, along with the locations of the message index records associated with those chunks. They are found in the chunk index portion of the index data section. If message indexing is in use, Chunk Indexes are required. A Chunk Index record must be preceded in the index data section by Channel Info records for any channels that it references.
+### Chunk Index (op=0x07)
+
+A Chunk Index record contains the location of a Chunk record and its associated Message Index records.
+
+A Chunk Index record exists for every Chunk in the file.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 8 | start_time | Timestamp | First message record timestamp in the chunk. |
-| 8 | end_time | Timestamp | Last message record timestamp in the chunk. |
-| 8 | offset | uint64 | Offset to the chunk record from the start of the file. |
-| N | message_index_offsets | KeyValues<uint16, uint64> | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. Duplicate keys are not allowed. |
-| 8 | message_index_length | uint64 | Total length in bytes of the message index records after the chunk, including lengths and opcodes. |
-| 4 + N | compression | String | The compression used on this chunk. Refer to [supported compression formats][compression formats]. |
-| 8 | compressed_size | uint64 | The compressed size of the chunk. |
-| 8 | uncompressed_size | uint64 | The uncompressed size of the chunk. |
+| 8 | start_time | Timestamp | Earliest message record_time in the chunk. |
+| 8 | end_time | Timestamp | Latest message record_time in the chunk. |
+| 8 | chunk_start_offset | uint64 | Offset to the chunk record from the start of the file. |
+| 8 | chunk_length | uint64 | The byte length of the chunk record. |
+| 4 + N | message_index_offsets | Map<uint16, uint64> | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. An empty map indicates no message indexing is available. |
+| 8 | message_index_length | uint64 | Total length in bytes of the message index records after the chunk. |
+| 4 + N | compression | String | The compression used within the chunk. Refer to [well-known compression formats formats][compression formats]. This field should match the the value in the corresponding Chunk record. |
+| 8 | compressed_size | uint64 | The size of the chunk `records` field. |
+| 8 | uncompressed_size | uint64 | The uncompressed size of the chunk `records` field. This field should match the value in the corresponding Chunk record. |
 
-#### Attachment (op=0x08)
+A Channel Info record MUST exist in the summary section for all channels referenced by chunk index records.
 
-Attachments can be used to attach artifacts such as calibration data, text, or core dumps. Attachment records must not appear within a chunk.
+> Why? The typical use case for file readers using an index is fast random access to a specific message timestamp. Channel Info is a prerequisite for decoding Message record data. Without an easy-to-access copy of the Channel Info records, readers would need to search for Channel Info records from the start of the file, degrading random access read performance.
+
+### Attachment (op=0x08)
+
+Attachment records contain auxiliary artifacts such as text, core dumps, calibration data, or other arbitrary data.
+
+Attachment records must not appear within a chunk.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 4 + N | name | String | Name of the attachment, e.g "scene1.jpg". |
+| 8 | created_at | Timestamp | Time at which the attachment was created. |
 | 8 | record_time | Timestamp | Time at which the attachment was recorded. |
 | 4 + N | content_type | String | MIME Type (e.g "text/plain"). |
-| 8 + N | data | uint64 length-prefixed bytes | Attachment data. |
+| 8 + N | data | uint64 length-prefixed Bytes | Attachment data. |
 | 4 | crc | uint32 | CRC32 checksum of preceding fields in the record. A value of zero indicates that CRC validation should not be performed. |
 
-#### Attachment Index (op=0x09)
+### Attachment Index (op=0x09)
 
-The attachment index is an index to named attachments within the file. One record is recorded per attachment in the file. The attachment index records are written to the attachment index portion of the message data section.
+An Attachment Index record contains the location of an attachment in the file. An Attachment Index record exists for every Attachment record in the file.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -191,9 +234,9 @@ The attachment index is an index to named attachments within the file. One recor
 | 4 + N | content_type | String | MIME type of the attachment. |
 | 8 | offset | uint64 | Byte offset to the attachment, from the start of the file. |
 
-#### Statistics (op=0x0A)
+### Statistics (op=0x0A)
 
-The statistics record contains statistics about the recorded data. It is the last record in the file before the footer. The record must be preceded in the index data section by Channel Info records for any channels referenced in the `channel_message_counts` field. If this is undesirable but some statistics are still desired, the field may be set to a zero-length map. The statistics record is optional.
+A Statistics record contains summary information about the recorded data. The statistics record is optional, but the file should contain at most one.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -201,8 +244,224 @@ The statistics record contains statistics about the recorded data. It is the las
 | 4 | channel_count | uint32 | Number of channels in the file across all topics. |
 | 4 | attachment_count | uint32 | Number of attachments in the file. |
 | 4 | chunk_count | uint32 | Number of chunks in the file. |
-| N | channel_message_counts | KeyValues<uint16, uint64> | Mapping from channel ID to total message count for the channel. Duplicate keys are not allowed. |
+| 4 + N | channel_message_counts | Map<uint16, uint64> | Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available. |
+
+When using a Statistics record with channel_message_counts, the Summary Data section MUST contain a copy of all Channel Info records. The Channel Info records MUST occur prior to the statistics record.
+
+> Why? The typical usecase for tools is to provide a listing of the types and quantities of messages stored in the file. Without an easy to access copy of the Channel Info records, tools would need to linearly scan the file for Channel Info records to display what types of messages exist in the file.
+
+### Metadata (op=0x0B)
+
+A metadata record contains arbitrary user data in key-value pairs.
+
+| Bytes | Name | Type | Description |
+| --- | --- | --- | --- |
+| 4 + N | metadata | Array<Tuple<string, string>> | Example keys: `robot_id`, `git_sha`, `timezone`, `run_id`. |
+
+### Metadata Index (op=0x0C)
+
+A metadata record contains arbitrary user data in key-value pairs.
+
+| Bytes | Name | Type | Description |
+| --- | --- | --- | --- |
+| 8 | offset | uint64 | Byte offset from the start of the file to the metadata record. |
+| 8 | length | uint64 | Total byte length of the record. |
+
+### Summary Offset (op=0x0D)
+
+A Summary Offset record contains the location of records within the summary section. Each Summary Offset record corresponds to a group of summary records with the same opcode.
+
+| Bytes | Name | Type | Description |
+| --- | --- | --- | --- |
+| 8 | group_opcode | uint64 | The opcode of all records in the group. |
+| 8 | group_start | uint64 | Byte offset from the start of the file of the first record in the group. |
+| 8 | group_length | uint64 | Total byte length of all records in the group. |
+
+## Serialization
+
+### Fixed-width types
+
+Multi-byte integers (uint16, uint32, uint64) are serialized using [little-endian byte order](https://en.wikipedia.org/wiki/Endianness).
+
+### String
+
+Strings are serialized using a uint32 byte length followed by the string data, which should be valid [UTF-8](https://en.wikipedia.org/wiki/UTF-8).
+
+    <byte length><utf-8 bytes>
+
+### Bytes
+
+Bytes is sequence of bytes with no additional requirements.
+
+    <bytes>
+
+### Tuple<first_type, second_type>
+
+Tuple represents a pair of values. The first value has type first_type and the second has type second_type.
+
+Tuple is serialized by serializing the first value and then the second value:
+
+    <first value><second value>
+
+A Tuple<uint8, uint32>:
+
+    <uint8><uint32>
+
+A Tuple<uint16, string>:
+
+    <uint16><string>
+
+    <uint16><uint32><utf-8 bytes>
+
+### Array<array_type>
+
+Arrays are serialized using a uint32 byte length followed by the serialized array elements.
+
+    <byte length><serialized element><serialized element>...
+
+An array of uint32 is specified as Array<uint32> and serialized as:
+
+    <byte length><uint32><uint32><uint32>...
+
+### Timestamp
+
+uint64 nanoseconds since a user-understood epoch (i.e unix epoch, robot boot time, etc.)
+
+### Map<key_type, value_type>
+
+A Map is an [association](https://en.wikipedia.org/wiki/Associative_array) of keys to values. Duplicate keys are not allowed.
+
+A map is serialized as an array of tuples i.e. `Array<Tuple<key_type, value_type>>`. See array and tuple serialization.
+
+## Diagrams
+
+The following diagrams demonstrate various valid MCAP files.
+
+### Empty file
+
+The smallest valid MCAP file, containing no data.
+
+```
+[Header]
+[Footer]
+```
+
+### Single Message
+
+An MCAP file containing 1 message.
+
+```
+[Header]
+[Channel Info 1]
+[Message on Channel 1]
+[Footer]
+```
+
+### Single Attachment
+
+An MCAP file containing 1 attachment
+
+```
+[Header]
+[Attachment]
+[Footer]
+```
+
+### Multiple Messages
+
+```
+[Header]
+[Channel Info 1]
+[Channel Info 2]
+[Message on 1]
+[Message on 1]
+[Message on 2]
+[Channel Info 3]
+[Attachment]
+[Message on 3]
+[Message on 1]
+[Footer]
+```
+
+### Messages in Chunks
+
+A writer may choose to put messages in Chunks to compress record data. This MCAP file does not use any index records.
+
+```
+[Header]
+[Chunk]
+  [Channel Info 1]
+  [Channel Info 2]
+  [Message on 1]
+  [Message on 1]
+  [Message on 2]
+[Attachment]
+[Chunk]
+  [Channel Info 3]
+  [Message on 3]
+  [Message on 1]
+[Footer]
+```
+
+### Multiple Messages with Summary Data
+
+```
+[Header]
+[Channel Info 1]
+[Channel Info 2]
+[Message on 1]
+[Message on 1]
+[Message on 2]
+[Channel Info 3]
+[Attachment]
+[Message on 3]
+[Message on 1]
+[Statistics]
+[Channel Info 1]
+[Channel Info 2]
+[Channel Info 3]
+[Summary Offset 0x01]
+[Footer]
+```
+
+### Multiple Messages with Chunk Indices
+
+```
+[Header]
+[Chunk A]
+  [Channel Info 1]
+  [Channel Info 2]
+  [Message on 1]
+  [Message on 1]
+  [Message on 2]
+[Message Index 1]
+[Message Index 2]
+[Attachment 1]
+[Chunk B]
+  [Channel Info 3]
+  [Message on 3]
+  [Message on 1]
+[Message Index 3]
+[Message Index 1]
+[Channel Info 1]
+[Channel Info 2]
+[Channel Info 3]
+[Chunk Index A]
+[Chunk Index B]
+[Attachment Index 1]
+[Statistics]
+[Summary Offset 0x01]
+[Summary Offset 0x05]
+[Summary Offset 0x07]
+[Summary Offset 0x08]
+[Footer]
+```
 
 ## Further Reading
 
 - [Feature explanations][feature explanations]: includes usage details that may be useful to implementers of readers or writers.
+
+[profiles]: ./profiles
+[compression formats]: ./compression/supported-compression-formats.md
+[explanatory notes]: ./notes/explanatory-notes.md
+[feature explanations]: ./notes/explanatory-notes.md#feature-explanations
