@@ -7,10 +7,12 @@ import {
   Footer,
   Message,
   Attachment,
+  AttachmentIndex,
   Chunk,
   ChunkIndex,
   MessageIndex,
   Metadata,
+  MetadataIndex,
 } from "./types";
 
 /**
@@ -104,7 +106,7 @@ export class Mcap0RecordBuilder {
       .bytes(message.messageData);
   }
 
-  writeAttachment(attachment: Attachment): void {
+  writeAttachment(attachment: Attachment): bigint {
     this.bufferBuilder.uint8(Opcode.ATTACHMENT);
 
     const startPosition = this.bufferBuilder.length;
@@ -120,6 +122,29 @@ export class Mcap0RecordBuilder {
       .seek(startPosition)
       .uint64(BigInt(endPosition - startPosition - 8))
       .seek(endPosition);
+
+    return BigInt(endPosition - startPosition + 1);
+  }
+
+  writeAttachmentIndex(attachmentIndex: AttachmentIndex): bigint {
+    this.bufferBuilder.uint8(Opcode.ATTACHMENT_INDEX);
+
+    const startPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .uint64(0n) // placeholder
+      .uint64(attachmentIndex.recordTime)
+      .uint64(attachmentIndex.attachmentSize)
+      .string(attachmentIndex.name)
+      .string(attachmentIndex.contentType)
+      .uint64(attachmentIndex.offset);
+
+    const endPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .seek(startPosition)
+      .uint64(BigInt(endPosition - startPosition - 8))
+      .seek(endPosition);
+
+    return BigInt(endPosition - startPosition + 1);
   }
 
   writeChunk(chunk: Chunk): bigint {
@@ -200,6 +225,25 @@ export class Mcap0RecordBuilder {
       .uint64(0n) // placeholder size
       .string(metadata.name)
       .array(metadata.metadata);
+
+    const endPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .seek(startPosition)
+      .uint64(BigInt(endPosition - startPosition - 8))
+      .seek(endPosition);
+
+    return BigInt(endPosition - startPosition + 1);
+  }
+
+  writeMetadataIndex(metadataIndex: MetadataIndex): bigint {
+    this.bufferBuilder.uint8(Opcode.METADATA_INDEX);
+
+    const startPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .uint64(0n) // placeholder size
+      .uint64(metadataIndex.offset)
+      .uint64(metadataIndex.length)
+      .string(metadataIndex.name);
 
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder

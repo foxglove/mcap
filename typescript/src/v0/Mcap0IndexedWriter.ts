@@ -9,6 +9,8 @@ import {
   Attachment,
   Chunk,
   ChunkIndex,
+  AttachmentIndex,
+  MetadataIndex,
   SummaryOffset,
   Metadata,
 } from "./types";
@@ -26,8 +28,12 @@ export class Mcap0IndexedWriter {
   private recordWriter = new Mcap0RecordBuilder();
   private channelInfos = new Map<number, ChannelInfo>();
   private writtenChannelIds = new Set<number>();
-  private chunkIndices: ChunkIndex[] = [];
   private chunkBuilder: ChunkBuilder = new ChunkBuilder();
+
+  // indices
+  private chunkIndices: ChunkIndex[] = [];
+  private attachmentIndices: AttachmentIndex[] = [];
+  private metadataIndices: MetadataIndex[] = [];
 
   constructor(writable: IWritable) {
     this.writable = writable;
@@ -56,7 +62,7 @@ export class Mcap0IndexedWriter {
     summaryOffsets.push({
       groupOpcode: Opcode.CHANNEL_INFO,
       groupStart: channelInfoStart,
-      groupLength: channelInfoStart + channelInfoLength,
+      groupLength: channelInfoLength,
     });
 
     await this.writable.write(this.recordWriter.buffer);
@@ -70,7 +76,29 @@ export class Mcap0IndexedWriter {
     summaryOffsets.push({
       groupOpcode: Opcode.CHUNK_INDEX,
       groupStart: chunkIndexStart,
-      groupLength: chunkIndexStart + chunkIndexLength,
+      groupLength: chunkIndexLength,
+    });
+
+    const attachmentIndexStart = this.writable.position();
+    let attachmentIndexLength = 0n;
+    for (const attachmentIndex of this.attachmentIndices) {
+      attachmentIndexLength += this.recordWriter.writeAttachmentIndex(attachmentIndex);
+    }
+    summaryOffsets.push({
+      groupOpcode: Opcode.ATTACHMENT_INDEX,
+      groupStart: attachmentIndexStart,
+      groupLength: attachmentIndexLength,
+    });
+
+    const metadataIndexStart = this.writable.position();
+    let metadataIndexLength = 0n;
+    for (const metadataIndex of this.metadataIndices) {
+      metadataIndexLength += this.recordWriter.writeMetadataIndex(metadataIndex);
+    }
+    summaryOffsets.push({
+      groupOpcode: Opcode.METADATA_INDEX,
+      groupStart: metadataIndexStart,
+      groupLength: metadataIndexLength,
     });
 
     await this.writable.write(this.recordWriter.buffer);
@@ -132,16 +160,28 @@ export class Mcap0IndexedWriter {
   async addAttachment(attachment: Attachment): Promise<void> {
     this.recordWriter.writeAttachment(attachment);
 
-    // fixme attachment index
+    const offset = this.writable.position();
+    this.attachmentIndices.push({
+      recordTime: attachment.recordTime,
+      name: attachment.name,
+      contentType: attachment.contentType,
+      offset,
+      attachmentSize: BigInt(attachment.data.byteLength),
+    });
 
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
   }
 
   async addMetadata(metadata: Metadata): Promise<void> {
-    this.recordWriter.writeMetadata(metadata);
+    const recordSize = this.recordWriter.writeMetadata(metadata);
 
-    // fixme metadata index
+    const offset = this.writable.position();
+    this.metadataIndices.push({
+      name: metadata.name,
+      offset,
+      length: recordSize,
+    });
 
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
