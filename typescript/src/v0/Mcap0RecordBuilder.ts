@@ -132,11 +132,12 @@ export class Mcap0RecordBuilder {
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .uint64(0n) // placeholder
+      .uint64(attachmentIndex.offset)
+      .uint64(attachmentIndex.attachmentRecordLength)
       .uint64(attachmentIndex.recordTime)
       .uint64(attachmentIndex.attachmentSize)
       .string(attachmentIndex.name)
-      .string(attachmentIndex.contentType)
-      .uint64(attachmentIndex.offset);
+      .string(attachmentIndex.contentType);
 
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder

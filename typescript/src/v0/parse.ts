@@ -297,11 +297,12 @@ export function parseRecord({
       return { record, usedBytes: recordEndOffset - startOffset };
     }
     case Opcode.ATTACHMENT_INDEX: {
+      const attachmentOffset = reader.uint64();
+      const attachmentRecordLength = reader.uint64();
       const recordTime = reader.uint64();
       const attachmentSize = reader.uint64();
       const name = reader.string();
       const contentType = reader.string();
-      const attachmentOffset = reader.uint64();
 
       const record: TypedMcapRecord = {
         type: "AttachmentIndex",
@@ -310,6 +311,7 @@ export function parseRecord({
         name,
         contentType,
         offset: attachmentOffset,
+        attachmentRecordLength,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }

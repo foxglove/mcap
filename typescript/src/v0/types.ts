@@ -62,6 +62,7 @@ export type AttachmentIndex = {
   name: string;
   contentType: string;
   offset: bigint;
+  attachmentRecordLength: bigint;
 };
 export type Statistics = {
   messageCount: bigint;

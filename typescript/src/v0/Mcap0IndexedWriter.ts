@@ -158,7 +158,7 @@ export class Mcap0IndexedWriter {
   }
 
   async addAttachment(attachment: Attachment): Promise<void> {
-    this.recordWriter.writeAttachment(attachment);
+    const attachmentRecordLength = this.recordWriter.writeAttachment(attachment);
 
     const offset = this.writable.position();
     this.attachmentIndices.push({
@@ -167,6 +167,7 @@ export class Mcap0IndexedWriter {
       contentType: attachment.contentType,
       offset,
       attachmentSize: BigInt(attachment.data.byteLength),
+      attachmentRecordLength,
     });
 
     await this.writable.write(this.recordWriter.buffer);
