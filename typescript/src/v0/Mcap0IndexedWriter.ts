@@ -1,7 +1,19 @@
 import { IWritable } from "../common/IWritable";
 import { ChunkBuilder } from "./ChunkBuilder";
 import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
-import { ChannelInfo, Message, Header, Attachment, Chunk, ChunkIndex } from "./types";
+import { Opcode } from "./constants";
+import {
+  ChannelInfo,
+  Message,
+  Header,
+  Attachment,
+  Chunk,
+  ChunkIndex,
+  AttachmentIndex,
+  MetadataIndex,
+  SummaryOffset,
+  Metadata,
+} from "./types";
 
 /**
  * Mcap0IndexedWriter provides an interface for writing messages
@@ -16,8 +28,12 @@ export class Mcap0IndexedWriter {
   private recordWriter = new Mcap0RecordBuilder();
   private channelInfos = new Map<number, ChannelInfo>();
   private writtenChannelIds = new Set<number>();
-  private chunkIndices: ChunkIndex[] = [];
   private chunkBuilder: ChunkBuilder = new ChunkBuilder();
+
+  // indices
+  private chunkIndices: ChunkIndex[] = [];
+  private attachmentIndices: AttachmentIndex[] = [];
+  private metadataIndices: MetadataIndex[] = [];
 
   constructor(writable: IWritable) {
     this.writable = writable;
@@ -34,25 +50,71 @@ export class Mcap0IndexedWriter {
   async end(): Promise<void> {
     await this.finalizeChunk();
 
-    const position = this.writable.position();
+    const summaryOffsets: SummaryOffset[] = [];
 
+    const summaryStart = this.writable.position();
+
+    const channelInfoStart = this.writable.position();
+    let channelInfoLength = 0n;
     for (const channelInfo of this.channelInfos.values()) {
-      this.recordWriter.writeChannelInfo(channelInfo);
+      channelInfoLength += this.recordWriter.writeChannelInfo(channelInfo);
     }
+    summaryOffsets.push({
+      groupOpcode: Opcode.CHANNEL_INFO,
+      groupStart: channelInfoStart,
+      groupLength: channelInfoLength,
+    });
 
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
 
+    const chunkIndexStart = this.writable.position();
+    let chunkIndexLength = 0n;
     for (const chunkIndex of this.chunkIndices) {
-      this.recordWriter.writeChunkIndex(chunkIndex);
+      chunkIndexLength += this.recordWriter.writeChunkIndex(chunkIndex);
     }
+    summaryOffsets.push({
+      groupOpcode: Opcode.CHUNK_INDEX,
+      groupStart: chunkIndexStart,
+      groupLength: chunkIndexLength,
+    });
+
+    const attachmentIndexStart = this.writable.position();
+    let attachmentIndexLength = 0n;
+    for (const attachmentIndex of this.attachmentIndices) {
+      attachmentIndexLength += this.recordWriter.writeAttachmentIndex(attachmentIndex);
+    }
+    summaryOffsets.push({
+      groupOpcode: Opcode.ATTACHMENT_INDEX,
+      groupStart: attachmentIndexStart,
+      groupLength: attachmentIndexLength,
+    });
+
+    const metadataIndexStart = this.writable.position();
+    let metadataIndexLength = 0n;
+    for (const metadataIndex of this.metadataIndices) {
+      metadataIndexLength += this.recordWriter.writeMetadataIndex(metadataIndex);
+    }
+    summaryOffsets.push({
+      groupOpcode: Opcode.METADATA_INDEX,
+      groupStart: metadataIndexStart,
+      groupLength: metadataIndexLength,
+    });
 
     await this.writable.write(this.recordWriter.buffer);
+    this.recordWriter.reset();
+
+    const summaryOffsetStart = this.writable.position();
+
+    for (const summaryOffset of summaryOffsets) {
+      this.recordWriter.writeSummaryOffset(summaryOffset);
+    }
     this.recordWriter.reset();
 
     this.recordWriter.writeFooter({
-      indexOffset: position,
-      indexCrc: 0,
+      summaryStart,
+      summaryOffsetStart,
+      crc: 0,
     });
 
     this.recordWriter.writeMagic();
@@ -96,7 +158,31 @@ export class Mcap0IndexedWriter {
   }
 
   async addAttachment(attachment: Attachment): Promise<void> {
-    this.recordWriter.writeAttachment(attachment);
+    const attachmentRecordLength = this.recordWriter.writeAttachment(attachment);
+
+    const offset = this.writable.position();
+    this.attachmentIndices.push({
+      recordTime: attachment.recordTime,
+      name: attachment.name,
+      contentType: attachment.contentType,
+      offset,
+      attachmentSize: BigInt(attachment.data.byteLength),
+      attachmentRecordLength,
+    });
+
+    await this.writable.write(this.recordWriter.buffer);
+    this.recordWriter.reset();
+  }
+
+  async addMetadata(metadata: Metadata): Promise<void> {
+    const recordSize = this.recordWriter.writeMetadata(metadata);
+
+    const offset = this.writable.position();
+    this.metadataIndices.push({
+      name: metadata.name,
+      offset,
+      length: recordSize,
+    });
 
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
@@ -109,25 +195,30 @@ export class Mcap0IndexedWriter {
 
     const chunkData = this.chunkBuilder.buffer;
     const chunkRecord: Chunk = {
+      startTime: this.chunkBuilder.startTime,
+      endTime: this.chunkBuilder.endTime,
       uncompressedSize: BigInt(chunkData.length),
       uncompressedCrc: 0,
       compression: "",
       records: chunkData,
     };
 
-    const offset = this.writable.position();
+    const chunkStart = this.writable.position();
+
+    const recordRecordSize = this.recordWriter.writeChunk(chunkRecord);
+    const chunkEnd = chunkStart + recordRecordSize;
+
     const chunkIndex: ChunkIndex = {
-      startTime: this.chunkBuilder.startTime,
-      endTime: this.chunkBuilder.endTime,
-      chunkOffset: offset,
+      startTime: chunkRecord.startTime,
+      endTime: chunkRecord.endTime,
+      chunkStart,
+      chunkLength: chunkEnd,
       messageIndexOffsets: new Map(),
       messageIndexLength: 0n,
       compression: chunkRecord.compression,
       compressedSize: 0n,
       uncompressedSize: chunkRecord.uncompressedSize,
     };
-
-    this.recordWriter.writeChunk(chunkRecord);
 
     const startPosition = this.writable.position();
     for (const messageIndex of this.chunkBuilder.indices) {

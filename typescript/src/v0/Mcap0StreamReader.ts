@@ -138,6 +138,9 @@ export default class Mcap0StreamReader implements McapStreamReader {
         case "Attachment":
         case "AttachmentIndex":
         case "Statistics":
+        case "Metadata":
+        case "MetadataIndex":
+        case "SummaryOffset":
           yield record;
           break;
 
@@ -185,6 +188,9 @@ export default class Mcap0StreamReader implements McapStreamReader {
               case "Attachment":
               case "AttachmentIndex":
               case "Statistics":
+              case "Metadata":
+              case "MetadataIndex":
+              case "SummaryOffset":
                 throw new Error(`${chunkResult.record.type} record not allowed inside a chunk`);
               case "ChannelInfo":
               case "Message":

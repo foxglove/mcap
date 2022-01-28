@@ -22,8 +22,9 @@ describe("Mcap0StreamReader", () => {
       new Uint8Array([
         ...MCAP0_MAGIC,
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0x0123456789abcdefn), // index offset
-          ...uint32LE(0x01234567), // index crc
+          ...uint64LE(0x0123456789abcdefn), // summary start
+          ...uint64LE(0x0123456789abcdefn), // summary offset start
+          ...uint32LE(0x01234567), // summary crc
         ]),
         ...MCAP0_MAGIC.slice(0, MCAP0_MAGIC.length - 1),
         0x00,
@@ -38,16 +39,18 @@ describe("Mcap0StreamReader", () => {
       new Uint8Array([
         ...MCAP0_MAGIC,
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0x0123456789abcdefn), // index offset
-          ...uint32LE(0x01234567), // index crc
+          ...uint64LE(0x0123456789abcdefn), // summary start
+          ...uint64LE(0x0123456789abcdefn), // summary offset start
+          ...uint32LE(0x01234567), // summary crc
         ]),
         ...MCAP0_MAGIC,
       ]),
     );
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      indexOffset: 0x0123456789abcdefn,
-      indexCrc: 0x01234567,
+      summaryStart: 0x0123456789abcdefn,
+      summaryOffsetStart: 0x0123456789abcdefn,
+      crc: 0x01234567,
     });
     expect(reader.done()).toBe(true);
   });
@@ -58,22 +61,26 @@ describe("Mcap0StreamReader", () => {
       new Uint8Array([
         ...MCAP0_MAGIC,
         ...record(Opcode.CHUNK, [
+          ...uint64LE(0n), // start_time
+          ...uint64LE(0n), // end_time
           ...uint64LE(0n), // decompressed size
           ...uint32LE(0), // decompressed crc32
           ...string("lz4"), // compression
           // no chunk data
         ]),
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // index offset
-          ...uint32LE(0), // index crc
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
+          ...uint32LE(0), // summary crc
         ]),
         ...MCAP0_MAGIC,
       ]),
     );
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      indexOffset: 0n,
-      indexCrc: 0,
+      summaryStart: 0n,
+      summaryOffsetStart: 0n,
+      crc: 0,
     });
     expect(reader.done()).toBe(true);
   });
@@ -83,8 +90,9 @@ describe("Mcap0StreamReader", () => {
     const data = new Uint8Array([
       ...MCAP0_MAGIC,
       ...record(Opcode.FOOTER, [
-        ...uint64LE(0x0123456789abcdefn), // index offset
-        ...uint32LE(0x01234567), // index crc
+        ...uint64LE(0x0123456789abcdefn), // summary start
+        ...uint64LE(0x0123456789abcdefn), // summary offset start
+        ...uint32LE(0x01234567), // summary crc
       ]),
       ...MCAP0_MAGIC,
     ]);
@@ -96,8 +104,9 @@ describe("Mcap0StreamReader", () => {
     reader.append(new Uint8Array(data.buffer, data.length - 1, 1));
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      indexOffset: 0x0123456789abcdefn,
-      indexCrc: 0x01234567,
+      summaryStart: 0x0123456789abcdefn,
+      summaryOffsetStart: 0x0123456789abcdefn,
+      crc: 0x01234567,
     });
     expect(reader.done()).toBe(true);
     expect(() => reader.append(new Uint8Array([42]))).toThrow("Already done reading");
@@ -109,8 +118,9 @@ describe("Mcap0StreamReader", () => {
       new Uint8Array([
         ...MCAP0_MAGIC,
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0x0123456789abcdefn), // index offset
-          ...uint32LE(0x01234567), // index crc
+          ...uint64LE(0x0123456789abcdefn), // summary start
+          ...uint64LE(0x0123456789abcdefn), // summary offset start
+          ...uint32LE(0x01234567), // summary crc
         ]),
         ...MCAP0_MAGIC,
         42,
@@ -126,6 +136,8 @@ describe("Mcap0StreamReader", () => {
         ...MCAP0_MAGIC,
 
         ...record(Opcode.CHUNK, [
+          ...uint64LE(0n), // start_time
+          ...uint64LE(0n), // end_time
           ...uint64LE(0n), // decompressed size
           ...uint32LE(0), // decompressed crc32
           ...string(""), // compression
@@ -133,16 +145,18 @@ describe("Mcap0StreamReader", () => {
         ]),
 
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // index offset
-          ...uint32LE(0), // index crc
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
+          ...uint32LE(0), // summary crc
         ]),
         ...MCAP0_MAGIC,
       ]),
     );
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      indexOffset: 0n,
-      indexCrc: 0,
+      summaryStart: 0n,
+      summaryOffsetStart: 0n,
+      crc: 0,
     });
     expect(reader.done()).toBe(true);
   });
@@ -154,6 +168,8 @@ describe("Mcap0StreamReader", () => {
         ...MCAP0_MAGIC,
 
         ...record(Opcode.CHUNK, [
+          ...uint64LE(0n), // start_time
+          ...uint64LE(0n), // end_time
           ...uint64LE(1n), // decompressed size
           ...uint32LE(crc32(new Uint8Array([Opcode.CHANNEL_INFO]))), // decompressed crc32
           ...string(""), // compression
@@ -162,8 +178,9 @@ describe("Mcap0StreamReader", () => {
         ]),
 
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // index offset
-          ...uint32LE(0), // index crc
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
+          ...uint32LE(0), // summary crc
         ]),
         ...MCAP0_MAGIC,
       ]),
@@ -183,8 +200,9 @@ describe("Mcap0StreamReader", () => {
         ]),
 
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // index offset
-          ...uint32LE(0), // index crc
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
+          ...uint32LE(0), // summary crc
         ]),
         ...MCAP0_MAGIC,
       ]),
@@ -205,6 +223,8 @@ describe("Mcap0StreamReader", () => {
         ...MCAP0_MAGIC,
 
         ...record(Opcode.CHUNK, [
+          ...uint64LE(0n), // start_time
+          ...uint64LE(0n), // end_time
           ...uint64LE(0n), // decompressed size
           ...uint32LE(crc32(message)), // decompressed crc32
           ...string(""), // compression
@@ -212,8 +232,9 @@ describe("Mcap0StreamReader", () => {
         ]),
 
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // index offset
-          ...uint32LE(0), // index crc
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
+          ...uint32LE(0), // summary crc
         ]),
         ...MCAP0_MAGIC,
       ]),
@@ -234,16 +255,18 @@ describe("Mcap0StreamReader", () => {
           crcSuffix([
             ...uint16LE(1), // channel id
             ...string("mytopic"), // topic
-            ...string("utf12"), // encoding
-            ...string("some data"), // schema name
+            ...string("utf12"), // message encoding
+            ...string("json"), // schema encoding
             ...string("stuff"), // schema
+            ...string("some data"), // schema name
             ...keyValues(string, string, [["foo", "bar"]]), // user data
           ]),
         ),
 
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // index offset
-          ...uint32LE(0), // index crc
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
+          ...uint32LE(0), // summary crc
         ]),
         ...MCAP0_MAGIC,
       ]),
@@ -252,15 +275,17 @@ describe("Mcap0StreamReader", () => {
       type: "ChannelInfo",
       channelId: 1,
       topicName: "mytopic",
-      encoding: "utf12",
+      messageEncoding: "utf12",
+      schemaEncoding: "json",
       schemaName: "some data",
       schema: "stuff",
       userData: [["foo", "bar"]],
     } as TypedMcapRecords["ChannelInfo"]);
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      indexOffset: 0n,
-      indexCrc: 0,
+      summaryStart: 0n,
+      summaryOffsetStart: 0n,
+      crc: 0,
     });
     expect(reader.done()).toBe(true);
   });
@@ -271,9 +296,10 @@ describe("Mcap0StreamReader", () => {
       crcSuffix([
         ...uint16LE(1), // channel id
         ...string("mytopic"), // topic
-        ...string("utf12"), // encoding
-        ...string("some data"), // schema name
+        ...string("utf12"), // message encoding
+        ...string("json"), // schema encoding
         ...string("stuff"), // schema
+        ...string("some data"), // schema name
         ...keyValues(string, string, [["foo", "bar"]]), // user data
       ]),
     );
@@ -284,6 +310,8 @@ describe("Mcap0StreamReader", () => {
         ...MCAP0_MAGIC,
 
         ...record(Opcode.CHUNK, [
+          ...uint64LE(0n), // start_time
+          ...uint64LE(0n), // end_time
           ...uint64LE(0n), // decompressed size
           ...uint32LE(crc32(channelInfo)), // decompressed crc32
           ...string(compressed ? "xyz" : ""), // compression
@@ -291,8 +319,9 @@ describe("Mcap0StreamReader", () => {
         ]),
 
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // index offset
-          ...uint32LE(0), // index crc
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
+          ...uint32LE(0), // summary crc
         ]),
         ...MCAP0_MAGIC,
       ]),
@@ -301,15 +330,17 @@ describe("Mcap0StreamReader", () => {
       type: "ChannelInfo",
       channelId: 1,
       topicName: "mytopic",
-      encoding: "utf12",
+      messageEncoding: "utf12",
+      schemaEncoding: "json",
       schemaName: "some data",
       schema: "stuff",
       userData: [["foo", "bar"]],
     } as TypedMcapRecords["ChannelInfo"]);
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      indexOffset: 0n,
-      indexCrc: 0,
+      summaryStart: 0n,
+      summaryOffsetStart: 0n,
+      crc: 0,
     });
     expect(reader.done()).toBe(true);
   });
@@ -325,9 +356,10 @@ describe("Mcap0StreamReader", () => {
             crcSuffix([
               ...uint16LE(42), // channel id
               ...string("XXXXXXXX"), // topic
-              ...string("utf12"), // encoding
-              ...string("some data"), // schema name
+              ...string("utf12"), // message encoding
+              ...string("json"), // schema encoding
               ...string("stuff"), // schema
+              ...string("some data"), // schema name
               ...keyValues(string, string, [["foo", "bar"]]), // user data
             ]),
           ),
@@ -339,9 +371,10 @@ describe("Mcap0StreamReader", () => {
             crcSuffix([
               ...uint16LE(42), // channel id
               ...string("mytopic"), // topic
-              ...string("XXXXXXXX"), // encoding
-              ...string("some data"), // schema name
+              ...string("XXXXXXXX"), // message encoding
+              ...string("json"), // schema encoding
               ...string("stuff"), // schema
+              ...string("some data"), // schema name
               ...keyValues(string, string, [["foo", "bar"]]), // user data
             ]),
           ),
@@ -353,9 +386,10 @@ describe("Mcap0StreamReader", () => {
             crcSuffix([
               ...uint16LE(42), // channel id
               ...string("mytopic"), // topic
-              ...string("utf12"), // encoding
-              ...string("XXXXXXXX"), // schema name
+              ...string("utf12"), // message encoding
+              ...string("json"), // schema encoding
               ...string("stuff"), // schema
+              ...string("XXXXXXXX"), // schema name
               ...keyValues(string, string, [["foo", "bar"]]), // user data
             ]),
           ),
@@ -367,9 +401,10 @@ describe("Mcap0StreamReader", () => {
             crcSuffix([
               ...uint16LE(42), // channel id
               ...string("mytopic"), // topic
-              ...string("utf12"), // encoding
-              ...string("some data"), // schema name
+              ...string("utf12"), // message encoding
+              ...string("json"), // schema encoding
               ...string("XXXXXXXX"), // schema
+              ...string("some data"), // schema name
               ...keyValues(string, string, [["foo", "bar"]]), // user data
             ]),
           ),
@@ -381,9 +416,10 @@ describe("Mcap0StreamReader", () => {
             crcSuffix([
               ...uint16LE(42), // channel id
               ...string("mytopic"), // topic
-              ...string("utf12"), // encoding
-              ...string("some data"), // schema name
+              ...string("utf12"), // message encoding
+              ...string("json"), // schema encoding
               ...string("stuff"), // schema
+              ...string("some data"), // schema name
               ...keyValues(string, string, [
                 ["foo", "bar"],
                 ["baz", "quux"],
@@ -397,9 +433,10 @@ describe("Mcap0StreamReader", () => {
           crcSuffix([
             ...uint16LE(42), // channel id
             ...string("mytopic"), // topic
-            ...string("utf12"), // encoding
-            ...string("some data"), // schema name
+            ...string("utf12"), // message encoding
+            ...string("json"), // schema encoding
             ...string("stuff"), // schema
+            ...string("some data"), // schema name
             ...keyValues(string, string, [["foo", "bar"]]), // user data
           ]),
         );
@@ -412,6 +449,8 @@ describe("Mcap0StreamReader", () => {
               ? [...channelInfo, ...channelInfo2]
               : testType === "same chunk"
               ? record(Opcode.CHUNK, [
+                  ...uint64LE(0n), // start_time
+                  ...uint64LE(0n), // end_time
                   ...uint64LE(0n), // decompressed size
                   ...uint32LE(crc32(new Uint8Array([...channelInfo, ...channelInfo2]))), // decompressed crc32
                   ...string(""), // compression
@@ -421,12 +460,16 @@ describe("Mcap0StreamReader", () => {
               : testType === "different chunks"
               ? [
                   ...record(Opcode.CHUNK, [
+                    ...uint64LE(0n), // start_time
+                    ...uint64LE(0n), // end_time
                     ...uint64LE(0n), // decompressed size
                     ...uint32LE(crc32(new Uint8Array(channelInfo))), // decompressed crc32
                     ...string(""), // compression
                     ...channelInfo,
                   ]),
                   ...record(Opcode.CHUNK, [
+                    ...uint64LE(0n), // start_time
+                    ...uint64LE(0n), // end_time
                     ...uint64LE(0n), // decompressed size
                     ...uint32LE(crc32(new Uint8Array(channelInfo2))), // decompressed crc32
                     ...string(""), // compression
@@ -436,8 +479,9 @@ describe("Mcap0StreamReader", () => {
               : []),
 
             ...record(Opcode.FOOTER, [
-              ...uint64LE(0n), // index offset
-              ...uint32LE(0), // index crc
+              ...uint64LE(0n), // summary start
+              ...uint64LE(0n), // summary offset start
+              ...uint32LE(0), // summary crc
             ]),
             ...MCAP0_MAGIC,
           ]),
@@ -446,7 +490,8 @@ describe("Mcap0StreamReader", () => {
           type: "ChannelInfo",
           channelId: 42,
           topicName: "mytopic",
-          encoding: "utf12",
+          messageEncoding: "utf12",
+          schemaEncoding: "json",
           schemaName: "some data",
           schema: "stuff",
           userData: [["foo", "bar"]],

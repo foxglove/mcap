@@ -115,7 +115,7 @@ async function validate(
           break;
         }
         let messageDeserializer: (data: ArrayBufferView) => unknown;
-        if (record.encoding === "ros1") {
+        if (record.messageEncoding === "ros1") {
           const reader = new ROS1LazyMessageReader(parseMessageDefinition(record.schema));
           messageDeserializer = (data) => {
             const size = reader.size(data);
@@ -124,14 +124,14 @@ async function validate(
             }
             return reader.readMessage(data).toJSON();
           };
-        } else if (record.encoding === "ros2") {
+        } else if (record.messageEncoding === "ros2") {
           const reader = new ROS2MessageReader(
             parseMessageDefinition(record.schema, {
               ros2: true,
             }),
           );
           messageDeserializer = (data) => reader.readMessage(data);
-        } else if (record.encoding === "protobuf") {
+        } else if (record.messageEncoding === "protobuf") {
           const root = protobufjs.Root.fromDescriptor(
             FileDescriptorSet.decode(Buffer.from(record.schema, "base64")),
           );
@@ -139,11 +139,11 @@ async function validate(
 
           messageDeserializer = (data) =>
             type.decode(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-        } else if (record.encoding === "json") {
+        } else if (record.messageEncoding === "json") {
           const textDecoder = new TextDecoder();
           messageDeserializer = (data) => JSON.parse(textDecoder.decode(data));
         } else {
-          throw new Error(`unsupported encoding ${record.encoding}`);
+          throw new Error(`unsupported encoding ${record.messageEncoding}`);
         }
         channelInfoById.set(record.channelId, { info: record, messageDeserializer });
         break;
@@ -157,7 +157,7 @@ async function validate(
         if (deserialize) {
           if (channelInfo.messageDeserializer == undefined) {
             throw new Error(
-              `No deserializer available for channel id: ${channelInfo.info.channelId} ${channelInfo.info.encoding}`,
+              `No deserializer available for channel id: ${channelInfo.info.channelId} ${channelInfo.info.messageEncoding}`,
             );
           }
           const message = channelInfo.messageDeserializer(record.messageData);

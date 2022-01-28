@@ -13,7 +13,10 @@ export enum Opcode {
   ATTACHMENT = 0x08,
   ATTACHMENT_INDEX = 0x09,
   STATISTICS = 0x0a,
-  MAX = 0x0a,
+  METADATA = 0x0b,
+  METADATA_INDEX = 0x0c,
+  SUMMARY_OFFSET = 0x0d,
+  MAX = 0x0d,
 }
 
 export function isKnownOpcode(opcode: number): opcode is Opcode {

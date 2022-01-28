@@ -4,18 +4,19 @@ export type McapMagic = {
 export type Header = {
   profile: string;
   library: string;
-  metadata: [key: string, value: string][];
 };
 export type Footer = {
-  indexOffset: bigint;
-  indexCrc: number;
+  summaryStart: bigint;
+  summaryOffsetStart: bigint;
+  crc: number;
 };
 export type ChannelInfo = {
   channelId: number;
   topicName: string;
-  encoding: string;
-  schemaName: string;
+  messageEncoding: string;
+  schemaEncoding: string;
   schema: string;
+  schemaName: string;
   userData: [key: string, value: string][];
 };
 export type Message = {
@@ -26,6 +27,8 @@ export type Message = {
   messageData: Uint8Array;
 };
 export type Chunk = {
+  startTime: bigint;
+  endTime: bigint;
   uncompressedSize: bigint;
   uncompressedCrc: number;
   compression: string;
@@ -39,7 +42,8 @@ export type MessageIndex = {
 export type ChunkIndex = {
   startTime: bigint;
   endTime: bigint;
-  chunkOffset: bigint;
+  chunkStart: bigint;
+  chunkLength: bigint;
   messageIndexOffsets: Map<number, bigint>;
   messageIndexLength: bigint;
   compression: string;
@@ -58,6 +62,7 @@ export type AttachmentIndex = {
   name: string;
   contentType: string;
   offset: bigint;
+  attachmentRecordLength: bigint;
 };
 export type Statistics = {
   messageCount: bigint;
@@ -65,6 +70,20 @@ export type Statistics = {
   attachmentCount: number;
   chunkCount: number;
   channelMessageCounts: Map<number, bigint>;
+};
+export type Metadata = {
+  name: string;
+  metadata: [key: string, value: string][];
+};
+export type MetadataIndex = {
+  offset: bigint;
+  length: bigint;
+  name: string;
+};
+export type SummaryOffset = {
+  groupOpcode: number;
+  groupStart: bigint;
+  groupLength: bigint;
 };
 export type UnknownRecord = {
   opcode: number;
@@ -82,6 +101,9 @@ export type McapRecords = {
   Attachment: Attachment;
   AttachmentIndex: AttachmentIndex;
   Statistics: Statistics;
+  Metadata: Metadata;
+  MetadataIndex: MetadataIndex;
+  SummaryOffset: SummaryOffset;
   Unknown: UnknownRecord;
 };
 
