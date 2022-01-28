@@ -4,6 +4,8 @@ go 1.17
 
 require (
 	github.com/foxglove/mcap/go/libmcap v0.0.0-00010101000000-000000000000
+	github.com/foxglove/mcap/go/ros v0.0.0-00010101000000-000000000000
+	github.com/mattn/go-sqlite3 v1.14.11
 	github.com/spf13/cobra v1.3.0
 	github.com/spf13/viper v1.10.1
 )
@@ -33,3 +35,5 @@ require (
 )
 
 replace github.com/foxglove/mcap/go/libmcap => ../libmcap
+
+replace github.com/foxglove/mcap/go/ros => ../ros
