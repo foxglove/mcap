@@ -225,13 +225,10 @@ func TestMessageReading(t *testing.T) {
 func TestReaderCounting(t *testing.T) {
 	for _, indexed := range []bool{true, false} {
 		t.Run(fmt.Sprintf("indexed %v", indexed), func(t *testing.T) {
-			bagfile, err := os.Open("../../testdata/bags/demo.bag")
+			f, err := os.Open("../../testdata/mcap/demo.mcap")
 			assert.Nil(t, err)
-			defer bagfile.Close()
-			mcapfile := &bytes.Buffer{}
-			err = Bag2MCAP(bagfile, mcapfile)
-			assert.Nil(t, err)
-			r, err := NewReader(bytes.NewReader(mcapfile.Bytes()))
+			defer f.Close()
+			r, err := NewReader(f)
 			assert.Nil(t, err)
 			it, err := r.Messages(0, time.Now().UnixNano(), []string{}, indexed)
 			assert.Nil(t, err)
@@ -250,13 +247,11 @@ func TestReaderCounting(t *testing.T) {
 }
 
 func TestMCAPInfo(t *testing.T) {
-	bagfile, err := os.Open("../../testdata/bags/demo.bag")
+	f, err := os.Open("../../testdata/mcap/demo.mcap")
 	assert.Nil(t, err)
-	defer bagfile.Close()
-	mcapfile := &bytes.Buffer{}
-	err = Bag2MCAP(bagfile, mcapfile)
+	defer f.Close()
 	assert.Nil(t, err)
-	r, err := NewReader(bytes.NewReader(mcapfile.Bytes()))
+	r, err := NewReader(f)
 	assert.Nil(t, err)
 	info, err := r.Info()
 	assert.Nil(t, err)
