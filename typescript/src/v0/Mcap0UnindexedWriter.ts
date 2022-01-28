@@ -1,6 +1,6 @@
 import { IWritable } from "../common/IWritable";
 import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
-import { ChannelInfo, Message, Header, Attachment } from "./types";
+import { ChannelInfo, Message, Header, Attachment, Metadata } from "./types";
 
 /**
  * Mcap0UnindexedWriter provides an interface for writing messages
@@ -14,7 +14,8 @@ export class Mcap0UnindexedWriter {
   private bufferRecordBuilder: Mcap0RecordBuilder;
   private writable: IWritable;
 
-  private nextChannelId = 1;
+  // Channel Ids start at 0
+  private nextChannelId = 0;
 
   constructor(writable: IWritable) {
     this.writable = writable;
@@ -31,8 +32,9 @@ export class Mcap0UnindexedWriter {
 
   async end(): Promise<void> {
     this.bufferRecordBuilder.writeFooter({
-      indexOffset: 0n,
-      indexCrc: 0,
+      summaryStart: 0n,
+      summaryOffsetStart: 0n,
+      crc: 0,
     });
     await this.writable.write(this.bufferRecordBuilder.buffer);
     this.bufferRecordBuilder.reset();
@@ -63,6 +65,12 @@ export class Mcap0UnindexedWriter {
 
   async addAttachment(attachment: Attachment): Promise<void> {
     this.bufferRecordBuilder.writeAttachment(attachment);
+    await this.writable.write(this.bufferRecordBuilder.buffer);
+    this.bufferRecordBuilder.reset();
+  }
+
+  async addMetadata(metadata: Metadata): Promise<void> {
+    this.bufferRecordBuilder.writeMetadata(metadata);
     await this.writable.write(this.bufferRecordBuilder.buffer);
     this.bufferRecordBuilder.reset();
   }
