@@ -45,80 +45,76 @@ type indexedMessageIterator struct {
 // parseIndexSection parses the index section of the file and populates the
 // related fields of the structure. It must be called prior to any of the other
 // access methods.
-func (it *indexedMessageIterator) parseIndexSection() error {
-	_, err := it.rs.Seek(-8-4-8, io.SeekEnd)
+func (it *indexedMessageIterator) parseSummarySection() error {
+	_, err := it.rs.Seek(-8-4-8-8, io.SeekEnd) // magic, plus 20 bytes footer
 	if err != nil {
 		return err
 	}
-	buf := make([]byte, 8+4+8)
+	buf := make([]byte, 8+20)
 	_, err = io.ReadFull(it.rs, buf)
 	if err != nil {
 		return fmt.Errorf("read error: %s", err)
 	}
-	indexOffset, offset := getUint64(buf, 0)
-	_, offset = getUint32(buf, offset) // crc
-	magic := buf[offset:]
+	magic := buf[20:]
 	if !bytes.Equal(magic, Magic) {
 		return fmt.Errorf("not an mcap file")
 	}
-	err = it.seekFile(int64(indexOffset))
+	footer, err := ParseFooter(buf[:20])
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse footer: %w", err)
 	}
-	var msg []byte
-	defer func() {
-		it.chunksets = sortOverlappingChunks(it.chunkIndexes)
-	}()
 
-	// now we're in the index data section. Read through the statistics record,
-	// populating the index fields.
-Top:
+	// scan the whole summary section
+	err = it.seekFile(int64(footer.SummaryStart))
+	if err != nil {
+		return fmt.Errorf("failed to seek to summary start")
+	}
 	for {
-		tok, err := it.lexer.Next()
+		tk, err := it.lexer.Next()
 		if err != nil {
-			return fmt.Errorf("lexer error: %w", err)
+			return fmt.Errorf("failed to get next token: %w", err)
 		}
-		msg = tok.bytes()
-		switch tok.TokenType {
-		case TokenChunkIndex:
-			chunkIndex, err := ParseChunkIndex(msg)
-			if err != nil {
-				return fmt.Errorf("failed to parse chunk index: %w", err)
-			}
-			// if the chunk index overlaps with the requested parameters, append to the list
-			if chunkIndex.StartTime < it.end && chunkIndex.EndTime >= it.start {
-				// if the message index relates to any target channels, include it
-				for k, _ := range it.channels {
-					if chunkIndex.MessageIndexOffsets[k] != 0 {
-						it.chunkIndexes = append(it.chunkIndexes, chunkIndex)
-						break
-					}
-				}
-			}
-		case TokenAttachmentIndex:
-			attachmentIndex, err := ParseAttachmentIndex(msg)
-			if err != nil {
-				return fmt.Errorf("failed to parse attachment index: %w", err)
-			}
-			it.attachmentIndexes = append(it.attachmentIndexes, attachmentIndex)
+		data := tk.bytes()
+		switch tk.TokenType {
 		case TokenChannelInfo:
-			// if the channel info is one of those requested, add it to our list
-			channelInfo, err := ParseChannelInfo(msg)
+			channelInfo, err := ParseChannelInfo(data)
 			if err != nil {
 				return fmt.Errorf("failed to parse channel info: %w", err)
 			}
 			if len(it.topics) == 0 || it.topics[channelInfo.TopicName] {
 				it.channels[channelInfo.ChannelID] = channelInfo
 			}
+		case TokenAttachmentIndex:
+			idx, err := ParseAttachmentIndex(data)
+			if err != nil {
+				return fmt.Errorf("failed to parse attachment index: %w", err)
+			}
+			it.attachmentIndexes = append(it.attachmentIndexes, idx)
+		case TokenChunkIndex:
+			idx, err := ParseChunkIndex(data)
+			if err != nil {
+				return fmt.Errorf("failed to parse attachment index: %w", err)
+			}
+			// if the chunk overlaps with the requested parameters, load it
+			for _, c := range it.channels {
+				if idx.MessageIndexOffsets[c.ChannelID] > 0 {
+					if (it.end == 0 && it.start == 0) || (idx.StartTime < it.end && idx.EndTime >= it.start) {
+						it.chunkIndexes = append(it.chunkIndexes, idx)
+					}
+					break
+				}
+			}
+
 		case TokenStatistics:
-			stats := ParseStatistics(msg)
+			stats, err := ParseStatistics(data)
+			if err != nil {
+				return fmt.Errorf("failed to parse statistics: %w", err)
+			}
 			it.statistics = stats
-			break Top
-		default:
-			return fmt.Errorf("unexpected token %s in index data section", tok)
+		case TokenFooter:
+			return nil
 		}
 	}
-	return nil
 }
 
 func sortOverlappingChunks(chunkIndexes []*ChunkIndex) [][]*ChunkIndex {
@@ -167,7 +163,7 @@ func sortOverlappingChunks(chunkIndexes []*ChunkIndex) [][]*ChunkIndex {
 func (it *indexedMessageIterator) loadChunk(index int) error {
 	chunkset := it.chunksets[it.activeChunksetIndex]
 	chunkIndex := chunkset[index]
-	err := it.seekFile(int64(chunkIndex.ChunkOffset))
+	err := it.seekFile(int64(chunkIndex.ChunkStartOffset))
 	if err != nil {
 		return err
 	}
@@ -217,7 +213,7 @@ func (it *indexedMessageIterator) loadChunk(index int) error {
 		SkipMagic: true,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to lex chunk: %s", err)
+		return fmt.Errorf("failed to read chunk: %s", err)
 	}
 	return nil
 }
@@ -236,23 +232,20 @@ func (it *indexedMessageIterator) loadNextChunkset() error {
 				return err
 			}
 			// now we're at the message index implicated by the chunk; parse one record
-			var messageIndex *MessageIndex
-			tok, err := it.lexer.Next()
+			tk, err := it.lexer.Next()
 			if err != nil {
 				return err
 			}
-			switch tok.TokenType {
-			case TokenMessageIndex:
-				messageIndex, err = ParseMessageIndex(tok.bytes())
-				if err != nil {
-					return err
-				}
-			default:
-				_ = tok.bytes()
-				return fmt.Errorf("unexpected token %s in message index section", tok)
+			data := tk.bytes()
+			if tk.TokenType != TokenMessageIndex {
+				return fmt.Errorf("unexpected token %s in message index section", tk)
+			}
+			messageIndex, err := ParseMessageIndex(data)
+			if err != nil {
+				return fmt.Errorf("failed to parse message index at %d", offset)
 			}
 			for _, record := range messageIndex.Records {
-				if record.Timestamp >= it.start && record.Timestamp < it.end {
+				if (it.start == 0 && it.end == 0) || (record.Timestamp >= it.start && record.Timestamp < it.end) {
 					it.messageOffsets = append(it.messageOffsets, messageOffset{
 						chunkIndex:  i,
 						chunkOffset: int(record.Offset),
@@ -287,11 +280,13 @@ func (it *indexedMessageIterator) seekChunk(offset int64) error {
 
 func (it *indexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 	if it.statistics == nil {
-		err := it.parseIndexSection()
+		err := it.parseSummarySection()
 		if err != nil {
 			return nil, nil, err
 		}
+		it.chunksets = sortOverlappingChunks(it.chunkIndexes)
 	}
+
 	if it.messageOffsetIdx >= len(it.messageOffsets) {
 		if it.activeChunksetIndex >= len(it.chunksets)-1 {
 			return nil, nil, io.EOF
@@ -301,6 +296,8 @@ func (it *indexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 			return nil, nil, err
 		}
 	}
+
+	fmt.Println(it.messageOffsetIdx, len(it.messageOffsets))
 
 	messageOffset := it.messageOffsets[it.messageOffsetIdx]
 	it.messageOffsetIdx++

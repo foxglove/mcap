@@ -27,8 +27,10 @@ type Writer struct {
 	messageIndexes    map[uint16]*MessageIndex
 	chunkIndexes      []*ChunkIndex
 	attachmentIndexes []*AttachmentIndex
+	compressedWriter  *CountingCRCWriter
 
-	compressedWriter *CountingCRCWriter
+	currentChunkStartTime uint64
+	currentChunkEndTime   uint64
 }
 
 func (w *Writer) writeRecord(writer io.Writer, op OpCode, data []byte) (int, error) {
@@ -58,15 +60,19 @@ func (w *Writer) writeChunk() error {
 	crc := w.compressedWriter.CRC()
 	compressedlen := w.compressed.Len()
 	uncompressedlen := w.compressedWriter.Size()
-	msglen := 8 + 4 + 4 + len(w.compression) + compressedlen
+	msglen := 8 + 8 + 8 + 4 + 4 + len(w.compression) + compressedlen
 	chunkStartOffset := w.w.Size()
+	start := w.currentChunkStartTime
+	end := w.currentChunkEndTime
 
 	// when writing a chunk, we don't go through writerecord to avoid needing to
 	// materialize the compressed data again. Instead, write the leading bytes
 	// then copy from the compressed data buffer.
-	buf := make([]byte, 1+8+8+4+4+len(w.compression))
+	buf := make([]byte, 1+8+msglen)
 	offset := putByte(buf, byte(OpChunk))
 	offset += putUint64(buf[offset:], uint64(msglen))
+	offset += putUint64(buf[offset:], start)
+	offset += putUint64(buf[offset:], end)
 	offset += putUint64(buf[offset:], uint64(uncompressedlen))
 	offset += putUint32(buf[offset:], crc)
 	offset += putPrefixedString(buf[offset:], string(w.compression))
@@ -84,24 +90,12 @@ func (w *Writer) writeChunk() error {
 	w.compressedWriter.ResetSize()
 	w.compressedWriter.ResetCRC()
 
-	// TODO change spec no chunk index record if no messages in the chunk
 	msgidxOffsets := make(map[uint16]uint64)
-	var start, end uint64
-	start = math.MaxInt64
-	end = 0
 	messageIndexStart := w.w.Size()
 	for _, msgidx := range w.messageIndexes {
-		// TODO evaluate custom sort for mostly sorted input
 		sort.Slice(msgidx.Records, func(i, j int) bool {
 			return msgidx.Records[i].Timestamp < msgidx.Records[j].Timestamp
 		})
-
-		if first := msgidx.Records[0].Timestamp; first < start {
-			start = first
-		}
-		if last := msgidx.Records[len(msgidx.Records)-1].Timestamp; last > end {
-			end = last
-		}
 		msgidxOffsets[msgidx.ChannelID] = w.w.Size()
 		err = w.WriteMessageIndex(msgidx)
 		if err != nil {
@@ -111,9 +105,9 @@ func (w *Writer) writeChunk() error {
 	messageIndexEnd := w.w.Size()
 	messageIndexLength := messageIndexEnd - messageIndexStart
 	w.chunkIndexes = append(w.chunkIndexes, &ChunkIndex{
-		StartTime:           start,
-		EndTime:             end,
-		ChunkOffset:         chunkStartOffset,
+		StartTime:           w.currentChunkStartTime,
+		EndTime:             w.currentChunkEndTime,
+		ChunkStartOffset:    chunkStartOffset,
 		MessageIndexOffsets: msgidxOffsets,
 		MessageIndexLength:  messageIndexLength,
 		Compression:         w.compression,
@@ -124,6 +118,8 @@ func (w *Writer) writeChunk() error {
 		delete(w.messageIndexes, k)
 	}
 	w.stats.ChunkCount++
+	w.currentChunkStartTime = math.MaxUint64
+	w.currentChunkEndTime = 0
 	return nil
 }
 
@@ -132,22 +128,19 @@ func (w *Writer) WriteMessage(m *Message) error {
 		return fmt.Errorf("unrecognized channel %d", m.ChannelID)
 	}
 	msglen := 2 + 4 + 8 + 8 + len(m.Data)
-	if len(w.msg) < msglen {
-		w.msg = make([]byte, 2*msglen)
-	}
+	w.ensureSized(msglen)
 	offset := putUint16(w.msg, m.ChannelID)
 	offset += putUint32(w.msg[offset:], m.Sequence)
 	offset += putUint64(w.msg[offset:], uint64(m.PublishTime))
 	offset += putUint64(w.msg[offset:], uint64(m.RecordTime))
 	offset += copy(w.msg[offset:], m.Data)
-	w.stats.ChannelStats[m.ChannelID]++
+	w.stats.ChannelMessageCounts[m.ChannelID]++
 	w.stats.MessageCount++
 	if w.chunked {
 
 		// TODO preallocate or maybe fancy structure. These could be conserved
 		// across chunks too, which might work ok assuming similar numbers of
 		// messages/chan/chunk.
-
 		idx, ok := w.messageIndexes[m.ChannelID]
 		if !ok {
 			idx = &MessageIndex{
@@ -167,6 +160,12 @@ func (w *Writer) WriteMessage(m *Message) error {
 				return err
 			}
 		}
+		if m.RecordTime > w.currentChunkEndTime {
+			w.currentChunkEndTime = m.RecordTime
+		}
+		if m.RecordTime < w.currentChunkStartTime {
+			w.currentChunkStartTime = m.RecordTime
+		}
 		return nil
 	}
 	_, err := w.writeRecord(w.w, OpMessage, w.msg[:offset])
@@ -178,18 +177,14 @@ func (w *Writer) WriteMessage(m *Message) error {
 
 func (w *Writer) WriteMessageIndex(idx *MessageIndex) error {
 	datalen := len(idx.Records) * (8 + 8)
-	msglen := 2 + 4 + 4 + datalen + 4
-	if len(w.msg) < msglen {
-		w.msg = make([]byte, 2*msglen)
-	}
+	msglen := 2 + 4 + datalen
+	w.ensureSized(msglen)
 	offset := putUint16(w.msg, idx.ChannelID)
 	offset += putUint32(w.msg[offset:], uint32(datalen))
 	for _, v := range idx.Records {
 		offset += putUint64(w.msg[offset:], uint64(v.Timestamp))
 		offset += putUint64(w.msg[offset:], uint64(v.Offset))
 	}
-	crc := crc32.ChecksumIEEE(w.msg[:offset])
-	offset += putUint32(w.msg[offset:], crc)
 	_, err := w.writeRecord(w.w, OpMessageIndex, w.msg[:offset])
 	return err
 }
@@ -208,27 +203,31 @@ func makePrefixedMap(m map[string]string) []byte {
 	return buf
 }
 
-func (w *Writer) WriteHeader(profile string, library string, metadata map[string]string) error {
-	data := makePrefixedMap(metadata)
-	buf := make([]byte, len(data)+len(profile)+4+len(library)+4)
-	offset := putPrefixedString(buf, profile)
-	offset += putPrefixedString(buf[offset:], library)
-	offset += copy(buf[offset:], data)
+func (w *Writer) WriteHeader(header *Header) error {
+	buf := make([]byte, 4+len(header.Profile)+4+len(header.Library))
+	offset := putPrefixedString(buf, header.Profile)
+	offset += putPrefixedString(buf[offset:], header.Library)
 	_, err := w.writeRecord(w.w, OpHeader, buf[:offset])
 	return err
 }
 
 func (w *Writer) WriteChannelInfo(c *ChannelInfo) error {
-	userdata := makePrefixedMap(c.UserData)
-	msglen := 2 + 4 + len(c.TopicName) + 4 + len(c.MessageEncoding) + 4 + len(c.SchemaName) + 4 + len(c.Schema) + len(userdata) + 4
-	if len(w.msg) < msglen {
-		w.msg = make([]byte, 2*msglen)
-	}
+	userdata := makePrefixedMap(c.Metadata)
+	msglen := (2 +
+		4 + len(c.TopicName) +
+		4 + len(c.MessageEncoding) +
+		4 + len(c.SchemaEncoding) +
+		4 + len(c.Schema) +
+		4 + len(c.SchemaName) +
+		len(userdata) +
+		4) // crc
+	w.ensureSized(msglen)
 	offset := putUint16(w.msg, c.ChannelID)
 	offset += putPrefixedString(w.msg[offset:], c.TopicName)
 	offset += putPrefixedString(w.msg[offset:], c.MessageEncoding)
-	offset += putPrefixedString(w.msg[offset:], c.SchemaName)
+	offset += putPrefixedString(w.msg[offset:], c.SchemaEncoding)
 	offset += putPrefixedBytes(w.msg[offset:], c.Schema)
+	offset += putPrefixedString(w.msg[offset:], c.SchemaName)
 	offset += copy(w.msg[offset:], userdata)
 	crc := crc32.ChecksumIEEE(w.msg[:offset])
 	offset += putUint32(w.msg[offset:], crc)
@@ -253,54 +252,53 @@ func (w *Writer) WriteChannelInfo(c *ChannelInfo) error {
 
 func (w *Writer) WriteAttachment(a *Attachment) error {
 	msglen := 4 + len(a.Name) + 8 + 4 + len(a.ContentType) + 8 + len(a.Data) + 4
-	if len(w.msg) < msglen {
-		w.msg = make([]byte, 2*msglen)
-	}
+	w.ensureSized(msglen)
 	offset := putPrefixedString(w.msg, a.Name)
+	offset += putUint64(w.msg[offset:], a.CreatedAt)
 	offset += putUint64(w.msg[offset:], a.RecordTime)
 	offset += putPrefixedString(w.msg[offset:], a.ContentType)
 	offset += putUint64(w.msg[offset:], uint64(len(a.Data)))
 	offset += copy(w.msg[offset:], a.Data)
+	crc := crc32.ChecksumIEEE(w.msg[:offset])
+	offset += putUint32(w.msg[offset:], crc)
 	attachmentOffset := w.w.Size()
-	_, err := w.writeRecord(w.w, OpAttachment, w.msg[:offset])
+	c, err := w.writeRecord(w.w, OpAttachment, w.msg[:offset])
 	if err != nil {
 		return err
 	}
 	w.attachmentIndexes = append(w.attachmentIndexes, &AttachmentIndex{
-		RecordTime:     a.RecordTime,
-		AttachmentSize: uint64(len(a.Data)),
-		Name:           a.Name,
-		ContentType:    a.ContentType,
-		Offset:         attachmentOffset,
+		Offset:      attachmentOffset,
+		Length:      uint64(c),
+		RecordTime:  a.RecordTime,
+		DataSize:    uint64(len(a.Data)),
+		Name:        a.Name,
+		ContentType: a.ContentType,
 	})
 	w.stats.AttachmentCount++
 	return nil
 }
 
 func (w *Writer) WriteAttachmentIndex(idx *AttachmentIndex) error {
-	msglen := 8 + 8 + 4 + len(idx.Name) + 4 + len(idx.ContentType) + 8
-	if len(w.msg) < msglen {
-		w.msg = make([]byte, 2*msglen)
-	}
-	offset := putUint64(w.msg, idx.RecordTime)
-	offset += putUint64(w.msg[offset:], idx.AttachmentSize)
+	msglen := 8 + 8 + 8 + 8 + 4 + len(idx.Name) + 4 + len(idx.ContentType)
+	w.ensureSized(msglen)
+	offset := putUint64(w.msg, idx.Offset)
+	offset += putUint64(w.msg[offset:], idx.Length)
+	offset += putUint64(w.msg[offset:], idx.RecordTime)
+	offset += putUint64(w.msg[offset:], idx.DataSize)
 	offset += putPrefixedString(w.msg[offset:], idx.Name)
 	offset += putPrefixedString(w.msg[offset:], idx.ContentType)
-	offset += putUint64(w.msg[offset:], idx.Offset)
 	_, err := w.writeRecord(w.w, OpAttachmentIndex, w.msg[:offset])
 	return err
 }
 
 func (w *Writer) writeChunkIndex(idx *ChunkIndex) error {
 	msgidxlen := len(idx.MessageIndexOffsets) * (2 + 8)
-	msglen := 8 + 8 + 8 + 4 + msgidxlen + 8 + 4 + len(idx.Compression) + 8 + 8 + 4
-	if len(w.msg) < msglen {
-		w.msg = make([]byte, 2*msglen)
-	}
+	msglen := 8 + 8 + 8 + 8 + 4 + msgidxlen + 8 + 4 + len(idx.Compression) + 8 + 8
+	w.ensureSized(msglen)
 	offset := putUint64(w.msg, idx.StartTime)
 	offset += putUint64(w.msg[offset:], idx.EndTime)
-	offset += putUint64(w.msg[offset:], idx.ChunkOffset)
-
+	offset += putUint64(w.msg[offset:], idx.ChunkStartOffset)
+	offset += putUint64(w.msg[offset:], idx.ChunkLength)
 	offset += putUint32(w.msg[offset:], uint32(msgidxlen))
 	for k, v := range idx.MessageIndexOffsets {
 		offset += putUint16(w.msg[offset:], k)
@@ -310,24 +308,19 @@ func (w *Writer) writeChunkIndex(idx *ChunkIndex) error {
 	offset += putPrefixedString(w.msg[offset:], string(idx.Compression))
 	offset += putUint64(w.msg[offset:], idx.CompressedSize)
 	offset += putUint64(w.msg[offset:], idx.UncompressedSize)
-
-	crc := crc32.ChecksumIEEE(w.msg[:offset])
-	offset += putUint32(w.msg[offset:], crc)
 	_, err := w.writeRecord(w.w, OpChunkIndex, w.msg[:offset])
 	return err
 }
 
 func (w *Writer) WriteStatistics(s *Statistics) error {
-	msglen := 8 + 4 + 4 + 4 + len(s.ChannelStats)*(2+8)
-	if len(w.msg) < msglen {
-		w.msg = make([]byte, 2*msglen)
-	}
+	msglen := 8 + 4 + 4 + 4 + len(s.ChannelMessageCounts)*(2+8)
+	w.ensureSized(msglen)
 	offset := putUint64(w.msg, s.MessageCount)
 	offset += putUint32(w.msg[offset:], s.ChannelCount)
 	offset += putUint32(w.msg[offset:], s.AttachmentCount)
 	offset += putUint32(w.msg[offset:], s.ChunkCount)
-	offset += putUint32(w.msg[offset:], uint32(len(s.ChannelStats)*(2+8)))
-	for k, v := range s.ChannelStats {
+	offset += putUint32(w.msg[offset:], uint32(len(s.ChannelMessageCounts)*(2+8)))
+	for k, v := range s.ChannelMessageCounts {
 		offset += putUint16(w.msg[offset:], k)
 		offset += putUint64(w.msg[offset:], v)
 	}
@@ -335,15 +328,50 @@ func (w *Writer) WriteStatistics(s *Statistics) error {
 	return err
 }
 
-func (w *Writer) WriteFooter(f *Footer) error {
-	msglen := 8 + 4
-	if len(w.msg) < msglen {
-		w.msg = make([]byte, 2*msglen)
+func (w *Writer) ensureSized(n int) {
+	if len(w.msg) < n {
+		w.msg = make([]byte, 2*n)
 	}
+}
+
+func (w *Writer) WriteFooter(f *Footer) error {
+	msglen := 8 + 8 + 4
+	w.ensureSized(msglen)
 	offset := putUint64(w.msg, f.SummaryStart)
-	offset += putUint64(w.msg, f.SummaryOffsetStart)
+	offset += putUint64(w.msg[offset:], f.SummaryOffsetStart)
 	offset += putUint32(w.msg[offset:], f.SummaryCRC)
 	_, err := w.writeRecord(w.w, OpFooter, w.msg[:offset])
+	return err
+}
+
+func (w *Writer) WriteMetadata(m *Metadata) error {
+	data := makePrefixedMap(m.Metadata)
+	msglen := 4 + len(m.Name) + 4 + len(data)
+	w.ensureSized(msglen)
+	offset := putPrefixedString(w.msg, m.Name)
+	offset += copy(w.msg[offset:], data)
+	_, err := w.writeRecord(w.w, OpMetadata, w.msg[:offset])
+	return err
+}
+
+func (w *Writer) WriteMetadataIndex(idx *MetadataIndex) error {
+	msglen := 8 + 8 + 4 + len(idx.Name)
+	w.ensureSized(msglen)
+	offset := putUint64(w.msg, idx.Offset)
+	offset += putUint64(w.msg[offset:], idx.Length)
+	offset += putPrefixedString(w.msg[offset:], idx.Name)
+	_, err := w.writeRecord(w.w, OpMetadataIndex, w.msg[:offset])
+	return err
+}
+
+func (w *Writer) WriteSummaryOffset(s *SummaryOffset) error {
+	msglen := 1 + 8 + 8
+	w.ensureSized(msglen)
+	w.msg[0] = byte(s.GroupOpcode)
+	offset := 1
+	offset += putUint64(w.msg[offset:], s.GroupStart)
+	offset += putUint64(w.msg[offset:], s.GroupLength)
+	_, err := w.writeRecord(w.w, OpSummaryOffset, w.msg[:offset])
 	return err
 }
 
@@ -354,38 +382,91 @@ func (w *Writer) Close() error {
 			return err
 		}
 	}
-	indexOffset := w.w.Size()
+
 	w.chunked = false
+
+	// summary section
+	channelInfoOffset := w.w.Size()
 	for _, channelInfo := range w.channels {
 		err := w.WriteChannelInfo(channelInfo)
 		if err != nil {
 			return err
 		}
 	}
+	chunkIndexOffset := w.w.Size()
 	for _, chunkidx := range w.chunkIndexes {
 		err := w.writeChunkIndex(chunkidx)
 		if err != nil {
 			return err
 		}
 	}
+	attachmentIndexOffset := w.w.Size()
 	for _, attachmentidx := range w.attachmentIndexes {
 		err := w.WriteAttachmentIndex(attachmentidx)
 		if err != nil {
 			return err
 		}
 	}
+	statisticsOffset := w.w.Size()
 	err := w.WriteStatistics(w.stats)
 	if err != nil {
 		return err
 	}
+
+	// summary offset section
+	summaryOffsetStart := w.w.Size()
+
+	if len(w.channels) > 0 {
+		err = w.WriteSummaryOffset(&SummaryOffset{
+			GroupOpcode: OpChannelInfo,
+			GroupStart:  channelInfoOffset,
+			GroupLength: chunkIndexOffset - channelInfoOffset,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if len(w.chunkIndexes) > 0 {
+		err = w.WriteSummaryOffset(&SummaryOffset{
+			GroupOpcode: OpChunkIndex,
+			GroupStart:  chunkIndexOffset,
+			GroupLength: attachmentIndexOffset - chunkIndexOffset,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if len(w.attachmentIndexes) > 0 {
+		err = w.WriteSummaryOffset(&SummaryOffset{
+			GroupOpcode: OpAttachmentIndex,
+			GroupStart:  attachmentIndexOffset,
+			GroupLength: statisticsOffset - attachmentIndexOffset,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if w.stats != nil {
+		err = w.WriteSummaryOffset(&SummaryOffset{
+			GroupOpcode: OpStatistics,
+			GroupStart:  statisticsOffset,
+			GroupLength: statisticsOffset - attachmentIndexOffset,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	// footer
 	err = w.WriteFooter(&Footer{
-		SummaryStart:       indexOffset,
-		SummaryOffsetStart: 0,
+		SummaryStart:       channelInfoOffset,
+		SummaryOffsetStart: summaryOffsetStart,
 		SummaryCRC:         0,
 	})
 	if err != nil {
 		return err
 	}
+	// magic
 	_, err = w.w.Write(Magic)
 	if err != nil {
 		return err
@@ -428,19 +509,21 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 		}
 	}
 	return &Writer{
-		w:                writer,
-		buf8:             make([]byte, 8),
-		channels:         make(map[uint16]*ChannelInfo),
-		messageIndexes:   make(map[uint16]*MessageIndex),
-		uncompressed:     &bytes.Buffer{},
-		compressed:       &compressed,
-		chunksize:        opts.ChunkSize,
-		chunked:          opts.Chunked,
-		compression:      opts.Compression,
-		compressedWriter: compressedWriter,
-		includeCRC:       opts.IncludeCRC,
+		w:                     writer,
+		buf8:                  make([]byte, 8),
+		channels:              make(map[uint16]*ChannelInfo),
+		messageIndexes:        make(map[uint16]*MessageIndex),
+		uncompressed:          &bytes.Buffer{},
+		compressed:            &compressed,
+		chunksize:             opts.ChunkSize,
+		chunked:               opts.Chunked,
+		compression:           opts.Compression,
+		compressedWriter:      compressedWriter,
+		includeCRC:            opts.IncludeCRC,
+		currentChunkStartTime: math.MaxUint64,
+		currentChunkEndTime:   0,
 		stats: &Statistics{
-			ChannelStats: make(map[uint16]uint64),
+			ChannelMessageCounts: make(map[uint16]uint64),
 		},
 	}, nil
 }

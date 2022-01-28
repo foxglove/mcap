@@ -50,12 +50,13 @@ func readPrefixedMap(data []byte, offset int) (map[string]string, int, error) {
 }
 
 func readMessageIndexEntries(data []byte, offset int) ([]MessageIndexEntry, int, error) {
-	entries := make([]MessageIndexEntry, 0)
 	entriesByteLength, offset := getUint32(data, offset)
+	var value, stamp uint64
 	var start = offset
+	entries := make([]MessageIndexEntry, 0, (len(data)-2)/(8+8))
 	for uint32(offset) < uint32(start)+entriesByteLength {
-		stamp, offset := getUint64(data, offset)
-		value, offset := getUint64(data, offset)
+		stamp, offset = getUint64(data, offset)
+		value, offset = getUint64(data, offset)
 		entries = append(entries, MessageIndexEntry{
 			Timestamp: stamp,
 			Offset:    value,
@@ -130,7 +131,7 @@ func (r *Reader) Messages(
 
 func (r *Reader) Info() (*Info, error) {
 	it := r.indexedMessageIterator(nil, 0, math.MaxUint64)
-	err := it.parseIndexSection()
+	err := it.parseSummarySection()
 	if err != nil {
 		return nil, err
 	}

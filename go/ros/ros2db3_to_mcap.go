@@ -148,7 +148,10 @@ func DB3ToMCAP(db *sql.DB, w io.Writer, searchdirs []string) error {
 		return err
 	}
 	defer writer.Close()
-	err = writer.WriteHeader("ros2", "golang-db3-to-mcap", map[string]string{})
+	err = writer.WriteHeader(&libmcap.Header{
+		Profile: "ros2",
+		Library: "golang-db3-mcap",
+	})
 	if err != nil {
 		return err
 	}
@@ -173,12 +176,12 @@ func DB3ToMCAP(db *sql.DB, w io.Writer, searchdirs []string) error {
 			return fmt.Errorf("Unrecognized schema for %s", t.typ)
 		}
 		err = writer.WriteChannelInfo(&libmcap.ChannelInfo{
-			ChannelID:  t.id,
-			TopicName:  t.name,
-			Encoding:   t.serializationFormat,
-			SchemaName: t.typ,
-			Schema:     schema,
-			UserData: map[string]string{
+			ChannelID:       t.id,
+			TopicName:       t.name,
+			MessageEncoding: t.serializationFormat,
+			SchemaName:      t.typ,
+			Schema:          schema,
+			Metadata: map[string]string{
 				"offered_qos_profiles": t.offeredQOSProfiles,
 			},
 		})

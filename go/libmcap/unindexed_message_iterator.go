@@ -46,6 +46,7 @@ func (it *unindexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 				return it.channels[message.ChannelID], message, nil
 			}
 		default:
+			// skip all other tokens
 			_, err := io.CopyN(io.Discard, token.Reader, token.ByteCount)
 			if err != nil {
 				return nil, nil, err

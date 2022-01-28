@@ -13,7 +13,9 @@ func TestMCAPReadWrite(t *testing.T) {
 		buf := &bytes.Buffer{}
 		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionLZ4})
 		assert.Nil(t, err)
-		err = w.WriteHeader("ros1", "", map[string]string{"foo": "bar"})
+		err = w.WriteHeader(&Header{
+			Profile: "ros1",
+		})
 		assert.Nil(t, err)
 		lexer, err := NewLexer(buf)
 		assert.Nil(t, err)
@@ -28,10 +30,6 @@ func TestMCAPReadWrite(t *testing.T) {
 		library, offset, err := readPrefixedString(data, offset)
 		assert.Nil(t, err)
 		assert.Equal(t, "", library)
-		metadata, offset, err := readPrefixedMap(data, offset)
-		assert.Nil(t, err)
-		assert.Equal(t, 1, len(metadata))
-		assert.Equal(t, "bar", metadata["foo"])
 		assert.Equal(t, TokenHeader, token.TokenType)
 	})
 }
@@ -50,7 +48,9 @@ func TestChunkedReadWrite(t *testing.T) {
 				IncludeCRC:  true,
 			})
 			assert.Nil(t, err)
-			err = w.WriteHeader("ros1", "", map[string]string{"foo": "bar"})
+			err = w.WriteHeader(&Header{
+				Profile: "ros1",
+			})
 			assert.Nil(t, err)
 			err = w.WriteChannelInfo(&ChannelInfo{
 				ChannelID:       1,
@@ -58,7 +58,7 @@ func TestChunkedReadWrite(t *testing.T) {
 				MessageEncoding: "ros1",
 				SchemaName:      "foo",
 				Schema:          []byte{},
-				UserData: map[string]string{
+				Metadata: map[string]string{
 					"callerid": "100",
 				},
 			})
@@ -85,6 +85,9 @@ func TestChunkedReadWrite(t *testing.T) {
 				TokenMessage,
 				TokenChannelInfo,
 				TokenStatistics,
+				TokenSummaryOffset,
+				TokenSummaryOffset,
+				TokenSummaryOffset,
 				TokenFooter,
 			} {
 				tok, err := lexer.Next()
@@ -100,7 +103,9 @@ func TestUnchunkedReadWrite(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w, err := NewWriter(buf, &WriterOptions{})
 	assert.Nil(t, err)
-	err = w.WriteHeader("ros1", "", map[string]string{"foo": "bar"})
+	err = w.WriteHeader(&Header{
+		Profile: "ros1",
+	})
 	assert.Nil(t, err)
 	err = w.WriteChannelInfo(&ChannelInfo{
 		ChannelID:       1,
@@ -108,7 +113,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		MessageEncoding: "ros1",
 		SchemaName:      "foo",
 		Schema:          []byte{},
-		UserData: map[string]string{
+		Metadata: map[string]string{
 			"callerid": "100",
 		},
 	})
@@ -146,6 +151,9 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		TokenChannelInfo,
 		TokenAttachmentIndex,
 		TokenStatistics,
+		TokenSummaryOffset,
+		TokenSummaryOffset,
+		TokenSummaryOffset,
 		TokenFooter,
 	} {
 		tok, err := lexer.Next()

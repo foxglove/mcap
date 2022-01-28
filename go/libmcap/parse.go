@@ -51,21 +51,45 @@ func ParseChunk(buf []byte) (*Chunk, error) {
 
 func ParseMessageIndex(buf []byte) (*MessageIndex, error) {
 	channelID, offset := getUint16(buf, 0)
-	_, offset = getUint32(buf, offset)
-
 	records, _, err := readMessageIndexEntries(buf, offset)
 	if err != nil {
 		return nil, err
 	}
-
 	return &MessageIndex{
 		ChannelID: channelID,
 		Records:   records,
 	}, nil
 }
 
+func ParseAttachment(buf []byte) (*Attachment, error) {
+	name, offset, err := readPrefixedString(buf, 0)
+	if err != nil {
+		return nil, err
+	}
+	createdAt, offset := getUint64(buf, offset)
+	recordTime, offset := getUint64(buf, offset)
+	contentType, offset, err := readPrefixedString(buf, offset)
+	if err != nil {
+		return nil, err
+	}
+	dataSize, offset := getUint64(buf, offset)
+	data := buf[offset : offset+int(dataSize)]
+	offset += int(dataSize)
+	crc, _ := getUint32(buf, offset)
+	return &Attachment{
+		Name:        name,
+		CreatedAt:   createdAt,
+		RecordTime:  recordTime,
+		ContentType: contentType,
+		Data:        data,
+		CRC:         crc,
+	}, nil
+}
+
 func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
-	recordTime, offset := getUint64(buf, 0)
+	attachmentOffset, offset := getUint64(buf, 0)
+	length, offset := getUint64(buf, offset)
+	recordTime, offset := getUint64(buf, offset)
 	dataSize, offset := getUint64(buf, offset)
 	name, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
@@ -75,13 +99,13 @@ func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
 	if err != nil {
 		return nil, err
 	}
-	attachmentOffset, _ := getUint64(buf, offset)
 	return &AttachmentIndex{
-		RecordTime:     recordTime,
-		AttachmentSize: dataSize,
-		Name:           name,
-		ContentType:    contentType,
-		Offset:         attachmentOffset,
+		Offset:      attachmentOffset,
+		Length:      length,
+		RecordTime:  recordTime,
+		DataSize:    dataSize,
+		Name:        name,
+		ContentType: contentType,
 	}, nil
 }
 
@@ -106,7 +130,8 @@ func ParseMessage(buf []byte) (*Message, error) {
 func ParseChunkIndex(buf []byte) (*ChunkIndex, error) {
 	startTime, offset := getUint64(buf, 0)
 	endTime, offset := getUint64(buf, offset)
-	chunkOffset, offset := getUint64(buf, offset)
+	chunkStartOffset, offset := getUint64(buf, offset)
+	chunkLength, offset := getUint64(buf, offset)
 	msgIndexLen, offset := getUint32(buf, offset)
 	messageIndexOffsets := make(map[uint16]uint64)
 	var chanID uint16
@@ -128,7 +153,8 @@ func ParseChunkIndex(buf []byte) (*ChunkIndex, error) {
 	return &ChunkIndex{
 		StartTime:           startTime,
 		EndTime:             endTime,
-		ChunkOffset:         chunkOffset,
+		ChunkStartOffset:    chunkStartOffset,
+		ChunkLength:         chunkLength,
 		MessageIndexOffsets: messageIndexOffsets,
 		MessageIndexLength:  msgIndexLength,
 		Compression:         CompressionFormat(compression),
@@ -159,7 +185,7 @@ func ParseChannelInfo(buf []byte) (*ChannelInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	userdata, _, err := readPrefixedMap(buf, offset)
+	metadata, _, err := readPrefixedMap(buf, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -170,32 +196,51 @@ func ParseChannelInfo(buf []byte) (*ChannelInfo, error) {
 		SchemaEncoding:  schemaEncoding,
 		SchemaName:      schemaName,
 		Schema:          schema,
-		UserData:        userdata,
+		Metadata:        metadata,
 	}, nil
 }
 
-func ParseStatistics(buf []byte) *Statistics {
+func ParseSummaryOffset(buf []byte) (*SummaryOffset, error) {
+	if len(buf) < 17 {
+		return nil, io.ErrShortBuffer
+	}
+	groupOpcode := buf[0]
+	offset := 1
+	groupStart, offset := getUint64(buf, offset)
+	groupLength, offset := getUint64(buf, offset)
+	return &SummaryOffset{
+		GroupOpcode: OpCode(groupOpcode),
+		GroupStart:  groupStart,
+		GroupLength: groupLength,
+	}, nil
+}
+
+func ParseStatistics(buf []byte) (*Statistics, error) {
+	if len(buf) < 8+4+4+4+4 {
+		return nil, io.ErrShortBuffer
+	}
 	messageCount, offset := getUint64(buf, 0)
 	channelCount, offset := getUint32(buf, offset)
 	attachmentCount, offset := getUint32(buf, offset)
 	chunkCount, offset := getUint32(buf, offset)
-
-	// TODO this is not actually necessary, since the bytes are at the end of
-	// the record
-	_, offset = getUint32(buf, offset)
+	messageCountLen, offset := getUint32(buf, offset)
 	var chanID uint16
 	var channelMessageCount uint64
-	channelStats := make(map[uint16]uint64)
-	for offset < len(buf) {
+	channelMessageCounts := make(map[uint16]uint64)
+	start := offset
+	if len(buf) < start+int(messageCountLen) {
+		return nil, io.ErrShortBuffer
+	}
+	for offset < start+int(messageCountLen) {
 		chanID, offset = getUint16(buf, offset)
 		channelMessageCount, offset = getUint64(buf, offset)
-		channelStats[chanID] = channelMessageCount
+		channelMessageCounts[chanID] = channelMessageCount
 	}
 	return &Statistics{
-		MessageCount:    messageCount,
-		ChannelCount:    channelCount,
-		AttachmentCount: attachmentCount,
-		ChunkCount:      chunkCount,
-		ChannelStats:    channelStats,
-	}
+		MessageCount:         messageCount,
+		ChannelCount:         channelCount,
+		AttachmentCount:      attachmentCount,
+		ChunkCount:           chunkCount,
+		ChannelMessageCounts: channelMessageCounts,
+	}, nil
 }

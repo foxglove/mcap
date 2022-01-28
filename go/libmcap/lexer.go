@@ -41,8 +41,15 @@ func (t TokenType) String() string {
 		return "statistics"
 	case TokenMessageIndex:
 		return "message index"
+	case TokenMetadata:
+		return "metadata"
+	case TokenMetadataIndex:
+		return "metadata index"
+	case TokenSummaryOffset:
+		return "summary offset"
+	default:
+		return "unknown"
 	}
-	return "unknown"
 }
 
 func (t Token) String() string {
@@ -63,6 +70,9 @@ const (
 	TokenStatistics
 	TokenChunk
 	TokenMessageIndex
+	TokenMetadata
+	TokenMetadataIndex
+	TokenSummaryOffset
 )
 
 type Token struct {
@@ -145,22 +155,30 @@ func loadChunk(l *lexer, recordSize int64) error {
 	if l.inChunk {
 		return ErrNestedChunk
 	}
-	_, err := io.ReadFull(l.reader, l.buf[:8+4+4])
+	_, err := io.ReadFull(l.reader, l.buf[:8+8+8+4+4])
 	if err != nil {
 		return err
 	}
+
+	// the reader does not care about the start, end, or uncompressed size, or
+	// they would be using emitChunks.
+
 	// Skip the uncompressed size; the lexer will read messages out of the
 	// reader incrementally.
-	_ = binary.LittleEndian.Uint64(l.buf[:8])
-	uncompressedCRC := binary.LittleEndian.Uint32(l.buf[8:12])
-	compressionLen := binary.LittleEndian.Uint32(l.buf[12:16])
-	_, err = io.ReadFull(l.reader, l.buf[:compressionLen])
+	_, offset := getUint64(l.buf, 0)     // start
+	_, offset = getUint64(l.buf, offset) // end
+	_, offset = getUint64(l.buf, offset) // uncompressed size
+	uncompressedCRC, offset := getUint32(l.buf, offset)
+	compressionLen, offset := getUint32(l.buf, offset)
+
+	compression := make([]byte, compressionLen)
+	_, err = io.ReadFull(l.reader, compression)
 	if err != nil {
 		return err
 	}
-	compression := l.buf[:compressionLen]
-	// will eof at the end of the chunk
-	lr := io.LimitReader(l.reader, int64(uint64(recordSize)-16-uint64(compressionLen)))
+
+	// remaining bytes in the record are the chunk data
+	lr := io.LimitReader(l.reader, int64(recordSize-int64(offset+len(compression))))
 	switch CompressionFormat(compression) {
 	case CompressionNone:
 		l.reader = lr
@@ -201,7 +219,7 @@ func (l *lexer) Next() (Token, error) {
 		if err != nil {
 			unexpectedEOF := errors.Is(err, io.ErrUnexpectedEOF)
 			eof := errors.Is(err, io.EOF)
-			if l.inChunk && eof {
+			if l.inChunk && (eof || unexpectedEOF) {
 				l.inChunk = false
 				l.reader = l.basereader
 				continue
@@ -255,6 +273,14 @@ func (l *lexer) Next() (Token, error) {
 				continue
 			}
 			return Token{TokenChunk, recordLen, l.reader}, nil
+		case OpMetadata:
+			return Token{TokenMetadata, recordLen, l.reader}, nil
+		case OpMetadataIndex:
+			return Token{TokenMetadata, recordLen, l.reader}, nil
+		case OpSummaryOffset:
+			return Token{TokenSummaryOffset, recordLen, l.reader}, nil
+		case OpInvalidZero:
+			return Token{}, fmt.Errorf("invalid zero opcode")
 		default:
 			continue // skip unrecognized opcodes
 		}
