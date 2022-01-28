@@ -276,7 +276,7 @@ A Summary Offset record contains the location of records within the summary sect
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 8 | group_opcode | uint64 | The opcode of all records in the group. |
+| 1 | group_opcode | uint8 | The opcode of all records in the group. |
 | 8 | group_start | uint64 | Byte offset from the start of the file of the first record in the group. |
 | 8 | group_length | uint64 | Total byte length of all records in the group. |
 
