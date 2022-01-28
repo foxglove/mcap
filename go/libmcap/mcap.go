@@ -168,7 +168,6 @@ type Message struct {
 	RecordTime  uint64
 	PublishTime uint64
 	Data        []byte
-	channelInfo *ChannelInfo
 }
 
 type ChannelInfo struct {
@@ -245,7 +244,6 @@ type Statistics struct {
 	AttachmentCount uint32
 	ChunkCount      uint32
 	ChannelStats    map[uint16]uint64
-	channels        map[uint16]*ChannelInfo
 }
 
 type Info struct {

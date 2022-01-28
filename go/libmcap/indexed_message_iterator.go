@@ -81,7 +81,7 @@ Top:
 		msg = tok.bytes()
 		switch tok.TokenType {
 		case TokenChunkIndex:
-			chunkIndex, err := parseChunkIndex(msg)
+			chunkIndex, err := ParseChunkIndex(msg)
 			if err != nil {
 				return fmt.Errorf("failed to parse chunk index: %w", err)
 			}
@@ -96,14 +96,14 @@ Top:
 				}
 			}
 		case TokenAttachmentIndex:
-			attachmentIndex, err := parseAttachmentIndex(msg)
+			attachmentIndex, err := ParseAttachmentIndex(msg)
 			if err != nil {
 				return fmt.Errorf("failed to parse attachment index: %w", err)
 			}
 			it.attachmentIndexes = append(it.attachmentIndexes, attachmentIndex)
 		case TokenChannelInfo:
 			// if the channel info is one of those requested, add it to our list
-			channelInfo, err := parseChannelInfo(msg)
+			channelInfo, err := ParseChannelInfo(msg)
 			if err != nil {
 				return fmt.Errorf("failed to parse channel info: %w", err)
 			}
@@ -111,7 +111,7 @@ Top:
 				it.channels[channelInfo.ChannelID] = channelInfo
 			}
 		case TokenStatistics:
-			stats := parseStatisticsRecord(msg)
+			stats := ParseStatistics(msg)
 			it.statistics = stats
 			break Top
 		default:
@@ -178,7 +178,7 @@ func (it *indexedMessageIterator) loadChunk(index int) error {
 	var chunk *Chunk
 	switch tok.TokenType {
 	case TokenChunk:
-		chunk, err = parseChunk(tok.bytes())
+		chunk, err = ParseChunk(tok.bytes())
 		if err != nil {
 			return fmt.Errorf("failed to parse chunk: %w", err)
 		}
@@ -243,7 +243,7 @@ func (it *indexedMessageIterator) loadNextChunkset() error {
 			}
 			switch tok.TokenType {
 			case TokenMessageIndex:
-				messageIndex = parseMessageIndex(tok.bytes())
+				messageIndex = ParseMessageIndex(tok.bytes())
 			default:
 				_ = tok.bytes()
 				return fmt.Errorf("unexpected token %s in message index section", tok)
@@ -322,7 +322,7 @@ func (it *indexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 	}
 	switch tok.TokenType {
 	case TokenMessage:
-		msg, err := parseMessage(tok.bytes())
+		msg, err := ParseMessage(tok.bytes())
 		if err != nil {
 			return nil, nil, err
 		}
