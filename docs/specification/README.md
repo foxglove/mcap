@@ -228,11 +228,12 @@ An Attachment Index record contains the location of an attachment in the file. A
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
+| 8 | offset | uint64 | Byte offset from the start of the file to the attachment record. |
+| 8 | length | uint64 | Byte length of the record. |
 | 8 | record_time | Timestamp | Timestamp at which the attachment was recorded. |
 | 8 | data_size | uint64 | Size of the attachment data. |
 | 4 + N | name | String | Name of the attachment. |
 | 4 + N | content_type | String | MIME type of the attachment. |
-| 8 | offset | uint64 | Byte offset to the attachment, from the start of the file. |
 
 ### Statistics (op=0x0A)
 
