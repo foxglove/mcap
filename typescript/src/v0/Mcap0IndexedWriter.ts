@@ -10,6 +10,7 @@ import {
   Chunk,
   ChunkIndex,
   SummaryOffset,
+  Metadata,
 } from "./types";
 
 /**
@@ -130,6 +131,17 @@ export class Mcap0IndexedWriter {
 
   async addAttachment(attachment: Attachment): Promise<void> {
     this.recordWriter.writeAttachment(attachment);
+
+    // fixme attachment index
+
+    await this.writable.write(this.recordWriter.buffer);
+    this.recordWriter.reset();
+  }
+
+  async addMetadata(metadata: Metadata): Promise<void> {
+    this.recordWriter.writeMetadata(metadata);
+
+    // fixme metadata index
 
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();

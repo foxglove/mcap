@@ -4,7 +4,6 @@ export type McapMagic = {
 export type Header = {
   profile: string;
   library: string;
-  metadata: [key: string, value: string][];
 };
 export type Footer = {
   summaryStart: bigint;
@@ -15,7 +14,7 @@ export type ChannelInfo = {
   channelId: number;
   topicName: string;
   messageEncoding: string;
-  schemaFormat: string;
+  schemaEncoding: string;
   schema: string;
   schemaName: string;
   userData: [key: string, value: string][];
@@ -72,11 +71,13 @@ export type Statistics = {
   channelMessageCounts: Map<number, bigint>;
 };
 export type Metadata = {
+  name: string;
   metadata: [key: string, value: string][];
 };
 export type MetadataIndex = {
   offset: bigint;
   length: bigint;
+  name: string;
 };
 export type SummaryOffset = {
   groupOpcode: number;

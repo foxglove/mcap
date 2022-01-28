@@ -10,6 +10,7 @@ import {
   Chunk,
   ChunkIndex,
   MessageIndex,
+  Metadata,
 } from "./types";
 
 /**
@@ -40,30 +41,33 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder.bytes(new Uint8Array(MCAP0_MAGIC));
   }
 
-  writeHeader(header: Header): void {
+  writeHeader(header: Header): bigint {
     this.bufferBuilder.uint8(Opcode.HEADER);
 
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .uint64(0n) // placeholder size
       .string(header.profile)
-      .string(header.library)
-      .array(header.metadata);
+      .string(header.library);
 
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .seek(startPosition)
       .uint64(BigInt(endPosition - startPosition - 8))
       .seek(endPosition);
+
+    return BigInt(endPosition - startPosition + 1);
   }
 
-  writeFooter(footer: Footer): void {
+  writeFooter(footer: Footer): bigint {
     this.bufferBuilder
       .uint8(Opcode.FOOTER)
       .uint64(20n) // footer is fixed length
       .uint64(footer.summaryStart)
       .uint64(footer.summaryOffsetStart)
       .uint32(footer.crc);
+
+    return 20n;
   }
 
   writeChannelInfo(info: ChannelInfo): bigint {
@@ -75,7 +79,7 @@ export class Mcap0RecordBuilder {
       .uint16(info.channelId)
       .string(info.topicName)
       .string(info.messageEncoding)
-      .string(info.schemaFormat)
+      .string(info.schemaEncoding)
       .string(info.schema)
       .string(info.schemaName)
       .array(info.userData);
@@ -186,6 +190,24 @@ export class Mcap0RecordBuilder {
     for (const record of messageIndex.records) {
       this.bufferBuilder.uint64(record[0]).uint64(record[1]);
     }
+  }
+
+  writeMetadata(metadata: Metadata): bigint {
+    this.bufferBuilder.uint8(Opcode.METADATA);
+
+    const startPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .uint64(0n) // placeholder size
+      .string(metadata.name)
+      .array(metadata.metadata);
+
+    const endPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .seek(startPosition)
+      .uint64(BigInt(endPosition - startPosition - 8))
+      .seek(endPosition);
+
+    return BigInt(endPosition - startPosition + 1);
   }
 
   writeSummaryOffset(summaryOffset: SummaryOffset): bigint {

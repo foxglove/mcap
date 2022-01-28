@@ -188,7 +188,11 @@ async function convert(filePath: string, options: { indexed: boolean }) {
   await mcapFile.start({
     profile: "",
     library: "mcap typescript bag2proto",
-    metadata: [["original path", mcapFilePath]],
+  });
+
+  await mcapFile.addMetadata({
+    name: "original file info",
+    metadata: [["path", mcapFilePath]],
   });
 
   const topicToDetailMap = new Map<string, TopicDetail>();
@@ -215,7 +219,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
     const channelInfo: Omit<ChannelInfo, "channelId"> = {
       topicName: connection.topic,
       messageEncoding: "protobuf",
-      schemaFormat: "proto-set",
+      schemaEncoding: "proto",
       schemaName,
       schema: protobufjs.util.base64.encode(
         descriptorMsgEncoded,

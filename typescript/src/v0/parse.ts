@@ -88,11 +88,7 @@ export function parseRecord({
     case Opcode.HEADER: {
       const profile = reader.string();
       const library = reader.string();
-      const metadata = reader.keyValuePairs(
-        (r) => r.string(),
-        (r) => r.string(),
-      );
-      const record: TypedMcapRecord = { type: "Header", profile, library, metadata };
+      const record: TypedMcapRecord = { type: "Header", profile, library };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
 
@@ -108,7 +104,7 @@ export function parseRecord({
       const channelId = reader.uint16();
       const topicName = reader.string();
       const messageEncoding = reader.string();
-      const schemaFormat = reader.string();
+      const schemaEncoding = reader.string();
       const schema = reader.string();
       const schemaName = reader.string();
       const userData = reader.keyValuePairs(
@@ -131,7 +127,7 @@ export function parseRecord({
         channelId,
         topicName,
         messageEncoding,
-        schemaFormat,
+        schemaEncoding,
         schemaName,
         schema,
         userData,
@@ -338,21 +334,24 @@ export function parseRecord({
       return { record, usedBytes: recordEndOffset - startOffset };
     }
     case Opcode.METADATA: {
+      const name = reader.string();
       const metadata = reader.keyValuePairs(
         (r) => r.string(),
         (r) => r.string(),
       );
-      const record: TypedMcapRecord = { type: "Metadata", metadata };
+      const record: TypedMcapRecord = { type: "Metadata", metadata, name };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
     case Opcode.METADATA_INDEX: {
       const offset = reader.uint64();
       const length = reader.uint64();
+      const name = reader.string();
 
       const record: TypedMcapRecord = {
         type: "MetadataIndex",
         offset,
         length,
+        name,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }

@@ -1,6 +1,6 @@
 import { IWritable } from "../common/IWritable";
 import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
-import { ChannelInfo, Message, Header, Attachment } from "./types";
+import { ChannelInfo, Message, Header, Attachment, Metadata } from "./types";
 
 /**
  * Mcap0UnindexedWriter provides an interface for writing messages
@@ -65,6 +65,12 @@ export class Mcap0UnindexedWriter {
 
   async addAttachment(attachment: Attachment): Promise<void> {
     this.bufferRecordBuilder.writeAttachment(attachment);
+    await this.writable.write(this.bufferRecordBuilder.buffer);
+    this.bufferRecordBuilder.reset();
+  }
+
+  async addMetadata(metadata: Metadata): Promise<void> {
+    this.bufferRecordBuilder.writeMetadata(metadata);
     await this.writable.write(this.bufferRecordBuilder.buffer);
     this.bufferRecordBuilder.reset();
   }

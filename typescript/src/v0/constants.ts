@@ -20,5 +20,5 @@ export enum Opcode {
 }
 
 export function isKnownOpcode(opcode: number): opcode is Opcode {
-  return opcode >= Opcode.MIN && opcode <= Opcode.MAX && opcode !== Opcode.FOOTER;
+  return opcode >= Opcode.MIN && opcode <= Opcode.MAX;
 }

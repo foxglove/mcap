@@ -44,8 +44,8 @@ describe("Mcap0IndexedReader", () => {
           new Uint8Array([
             ...MCAP0_MAGIC,
             ...record(Opcode.FOOTER, [
-              ...uint64LE(0n), // index offset
-              ...uint32LE(0), // index crc
+              ...uint64LE(0n), // summary offset
+              ...uint32LE(0), // summary crc
             ]),
             ...MCAP0_MAGIC,
           ]),
@@ -80,8 +80,8 @@ describe("Mcap0IndexedReader", () => {
           ...keyValues(string, string, []), // metadata
         ]),
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // index offset
-          ...uint32LE(0), // index crc
+          ...uint64LE(0n), // summary offset
+          ...uint32LE(0), // summary crc
         ]),
         ...MCAP0_MAGIC,
       ]),
@@ -103,7 +103,7 @@ describe("Mcap0IndexedReader", () => {
     const indexOffset = data.length;
     data.push(
       ...record(Opcode.FOOTER, [
-        ...uint64LE(BigInt(indexOffset)), // index offset
+        ...uint64LE(BigInt(indexOffset)), // summary offset
         ...uint32LE(
           crc32(
             new Uint8Array([
@@ -112,7 +112,7 @@ describe("Mcap0IndexedReader", () => {
               ...uint64LE(BigInt(indexOffset)), //index offset
             ]),
           ),
-        ), // index crc
+        ), // summary crc
       ]),
       ...MCAP0_MAGIC,
     );
@@ -134,8 +134,8 @@ describe("Mcap0IndexedReader", () => {
     const indexOffset = data.length;
     data.push(
       ...record(Opcode.FOOTER, [
-        ...uint64LE(BigInt(indexOffset)), // index offset
-        ...uint32LE(crc32(new Uint8Array([42]))), // index crc
+        ...uint64LE(BigInt(indexOffset)), // summary offset
+        ...uint32LE(crc32(new Uint8Array([42]))), // summary crc
       ]),
       ...MCAP0_MAGIC,
     );
@@ -168,8 +168,8 @@ describe("Mcap0IndexedReader", () => {
         ]),
       ),
       ...record(Opcode.FOOTER, [
-        ...uint64LE(BigInt(indexOffset)), // index offset
-        ...uint32LE(crc32(new Uint8Array(0))), // index crc
+        ...uint64LE(BigInt(indexOffset)), // summary offset
+        ...uint32LE(crc32(new Uint8Array(0))), // summary crc
       ]),
       ...MCAP0_MAGIC,
     );
@@ -183,7 +183,7 @@ describe("Mcap0IndexedReader", () => {
           {
             type: "ChannelInfo",
             channelId: 42,
-            schemaFormat: "myformat",
+            schemaEncoding: "myformat",
             topicName: "mytopic",
             messageEncoding: "utf12",
             schemaName: "some data",
@@ -317,8 +317,8 @@ describe("Mcap0IndexedReader", () => {
             ]),
           ),
           ...record(Opcode.FOOTER, [
-            ...uint64LE(BigInt(indexOffset)), // index offset
-            ...uint32LE(crc32(new Uint8Array(0))), // index crc
+            ...uint64LE(BigInt(indexOffset)), // summary offset
+            ...uint32LE(crc32(new Uint8Array(0))), // summary crc
           ]),
           ...MCAP0_MAGIC,
         );
@@ -370,8 +370,8 @@ describe("Mcap0IndexedReader", () => {
         ]),
       ),
       ...record(Opcode.FOOTER, [
-        ...uint64LE(BigInt(indexOffset)), // index offset
-        ...uint32LE(crc32(new Uint8Array(0))), // index crc
+        ...uint64LE(BigInt(indexOffset)), // summary offset
+        ...uint32LE(crc32(new Uint8Array(0))), // summary crc
       ]),
       ...MCAP0_MAGIC,
     );
@@ -455,8 +455,8 @@ describe("Mcap0IndexedReader", () => {
           ]),
         ),
         ...record(Opcode.FOOTER, [
-          ...uint64LE(indexOffset), // index offset
-          ...uint32LE(crc32(new Uint8Array(0))), // index crc
+          ...uint64LE(indexOffset), // summary offset
+          ...uint32LE(crc32(new Uint8Array(0))), // summary crc
         ]),
         ...MCAP0_MAGIC,
       );
