@@ -2,8 +2,37 @@ package libmcap
 
 import "io"
 
+func ParseHeader(buf []byte) (*Header, error) {
+	profile, offset, err := readPrefixedString(buf, 0)
+	if err != nil {
+		return nil, err
+	}
+	library, _, err := readPrefixedString(buf, offset)
+	if err != nil {
+		return nil, err
+	}
+	return &Header{
+		Profile: profile,
+		Library: library,
+	}, nil
+}
+
+func ParseFooter(buf []byte) (*Footer, error) {
+	summaryStart, offset := getUint64(buf, 0)
+	summaryOffsetStart, offset := getUint64(buf, offset)
+	summaryCrc, _ := getUint32(buf, offset)
+
+	return &Footer{
+		SummaryStart:       summaryStart,
+		SummaryOffsetStart: summaryOffsetStart,
+		SummaryCRC:         summaryCrc,
+	}, nil
+}
+
 func ParseChunk(buf []byte) (*Chunk, error) {
-	uncompressedSize, offset := getUint64(buf, 0)
+	startTime, offset := getUint64(buf, 0)
+	endTime, offset := getUint64(buf, offset)
+	uncompressedSize, offset := getUint64(buf, offset)
 	uncompressedCRC, offset := getUint32(buf, offset)
 	compression, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
@@ -11,6 +40,8 @@ func ParseChunk(buf []byte) (*Chunk, error) {
 	}
 	records := buf[offset:]
 	return &Chunk{
+		StartTime:        startTime,
+		EndTime:          endTime,
 		UncompressedSize: uncompressedSize,
 		UncompressedCRC:  uncompressedCRC,
 		Compression:      compression,
@@ -18,28 +49,19 @@ func ParseChunk(buf []byte) (*Chunk, error) {
 	}, nil
 }
 
-func ParseMessageIndex(buf []byte) *MessageIndex {
+func ParseMessageIndex(buf []byte) (*MessageIndex, error) {
 	channelID, offset := getUint16(buf, 0)
-	count, offset := getUint32(buf, offset)
 	_, offset = getUint32(buf, offset)
-	var recordTime uint64
-	var recordOffset uint64
-	records := make([]MessageIndexRecord, count)
-	for i := range records {
-		recordTime, offset = getUint64(buf, offset)
-		recordOffset, offset = getUint64(buf, offset)
-		records[i] = MessageIndexRecord{
-			Timestamp: recordTime,
-			Offset:    recordOffset,
-		}
+
+	records, _, err := readMessageIndexEntries(buf, offset)
+	if err != nil {
+		return nil, err
 	}
-	crc, _ := getUint32(buf, offset)
+
 	return &MessageIndex{
 		ChannelID: channelID,
-		Count:     count,
 		Records:   records,
-		CRC:       crc,
-	}
+	}, nil
 }
 
 func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
@@ -121,15 +143,19 @@ func ParseChannelInfo(buf []byte) (*ChannelInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	encoding, offset, err := readPrefixedString(buf, offset)
+	messageEncoding, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
 		return nil, err
 	}
-	schemaName, offset, err := readPrefixedString(buf, offset)
+	schemaEncoding, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
 		return nil, err
 	}
 	schema, offset, err := readPrefixedBytes(buf, offset)
+	if err != nil {
+		return nil, err
+	}
+	schemaName, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -138,12 +164,13 @@ func ParseChannelInfo(buf []byte) (*ChannelInfo, error) {
 		return nil, err
 	}
 	return &ChannelInfo{
-		ChannelID:  channelID,
-		TopicName:  topicName,
-		Encoding:   encoding,
-		SchemaName: schemaName,
-		Schema:     schema,
-		UserData:   userdata,
+		ChannelID:       channelID,
+		TopicName:       topicName,
+		MessageEncoding: messageEncoding,
+		SchemaEncoding:  schemaEncoding,
+		SchemaName:      schemaName,
+		Schema:          schema,
+		UserData:        userdata,
 	}, nil
 }
 

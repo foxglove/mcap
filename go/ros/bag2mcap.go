@@ -196,12 +196,21 @@ func Bag2MCAP(r io.Reader, w io.Writer) error {
 			if err != nil {
 				return err
 			}
+<<<<<<< HEAD:go/ros/bag2mcap.go
 			channelInfo := &libmcap.ChannelInfo{
 				ChannelID:  connID,
 				TopicName:  string(topic),
 				Encoding:   "ros1",
 				SchemaName: string(typ),
 				Schema:     msgdef,
+=======
+			channelInfo := &ChannelInfo{
+				ChannelID:       connID,
+				TopicName:       string(topic),
+				MessageEncoding: "ros1",
+				SchemaName:      string(typ),
+				Schema:          msgdef,
+>>>>>>> 2be46f8 (Update golang implementation to supported v0 records):go/libmcap/bag2mcap.go
 				UserData: map[string]string{
 					"md5sum": string(md5sum),
 				},

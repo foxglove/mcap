@@ -53,11 +53,11 @@ func TestChunkedReadWrite(t *testing.T) {
 			err = w.WriteHeader("ros1", "", map[string]string{"foo": "bar"})
 			assert.Nil(t, err)
 			err = w.WriteChannelInfo(&ChannelInfo{
-				ChannelID:  1,
-				TopicName:  "/test",
-				Encoding:   "ros1",
-				SchemaName: "foo",
-				Schema:     []byte{},
+				ChannelID:       1,
+				TopicName:       "/test",
+				MessageEncoding: "ros1",
+				SchemaName:      "foo",
+				Schema:          []byte{},
 				UserData: map[string]string{
 					"callerid": "100",
 				},
@@ -103,11 +103,11 @@ func TestUnchunkedReadWrite(t *testing.T) {
 	err = w.WriteHeader("ros1", "", map[string]string{"foo": "bar"})
 	assert.Nil(t, err)
 	err = w.WriteChannelInfo(&ChannelInfo{
-		ChannelID:  1,
-		TopicName:  "/test",
-		Encoding:   "ros1",
-		SchemaName: "foo",
-		Schema:     []byte{},
+		ChannelID:       1,
+		TopicName:       "/test",
+		MessageEncoding: "ros1",
+		SchemaName:      "foo",
+		Schema:          []byte{},
 		UserData: map[string]string{
 			"callerid": "100",
 		},

@@ -152,13 +152,11 @@ func (w *Writer) WriteMessage(m *Message) error {
 		if !ok {
 			idx = &MessageIndex{
 				ChannelID: m.ChannelID,
-				Count:     0,
 				Records:   nil,
 			}
 			w.messageIndexes[m.ChannelID] = idx
 		}
-		idx.Records = append(idx.Records, MessageIndexRecord{m.RecordTime, uint64(w.compressedWriter.Size())})
-		idx.Count++
+		idx.Records = append(idx.Records, MessageIndexEntry{m.RecordTime, uint64(w.compressedWriter.Size())})
 		_, err := w.writeRecord(w.compressedWriter, OpMessage, w.msg[:offset])
 		if err != nil {
 			return err
@@ -185,7 +183,6 @@ func (w *Writer) WriteMessageIndex(idx *MessageIndex) error {
 		w.msg = make([]byte, 2*msglen)
 	}
 	offset := putUint16(w.msg, idx.ChannelID)
-	offset += putUint32(w.msg[offset:], idx.Count)
 	offset += putUint32(w.msg[offset:], uint32(datalen))
 	for _, v := range idx.Records {
 		offset += putUint64(w.msg[offset:], uint64(v.Timestamp))
@@ -223,13 +220,13 @@ func (w *Writer) WriteHeader(profile string, library string, metadata map[string
 
 func (w *Writer) WriteChannelInfo(c *ChannelInfo) error {
 	userdata := makePrefixedMap(c.UserData)
-	msglen := 2 + 4 + len(c.TopicName) + 4 + len(c.Encoding) + 4 + len(c.SchemaName) + 4 + len(c.Schema) + len(userdata) + 4
+	msglen := 2 + 4 + len(c.TopicName) + 4 + len(c.MessageEncoding) + 4 + len(c.SchemaName) + 4 + len(c.Schema) + len(userdata) + 4
 	if len(w.msg) < msglen {
 		w.msg = make([]byte, 2*msglen)
 	}
 	offset := putUint16(w.msg, c.ChannelID)
 	offset += putPrefixedString(w.msg[offset:], c.TopicName)
-	offset += putPrefixedString(w.msg[offset:], c.Encoding)
+	offset += putPrefixedString(w.msg[offset:], c.MessageEncoding)
 	offset += putPrefixedString(w.msg[offset:], c.SchemaName)
 	offset += putPrefixedBytes(w.msg[offset:], c.Schema)
 	offset += copy(w.msg[offset:], userdata)
@@ -343,8 +340,9 @@ func (w *Writer) WriteFooter(f *Footer) error {
 	if len(w.msg) < msglen {
 		w.msg = make([]byte, 2*msglen)
 	}
-	offset := putUint64(w.msg, f.IndexOffset)
-	offset += putUint32(w.msg[offset:], f.IndexCRC)
+	offset := putUint64(w.msg, f.SummaryStart)
+	offset += putUint64(w.msg, f.SummaryOffsetStart)
+	offset += putUint32(w.msg[offset:], f.SummaryCRC)
 	_, err := w.writeRecord(w.w, OpFooter, w.msg[:offset])
 	return err
 }
@@ -381,8 +379,9 @@ func (w *Writer) Close() error {
 		return err
 	}
 	err = w.WriteFooter(&Footer{
-		IndexOffset: indexOffset,
-		IndexCRC:    0,
+		SummaryStart:       indexOffset,
+		SummaryOffsetStart: 0,
+		SummaryCRC:         0,
 	})
 	if err != nil {
 		return err

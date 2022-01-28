@@ -49,6 +49,21 @@ func readPrefixedMap(data []byte, offset int) (map[string]string, int, error) {
 	return m, offset + inset, nil
 }
 
+func readMessageIndexEntries(data []byte, offset int) ([]MessageIndexEntry, int, error) {
+	entries := make([]MessageIndexEntry, 0)
+	entriesByteLength, offset := getUint32(data, offset)
+	var start = offset
+	for uint32(offset) < uint32(start)+entriesByteLength {
+		stamp, offset := getUint64(data, offset)
+		value, offset := getUint64(data, offset)
+		entries = append(entries, MessageIndexEntry{
+			Timestamp: stamp,
+			Offset:    value,
+		})
+	}
+	return entries, offset, nil
+}
+
 type Reader struct {
 	l                 *lexer
 	r                 io.Reader

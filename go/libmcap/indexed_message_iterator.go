@@ -243,7 +243,10 @@ func (it *indexedMessageIterator) loadNextChunkset() error {
 			}
 			switch tok.TokenType {
 			case TokenMessageIndex:
-				messageIndex = ParseMessageIndex(tok.bytes())
+				messageIndex, err = ParseMessageIndex(tok.bytes())
+				if err != nil {
+					return err
+				}
 			default:
 				_ = tok.bytes()
 				return fmt.Errorf("unexpected token %s in message index section", tok)

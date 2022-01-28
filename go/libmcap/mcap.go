@@ -162,6 +162,11 @@ const (
 
 type OpCode byte
 
+type Header struct {
+	Profile string
+	Library string
+}
+
 type Message struct {
 	ChannelID   uint16
 	Sequence    uint32
@@ -171,12 +176,13 @@ type Message struct {
 }
 
 type ChannelInfo struct {
-	ChannelID  uint16
-	TopicName  string
-	Encoding   string
-	SchemaName string
-	Schema     []byte
-	UserData   map[string]string
+	ChannelID       uint16
+	TopicName       string
+	MessageEncoding string
+	SchemaEncoding  string
+	Schema          []byte
+	SchemaName      string
+	UserData        map[string]string
 }
 
 type Attachment struct {
@@ -223,8 +229,9 @@ type AttachmentIndex struct {
 }
 
 type Footer struct {
-	IndexOffset uint64
-	IndexCRC    uint32
+	SummaryStart       uint64
+	SummaryOffsetStart uint64
+	SummaryCRC         uint32
 }
 
 type ChunkIndex struct {
@@ -317,19 +324,19 @@ func (i Info) String() string {
 	return buf.String()
 }
 
-type MessageIndexRecord struct {
+type MessageIndexEntry struct {
 	Timestamp uint64
 	Offset    uint64
 }
 
 type MessageIndex struct {
 	ChannelID uint16
-	Count     uint32
-	Records   []MessageIndexRecord
-	CRC       uint32
+	Records   []MessageIndexEntry
 }
 
 type Chunk struct {
+	StartTime        uint64
+	EndTime          uint64
 	UncompressedSize uint64
 	UncompressedCRC  uint32
 	Compression      string

@@ -114,18 +114,18 @@ func TestMessageReading(t *testing.T) {
 					err = w.WriteHeader("ros1", "", map[string]string{"foo": "bar"})
 					assert.Nil(t, err)
 					err = w.WriteChannelInfo(&ChannelInfo{
-						ChannelID:  0,
-						TopicName:  "/test1",
-						Encoding:   "ros1",
-						SchemaName: "foo",
-						Schema:     []byte{},
+						ChannelID:       0,
+						TopicName:       "/test1",
+						MessageEncoding: "ros1",
+						SchemaName:      "foo",
+						Schema:          []byte{},
 					})
 					err = w.WriteChannelInfo(&ChannelInfo{
-						ChannelID:  1,
-						TopicName:  "/test2",
-						Encoding:   "ros1",
-						SchemaName: "foo",
-						Schema:     []byte{},
+						ChannelID:       1,
+						TopicName:       "/test2",
+						MessageEncoding: "ros1",
+						SchemaName:      "foo",
+						Schema:          []byte{},
 					})
 					assert.Nil(t, err)
 					for i := 0; i < 1000; i++ {
