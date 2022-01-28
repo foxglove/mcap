@@ -48,7 +48,7 @@ export function parseRecord({
   channelInfosById: Map<number, TypedMcapRecords["ChannelInfo"]>;
   validateCrcs: boolean;
 }): { record: TypedMcapRecord; usedBytes: number } | { record?: undefined; usedBytes: 0 } {
-  if (startOffset + /*opcode*/ 1 + /*record length*/ 8 >= view.byteLength) {
+  if (startOffset + /*opcode*/ 1 + /*record content length*/ 8 >= view.byteLength) {
     return { usedBytes: 0 };
   }
   const headerReader = new Reader(view, startOffset);
@@ -57,7 +57,7 @@ export function parseRecord({
 
   const recordLength = headerReader.uint64();
   if (recordLength > Number.MAX_SAFE_INTEGER) {
-    throw new Error(`Record length ${recordLength} is too large`);
+    throw new Error(`Record content length ${recordLength} is too large`);
   }
   const recordEndOffset = headerReader.offset + Number(recordLength);
   if (recordEndOffset > view.byteLength) {

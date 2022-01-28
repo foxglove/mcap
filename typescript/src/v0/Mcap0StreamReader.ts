@@ -127,7 +127,6 @@ export default class Mcap0StreamReader implements McapStreamReader {
         }
         this.buffer.consume(usedBytes);
       }
-      console.log(record);
       switch (record.type) {
         case "Unknown":
           break;

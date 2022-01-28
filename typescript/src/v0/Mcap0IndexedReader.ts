@@ -67,40 +67,42 @@ export default class Mcap0IndexedReader {
   }): Promise<Mcap0IndexedReader> {
     const size = await readable.size();
     let footerOffset: bigint;
-    let footerView: DataView;
+    let footerAndMagicView: DataView;
     {
       const headerLengthLowerBound = BigInt(
         MCAP0_MAGIC.length +
           /* Opcode.HEADER */ 1 +
-          /* record length */ 8 +
+          /* record content length */ 8 +
           /* profile length */ 4 +
           /* library length */ 4,
       );
-      const footerReadLength = BigInt(
+      const footerAndMagicReadLength = BigInt(
         /* Opcode.FOOTER */ 1 +
-          /* record length */ 8 +
-          /* indexOffset */ 8 +
-          /* indexCrc */ 4 +
+          /* record content length */ 8 +
+          /* summaryStart */ 8 +
+          /* summaryOffsetStart */ 8 +
+          /* crc */ 4 +
           MCAP0_MAGIC.length,
       );
-      if (size < headerLengthLowerBound + footerReadLength) {
+      if (size < headerLengthLowerBound + footerAndMagicReadLength) {
         throw new Error(`File size (${size}) is too small to be valid MCAP`);
       }
-      footerOffset = size - footerReadLength;
-      const footerBuffer = await readable.read(footerOffset, footerReadLength);
-      footerView = new DataView(
+      footerOffset = size - footerAndMagicReadLength;
+      const footerBuffer = await readable.read(footerOffset, footerAndMagicReadLength);
+
+      footerAndMagicView = new DataView(
         footerBuffer.buffer,
         footerBuffer.byteOffset,
         footerBuffer.byteLength,
       );
     }
 
-    void parseMagic(footerView, footerView.byteLength - MCAP0_MAGIC.length);
+    void parseMagic(footerAndMagicView, footerAndMagicView.byteLength - MCAP0_MAGIC.length);
 
     const channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
 
     const footer = parseRecord({
-      view: footerView,
+      view: footerAndMagicView,
       startOffset: 0,
       channelInfosById: new Map(),
       validateCrcs: true,
@@ -116,17 +118,23 @@ export default class Mcap0IndexedReader {
       throw new Error("File is not indexed");
     }
 
-    // Future optimization: avoid holding whole index blob in memory at once
-    const indexData = await readable.read(footer.summaryStart, footerOffset + 16n);
+    // Future optimization: avoid holding whole summary blob in memory at once
+    const allSummaryData = await readable.read(
+      footer.summaryStart,
+      footerOffset - footer.summaryStart,
+    );
     if (footer.crc !== 0) {
       let indexCrc = crc32Init();
-      indexCrc = crc32Update(indexCrc, indexData);
+      indexCrc = crc32Update(indexCrc, allSummaryData);
       indexCrc = crc32Update(
         indexCrc,
         new DataView(
-          footerView.buffer,
-          footerView.byteOffset,
-          /* Opcode.FOOTER */ 1 + /* record length */ 8 + /* indexOffset */ 8,
+          footerAndMagicView.buffer,
+          footerAndMagicView.byteOffset,
+          /* Opcode.FOOTER */ 1 +
+            /* record content length */ 8 +
+            /* summary start */ 8 +
+            /* summary offset start */ 8,
         ),
       );
       indexCrc = crc32Final(indexCrc);
@@ -135,7 +143,11 @@ export default class Mcap0IndexedReader {
       }
     }
 
-    const indexView = new DataView(indexData.buffer, indexData.byteOffset, indexData.byteLength);
+    const indexView = new DataView(
+      allSummaryData.buffer,
+      allSummaryData.byteOffset,
+      allSummaryData.byteLength,
+    );
 
     const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
     const attachmentIndexes: TypedMcapRecords["AttachmentIndex"][] = [];
