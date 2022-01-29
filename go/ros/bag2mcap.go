@@ -1,4 +1,4 @@
-package libmcap
+package ros
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 
+	"github.com/foxglove/mcap/go/libmcap"
 	"github.com/pierrec/lz4/v4"
 )
 
@@ -26,15 +27,26 @@ const (
 	OpBagChunkInfo   = 0x06
 )
 
+func getUint32(buf []byte, offset int) (uint32, int, error) {
+	if len(buf[offset:]) < 4 {
+		return 0, 0, fmt.Errorf("short buffer")
+	}
+	return binary.LittleEndian.Uint32(buf[offset:]), offset + 4, nil
+}
+
 func extractHeaderValue(header []byte, key []byte) ([]byte, error) {
 	var fieldlen uint32
+	var err error
 	offset := 0
 	for offset < len(header) {
-		fieldlen, offset = getUint32(header, offset)
+		fieldlen, offset, err = getUint32(header, offset)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract field length: %w", err)
+		}
 		field := header[offset : offset+int(fieldlen)]
 		parts := bytes.SplitN(field, []byte{'='}, 2)
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid header field: %s", field)
+			return nil, fmt.Errorf("invalid header field: %s", string(field))
 		}
 		if bytes.Equal(key, parts[0]) {
 			return parts[1], nil
@@ -145,10 +157,10 @@ func processBag(
 }
 
 func Bag2MCAP(r io.Reader, w io.Writer) error {
-	writer, err := NewWriter(w, &WriterOptions{
+	writer, err := libmcap.NewWriter(w, &libmcap.WriterOptions{
 		Chunked:     true,
 		ChunkSize:   4 * 1024 * 1024,
-		Compression: CompressionLZ4,
+		Compression: libmcap.CompressionLZ4,
 		IncludeCRC:  true,
 	})
 	if err != nil {
@@ -184,7 +196,7 @@ func Bag2MCAP(r io.Reader, w io.Writer) error {
 			if err != nil {
 				return err
 			}
-			channelInfo := &ChannelInfo{
+			channelInfo := &libmcap.ChannelInfo{
 				ChannelID:  connID,
 				TopicName:  string(topic),
 				Encoding:   "ros1",
@@ -207,7 +219,7 @@ func Bag2MCAP(r io.Reader, w io.Writer) error {
 				return err
 			}
 			nsecs := rostimeToNanos(time)
-			err = writer.WriteMessage(&Message{
+			err = writer.WriteMessage(&libmcap.Message{
 				ChannelID:   connID,
 				Sequence:    seq,
 				RecordTime:  nsecs,

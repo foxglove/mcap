@@ -65,3 +65,20 @@ Echo messages to stdout using the end of file index:
     1490149580165152280 /diagnostics [94 13 0 0 204 224 209 88 174 52]...
     1490149580165152280 /diagnostics [95 13 0 0 204 224 209 88 215 86]...
     1490149580165152280 /tf [1 0 0 0 0 0 0 0 204 224]...
+
+Convert a ros2 bag file to mcap:
+
+    [~/work/mcap/go/mcap] (task/mcap-client) $ mcap convert multiple_files_1.db3 demo.mcap
+
+Note that if the system the conversion is called on is not the original ros2
+system, the command requires a search directory for packages. This can be found
+by copying the relevant directory (e.g /opt/ros/galactic) from the original
+system
+
+    [~/work/mcap/go/mcap] (task/mcap-client) $ mcap convert multiple_files_1.db3 demo.mcap --directories ./galactic
+
+### Building
+
+To ensure the resulting binary is statically linked, build with `make`:
+
+    make build
