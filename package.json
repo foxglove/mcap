@@ -6,7 +6,8 @@
     ]
   },
   "scripts": {
-    "lint:docs": "prettier docs --check"
+    "lint:docs": "prettier docs --check",
+    "test:conformance": "yarn workspace @foxglove/mcap generate-test-data --test-dir $(pwd)/testdata/fixtures"
   },
   "devDependencies": {
     "prettier": "^2.5.1"

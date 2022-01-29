@@ -26,7 +26,8 @@
     "lint": "eslint --report-unused-disable-directives --fix .",
     "test": "jest",
     "validate": "ts-node --files --project tsconfig.cjs.json scripts/validate.ts",
-    "bag2proto": "ts-node --files --project tsconfig.cjs.json scripts/bag2proto.ts"
+    "bag2proto": "ts-node --files --project tsconfig.cjs.json scripts/bag2proto.ts",
+    "generate-test-data": "ts-node --files --project tsconfig.cjs.json scripts/generate-test-data.ts"
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "0.17.1",
