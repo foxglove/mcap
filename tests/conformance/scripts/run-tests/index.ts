@@ -37,7 +37,7 @@ async function main(options: { dataDir: string; runner?: string; update: boolean
 
       const expectedOutputPath = path.join(
         options.dataDir,
-        path.basename(fileName, ".mcap") + ".txt",
+        path.basename(fileName, ".mcap") + ".expected.txt",
       );
       if (options.update) {
         await fs.writeFile(expectedOutputPath, output);
