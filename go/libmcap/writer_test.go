@@ -13,7 +13,9 @@ func TestMCAPReadWrite(t *testing.T) {
 		buf := &bytes.Buffer{}
 		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionLZ4})
 		assert.Nil(t, err)
-		err = w.WriteHeader("ros1", "", map[string]string{"foo": "bar"})
+		err = w.WriteHeader(&Header{
+			Profile: "ros1",
+		})
 		assert.Nil(t, err)
 		lexer, err := NewLexer(buf)
 		assert.Nil(t, err)
@@ -25,13 +27,9 @@ func TestMCAPReadWrite(t *testing.T) {
 		profile, offset, err := readPrefixedString(data, offset)
 		assert.Nil(t, err)
 		assert.Equal(t, "ros1", profile)
-		library, offset, err := readPrefixedString(data, offset)
+		library, _, err := readPrefixedString(data, offset)
 		assert.Nil(t, err)
 		assert.Equal(t, "", library)
-		metadata, offset, err := readPrefixedMap(data, offset)
-		assert.Nil(t, err)
-		assert.Equal(t, 1, len(metadata))
-		assert.Equal(t, "bar", metadata["foo"])
 		assert.Equal(t, TokenHeader, token.TokenType)
 	})
 }
@@ -50,15 +48,17 @@ func TestChunkedReadWrite(t *testing.T) {
 				IncludeCRC:  true,
 			})
 			assert.Nil(t, err)
-			err = w.WriteHeader("ros1", "", map[string]string{"foo": "bar"})
+			err = w.WriteHeader(&Header{
+				Profile: "ros1",
+			})
 			assert.Nil(t, err)
 			err = w.WriteChannelInfo(&ChannelInfo{
-				ChannelID:  1,
-				TopicName:  "/test",
-				Encoding:   "ros1",
-				SchemaName: "foo",
-				Schema:     []byte{},
-				UserData: map[string]string{
+				ChannelID:       1,
+				TopicName:       "/test",
+				MessageEncoding: "ros1",
+				SchemaName:      "foo",
+				Schema:          []byte{},
+				Metadata: map[string]string{
 					"callerid": "100",
 				},
 			})
@@ -85,12 +85,16 @@ func TestChunkedReadWrite(t *testing.T) {
 				TokenMessage,
 				TokenChannelInfo,
 				TokenStatistics,
+				TokenSummaryOffset,
+				TokenSummaryOffset,
+				TokenSummaryOffset,
 				TokenFooter,
 			} {
 				tok, err := lexer.Next()
 				assert.Nil(t, err)
 				_ = tok.bytes() // need to read the data
-				assert.Equal(t, expected, tok.TokenType, fmt.Sprintf("want %s got %s at %d", Token{expected, 0, nil}, tok.TokenType, i))
+				assert.Equal(t, expected, tok.TokenType,
+					fmt.Sprintf("want %s got %s at %d", Token{expected, 0, nil}, tok.TokenType, i))
 			}
 		})
 	}
@@ -100,15 +104,17 @@ func TestUnchunkedReadWrite(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w, err := NewWriter(buf, &WriterOptions{})
 	assert.Nil(t, err)
-	err = w.WriteHeader("ros1", "", map[string]string{"foo": "bar"})
+	err = w.WriteHeader(&Header{
+		Profile: "ros1",
+	})
 	assert.Nil(t, err)
 	err = w.WriteChannelInfo(&ChannelInfo{
-		ChannelID:  1,
-		TopicName:  "/test",
-		Encoding:   "ros1",
-		SchemaName: "foo",
-		Schema:     []byte{},
-		UserData: map[string]string{
+		ChannelID:       1,
+		TopicName:       "/test",
+		MessageEncoding: "ros1",
+		SchemaName:      "foo",
+		Schema:          []byte{},
+		Metadata: map[string]string{
 			"callerid": "100",
 		},
 	})
@@ -146,6 +152,9 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		TokenChannelInfo,
 		TokenAttachmentIndex,
 		TokenStatistics,
+		TokenSummaryOffset,
+		TokenSummaryOffset,
+		TokenSummaryOffset,
 		TokenFooter,
 	} {
 		tok, err := lexer.Next()

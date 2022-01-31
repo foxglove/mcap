@@ -106,15 +106,15 @@ func putByte(buf []byte, x byte) int {
 	return 1
 }
 
-func getUint16(buf []byte, offset int) (uint16, int) {
+func getUint16(buf []byte, offset int) (x uint16, newoffset int) {
 	return binary.LittleEndian.Uint16(buf[offset:]), offset + 2
 }
 
-func getUint32(buf []byte, offset int) (uint32, int) {
+func getUint32(buf []byte, offset int) (x uint32, newoffset int) {
 	return binary.LittleEndian.Uint32(buf[offset:]), offset + 4
 }
 
-func getUint64(buf []byte, offset int) (uint64, int) {
+func getUint64(buf []byte, offset int) (x uint64, newoffset int) {
 	return binary.LittleEndian.Uint64(buf[offset:]), offset + 8
 }
 
@@ -148,6 +148,7 @@ func putPrefixedBytes(buf []byte, s []byte) int {
 type CompressionFormat string
 
 const (
+	OpInvalidZero     OpCode = 0x00
 	OpHeader          OpCode = 0x01
 	OpFooter          OpCode = 0x02
 	OpChannelInfo     OpCode = 0x03
@@ -157,10 +158,18 @@ const (
 	OpChunkIndex      OpCode = 0x07
 	OpAttachment      OpCode = 0x08
 	OpAttachmentIndex OpCode = 0x09
-	OpStatistics      OpCode = 0x0a
+	OpStatistics      OpCode = 0x0A
+	OpMetadata        OpCode = 0x0B
+	OpMetadataIndex   OpCode = 0x0C
+	OpSummaryOffset   OpCode = 0x0D
 )
 
 type OpCode byte
+
+type Header struct {
+	Profile string
+	Library string
+}
 
 type Message struct {
 	ChannelID   uint16
@@ -168,23 +177,25 @@ type Message struct {
 	RecordTime  uint64
 	PublishTime uint64
 	Data        []byte
-	channelInfo *ChannelInfo
 }
 
 type ChannelInfo struct {
-	ChannelID  uint16
-	TopicName  string
-	Encoding   string
-	SchemaName string
-	Schema     []byte
-	UserData   map[string]string
+	ChannelID       uint16
+	TopicName       string
+	MessageEncoding string
+	SchemaEncoding  string
+	Schema          []byte
+	SchemaName      string
+	Metadata        map[string]string
 }
 
 type Attachment struct {
 	Name        string
+	CreatedAt   uint64
 	RecordTime  uint64
 	ContentType string
 	Data        []byte
+	CRC         uint32
 }
 
 type CompressionSummary struct {
@@ -201,9 +212,6 @@ type TopicSummary struct {
 	MessageCount uint64
 	SchemaName   string
 }
-
-// TODO md5sum in rosbags does not have a place in mcap
-
 type Summary struct {
 	Duration    time.Duration
 	Start       uint64
@@ -216,22 +224,42 @@ type Summary struct {
 }
 
 type AttachmentIndex struct {
-	RecordTime     uint64
-	AttachmentSize uint64
-	Name           string
-	ContentType    string
-	Offset         uint64
+	Offset      uint64
+	Length      uint64
+	RecordTime  uint64
+	DataSize    uint64
+	Name        string
+	ContentType string
 }
 
 type Footer struct {
-	IndexOffset uint64
-	IndexCRC    uint32
+	SummaryStart       uint64
+	SummaryOffsetStart uint64
+	SummaryCRC         uint32
+}
+
+type SummaryOffset struct {
+	GroupOpcode OpCode
+	GroupStart  uint64
+	GroupLength uint64
+}
+
+type Metadata struct {
+	Name     string
+	Metadata map[string]string
+}
+
+type MetadataIndex struct {
+	Offset uint64
+	Length uint64
+	Name   string
 }
 
 type ChunkIndex struct {
 	StartTime           uint64
 	EndTime             uint64
-	ChunkOffset         uint64
+	ChunkStartOffset    uint64
+	ChunkLength         uint64
 	MessageIndexOffsets map[uint16]uint64
 	MessageIndexLength  uint64
 	Compression         CompressionFormat
@@ -240,12 +268,11 @@ type ChunkIndex struct {
 }
 
 type Statistics struct {
-	MessageCount    uint64
-	ChannelCount    uint32
-	AttachmentCount uint32
-	ChunkCount      uint32
-	ChannelStats    map[uint16]uint64
-	channels        map[uint16]*ChannelInfo
+	MessageCount         uint64
+	ChannelCount         uint32
+	AttachmentCount      uint32
+	ChunkCount           uint32
+	ChannelMessageCounts map[uint16]uint64
 }
 
 type Info struct {
@@ -256,16 +283,16 @@ type Info struct {
 	End          time.Time
 }
 
-func (i Info) ChannelCounts() map[string]uint64 {
+func (i *Info) ChannelCounts() map[string]uint64 {
 	counts := make(map[string]uint64)
-	for k, v := range i.Statistics.ChannelStats {
+	for k, v := range i.Statistics.ChannelMessageCounts {
 		channel := i.Channels[k]
 		counts[channel.TopicName] = v
 	}
 	return counts
 }
 
-func (i Info) String() string {
+func (i *Info) String() string {
 	buf := &bytes.Buffer{}
 	start := uint64(math.MaxUint64)
 	end := uint64(0)
@@ -313,25 +340,29 @@ func (i Info) String() string {
 	})
 	for _, chanID := range chanIDs {
 		channel := i.Channels[chanID]
-		fmt.Fprintf(buf, "\t(%d) %s: %d msgs\n", channel.ChannelID, channel.TopicName, i.Statistics.ChannelStats[chanID])
+		fmt.Fprintf(buf, "\t(%d) %s: %d msgs\n",
+			channel.ChannelID,
+			channel.TopicName,
+			i.Statistics.ChannelMessageCounts[chanID],
+		)
 	}
 	fmt.Fprintf(buf, "attachments: %d", i.Statistics.AttachmentCount)
 	return buf.String()
 }
 
-type MessageIndexRecord struct {
+type MessageIndexEntry struct {
 	Timestamp uint64
 	Offset    uint64
 }
 
 type MessageIndex struct {
 	ChannelID uint16
-	Count     uint32
-	Records   []MessageIndexRecord
-	CRC       uint32
+	Records   []MessageIndexEntry
 }
 
 type Chunk struct {
+	StartTime        uint64
+	EndTime          uint64
 	UncompressedSize uint64
 	UncompressedCRC  uint32
 	Compression      string

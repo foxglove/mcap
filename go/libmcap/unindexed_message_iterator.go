@@ -6,7 +6,7 @@ import (
 )
 
 type unindexedMessageIterator struct {
-	lexer    *lexer
+	lexer    *Lexer
 	channels map[uint16]*ChannelInfo
 	topics   map[string]bool
 	start    uint64
@@ -21,7 +21,7 @@ func (it *unindexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 		}
 		switch token.TokenType {
 		case TokenChannelInfo:
-			channelInfo, err := parseChannelInfo(token.bytes())
+			channelInfo, err := ParseChannelInfo(token.bytes())
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to parse channel info: %w", err)
 			}
@@ -31,7 +31,7 @@ func (it *unindexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 				}
 			}
 		case TokenMessage:
-			message, err := parseMessage(token.bytes())
+			message, err := ParseMessage(token.bytes())
 			if err != nil {
 				return nil, nil, err
 			}
@@ -42,10 +42,11 @@ func (it *unindexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 				// channel ID, it has no option but to skip.
 				continue
 			}
-			if message.RecordTime >= uint64(it.start) && message.RecordTime < uint64(it.end) {
+			if message.RecordTime >= it.start && message.RecordTime < it.end {
 				return it.channels[message.ChannelID], message, nil
 			}
 		default:
+			// skip all other tokens
 			_, err := io.CopyN(io.Discard, token.Reader, token.ByteCount)
 			if err != nil {
 				return nil, nil, err

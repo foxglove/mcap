@@ -27,6 +27,7 @@ MCAP files are designed to work well under various workloads, resource constrain
   - [Metadata](#metadata-op0x0B)
   - [Metadata Index](#metadata-op0x0C)
   - [Summary Offset](#summary-offset-op0x0D)
+  - [Data End](#data-end-op0x0E)
 - [Serialization](#serialization)
 
 ## File Structure
@@ -65,16 +66,23 @@ The last record before the trailing magic bytes is the [Footer](#footer) record.
 
 The data section contains records with message data, attachments, and supporting records.
 
+The following records are allowed to appear in the data section:
+
 - Channel Info
 - Message
 - Attachment
 - Chunk
 - Message Index
 - Metadata
+- Data End
+
+The last record in the data section MUST be the [Data End](#data-end-op0x0E) record.
 
 ### Summary Section
 
-The optional summary section contains records for fast lookup of file information or other top-level records.
+The optional summary section contains records for fast lookup of file information or other data section records.
+
+The following records are allowed to appear in the summary section:
 
 - Channel Info
 - Chunk Index
@@ -90,7 +98,7 @@ Channel Info records in the summary are duplicates of Channel Info records throu
 
 ### Summary Offset Section
 
-The optional summary offset section contains [Summary Offset](#summary-offset-op0x0D) records referencing records in the summary section.
+The optional summary offset section contains [Summary Offset](#summary-offset-op0x0D) records for fast lookup of summary section records.
 
 The summary offset section aids random access reading.
 
@@ -123,7 +131,7 @@ A Footer record contains end-of-file information. It must be the last record in 
 | --- | --- | --- | --- |
 | 8 | summary_start | uint64 | Byte offset of the start of file to the first record in the summary section. If there are no records in the summary section this should be 0. |
 | 8 | summary_offset_start | uint64 | Byte offset from the start of the first record in the summary offset section. If there are no Summary Offset records this value should be 0. |
-| 4 | summary_crc | uint32 | A CRC32 of all bytes from the start of the Summary section up through the end of the previous field in the footer record. |
+| 4 | summary_crc | uint32 | A CRC32 of all bytes from the start of the Summary section up through the end of the previous field in the footer record. A value of 0 indicates the CRC32 is not available. |
 
 ### Channel Info (op=0x03)
 
@@ -276,9 +284,19 @@ A Summary Offset record contains the location of records within the summary sect
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 8 | group_opcode | uint64 | The opcode of all records in the group. |
+| 1 | group_opcode | uint8 | The opcode of all records in the group. |
 | 8 | group_start | uint64 | Byte offset from the start of the file of the first record in the group. |
 | 8 | group_length | uint64 | Total byte length of all records in the group. |
+
+### Data End (op=0x0E)
+
+A Data End record indicates the end of the data section.
+
+> Why? When reading a file from start to end, there is ambiguity when the data section ends and the summary section starts because some records (i.e. Channel Info) can repeat for summary data. The Data End record provides a clear dilineation the data section has ended.
+
+| Bytes | Name | Type | Description |
+| --- | --- | --- | --- |
+| 4 | data_section_crc | int32 | CRC32 of all bytes in the data section. A value of 0 indicates the CRC32 is not available. |
 
 ## Serialization
 
@@ -419,6 +437,7 @@ A writer may choose to put messages in Chunks to compress record data. This MCAP
 [Attachment]
 [Message on 3]
 [Message on 1]
+[Data End]
 [Statistics]
 [Channel Info 1]
 [Channel Info 2]
@@ -446,6 +465,7 @@ A writer may choose to put messages in Chunks to compress record data. This MCAP
   [Message on 1]
 [Message Index 3]
 [Message Index 1]
+[Data End]
 [Channel Info 1]
 [Channel Info 2]
 [Channel Info 3]

@@ -18,8 +18,10 @@ func TestLexUnchunkedFile(t *testing.T) {
 		channelInfo(),
 		message(),
 		message(),
-		attachment(),
-		attachment(),
+		record(OpAttachment),
+		record(OpAttachment),
+		channelInfo(),
+		record(OpAttachmentIndex),
 		footer(),
 	)
 	lexer, err := NewLexer(bytes.NewReader(file))
@@ -31,6 +33,8 @@ func TestLexUnchunkedFile(t *testing.T) {
 		TokenMessage,
 		TokenAttachment,
 		TokenAttachment,
+		TokenChannelInfo,
+		TokenAttachmentIndex,
 		TokenFooter,
 	}
 	for _, tt := range expected {
@@ -63,7 +67,7 @@ func TestRejectsNestedChunks(t *testing.T) {
 	tk, err := lexer.Next()
 	assert.Nil(t, err)
 	assert.Equal(t, tk.TokenType, TokenHeader)
-	tk, err = lexer.Next()
+	_, err = lexer.Next()
 	assert.ErrorIs(t, ErrNestedChunk, err)
 }
 
@@ -104,7 +108,10 @@ func TestReturnsEOFOnSuccessiveCalls(t *testing.T) {
 }
 
 func TestLexChunkedFile(t *testing.T) {
-	for _, validateCRC := range []bool{true, false} {
+	for _, validateCRC := range []bool{
+		true,
+		false,
+	} {
 		t.Run(fmt.Sprintf("crc validation %v", validateCRC), func(t *testing.T) {
 			for _, compression := range []CompressionFormat{
 				CompressionLZ4,
@@ -139,13 +146,13 @@ func TestLexChunkedFile(t *testing.T) {
 						tk, err := lexer.Next()
 						tk.bytes()
 						assert.Nil(t, err)
-						assert.Equal(t, tt, tk.TokenType, fmt.Sprintf("mismatch element %d", i))
+						assert.Equal(t, tt, tk.TokenType, fmt.Sprintf("expected %s but got %s at index %d", tt, tk, i))
 					}
 
 					// now we are eof
 					tk, err := lexer.Next()
 					tk.bytes()
-					assert.ErrorIs(t, io.EOF, err)
+					assert.ErrorIs(t, err, io.EOF)
 				})
 			}
 		})
@@ -204,7 +211,10 @@ func TestChunkCRCValidation(t *testing.T) {
 	})
 	t.Run("validation fails on corrupted file", func(t *testing.T) {
 		badchunk := chunk(t, CompressionLZ4, channelInfo(), message(), message())
-		badchunk[20] = 0x00 // corrupt the CRC
+
+		// chunk must be corrupted at a deep enough offset to hit the compressed data section
+		assert.NotEqual(t, badchunk[35], 0x00)
+		badchunk[35] = 0x00
 		file := file(
 			header(),
 			chunk(t, CompressionLZ4, channelInfo(), message(), message()),
@@ -229,7 +239,8 @@ func TestChunkCRCValidation(t *testing.T) {
 			assert.Equal(t, tt, tk.TokenType, fmt.Sprintf("mismatch element %d", i))
 		}
 		_, err = lexer.Next()
-		assert.Equal(t, "invalid CRC: ffaaf97a != aaf97a", err.Error())
+		assert.NotNil(t, err)
+		assert.Equal(t, "invalid CRC: ffaaf97a != ff00f97a", err.Error())
 	})
 }
 
@@ -288,14 +299,14 @@ func BenchmarkLexer(b *testing.B) {
 			"demo.bag",
 			"../../testdata/mcap/demo.mcap",
 		},
-		//{
-		//	"cal_loop.bag",
-		//	"../../testdata/cal_loop.mcap",
-		//},
-		//{
-		//	"turtlebot.bag",
-		//	"../../testdata/turtlebot3-burger-2021-04-22-15-35-44.mcap",
-		//},
+		// {
+		// 	"cal_loop.bag",
+		// 	"../../testdata/cal_loop.mcap",
+		// },
+		// {
+		// 	"turtlebot.bag",
+		// 	"../../testdata/turtlebot3-burger-2021-04-22-15-35-44.mcap",
+		// },
 	}
 	for _, c := range cases {
 		input, err := os.ReadFile(c.inputfile)

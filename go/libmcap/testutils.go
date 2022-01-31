@@ -30,32 +30,24 @@ func file(records ...[]byte) []byte {
 func footer() []byte {
 	buf := make([]byte, 9)
 	buf[0] = byte(OpFooter)
-	offset := 1
-	offset += putUint64(buf[offset:], 0)
 	return buf
 }
 
 func header() []byte {
 	buf := make([]byte, 9)
 	buf[0] = byte(OpHeader)
-	offset := 1
-	offset += putUint64(buf[offset:], 0)
 	return buf
 }
 
 func channelInfo() []byte {
 	buf := make([]byte, 9)
 	buf[0] = byte(OpChannelInfo)
-	offset := 1
-	offset += putUint64(buf[offset:], 0)
 	return buf
 }
 
 func message() []byte {
 	buf := make([]byte, 9)
 	buf[0] = byte(OpMessage)
-	offset := 1
-	offset += putUint64(buf[offset:], 0)
 	return buf
 }
 
@@ -86,32 +78,30 @@ func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byt
 	compressionLen := len(compression)
 	compressedLen := buf.Len()
 	uncompressedLen := len(data)
-	msglen := uint64(8 + 4 + 4 + compressionLen + compressedLen)
+	msglen := uint64(8 + 8 + 8 + 4 + 4 + compressionLen + compressedLen)
 	record := make([]byte, msglen+9)
-	record[0] = byte(OpChunk)
-	offset := 1
+	offset := putByte(record, byte(OpChunk))
 	offset += putUint64(record[offset:], msglen)
+
+	offset += putUint64(record[offset:], 0)   // start
+	offset += putUint64(record[offset:], 1e9) // end
 	offset += putUint64(record[offset:], uint64(uncompressedLen))
 	crc := crc32.NewIEEE()
 	_, _ = crc.Write(data)
 	offset += putUint32(record[offset:], crc.Sum32())
 	offset += putPrefixedString(record[offset:], string(compression))
-	offset += copy(record[offset:], buf.Bytes())
+	_ = copy(record[offset:], buf.Bytes())
 	return record
+}
+
+func record(op OpCode) []byte {
+	buf := make([]byte, 9)
+	buf[0] = byte(op)
+	return buf
 }
 
 func attachment() []byte {
 	buf := make([]byte, 9)
 	buf[0] = byte(OpAttachment)
-	offset := 1
-	offset += putUint64(buf[offset:], 0)
-	return buf
-}
-
-func statistics() []byte {
-	buf := make([]byte, 9)
-	buf[0] = byte(OpStatistics)
-	offset := 1
-	offset += putUint64(buf[offset:], 0)
 	return buf
 }
