@@ -17,7 +17,29 @@ var (
 	ErrBadMagic    = errors.New("not an mcap file")
 )
 
+const (
+	TokenMessage TokenType = iota
+	TokenChannelInfo
+	TokenFooter
+	TokenHeader
+	TokenAttachment
+	TokenAttachmentIndex
+	TokenChunkIndex
+	TokenStatistics
+	TokenChunk
+	TokenMessageIndex
+	TokenMetadata
+	TokenMetadataIndex
+	TokenSummaryOffset
+)
+
 type TokenType int
+
+type Token struct {
+	TokenType TokenType
+	ByteCount int64
+	Reader    io.Reader
+}
 
 func (t TokenType) String() string {
 	switch t {
@@ -53,32 +75,7 @@ func (t TokenType) String() string {
 }
 
 func (t Token) String() string {
-	switch t.TokenType {
-	default:
-		return t.TokenType.String()
-	}
-}
-
-const (
-	TokenMessage TokenType = iota
-	TokenChannelInfo
-	TokenFooter
-	TokenHeader
-	TokenAttachment
-	TokenAttachmentIndex
-	TokenChunkIndex
-	TokenStatistics
-	TokenChunk
-	TokenMessageIndex
-	TokenMetadata
-	TokenMetadataIndex
-	TokenSummaryOffset
-)
-
-type Token struct {
-	TokenType TokenType
-	ByteCount int64
-	Reader    io.Reader
+	return t.TokenType.String()
 }
 
 func (t Token) bytes() []byte {
@@ -93,7 +90,7 @@ type decoders struct {
 	none *bytes.Reader
 }
 
-type lexer struct {
+type Lexer struct {
 	basereader io.Reader
 	reader     io.Reader
 	emitChunks bool
@@ -106,8 +103,7 @@ type lexer struct {
 
 func validateMagic(r io.Reader) error {
 	magic := make([]byte, len(Magic))
-	_, err := io.ReadFull(r, magic)
-	if err != nil {
+	if _, err := io.ReadFull(r, magic); err != nil {
 		return ErrBadMagic
 	}
 	if !bytes.Equal(magic, Magic) {
@@ -116,7 +112,7 @@ func validateMagic(r io.Reader) error {
 	return nil
 }
 
-func (l *lexer) setNoneDecoder(buf []byte) {
+func (l *Lexer) setNoneDecoder(buf []byte) {
 	if l.decoders.none == nil {
 		l.decoders.none = bytes.NewReader(buf)
 	} else {
@@ -125,7 +121,7 @@ func (l *lexer) setNoneDecoder(buf []byte) {
 	l.reader = l.decoders.none
 }
 
-func (l *lexer) setLZ4Decoder(r io.Reader) {
+func (l *Lexer) setLZ4Decoder(r io.Reader) {
 	if l.decoders.lz4 == nil {
 		l.decoders.lz4 = lz4.NewReader(r)
 	} else {
@@ -134,7 +130,7 @@ func (l *lexer) setLZ4Decoder(r io.Reader) {
 	l.reader = l.decoders.lz4
 }
 
-func (l *lexer) setZSTDDecoder(r io.Reader) error {
+func (l *Lexer) setZSTDDecoder(r io.Reader) error {
 	if l.decoders.zstd == nil {
 		decoder, err := zstd.NewReader(r)
 		if err != nil {
@@ -151,7 +147,7 @@ func (l *lexer) setZSTDDecoder(r io.Reader) error {
 	return nil
 }
 
-func loadChunk(l *lexer, recordSize int64) error {
+func loadChunk(l *Lexer, recordSize int64) error {
 	if l.inChunk {
 		return ErrNestedChunk
 	}
@@ -178,7 +174,7 @@ func loadChunk(l *lexer, recordSize int64) error {
 	}
 
 	// remaining bytes in the record are the chunk data
-	lr := io.LimitReader(l.reader, int64(recordSize-int64(offset+len(compression))))
+	lr := io.LimitReader(l.reader, recordSize-int64(offset+len(compression)))
 	switch CompressionFormat(compression) {
 	case CompressionNone:
 		l.reader = lr
@@ -213,7 +209,7 @@ func loadChunk(l *lexer, recordSize int64) error {
 	return nil
 }
 
-func (l *lexer) Next() (Token, error) {
+func (l *Lexer) Next() (Token, error) {
 	for {
 		_, err := io.ReadFull(l.reader, l.buf[:9])
 		if err != nil {
@@ -293,7 +289,7 @@ type LexOpts struct {
 	EmitChunks  bool
 }
 
-func NewLexer(r io.Reader, opts ...*LexOpts) (*lexer, error) {
+func NewLexer(r io.Reader, opts ...*LexOpts) (*Lexer, error) {
 	var validateCRC, emitChunks, skipMagic bool
 	if len(opts) > 0 {
 		validateCRC = opts[0].ValidateCRC
@@ -307,7 +303,7 @@ func NewLexer(r io.Reader, opts ...*LexOpts) (*lexer, error) {
 			return nil, err
 		}
 	}
-	return &lexer{
+	return &Lexer{
 		basereader:  r,
 		reader:      r,
 		buf:         make([]byte, 32),

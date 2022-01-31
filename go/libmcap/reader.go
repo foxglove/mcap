@@ -7,7 +7,7 @@ import (
 	"math"
 )
 
-func readPrefixedString(data []byte, offset int) (string, int, error) {
+func readPrefixedString(data []byte, offset int) (s string, newoffset int, err error) {
 	if len(data[offset:]) < 4 {
 		return "", 0, io.ErrShortBuffer
 	}
@@ -18,7 +18,7 @@ func readPrefixedString(data []byte, offset int) (string, int, error) {
 	return string(data[offset+4 : offset+length+4]), offset + 4 + length, nil
 }
 
-func readPrefixedBytes(data []byte, offset int) ([]byte, int, error) {
+func readPrefixedBytes(data []byte, offset int) (s []byte, newoffset int, err error) {
 	if len(data[offset:]) < 4 {
 		return nil, 0, io.ErrShortBuffer
 	}
@@ -29,8 +29,7 @@ func readPrefixedBytes(data []byte, offset int) ([]byte, int, error) {
 	return data[offset+4 : offset+length+4], offset + 4 + length, nil
 }
 
-func readPrefixedMap(data []byte, offset int) (map[string]string, int, error) {
-	var err error
+func readPrefixedMap(data []byte, offset int) (result map[string]string, newoffset int, err error) {
 	var key, value string
 	var inset int
 	m := make(map[string]string)
@@ -49,30 +48,11 @@ func readPrefixedMap(data []byte, offset int) (map[string]string, int, error) {
 	return m, offset + inset, nil
 }
 
-func readMessageIndexEntries(data []byte, offset int) ([]MessageIndexEntry, int, error) {
-	entriesByteLength, offset := getUint32(data, offset)
-	var value, stamp uint64
-	var start = offset
-	entries := make([]MessageIndexEntry, 0, (len(data)-2)/(8+8))
-	for uint32(offset) < uint32(start)+entriesByteLength {
-		stamp, offset = getUint64(data, offset)
-		value, offset = getUint64(data, offset)
-		entries = append(entries, MessageIndexEntry{
-			Timestamp: stamp,
-			Offset:    value,
-		})
-	}
-	return entries, offset, nil
-}
-
 type Reader struct {
-	l                 *lexer
-	r                 io.Reader
-	rs                io.ReadSeeker
-	channels          map[uint16]*ChannelInfo
-	statistics        *Statistics
-	chunkIndexes      []*ChunkIndex
-	attachmentIndexes []*AttachmentIndex
+	l        *Lexer
+	r        io.Reader
+	rs       io.ReadSeeker
+	channels map[uint16]*ChannelInfo
 }
 
 type MessageIterator interface {

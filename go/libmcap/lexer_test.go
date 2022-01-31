@@ -67,7 +67,7 @@ func TestRejectsNestedChunks(t *testing.T) {
 	tk, err := lexer.Next()
 	assert.Nil(t, err)
 	assert.Equal(t, tk.TokenType, TokenHeader)
-	tk, err = lexer.Next()
+	_, err = lexer.Next()
 	assert.ErrorIs(t, ErrNestedChunk, err)
 }
 
@@ -299,14 +299,14 @@ func BenchmarkLexer(b *testing.B) {
 			"demo.bag",
 			"../../testdata/mcap/demo.mcap",
 		},
-		//{
-		//	"cal_loop.bag",
-		//	"../../testdata/cal_loop.mcap",
-		//},
-		//{
-		//	"turtlebot.bag",
-		//	"../../testdata/turtlebot3-burger-2021-04-22-15-35-44.mcap",
-		//},
+		// {
+		// 	"cal_loop.bag",
+		// 	"../../testdata/cal_loop.mcap",
+		// },
+		// {
+		// 	"turtlebot.bag",
+		// 	"../../testdata/turtlebot3-burger-2021-04-22-15-35-44.mcap",
+		// },
 	}
 	for _, c := range cases {
 		input, err := os.ReadFile(c.inputfile)

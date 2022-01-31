@@ -20,7 +20,7 @@ type messageOffset struct {
 // seeking is required). It makes reads in alternation from the index data
 // section, the message index at the end of a chunk, and the chunk's contents.
 type indexedMessageIterator struct {
-	lexer  *lexer
+	lexer  *Lexer
 	rs     io.ReadSeeker
 	topics map[string]bool
 	start  uint64
@@ -36,10 +36,9 @@ type indexedMessageIterator struct {
 	activeChunksetIndex int           // active chunkset
 	activeChunkIndex    int           // index of the active chunk within the set
 	activeChunkReader   *bytes.Reader // active decompressed chunk
-	activeChunkLexer    *lexer
+	activeChunkLexer    *Lexer
 	messageOffsets      []messageOffset
 	messageOffsetIdx    int
-	buf                 []byte // opcode + len
 }
 
 // parseIndexSection parses the index section of the file and populates the
@@ -53,7 +52,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	buf := make([]byte, 8+20)
 	_, err = io.ReadFull(it.rs, buf)
 	if err != nil {
-		return fmt.Errorf("read error: %s", err)
+		return fmt.Errorf("read error: %w", err)
 	}
 	magic := buf[20:]
 	if !bytes.Equal(magic, Magic) {
@@ -213,7 +212,7 @@ func (it *indexedMessageIterator) loadChunk(index int) error {
 		SkipMagic: true,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to read chunk: %s", err)
+		return fmt.Errorf("failed to read chunk: %w", err)
 	}
 	return nil
 }

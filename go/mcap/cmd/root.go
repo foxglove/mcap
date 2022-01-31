@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-
 	"github.com/spf13/viper"
 )
 
@@ -18,6 +17,11 @@ var rootCmd = &cobra.Command{
 
 func Execute() {
 	cobra.CheckErr(rootCmd.Execute())
+}
+
+func die(s string, args ...interface{}) {
+	fmt.Fprintln(os.Stderr, fmt.Sprintf(s, args...))
+	os.Exit(1)
 }
 
 func init() {
