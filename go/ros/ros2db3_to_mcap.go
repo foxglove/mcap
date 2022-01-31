@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -42,14 +41,14 @@ func collectMessageSchemas(directories []string, types []string) (map[string][]b
 	for _, t := range types {
 		parts := strings.Split(t, "/")
 		if len(parts) != 3 {
-			return nil, fmt.Errorf("Invalid type name %s", t)
+			return nil, fmt.Errorf("invalid type name %s", t)
 		}
 		packageName := parts[0]
 		resourceType := parts[1]
 		typeName := parts[2]
 		for parentPath, dirPath := range interfaceDirs {
 			packageFile := path.Join(dirPath, packageName)
-			packageData, err := ioutil.ReadFile(packageFile)
+			packageData, err := os.ReadFile(packageFile)
 			if errors.Is(err, os.ErrNotExist) {
 				break
 			}
@@ -71,7 +70,7 @@ func collectMessageSchemas(directories []string, types []string) (map[string][]b
 	// ensure all requested schemas were found, or we won't be able to create a valid file
 	for _, t := range types {
 		if _, ok := schemas[t]; !ok {
-			return nil, fmt.Errorf("No schema found for type %s", t)
+			return nil, fmt.Errorf("no schema found for type %s", t)
 		}
 	}
 
@@ -108,7 +107,6 @@ func getTopics(db *sql.DB) ([]topicsRecord, error) {
 			return nil, err
 		}
 		topics = append(topics, record)
-
 	}
 	return topics, nil
 }
@@ -173,7 +171,7 @@ func DB3ToMCAP(db *sql.DB, w io.Writer, searchdirs []string) error {
 	for _, t := range topics {
 		schema, ok := schemas[t.typ]
 		if !ok {
-			return fmt.Errorf("Unrecognized schema for %s", t.typ)
+			return fmt.Errorf("unrecognized schema for %s", t.typ)
 		}
 		err = writer.WriteChannelInfo(&libmcap.ChannelInfo{
 			ChannelID:       t.id,
@@ -185,6 +183,9 @@ func DB3ToMCAP(db *sql.DB, w io.Writer, searchdirs []string) error {
 				"offered_qos_profiles": t.offeredQOSProfiles,
 			},
 		})
+		if err != nil {
+			return fmt.Errorf("failed to write channel info: %w", err)
+		}
 	}
 	seq := make(map[uint16]uint32)
 	err = transformMessages(db, func(rows *sql.Rows) error {

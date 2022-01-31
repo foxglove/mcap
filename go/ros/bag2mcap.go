@@ -27,7 +27,7 @@ const (
 	OpBagChunkInfo   = 0x06
 )
 
-func getUint32(buf []byte, offset int) (uint32, int, error) {
+func getUint32(buf []byte, offset int) (result uint32, newoffset int, err error) {
 	if len(buf[offset:]) < 4 {
 		return 0, 0, fmt.Errorf("short buffer")
 	}

@@ -115,23 +115,22 @@ func TestMessageReading(t *testing.T) {
 						Profile: "ros1",
 					})
 					assert.Nil(t, err)
-					err = w.WriteChannelInfo(&ChannelInfo{
+					assert.Nil(t, w.WriteChannelInfo(&ChannelInfo{
 						ChannelID:       0,
 						TopicName:       "/test1",
 						SchemaEncoding:  "msg",
 						MessageEncoding: "ros1",
 						SchemaName:      "foo",
 						Schema:          []byte{},
-					})
-					err = w.WriteChannelInfo(&ChannelInfo{
+					}))
+					assert.Nil(t, w.WriteChannelInfo(&ChannelInfo{
 						ChannelID:       1,
 						TopicName:       "/test2",
 						MessageEncoding: "ros1",
 						SchemaEncoding:  "msg",
 						SchemaName:      "foo",
 						Schema:          []byte{},
-					})
-					assert.Nil(t, err)
+					}))
 					for i := 0; i < 1000; i++ {
 						err := w.WriteMessage(&Message{
 							ChannelID:   uint16(i % 2),
@@ -275,7 +274,7 @@ func TestMCAPInfo(t *testing.T) {
 		"/image_color/compressed": 234,
 	}
 	for k, v := range info.ChannelCounts() {
-		assert.Equal(t, expectedCounts[k], v, "mismatch on %s - got %d", k, uint64(v))
+		assert.Equal(t, expectedCounts[k], v, "mismatch on %s - got %d", k, v)
 	}
 }
 
