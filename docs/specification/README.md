@@ -161,8 +161,8 @@ The message encoding must match that of the channel info record corresponding to
 | --- | --- | --- | --- |
 | 2 | channel_id | uint16 | Channel ID |
 | 4 | sequence | uint32 | Optional message counter assigned by publisher. If not assigned by publisher, must be recorded by the recorder. |
-| 8 | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the record time. |
-| 8 | record_time | Timestamp | Time at which the message was recorded by the recorder process. |
+| 8 | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time. |
+| 8 | log_time | Timestamp | Time at which the message was recorded. |
 | N | message_data | Bytes | Message data, to be decoded according to the schema of the channel. |
 
 ### Chunk (op=0x05)
@@ -173,8 +173,8 @@ All messages in the chunk must reference channel infos recorded earlier in the f
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 8 | start_time | Timestamp | Earliest message record_time in the chunk. |
-| 8 | end_time | Timestamp | Latest message record_time in the chunk. |
+| 8 | start_time | Timestamp | Earliest message log_time in the chunk. |
+| 8 | end_time | Timestamp | Latest message log_time in the chunk. |
 | 8 | uncompressed_size | uint64 | Uncompressed size of the `records` field. |
 | 4 | uncompressed_crc | uint32 | CRC32 checksum of uncompressed `records` field. A value of zero indicates that CRC validation should not be performed. |
 | 4 + N | compression | String | compression algorithm. i.e. `lz4`, `zstd`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression formats]. |
@@ -189,7 +189,7 @@ A sequence of Message Index records occurs immediately after each chunk. Exactly
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 2 | channel_id | uint16 | Channel ID. |
-| 4 + N | records | Array<Tuple<Timestamp, uint64>> | Array of record_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
+| 4 + N | records | Array<Tuple<Timestamp, uint64>> | Array of log_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
 
 Messages outside of chunks cannot be indexed.
 
@@ -201,8 +201,8 @@ A Chunk Index record exists for every Chunk in the file.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 8 | start_time | Timestamp | Earliest message record_time in the chunk. |
-| 8 | end_time | Timestamp | Latest message record_time in the chunk. |
+| 8 | start_time | Timestamp | Earliest message log_time in the chunk. |
+| 8 | end_time | Timestamp | Latest message log_time in the chunk. |
 | 8 | chunk_start_offset | uint64 | Offset to the chunk record from the start of the file. |
 | 8 | chunk_length | uint64 | The byte length of the chunk record. |
 | 4 + N | message_index_offsets | Map<uint16, uint64> | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. An empty map indicates no message indexing is available. |
@@ -225,7 +225,7 @@ Attachment records must not appear within a chunk.
 | --- | --- | --- | --- |
 | 4 + N | name | String | Name of the attachment, e.g "scene1.jpg". |
 | 8 | created_at | Timestamp | Time at which the attachment was created. |
-| 8 | record_time | Timestamp | Time at which the attachment was recorded. |
+| 8 | log_time | Timestamp | Time at which the attachment was recorded. |
 | 4 + N | content_type | String | MIME Type (e.g "text/plain"). |
 | 8 + N | data | uint64 length-prefixed Bytes | Attachment data. |
 | 4 | crc | uint32 | CRC32 checksum of preceding fields in the record. A value of zero indicates that CRC validation should not be performed. |
@@ -238,7 +238,7 @@ An Attachment Index record contains the location of an attachment in the file. A
 | --- | --- | --- | --- |
 | 8 | offset | uint64 | Byte offset from the start of the file to the attachment record. |
 | 8 | length | uint64 | Byte length of the record. |
-| 8 | record_time | Timestamp | Timestamp at which the attachment was recorded. |
+| 8 | log_time | Timestamp | Timestamp at which the attachment was recorded. |
 | 8 | data_size | uint64 | Size of the attachment data. |
 | 4 + N | name | String | Name of the attachment. |
 | 4 + N | content_type | String | MIME type of the attachment. |
