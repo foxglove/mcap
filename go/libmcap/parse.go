@@ -51,10 +51,7 @@ func ParseChunk(buf []byte) (*Chunk, error) {
 
 func ParseMessageIndex(buf []byte) (*MessageIndex, error) {
 	channelID, offset := getUint16(buf, 0)
-	records, _, err := readMessageIndexEntries(buf, offset)
-	if err != nil {
-		return nil, err
-	}
+	records, _ := readMessageIndexEntries(buf, offset)
 	return &MessageIndex{
 		ChannelID: channelID,
 		Records:   records,
@@ -95,7 +92,7 @@ func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
 	if err != nil {
 		return nil, err
 	}
-	contentType, offset, err := readPrefixedString(buf, offset)
+	contentType, _, err := readPrefixedString(buf, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +204,7 @@ func ParseSummaryOffset(buf []byte) (*SummaryOffset, error) {
 	groupOpcode := buf[0]
 	offset := 1
 	groupStart, offset := getUint64(buf, offset)
-	groupLength, offset := getUint64(buf, offset)
+	groupLength, _ := getUint64(buf, offset)
 	return &SummaryOffset{
 		GroupOpcode: OpCode(groupOpcode),
 		GroupStart:  groupStart,
@@ -243,4 +240,20 @@ func ParseStatistics(buf []byte) (*Statistics, error) {
 		ChunkCount:           chunkCount,
 		ChannelMessageCounts: channelMessageCounts,
 	}, nil
+}
+
+func readMessageIndexEntries(data []byte, offset int) (entries []MessageIndexEntry, newoffset int) {
+	entriesByteLength, offset := getUint32(data, offset)
+	var value, stamp uint64
+	var start = offset
+	entries = make([]MessageIndexEntry, 0, (len(data)-2)/(8+8))
+	for uint32(offset) < uint32(start)+entriesByteLength {
+		stamp, offset = getUint64(data, offset)
+		value, offset = getUint64(data, offset)
+		entries = append(entries, MessageIndexEntry{
+			Timestamp: stamp,
+			Offset:    value,
+		})
+	}
+	return entries, offset
 }

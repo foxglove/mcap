@@ -27,7 +27,7 @@ func TestMCAPReadWrite(t *testing.T) {
 		profile, offset, err := readPrefixedString(data, offset)
 		assert.Nil(t, err)
 		assert.Equal(t, "ros1", profile)
-		library, offset, err := readPrefixedString(data, offset)
+		library, _, err := readPrefixedString(data, offset)
 		assert.Nil(t, err)
 		assert.Equal(t, "", library)
 		assert.Equal(t, TokenHeader, token.TokenType)
@@ -93,7 +93,8 @@ func TestChunkedReadWrite(t *testing.T) {
 				tok, err := lexer.Next()
 				assert.Nil(t, err)
 				_ = tok.bytes() // need to read the data
-				assert.Equal(t, expected, tok.TokenType, fmt.Sprintf("want %s got %s at %d", Token{expected, 0, nil}, tok.TokenType, i))
+				assert.Equal(t, expected, tok.TokenType,
+					fmt.Sprintf("want %s got %s at %d", Token{expected, 0, nil}, tok.TokenType, i))
 			}
 		})
 	}

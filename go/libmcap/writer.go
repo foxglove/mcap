@@ -131,13 +131,12 @@ func (w *Writer) WriteMessage(m *Message) error {
 	w.ensureSized(msglen)
 	offset := putUint16(w.msg, m.ChannelID)
 	offset += putUint32(w.msg[offset:], m.Sequence)
-	offset += putUint64(w.msg[offset:], uint64(m.PublishTime))
-	offset += putUint64(w.msg[offset:], uint64(m.RecordTime))
+	offset += putUint64(w.msg[offset:], m.PublishTime)
+	offset += putUint64(w.msg[offset:], m.RecordTime)
 	offset += copy(w.msg[offset:], m.Data)
 	w.stats.ChannelMessageCounts[m.ChannelID]++
 	w.stats.MessageCount++
 	if w.chunked {
-
 		// TODO preallocate or maybe fancy structure. These could be conserved
 		// across chunks too, which might work ok assuming similar numbers of
 		// messages/chan/chunk.
@@ -182,8 +181,8 @@ func (w *Writer) WriteMessageIndex(idx *MessageIndex) error {
 	offset := putUint16(w.msg, idx.ChannelID)
 	offset += putUint32(w.msg[offset:], uint32(datalen))
 	for _, v := range idx.Records {
-		offset += putUint64(w.msg[offset:], uint64(v.Timestamp))
-		offset += putUint64(w.msg[offset:], uint64(v.Offset))
+		offset += putUint64(w.msg[offset:], v.Timestamp)
+		offset += putUint64(w.msg[offset:], v.Offset)
 	}
 	_, err := w.writeRecord(w.w, OpMessageIndex, w.msg[:offset])
 	return err
@@ -483,8 +482,7 @@ type WriterOptions struct {
 
 func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	writer := NewWriteSizer(w)
-	_, err := writer.Write(Magic)
-	if err != nil {
+	if _, err := writer.Write(Magic); err != nil {
 		return nil, err
 	}
 	compressed := bytes.Buffer{}

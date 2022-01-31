@@ -106,15 +106,15 @@ func putByte(buf []byte, x byte) int {
 	return 1
 }
 
-func getUint16(buf []byte, offset int) (uint16, int) {
+func getUint16(buf []byte, offset int) (x uint16, newoffset int) {
 	return binary.LittleEndian.Uint16(buf[offset:]), offset + 2
 }
 
-func getUint32(buf []byte, offset int) (uint32, int) {
+func getUint32(buf []byte, offset int) (x uint32, newoffset int) {
 	return binary.LittleEndian.Uint32(buf[offset:]), offset + 4
 }
 
-func getUint64(buf []byte, offset int) (uint64, int) {
+func getUint64(buf []byte, offset int) (x uint64, newoffset int) {
 	return binary.LittleEndian.Uint64(buf[offset:]), offset + 8
 }
 
@@ -283,7 +283,7 @@ type Info struct {
 	End          time.Time
 }
 
-func (i Info) ChannelCounts() map[string]uint64 {
+func (i *Info) ChannelCounts() map[string]uint64 {
 	counts := make(map[string]uint64)
 	for k, v := range i.Statistics.ChannelMessageCounts {
 		channel := i.Channels[k]
@@ -292,7 +292,7 @@ func (i Info) ChannelCounts() map[string]uint64 {
 	return counts
 }
 
-func (i Info) String() string {
+func (i *Info) String() string {
 	buf := &bytes.Buffer{}
 	start := uint64(math.MaxUint64)
 	end := uint64(0)
@@ -340,7 +340,11 @@ func (i Info) String() string {
 	})
 	for _, chanID := range chanIDs {
 		channel := i.Channels[chanID]
-		fmt.Fprintf(buf, "\t(%d) %s: %d msgs\n", channel.ChannelID, channel.TopicName, i.Statistics.ChannelMessageCounts[chanID])
+		fmt.Fprintf(buf, "\t(%d) %s: %d msgs\n",
+			channel.ChannelID,
+			channel.TopicName,
+			i.Statistics.ChannelMessageCounts[chanID],
+		)
 	}
 	fmt.Fprintf(buf, "attachments: %d", i.Statistics.AttachmentCount)
 	return buf.String()
