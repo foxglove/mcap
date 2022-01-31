@@ -168,7 +168,10 @@ func Bag2MCAP(r io.Reader, w io.Writer) error {
 	}
 	defer writer.Close()
 
-	err = writer.WriteHeader("ros1", "golang-bag2mcap", map[string]string{"name": "my funky mcap file"})
+	err = writer.WriteHeader(&libmcap.Header{
+		Profile: "ros1",
+		Library: "golang-mcap-v0",
+	})
 	if err != nil {
 		return err
 	}
@@ -197,12 +200,12 @@ func Bag2MCAP(r io.Reader, w io.Writer) error {
 				return err
 			}
 			channelInfo := &libmcap.ChannelInfo{
-				ChannelID:  connID,
-				TopicName:  string(topic),
-				Encoding:   "ros1",
-				SchemaName: string(typ),
-				Schema:     msgdef,
-				UserData: map[string]string{
+				ChannelID:       connID,
+				TopicName:       string(topic),
+				MessageEncoding: "ros1",
+				SchemaName:      string(typ),
+				Schema:          msgdef,
+				Metadata: map[string]string{
 					"md5sum": string(md5sum),
 				},
 			}
