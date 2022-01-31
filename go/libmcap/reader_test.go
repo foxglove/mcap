@@ -111,21 +111,25 @@ func TestMessageReading(t *testing.T) {
 						IncludeCRC:  true,
 					})
 					assert.Nil(t, err)
-					err = w.WriteHeader("ros1", "", map[string]string{"foo": "bar"})
+					err = w.WriteHeader(&Header{
+						Profile: "ros1",
+					})
 					assert.Nil(t, err)
 					err = w.WriteChannelInfo(&ChannelInfo{
-						ChannelID:  0,
-						TopicName:  "/test1",
-						Encoding:   "ros1",
-						SchemaName: "foo",
-						Schema:     []byte{},
+						ChannelID:       0,
+						TopicName:       "/test1",
+						SchemaEncoding:  "msg",
+						MessageEncoding: "ros1",
+						SchemaName:      "foo",
+						Schema:          []byte{},
 					})
 					err = w.WriteChannelInfo(&ChannelInfo{
-						ChannelID:  1,
-						TopicName:  "/test2",
-						Encoding:   "ros1",
-						SchemaName: "foo",
-						Schema:     []byte{},
+						ChannelID:       1,
+						TopicName:       "/test2",
+						MessageEncoding: "ros1",
+						SchemaEncoding:  "msg",
+						SchemaName:      "foo",
+						Schema:          []byte{},
 					})
 					assert.Nil(t, err)
 					for i := 0; i < 1000; i++ {
@@ -223,7 +227,10 @@ func TestMessageReading(t *testing.T) {
 }
 
 func TestReaderCounting(t *testing.T) {
-	for _, indexed := range []bool{true, false} {
+	for _, indexed := range []bool{
+		true,
+		false,
+	} {
 		t.Run(fmt.Sprintf("indexed %v", indexed), func(t *testing.T) {
 			f, err := os.Open("../../testdata/mcap/demo.mcap")
 			assert.Nil(t, err)
@@ -270,4 +277,25 @@ func TestMCAPInfo(t *testing.T) {
 	for k, v := range info.ChannelCounts() {
 		assert.Equal(t, expectedCounts[k], v, "mismatch on %s - got %d", k, uint64(v))
 	}
+}
+
+func TestReadingDiagnostics(t *testing.T) {
+	f, err := os.Open("../../testdata/mcap/demo.mcap")
+	assert.Nil(t, err)
+	defer f.Close()
+	assert.Nil(t, err)
+	r, err := NewReader(f)
+	assert.Nil(t, err)
+	it, err := r.Messages(0, time.Now().UnixNano(), []string{"/diagnostics"}, true)
+	assert.Nil(t, err)
+	c := 0
+	for {
+		_, _, err := it.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		assert.Nil(t, err)
+		c++
+	}
+	assert.Equal(t, 52, c)
 }
