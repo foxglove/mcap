@@ -1,17 +1,11 @@
+import { Mcap0Types, Mcap0Constants, Mcap0RecordBuilder, Mcap0ChunkBuilder } from "@foxglove/mcap";
 import { program } from "commander";
 import fs from "fs/promises";
 import path from "path";
 
-import { Mcap0StreamReader } from "../src";
-import {
-  AttachmentIndex,
-  ChunkIndex,
-  Mcap0RecordBuilder,
-  MetadataIndex,
-  TypedMcapRecords,
-} from "../src/v0";
-import { ChunkBuilder } from "../src/v0/ChunkBuilder";
-import { Opcode } from "../src/v0/constants";
+type MetadataIndex = Mcap0Types.MetadataIndex;
+type ChunkIndex = Mcap0Types.ChunkIndex;
+type AttachmentIndex = Mcap0Types.AttachmentIndex;
 
 enum TestFeatures {
   UseChunks = "ch",
@@ -25,18 +19,22 @@ enum TestFeatures {
   AddExtraDataToRecords = "pad",
 }
 
-function* generateVariants(...variables: TestFeatures[]): Generator<Set<TestFeatures>, void, void> {
-  if (variables.length === 0) {
+function* generateVariants(...features: TestFeatures[]): Generator<Set<TestFeatures>, void, void> {
+  if (features.length === 0) {
     yield new Set();
     return;
   }
-  for (const variant of generateVariants(...variables.slice(1))) {
+  for (const variant of generateVariants(...features.slice(1))) {
     yield variant;
-    yield new Set([variables[0]!, ...variant]);
+    yield new Set([features[0]!, ...variant]);
   }
 }
 
-type TestDataRecord = TypedMcapRecords["Message" | "ChannelInfo" | "Attachment" | "Metadata"];
+type TestDataRecord = Mcap0Types.TypedMcapRecords[
+  | "Message"
+  | "ChannelInfo"
+  | "Attachment"
+  | "Metadata"];
 
 function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   const builder = new Mcap0RecordBuilder({
@@ -45,7 +43,7 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   builder.writeMagic();
   builder.writeHeader({ profile: "", library: "" });
 
-  const chunk = variant.has(TestFeatures.UseChunks) ? new ChunkBuilder() : undefined;
+  const chunk = variant.has(TestFeatures.UseChunks) ? new Mcap0ChunkBuilder() : undefined;
   const chunkCount = chunk ? 1 : 0;
 
   const metadataIndexes: MetadataIndex[] = [];
@@ -168,17 +166,17 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   if (variant.has(TestFeatures.UseSummaryOffset)) {
     summaryOffsetStart = BigInt(builder.length);
     builder.writeSummaryOffset({
-      groupOpcode: Opcode.METADATA_INDEX,
+      groupOpcode: Mcap0Constants.Opcode.METADATA_INDEX,
       groupStart: metadataIndexStart,
       groupLength: metadataIndexLength,
     });
     builder.writeSummaryOffset({
-      groupOpcode: Opcode.ATTACHMENT_INDEX,
+      groupOpcode: Mcap0Constants.Opcode.ATTACHMENT_INDEX,
       groupStart: attachmentIndexStart,
       groupLength: attachmentIndexLength,
     });
     builder.writeSummaryOffset({
-      groupOpcode: Opcode.CHUNK_INDEX,
+      groupOpcode: Mcap0Constants.Opcode.CHUNK_INDEX,
       groupStart: chunkIndexStart,
       groupLength: chunkIndexLength,
     });
@@ -195,51 +193,16 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   return builder.buffer;
 }
 
-interface TestRunner {
-  // supports(variant: Set<TestFeatures>): boolean;
-
-  readonly name: string;
-
-  readonly supportsDataOnly: boolean;
-  readonly supportsDataAndSummary: boolean;
-  readonly supportsDataAndSummaryWithOffsets: boolean;
-  run(filePath: string): Promise<string[]>;
-}
-
-class TypescriptStreamedTestRunner implements TestRunner {
-  name = "ts-stream";
-  supportsDataOnly = true;
-  supportsDataAndSummary = true;
-  supportsDataAndSummaryWithOffsets = true;
-  async run(filePath: string): Promise<string[]> {
-    const result = [];
-    const reader = new Mcap0StreamReader({ validateCrcs: true });
-    reader.append(await fs.readFile(filePath));
-    let record;
-    while ((record = reader.nextRecord())) {
-      result.push(
-        JSON.stringify(record, (_key, value) =>
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-          typeof value === "bigint" ? `BigInt(${value})` : value,
-        ),
-      );
-    }
-    if (!reader.done()) {
-      throw new Error("Reader not done");
-    }
-    return result;
-  }
-}
 const inputs: { name: string; records: TestDataRecord[] }[] = [{ name: "NoData", records: [] }];
 
-const runners: TestRunner[] = [new TypescriptStreamedTestRunner()];
-
-async function main(options: { testDir: string; runner: string; update: boolean }) {
-  const runner = runners.find((r) => r.name === options.runner);
-  if (!runner) {
-    throw new Error(`No runner named ${options.runner}`);
-  }
-  await fs.mkdir(options.testDir);
+async function main(options: { dataDir: string; verify: boolean }) {
+  let hadError = false;
+  await fs.mkdir(options.dataDir, { recursive: true });
+  const unexpectedFilePaths = new Set(
+    (await fs.readdir(options.dataDir))
+      .filter((name) => name.endsWith(".mcap"))
+      .map((name) => path.join(options.dataDir, name)),
+  );
 
   for (const { name, records } of inputs) {
     for (const variant of generateVariants(...Object.values(TestFeatures))) {
@@ -284,22 +247,40 @@ async function main(options: { testDir: string; runner: string; update: boolean 
       }
 
       const prefix = [name, ...Array.from(variant).sort()].join("-");
-
+      const filePath = path.join(options.dataDir, `${prefix}.mcap`);
       const data = generateFile(variant, records);
-      const filePath = path.join(options.testDir, `${prefix}.mcap`);
-      const expectedOutputPath = path.join(options.testDir, `${prefix}.txt`);
-      console.log("running", filePath);
-      await fs.writeFile(filePath, data);
-      const output = await runner.run(filePath);
-      if (options.update) {
-        await fs.writeFile(expectedOutputPath, output.join("\n"));
-      } else {
-        const expectedOutput = await fs.readFile(expectedOutputPath, { encoding: "utf-8" });
-        if (output.join("\n") !== expectedOutput) {
-          throw new Error("output did not match expected");
+
+      unexpectedFilePaths.delete(filePath);
+
+      if (options.verify) {
+        try {
+          const existingData = await fs.readFile(filePath);
+          if (existingData.equals(data)) {
+            console.log(`  ok         ${filePath}`);
+          } else {
+            console.log(`* outdated   ${filePath}`);
+            hadError = true;
+          }
+        } catch (error) {
+          console.log(`- missing    ${filePath}`);
+          hadError = true;
         }
+      } else {
+        console.log("generated", filePath);
+        await fs.writeFile(filePath, data);
       }
     }
+  }
+
+  if (options.verify) {
+    for (const filePath of unexpectedFilePaths) {
+      console.log(`+ unexpected ${filePath}`);
+      hadError = true;
+    }
+  }
+
+  if (hadError) {
+    process.exit(1);
   }
 }
 
@@ -330,11 +311,7 @@ expect:
 */
 
 program
-  .requiredOption("--test-dir <testDir>", "directory to output test data")
-  .requiredOption("--runner <runnner>", "test runner to use")
-  .option("--update", "update expected output files", false)
-  .action(async (options) => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-    await main(options);
-  })
+  .requiredOption("--data-dir <dataDir>", "directory to output test data")
+  .option("--verify", "verify generated tests are up to date")
+  .action(main)
   .parse();
