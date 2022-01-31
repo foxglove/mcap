@@ -218,8 +218,7 @@ func (w *Writer) WriteChannelInfo(c *ChannelInfo) error {
 		4 + len(c.SchemaEncoding) +
 		4 + len(c.Schema) +
 		4 + len(c.SchemaName) +
-		len(userdata) +
-		4) // crc
+		len(userdata))
 	w.ensureSized(msglen)
 	offset := putUint16(w.msg, c.ChannelID)
 	offset += putPrefixedString(w.msg[offset:], c.TopicName)
@@ -228,8 +227,6 @@ func (w *Writer) WriteChannelInfo(c *ChannelInfo) error {
 	offset += putPrefixedBytes(w.msg[offset:], c.Schema)
 	offset += putPrefixedString(w.msg[offset:], c.SchemaName)
 	offset += copy(w.msg[offset:], userdata)
-	crc := crc32.ChecksumIEEE(w.msg[:offset])
-	offset += putUint32(w.msg[offset:], crc)
 	var err error
 	if w.chunked {
 		_, err = w.writeRecord(w.compressedWriter, OpChannelInfo, w.msg[:offset])
