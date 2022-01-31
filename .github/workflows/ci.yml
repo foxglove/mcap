@@ -16,7 +16,8 @@ jobs:
           node-version: 16.x
           cache: yarn
 
-      - run: yarn test:conformance:generate --verify
+      - run: yarn test:conformance:generate-inputs --verify
+      - run: yarn test:conformance
 
   docs:
     runs-on: ubuntu-latest
@@ -66,7 +67,6 @@ jobs:
       - uses: actions/checkout@v2
       - run: git lfs pull
       - name: install golangci-lint
-        run:
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.41.1
+        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.41.1
       - run: make lint
       - run: make test

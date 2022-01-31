@@ -1,0 +1,6 @@
+{"type":"Header","profile":"","library":""}
+{"type":"Statistics","messageCount":"BigInt(0)","channelCount":0,"attachmentCount":0,"chunkCount":0,"channelMessageCounts":{}}
+{"type":"SummaryOffset","groupOpcode":12,"groupStart":"BigInt(64)","groupLength":"BigInt(0)"}
+{"type":"SummaryOffset","groupOpcode":9,"groupStart":"BigInt(64)","groupLength":"BigInt(0)"}
+{"type":"SummaryOffset","groupOpcode":7,"groupStart":"BigInt(64)","groupLength":"BigInt(0)"}
+{"type":"Footer","summaryStart":"BigInt(0)","summaryOffsetStart":"BigInt(64)","crc":0}
