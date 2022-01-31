@@ -1,0 +1,4 @@
+**/*.pyc
+build
+dist
+src/mcap.egg-info
