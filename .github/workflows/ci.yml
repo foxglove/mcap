@@ -16,6 +16,7 @@ jobs:
           node-version: 16.x
           cache: yarn
 
+      - run: yarn install --frozen-lockfile
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance
 
