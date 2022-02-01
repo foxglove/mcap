@@ -114,7 +114,9 @@ Record type is a single byte opcode, and record content length is a uint64 value
 
 Records may be extended by adding new fields at the end of existing fields. Readers should ignore any unknown fields.
 
-The Footer record will not be extended.
+> The Footer record will not be extended.
+
+Each record definition below contains a `Type` column. See the [Serialization](#serialization) section on how to serialize each type.
 
 ### Header (op=0x01)
 
@@ -296,17 +298,17 @@ A Data End record indicates the end of the data section.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 4 | data_section_crc | int32 | CRC32 of all bytes in the data section. A value of 0 indicates the CRC32 is not available. |
+| 4 | data_section_crc | uint32 | CRC32 of all bytes in the data section. A value of 0 indicates the CRC32 is not available. |
 
 ## Serialization
 
 ### Fixed-width types
 
-Multi-byte integers (uint16, uint32, uint64) are serialized using [little-endian byte order](https://en.wikipedia.org/wiki/Endianness).
+Multi-byte integers (`uint16`, `uint32`, `uint64`) are serialized using [little-endian byte order](https://en.wikipedia.org/wiki/Endianness).
 
 ### String
 
-Strings are serialized using a uint32 byte length followed by the string data, which should be valid [UTF-8](https://en.wikipedia.org/wiki/UTF-8).
+Strings are serialized using a `uint32` byte length followed by the string data, which should be valid [UTF-8](https://en.wikipedia.org/wiki/UTF-8).
 
     <byte length><utf-8 bytes>
 
@@ -336,23 +338,25 @@ A Tuple<uint16, string>:
 
 ### Array<array_type>
 
-Arrays are serialized using a uint32 byte length followed by the serialized array elements.
+Arrays are serialized using a `uint32` byte length followed by the serialized array elements.
 
     <byte length><serialized element><serialized element>...
 
-An array of uint32 is specified as Array<uint32> and serialized as:
+An array of uint64 is specified as Array<uint64> and serialized as:
 
-    <byte length><uint32><uint32><uint32>...
+    <byte length><uint64><uint64><uint64>...
+
+> Since arrays use a `uint32` byte length prefix, the maximum size of the serialized array elements cannot exceed 4,294,967,295 bytes.
 
 ### Timestamp
 
-uint64 nanoseconds since a user-understood epoch (i.e unix epoch, robot boot time, etc.)
+`uint64` nanoseconds since a user-understood epoch (i.e unix epoch, robot boot time, etc.)
 
 ### Map<key_type, value_type>
 
 A Map is an [association](https://en.wikipedia.org/wiki/Associative_array) of keys to values. Duplicate keys are not allowed.
 
-A map is serialized as an array of tuples i.e. `Array<Tuple<key_type, value_type>>`. See array and tuple serialization.
+A map is serialized as an array of tuples i.e. `Array<Tuple<key_type, value_type>>`. See Array and Tuple serialization.
 
 ## Diagrams
 
