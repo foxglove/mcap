@@ -159,7 +159,7 @@ func processBag(
 	return nil
 }
 
-func Bag2MCAP(r io.Reader, w io.Writer) error {
+func Bag2MCAP(w io.Writer, r io.Reader) error {
 	writer, err := libmcap.NewWriter(w, &libmcap.WriterOptions{
 		Chunked:     true,
 		ChunkSize:   4 * 1024 * 1024,

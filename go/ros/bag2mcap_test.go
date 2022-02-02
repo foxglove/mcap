@@ -36,7 +36,7 @@ func BenchmarkBag2MCAP(b *testing.B) {
 				t0 := time.Now()
 				reader.Reset(input)
 				writer.Reset()
-				err = Bag2MCAP(reader, writer)
+				err = Bag2MCAP(writer, reader)
 				assert.Nil(b, err)
 				elapsed := time.Since(t0)
 				mbread := stats.Size() / (1024 * 1024)
