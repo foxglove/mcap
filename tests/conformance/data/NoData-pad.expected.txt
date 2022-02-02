@@ -1,2 +1,2 @@
 Header profile="" library=""
-Footer summaryStart=28 summaryOffsetStart=0
+Footer summaryStart=0 summaryOffsetStart=0

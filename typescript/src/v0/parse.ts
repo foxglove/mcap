@@ -370,5 +370,13 @@ export function parseRecord({
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
+    case Opcode.DATA_END: {
+      const dataSectionCrc = reader.uint32();
+      const record: TypedMcapRecord = {
+        type: "DataEnd",
+        dataSectionCrc,
+      };
+      return { record, usedBytes: recordEndOffset - startOffset };
+    }
   }
 }

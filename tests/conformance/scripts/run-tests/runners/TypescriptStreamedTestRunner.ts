@@ -15,6 +15,10 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
     return result;
   }
   switch (record.type) {
+    case "Chunk":
+    case "DataEnd":
+      throw new Error(`${record.type} record not expected in conformance test output`);
+
     case "Header":
       return (
         "Header " +
@@ -55,8 +59,6 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
           ["messageData", stringifyData(record.messageData)],
         ])
       );
-    case "Chunk":
-      throw new Error("TODO: how to handle chunks?");
     case "MessageIndex":
       return (
         "MessageIndex " +

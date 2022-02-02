@@ -111,6 +111,12 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
       uncompressedSize: BigInt(chunk.buffer.byteLength),
       records: chunk.buffer,
     });
+    const messageIndexOffsets = new Map<number, bigint>();
+    let messageIndexLength = 0n;
+    for (const index of chunk.indices) {
+      messageIndexOffsets.set(index.channelId, BigInt(builder.length));
+      messageIndexLength += builder.writeMessageIndex(index);
+    }
     chunkIndexes.push({
       compression: "",
       startTime: chunk.startTime,
@@ -119,15 +125,26 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
       compressedSize: BigInt(chunk.buffer.byteLength),
       chunkStart: offset,
       chunkLength: length,
-      messageIndexLength: 0n, //TODO
-      messageIndexOffsets: new Map(), //TODO
+      messageIndexLength,
+      messageIndexOffsets,
     });
   }
-  //TODO: data end
+
+  builder.writeDataEnd({ dataSectionCrc: 0 });
+
   const summaryStart = BigInt(builder.length);
 
-  // TODO: UseRepeatedChannelInfos
+  const repeatedChannelInfosStart = BigInt(builder.length);
+  if (variant.has(TestFeatures.UseRepeatedChannelInfos)) {
+    for (const record of records) {
+      if (record.type === "ChannelInfo") {
+        builder.writeChannelInfo(record);
+      }
+    }
+  }
+  const repeatedChannelInfosLength = BigInt(builder.length) - repeatedChannelInfosStart;
 
+  const statisticsStart = BigInt(builder.length);
   if (variant.has(TestFeatures.UseStatistics)) {
     builder.writeStatistics({
       attachmentCount,
@@ -137,6 +154,7 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
       channelMessageCounts,
     });
   }
+  const statisticsLength = BigInt(builder.length) - statisticsStart;
 
   // metadata indexes
   const metadataIndexStart = BigInt(builder.length);
@@ -159,17 +177,31 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   }
   const chunkIndexLength = BigInt(builder.length) - chunkIndexStart;
 
-  const hasSummary = BigInt(builder.length) === summaryStart;
+  const hasSummary = BigInt(builder.length) !== summaryStart;
 
   // summary offsets
   let summaryOffsetStart = 0n;
   if (variant.has(TestFeatures.UseSummaryOffset)) {
     summaryOffsetStart = BigInt(builder.length);
+    if (repeatedChannelInfosLength !== 0n) {
+      builder.writeSummaryOffset({
+        groupOpcode: Mcap0Constants.Opcode.METADATA_INDEX,
+        groupStart: repeatedChannelInfosStart,
+        groupLength: repeatedChannelInfosLength,
+      });
+    }
     builder.writeSummaryOffset({
       groupOpcode: Mcap0Constants.Opcode.METADATA_INDEX,
       groupStart: metadataIndexStart,
       groupLength: metadataIndexLength,
     });
+    if (statisticsLength !== 0n) {
+      builder.writeSummaryOffset({
+        groupOpcode: Mcap0Constants.Opcode.STATISTICS,
+        groupStart: statisticsStart,
+        groupLength: statisticsLength,
+      });
+    }
     builder.writeSummaryOffset({
       groupOpcode: Mcap0Constants.Opcode.ATTACHMENT_INDEX,
       groupStart: attachmentIndexStart,
@@ -181,8 +213,6 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
       groupLength: chunkIndexLength,
     });
   }
-
-  //TODO: statistics
 
   builder.writeFooter({
     summaryOffsetStart,
