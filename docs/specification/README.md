@@ -354,7 +354,7 @@ An array of uint64 is specified as Array<uint64> and serialized as:
 
 ### Map<key_type, value_type>
 
-A Map is an [association](https://en.wikipedia.org/wiki/Associative_array) of unique keys to values. Duplicate keys are not allowed.
+A Map is an [association](https://en.wikipedia.org/wiki/Associative_array) of unique keys to values.
 
 Maps are serialized using a `uint32` byte length followed by the serialized map key/value entries. The key and value entries are serialized according to their `key_type` and `value_type`.
 
