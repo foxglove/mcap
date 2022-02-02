@@ -149,7 +149,7 @@ Channel Info records are uniquely identified within a file by their channel ID. 
 | 4 + N | schema_encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. |
 | 4 + N | schema | uint32 lengh prefixed Bytes | Schema should conform to the schema_encoding. |
 | 4 + N | schema_name | String | An identifier for the schema. The schema name should conform to any schema_encoding requirements. |
-| 4 + N | metadata | Array<Tuple<string, string>> | Metadata about this channel |
+| 4 + N | metadata | Map<string, string> | Metadata about this channel |
 
 Channel Info records may be duplicated in the summary section.
 
@@ -268,7 +268,7 @@ A metadata record contains arbitrary user data in key-value pairs.
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 4 + N | name | String | Example: `map_metadata`. |
-| 4 + N | metadata | Array<Tuple<string, string>> | Example keys: `robot_id`, `git_sha`, `timezone`, `run_id`. |
+| 4 + N | metadata | Map<string, string> | Example keys: `robot_id`, `git_sha`, `timezone`, `run_id`. |
 
 ### Metadata Index (op=0x0C)
 
@@ -354,9 +354,17 @@ An array of uint64 is specified as Array<uint64> and serialized as:
 
 ### Map<key_type, value_type>
 
-A Map is an [association](https://en.wikipedia.org/wiki/Associative_array) of keys to values. Duplicate keys are not allowed.
+A Map is an [association](https://en.wikipedia.org/wiki/Associative_array) of unique keys to values.
 
-A map is serialized as an array of tuples i.e. `Array<Tuple<key_type, value_type>>`. See Array and Tuple serialization.
+Maps are serialized using a `uint32` byte length followed by the serialized map key/value entries. The key and value entries are serialized according to their `key_type` and `value_type`.
+
+    <byte length><key><value><key><value>...
+
+A `Map<string, string>` would be serialized as:
+
+    <byte length><uint32 key length><utf-8 key bytes><uint32 value length><utf-8 value bytes>...
+
+A serialization which has duplicate keys may cause indeterminate decoding.
 
 ## Diagrams
 
