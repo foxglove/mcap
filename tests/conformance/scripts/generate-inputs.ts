@@ -314,32 +314,6 @@ async function main(options: { dataDir: string; verify: boolean }) {
   }
 }
 
-/*
-
-channel info, then message (in same chunk)
-channel info, then message (in different chunk)
-channel info (duplicated in both chunks), then message (in 2nd chunk)
-*/
-// class TypescriptIndexedTestRunner implements TestRunner {
-//   supportsDataOnly = false;
-//   supportsDataAndSummary = true;
-//   supportsDataAndSummaryWithOffsets = true;
-//   async run(filePath: string) {}
-// }
-/*
-
-# NoData-sum.yaml
-
-expected-output:
-  - "expected output for passed runners"
-expect:
-  ts-stream: pass
-  ts-index: fail
-  cpp: unsupported
-  py: fail
-
-*/
-
 program
   .requiredOption("--data-dir <dataDir>", "directory to output test data")
   .option("--verify", "verify generated tests are up to date")

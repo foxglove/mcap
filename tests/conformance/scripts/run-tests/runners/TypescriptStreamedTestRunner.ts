@@ -159,9 +159,6 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
 
 export default class TypescriptStreamedTestRunner implements ITestRunner {
   name = "ts-stream";
-  supportsDataOnly = true;
-  supportsDataAndSummary = true;
-  supportsDataAndSummaryWithOffsets = true;
   async run(filePath: string): Promise<string[]> {
     const result = [];
     const reader = new Mcap0StreamReader({ validateCrcs: true });
