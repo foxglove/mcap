@@ -1,3 +1,3 @@
-{"type":"Header","profile":"","library":""}
-{"type":"Statistics","messageCount":"BigInt(0)","channelCount":0,"attachmentCount":0,"chunkCount":0,"channelMessageCounts":{}}
-{"type":"Footer","summaryStart":"BigInt(0)","summaryOffsetStart":"BigInt(0)","crc":0}
+Header profile="" library=""
+Statistics messageCount=0 channelCount=0 attachmentCount=0 chunkCount=0 channelMessageCounts={}
+Footer summaryStart=0 summaryOffsetStart=0

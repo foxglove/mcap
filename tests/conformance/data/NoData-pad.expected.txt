@@ -1,2 +1,2 @@
-{"type":"Header","profile":"","library":""}
-{"type":"Footer","summaryStart":"BigInt(28)","summaryOffsetStart":"BigInt(0)","crc":0}
+Header profile="" library=""
+Footer summaryStart=28 summaryOffsetStart=0
