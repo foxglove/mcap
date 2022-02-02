@@ -1,0 +1,16 @@
+{
+  "extends": "@foxglove/tsconfig/base",
+  "include": ["./**/*"],
+  "compilerOptions": {
+    "rootDir": "../..",
+    "noEmit": true,
+    "lib": ["es2020", "dom"],
+    "paths": {
+      "@foxglove/mcap": ["../../typescript/src"]
+    },
+    "baseUrl": "."
+  },
+  "ts-node": {
+    "require": ["tsconfig-paths/register"]
+  }
+}

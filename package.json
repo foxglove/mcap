@@ -2,11 +2,14 @@
   "private": true,
   "workspaces": {
     "packages": [
-      "typescript"
+      "typescript",
+      "tests/conformance"
     ]
   },
   "scripts": {
-    "lint:docs": "prettier docs --check"
+    "lint:docs": "prettier docs --check",
+    "test:conformance:generate-inputs": "yarn workspace @foxglove/mcap-conformance generate-inputs --data-dir \"$(pwd)/tests/conformance/data\"",
+    "test:conformance": "yarn workspace @foxglove/mcap-conformance run-tests --data-dir \"$(pwd)/tests/conformance/data\""
   },
   "devDependencies": {
     "prettier": "^2.5.1"
