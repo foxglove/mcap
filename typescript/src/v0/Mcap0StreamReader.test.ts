@@ -68,6 +68,9 @@ describe("Mcap0StreamReader", () => {
           ...string("lz4"), // compression
           // no chunk data
         ]),
+        ...record(Opcode.DATA_END, [
+          ...uint32LE(0), // data section crc
+        ]),
         ...record(Opcode.FOOTER, [
           ...uint64LE(0n), // summary start
           ...uint64LE(0n), // summary offset start
@@ -250,18 +253,15 @@ describe("Mcap0StreamReader", () => {
       new Uint8Array([
         ...MCAP0_MAGIC,
 
-        ...record(
-          Opcode.CHANNEL_INFO,
-          crcSuffix([
-            ...uint16LE(1), // channel id
-            ...string("mytopic"), // topic
-            ...string("utf12"), // message encoding
-            ...string("json"), // schema encoding
-            ...string("stuff"), // schema
-            ...string("some data"), // schema name
-            ...keyValues(string, string, [["foo", "bar"]]), // user data
-          ]),
-        ),
+        ...record(Opcode.CHANNEL_INFO, [
+          ...uint16LE(1), // channel id
+          ...string("mytopic"), // topic
+          ...string("utf12"), // message encoding
+          ...string("json"), // schema encoding
+          ...string("stuff"), // schema
+          ...string("some data"), // schema name
+          ...keyValues(string, string, [["foo", "bar"]]), // user data
+        ]),
 
         ...record(Opcode.FOOTER, [
           ...uint64LE(0n), // summary start
@@ -291,18 +291,15 @@ describe("Mcap0StreamReader", () => {
   });
 
   it.each([true, false])("parses channel info in chunk (compressed: %s)", (compressed) => {
-    const channelInfo = record(
-      Opcode.CHANNEL_INFO,
-      crcSuffix([
-        ...uint16LE(1), // channel id
-        ...string("mytopic"), // topic
-        ...string("utf12"), // message encoding
-        ...string("json"), // schema encoding
-        ...string("stuff"), // schema
-        ...string("some data"), // schema name
-        ...keyValues(string, string, [["foo", "bar"]]), // user data
-      ]),
-    );
+    const channelInfo = record(Opcode.CHANNEL_INFO, [
+      ...uint16LE(1), // channel id
+      ...string("mytopic"), // topic
+      ...string("utf12"), // message encoding
+      ...string("json"), // schema encoding
+      ...string("stuff"), // schema
+      ...string("some data"), // schema name
+      ...keyValues(string, string, [["foo", "bar"]]), // user data
+    ]);
     const decompressHandlers = { xyz: () => channelInfo };
     const reader = new Mcap0StreamReader(compressed ? { decompressHandlers } : undefined);
     reader.append(
@@ -351,95 +348,77 @@ describe("Mcap0StreamReader", () => {
       it.each([
         {
           key: "topic",
-          channelInfo2: record(
-            Opcode.CHANNEL_INFO,
-            crcSuffix([
-              ...uint16LE(42), // channel id
-              ...string("XXXXXXXX"), // topic
-              ...string("utf12"), // message encoding
-              ...string("json"), // schema encoding
-              ...string("stuff"), // schema
-              ...string("some data"), // schema name
-              ...keyValues(string, string, [["foo", "bar"]]), // user data
-            ]),
-          ),
-        },
-        {
-          key: "encoding",
-          channelInfo2: record(
-            Opcode.CHANNEL_INFO,
-            crcSuffix([
-              ...uint16LE(42), // channel id
-              ...string("mytopic"), // topic
-              ...string("XXXXXXXX"), // message encoding
-              ...string("json"), // schema encoding
-              ...string("stuff"), // schema
-              ...string("some data"), // schema name
-              ...keyValues(string, string, [["foo", "bar"]]), // user data
-            ]),
-          ),
-        },
-        {
-          key: "schema name",
-          channelInfo2: record(
-            Opcode.CHANNEL_INFO,
-            crcSuffix([
-              ...uint16LE(42), // channel id
-              ...string("mytopic"), // topic
-              ...string("utf12"), // message encoding
-              ...string("json"), // schema encoding
-              ...string("stuff"), // schema
-              ...string("XXXXXXXX"), // schema name
-              ...keyValues(string, string, [["foo", "bar"]]), // user data
-            ]),
-          ),
-        },
-        {
-          key: "schema",
-          channelInfo2: record(
-            Opcode.CHANNEL_INFO,
-            crcSuffix([
-              ...uint16LE(42), // channel id
-              ...string("mytopic"), // topic
-              ...string("utf12"), // message encoding
-              ...string("json"), // schema encoding
-              ...string("XXXXXXXX"), // schema
-              ...string("some data"), // schema name
-              ...keyValues(string, string, [["foo", "bar"]]), // user data
-            ]),
-          ),
-        },
-        {
-          key: "data",
-          channelInfo2: record(
-            Opcode.CHANNEL_INFO,
-            crcSuffix([
-              ...uint16LE(42), // channel id
-              ...string("mytopic"), // topic
-              ...string("utf12"), // message encoding
-              ...string("json"), // schema encoding
-              ...string("stuff"), // schema
-              ...string("some data"), // schema name
-              ...keyValues(string, string, [
-                ["foo", "bar"],
-                ["baz", "quux"],
-              ]), // user data
-            ]),
-          ),
-        },
-      ])("differing in $key", ({ channelInfo2 }) => {
-        const channelInfo = record(
-          Opcode.CHANNEL_INFO,
-          crcSuffix([
+          channelInfo2: record(Opcode.CHANNEL_INFO, [
             ...uint16LE(42), // channel id
-            ...string("mytopic"), // topic
+            ...string("XXXXXXXX"), // topic
             ...string("utf12"), // message encoding
             ...string("json"), // schema encoding
             ...string("stuff"), // schema
             ...string("some data"), // schema name
             ...keyValues(string, string, [["foo", "bar"]]), // user data
           ]),
-        );
+        },
+        {
+          key: "encoding",
+          channelInfo2: record(Opcode.CHANNEL_INFO, [
+            ...uint16LE(42), // channel id
+            ...string("mytopic"), // topic
+            ...string("XXXXXXXX"), // message encoding
+            ...string("json"), // schema encoding
+            ...string("stuff"), // schema
+            ...string("some data"), // schema name
+            ...keyValues(string, string, [["foo", "bar"]]), // user data
+          ]),
+        },
+        {
+          key: "schema name",
+          channelInfo2: record(Opcode.CHANNEL_INFO, [
+            ...uint16LE(42), // channel id
+            ...string("mytopic"), // topic
+            ...string("utf12"), // message encoding
+            ...string("json"), // schema encoding
+            ...string("stuff"), // schema
+            ...string("XXXXXXXX"), // schema name
+            ...keyValues(string, string, [["foo", "bar"]]), // user data
+          ]),
+        },
+        {
+          key: "schema",
+          channelInfo2: record(Opcode.CHANNEL_INFO, [
+            ...uint16LE(42), // channel id
+            ...string("mytopic"), // topic
+            ...string("utf12"), // message encoding
+            ...string("json"), // schema encoding
+            ...string("XXXXXXXX"), // schema
+            ...string("some data"), // schema name
+            ...keyValues(string, string, [["foo", "bar"]]), // user data
+          ]),
+        },
+        {
+          key: "data",
+          channelInfo2: record(Opcode.CHANNEL_INFO, [
+            ...uint16LE(42), // channel id
+            ...string("mytopic"), // topic
+            ...string("utf12"), // message encoding
+            ...string("json"), // schema encoding
+            ...string("stuff"), // schema
+            ...string("some data"), // schema name
+            ...keyValues(string, string, [
+              ["foo", "bar"],
+              ["baz", "quux"],
+            ]), // user data
+          ]),
+        },
+      ])("differing in $key", ({ channelInfo2 }) => {
+        const channelInfo = record(Opcode.CHANNEL_INFO, [
+          ...uint16LE(42), // channel id
+          ...string("mytopic"), // topic
+          ...string("utf12"), // message encoding
+          ...string("json"), // schema encoding
+          ...string("stuff"), // schema
+          ...string("some data"), // schema name
+          ...keyValues(string, string, [["foo", "bar"]]), // user data
+        ]);
         const reader = new Mcap0StreamReader();
         reader.append(
           new Uint8Array([
@@ -500,4 +479,45 @@ describe("Mcap0StreamReader", () => {
       });
     },
   );
+
+  it("validates attachment crc", () => {
+    const reader = new Mcap0StreamReader();
+    reader.append(
+      new Uint8Array([
+        ...MCAP0_MAGIC,
+        ...record(
+          Opcode.ATTACHMENT,
+          crcSuffix([
+            ...string("myfile"), // name
+            ...uint64LE(1n), // created at
+            ...uint64LE(2n), // log time
+            ...string("text/plain"), // content type
+            ...uint64LE(BigInt(new TextEncoder().encode("hello").byteLength)), // data length
+            ...new TextEncoder().encode("hello"), // data
+          ]),
+        ),
+        ...record(Opcode.FOOTER, [
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
+          ...uint32LE(0), // summary crc
+        ]),
+        ...MCAP0_MAGIC,
+      ]),
+    );
+    expect(reader.nextRecord()).toEqual({
+      type: "Attachment",
+      name: "myfile",
+      createdAt: 1n,
+      recordTime: 2n,
+      contentType: "text/plain",
+      data: new TextEncoder().encode("hello"),
+    } as TypedMcapRecords["Attachment"]);
+    expect(reader.nextRecord()).toEqual({
+      type: "Footer",
+      summaryStart: 0n,
+      summaryOffsetStart: 0n,
+      crc: 0,
+    });
+    expect(reader.done()).toBe(true);
+  });
 });

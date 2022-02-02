@@ -111,16 +111,6 @@ export function parseRecord({
         (r) => r.string(),
         (r) => r.string(),
       );
-      const crcLength = reader.offset;
-      const expectedCrc = reader.uint32();
-      if (validateCrcs && expectedCrc !== 0) {
-        const actualCrc = crc32(new DataView(recordView.buffer, recordView.byteOffset, crcLength));
-        if (actualCrc !== expectedCrc) {
-          throw new Error(
-            `Channel Info CRC32 mismatch: expected ${expectedCrc}, actual ${actualCrc}`,
-          );
-        }
-      }
 
       const record: TypedMcapRecord = {
         type: "ChannelInfo",
@@ -204,16 +194,6 @@ export function parseRecord({
         (r) => r.uint64(),
         (r) => r.uint64(),
       );
-      const crcLength = reader.offset;
-      const expectedCrc = reader.uint32();
-      if (validateCrcs && expectedCrc !== 0) {
-        const actualCrc = crc32(new DataView(recordView.buffer, recordView.byteOffset, crcLength));
-        if (actualCrc !== expectedCrc) {
-          throw new Error(
-            `Message Index CRC32 mismatch: expected ${expectedCrc}, actual ${actualCrc}`,
-          );
-        }
-      }
       const record: TypedMcapRecord = {
         type: "MessageIndex",
         channelId,
@@ -235,16 +215,6 @@ export function parseRecord({
       const compression = reader.string();
       const compressedSize = reader.uint64();
       const uncompressedSize = reader.uint64();
-      const crcLength = reader.offset;
-      const expectedCrc = reader.uint32();
-      if (validateCrcs && expectedCrc !== 0) {
-        const actualCrc = crc32(new DataView(recordView.buffer, recordView.byteOffset, crcLength));
-        if (actualCrc !== expectedCrc) {
-          throw new Error(
-            `Chunk Index CRC32 mismatch: expected ${expectedCrc}, actual ${actualCrc}`,
-          );
-        }
-      }
       const record: TypedMcapRecord = {
         type: "ChunkIndex",
         startTime,
@@ -261,6 +231,7 @@ export function parseRecord({
     }
     case Opcode.ATTACHMENT: {
       const name = reader.string();
+      const createdAt = reader.uint64();
       const recordTime = reader.uint64();
       const contentType = reader.string();
       const dataLen = reader.uint64();
@@ -277,9 +248,7 @@ export function parseRecord({
       const crcLength = reader.offset;
       const expectedCrc = reader.uint32();
       if (validateCrcs && expectedCrc !== 0) {
-        const actualCrc = crc32(
-          new DataView(view.buffer, startOffset + 5, crcLength - (startOffset + 5)),
-        );
+        const actualCrc = crc32(new DataView(recordView.buffer, recordView.byteOffset, crcLength));
         if (actualCrc !== expectedCrc) {
           throw new Error(
             `Attachment CRC32 mismatch: expected ${expectedCrc}, actual ${actualCrc}`,
@@ -290,6 +259,7 @@ export function parseRecord({
       const record: TypedMcapRecord = {
         type: "Attachment",
         name,
+        createdAt,
         recordTime,
         contentType,
         data,
@@ -367,6 +337,14 @@ export function parseRecord({
         groupOpcode,
         groupStart,
         groupLength,
+      };
+      return { record, usedBytes: recordEndOffset - startOffset };
+    }
+    case Opcode.DATA_END: {
+      const dataSectionCrc = reader.uint32();
+      const record: TypedMcapRecord = {
+        type: "DataEnd",
+        dataSectionCrc,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
