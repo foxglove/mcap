@@ -1,14 +1,7 @@
 import { Mcap0StreamReader, Mcap0Types } from "@foxglove/mcap";
 import fs from "fs/promises";
 
-export interface TestRunner {
-  readonly name: string;
-
-  readonly supportsDataOnly: boolean;
-  readonly supportsDataAndSummary: boolean;
-  readonly supportsDataAndSummaryWithOffsets: boolean;
-  run(filePath: string): Promise<string[]>;
-}
+import ITestRunner from "./ITestRunner";
 
 function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
   function stringifyFields(fields: [string | bigint | number, string | bigint | number][]): string {
@@ -162,7 +155,7 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
   }
 }
 
-class TypescriptStreamedTestRunner implements TestRunner {
+export default class TypescriptStreamedTestRunner implements ITestRunner {
   name = "ts-stream";
   supportsDataOnly = true;
   supportsDataAndSummary = true;
@@ -181,5 +174,3 @@ class TypescriptStreamedTestRunner implements TestRunner {
     return result;
   }
 }
-
-export default [new TypescriptStreamedTestRunner()];
