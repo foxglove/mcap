@@ -16,7 +16,7 @@ func TestDB3MCAPConversion(t *testing.T) {
 	db, err := sql.Open("sqlite3", db3file)
 	assert.Nil(t, err)
 
-	err = DB3ToMCAP(db, buf, []string{"./testdata/galactic"})
+	err = DB3ToMCAP(buf, db, []string{"./testdata/galactic"})
 	assert.Nil(t, err)
 
 	reader, err := libmcap.NewReader(bytes.NewReader(buf.Bytes()))
