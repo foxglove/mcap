@@ -93,14 +93,19 @@ export class BufferBuilder {
     this.offset += buffer.length;
     return this;
   }
-  array(array: [string, string][]): BufferBuilder {
+  tupleArray<T1, T2>(
+    write1: (_: T1) => void,
+    write2: (_: T2) => void,
+    array: Iterable<[T1, T2]>,
+  ): BufferBuilder {
     // We placeholder the byte length of the array and will come back to
     // set it once we have written the array items
     const sizeOffset = this.offset;
     this.uint32(0); // placeholder length of 0
 
     for (const [key, value] of array) {
-      this.string(key).string(value);
+      write1.call(this, key);
+      write2.call(this, value);
     }
     const currentOffset = this.offset;
 
