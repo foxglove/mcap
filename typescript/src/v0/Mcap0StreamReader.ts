@@ -128,6 +128,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
         this.buffer.consume(usedBytes);
       }
       switch (record.type) {
+        case "DataEnd":
         case "Unknown":
           break;
         case "Header":
@@ -191,6 +192,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
               case "Metadata":
               case "MetadataIndex":
               case "SummaryOffset":
+              case "DataEnd":
                 throw new Error(`${chunkResult.record.type} record not allowed inside a chunk`);
               case "ChannelInfo":
               case "Message":

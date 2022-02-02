@@ -52,6 +52,7 @@ export type ChunkIndex = {
 };
 export type Attachment = {
   name: string;
+  createdAt: bigint;
   recordTime: bigint;
   contentType: string;
   data: Uint8Array;
@@ -85,6 +86,9 @@ export type SummaryOffset = {
   groupStart: bigint;
   groupLength: bigint;
 };
+export type DataEnd = {
+  dataSectionCrc: number;
+};
 export type UnknownRecord = {
   opcode: number;
   data: Uint8Array;
@@ -104,6 +108,7 @@ export type McapRecords = {
   Metadata: Metadata;
   MetadataIndex: MetadataIndex;
   SummaryOffset: SummaryOffset;
+  DataEnd: DataEnd;
   Unknown: UnknownRecord;
 };
 

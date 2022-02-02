@@ -2,16 +2,7 @@ import { crc32 } from "@foxglove/crc";
 
 import Mcap0IndexedReader from "./Mcap0IndexedReader";
 import { MCAP0_MAGIC, Opcode } from "./constants";
-import {
-  record,
-  uint64LE,
-  uint32LE,
-  string,
-  keyValues,
-  collect,
-  crcSuffix,
-  uint16LE,
-} from "./testUtils";
+import { record, uint64LE, uint32LE, string, keyValues, collect, uint16LE } from "./testUtils";
 import { TypedMcapRecords } from "./types";
 
 function makeReadable(data: Uint8Array) {
@@ -132,18 +123,15 @@ describe("Mcap0IndexedReader", () => {
     ];
     const summaryStart = data.length;
     data.push(
-      ...record(
-        Opcode.CHANNEL_INFO,
-        crcSuffix([
-          ...uint16LE(42), // channel id
-          ...string("mytopic"), // topic
-          ...string("utf12"), // encoding
-          ...string("json"), // schema format
-          ...string("stuff"), // schema
-          ...string("some data"), // schema name
-          ...keyValues(string, string, [["foo", "bar"]]), // user data
-        ]),
-      ),
+      ...record(Opcode.CHANNEL_INFO, [
+        ...uint16LE(42), // channel id
+        ...string("mytopic"), // topic
+        ...string("utf12"), // encoding
+        ...string("json"), // schema format
+        ...string("stuff"), // schema
+        ...string("some data"), // schema name
+        ...keyValues(string, string, [["foo", "bar"]]), // user data
+      ]),
       ...record(Opcode.FOOTER, [
         ...uint64LE(BigInt(summaryStart)), // summary offset
         ...uint64LE(0n), // summary start offset
@@ -208,18 +196,15 @@ describe("Mcap0IndexedReader", () => {
     ])(
       "fetches chunk data and reads requested messages between $startTime and $endTime",
       async ({ startTime, endTime, expected }) => {
-        const channelInfo = record(
-          Opcode.CHANNEL_INFO,
-          crcSuffix([
-            ...uint16LE(42), // channel id
-            ...string("mytopic"), // topic
-            ...string("utf12"), // message encoding
-            ...string("json"), // schema format
-            ...string("stuff"), // schema
-            ...string("some data"), // schema name
-            ...keyValues(string, string, [["foo", "bar"]]), // user data
-          ]),
-        );
+        const channelInfo = record(Opcode.CHANNEL_INFO, [
+          ...uint16LE(42), // channel id
+          ...string("mytopic"), // topic
+          ...string("utf12"), // message encoding
+          ...string("json"), // schema format
+          ...string("stuff"), // schema
+          ...string("some data"), // schema name
+          ...keyValues(string, string, [["foo", "bar"]]), // user data
+        ]);
         const message1Data = record(Opcode.MESSAGE, [
           ...uint16LE(message1.channelId), // channel id
           ...uint32LE(message1.sequence), // sequence
@@ -266,37 +251,31 @@ describe("Mcap0IndexedReader", () => {
         );
         const messageIndexOffset = BigInt(data.length);
         data.push(
-          ...record(
-            Opcode.MESSAGE_INDEX,
-            crcSuffix([
-              ...uint16LE(42), // channel id
-              ...uint32LE(1), // count
-              ...keyValues(uint64LE, uint64LE, [
-                [message1.recordTime, message1Offset],
-                [message2.recordTime, message2Offset],
-                [message3.recordTime, message3Offset],
-              ]), // records
-            ]),
-          ),
+          ...record(Opcode.MESSAGE_INDEX, [
+            ...uint16LE(42), // channel id
+            ...uint32LE(1), // count
+            ...keyValues(uint64LE, uint64LE, [
+              [message1.recordTime, message1Offset],
+              [message2.recordTime, message2Offset],
+              [message3.recordTime, message3Offset],
+            ]), // records
+          ]),
         );
         const messageIndexLength = BigInt(data.length) - messageIndexOffset;
         const summaryStart = data.length;
         data.push(
           ...channelInfo,
-          ...record(
-            Opcode.CHUNK_INDEX,
-            crcSuffix([
-              ...uint64LE(message1.recordTime), // start time
-              ...uint64LE(message3.recordTime), // end time
-              ...uint64LE(chunkOffset), // offset
-              ...uint64LE(0n), // chunk length
-              ...keyValues(uint16LE, uint64LE, [[42, messageIndexOffset]]), // message index offsets
-              ...uint64LE(messageIndexLength), // message index length
-              ...string(""), // compression
-              ...uint64LE(BigInt(chunkContents.length)), // compressed size
-              ...uint64LE(BigInt(chunkContents.length)), // uncompressed size
-            ]),
-          ),
+          ...record(Opcode.CHUNK_INDEX, [
+            ...uint64LE(message1.recordTime), // start time
+            ...uint64LE(message3.recordTime), // end time
+            ...uint64LE(chunkOffset), // offset
+            ...uint64LE(0n), // chunk length
+            ...keyValues(uint16LE, uint64LE, [[42, messageIndexOffset]]), // message index offsets
+            ...uint64LE(messageIndexLength), // message index length
+            ...string(""), // compression
+            ...uint64LE(BigInt(chunkContents.length)), // compressed size
+            ...uint64LE(BigInt(chunkContents.length)), // uncompressed size
+          ]),
           ...record(Opcode.FOOTER, [
             ...uint64LE(BigInt(summaryStart)), // summary offset
             ...uint64LE(0n), // summary start offset
@@ -324,34 +303,28 @@ describe("Mcap0IndexedReader", () => {
     ];
     const summaryStart = BigInt(data.length);
     data.push(
-      ...record(
-        Opcode.CHUNK_INDEX,
-        crcSuffix([
-          ...uint64LE(0n), // start time
-          ...uint64LE(2n), // end time
-          ...uint64LE(0n), // offset
-          ...uint64LE(0n), // chunk length
-          ...keyValues(uint16LE, uint64LE, []), // message index offsets
-          ...uint64LE(0n), // message index length
-          ...string(""), // compression
-          ...uint64LE(BigInt(0n)), // compressed size
-          ...uint64LE(BigInt(0n)), // uncompressed size
-        ]),
-      ),
-      ...record(
-        Opcode.CHUNK_INDEX,
-        crcSuffix([
-          ...uint64LE(1n), // start time
-          ...uint64LE(3n), // end time
-          ...uint64LE(0n), // offset
-          ...uint64LE(0n), // chunk length
-          ...keyValues(uint16LE, uint64LE, []), // message index offsets
-          ...uint64LE(0n), // message index length
-          ...string(""), // compression
-          ...uint64LE(BigInt(0n)), // compressed size
-          ...uint64LE(BigInt(0n)), // uncompressed size
-        ]),
-      ),
+      ...record(Opcode.CHUNK_INDEX, [
+        ...uint64LE(0n), // start time
+        ...uint64LE(2n), // end time
+        ...uint64LE(0n), // offset
+        ...uint64LE(0n), // chunk length
+        ...keyValues(uint16LE, uint64LE, []), // message index offsets
+        ...uint64LE(0n), // message index length
+        ...string(""), // compression
+        ...uint64LE(BigInt(0n)), // compressed size
+        ...uint64LE(BigInt(0n)), // uncompressed size
+      ]),
+      ...record(Opcode.CHUNK_INDEX, [
+        ...uint64LE(1n), // start time
+        ...uint64LE(3n), // end time
+        ...uint64LE(0n), // offset
+        ...uint64LE(0n), // chunk length
+        ...keyValues(uint16LE, uint64LE, []), // message index offsets
+        ...uint64LE(0n), // message index length
+        ...string(""), // compression
+        ...uint64LE(BigInt(0n)), // compressed size
+        ...uint64LE(BigInt(0n)), // uncompressed size
+      ]),
       ...record(Opcode.FOOTER, [
         ...uint64LE(BigInt(summaryStart)), // summary offset
         ...uint64LE(0n), // summary start offset
@@ -414,32 +387,26 @@ describe("Mcap0IndexedReader", () => {
       );
       const messageIndexOffset = BigInt(data.length);
       data.push(
-        ...record(
-          Opcode.MESSAGE_INDEX,
-          crcSuffix([
-            ...uint16LE(42), // channel id
-            ...uint32LE(1), // count
-            ...keyValues(uint64LE, uint64LE, records), // records
-          ]),
-        ),
+        ...record(Opcode.MESSAGE_INDEX, [
+          ...uint16LE(42), // channel id
+          ...uint32LE(1), // count
+          ...keyValues(uint64LE, uint64LE, records), // records
+        ]),
       );
       const messageIndexLength = BigInt(data.length) - messageIndexOffset;
       const summaryStart = BigInt(data.length);
       data.push(
-        ...record(
-          Opcode.CHUNK_INDEX,
-          crcSuffix([
-            ...uint64LE(0n), // start time
-            ...uint64LE(100n), // end time
-            ...uint64LE(chunkOffset), // offset
-            ...uint64LE(0n), // chunk length
-            ...keyValues(uint16LE, uint64LE, [[42, messageIndexOffset]]), // message index offsets
-            ...uint64LE(messageIndexLength), // message index length
-            ...string(""), // compression
-            ...uint64LE(BigInt(0n)), // compressed size
-            ...uint64LE(BigInt(0n)), // uncompressed size
-          ]),
-        ),
+        ...record(Opcode.CHUNK_INDEX, [
+          ...uint64LE(0n), // start time
+          ...uint64LE(100n), // end time
+          ...uint64LE(chunkOffset), // offset
+          ...uint64LE(0n), // chunk length
+          ...keyValues(uint16LE, uint64LE, [[42, messageIndexOffset]]), // message index offsets
+          ...uint64LE(messageIndexLength), // message index length
+          ...string(""), // compression
+          ...uint64LE(BigInt(0n)), // compressed size
+          ...uint64LE(BigInt(0n)), // uncompressed size
+        ]),
         ...record(Opcode.FOOTER, [
           ...uint64LE(summaryStart), // summary offset
           ...uint64LE(0n), // summary start offset

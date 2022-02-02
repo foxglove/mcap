@@ -16,7 +16,8 @@ export enum Opcode {
   METADATA = 0x0b,
   METADATA_INDEX = 0x0c,
   SUMMARY_OFFSET = 0x0d,
-  MAX = 0x0d,
+  DATA_END = 0x0e,
+  MAX = 0x0e,
 }
 
 export function isKnownOpcode(opcode: number): opcode is Opcode {

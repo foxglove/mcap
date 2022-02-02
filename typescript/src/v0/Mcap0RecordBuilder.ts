@@ -1,4 +1,4 @@
-import { SummaryOffset } from ".";
+import { Statistics, SummaryOffset } from ".";
 import { BufferBuilder } from "./BufferBuilder";
 import { MCAP0_MAGIC, Opcode } from "./constants";
 import {
@@ -13,7 +13,13 @@ import {
   MessageIndex,
   Metadata,
   MetadataIndex,
+  DataEnd,
 } from "./types";
+
+type Options = {
+  /** Add an unspecified number of extra padding bytes at the end of each record */
+  padRecords: boolean;
+};
 
 /**
  * Mcap0RecordBuilder provides methods to serialize mcap records to a buffer in memory.
@@ -26,6 +32,8 @@ import {
  */
 export class Mcap0RecordBuilder {
   private bufferBuilder = new BufferBuilder();
+
+  constructor(private options?: Options) {}
 
   get length(): number {
     return this.bufferBuilder.length;
@@ -52,6 +60,10 @@ export class Mcap0RecordBuilder {
       .string(header.profile)
       .string(header.library);
 
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
+
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .seek(startPosition)
@@ -68,7 +80,7 @@ export class Mcap0RecordBuilder {
       .uint64(footer.summaryStart)
       .uint64(footer.summaryOffsetStart)
       .uint32(footer.crc);
-
+    // footer record cannot be padded
     return 20n;
   }
 
@@ -84,8 +96,14 @@ export class Mcap0RecordBuilder {
       .string(info.schemaEncoding)
       .string(info.schema)
       .string(info.schemaName)
-      .array(info.userData);
-
+      .tupleArray(
+        (key) => this.bufferBuilder.string(key),
+        (value) => this.bufferBuilder.string(value),
+        info.userData,
+      );
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .seek(startPosition)
@@ -96,14 +114,24 @@ export class Mcap0RecordBuilder {
   }
 
   writeMessage(message: Message): void {
+    this.bufferBuilder.uint8(Opcode.MESSAGE);
+    const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
-      .uint8(Opcode.MESSAGE)
-      .uint64(BigInt(22 + message.messageData.byteLength))
+      .uint64(0n) // placeholder
       .uint16(message.channelId)
       .uint32(message.sequence)
       .uint64(message.publishTime)
       .uint64(message.recordTime)
       .bytes(message.messageData);
+
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
+    const endPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .seek(startPosition)
+      .uint64(BigInt(endPosition - startPosition - 8))
+      .seek(endPosition);
   }
 
   writeAttachment(attachment: Attachment): bigint {
@@ -116,6 +144,9 @@ export class Mcap0RecordBuilder {
       .uint64(attachment.recordTime)
       .string(attachment.contentType)
       .bytes(attachment.data);
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
 
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder
@@ -138,6 +169,9 @@ export class Mcap0RecordBuilder {
       .uint64(attachmentIndex.attachmentSize)
       .string(attachmentIndex.name)
       .string(attachmentIndex.contentType);
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
 
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder
@@ -160,6 +194,9 @@ export class Mcap0RecordBuilder {
       .uint32(chunk.uncompressedCrc)
       .string(chunk.compression)
       .bytes(chunk.records);
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
 
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder
@@ -192,6 +229,9 @@ export class Mcap0RecordBuilder {
       .uint64(chunkIndex.compressedSize)
       .uint64(chunkIndex.uncompressedSize)
       .uint32(0);
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
 
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder
@@ -202,20 +242,31 @@ export class Mcap0RecordBuilder {
     return BigInt(endPosition - startPosition + 1);
   }
 
-  writeMessageIndex(messageIndex: MessageIndex): void {
+  writeMessageIndex(messageIndex: MessageIndex): bigint {
     this.bufferBuilder.uint8(Opcode.MESSAGE_INDEX);
+    const startPosition = this.bufferBuilder.length;
 
     // each records tuple is a fixed byte length
     const messageIndexRecordsByteLength = messageIndex.records.length * 16;
 
     this.bufferBuilder
-      .uint64(BigInt(2 + 4 + messageIndexRecordsByteLength))
+      .uint64(0n) // placeholder
       .uint16(messageIndex.channelId)
       .uint32(messageIndexRecordsByteLength);
 
     for (const record of messageIndex.records) {
       this.bufferBuilder.uint64(record[0]).uint64(record[1]);
     }
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
+
+    const endPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .seek(startPosition)
+      .uint64(BigInt(endPosition - startPosition - 8))
+      .seek(endPosition);
+    return BigInt(endPosition - startPosition + 1);
   }
 
   writeMetadata(metadata: Metadata): bigint {
@@ -225,7 +276,14 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder
       .uint64(0n) // placeholder size
       .string(metadata.name)
-      .array(metadata.metadata);
+      .tupleArray(
+        (key) => this.bufferBuilder.string(key),
+        (value) => this.bufferBuilder.string(value),
+        metadata.metadata,
+      );
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
 
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder
@@ -245,6 +303,9 @@ export class Mcap0RecordBuilder {
       .uint64(metadataIndex.offset)
       .uint64(metadataIndex.length)
       .string(metadataIndex.name);
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
 
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder
@@ -256,12 +317,73 @@ export class Mcap0RecordBuilder {
   }
 
   writeSummaryOffset(summaryOffset: SummaryOffset): bigint {
+    this.bufferBuilder.uint8(Opcode.SUMMARY_OFFSET);
+
+    const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
-      .uint8(Opcode.SUMMARY_OFFSET)
+      .uint64(0n) // placeholder size
       .uint8(summaryOffset.groupOpcode)
       .uint64(summaryOffset.groupStart)
       .uint64(summaryOffset.groupLength);
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
 
-    return 24n;
+    const endPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .seek(startPosition)
+      .uint64(BigInt(endPosition - startPosition - 8))
+      .seek(endPosition);
+
+    return BigInt(endPosition - startPosition + 1);
+  }
+
+  writeStatistics(statistics: Statistics): bigint {
+    this.bufferBuilder.uint8(Opcode.STATISTICS);
+
+    const startPosition = this.bufferBuilder.length;
+
+    this.bufferBuilder
+      .uint64(0n) // placeholder size
+      .uint64(statistics.messageCount)
+      .uint32(statistics.channelCount)
+      .uint32(statistics.attachmentCount)
+      .uint32(statistics.chunkCount)
+      .tupleArray(
+        (key) => this.bufferBuilder.uint16(key),
+        (value) => this.bufferBuilder.uint64(value),
+        statistics.channelMessageCounts.entries(),
+      );
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
+
+    const endPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .seek(startPosition)
+      .uint64(BigInt(endPosition - startPosition - 8))
+      .seek(endPosition);
+
+    return BigInt(endPosition - startPosition + 1);
+  }
+
+  writeDataEnd(dataEnd: DataEnd): bigint {
+    this.bufferBuilder.uint8(Opcode.DATA_END);
+
+    const startPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .uint64(0n) // placeholder size
+      .uint32(dataEnd.dataSectionCrc);
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
+
+    const endPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .seek(startPosition)
+      .uint64(BigInt(endPosition - startPosition - 8))
+      .seek(endPosition);
+
+    return BigInt(endPosition - startPosition + 1);
   }
 }
