@@ -75,6 +75,7 @@ func processBag(
 
 	headerbuf := make([]byte, 1024)
 	buf := make([]byte, 8)
+	data := make([]byte, 1024*1024)
 	for {
 		// header len
 		_, err := io.ReadFull(r, buf[:4])
@@ -111,8 +112,10 @@ func processBag(
 		}
 
 		// data
-		data := make([]byte, datalen)
-		_, err = io.ReadFull(r, data)
+		if len(data) < int(datalen) {
+			data = make([]byte, datalen*2)
+		}
+		_, err = io.ReadFull(r, data[:datalen])
 		if err != nil {
 			return err
 		}
@@ -127,9 +130,9 @@ func processBag(
 			var reader io.Reader
 			switch string(compression) {
 			case "lz4":
-				reader = lz4.NewReader(bytes.NewReader(data))
+				reader = lz4.NewReader(bytes.NewReader(data[:datalen]))
 			case "none":
-				reader = bytes.NewReader(data)
+				reader = bytes.NewReader(data[:datalen])
 			default:
 				return fmt.Errorf("unsupported compression: %s", compression)
 			}
@@ -138,12 +141,12 @@ func processBag(
 				return err
 			}
 		case OpBagConnection:
-			err := connectionCallback(header, data)
+			err := connectionCallback(header, data[:datalen])
 			if err != nil {
 				return err
 			}
 		case OpBagMessageData:
-			err := msgcallback(header, data)
+			err := msgcallback(header, data[:datalen])
 			if err != nil {
 				return err
 			}
@@ -156,7 +159,7 @@ func processBag(
 	return nil
 }
 
-func Bag2MCAP(r io.Reader, w io.Writer) error {
+func Bag2MCAP(w io.Writer, r io.Reader) error {
 	writer, err := libmcap.NewWriter(w, &libmcap.WriterOptions{
 		Chunked:     true,
 		ChunkSize:   4 * 1024 * 1024,

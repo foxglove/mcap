@@ -2,6 +2,7 @@ package libmcap
 
 import (
 	"bytes"
+	"crypto/md5"
 	"fmt"
 	"testing"
 
@@ -31,6 +32,62 @@ func TestMCAPReadWrite(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, "", library)
 		assert.Equal(t, TokenHeader, token.TokenType)
+	})
+}
+
+func TestOutputDeterminism(t *testing.T) {
+	buf := &bytes.Buffer{}
+	w, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		Compression: CompressionLZ4,
+		IncludeCRC:  true,
+		ChunkSize:   1024,
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, w.WriteHeader(&Header{
+		Profile: "ros1",
+	}))
+	for i := 0; i < 3; i++ {
+		assert.Nil(t, w.WriteChannelInfo(&ChannelInfo{
+			ChannelID:       uint16(i),
+			TopicName:       fmt.Sprintf("/test-%d", i),
+			MessageEncoding: "ros1",
+			SchemaName:      "foo",
+			Schema:          []byte{},
+			Metadata:        map[string]string{},
+		}))
+	}
+	for i := 0; i < 1000; i++ {
+		channelID := uint16(i % 3)
+		assert.Nil(t, w.WriteMessage(&Message{
+			ChannelID:   channelID,
+			Sequence:    0,
+			RecordTime:  100,
+			PublishTime: 100,
+			Data: []byte{
+				1,
+				2,
+				3,
+				4,
+			},
+		}))
+	}
+	assert.Nil(t, w.WriteAttachment(&Attachment{
+		Name:        "file.jpg",
+		RecordTime:  0,
+		ContentType: "image/jpeg",
+		Data:        []byte{0x01, 0x02, 0x03, 0x04},
+	}))
+	assert.Nil(t, w.WriteAttachment(&Attachment{
+		Name:        "file2.jpg",
+		RecordTime:  0,
+		ContentType: "image/jpeg",
+		Data:        []byte{0x01, 0x02, 0x03, 0x04},
+	}))
+	assert.Nil(t, w.Close())
+	t.Run("output hashes consistently", func(t *testing.T) {
+		hash := md5.Sum(buf.Bytes())
+		assert.Equal(t, "2565bf57aee807d7a0d2eed51f84d7f4", fmt.Sprintf("%x", hash))
 	})
 }
 
@@ -75,8 +132,14 @@ func TestChunkedReadWrite(t *testing.T) {
 					4,
 				},
 			})
-			assert.Nil(t, w.Close())
 			assert.Nil(t, err)
+			assert.Nil(t, w.Close())
+			assert.Equal(t, 1, len(w.ChunkIndexes))
+			assert.Equal(t, 0, len(w.AttachmentIndexes))
+			assert.Equal(t, uint64(1), w.Statistics.MessageCount)
+			assert.Equal(t, uint32(0), w.Statistics.AttachmentCount)
+			assert.Equal(t, uint32(1), w.Statistics.ChannelCount)
+			assert.Equal(t, uint32(1), w.Statistics.ChunkCount)
 			lexer, err := NewLexer(buf)
 			assert.Nil(t, err)
 			for i, expected := range []TokenType{
@@ -98,6 +161,51 @@ func TestChunkedReadWrite(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStatistics(t *testing.T) {
+	buf := &bytes.Buffer{}
+	w, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   1024,
+		Compression: CompressionLZ4,
+	})
+	assert.Nil(t, err)
+	err = w.WriteHeader(&Header{
+		Profile: "ros1",
+	})
+	assert.Nil(t, err)
+	err = w.WriteChannelInfo(&ChannelInfo{
+		ChannelID:       1,
+		TopicName:       "/test",
+		MessageEncoding: "ros1",
+		SchemaName:      "foo",
+		Schema:          []byte{},
+		Metadata:        make(map[string]string),
+	})
+	assert.Nil(t, err)
+	for i := 0; i < 1000; i++ {
+		assert.Nil(t, w.WriteMessage(&Message{
+			ChannelID:   1,
+			Sequence:    uint32(i),
+			RecordTime:  uint64(i),
+			PublishTime: uint64(i),
+			Data:        []byte("Hello, world!"),
+		}))
+	}
+	assert.Nil(t, w.WriteAttachment(&Attachment{
+		Name:        "file.jpg",
+		RecordTime:  0,
+		ContentType: "image/jpeg",
+		Data:        []byte{0x01, 0x02, 0x03, 0x04},
+	}))
+	assert.Nil(t, w.Close())
+	assert.Equal(t, uint64(1000), w.Statistics.MessageCount)
+	assert.Equal(t, uint32(1), w.Statistics.ChannelCount)
+	assert.Equal(t, uint32(1), w.Statistics.AttachmentCount)
+	assert.Equal(t, 42, int(w.Statistics.ChunkCount))
+	assert.Equal(t, 42, len(w.ChunkIndexes))
+	assert.Equal(t, 1, len(w.AttachmentIndexes))
 }
 
 func TestUnchunkedReadWrite(t *testing.T) {
@@ -141,6 +249,13 @@ func TestUnchunkedReadWrite(t *testing.T) {
 	})
 	assert.Nil(t, err)
 	assert.Nil(t, w.Close())
+
+	assert.Equal(t, 0, len(w.ChunkIndexes))
+	assert.Equal(t, 1, len(w.AttachmentIndexes))
+	assert.Equal(t, uint64(1), w.Statistics.MessageCount)
+	assert.Equal(t, uint32(1), w.Statistics.AttachmentCount)
+	assert.Equal(t, uint32(1), w.Statistics.ChannelCount)
+	assert.Equal(t, uint32(0), w.Statistics.ChunkCount)
 
 	lexer, err := NewLexer(buf)
 	assert.Nil(t, err)

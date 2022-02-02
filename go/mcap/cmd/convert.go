@@ -56,7 +56,7 @@ var convertCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		filetype, err := checkMagic(args[0])
 		if err != nil {
-			die("Magic number check failed: %s", err)
+			die("magic number check failed: %s", err)
 		}
 
 		f, err := os.Open(args[0])
@@ -72,7 +72,7 @@ var convertCmd = &cobra.Command{
 
 		switch filetype {
 		case "ros1":
-			err = ros.Bag2MCAP(f, w)
+			err = ros.Bag2MCAP(w, f)
 			if err != nil && !errors.Is(err, io.EOF) {
 				die("failed to convert file: %s", err)
 			}
@@ -87,7 +87,7 @@ var convertCmd = &cobra.Command{
 			if prefix != "" {
 				dirs = append(dirs, prefix)
 			}
-			err = ros.DB3ToMCAP(db, w, dirs)
+			err = ros.DB3ToMCAP(w, db, dirs)
 			if err != nil {
 				die("failed to convert file: %s", err)
 			}

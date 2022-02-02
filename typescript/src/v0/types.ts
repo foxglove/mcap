@@ -52,6 +52,7 @@ export type ChunkIndex = {
 };
 export type Attachment = {
   name: string;
+  createdAt: bigint;
   recordTime: bigint;
   contentType: string;
   data: Uint8Array;

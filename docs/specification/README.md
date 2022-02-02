@@ -114,7 +114,9 @@ Record type is a single byte opcode, and record content length is a uint64 value
 
 Records may be extended by adding new fields at the end of existing fields. Readers should ignore any unknown fields.
 
-The Footer record will not be extended.
+> The Footer record will not be extended.
+
+Each record definition below contains a `Type` column. See the [Serialization](#serialization) section on how to serialize each type.
 
 ### Header (op=0x01)
 
@@ -147,7 +149,7 @@ Channel Info records are uniquely identified within a file by their channel ID. 
 | 4 + N | schema_encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. |
 | 4 + N | schema | uint32 lengh prefixed Bytes | Schema should conform to the schema_encoding. |
 | 4 + N | schema_name | String | An identifier for the schema. The schema name should conform to any schema_encoding requirements. |
-| 4 + N | metadata | Array<Tuple<string, string>> | Metadata about this channel |
+| 4 + N | metadata | Map<string, string> | Metadata about this channel |
 
 Channel Info records may be duplicated in the summary section.
 
@@ -161,8 +163,8 @@ The message encoding must match that of the channel info record corresponding to
 | --- | --- | --- | --- |
 | 2 | channel_id | uint16 | Channel ID |
 | 4 | sequence | uint32 | Optional message counter assigned by publisher. If not assigned by publisher, must be recorded by the recorder. |
-| 8 | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the record time. |
-| 8 | record_time | Timestamp | Time at which the message was recorded by the recorder process. |
+| 8 | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time. |
+| 8 | log_time | Timestamp | Time at which the message was recorded. |
 | N | message_data | Bytes | Message data, to be decoded according to the schema of the channel. |
 
 ### Chunk (op=0x05)
@@ -173,8 +175,8 @@ All messages in the chunk must reference channel infos recorded earlier in the f
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 8 | start_time | Timestamp | Earliest message record_time in the chunk. |
-| 8 | end_time | Timestamp | Latest message record_time in the chunk. |
+| 8 | start_time | Timestamp | Earliest message log_time in the chunk. |
+| 8 | end_time | Timestamp | Latest message log_time in the chunk. |
 | 8 | uncompressed_size | uint64 | Uncompressed size of the `records` field. |
 | 4 | uncompressed_crc | uint32 | CRC32 checksum of uncompressed `records` field. A value of zero indicates that CRC validation should not be performed. |
 | 4 + N | compression | String | compression algorithm. i.e. `lz4`, `zstd`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression formats]. |
@@ -189,7 +191,7 @@ A sequence of Message Index records occurs immediately after each chunk. Exactly
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 2 | channel_id | uint16 | Channel ID. |
-| 4 + N | records | Array<Tuple<Timestamp, uint64>> | Array of record_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
+| 4 + N | records | Array<Tuple<Timestamp, uint64>> | Array of log_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
 
 Messages outside of chunks cannot be indexed.
 
@@ -201,8 +203,8 @@ A Chunk Index record exists for every Chunk in the file.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 8 | start_time | Timestamp | Earliest message record_time in the chunk. |
-| 8 | end_time | Timestamp | Latest message record_time in the chunk. |
+| 8 | start_time | Timestamp | Earliest message log_time in the chunk. |
+| 8 | end_time | Timestamp | Latest message log_time in the chunk. |
 | 8 | chunk_start_offset | uint64 | Offset to the chunk record from the start of the file. |
 | 8 | chunk_length | uint64 | The byte length of the chunk record. |
 | 4 + N | message_index_offsets | Map<uint16, uint64> | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. An empty map indicates no message indexing is available. |
@@ -225,7 +227,7 @@ Attachment records must not appear within a chunk.
 | --- | --- | --- | --- |
 | 4 + N | name | String | Name of the attachment, e.g "scene1.jpg". |
 | 8 | created_at | Timestamp | Time at which the attachment was created. |
-| 8 | record_time | Timestamp | Time at which the attachment was recorded. |
+| 8 | log_time | Timestamp | Time at which the attachment was recorded. |
 | 4 + N | content_type | String | MIME Type (e.g "text/plain"). |
 | 8 + N | data | uint64 length-prefixed Bytes | Attachment data. |
 | 4 | crc | uint32 | CRC32 checksum of preceding fields in the record. A value of zero indicates that CRC validation should not be performed. |
@@ -238,7 +240,7 @@ An Attachment Index record contains the location of an attachment in the file. A
 | --- | --- | --- | --- |
 | 8 | offset | uint64 | Byte offset from the start of the file to the attachment record. |
 | 8 | length | uint64 | Byte length of the record. |
-| 8 | record_time | Timestamp | Timestamp at which the attachment was recorded. |
+| 8 | log_time | Timestamp | Timestamp at which the attachment was recorded. |
 | 8 | data_size | uint64 | Size of the attachment data. |
 | 4 + N | name | String | Name of the attachment. |
 | 4 + N | content_type | String | MIME type of the attachment. |
@@ -266,7 +268,7 @@ A metadata record contains arbitrary user data in key-value pairs.
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 4 + N | name | String | Example: `map_metadata`. |
-| 4 + N | metadata | Array<Tuple<string, string>> | Example keys: `robot_id`, `git_sha`, `timezone`, `run_id`. |
+| 4 + N | metadata | Map<string, string> | Example keys: `robot_id`, `git_sha`, `timezone`, `run_id`. |
 
 ### Metadata Index (op=0x0C)
 
@@ -296,17 +298,17 @@ A Data End record indicates the end of the data section.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 4 | data_section_crc | int32 | CRC32 of all bytes in the data section. A value of 0 indicates the CRC32 is not available. |
+| 4 | data_section_crc | uint32 | CRC32 of all bytes in the data section. A value of 0 indicates the CRC32 is not available. |
 
 ## Serialization
 
 ### Fixed-width types
 
-Multi-byte integers (uint16, uint32, uint64) are serialized using [little-endian byte order](https://en.wikipedia.org/wiki/Endianness).
+Multi-byte integers (`uint16`, `uint32`, `uint64`) are serialized using [little-endian byte order](https://en.wikipedia.org/wiki/Endianness).
 
 ### String
 
-Strings are serialized using a uint32 byte length followed by the string data, which should be valid [UTF-8](https://en.wikipedia.org/wiki/UTF-8).
+Strings are serialized using a `uint32` byte length followed by the string data, which should be valid [UTF-8](https://en.wikipedia.org/wiki/UTF-8).
 
     <byte length><utf-8 bytes>
 
@@ -336,23 +338,33 @@ A Tuple<uint16, string>:
 
 ### Array<array_type>
 
-Arrays are serialized using a uint32 byte length followed by the serialized array elements.
+Arrays are serialized using a `uint32` byte length followed by the serialized array elements.
 
     <byte length><serialized element><serialized element>...
 
-An array of uint32 is specified as Array<uint32> and serialized as:
+An array of uint64 is specified as Array<uint64> and serialized as:
 
-    <byte length><uint32><uint32><uint32>...
+    <byte length><uint64><uint64><uint64>...
+
+> Since arrays use a `uint32` byte length prefix, the maximum size of the serialized array elements cannot exceed 4,294,967,295 bytes.
 
 ### Timestamp
 
-uint64 nanoseconds since a user-understood epoch (i.e unix epoch, robot boot time, etc.)
+`uint64` nanoseconds since a user-understood epoch (i.e unix epoch, robot boot time, etc.)
 
 ### Map<key_type, value_type>
 
-A Map is an [association](https://en.wikipedia.org/wiki/Associative_array) of keys to values. Duplicate keys are not allowed.
+A Map is an [association](https://en.wikipedia.org/wiki/Associative_array) of unique keys to values.
 
-A map is serialized as an array of tuples i.e. `Array<Tuple<key_type, value_type>>`. See array and tuple serialization.
+Maps are serialized using a `uint32` byte length followed by the serialized map key/value entries. The key and value entries are serialized according to their `key_type` and `value_type`.
+
+    <byte length><key><value><key><value>...
+
+A `Map<string, string>` would be serialized as:
+
+    <byte length><uint32 key length><utf-8 key bytes><uint32 value length><utf-8 value bytes>...
+
+A serialization which has duplicate keys may cause indeterminate decoding.
 
 ## Diagrams
 
