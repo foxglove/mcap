@@ -23,6 +23,7 @@ type Writer struct {
 	w                *WriteSizer
 	buf8             []byte
 	msg              []byte
+	chunk            []byte
 	chunked          bool
 	includeCRC       bool
 	uncompressed     *bytes.Buffer
@@ -70,20 +71,19 @@ func (w *Writer) writeChunk() error {
 	// when writing a chunk, we don't go through writerecord to avoid needing to
 	// materialize the compressed data again. Instead, write the leading bytes
 	// then copy from the compressed data buffer.
-	buf := make([]byte, 1+8+msglen)
-	offset := putByte(buf, byte(OpChunk))
-	offset += putUint64(buf[offset:], uint64(msglen))
-	offset += putUint64(buf[offset:], start)
-	offset += putUint64(buf[offset:], end)
-	offset += putUint64(buf[offset:], uint64(uncompressedlen))
-	offset += putUint32(buf[offset:], crc)
-	offset += putPrefixedString(buf[offset:], string(w.compression))
-	_, err = w.w.Write(buf[:offset])
-	if err != nil {
-		return err
+	recordlen := 1 + 8 + msglen
+	if len(w.chunk) < recordlen {
+		w.chunk = make([]byte, recordlen)
 	}
-	// copy the compressed data buffer, then reset it
-	_, err = io.Copy(w.w, w.compressed)
+	offset := putByte(w.chunk, byte(OpChunk))
+	offset += putUint64(w.chunk[offset:], uint64(msglen))
+	offset += putUint64(w.chunk[offset:], start)
+	offset += putUint64(w.chunk[offset:], end)
+	offset += putUint64(w.chunk[offset:], uint64(uncompressedlen))
+	offset += putUint32(w.chunk[offset:], crc)
+	offset += putPrefixedString(w.chunk[offset:], string(w.compression))
+	offset += copy(w.chunk[offset:recordlen], w.compressed.Bytes())
+	_, err = w.w.Write(w.chunk[:offset])
 	if err != nil {
 		return err
 	}

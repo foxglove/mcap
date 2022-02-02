@@ -18,8 +18,9 @@ var (
 )
 
 var catCmd = &cobra.Command{
-	Use:   "cat",
+	Use:   "cat [file]",
 	Short: "Cat the messages in an mcap file to stdout",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		topics := strings.FieldsFunc(topics, func(c rune) bool { return c == ',' })
 		f, err := os.Open(args[0])
@@ -47,7 +48,7 @@ var catCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(catCmd)
 
-	catCmd.PersistentFlags().Int64VarP(&start, "start seconds", "", 0, "start time (epoch seconds)")
-	catCmd.PersistentFlags().Int64VarP(&end, "end seconds", "", math.MaxInt64, "end time (epoch seconds)")
+	catCmd.PersistentFlags().Int64VarP(&start, "start-secs", "", 0, "start time")
+	catCmd.PersistentFlags().Int64VarP(&end, "end-secs", "", math.MaxInt64, "end time")
 	catCmd.PersistentFlags().StringVarP(&topics, "topics", "", "", "comma-separated list of topics")
 }
