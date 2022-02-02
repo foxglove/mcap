@@ -18,6 +18,7 @@ type Writer struct {
 	ChunkIndexes      []*ChunkIndex
 	AttachmentIndexes []*AttachmentIndex
 
+	channelIDs       []uint16
 	channels         map[uint16]*ChannelInfo
 	w                *WriteSizer
 	buf8             []byte
@@ -93,14 +94,16 @@ func (w *Writer) writeChunk() error {
 
 	msgidxOffsets := make(map[uint16]uint64)
 	messageIndexStart := w.w.Size()
-	for _, msgidx := range w.MessageIndexes {
-		sort.Slice(msgidx.Records, func(i, j int) bool {
-			return msgidx.Records[i].Timestamp < msgidx.Records[j].Timestamp
-		})
-		msgidxOffsets[msgidx.ChannelID] = w.w.Size()
-		err = w.WriteMessageIndex(msgidx)
-		if err != nil {
-			return err
+	for _, chanID := range w.channelIDs {
+		if msgidx, ok := w.MessageIndexes[chanID]; ok {
+			sort.Slice(msgidx.Records, func(i, j int) bool {
+				return msgidx.Records[i].Timestamp < msgidx.Records[j].Timestamp
+			})
+			msgidxOffsets[msgidx.ChannelID] = w.w.Size()
+			err = w.WriteMessageIndex(msgidx)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	messageIndexEnd := w.w.Size()
@@ -191,12 +194,15 @@ func (w *Writer) WriteMessageIndex(idx *MessageIndex) error {
 
 func makePrefixedMap(m map[string]string) []byte {
 	maplen := 0
+	mapkeys := make([]string, 0, len(m))
 	for k, v := range m {
 		maplen += 4 + len(k) + 4 + len(v)
+		mapkeys = append(mapkeys, k)
 	}
 	buf := make([]byte, maplen+4)
 	offset := putUint32(buf, uint32(maplen))
-	for k, v := range m {
+	for _, k := range mapkeys {
+		v := m[k]
 		offset += putPrefixedString(buf[offset:], k)
 		offset += putPrefixedString(buf[offset:], v)
 	}
@@ -243,6 +249,7 @@ func (w *Writer) WriteChannelInfo(c *ChannelInfo) error {
 	if _, ok := w.channels[c.ChannelID]; !ok {
 		w.Statistics.ChannelCount++
 		w.channels[c.ChannelID] = c
+		w.channelIDs = append(w.channelIDs, c.ChannelID)
 	}
 	return nil
 }
@@ -297,9 +304,11 @@ func (w *Writer) writeChunkIndex(idx *ChunkIndex) error {
 	offset += putUint64(w.msg[offset:], idx.ChunkStartOffset)
 	offset += putUint64(w.msg[offset:], idx.ChunkLength)
 	offset += putUint32(w.msg[offset:], uint32(msgidxlen))
-	for k, v := range idx.MessageIndexOffsets {
-		offset += putUint16(w.msg[offset:], k)
-		offset += putUint64(w.msg[offset:], v)
+	for _, chanID := range w.channelIDs {
+		if v, ok := idx.MessageIndexOffsets[chanID]; ok {
+			offset += putUint16(w.msg[offset:], chanID)
+			offset += putUint64(w.msg[offset:], v)
+		}
 	}
 	offset += putUint64(w.msg[offset:], idx.MessageIndexLength)
 	offset += putPrefixedString(w.msg[offset:], string(idx.Compression))
@@ -317,9 +326,11 @@ func (w *Writer) WriteStatistics(s *Statistics) error {
 	offset += putUint32(w.msg[offset:], s.AttachmentCount)
 	offset += putUint32(w.msg[offset:], s.ChunkCount)
 	offset += putUint32(w.msg[offset:], uint32(len(s.ChannelMessageCounts)*(2+8)))
-	for k, v := range s.ChannelMessageCounts {
-		offset += putUint16(w.msg[offset:], k)
-		offset += putUint64(w.msg[offset:], v)
+	for _, chanID := range w.channelIDs {
+		if v, ok := s.ChannelMessageCounts[chanID]; ok {
+			offset += putUint16(w.msg[offset:], chanID)
+			offset += putUint64(w.msg[offset:], v)
+		}
 	}
 	_, err := w.writeRecord(w.w, OpStatistics, w.msg[:offset])
 	return err
@@ -384,10 +395,13 @@ func (w *Writer) Close() error {
 
 	// summary section
 	channelInfoOffset := w.w.Size()
-	for _, channelInfo := range w.channels {
-		err := w.WriteChannelInfo(channelInfo)
-		if err != nil {
-			return err
+
+	for _, chanID := range w.channelIDs {
+		if channelInfo, ok := w.channels[chanID]; ok {
+			err := w.WriteChannelInfo(channelInfo)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	chunkIndexOffset := w.w.Size()
