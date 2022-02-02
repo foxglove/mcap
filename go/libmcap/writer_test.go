@@ -2,6 +2,7 @@ package libmcap
 
 import (
 	"bytes"
+	"crypto/md5"
 	"fmt"
 	"testing"
 
@@ -31,6 +32,62 @@ func TestMCAPReadWrite(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, "", library)
 		assert.Equal(t, TokenHeader, token.TokenType)
+	})
+}
+
+func TestOutputDeterminism(t *testing.T) {
+	buf := &bytes.Buffer{}
+	w, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		Compression: CompressionLZ4,
+		IncludeCRC:  true,
+		ChunkSize:   1024,
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, w.WriteHeader(&Header{
+		Profile: "ros1",
+	}))
+	for i := 0; i < 3; i++ {
+		assert.Nil(t, w.WriteChannelInfo(&ChannelInfo{
+			ChannelID:       uint16(i),
+			TopicName:       fmt.Sprintf("/test-%d", i),
+			MessageEncoding: "ros1",
+			SchemaName:      "foo",
+			Schema:          []byte{},
+			Metadata:        map[string]string{},
+		}))
+	}
+	for i := 0; i < 1000; i++ {
+		channelID := uint16(i % 3)
+		assert.Nil(t, w.WriteMessage(&Message{
+			ChannelID:   channelID,
+			Sequence:    0,
+			RecordTime:  100,
+			PublishTime: 100,
+			Data: []byte{
+				1,
+				2,
+				3,
+				4,
+			},
+		}))
+	}
+	assert.Nil(t, w.WriteAttachment(&Attachment{
+		Name:        "file.jpg",
+		RecordTime:  0,
+		ContentType: "image/jpeg",
+		Data:        []byte{0x01, 0x02, 0x03, 0x04},
+	}))
+	assert.Nil(t, w.WriteAttachment(&Attachment{
+		Name:        "file2.jpg",
+		RecordTime:  0,
+		ContentType: "image/jpeg",
+		Data:        []byte{0x01, 0x02, 0x03, 0x04},
+	}))
+	assert.Nil(t, w.Close())
+	t.Run("output hashes consistently", func(t *testing.T) {
+		hash := md5.Sum(buf.Bytes())
+		assert.Equal(t, "2565bf57aee807d7a0d2eed51f84d7f4", fmt.Sprintf("%x", hash))
 	})
 }
 
