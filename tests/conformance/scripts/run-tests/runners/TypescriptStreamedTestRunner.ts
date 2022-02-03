@@ -12,7 +12,7 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
     for (const value of data) {
       result += value.toString(16).padStart(2, "0");
     }
-    return result;
+    return `<${result}>`;
   }
   switch (record.type) {
     case "Chunk":
@@ -64,7 +64,6 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
         "MessageIndex " +
         stringifyFields([
           ["channelId", record.channelId],
-          ["count", record.count],
           ["records", "{" + stringifyFields(record.records) + "}"],
         ])
       );

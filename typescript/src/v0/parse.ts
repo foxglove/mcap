@@ -189,7 +189,6 @@ export function parseRecord({
 
     case Opcode.MESSAGE_INDEX: {
       const channelId = reader.uint16();
-      const count = reader.uint32();
       const records = reader.keyValuePairs(
         (r) => r.uint64(),
         (r) => r.uint64(),
@@ -197,7 +196,6 @@ export function parseRecord({
       const record: TypedMcapRecord = {
         type: "MessageIndex",
         channelId,
-        count,
         records,
       };
       return { record, usedBytes: recordEndOffset - startOffset };

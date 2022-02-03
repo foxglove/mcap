@@ -1,0 +1,9 @@
+Header profile="" library=""
+ChannelInfo channelId=1 topicName=example messageEncoding=a schemaEncoding=c schema=b schemaName=Example userData={foo=bar}
+Message channelId=1 sequence=10 publishTime=1 recordTime=2 messageData=<010203>
+MessageIndex channelId=1 records={2=66}
+ChunkIndex startTime=2 endTime=2 chunkStart=28 chunkLength=139 messageIndexOffsets={1=169} messageIndexLength=34 compression="" compressedSize=100 uncompressedSize=100
+SummaryOffset groupOpcode=12 groupStart=219 groupLength=0
+SummaryOffset groupOpcode=9 groupStart=219 groupLength=0
+SummaryOffset groupOpcode=7 groupStart=219 groupLength=90
+Footer summaryStart=219 summaryOffsetStart=309

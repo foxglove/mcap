@@ -1,0 +1,11 @@
+Header profile="" library=""
+ChannelInfo channelId=1 topicName=example messageEncoding=a schemaEncoding=c schema=b schemaName=Example userData={foo=bar}
+Message channelId=1 sequence=10 publishTime=1 recordTime=2 messageData=<010203>
+ChannelInfo channelId=1 topicName=example messageEncoding=a schemaEncoding=c schema=b schemaName=Example userData={foo=bar}
+Statistics messageCount=1 channelCount=1 attachmentCount=0 chunkCount=0 channelMessageCounts={1=1}
+SummaryOffset groupOpcode=12 groupStart=147 groupLength=69
+SummaryOffset groupOpcode=12 groupStart=262 groupLength=0
+SummaryOffset groupOpcode=10 groupStart=216 groupLength=46
+SummaryOffset groupOpcode=9 groupStart=262 groupLength=0
+SummaryOffset groupOpcode=7 groupStart=262 groupLength=0
+Footer summaryStart=147 summaryOffsetStart=262

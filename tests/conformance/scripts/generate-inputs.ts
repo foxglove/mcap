@@ -223,7 +223,32 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   return builder.buffer;
 }
 
-const inputs: { name: string; records: TestDataRecord[] }[] = [{ name: "NoData", records: [] }];
+const inputs: { name: string; records: TestDataRecord[] }[] = [
+  { name: "NoData", records: [] },
+  {
+    name: "OneMessage",
+    records: [
+      {
+        type: "ChannelInfo",
+        channelId: 1,
+        topicName: "example",
+        schemaName: "Example",
+        messageEncoding: "a",
+        schema: "b",
+        schemaEncoding: "c",
+        userData: [["foo", "bar"]],
+      },
+      {
+        type: "Message",
+        channelId: 1,
+        publishTime: 1n,
+        recordTime: 2n,
+        messageData: new Uint8Array([1, 2, 3]),
+        sequence: 10,
+      },
+    ],
+  },
+];
 
 async function main(options: { dataDir: string; verify: boolean }) {
   let hadError = false;
