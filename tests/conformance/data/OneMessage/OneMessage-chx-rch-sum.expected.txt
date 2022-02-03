@@ -1,9 +1,9 @@
-Header profile="" library=""
-ChannelInfo id=1 topic=example message_encoding=a schema_encoding=c schema=b schema_name=Example metadata={foo=bar}
-Message channel_id=1 sequence=10 publish_time=1 log_time=2 message_data=<010203>
-ChannelInfo id=1 topic=example message_encoding=a schema_encoding=c schema=b schema_name=Example metadata={foo=bar}
-SummaryOffset group_opcode=12 group_start=138 group_length=66
-SummaryOffset group_opcode=12 group_start=204 group_length=0
-SummaryOffset group_opcode=9 group_start=204 group_length=0
-SummaryOffset group_opcode=7 group_start=204 group_length=0
-Footer summary_start=138 summary_offset_start=204
+Header library="" profile=""
+ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema=b schema_encoding=c schema_name=Example topic=example
+Message channel_id=1 log_time=2 message_data=<010203> publish_time=1 sequence=10
+ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema=b schema_encoding=c schema_name=Example topic=example
+SummaryOffset group_length=66 group_opcode=12 group_start=138
+SummaryOffset group_length=0 group_opcode=12 group_start=204
+SummaryOffset group_length=0 group_opcode=9 group_start=204
+SummaryOffset group_length=0 group_opcode=7 group_start=204
+Footer summary_offset_start=204 summary_start=138

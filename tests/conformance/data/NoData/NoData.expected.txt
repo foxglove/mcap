@@ -1,2 +1,2 @@
-Header profile="" library=""
-Footer summary_start=0 summary_offset_start=0
+Header library="" profile=""
+Footer summary_offset_start=0 summary_start=0

@@ -1,7 +1,7 @@
-Header profile="" library=""
-Statistics message_count=0 channel_count=0 attachment_count=0 chunk_count=0 channel_message_counts={}
-SummaryOffset group_opcode=12 group_start=71 group_length=0
-SummaryOffset group_opcode=10 group_start=38 group_length=33
-SummaryOffset group_opcode=9 group_start=71 group_length=0
-SummaryOffset group_opcode=7 group_start=71 group_length=0
-Footer summary_start=38 summary_offset_start=71
+Header library="" profile=""
+Statistics attachment_count=0 channel_count=0 channel_message_counts={} chunk_count=0 message_count=0
+SummaryOffset group_length=0 group_opcode=12 group_start=71
+SummaryOffset group_length=33 group_opcode=10 group_start=38
+SummaryOffset group_length=0 group_opcode=9 group_start=71
+SummaryOffset group_length=0 group_opcode=7 group_start=71
+Footer summary_offset_start=71 summary_start=38
