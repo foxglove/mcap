@@ -7,7 +7,7 @@
     ]
   },
   "scripts": {
-    "lint:docs": "prettier docs --check",
+    "lint:docs": "prettier '**/*.md' --check",
     "spellcheck": "cspell --no-progress --relative '**'",
     "test:conformance:generate-inputs": "yarn workspace @foxglove/mcap-conformance generate-inputs --data-dir \"$(pwd)/tests/conformance/data\"",
     "test:conformance": "yarn workspace @foxglove/mcap-conformance run-tests --data-dir \"$(pwd)/tests/conformance/data\""
