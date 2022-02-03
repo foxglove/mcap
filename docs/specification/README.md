@@ -313,7 +313,7 @@ Schema records are uniquely identified within a file by their schema ID. A Datat
 | --- | --- | --- | --- |
 | 2 | id | uint16 | A unique identifier for this schema within the file. |
 | 4 + N | encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. |
-| 4 + N | schema | uint32 lengh prefixed Bytes | Schema should conform to the encoding. |
+| 4 + N | schema | uint32 length-prefixed Bytes | Schema should conform to the encoding. |
 | 4 + N | name | String | An identifier for the schema. The schema name should conform to any encoding requirements. |
 
 Schema records may be duplicated in the summary section.
