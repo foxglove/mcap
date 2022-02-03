@@ -5,7 +5,10 @@ import ITestRunner from "./ITestRunner";
 
 function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
   function stringifyFields(fields: [string | bigint | number, string | bigint | number][]): string {
-    return fields.map(([name, value]) => `${name}=${value === "" ? `""` : value}`).join(" ");
+    return fields
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+      .map(([name, value]) => `${name}=${value === "" ? `""` : value}`)
+      .join(" ");
   }
   function stringifyData(data: Uint8Array): string {
     let result = "";
