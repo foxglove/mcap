@@ -259,7 +259,7 @@ A Statistics record contains summary information about the recorded data. The st
 
 When using a Statistics record with channel_message_counts, the Summary Data section MUST contain a copy of all Channel Info records. The Channel Info records MUST occur prior to the statistics record.
 
-> Why? The typical usecase for tools is to provide a listing of the types and quantities of messages stored in the file. Without an easy to access copy of the Channel Info records, tools would need to linearly scan the file for Channel Info records to display what types of messages exist in the file.
+> Why? The typical use case for tools is to provide a listing of the types and quantities of messages stored in the file. Without an easy to access copy of the Channel Info records, tools would need to linearly scan the file for Channel Info records to display what types of messages exist in the file.
 
 ### Metadata (op=0x0B)
 
@@ -294,7 +294,7 @@ A Summary Offset record contains the location of records within the summary sect
 
 A Data End record indicates the end of the data section.
 
-> Why? When reading a file from start to end, there is ambiguity when the data section ends and the summary section starts because some records (i.e. Channel Info) can repeat for summary data. The Data End record provides a clear dilineation the data section has ended.
+> Why? When reading a file from start to end, there is ambiguity when the data section ends and the summary section starts because some records (i.e. Channel Info) can repeat for summary data. The Data End record provides a clear delineation the data section has ended.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
