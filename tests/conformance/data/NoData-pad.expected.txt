@@ -1,2 +1,0 @@
-Header profile="" library=""
-Footer summaryStart=0 summaryOffsetStart=0
