@@ -37,6 +37,12 @@ overrides:
     ignoreRegExpList:
       - '"github\.com.+?"'
 
+  - filename: "go/**/Makefile"
+    words:
+      - memprofile
+      - cpuprofile
+      - benchmem
+
   - filename: "CMakeLists.txt"
     words:
       - conanbuildinfo

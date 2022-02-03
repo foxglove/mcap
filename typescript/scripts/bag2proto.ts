@@ -145,7 +145,7 @@ function convertTypedArrays(msg: Record<string, unknown>): Record<string, unknow
   return msg;
 }
 
-// IWrtiable interface for FileHandle
+// IWritable interface for FileHandle
 class FileHandleWritable implements IWritable {
   private handle: FileHandle;
   private totalBytesWritten = 0;

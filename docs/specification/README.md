@@ -147,7 +147,7 @@ Channel Info records are uniquely identified within a file by their channel ID. 
 | 4 + N | topic | String | The channel topic. |
 | 4 + N | message_encoding | String | Encoding for messages on this channel. The value should be one of the [well-known message encodings](./well-known-encodings.md). Custom values should use `x-` prefix. |
 | 4 + N | schema_encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. |
-| 4 + N | schema | uint32 lengh prefixed Bytes | Schema should conform to the schema_encoding. |
+| 4 + N | schema | uint32 length-prefixed Bytes | Schema should conform to the schema_encoding. |
 | 4 + N | schema_name | String | An identifier for the schema. The schema name should conform to any schema_encoding requirements. |
 | 4 + N | metadata | Map<string, string> | Metadata about this channel |
 

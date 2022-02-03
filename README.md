@@ -1,8 +1,8 @@
 # MCAP file format
 
-* [Draft specification](./docs/specification)
+- [Draft specification](./docs/specification)
 
-## Developer quickstart
+## Developer quick start
 
 ### TypeScript
 
