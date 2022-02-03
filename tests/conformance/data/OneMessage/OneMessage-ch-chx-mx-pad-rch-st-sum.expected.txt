@@ -1,0 +1,13 @@
+Header profile="" library=""
+ChannelInfo id=1 topic=example message_encoding=a schema_encoding=c schema=b schema_name=Example metadata={foo=bar}
+Message channel_id=1 sequence=10 publish_time=1 log_time=2 message_data=<010203>
+MessageIndex channel_id=1 records={2=66}
+ChannelInfo id=1 topic=example message_encoding=a schema_encoding=c schema=b schema_name=Example metadata={foo=bar}
+Statistics message_count=1 channel_count=1 attachment_count=0 chunk_count=1 channel_message_counts={1=1}
+ChunkIndex start_time=2 end_time=2 chunk_start_offset=28 chunk_length=139 message_index_offsets={1=169} message_index_length=34 compression="" compressed_size=100 uncompressed_size=100
+SummaryOffset group_opcode=12 group_start=219 group_length=69
+SummaryOffset group_opcode=12 group_start=334 group_length=0
+SummaryOffset group_opcode=10 group_start=288 group_length=46
+SummaryOffset group_opcode=9 group_start=334 group_length=0
+SummaryOffset group_opcode=7 group_start=334 group_length=90
+Footer summary_start=219 summary_offset_start=424

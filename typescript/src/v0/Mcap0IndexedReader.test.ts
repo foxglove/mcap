@@ -253,7 +253,6 @@ describe("Mcap0IndexedReader", () => {
         data.push(
           ...record(Opcode.MESSAGE_INDEX, [
             ...uint16LE(42), // channel id
-            ...uint32LE(1), // count
             ...keyValues(uint64LE, uint64LE, [
               [message1.recordTime, message1Offset],
               [message2.recordTime, message2Offset],
@@ -389,7 +388,6 @@ describe("Mcap0IndexedReader", () => {
       data.push(
         ...record(Opcode.MESSAGE_INDEX, [
           ...uint16LE(42), // channel id
-          ...uint32LE(1), // count
           ...keyValues(uint64LE, uint64LE, records), // records
         ]),
       );

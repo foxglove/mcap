@@ -25,7 +25,6 @@ class ChunkBuilder {
     if (!this.messageIndices.has(info.channelId)) {
       this.messageIndices.set(info.channelId, {
         channelId: info.channelId,
-        count: 0,
         records: [],
       });
     }
@@ -38,15 +37,15 @@ class ChunkBuilder {
     }
     this.endTime = message.recordTime;
 
-    const messageIndex = this.messageIndices.get(message.channelId) ?? {
-      channelId: message.channelId,
-      count: 0,
-      records: [],
-    };
+    let messageIndex = this.messageIndices.get(message.channelId);
+    if (!messageIndex) {
+      messageIndex = {
+        channelId: message.channelId,
+        records: [],
+      };
+      this.messageIndices.set(message.channelId, messageIndex);
+    }
 
-    this.messageIndices.set(message.channelId, messageIndex);
-
-    messageIndex.count += 1;
     messageIndex.records.push([message.recordTime, BigInt(this.recordWriter.length)]);
 
     this.totalMessageCount += 1;

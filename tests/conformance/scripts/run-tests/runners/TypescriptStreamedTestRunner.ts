@@ -12,7 +12,7 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
     for (const value of data) {
       result += value.toString(16).padStart(2, "0");
     }
-    return result;
+    return `<${result}>`;
   }
   switch (record.type) {
     case "Chunk":
@@ -31,40 +31,39 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
       return (
         "Footer " +
         stringifyFields([
-          ["summaryStart", record.summaryStart],
-          ["summaryOffsetStart", record.summaryOffsetStart],
+          ["summary_start", record.summaryStart],
+          ["summary_offset_start", record.summaryOffsetStart],
         ])
       );
     case "ChannelInfo":
       return (
         "ChannelInfo " +
         stringifyFields([
-          ["channelId", record.channelId],
-          ["topicName", record.topicName],
-          ["messageEncoding", record.messageEncoding],
-          ["schemaEncoding", record.schemaEncoding],
+          ["id", record.channelId],
+          ["topic", record.topicName],
+          ["message_encoding", record.messageEncoding],
+          ["schema_encoding", record.schemaEncoding],
           ["schema", record.schema],
-          ["schemaName", record.schemaName],
-          ["userData", "{" + stringifyFields(record.userData) + "}"],
+          ["schema_name", record.schemaName],
+          ["metadata", "{" + stringifyFields(record.userData) + "}"],
         ])
       );
     case "Message":
       return (
         "Message " +
         stringifyFields([
-          ["channelId", record.channelId],
+          ["channel_id", record.channelId],
           ["sequence", record.sequence],
-          ["publishTime", record.publishTime],
-          ["recordTime", record.recordTime],
-          ["messageData", stringifyData(record.messageData)],
+          ["publish_time", record.publishTime],
+          ["log_time", record.recordTime],
+          ["message_data", stringifyData(record.messageData)],
         ])
       );
     case "MessageIndex":
       return (
         "MessageIndex " +
         stringifyFields([
-          ["channelId", record.channelId],
-          ["count", record.count],
+          ["channel_id", record.channelId],
           ["records", "{" + stringifyFields(record.records) + "}"],
         ])
       );
@@ -72,20 +71,20 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
       return (
         "ChunkIndex " +
         stringifyFields([
-          ["startTime", record.startTime],
-          ["endTime", record.endTime],
-          ["chunkStart", record.chunkStart],
-          ["chunkLength", record.chunkLength],
+          ["start_time", record.startTime],
+          ["end_time", record.endTime],
+          ["chunk_start_offset", record.chunkStart],
+          ["chunk_length", record.chunkLength],
           [
-            "messageIndexOffsets",
+            "message_index_offsets",
             "{" +
               stringifyFields(Array.from(record.messageIndexOffsets).sort((a, b) => a[0] - b[0])) +
               "}",
           ],
-          ["messageIndexLength", record.messageIndexLength],
+          ["message_index_length", record.messageIndexLength],
           ["compression", record.compression],
-          ["compressedSize", record.compressedSize],
-          ["uncompressedSize", record.uncompressedSize],
+          ["compressed_size", record.compressedSize],
+          ["uncompressed_size", record.uncompressedSize],
         ])
       );
     case "Attachment":
@@ -93,8 +92,9 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
         "Attachment " +
         stringifyFields([
           ["name", record.name],
-          ["recordTime", record.recordTime],
-          ["contentType", record.contentType],
+          ["created_at", record.createdAt],
+          ["log_time", record.recordTime],
+          ["content_type", record.contentType],
           ["data", stringifyData(record.data)],
         ])
       );
@@ -102,24 +102,24 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
       return (
         "AttachmentIndex " +
         stringifyFields([
-          ["recordTime", record.recordTime],
-          ["attachmentSize", record.attachmentSize],
-          ["name", record.name],
-          ["contentType", record.contentType],
           ["offset", record.offset],
-          ["attachmentRecordLength", record.attachmentRecordLength],
+          ["length", record.attachmentRecordLength],
+          ["log_time", record.recordTime],
+          ["data_size", record.attachmentSize],
+          ["name", record.name],
+          ["content_type", record.contentType],
         ])
       );
     case "Statistics":
       return (
         "Statistics " +
         stringifyFields([
-          ["messageCount", record.messageCount],
-          ["channelCount", record.channelCount],
-          ["attachmentCount", record.attachmentCount],
-          ["chunkCount", record.chunkCount],
+          ["message_count", record.messageCount],
+          ["channel_count", record.channelCount],
+          ["attachment_count", record.attachmentCount],
+          ["chunk_count", record.chunkCount],
           [
-            "channelMessageCounts",
+            "channel_message_counts",
             "{" +
               stringifyFields(Array.from(record.channelMessageCounts).sort((a, b) => a[0] - b[0])) +
               "}",
@@ -147,13 +147,13 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
       return (
         "SummaryOffset " +
         stringifyFields([
-          ["groupOpcode", record.groupOpcode],
-          ["groupStart", record.groupStart],
-          ["groupLength", record.groupLength],
+          ["group_opcode", record.groupOpcode],
+          ["group_start", record.groupStart],
+          ["group_length", record.groupLength],
         ])
       );
     case "Unknown":
-      return "Unknown " + stringifyFields([["opcode", record.opcode]]);
+      return "Unknown " + stringifyFields([["op", record.opcode]]);
   }
 }
 
