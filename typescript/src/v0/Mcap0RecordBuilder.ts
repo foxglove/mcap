@@ -123,10 +123,7 @@ export class Mcap0RecordBuilder {
       .uint64(message.publishTime)
       .uint64(message.recordTime)
       .bytes(message.messageData);
-
-    if (this.options?.padRecords === true) {
-      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
-    }
+    // message record cannot be padded
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .seek(startPosition)
@@ -141,9 +138,12 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder
       .uint64(0n) // placeholder
       .string(attachment.name)
+      .uint64(attachment.createdAt)
       .uint64(attachment.recordTime)
       .string(attachment.contentType)
-      .bytes(attachment.data);
+      .uint64(BigInt(attachment.data.byteLength))
+      .bytes(attachment.data)
+      .uint32(0 /*crc*/);
     if (this.options?.padRecords === true) {
       this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
     }
@@ -194,10 +194,7 @@ export class Mcap0RecordBuilder {
       .uint32(chunk.uncompressedCrc)
       .string(chunk.compression)
       .bytes(chunk.records);
-    if (this.options?.padRecords === true) {
-      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
-    }
-
+    // chunk record cannot be padded
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .seek(startPosition)

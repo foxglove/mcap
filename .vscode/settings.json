@@ -1,3 +1,4 @@
+// -*- jsonc -*-
 {
   "editor.formatOnSave": true,
 
@@ -8,6 +9,11 @@
     "reportUnusedDisableDirectives": true
   },
   "jest.jestCommandLine": "yarn workspace @foxglove/mcap test",
+
+  "search.exclude": {
+    "**/node_modules": true,
+    "tests/conformance/data": true
+  },
 
   // https://github.com/microsoft/vscode-cpptools/issues/722
   "C_Cpp.autoAddFileAssociations": false,

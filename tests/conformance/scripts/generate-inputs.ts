@@ -3,6 +3,9 @@ import { program } from "commander";
 import fs from "fs/promises";
 import path from "path";
 
+import { collect } from "./util/collect";
+import listDirRecursive from "./util/listDirRecursive";
+
 type MetadataIndex = Mcap0Types.MetadataIndex;
 type ChunkIndex = Mcap0Types.ChunkIndex;
 type AttachmentIndex = Mcap0Types.AttachmentIndex;
@@ -223,18 +226,56 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   return builder.buffer;
 }
 
-const inputs: { name: string; records: TestDataRecord[] }[] = [{ name: "NoData", records: [] }];
+const inputs: { name: string; records: TestDataRecord[] }[] = [
+  { name: "NoData", records: [] },
+  {
+    name: "OneMessage",
+    records: [
+      {
+        type: "ChannelInfo",
+        channelId: 1,
+        topicName: "example",
+        schemaName: "Example",
+        messageEncoding: "a",
+        schema: "b",
+        schemaEncoding: "c",
+        userData: [["foo", "bar"]],
+      },
+      {
+        type: "Message",
+        channelId: 1,
+        publishTime: 1n,
+        recordTime: 2n,
+        messageData: new Uint8Array([1, 2, 3]),
+        sequence: 10,
+      },
+    ],
+  },
+  {
+    name: "OneAttachment",
+    records: [
+      {
+        type: "Attachment",
+        name: "myfile",
+        contentType: "application/octet-stream",
+        createdAt: 1n,
+        recordTime: 2n,
+        data: new Uint8Array([1, 2, 3]),
+      },
+    ],
+  },
+];
 
 async function main(options: { dataDir: string; verify: boolean }) {
   let hadError = false;
   await fs.mkdir(options.dataDir, { recursive: true });
   const unexpectedFilePaths = new Set(
-    (await fs.readdir(options.dataDir))
+    (await collect(listDirRecursive(options.dataDir)))
       .filter((name) => name.endsWith(".mcap"))
       .map((name) => path.join(options.dataDir, name)),
   );
 
-  for (const { name, records } of inputs) {
+  for (const { name: testName, records } of inputs) {
     for (const variant of generateVariants(...Object.values(TestFeatures))) {
       // validate that variant features make sense for the data
       if (
@@ -276,8 +317,9 @@ async function main(options: { dataDir: string; verify: boolean }) {
         continue;
       }
 
-      const prefix = [name, ...Array.from(variant).sort()].join("-");
-      const filePath = path.join(options.dataDir, `${prefix}.mcap`);
+      const prefix = [testName, ...Array.from(variant).sort()].join("-");
+      const testDir = path.join(options.dataDir, testName);
+      const filePath = path.join(options.dataDir, testName, `${prefix}.mcap`);
       const data = generateFile(variant, records);
 
       unexpectedFilePaths.delete(filePath);
@@ -297,6 +339,7 @@ async function main(options: { dataDir: string; verify: boolean }) {
         }
       } else {
         console.log("generated", filePath);
+        await fs.mkdir(testDir, { recursive: true });
         await fs.writeFile(filePath, data);
       }
     }

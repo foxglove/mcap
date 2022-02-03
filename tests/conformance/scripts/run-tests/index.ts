@@ -2,6 +2,7 @@ import { program } from "commander";
 import * as Diff from "diff";
 import fs from "fs/promises";
 import path from "path";
+import listDirRecursive from "scripts/util/listDirRecursive";
 
 import runners from "./runners";
 
@@ -25,7 +26,7 @@ async function main(options: { dataDir: string; runner?: string; update: boolean
 
   for (const runner of enabledRunners) {
     console.log("running", runner.name);
-    for (const fileName of await fs.readdir(options.dataDir)) {
+    for await (const fileName of listDirRecursive(options.dataDir)) {
       if (!fileName.endsWith(".mcap")) {
         continue;
       }
@@ -35,10 +36,7 @@ async function main(options: { dataDir: string; runner?: string; update: boolean
       const outputLines = await runner.run(filePath);
       const output = outputLines.join("\n") + "\n";
 
-      const expectedOutputPath = path.join(
-        options.dataDir,
-        path.basename(fileName, ".mcap") + ".expected.txt",
-      );
+      const expectedOutputPath = filePath.replace(/\.mcap$/, ".expected.txt");
       if (options.update) {
         await fs.writeFile(expectedOutputPath, output);
       } else {
