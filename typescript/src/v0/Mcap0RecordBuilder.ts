@@ -24,7 +24,7 @@ type Options = {
 /**
  * Mcap0RecordBuilder provides methods to serialize mcap records to a buffer in memory.
  *
- * It makes no effort to ensure spec compatability on the order of records, this is the responsibility
+ * It makes no effort to ensure spec compatibility on the order of records, this is the responsibility
  * of the caller.
  *
  * You'll likely want to use one of the higher level writer interfaces unless you are building your
@@ -187,7 +187,7 @@ export class Mcap0RecordBuilder {
 
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
-      .uint64(0n) // palceholder
+      .uint64(0n) // placeholder
       .uint64(chunk.startTime)
       .uint64(chunk.endTime)
       .uint64(chunk.uncompressedSize)

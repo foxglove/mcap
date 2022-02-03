@@ -147,7 +147,7 @@ Channel Info records are uniquely identified within a file by their channel ID. 
 | 4 + N | topic | String | The channel topic. |
 | 4 + N | message_encoding | String | Encoding for messages on this channel. The value should be one of the [well-known message encodings](./well-known-encodings.md). Custom values should use `x-` prefix. |
 | 4 + N | schema_encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. |
-| 4 + N | schema | uint32 lengh prefixed Bytes | Schema should conform to the schema_encoding. |
+| 4 + N | schema | uint32 length-prefixed Bytes | Schema should conform to the schema_encoding. |
 | 4 + N | schema_name | String | An identifier for the schema. The schema name should conform to any schema_encoding requirements. |
 | 4 + N | metadata | Map<string, string> | Metadata about this channel |
 
@@ -259,7 +259,7 @@ A Statistics record contains summary information about the recorded data. The st
 
 When using a Statistics record with channel_message_counts, the Summary Data section MUST contain a copy of all Channel Info records. The Channel Info records MUST occur prior to the statistics record.
 
-> Why? The typical usecase for tools is to provide a listing of the types and quantities of messages stored in the file. Without an easy to access copy of the Channel Info records, tools would need to linearly scan the file for Channel Info records to display what types of messages exist in the file.
+> Why? The typical use case for tools is to provide a listing of the types and quantities of messages stored in the file. Without an easy to access copy of the Channel Info records, tools would need to linearly scan the file for Channel Info records to display what types of messages exist in the file.
 
 ### Metadata (op=0x0B)
 
@@ -294,7 +294,7 @@ A Summary Offset record contains the location of records within the summary sect
 
 A Data End record indicates the end of the data section.
 
-> Why? When reading a file from start to end, there is ambiguity when the data section ends and the summary section starts because some records (i.e. Channel Info) can repeat for summary data. The Data End record provides a clear dilineation the data section has ended.
+> Why? When reading a file from start to end, there is ambiguity when the data section ends and the summary section starts because some records (i.e. Channel Info) can repeat for summary data. The Data End record provides a clear delineation the data section has ended.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |

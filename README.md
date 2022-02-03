@@ -2,7 +2,7 @@
 
 - [Draft specification](./docs/specification)
 
-## Developer quickstart
+## Developer quick start
 
 ### TypeScript
 

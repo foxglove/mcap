@@ -28,7 +28,11 @@ Examples:
 
 Convert a bag file to mcap:
 
+<!-- cspell: disable -->
+
     [~/work/mcap/go/mcap] (task/mcap-client) $ mcap convert ../../testdata/bags/demo.bag demo.mcap
+
+<!-- cspell: enable -->
 
 Report summary statistics on an mcap file:
 
