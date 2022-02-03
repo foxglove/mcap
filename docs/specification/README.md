@@ -114,7 +114,7 @@ Record type is a single byte opcode, and record content length is a uint64 value
 
 Records may be extended by adding new fields at the end of existing fields. Readers should ignore any unknown fields.
 
-> The Footer record will not be extended.
+> The Footer and Message records will not be extended, since their formats do not allow for backward-compatible size changes.
 
 Each record definition below contains a `Type` column. See the [Serialization](#serialization) section on how to serialize each type.
 
