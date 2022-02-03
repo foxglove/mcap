@@ -1,7 +1,7 @@
 Header profile="" library=""
-Attachment name=myfile recordTime=2 contentType=application/octet-stream data=<010203>
-AttachmentIndex recordTime=2 attachmentSize=3 name=myfile contentType=application/octet-stream offset=28 attachmentRecordLength=81
-SummaryOffset groupOpcode=12 groupStart=125 groupLength=0
-SummaryOffset groupOpcode=9 groupStart=125 groupLength=82
-SummaryOffset groupOpcode=7 groupStart=207 groupLength=0
-Footer summaryStart=125 summaryOffsetStart=207
+Attachment name=myfile created_at=1 log_time=2 content_type=application/octet-stream data=<010203>
+AttachmentIndex offset=28 length=81 log_time=2 data_size=3 name=myfile content_type=application/octet-stream
+SummaryOffset group_opcode=12 group_start=125 group_length=0
+SummaryOffset group_opcode=9 group_start=125 group_length=82
+SummaryOffset group_opcode=7 group_start=207 group_length=0
+Footer summary_start=125 summary_offset_start=207

@@ -1,4 +1,4 @@
 Header profile="" library=""
-Attachment name=myfile recordTime=2 contentType=application/octet-stream data=<010203>
-AttachmentIndex recordTime=2 attachmentSize=3 name=myfile contentType=application/octet-stream offset=28 attachmentRecordLength=81
-Footer summaryStart=125 summaryOffsetStart=0
+Attachment name=myfile created_at=1 log_time=2 content_type=application/octet-stream data=<010203>
+AttachmentIndex offset=28 length=81 log_time=2 data_size=3 name=myfile content_type=application/octet-stream
+Footer summary_start=125 summary_offset_start=0

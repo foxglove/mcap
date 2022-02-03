@@ -1,5 +1,5 @@
 Header profile="" library=""
-ChannelInfo channelId=1 topicName=example messageEncoding=a schemaEncoding=c schema=b schemaName=Example userData={foo=bar}
-Message channelId=1 sequence=10 publishTime=1 recordTime=2 messageData=<010203>
-ChannelInfo channelId=1 topicName=example messageEncoding=a schemaEncoding=c schema=b schemaName=Example userData={foo=bar}
-Footer summaryStart=147 summaryOffsetStart=0
+ChannelInfo id=1 topic=example message_encoding=a schema_encoding=c schema=b schema_name=Example metadata={foo=bar}
+Message channel_id=1 sequence=10 publish_time=1 log_time=2 message_data=<010203>
+ChannelInfo id=1 topic=example message_encoding=a schema_encoding=c schema=b schema_name=Example metadata={foo=bar}
+Footer summary_start=147 summary_offset_start=0

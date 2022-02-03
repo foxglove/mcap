@@ -1,9 +1,9 @@
 Header profile="" library=""
-ChannelInfo channelId=1 topicName=example messageEncoding=a schemaEncoding=c schema=b schemaName=Example userData={foo=bar}
-Message channelId=1 sequence=10 publishTime=1 recordTime=2 messageData=<010203>
-MessageIndex channelId=1 records={2=66}
-ChunkIndex startTime=2 endTime=2 chunkStart=25 chunkLength=139 messageIndexOffsets={1=166} messageIndexLength=31 compression="" compressedSize=100 uncompressedSize=100
-SummaryOffset groupOpcode=12 groupStart=210 groupLength=0
-SummaryOffset groupOpcode=9 groupStart=210 groupLength=0
-SummaryOffset groupOpcode=7 groupStart=210 groupLength=87
-Footer summaryStart=210 summaryOffsetStart=297
+ChannelInfo id=1 topic=example message_encoding=a schema_encoding=c schema=b schema_name=Example metadata={foo=bar}
+Message channel_id=1 sequence=10 publish_time=1 log_time=2 message_data=<010203>
+MessageIndex channel_id=1 records={2=66}
+ChunkIndex start_time=2 end_time=2 chunk_start_offset=25 chunk_length=139 message_index_offsets={1=166} message_index_length=31 compression="" compressed_size=100 uncompressed_size=100
+SummaryOffset group_opcode=12 group_start=210 group_length=0
+SummaryOffset group_opcode=9 group_start=210 group_length=0
+SummaryOffset group_opcode=7 group_start=210 group_length=87
+Footer summary_start=210 summary_offset_start=297
