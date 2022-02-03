@@ -28,12 +28,12 @@ static void BM_McapWriterBufferedWriterUnchunkedUnindexed(benchmark::State& stat
   writer.open(out, options);
 
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -68,12 +68,12 @@ static void BM_McapWriterBufferedWriterUnchunked(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -108,12 +108,12 @@ static void BM_McapWriterBufferedWriterChunked(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -149,12 +149,12 @@ static void BM_McapWriterBufferedWriterChunkedUnindexed(benchmark::State& state)
   writer.open(out, options);
 
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -191,12 +191,12 @@ static void BM_McapWriterBufferedWriterLZ4(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -233,12 +233,12 @@ static void BM_McapWriterBufferedWriterZStd(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -273,12 +273,12 @@ static void BM_McapWriterStreamWriterUnchunked(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -314,12 +314,12 @@ static void BM_McapWriterStreamWriterChunked(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;

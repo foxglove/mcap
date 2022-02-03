@@ -2,9 +2,11 @@
 
 #include "errors.hpp"
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <limits>
 #include <lz4.h>
+#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -20,16 +22,17 @@ namespace mcap {
 
 #define LIBRARY_VERSION "0.0.1"
 
-constexpr char SpecVersion = '0';
-constexpr char LibraryVersion[] = LIBRARY_VERSION;
-constexpr uint8_t Magic[] = {137, 77, 67, 65, 80, SpecVersion, 13, 10};  // "\x89MCAP0\r\n"
-constexpr uint64_t DefaultChunkSize = 1024 * 768;
-
 using ChannelId = uint16_t;
 using Timestamp = uint64_t;
 using ByteOffset = uint64_t;
 using KeyValueMap = std::unordered_map<std::string, std::string>;
-using ByteArray = std::vector<uint8_t>;
+using ByteArray = std::vector<std::byte>;
+
+constexpr char SpecVersion = '0';
+constexpr char LibraryVersion[] = LIBRARY_VERSION;
+constexpr uint8_t Magic[] = {137, 77, 67, 65, 80, SpecVersion, 13, 10};  // "\x89MCAP0\r\n"
+constexpr uint64_t DefaultChunkSize = 1024 * 768;
+constexpr mcap::ByteOffset EndOffset = std::numeric_limits<mcap::ByteOffset>::max();
 
 enum struct Compression {
   None,
@@ -56,33 +59,54 @@ enum struct OpCode : uint8_t {
   Attachment = 0x08,
   AttachmentIndex = 0x09,
   Statistics = 0x0A,
+  Metadata = 0x0B,
+  MetadataIndex = 0x0C,
+  SummaryOffset = 0x0D,
+  DataEnd = 0x0E,
 };
 
 struct Header {
   std::string profile;
   std::string library;
-  mcap::KeyValueMap metadata;
 };
 
 struct Footer {
-  mcap::ByteOffset indexOffset;
-  uint32_t indexCrc;
+  mcap::ByteOffset summaryStart;
+  mcap::ByteOffset summaryOffsetStart;
+  uint32_t summaryCrc;
 };
 
 struct ChannelInfo {
-  mcap::ChannelId channelId;
-  std::string topicName;
-  std::string encoding;
+  mcap::ChannelId id;
+  std::string topic;
+  std::string messageEncoding;
+  std::string schemaEncoding;
+  mcap::ByteArray schema;
   std::string schemaName;
-  std::string schema;
-  mcap::KeyValueMap userData;
+  mcap::KeyValueMap metadata;
 
-  ChannelInfo(const std::string_view topicName, const std::string_view encoding,
-              const std::string_view schemaName, const std::string_view schema)
-      : topicName(topicName)
-      , encoding(encoding)
+  ChannelInfo() = default;
+
+  ChannelInfo(const std::string_view topic, const std::string_view messageEncoding,
+              const std::string_view schemaEncoding, const std::string_view schema,
+              const std::string_view schemaName, const KeyValueMap& metadata = {})
+      : topic(topic)
+      , messageEncoding(messageEncoding)
+      , schemaEncoding(schemaEncoding)
+      , schema{reinterpret_cast<const std::byte*>(schema.data()),
+               reinterpret_cast<const std::byte*>(schema.data() + schema.size())}
       , schemaName(schemaName)
-      , schema(schema) {}
+      , metadata(metadata) {}
+
+  ChannelInfo(const std::string_view topic, const std::string_view messageEncoding,
+              const std::string_view schemaEncoding, const mcap::ByteArray& schema,
+              const std::string_view schemaName, const KeyValueMap& metadata = {})
+      : topic(topic)
+      , messageEncoding(messageEncoding)
+      , schemaEncoding(schemaEncoding)
+      , schema{schema}
+      , schemaName(schemaName)
+      , metadata(metadata) {}
 };
 
 struct Message {
@@ -111,13 +135,13 @@ struct MessageIndex {
 struct ChunkIndex {
   mcap::Timestamp startTime;
   mcap::Timestamp endTime;
-  mcap::ByteOffset chunkOffset;
+  mcap::ByteOffset chunkStartOffset;
+  mcap::ByteOffset chunkLength;
   std::unordered_map<mcap::ChannelId, mcap::ByteOffset> messageIndexOffsets;
-  uint64_t messageIndexLength;
+  mcap::ByteOffset messageIndexLength;
   std::string compression;
-  uint64_t compressedSize;
-  uint64_t uncompressedSized;
-  uint32_t crc;
+  mcap::ByteOffset compressedSize;
+  mcap::ByteOffset uncompressedSized;
 };
 
 struct Attachment {
@@ -147,14 +171,44 @@ struct Statistics {
   uint64_t messageCount;
   uint32_t channelCount;
   uint32_t attachmentCount;
+  uint32_t metadataCount;
   uint32_t chunkCount;
   std::unordered_map<mcap::ChannelId, uint64_t> channelMessageCounts;
+};
+
+struct Metadata {
+  std::string name;
+  mcap::KeyValueMap metadata;
+};
+
+struct MetadataIndex {
+  uint64_t offset;
+  uint64_t length;
+  std::string name;
+
+  MetadataIndex(const Metadata& metadata, mcap::ByteOffset fileOffset);
+};
+
+struct SummaryOffset {
+  mcap::OpCode groupOpCode;
+  mcap::ByteOffset groupStart;
+  mcap::ByteOffset groupLength;
+};
+
+struct DataEnd {
+  uint32_t dataSectionCrc;
 };
 
 struct UnknownRecord {
   uint8_t opcode;
   uint64_t dataSize;
   std::byte* data = nullptr;
+};
+
+struct McapReaderOptions {
+  bool noSeeking;
+  bool forceScan;
+  bool allowFallbackScan;
 };
 
 struct McapWriterOptions {
@@ -189,7 +243,7 @@ struct IReadable {
   virtual inline ~IReadable() = default;
 
   virtual uint64_t size() const = 0;
-  virtual uint64_t read(std::byte* output, uint64_t size) = 0;
+  virtual uint64_t read(std::byte** output, uint64_t offset, uint64_t size) = 0;
 };
 
 struct IChunkWriter {
@@ -282,6 +336,176 @@ private:
   ZSTD_CCtx* zstdContext_ = nullptr;
 };
 
+struct Record {
+  OpCode opcode;
+  uint64_t dataSize;
+  std::byte* data;
+};
+
+class McapReader final {
+public:
+  struct LinearMessageView {
+    struct ForwardMessageIterator {
+      using iterator_category = std::forward_iterator_tag;
+      using difference_type = int64_t;
+      using value_type = Message;
+      using pointer = Message*;
+      using reference = Message&;
+
+      ForwardMessageIterator(LinearMessageView& view)
+          : view_(view)
+          , offset_(view.startOffset())
+          , curRecord_{} {}
+
+      ForwardMessageIterator(LinearMessageView& view, uint64_t offset)
+          : view_(view)
+          , offset_(offset)
+          , curRecord_{} {}
+
+      reference operator*() const {
+        // FIXME
+        static Message message;
+        return message;
+      }
+      const pointer operator->() {
+        return &(operator*());
+      }
+      ForwardMessageIterator& operator++() {
+        // Mark any offset past the end of the file as EndOffset
+        auto* dataSource = view_.reader().dataSource();
+        if (!dataSource || offset_ >= dataSource->size()) {
+          offset_ = EndOffset;
+          return *this;
+        }
+
+        // Read the current record if needed
+        if (!curRecord_.data) {
+          if (!readCurrentRecord(*dataSource)) {
+            return *this;
+          }
+        }
+
+        // Advance to the next record
+        offset_ += 9 + curRecord_.dataSize;
+
+        // Read the next record
+        readCurrentRecord(*dataSource);
+
+        return *this;
+      }
+      ForwardMessageIterator operator++(int) {
+        ForwardMessageIterator tmp = *this;
+        ++(*this);
+        return tmp;
+      }
+      friend bool operator==(const ForwardMessageIterator& a, const ForwardMessageIterator& b) {
+        return a.offset_ == b.offset_;
+      }
+      friend bool operator!=(const ForwardMessageIterator& a, const ForwardMessageIterator& b) {
+        return a.offset_ != b.offset_;
+      }
+
+    private:
+      LinearMessageView& view_;
+      mcap::ByteOffset offset_;
+      mcap::Record curRecord_;
+
+      bool readCurrentRecord(mcap::IReadable& dataSource) {
+        if (auto status = McapReader::ReadRecord(dataSource, offset_, &curRecord_); !status.ok()) {
+          view_.reader().problems().push_back(status);
+          curRecord_.data = nullptr;
+          offset_ = EndOffset;
+          return false;
+        }
+        return true;
+      }
+    };
+
+    LinearMessageView(McapReader& reader, mcap::ByteOffset startOffset, mcap::Timestamp endTime)
+        : reader_(reader)
+        , startOffset_(startOffset)
+        , endTime_(endTime) {}
+
+    ForwardMessageIterator begin() {
+      return ForwardMessageIterator(*this, startOffset_);
+    }
+    ForwardMessageIterator end() {
+      return ForwardMessageIterator(*this, EndOffset);
+    }
+
+    mcap::McapReader& reader() {
+      return reader_;
+    }
+    mcap::ByteOffset startOffset() const {
+      return startOffset_;
+    }
+    mcap::Timestamp endTime() const {
+      return endTime_;
+    }
+
+  private:
+    mcap::McapReader& reader_;
+    mcap::ByteOffset startOffset_;
+    mcap::Timestamp endTime_;
+  };
+
+  ~McapReader();
+
+  mcap::Status open(mcap::IReadable& reader, const McapReaderOptions& options);
+
+  LinearMessageView read() const;
+
+  mcap::IReadable* dataSource() {
+    return input_;
+  }
+
+  std::vector<mcap::Status>& problems() {
+    return problems_;
+  }
+
+  void close();
+
+  static mcap::Status ReadRecord(mcap::IReadable& reader, uint64_t offset, mcap::Record* record);
+  static mcap::Status ReadFooter(mcap::IReadable& reader, uint64_t offset, mcap::Footer* footer);
+
+  static mcap::Status ParseHeader(const mcap::Record& record, mcap::Header* header);
+  static mcap::Status ParseChannelInfo(const mcap::Record& record, mcap::ChannelInfo* channelInfo);
+  static mcap::Status ParseMessage(const mcap::Record& record, mcap::Message* message);
+  static mcap::Status ParseChunk(const mcap::Record& record, mcap::Chunk* chunk);
+  static mcap::Status ParseMessageIndex(const mcap::Record& record,
+                                        mcap::MessageIndex* messageIndex);
+  static mcap::Status ParseChunkIndex(const mcap::Record& record, mcap::ChunkIndex* chunkIndex);
+  static mcap::Status ParseAttachment(const mcap::Record& record, mcap::Attachment* attachment);
+  static mcap::Status ParseAttachmentIndex(const mcap::Record& record,
+                                           mcap::AttachmentIndex* attachmentIndex);
+  static mcap::Status ParseStatistics(const mcap::Record& record, mcap::Statistics* statistics);
+  static mcap::Status ParseMetadata(const mcap::Record& record, mcap::Metadata* metadata);
+  static mcap::Status ParseMetadataIndex(const mcap::Record& record,
+                                         mcap::MetadataIndex* metadataIndex);
+  static mcap::Status ParseSummaryOffset(const mcap::Record& record,
+                                         mcap::SummaryOffset* summaryOffset);
+  static mcap::Status ParseDataEnd(const mcap::Record& record, mcap::DataEnd* dataEnd);
+
+private:
+  mcap::IReadable* input_ = nullptr;
+  McapReaderOptions options_{};
+  std::vector<mcap::Status> problems_;
+  std::optional<mcap::Header> header_;
+  std::optional<mcap::Footer> footer_;
+  std::optional<mcap::Statistics> statistics_;
+  std::vector<mcap::ChunkIndex> chunkIndexes_;
+  std::vector<mcap::AttachmentIndex> attachmentIndexes_;
+  std::unordered_map<mcap::ChannelId, mcap::ChannelInfo> channelInfos_;
+  // Used for uncompressed messages
+  std::unordered_map<mcap::ChannelId, std::map<mcap::Timestamp, mcap::ByteOffset>> messageIndex_;
+  // Used for messages inside compressed chunks
+  std::unordered_map<mcap::ChannelId, std::map<mcap::Timestamp, mcap::ByteOffset>>
+    messageChunkIndex_;
+  uint64_t startTime_ = 0;
+  uint64_t endTime_ = 0;
+  bool parsedSummary_ = false;
+};
+
 class McapWriter final {
 public:
   ~McapWriter();
@@ -341,6 +565,14 @@ public:
    */
   mcap::Status write(const mcap::Attachment& attachment);
 
+  /**
+   * @brief Write a metadata record to the output stream.
+   *
+   * @param metdata  Named group of key/value string pairs to add.
+   * @return A non-zero error code on failure.
+   */
+  mcap::Status write(const mcap::Metadata& metdata);
+
 private:
   uint64_t chunkSize_ = DefaultChunkSize;
   mcap::IWritable* output_ = nullptr;
@@ -350,6 +582,7 @@ private:
   std::unique_ptr<mcap::ZStdWriter> zstdChunk_;
   std::vector<mcap::ChannelInfo> channels_;
   std::vector<mcap::AttachmentIndex> attachmentIndex_;
+  std::vector<mcap::MetadataIndex> metadataIndex_;
   std::vector<mcap::ChunkIndex> chunkIndex_;
   Statistics statistics_{};
   std::unordered_map<mcap::ChannelId, mcap::MessageIndex> currentMessageIndex_;
@@ -371,14 +604,19 @@ private:
   static uint64_t write(mcap::IWritable& output, const mcap::ChannelInfo& info);
   static uint64_t write(mcap::IWritable& output, const mcap::Message& message);
   static uint64_t write(mcap::IWritable& output, const mcap::Attachment& attachment);
+  static uint64_t write(mcap::IWritable& output, const mcap::Metadata& metadata);
   static uint64_t write(mcap::IWritable& output, const mcap::Chunk& chunk);
   static uint64_t write(mcap::IWritable& output, const mcap::MessageIndex& index);
   static uint64_t write(mcap::IWritable& output, const mcap::ChunkIndex& index);
   static uint64_t write(mcap::IWritable& output, const mcap::AttachmentIndex& index);
+  static uint64_t write(mcap::IWritable& output, const mcap::MetadataIndex& index);
   static uint64_t write(mcap::IWritable& output, const mcap::Statistics& stats);
+  static uint64_t write(mcap::IWritable& output, const mcap::SummaryOffset& summaryOffset);
+  static uint64_t write(mcap::IWritable& output, const mcap::DataEnd& dataEnd);
   static uint64_t write(mcap::IWritable& output, const mcap::UnknownRecord& record);
 
   static void write(mcap::IWritable& output, const std::string_view str);
+  static void write(mcap::IWritable& output, const mcap::ByteArray bytes);
   static void write(mcap::IWritable& output, OpCode value);
   static void write(mcap::IWritable& output, uint16_t value);
   static void write(mcap::IWritable& output, uint32_t value);

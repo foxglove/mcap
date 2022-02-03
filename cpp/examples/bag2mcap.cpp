@@ -22,7 +22,7 @@ int main() {
   std::ofstream out("output.mcap", std::ios::binary);
   writer.open(out, options);
 
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
   writer.addChannel(topic);
 
   std::array<std::byte, 4 + 13> payload;
@@ -31,7 +31,7 @@ int main() {
   std::memcpy(payload.data() + 4, "Hello, world!", 13);
 
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = now();
   msg.recordTime = msg.publishTime;
