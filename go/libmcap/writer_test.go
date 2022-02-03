@@ -116,7 +116,7 @@ func TestChunkedReadWrite(t *testing.T) {
 				SchemaName:      "foo",
 				Schema:          []byte{},
 				Metadata: map[string]string{
-					"callerid": "100",
+					"callerid": "100", // cspell:disable-line
 				},
 			})
 			assert.Nil(t, err)
@@ -223,7 +223,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		SchemaName:      "foo",
 		Schema:          []byte{},
 		Metadata: map[string]string{
-			"callerid": "100",
+			"callerid": "100", // cspell:disable-line
 		},
 	})
 	assert.Nil(t, err)

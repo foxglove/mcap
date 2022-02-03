@@ -73,7 +73,7 @@ func processBag(
 		}
 	}
 
-	headerbuf := make([]byte, 1024)
+	header := make([]byte, 1024)
 	buf := make([]byte, 8)
 	data := make([]byte, 1024*1024)
 	for {
@@ -88,15 +88,15 @@ func processBag(
 		headerlen := binary.LittleEndian.Uint32(buf[:4])
 
 		// header
-		if len(headerbuf) < int(headerlen) {
-			headerbuf = make([]byte, headerlen*2)
+		if len(header) < int(headerlen) {
+			header = make([]byte, headerlen*2)
 		}
-		_, err = io.ReadFull(r, headerbuf[:headerlen])
+		_, err = io.ReadFull(r, header[:headerlen])
 		if err != nil {
 			return err
 		}
 
-		header := headerbuf[:headerlen]
+		headerData := header[:headerlen]
 
 		// data len
 		_, err = io.ReadFull(r, buf[4:8])
@@ -106,7 +106,7 @@ func processBag(
 		datalen := binary.LittleEndian.Uint32(buf[4:8])
 
 		// opcode
-		opcode, err := extractHeaderValue(header, []byte("op"))
+		opcode, err := extractHeaderValue(headerData, []byte("op"))
 		if err != nil {
 			return err
 		}
@@ -123,7 +123,7 @@ func processBag(
 		case OpBagHeader:
 			continue
 		case OpBagChunk:
-			compression, err := extractHeaderValue(header, []byte("compression"))
+			compression, err := extractHeaderValue(headerData, []byte("compression"))
 			if err != nil {
 				return err
 			}
@@ -141,12 +141,12 @@ func processBag(
 				return err
 			}
 		case OpBagConnection:
-			err := connectionCallback(header, data[:datalen])
+			err := connectionCallback(headerData, data[:datalen])
 			if err != nil {
 				return err
 			}
 		case OpBagMessageData:
-			err := msgcallback(header, data[:datalen])
+			err := msgcallback(headerData, data[:datalen])
 			if err != nil {
 				return err
 			}
@@ -224,7 +224,7 @@ func Bag2MCAP(w io.Writer, r io.Reader) error {
 			if err != nil {
 				return err
 			}
-			nsecs := rostimeToNanos(time)
+			nsecs := rosTimeToNanoseconds(time)
 			err = writer.WriteMessage(&libmcap.Message{
 				ChannelID:   connID,
 				Sequence:    seq,
@@ -242,7 +242,7 @@ func Bag2MCAP(w io.Writer, r io.Reader) error {
 	)
 }
 
-func rostimeToNanos(time []byte) uint64 {
+func rosTimeToNanoseconds(time []byte) uint64 {
 	secs := binary.LittleEndian.Uint32(time)
 	nsecs := binary.LittleEndian.Uint32(time[4:])
 	return uint64(secs)*1000000000 + uint64(nsecs)
