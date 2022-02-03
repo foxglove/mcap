@@ -19,6 +19,7 @@ jobs:
           cache: yarn
 
       - run: yarn install --frozen-lockfile
+      - run: echo '::add-matcher::.github/cspell-problem-matcher.json'
       - run: yarn spellcheck
 
   conformance:
