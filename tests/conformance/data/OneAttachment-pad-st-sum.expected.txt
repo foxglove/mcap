@@ -1,0 +1,9 @@
+Header profile="" library=""
+Attachment name=myfile recordTime=2 contentType=application/octet-stream data=<010203>
+Statistics messageCount=0 channelCount=0 attachmentCount=1 chunkCount=0 channelMessageCounts={}
+AttachmentIndex recordTime=2 attachmentSize=3 name=myfile contentType=application/octet-stream offset=28 attachmentRecordLength=81
+SummaryOffset groupOpcode=12 groupStart=161 groupLength=0
+SummaryOffset groupOpcode=10 groupStart=125 groupLength=36
+SummaryOffset groupOpcode=9 groupStart=161 groupLength=82
+SummaryOffset groupOpcode=7 groupStart=243 groupLength=0
+Footer summaryStart=125 summaryOffsetStart=243

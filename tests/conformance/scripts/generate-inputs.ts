@@ -248,6 +248,19 @@ const inputs: { name: string; records: TestDataRecord[] }[] = [
       },
     ],
   },
+  {
+    name: "OneAttachment",
+    records: [
+      {
+        type: "Attachment",
+        name: "myfile",
+        contentType: "application/octet-stream",
+        createdAt: 1n,
+        recordTime: 2n,
+        data: new Uint8Array([1, 2, 3]),
+      },
+    ],
+  },
 ];
 
 async function main(options: { dataDir: string; verify: boolean }) {
