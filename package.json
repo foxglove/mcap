@@ -8,10 +8,12 @@
   },
   "scripts": {
     "lint:docs": "prettier docs --check",
+    "spellcheck": "cspell --no-progress --relative '**'",
     "test:conformance:generate-inputs": "yarn workspace @foxglove/mcap-conformance generate-inputs --data-dir \"$(pwd)/tests/conformance/data\"",
     "test:conformance": "yarn workspace @foxglove/mcap-conformance run-tests --data-dir \"$(pwd)/tests/conformance/data\""
   },
   "devDependencies": {
+    "cspell": "^5.18.0",
     "prettier": "^2.5.1"
   }
 }

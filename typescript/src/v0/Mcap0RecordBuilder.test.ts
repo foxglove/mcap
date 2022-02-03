@@ -55,7 +55,7 @@ describe("Mcap0RecordBuilder", () => {
       channelId: 1,
       topicName: "/topic",
       messageEncoding: "encoding",
-      schemaEncoding: "someformat",
+      schemaEncoding: "some format",
       schemaName: "schema name",
       schema: "schema",
       userData: [],
@@ -68,7 +68,7 @@ describe("Mcap0RecordBuilder", () => {
       .uint16(1)
       .string("/topic")
       .string("encoding")
-      .string("someformat")
+      .string("some format")
       .string("schema")
       .string("schema name")
       .uint32(0); // user data length

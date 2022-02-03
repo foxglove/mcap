@@ -7,6 +7,20 @@ on:
     branches: ["*"]
 
 jobs:
+  spellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          lfs: true
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 16.x
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+      - run: yarn spellcheck
+
   conformance:
     runs-on: ubuntu-latest
     steps:
