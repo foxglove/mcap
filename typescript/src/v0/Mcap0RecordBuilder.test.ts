@@ -64,7 +64,7 @@ describe("Mcap0RecordBuilder", () => {
     const buffer = new BufferBuilder();
     buffer
       .uint8(3) // opcode
-      .uint64(BigInt(67)) // record content byte length
+      .uint64(BigInt(68)) // record content byte length
       .uint16(1)
       .string("/topic")
       .string("encoding")
