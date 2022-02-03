@@ -30,12 +30,12 @@ Which of these options is preferable will tend to depend on the proportion of to
 
 ### Listing and accessing attachments
 
-The format provides the ability to list attachments contained wihtin the file, and quickly extract them from the file contents. To list/select attachments in the file:
+The format provides the ability to list attachments contained within the file, and quickly extract them from the file contents. To list/select attachments in the file:
 
 1. Read the fixed-length footer and seek to the start of the index data section.
 2. Scan forward until encountering the attachment index, then read attachment index records until encountering a record that is not an attachment index.
-3. The rcords covered in the previous read will include attachment names, types, sizes, and timestamps. These can be used to fill out a list of attachments for selection.
-4. To select an attachment from th efile, seek to the associated offset in the file and unpack the file content from the attachment record.
+3. The records covered in the previous read will include attachment names, types, sizes, and timestamps. These can be used to fill out a list of attachments for selection.
+4. To select an attachment from the file, seek to the associated offset in the file and unpack the file content from the attachment record.
 
 ### Accessing summary statistics
 

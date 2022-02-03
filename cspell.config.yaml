@@ -1,0 +1,56 @@
+$schema: https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json
+version: "0.2"
+ignorePaths:
+  - cspell.config.yaml
+  - node_modules
+  - go.mod
+  - go.sum
+  - testdata
+  - "*.Dockerfile"
+  - "*.mcap"
+
+words:
+  - cbor
+  - cmake
+  - crc
+  - crcs
+  - deserialization
+  - golangci
+  - libmcap
+  - mcap
+  - nsec
+  - nsecs
+  - proto
+  - protobuf
+  - rosbag
+  - rosmsg
+  - typecheck
+  - unchunked
+  - unindexed
+  - velodyne
+  - zstd
+
+overrides:
+  - filename: "**/*.go"
+    words:
+      - libmcap
+    ignoreRegExpList:
+      - '"github\.com.+?"'
+
+  - filename: "go/**/Makefile"
+    words:
+      - memprofile
+      - cpuprofile
+      - benchmem
+
+  - filename: "CMakeLists.txt"
+    words:
+      - conanbuildinfo
+
+  - filename: "cpp/**"
+    words:
+      - cppstd
+
+  - filename: "**/{*.js,*.ts,*.tsx}"
+    ignoreRegExpList:
+      - "0x[0-9a-f]+n?"

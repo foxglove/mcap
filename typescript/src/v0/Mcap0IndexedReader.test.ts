@@ -125,7 +125,7 @@ describe("Mcap0IndexedReader", () => {
     data.push(
       ...record(Opcode.CHANNEL_INFO, [
         ...uint16LE(42), // channel id
-        ...string("mytopic"), // topic
+        ...string("myTopic"), // topic
         ...string("utf12"), // encoding
         ...string("json"), // schema format
         ...string("stuff"), // schema
@@ -150,7 +150,7 @@ describe("Mcap0IndexedReader", () => {
             type: "ChannelInfo",
             channelId: 42,
             schemaEncoding: "json",
-            topicName: "mytopic",
+            topicName: "myTopic",
             messageEncoding: "utf12",
             schemaName: "some data",
             schema: "stuff",
@@ -198,7 +198,7 @@ describe("Mcap0IndexedReader", () => {
       async ({ startTime, endTime, expected }) => {
         const channelInfo = record(Opcode.CHANNEL_INFO, [
           ...uint16LE(42), // channel id
-          ...string("mytopic"), // topic
+          ...string("myTopic"), // topic
           ...string("utf12"), // message encoding
           ...string("json"), // schema format
           ...string("stuff"), // schema
