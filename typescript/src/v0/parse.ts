@@ -95,8 +95,13 @@ export function parseRecord({
     case Opcode.FOOTER: {
       const summaryStart = reader.uint64();
       const summaryOffsetStart = reader.uint64();
-      const crc = reader.uint32();
-      const record: TypedMcapRecord = { type: "Footer", summaryStart, summaryOffsetStart, crc };
+      const summaryCrc = reader.uint32();
+      const record: TypedMcapRecord = {
+        type: "Footer",
+        summaryStart,
+        summaryOffsetStart,
+        summaryCrc,
+      };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
 
@@ -107,25 +112,25 @@ export function parseRecord({
       const schemaEncoding = reader.string();
       const schema = reader.string();
       const schemaName = reader.string();
-      const userData = reader.keyValuePairs(
+      const metadata = reader.keyValuePairs(
         (r) => r.string(),
         (r) => r.string(),
       );
 
       const record: TypedMcapRecord = {
         type: "ChannelInfo",
-        channelId,
-        topicName,
+        id: channelId,
+        topic: topicName,
         messageEncoding,
         schemaEncoding,
         schemaName,
         schema,
-        userData,
+        metadata,
       };
       const existingInfo = channelInfosById.get(channelId);
       if (existingInfo) {
         if (!isEqual(existingInfo, record)) {
-          throw new Error(`differing channel infos for ${record.channelId}`);
+          throw new Error(`differing channel infos for ${record.id}`);
         }
         return {
           record: existingInfo,
@@ -145,7 +150,7 @@ export function parseRecord({
       }
       const sequence = reader.uint32();
       const publishTime = reader.uint64();
-      const recordTime = reader.uint64();
+      const logTime = reader.uint64();
       const messageData = new Uint8Array(
         recordView.buffer.slice(
           recordView.byteOffset + reader.offset,
@@ -157,7 +162,7 @@ export function parseRecord({
         channelId,
         sequence,
         publishTime,
-        recordTime,
+        logTime,
         messageData,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
@@ -203,7 +208,7 @@ export function parseRecord({
     case Opcode.CHUNK_INDEX: {
       const startTime = reader.uint64();
       const endTime = reader.uint64();
-      const chunkStart = reader.uint64();
+      const chunkStartOffset = reader.uint64();
       const chunkLength = reader.uint64();
       const messageIndexOffsets = reader.map(
         (r) => r.uint16(),
@@ -217,7 +222,7 @@ export function parseRecord({
         type: "ChunkIndex",
         startTime,
         endTime,
-        chunkStart,
+        chunkStartOffset,
         chunkLength,
         messageIndexOffsets,
         messageIndexLength,
@@ -230,7 +235,7 @@ export function parseRecord({
     case Opcode.ATTACHMENT: {
       const name = reader.string();
       const createdAt = reader.uint64();
-      const recordTime = reader.uint64();
+      const logTime = reader.uint64();
       const contentType = reader.string();
       const dataLen = reader.uint64();
       if (BigInt(recordView.byteOffset + reader.offset) + dataLen > Number.MAX_SAFE_INTEGER) {
@@ -258,28 +263,28 @@ export function parseRecord({
         type: "Attachment",
         name,
         createdAt,
-        recordTime,
+        logTime,
         contentType,
         data,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
     case Opcode.ATTACHMENT_INDEX: {
-      const attachmentOffset = reader.uint64();
-      const attachmentRecordLength = reader.uint64();
-      const recordTime = reader.uint64();
-      const attachmentSize = reader.uint64();
+      const offset = reader.uint64();
+      const length = reader.uint64();
+      const logTime = reader.uint64();
+      const dataSize = reader.uint64();
       const name = reader.string();
       const contentType = reader.string();
 
       const record: TypedMcapRecord = {
         type: "AttachmentIndex",
-        recordTime,
-        attachmentSize,
+        offset,
+        length,
+        logTime,
+        dataSize,
         name,
         contentType,
-        offset: attachmentOffset,
-        attachmentRecordLength,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }

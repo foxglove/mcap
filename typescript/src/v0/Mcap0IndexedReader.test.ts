@@ -148,13 +148,13 @@ describe("Mcap0IndexedReader", () => {
           42,
           {
             type: "ChannelInfo",
-            channelId: 42,
+            id: 42,
             schemaEncoding: "json",
-            topicName: "mytopic",
+            topic: "mytopic",
             messageEncoding: "utf12",
             schemaName: "some data",
             schema: "stuff",
-            userData: [["foo", "bar"]],
+            metadata: [["foo", "bar"]],
           },
         ],
       ]),
@@ -168,7 +168,7 @@ describe("Mcap0IndexedReader", () => {
       channelId: 42,
       sequence: 1,
       publishTime: 0n,
-      recordTime: 10n,
+      logTime: 10n,
       messageData: new Uint8Array(),
     };
     const message2: TypedMcapRecords["Message"] = {
@@ -176,7 +176,7 @@ describe("Mcap0IndexedReader", () => {
       channelId: 42,
       sequence: 2,
       publishTime: 1n,
-      recordTime: 11n,
+      logTime: 11n,
       messageData: new Uint8Array(),
     };
     const message3: TypedMcapRecords["Message"] = {
@@ -184,7 +184,7 @@ describe("Mcap0IndexedReader", () => {
       channelId: 42,
       sequence: 3,
       publishTime: 2n,
-      recordTime: 12n,
+      logTime: 12n,
       messageData: new Uint8Array(),
     };
     it.each([
@@ -209,19 +209,19 @@ describe("Mcap0IndexedReader", () => {
           ...uint16LE(message1.channelId), // channel id
           ...uint32LE(message1.sequence), // sequence
           ...uint64LE(message1.publishTime), // publish time
-          ...uint64LE(message1.recordTime), // record time
+          ...uint64LE(message1.logTime), // record time
         ]);
         const message2Data = record(Opcode.MESSAGE, [
           ...uint16LE(message2.channelId), // channel id
           ...uint32LE(message2.sequence), // sequence
           ...uint64LE(message2.publishTime), // publish time
-          ...uint64LE(message2.recordTime), // record time
+          ...uint64LE(message2.logTime), // record time
         ]);
         const message3Data = record(Opcode.MESSAGE, [
           ...uint16LE(message3.channelId), // channel id
           ...uint32LE(message3.sequence), // sequence
           ...uint64LE(message3.publishTime), // publish time
-          ...uint64LE(message3.recordTime), // record time
+          ...uint64LE(message3.logTime), // record time
         ]);
         const chunkContents = [...channelInfo];
         const message1Offset = BigInt(chunkContents.length);
@@ -254,9 +254,9 @@ describe("Mcap0IndexedReader", () => {
           ...record(Opcode.MESSAGE_INDEX, [
             ...uint16LE(42), // channel id
             ...keyValues(uint64LE, uint64LE, [
-              [message1.recordTime, message1Offset],
-              [message2.recordTime, message2Offset],
-              [message3.recordTime, message3Offset],
+              [message1.logTime, message1Offset],
+              [message2.logTime, message2Offset],
+              [message3.logTime, message3Offset],
             ]), // records
           ]),
         );
@@ -265,8 +265,8 @@ describe("Mcap0IndexedReader", () => {
         data.push(
           ...channelInfo,
           ...record(Opcode.CHUNK_INDEX, [
-            ...uint64LE(message1.recordTime), // start time
-            ...uint64LE(message3.recordTime), // end time
+            ...uint64LE(message1.logTime), // start time
+            ...uint64LE(message3.logTime), // end time
             ...uint64LE(chunkOffset), // offset
             ...uint64LE(0n), // chunk length
             ...keyValues(uint16LE, uint64LE, [[42, messageIndexOffset]]), // message index offsets

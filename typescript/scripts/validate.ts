@@ -107,10 +107,10 @@ async function validate(
         break;
 
       case "ChannelInfo": {
-        const existingInfo = channelInfoById.get(record.channelId);
+        const existingInfo = channelInfoById.get(record.id);
         if (existingInfo) {
           if (!isEqual(existingInfo.info, record)) {
-            throw new Error(`differing channel infos for ${record.channelId}`);
+            throw new Error(`differing channel infos for ${record.id}`);
           }
           break;
         }
@@ -145,7 +145,7 @@ async function validate(
         } else {
           throw new Error(`unsupported encoding ${record.messageEncoding}`);
         }
-        channelInfoById.set(record.channelId, { info: record, messageDeserializer });
+        channelInfoById.set(record.id, { info: record, messageDeserializer });
         break;
       }
 
@@ -157,7 +157,7 @@ async function validate(
         if (deserialize) {
           if (channelInfo.messageDeserializer == undefined) {
             throw new Error(
-              `No deserializer available for channel id: ${channelInfo.info.channelId} ${channelInfo.info.messageEncoding}`,
+              `No deserializer available for channel id: ${channelInfo.info.id} ${channelInfo.info.messageEncoding}`,
             );
           }
           const message = channelInfo.messageDeserializer(record.messageData);

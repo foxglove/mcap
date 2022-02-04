@@ -22,9 +22,9 @@ class ChunkBuilder {
   }
 
   addChannelInfo(info: ChannelInfo): void {
-    if (!this.messageIndices.has(info.channelId)) {
-      this.messageIndices.set(info.channelId, {
-        channelId: info.channelId,
+    if (!this.messageIndices.has(info.id)) {
+      this.messageIndices.set(info.id, {
+        channelId: info.id,
         records: [],
       });
     }
@@ -33,9 +33,9 @@ class ChunkBuilder {
 
   addMessage(message: Message): void {
     if (this.startTime === 0n) {
-      this.startTime = message.recordTime;
+      this.startTime = message.logTime;
     }
-    this.endTime = message.recordTime;
+    this.endTime = message.logTime;
 
     let messageIndex = this.messageIndices.get(message.channelId);
     if (!messageIndex) {
@@ -46,7 +46,7 @@ class ChunkBuilder {
       this.messageIndices.set(message.channelId, messageIndex);
     }
 
-    messageIndex.records.push([message.recordTime, BigInt(this.recordWriter.length)]);
+    messageIndex.records.push([message.logTime, BigInt(this.recordWriter.length)]);
 
     this.totalMessageCount += 1;
     this.recordWriter.writeMessage(message);

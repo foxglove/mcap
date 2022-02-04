@@ -4,4 +4,4 @@ AttachmentIndex content_type=application/octet-stream data_size=3 length=78 log_
 SummaryOffset group_length=0 group_opcode=12 group_start=116
 SummaryOffset group_length=79 group_opcode=9 group_start=116
 SummaryOffset group_length=0 group_opcode=7 group_start=195
-Footer summary_offset_start=195 summary_start=116
+Footer summary_crc=0 summary_offset_start=195 summary_start=116

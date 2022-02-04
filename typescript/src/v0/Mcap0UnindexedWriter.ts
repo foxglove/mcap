@@ -34,7 +34,7 @@ export class Mcap0UnindexedWriter {
     this.bufferRecordBuilder.writeFooter({
       summaryStart: 0n,
       summaryOffsetStart: 0n,
-      crc: 0,
+      summaryCrc: 0,
     });
     await this.writable.write(this.bufferRecordBuilder.buffer);
     this.bufferRecordBuilder.reset();
@@ -47,7 +47,7 @@ export class Mcap0UnindexedWriter {
     const channelId = this.nextChannelId;
     this.bufferRecordBuilder.writeChannelInfo({
       ...info,
-      channelId,
+      id: channelId,
     });
 
     await this.writable.write(this.bufferRecordBuilder.buffer);
