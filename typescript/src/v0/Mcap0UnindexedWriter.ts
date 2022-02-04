@@ -34,7 +34,7 @@ export class Mcap0UnindexedWriter {
     this.bufferRecordBuilder.writeFooter({
       summaryStart: 0n,
       summaryOffsetStart: 0n,
-      crc: 0,
+      summaryCrc: 0,
     });
     await this.writable.write(this.bufferRecordBuilder.buffer);
     this.bufferRecordBuilder.reset();
@@ -43,11 +43,11 @@ export class Mcap0UnindexedWriter {
   /**
    * Add channel info and return a generated channel id. The channel id is used when adding messages.
    */
-  async registerChannel(info: Omit<ChannelInfo, "channelId">): Promise<number> {
+  async registerChannel(info: Omit<ChannelInfo, "id">): Promise<number> {
     const channelId = this.nextChannelId;
     this.bufferRecordBuilder.writeChannelInfo({
       ...info,
-      channelId,
+      id: channelId,
     });
 
     await this.writable.write(this.bufferRecordBuilder.buffer);

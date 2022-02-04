@@ -34,7 +34,7 @@ describe("Mcap0RecordBuilder", () => {
     writer.writeFooter({
       summaryStart: 0n,
       summaryOffsetStart: 0n,
-      crc: 0,
+      summaryCrc: 0,
     });
 
     const buffer = new BufferBuilder();
@@ -52,13 +52,13 @@ describe("Mcap0RecordBuilder", () => {
     const writer = new Mcap0RecordBuilder();
 
     const written = writer.writeChannelInfo({
-      channelId: 1,
-      topicName: "/topic",
+      id: 1,
+      topic: "/topic",
       messageEncoding: "encoding",
       schemaEncoding: "some format",
       schemaName: "schema name",
       schema: "schema",
-      userData: [],
+      metadata: [],
     });
 
     const buffer = new BufferBuilder();
@@ -83,7 +83,7 @@ describe("Mcap0RecordBuilder", () => {
     writer.writeMessage({
       channelId: 1,
       publishTime: 3n,
-      recordTime: 5n,
+      logTime: 5n,
       sequence: 7,
       messageData: new Uint8Array(),
     });
