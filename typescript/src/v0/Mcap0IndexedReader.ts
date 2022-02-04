@@ -15,7 +15,6 @@ export default class Mcap0IndexedReader {
 
   private readable: IReadable;
   private decompressHandlers?: DecompressHandlers;
-  private readwriteChannelInfosById: Map<number, TypedMcapRecords["ChannelInfo"]>;
 
   private startTime: bigint | undefined;
   private endTime: bigint | undefined;
@@ -41,7 +40,6 @@ export default class Mcap0IndexedReader {
     this.statistics = statistics;
     this.decompressHandlers = decompressHandlers;
     this.channelInfosById = channelInfosById;
-    this.readwriteChannelInfosById = channelInfosById;
 
     for (const chunk of chunkIndexes) {
       if (this.startTime == undefined || chunk.startTime < this.startTime) {
@@ -104,7 +102,6 @@ export default class Mcap0IndexedReader {
     const footer = parseRecord({
       view: footerAndMagicView,
       startOffset: 0,
-      channelInfosById: new Map(),
       validateCrcs: true,
     }).record;
     if (footer?.type !== "Footer") {
@@ -159,7 +156,6 @@ export default class Mcap0IndexedReader {
       (result = parseRecord({
         view: indexView,
         startOffset: offset,
-        channelInfosById,
         validateCrcs: true,
       })),
         result.record;
@@ -302,7 +298,6 @@ export default class Mcap0IndexedReader {
       const chunkResult = parseRecord({
         view: chunkAndMessageIndexesView,
         startOffset: offset,
-        channelInfosById: this.readwriteChannelInfosById,
         validateCrcs: true,
       });
       offset += chunkResult.usedBytes;
@@ -320,7 +315,6 @@ export default class Mcap0IndexedReader {
         (result = parseRecord({
           view: chunkAndMessageIndexesView,
           startOffset: offset,
-          channelInfosById: this.readwriteChannelInfosById,
           validateCrcs: true,
         })),
           result.record;
@@ -385,7 +379,6 @@ export default class Mcap0IndexedReader {
         const result = parseRecord({
           view: recordsView,
           startOffset: Number(offset),
-          channelInfosById: this.readwriteChannelInfosById,
           validateCrcs: true,
         });
         if (!result.record) {

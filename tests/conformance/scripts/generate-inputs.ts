@@ -14,6 +14,7 @@ enum TestFeatures {
   UseChunks = "ch",
   UseMessageIndex = "mx",
   UseStatistics = "st",
+  UseRepeatedSchemas = "rsh",
   UseRepeatedChannelInfos = "rch",
   UseAttachmentIndex = "ax",
   UseMetadataIndex = "mdx",
@@ -35,6 +36,7 @@ function* generateVariants(...features: TestFeatures[]): Generator<Set<TestFeatu
 
 type TestDataRecord = Mcap0Types.TypedMcapRecords[
   | "Message"
+  | "Schema"
   | "ChannelInfo"
   | "Attachment"
   | "Metadata"];
@@ -60,6 +62,13 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
 
   for (const record of records) {
     switch (record.type) {
+      case "Schema":
+        if (chunk) {
+          chunk.addSchema(record);
+        } else {
+          builder.writeSchema(record);
+        }
+        break;
       case "ChannelInfo":
         channelCount++;
         if (chunk) {
@@ -137,6 +146,16 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
 
   const summaryStart = BigInt(builder.length);
 
+  const repeatedSchemasStart = BigInt(builder.length);
+  if (variant.has(TestFeatures.UseRepeatedSchemas)) {
+    for (const record of records) {
+      if (record.type === "Schema") {
+        builder.writeSchema(record);
+      }
+    }
+  }
+  const repeatedSchemasLength = BigInt(builder.length) - repeatedSchemasStart;
+
   const repeatedChannelInfosStart = BigInt(builder.length);
   if (variant.has(TestFeatures.UseRepeatedChannelInfos)) {
     for (const record of records) {
@@ -186,9 +205,16 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   let summaryOffsetStart = 0n;
   if (variant.has(TestFeatures.UseSummaryOffset)) {
     summaryOffsetStart = BigInt(builder.length);
+    if (repeatedSchemasLength !== 0n) {
+      builder.writeSummaryOffset({
+        groupOpcode: Mcap0Constants.Opcode.SCHEMA,
+        groupStart: repeatedSchemasStart,
+        groupLength: repeatedSchemasLength,
+      });
+    }
     if (repeatedChannelInfosLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: Mcap0Constants.Opcode.METADATA_INDEX,
+        groupOpcode: Mcap0Constants.Opcode.CHANNEL_INFO,
         groupStart: repeatedChannelInfosStart,
         groupLength: repeatedChannelInfosLength,
       });
@@ -232,13 +258,18 @@ const inputs: { name: string; records: TestDataRecord[] }[] = [
     name: "OneMessage",
     records: [
       {
+        type: "Schema",
+        id: 1,
+        schemaName: "Example",
+        schema: "b",
+        schemaEncoding: "c",
+      },
+      {
         type: "ChannelInfo",
         id: 1,
         topic: "example",
-        schemaName: "Example",
+        schemaId: 1,
         messageEncoding: "a",
-        schema: "b",
-        schemaEncoding: "c",
         metadata: [["foo", "bar"]],
       },
       {
@@ -291,13 +322,22 @@ async function main(options: { dataDir: string; verify: boolean }) {
         continue;
       }
       if (
+        variant.has(TestFeatures.UseRepeatedSchemas) &&
+        !records.some((record) => record.type === "Schema")
+      ) {
+        continue;
+      }
+      if (
         variant.has(TestFeatures.UseRepeatedChannelInfos) &&
         !records.some((record) => record.type === "ChannelInfo")
       ) {
         continue;
       }
       if (
-        !records.some((record) => record.type === "Message" || record.type === "ChannelInfo") &&
+        !records.some(
+          (record) =>
+            record.type === "Message" || record.type === "ChannelInfo" || record.type === "Schema",
+        ) &&
         (variant.has(TestFeatures.UseChunks) ||
           variant.has(TestFeatures.UseChunkIndex) ||
           variant.has(TestFeatures.UseMessageIndex))
@@ -308,6 +348,7 @@ async function main(options: { dataDir: string; verify: boolean }) {
         variant.has(TestFeatures.UseSummaryOffset) &&
         !(
           variant.has(TestFeatures.UseChunkIndex) ||
+          variant.has(TestFeatures.UseRepeatedSchemas) ||
           variant.has(TestFeatures.UseRepeatedChannelInfos) ||
           variant.has(TestFeatures.UseMetadataIndex) ||
           variant.has(TestFeatures.UseAttachmentIndex) ||

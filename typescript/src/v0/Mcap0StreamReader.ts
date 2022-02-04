@@ -1,10 +1,9 @@
 import { crc32 } from "@foxglove/crc";
 
-import { DecompressHandlers, TypedMcapRecords } from ".";
 import StreamBuffer from "../common/StreamBuffer";
 import { MCAP0_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
-import { McapStreamReader, TypedMcapRecord } from "./types";
+import { DecompressHandlers, McapStreamReader, TypedMcapRecord } from "./types";
 
 type McapReaderOptions = {
   /**
@@ -101,7 +100,6 @@ export default class Mcap0StreamReader implements McapStreamReader {
   }
 
   private *read(): Generator<TypedMcapRecord | undefined, TypedMcapRecord | undefined, void> {
-    const channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
     {
       let magic, usedBytes;
       while ((({ magic, usedBytes } = parseMagic(this.buffer.view, 0)), !magic)) {
@@ -118,7 +116,6 @@ export default class Mcap0StreamReader implements McapStreamReader {
           (({ record, usedBytes } = parseRecord({
             view: this.buffer.view,
             startOffset: 0,
-            channelInfosById,
             validateCrcs: this.validateCrcs,
           })),
           !record)
@@ -132,6 +129,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
         case "Unknown":
           break;
         case "Header":
+        case "Schema":
         case "ChannelInfo":
         case "Message":
         case "MessageIndex":
@@ -172,7 +170,6 @@ export default class Mcap0StreamReader implements McapStreamReader {
             (chunkResult = parseRecord({
               view,
               startOffset: chunkOffset,
-              channelInfosById,
               validateCrcs: this.validateCrcs,
             })),
               chunkResult.record;
@@ -194,6 +191,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
               case "SummaryOffset":
               case "DataEnd":
                 throw new Error(`${chunkResult.record.type} record not allowed inside a chunk`);
+              case "Schema":
               case "ChannelInfo":
               case "Message":
                 yield chunkResult.record;

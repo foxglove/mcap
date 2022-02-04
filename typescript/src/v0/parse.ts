@@ -1,7 +1,5 @@
 import { crc32 } from "@foxglove/crc";
-import { isEqual } from "lodash";
 
-import { TypedMcapRecords } from ".";
 import Reader from "./Reader";
 import { isKnownOpcode, MCAP0_MAGIC, Opcode } from "./constants";
 import { McapMagic, TypedMcapRecord } from "./types";
@@ -40,12 +38,10 @@ export function parseMagic(
 export function parseRecord({
   view,
   startOffset,
-  channelInfosById,
   validateCrcs,
 }: {
   view: DataView;
   startOffset: number;
-  channelInfosById: Map<number, TypedMcapRecords["ChannelInfo"]>;
   validateCrcs: boolean;
 }): { record: TypedMcapRecord; usedBytes: number } | { record?: undefined; usedBytes: 0 } {
   if (startOffset + /*opcode*/ 1 + /*record content length*/ 8 >= view.byteLength) {
@@ -105,13 +101,28 @@ export function parseRecord({
       return { record, usedBytes: recordEndOffset - startOffset };
     }
 
+    case Opcode.SCHEMA: {
+      const schemId = reader.uint16();
+      const schemaEncoding = reader.string();
+      const schema = reader.string();
+      const schemaName = reader.string();
+
+      const record: TypedMcapRecord = {
+        type: "Schema",
+        id: schemId,
+        schemaEncoding,
+        schemaName,
+        schema,
+      };
+
+      return { record, usedBytes: recordEndOffset - startOffset };
+    }
+
     case Opcode.CHANNEL_INFO: {
       const channelId = reader.uint16();
       const topicName = reader.string();
       const messageEncoding = reader.string();
-      const schemaEncoding = reader.string();
-      const schema = reader.string();
-      const schemaName = reader.string();
+      const schemaId = reader.uint16();
       const metadata = reader.keyValuePairs(
         (r) => r.string(),
         (r) => r.string(),
@@ -122,32 +133,15 @@ export function parseRecord({
         id: channelId,
         topic: topicName,
         messageEncoding,
-        schemaEncoding,
-        schemaName,
-        schema,
+        schemaId,
         metadata,
       };
-      const existingInfo = channelInfosById.get(channelId);
-      if (existingInfo) {
-        if (!isEqual(existingInfo, record)) {
-          throw new Error(`differing channel infos for ${record.id}`);
-        }
-        return {
-          record: existingInfo,
-          usedBytes: recordEndOffset - startOffset,
-        };
-      } else {
-        channelInfosById.set(channelId, record);
-        return { record, usedBytes: recordEndOffset - startOffset };
-      }
+
+      return { record, usedBytes: recordEndOffset - startOffset };
     }
 
     case Opcode.MESSAGE: {
       const channelId = reader.uint16();
-      const channelInfo = channelInfosById.get(channelId);
-      if (!channelInfo) {
-        throw new Error(`Encountered message on channel ${channelId} without prior channel info`);
-      }
       const sequence = reader.uint32();
       const publishTime = reader.uint64();
       const logTime = reader.uint64();
