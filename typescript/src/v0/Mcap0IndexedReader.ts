@@ -287,14 +287,14 @@ export default class Mcap0IndexedReader {
       channelId: number;
       records: TypedMcapRecords["MessageIndex"]["records"];
     }>((a, b) => {
-      const recordTimeA = a.records[a.index]?.[0];
-      const recordTimeB = b.records[b.index]?.[0];
-      if (recordTimeA == undefined) {
+      const logTimeA = a.records[a.index]?.[0];
+      const logTimeB = b.records[b.index]?.[0];
+      if (logTimeA == undefined) {
         return 1;
-      } else if (recordTimeB == undefined) {
+      } else if (logTimeB == undefined) {
         return -1;
       }
-      return Number(recordTimeA - recordTimeB);
+      return Number(logTimeA - logTimeB);
     });
 
     {
@@ -336,7 +336,7 @@ export default class Mcap0IndexedReader {
           for (let i = 0; i + 1 < result.record.records.length; i++) {
             if (result.record.records[i]![0] > result.record.records[i + 1]![0]) {
               throw new Error(
-                `Message index entries for channel ${result.record.channelId} in chunk at offset ${chunkIndex.chunkStartOffset} must be sorted by recordTime`,
+                `Message index entries for channel ${result.record.channelId} in chunk at offset ${chunkIndex.chunkStartOffset} must be sorted by log time`,
               );
             }
           }
@@ -375,11 +375,11 @@ export default class Mcap0IndexedReader {
 
     let cursor;
     while ((cursor = messageIndexCursors.peek())) {
-      const [recordTime, offset] = cursor.records[cursor.index]!;
-      if (recordTime >= startTime && recordTime <= endTime) {
+      const [logTime, offset] = cursor.records[cursor.index]!;
+      if (logTime >= startTime && logTime <= endTime) {
         if (BigInt(recordsView.byteOffset) + offset >= Number.MAX_SAFE_INTEGER) {
           throw new Error(
-            `Message offset too large (recordTime ${recordTime}, offset ${offset}) in channel ${cursor.channelId} in chunk at offset ${chunkIndex.chunkStartOffset}`,
+            `Message offset too large (log time ${logTime}, offset ${offset}) in channel ${cursor.channelId} in chunk at offset ${chunkIndex.chunkStartOffset}`,
           );
         }
         const result = parseRecord({
@@ -395,18 +395,18 @@ export default class Mcap0IndexedReader {
         }
         if (result.record.type !== "Message") {
           throw new Error(
-            `Unexpected record type ${result.record.type} in message index (time ${recordTime}, offset ${offset} in chunk at offset ${chunkIndex.chunkStartOffset})`,
+            `Unexpected record type ${result.record.type} in message index (time ${logTime}, offset ${offset} in chunk at offset ${chunkIndex.chunkStartOffset})`,
           );
         }
-        if (result.record.logTime !== recordTime) {
+        if (result.record.logTime !== logTime) {
           throw new Error(
-            `Message recordTime ${result.record.logTime} did not match message index entry (${recordTime} at offset ${offset} in chunk at offset ${chunkIndex.chunkStartOffset})`,
+            `Message log time ${result.record.logTime} did not match message index entry (${logTime} at offset ${offset} in chunk at offset ${chunkIndex.chunkStartOffset})`,
           );
         }
         yield result.record;
       }
 
-      if (cursor.index + 1 < cursor.records.length && recordTime <= endTime) {
+      if (cursor.index + 1 < cursor.records.length && logTime <= endTime) {
         cursor.index++;
         messageIndexCursors.replace(cursor);
       } else {

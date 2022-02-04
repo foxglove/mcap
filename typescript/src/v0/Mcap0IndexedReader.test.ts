@@ -206,22 +206,22 @@ describe("Mcap0IndexedReader", () => {
           ...keyValues(string, string, [["foo", "bar"]]), // user data
         ]);
         const message1Data = record(Opcode.MESSAGE, [
-          ...uint16LE(message1.channelId), // channel id
-          ...uint32LE(message1.sequence), // sequence
-          ...uint64LE(message1.publishTime), // publish time
-          ...uint64LE(message1.logTime), // record time
+          ...uint16LE(message1.channelId),
+          ...uint32LE(message1.sequence),
+          ...uint64LE(message1.publishTime),
+          ...uint64LE(message1.logTime),
         ]);
         const message2Data = record(Opcode.MESSAGE, [
-          ...uint16LE(message2.channelId), // channel id
-          ...uint32LE(message2.sequence), // sequence
-          ...uint64LE(message2.publishTime), // publish time
-          ...uint64LE(message2.logTime), // record time
+          ...uint16LE(message2.channelId),
+          ...uint32LE(message2.sequence),
+          ...uint64LE(message2.publishTime),
+          ...uint64LE(message2.logTime),
         ]);
         const message3Data = record(Opcode.MESSAGE, [
-          ...uint16LE(message3.channelId), // channel id
-          ...uint32LE(message3.sequence), // sequence
-          ...uint64LE(message3.publishTime), // publish time
-          ...uint64LE(message3.logTime), // record time
+          ...uint16LE(message3.channelId),
+          ...uint32LE(message3.sequence),
+          ...uint64LE(message3.publishTime),
+          ...uint64LE(message3.logTime),
         ]);
         const chunkContents = [...channelInfo];
         const message1Offset = BigInt(chunkContents.length);
@@ -365,7 +365,7 @@ describe("Mcap0IndexedReader", () => {
       shouldThrow: true,
     },
   ])(
-    "requires message index offsets to be in order of recordTime",
+    "requires message index offsets to be in order of log time",
     async ({ records, shouldThrow }) => {
       const data = [
         ...MCAP0_MAGIC,
@@ -418,7 +418,7 @@ describe("Mcap0IndexedReader", () => {
       if (shouldThrow) {
         // eslint-disable-next-line jest/no-conditional-expect
         await expect(collect(reader.readMessages())).rejects.toThrow(
-          /Message index entries for channel 42 .+ must be sorted by recordTime/,
+          /Message index entries for channel 42 .+ must be sorted by log time/,
         );
       } else {
         // Still fails because messages are not actually present in the chunk
