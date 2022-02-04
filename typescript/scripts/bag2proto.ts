@@ -216,7 +216,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
 
     const descriptorMsgEncoded = descriptor.FileDescriptorSet.encode(descriptorMsg).finish();
 
-    const channelInfo: Omit<ChannelInfo, "channelId"> = {
+    const channelInfo: Omit<ChannelInfo, "id"> = {
       topic: connection.topic,
       messageEncoding: "protobuf",
       schemaEncoding: "proto",
