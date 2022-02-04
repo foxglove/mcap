@@ -734,8 +734,16 @@ void McapWriter::write(mcap::IWritable& output, const std::byte* data, uint64_t 
 }
 
 void McapWriter::write(mcap::IWritable& output, const KeyValueMap& map, uint32_t size) {
-  write(output, size > 0 ? size : internal::KeyValueMapSize(map));
+  // Create a vector of key-value pairs so we can lexicographically sort by key
+  std::vector<std::pair<std::string, std::string>> pairs;
+  pairs.reserve(map.size());
   for (const auto& [key, value] : map) {
+    pairs.emplace_back(key, value);
+  }
+  std::sort(pairs.begin(), pairs.end());
+
+  write(output, size > 0 ? size : internal::KeyValueMapSize(map));
+  for (const auto& [key, value] : pairs) {
     write(output, key);
     write(output, value);
   }

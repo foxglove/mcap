@@ -1,6 +1,8 @@
 #pragma once
 
 #include "errors.hpp"
+#include <algorithm>
+#include <cassert>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -529,29 +531,9 @@ public:
    */
   mcap::Status write(const mcap::Metadata& metdata);
 
-private:
-  uint64_t chunkSize_ = DefaultChunkSize;
-  mcap::IWritable* output_ = nullptr;
-  std::unique_ptr<mcap::StreamWriter> streamOutput_;
-  std::unique_ptr<mcap::BufferWriter> uncompressedChunk_;
-  std::unique_ptr<mcap::LZ4Writer> lz4Chunk_;
-  std::unique_ptr<mcap::ZStdWriter> zstdChunk_;
-  std::vector<mcap::ChannelInfo> channels_;
-  std::vector<mcap::AttachmentIndex> attachmentIndex_;
-  std::vector<mcap::MetadataIndex> metadataIndex_;
-  std::vector<mcap::ChunkIndex> chunkIndex_;
-  Statistics statistics_{};
-  std::unordered_map<mcap::ChannelId, mcap::MessageIndex> currentMessageIndex_;
-  uint64_t currentChunkStart_ = std::numeric_limits<uint64_t>::max();
-  uint64_t currentChunkEnd_ = std::numeric_limits<uint64_t>::min();
-  Compression compression_ = Compression::None;
-  uint64_t uncompressedSize_ = 0;
-  bool indexing_ = true;
-  bool opened_ = false;
-
-  mcap::IWritable& getOutput();
-  mcap::IChunkWriter* getChunkWriter();
-  void writeChunk(mcap::IWritable& output, mcap::IChunkWriter& chunkData);
+  // The following static methods are used for serialization of records and
+  // primitives to an output stream. They are not intended to be used directly
+  // unless you are implementing a lower level writer or tests
 
   static void writeMagic(mcap::IWritable& output);
 
@@ -579,6 +561,30 @@ private:
   static void write(mcap::IWritable& output, uint64_t value);
   static void write(mcap::IWritable& output, const std::byte* data, uint64_t size);
   static void write(mcap::IWritable& output, const KeyValueMap& map, uint32_t size = 0);
+
+private:
+  uint64_t chunkSize_ = DefaultChunkSize;
+  mcap::IWritable* output_ = nullptr;
+  std::unique_ptr<mcap::StreamWriter> streamOutput_;
+  std::unique_ptr<mcap::BufferWriter> uncompressedChunk_;
+  std::unique_ptr<mcap::LZ4Writer> lz4Chunk_;
+  std::unique_ptr<mcap::ZStdWriter> zstdChunk_;
+  std::vector<mcap::ChannelInfo> channels_;
+  std::vector<mcap::AttachmentIndex> attachmentIndex_;
+  std::vector<mcap::MetadataIndex> metadataIndex_;
+  std::vector<mcap::ChunkIndex> chunkIndex_;
+  Statistics statistics_{};
+  std::unordered_map<mcap::ChannelId, mcap::MessageIndex> currentMessageIndex_;
+  uint64_t currentChunkStart_ = std::numeric_limits<uint64_t>::max();
+  uint64_t currentChunkEnd_ = std::numeric_limits<uint64_t>::min();
+  Compression compression_ = Compression::None;
+  uint64_t uncompressedSize_ = 0;
+  bool indexing_ = true;
+  bool opened_ = false;
+
+  mcap::IWritable& getOutput();
+  mcap::IChunkWriter* getChunkWriter();
+  void writeChunk(mcap::IWritable& output, mcap::IChunkWriter& chunkData);
 };
 
 // Iterators ///////////////////////////////////////////////////////////////////

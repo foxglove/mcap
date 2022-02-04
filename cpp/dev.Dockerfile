@@ -40,12 +40,15 @@ FROM build as build_executables
 COPY ./bench /src/bench/
 COPY ./examples /src/examples/
 COPY ./mcap /src/mcap/
+COPY ./test /src/test/
 COPY ./.clang-format /src/
 RUN conan editable add ./mcap mcap/0.0.1
 RUN conan install bench --install-folder bench/build/Release \
   -s compiler.cppstd=17 -s build_type=Release --build missing
 RUN conan install examples --install-folder examples/build/Release \
   -s compiler.cppstd=17 -s build_type=Release --build missing
+RUN conan install test --install-folder test/build/Debug \
+  -s compiler.cppstd=17 -s build_type=Debug --build missing
 
 FROM build_executables AS bag2mcap
 COPY --from=build_executables /src /src
@@ -58,3 +61,9 @@ COPY --from=build_executables /src /src
 COPY --from=build_executables /src/bench/build/ /src/bench/build/
 RUN conan build bench --build-folder bench/build/Release
 ENTRYPOINT ["bench/build/Release/bin/bench-tests"]
+
+FROM build_executables AS test
+COPY --from=build_executables /src /src
+COPY --from=build_executables /src/test/build/ /src/test/build/
+RUN conan build test --build-folder test/build/Debug
+ENTRYPOINT ["test/build/Debug/bin/unit-tests"]
