@@ -115,6 +115,7 @@ func (w *Writer) writeChunk() error {
 		StartTime:           w.currentChunkStartTime,
 		EndTime:             w.currentChunkEndTime,
 		ChunkStartOffset:    chunkStartOffset,
+		ChunkLength:         messageIndexStart - chunkStartOffset,
 		MessageIndexOffsets: messageIndexOffsets,
 		MessageIndexLength:  messageIndexLength,
 		Compression:         w.compression,
