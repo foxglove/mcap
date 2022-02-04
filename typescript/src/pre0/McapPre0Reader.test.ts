@@ -298,7 +298,7 @@ describe("McapReader", () => {
   it("rejects message in chunk with no prior channel info in the same chunk", () => {
     const channelInfo = record(RecordType.CHANNEL_INFO, [
       ...uint32LE(42), // channel id
-      ...string("mytopic"), // topic
+      ...string("myTopic"), // topic
       ...string("utf12"), // encoding
       ...string("some data"), // schema name
       ...string("stuff"), // schema
@@ -340,7 +340,7 @@ describe("McapReader", () => {
     const expectedChannelInfo = {
       type: "ChannelInfo",
       id: 42,
-      topic: "mytopic",
+      topic: "myTopic",
       encoding: "utf12",
       schemaName: "some data",
       schema: "stuff",
@@ -361,7 +361,7 @@ describe("McapReader", () => {
   it("parses message and returns reference-equal channel info on the same channel in different chunks", () => {
     const channelInfo = record(RecordType.CHANNEL_INFO, [
       ...uint32LE(42), // channel id
-      ...string("mytopic"), // topic
+      ...string("myTopic"), // topic
       ...string("utf12"), // encoding
       ...string("some data"), // schema name
       ...string("stuff"), // schema
@@ -404,7 +404,7 @@ describe("McapReader", () => {
     const expectedChannelInfo = {
       type: "ChannelInfo",
       id: 42,
-      topic: "mytopic",
+      topic: "myTopic",
       encoding: "utf12",
       schemaName: "some data",
       schema: "stuff",
@@ -436,7 +436,7 @@ describe("McapReader", () => {
 
         ...record(RecordType.CHANNEL_INFO, [
           ...uint32LE(1), // channel id
-          ...string("mytopic"), // topic
+          ...string("myTopic"), // topic
           ...string("utf12"), // encoding
           ...string("some data"), // schema name
           ...string("stuff"), // schema
@@ -454,7 +454,7 @@ describe("McapReader", () => {
     expect(reader.nextRecord()).toEqual({
       type: "ChannelInfo",
       id: 1,
-      topic: "mytopic",
+      topic: "myTopic",
       encoding: "utf12",
       schemaName: "some data",
       schema: "stuff",
@@ -471,7 +471,7 @@ describe("McapReader", () => {
   it.each([true, false])("parses channel info in chunk (compressed: %s)", (compressed) => {
     const channelInfo = record(RecordType.CHANNEL_INFO, [
       ...uint32LE(1), // channel id
-      ...string("mytopic"), // topic
+      ...string("myTopic"), // topic
       ...string("utf12"), // encoding
       ...string("some data"), // schema name
       ...string("stuff"), // schema
@@ -502,7 +502,7 @@ describe("McapReader", () => {
     expect(reader.nextRecord()).toEqual({
       type: "ChannelInfo",
       id: 1,
-      topic: "mytopic",
+      topic: "myTopic",
       encoding: "utf12",
       schemaName: "some data",
       schema: "stuff",
@@ -535,7 +535,7 @@ describe("McapReader", () => {
           key: "encoding",
           channelInfo2: record(RecordType.CHANNEL_INFO, [
             ...uint32LE(42), // channel id
-            ...string("mytopic"), // topic
+            ...string("myTopic"), // topic
             ...string("XXXXXXXX"), // encoding
             ...string("some data"), // schema name
             ...string("stuff"), // schema
@@ -546,7 +546,7 @@ describe("McapReader", () => {
           key: "schema name",
           channelInfo2: record(RecordType.CHANNEL_INFO, [
             ...uint32LE(42), // channel id
-            ...string("mytopic"), // topic
+            ...string("myTopic"), // topic
             ...string("utf12"), // encoding
             ...string("XXXXXXXX"), // schema name
             ...string("stuff"), // schema
@@ -557,7 +557,7 @@ describe("McapReader", () => {
           key: "schema",
           channelInfo2: record(RecordType.CHANNEL_INFO, [
             ...uint32LE(42), // channel id
-            ...string("mytopic"), // topic
+            ...string("myTopic"), // topic
             ...string("utf12"), // encoding
             ...string("some data"), // schema name
             ...string("XXXXXXXX"), // schema
@@ -568,7 +568,7 @@ describe("McapReader", () => {
           key: "data",
           channelInfo2: record(RecordType.CHANNEL_INFO, [
             ...uint32LE(42), // channel id
-            ...string("mytopic"), // topic
+            ...string("myTopic"), // topic
             ...string("utf12"), // encoding
             ...string("some data"), // schema name
             ...string("stuff"), // schema
@@ -578,7 +578,7 @@ describe("McapReader", () => {
       ])("differing in $key", ({ channelInfo2 }) => {
         const channelInfo = record(RecordType.CHANNEL_INFO, [
           ...uint32LE(42), // channel id
-          ...string("mytopic"), // topic
+          ...string("myTopic"), // topic
           ...string("utf12"), // encoding
           ...string("some data"), // schema name
           ...string("stuff"), // schema
@@ -628,7 +628,7 @@ describe("McapReader", () => {
         expect(reader.nextRecord()).toEqual({
           type: "ChannelInfo",
           id: 42,
-          topic: "mytopic",
+          topic: "myTopic",
           encoding: "utf12",
           schemaName: "some data",
           schema: "stuff",

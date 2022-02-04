@@ -16,19 +16,19 @@ MCAP files are designed to work well under various workloads, resource constrain
 - [Records](#records)
   - [Header](#header-op0x01)
   - [Footer](#footer-op0x02)
-  - [Channel Info](#channel-info-op0x03)
-  - [Message](#message-op0x04)
-  - [Chunk](#chunk-op0x05)
-  - [Message Index](#message-index-op0x06)
-  - [Chunk Index](#chunk-index-op0x07)
-  - [Attachment](#attachment-op0x08)
-  - [Attachment Index](#attachment-index-op0x09)
-  - [Statistics](#statistics-op0x0A)
-  - [Metadata](#metadata-op0x0B)
-  - [Metadata Index](#metadata-op0x0C)
-  - [Summary Offset](#summary-offset-op0x0D)
-  - [Data End](#data-end-op0x0E)
-  - [Schema](#schema-op0x0F)
+  - [Schema](#schema-op0x03)
+  - [Channel Info](#channel-info-op0x04)
+  - [Message](#message-op0x05)
+  - [Chunk](#chunk-op0x06)
+  - [Message Index](#message-index-op0x07)
+  - [Chunk Index](#chunk-index-op0x08)
+  - [Attachment](#attachment-op0x09)
+  - [Attachment Index](#attachment-index-op0x0A)
+  - [Statistics](#statistics-op0x0B)
+  - [Metadata](#metadata-op0x0C)
+  - [Metadata Index](#metadata-index-op0x0D)
+  - [Summary Offset](#summary-offset-op0x0E)
+  - [Data End](#data-end-op0x0F)
 - [Serialization](#serialization)
 
 ## File Structure
@@ -69,8 +69,8 @@ The data section contains records with message data, attachments, and supporting
 
 The following records are allowed to appear in the data section:
 
-- Channel Info
 - Schema
+- Channel Info
 - Message
 - Attachment
 - Chunk
@@ -78,7 +78,7 @@ The following records are allowed to appear in the data section:
 - Metadata
 - Data End
 
-The last record in the data section MUST be the [Data End](#data-end-op0x0E) record.
+The last record in the data section MUST be the [Data End](#data-end-op0x0F) record.
 
 ### Summary Section
 
@@ -103,7 +103,7 @@ Schema records in the summary are duplicates of Schema records throughout the Da
 
 ### Summary Offset Section
 
-The optional summary offset section contains [Summary Offset](#summary-offset-op0x0D) records for fast lookup of summary section records.
+The optional summary offset section contains [Summary Offset](#summary-offset-op0x0E) records for fast lookup of summary section records.
 
 The summary offset section aids random access reading.
 
@@ -140,7 +140,22 @@ A Footer record contains end-of-file information. It must be the last record in 
 | 8 | summary_offset_start | uint64 | Byte offset from the start of the first record in the summary offset section. If there are no Summary Offset records this value should be 0. |
 | 4 | summary_crc | uint32 | A CRC32 of all bytes from the start of the Summary section up through the end of the previous field in the footer record. A value of 0 indicates the CRC32 is not available. |
 
-### Channel Info (op=0x03)
+### Schema (op=0x03)
+
+A Schema record defines an individual schema.
+
+Schema records are uniquely identified within a file by their schema ID. A Datatye record must occur at least once in the file prior to any Channel Info referring to its schema ID.
+
+| Bytes | Name | Type | Description |
+| --- | --- | --- | --- |
+| 2 | id | uint16 | A unique identifier for this schema within the file. |
+| 4 + N | encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. |
+| 4 + N | schema | uint32 length-prefixed Bytes | Schema should conform to the encoding. |
+| 4 + N | name | String | An identifier for the schema. The schema name should conform to any encoding requirements. |
+
+Schema records may be duplicated in the summary section.
+
+### Channel Info (op=0x04)
 
 A Channel Info record defines an encoded stream of messages on a topic.
 
@@ -156,7 +171,7 @@ Channel Info records are uniquely identified within a file by their channel ID. 
 
 Channel Info records may be duplicated in the summary section.
 
-### Message (op=0x04)
+### Message (op=0x05)
 
 A message record encodes a single timestamped message on a channel.
 
@@ -170,7 +185,7 @@ The message encoding and schema must match that of the channel info record corre
 | 8 | log_time | Timestamp | Time at which the message was recorded. |
 | N | message_data | Bytes | Message data, to be decoded according to the schema of the channel. |
 
-### Chunk (op=0x05)
+### Chunk (op=0x06)
 
 A Chunk contains a batch of schema, channel info, and message records. The batch of records contained in a chunk may be compressed or uncompressed.
 
@@ -185,7 +200,7 @@ All messages in the chunk must reference channel infos recorded earlier in the f
 | 4 + N | compression | String | compression algorithm. i.e. `lz4`, `zstd`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression formats]. |
 | N | records | Bytes | Repeating sequences of `<record type><record content length><record content>`. Compressed with the algorithm in the `compression` field. |
 
-### Message Index (op=0x06)
+### Message Index (op=0x07)
 
 A Message Index record allows readers to locate individual message records within a chunk by their timestamp.
 
@@ -198,7 +213,7 @@ A sequence of Message Index records occurs immediately after each chunk. Exactly
 
 Messages outside of chunks cannot be indexed.
 
-### Chunk Index (op=0x07)
+### Chunk Index (op=0x08)
 
 A Chunk Index record contains the location of a Chunk record and its associated Message Index records.
 
@@ -220,7 +235,7 @@ A Schema and Channel Info record MUST exist in the summary section for all chann
 
 > Why? The typical use case for file readers using an index is fast random access to a specific message timestamp. Channel Info is a prerequisite for decoding Message record data. Without an easy-to-access copy of the Channel Info records, readers would need to search for Channel Info records from the start of the file, degrading random access read performance.
 
-### Attachment (op=0x08)
+### Attachment (op=0x09)
 
 Attachment records contain auxiliary artifacts such as text, core dumps, calibration data, or other arbitrary data.
 
@@ -235,7 +250,7 @@ Attachment records must not appear within a chunk.
 | 8 + N | data | uint64 length-prefixed Bytes | Attachment data. |
 | 4 | crc | uint32 | CRC32 checksum of preceding fields in the record. A value of zero indicates that CRC validation should not be performed. |
 
-### Attachment Index (op=0x09)
+### Attachment Index (op=0x0A)
 
 An Attachment Index record contains the location of an attachment in the file. An Attachment Index record exists for every Attachment record in the file.
 
@@ -248,7 +263,7 @@ An Attachment Index record contains the location of an attachment in the file. A
 | 4 + N | name | String | Name of the attachment. |
 | 4 + N | content_type | String | MIME type of the attachment. |
 
-### Statistics (op=0x0A)
+### Statistics (op=0x0B)
 
 A Statistics record contains summary information about the recorded data. The statistics record is optional, but the file should contain at most one.
 
@@ -262,9 +277,9 @@ A Statistics record contains summary information about the recorded data. The st
 
 When using a Statistics record with channel_message_counts, the Summary Data section MUST contain a copy of all Channel Info records. The Channel Info records MUST occur prior to the statistics record.
 
-> Why? The typical usecase for tools is to provide a listing of the types and quantities of messages stored in the file. Without an easy to access copy of the Schema and Channel Info records, tools would need to linearly scan the file for Schema and Channel Info records to display what types of messages exist in the file.
+> Why? The typical use case for tools is to provide a listing of the types and quantities of messages stored in the file. Without an easy to access copy of the Channel Info records, tools would need to linearly scan the file for Channel Info records to display what types of messages exist in the file.
 
-### Metadata (op=0x0B)
+### Metadata (op=0x0C)
 
 A metadata record contains arbitrary user data in key-value pairs.
 
@@ -273,7 +288,7 @@ A metadata record contains arbitrary user data in key-value pairs.
 | 4 + N | name | String | Example: `map_metadata`. |
 | 4 + N | metadata | Map<string, string> | Example keys: `robot_id`, `git_sha`, `timezone`, `run_id`. |
 
-### Metadata Index (op=0x0C)
+### Metadata Index (op=0x0D)
 
 A metadata record contains arbitrary user data in key-value pairs.
 
@@ -283,7 +298,7 @@ A metadata record contains arbitrary user data in key-value pairs.
 | 8 | length | uint64 | Total byte length of the record. |
 | 4 + N | name | String | Name of the metadata record. |
 
-### Summary Offset (op=0x0D)
+### Summary Offset (op=0x0E)
 
 A Summary Offset record contains the location of records within the summary section. Each Summary Offset record corresponds to a group of summary records with the same opcode.
 
@@ -293,30 +308,15 @@ A Summary Offset record contains the location of records within the summary sect
 | 8 | group_start | uint64 | Byte offset from the start of the file of the first record in the group. |
 | 8 | group_length | uint64 | Total byte length of all records in the group. |
 
-### Data End (op=0x0E)
+### Data End (op=0x0F)
 
 A Data End record indicates the end of the data section.
 
-> Why? When reading a file from start to end, there is ambiguity when the data section ends and the summary section starts because some records (i.e. Schema, Channel Info) can repeat for summary data. The Data End record provides a clear dilineation the data section has ended.
+> Why? When reading a file from start to end, there is ambiguity when the data section ends and the summary section starts because some records (i.e. Channel Info) can repeat for summary data. The Data End record provides a clear delineation the data section has ended.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 4 | data_section_crc | uint32 | CRC32 of all bytes in the data section. A value of 0 indicates the CRC32 is not available. |
-
-### Schema (op=0x0F)
-
-A Schema record defines an individual schema.
-
-Schema records are uniquely identified within a file by their schema ID. A Datatye record must occur at least once in the file prior to any Channel Info referring to its schema ID.
-
-| Bytes | Name | Type | Description |
-| --- | --- | --- | --- |
-| 2 | id | uint16 | A unique identifier for this schema within the file. |
-| 4 + N | encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. |
-| 4 + N | schema | uint32 length-prefixed Bytes | Schema should conform to the encoding. |
-| 4 + N | name | String | An identifier for the schema. The schema name should conform to any encoding requirements. |
-
-Schema records may be duplicated in the summary section.
 
 ## Serialization
 

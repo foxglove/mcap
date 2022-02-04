@@ -10,4 +10,4 @@ SummaryOffset group_length=0 group_opcode=12 group_start=334
 SummaryOffset group_length=46 group_opcode=10 group_start=288
 SummaryOffset group_length=0 group_opcode=9 group_start=334
 SummaryOffset group_length=90 group_opcode=7 group_start=334
-Footer summary_offset_start=424 summary_start=219
+Footer summary_crc=0 summary_offset_start=424 summary_start=219

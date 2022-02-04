@@ -7,13 +7,13 @@ function translateRecord(record: McapPre0Record): TypedMcapRecord {
     case "ChannelInfo":
       return {
         type: "ChannelInfo",
-        channelId: record.id,
-        topicName: record.topic,
+        id: record.id,
+        topic: record.topic,
         messageEncoding: record.encoding,
         schemaEncoding: "",
         schemaName: record.schemaName,
         schema: record.schema,
-        userData: [],
+        metadata: [],
       };
     case "Message":
       return {
@@ -21,7 +21,7 @@ function translateRecord(record: McapPre0Record): TypedMcapRecord {
         channelId: record.channelInfo.id,
         sequence: 0,
         publishTime: record.timestamp,
-        recordTime: record.timestamp,
+        logTime: record.timestamp,
         messageData: new Uint8Array(record.data),
       };
     case "Chunk":
@@ -39,7 +39,7 @@ function translateRecord(record: McapPre0Record): TypedMcapRecord {
         type: "Footer",
         summaryStart: 0n,
         summaryOffsetStart: 0n,
-        crc: 0,
+        summaryCrc: 0,
       };
   }
 }

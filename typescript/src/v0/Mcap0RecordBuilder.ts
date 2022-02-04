@@ -24,7 +24,7 @@ type Options = {
 /**
  * Mcap0RecordBuilder provides methods to serialize mcap records to a buffer in memory.
  *
- * It makes no effort to ensure spec compatability on the order of records, this is the responsibility
+ * It makes no effort to ensure spec compatibility on the order of records, this is the responsibility
  * of the caller.
  *
  * You'll likely want to use one of the higher level writer interfaces unless you are building your
@@ -79,7 +79,7 @@ export class Mcap0RecordBuilder {
       .uint64(20n) // footer is fixed length
       .uint64(footer.summaryStart)
       .uint64(footer.summaryOffsetStart)
-      .uint32(footer.crc);
+      .uint32(footer.summaryCrc);
     // footer record cannot be padded
     return 20n;
   }
@@ -90,8 +90,8 @@ export class Mcap0RecordBuilder {
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .uint64(0n) // placeholder
-      .uint16(info.channelId)
-      .string(info.topicName)
+      .uint16(info.id)
+      .string(info.topic)
       .string(info.messageEncoding)
       .string(info.schemaEncoding)
       .string(info.schema)
@@ -99,7 +99,7 @@ export class Mcap0RecordBuilder {
       .tupleArray(
         (key) => this.bufferBuilder.string(key),
         (value) => this.bufferBuilder.string(value),
-        info.userData,
+        info.metadata,
       );
     if (this.options?.padRecords === true) {
       this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
@@ -121,7 +121,7 @@ export class Mcap0RecordBuilder {
       .uint16(message.channelId)
       .uint32(message.sequence)
       .uint64(message.publishTime)
-      .uint64(message.recordTime)
+      .uint64(message.logTime)
       .bytes(message.messageData);
     // message record cannot be padded
     const endPosition = this.bufferBuilder.length;
@@ -139,7 +139,7 @@ export class Mcap0RecordBuilder {
       .uint64(0n) // placeholder
       .string(attachment.name)
       .uint64(attachment.createdAt)
-      .uint64(attachment.recordTime)
+      .uint64(attachment.logTime)
       .string(attachment.contentType)
       .uint64(BigInt(attachment.data.byteLength))
       .bytes(attachment.data)
@@ -164,9 +164,9 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder
       .uint64(0n) // placeholder
       .uint64(attachmentIndex.offset)
-      .uint64(attachmentIndex.attachmentRecordLength)
-      .uint64(attachmentIndex.recordTime)
-      .uint64(attachmentIndex.attachmentSize)
+      .uint64(attachmentIndex.length)
+      .uint64(attachmentIndex.logTime)
+      .uint64(attachmentIndex.dataSize)
       .string(attachmentIndex.name)
       .string(attachmentIndex.contentType);
     if (this.options?.padRecords === true) {
@@ -187,7 +187,7 @@ export class Mcap0RecordBuilder {
 
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
-      .uint64(0n) // palceholder
+      .uint64(0n) // placeholder
       .uint64(chunk.startTime)
       .uint64(chunk.endTime)
       .uint64(chunk.uncompressedSize)
@@ -212,7 +212,7 @@ export class Mcap0RecordBuilder {
       .uint64(0n) // placeholder
       .uint64(chunkIndex.startTime)
       .uint64(chunkIndex.endTime)
-      .uint64(chunkIndex.chunkStart)
+      .uint64(chunkIndex.chunkStartOffset)
       .uint64(chunkIndex.chunkLength)
       .uint32(chunkIndex.messageIndexOffsets.size * 10);
 

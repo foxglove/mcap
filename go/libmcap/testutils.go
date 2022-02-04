@@ -80,7 +80,8 @@ func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byt
 	uncompressedLen := len(data)
 	msglen := uint64(8 + 8 + 8 + 4 + 4 + compressionLen + compressedLen)
 	record := make([]byte, msglen+9)
-	offset := putByte(record, byte(OpChunk))
+	offset, err := putByte(record, byte(OpChunk))
+	assert.Nil(t, err)
 	offset += putUint64(record[offset:], msglen)
 
 	offset += putUint64(record[offset:], 0)   // start

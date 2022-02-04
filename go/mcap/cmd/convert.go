@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	rosMagic = []byte("#ROSBAG V2.0")
+	bagMagic = []byte("#ROSBAG V2.0")
 	db3Magic = []byte{0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x33, 0x00}
 )
 
@@ -28,17 +28,17 @@ func checkMagic(path string) (string, error) {
 	}
 	defer f.Close()
 
-	rosmagic := make([]byte, len(rosMagic))
-	_, err = f.Read(rosmagic)
+	magic := make([]byte, len(bagMagic))
+	_, err = f.Read(magic)
 	if err != nil {
 		die("failed to read magic bytes: %s", err)
 	}
-	if bytes.Equal(rosmagic, rosMagic) {
+	if bytes.Equal(magic, bagMagic) {
 		return "ros1", nil
 	}
 
 	db3magic := make([]byte, len(db3Magic))
-	n := copy(db3magic, rosmagic)
+	n := copy(db3magic, magic)
 	_, err = f.Read(db3magic[n:])
 	if err != nil {
 		die("failed to read magic bytes: %s", err)

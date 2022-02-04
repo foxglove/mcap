@@ -3,7 +3,7 @@ import { crc32 } from "@foxglove/crc";
 import { TypedMcapRecords } from ".";
 import Mcap0StreamReader from "./Mcap0StreamReader";
 import { MCAP0_MAGIC, Opcode } from "./constants";
-import { record, uint64LE, uint32LE, string, uint16LE, crcSuffix, keyValues } from "./testUtils";
+import { record, uint64LE, uint32LE, string, uint16LE, keyValues, crcSuffix } from "./testUtils";
 
 describe("Mcap0StreamReader", () => {
   it("rejects invalid header", () => {
@@ -50,7 +50,7 @@ describe("Mcap0StreamReader", () => {
       type: "Footer",
       summaryStart: 0x0123456789abcdefn,
       summaryOffsetStart: 0x0123456789abcdefn,
-      crc: 0x01234567,
+      summaryCrc: 0x01234567,
     });
     expect(reader.done()).toBe(true);
   });
@@ -83,7 +83,7 @@ describe("Mcap0StreamReader", () => {
       type: "Footer",
       summaryStart: 0n,
       summaryOffsetStart: 0n,
-      crc: 0,
+      summaryCrc: 0,
     });
     expect(reader.done()).toBe(true);
   });
@@ -109,7 +109,7 @@ describe("Mcap0StreamReader", () => {
       type: "Footer",
       summaryStart: 0x0123456789abcdefn,
       summaryOffsetStart: 0x0123456789abcdefn,
-      crc: 0x01234567,
+      summaryCrc: 0x01234567,
     });
     expect(reader.done()).toBe(true);
     expect(() => reader.append(new Uint8Array([42]))).toThrow("Already done reading");
@@ -159,7 +159,7 @@ describe("Mcap0StreamReader", () => {
       type: "Footer",
       summaryStart: 0n,
       summaryOffsetStart: 0n,
-      crc: 0,
+      summaryCrc: 0,
     });
     expect(reader.done()).toBe(true);
   });
@@ -255,7 +255,7 @@ describe("Mcap0StreamReader", () => {
 
         ...record(Opcode.CHANNEL_INFO, [
           ...uint16LE(1), // channel id
-          ...string("mytopic"), // topic
+          ...string("myTopic"), // topic
           ...string("utf12"), // message encoding
           ...string("json"), // schema encoding
           ...string("stuff"), // schema
@@ -273,19 +273,19 @@ describe("Mcap0StreamReader", () => {
     );
     expect(reader.nextRecord()).toEqual({
       type: "ChannelInfo",
-      channelId: 1,
-      topicName: "mytopic",
+      id: 1,
+      topic: "myTopic",
       messageEncoding: "utf12",
       schemaEncoding: "json",
       schemaName: "some data",
       schema: "stuff",
-      userData: [["foo", "bar"]],
+      metadata: [["foo", "bar"]],
     } as TypedMcapRecords["ChannelInfo"]);
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
       summaryStart: 0n,
       summaryOffsetStart: 0n,
-      crc: 0,
+      summaryCrc: 0,
     });
     expect(reader.done()).toBe(true);
   });
@@ -293,7 +293,7 @@ describe("Mcap0StreamReader", () => {
   it.each([true, false])("parses channel info in chunk (compressed: %s)", (compressed) => {
     const channelInfo = record(Opcode.CHANNEL_INFO, [
       ...uint16LE(1), // channel id
-      ...string("mytopic"), // topic
+      ...string("myTopic"), // topic
       ...string("utf12"), // message encoding
       ...string("json"), // schema encoding
       ...string("stuff"), // schema
@@ -325,19 +325,19 @@ describe("Mcap0StreamReader", () => {
     );
     expect(reader.nextRecord()).toEqual({
       type: "ChannelInfo",
-      channelId: 1,
-      topicName: "mytopic",
+      id: 1,
+      topic: "myTopic",
       messageEncoding: "utf12",
       schemaEncoding: "json",
       schemaName: "some data",
       schema: "stuff",
-      userData: [["foo", "bar"]],
+      metadata: [["foo", "bar"]],
     } as TypedMcapRecords["ChannelInfo"]);
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
       summaryStart: 0n,
       summaryOffsetStart: 0n,
-      crc: 0,
+      summaryCrc: 0,
     });
     expect(reader.done()).toBe(true);
   });
@@ -362,7 +362,7 @@ describe("Mcap0StreamReader", () => {
           key: "encoding",
           channelInfo2: record(Opcode.CHANNEL_INFO, [
             ...uint16LE(42), // channel id
-            ...string("mytopic"), // topic
+            ...string("myTopic"), // topic
             ...string("XXXXXXXX"), // message encoding
             ...string("json"), // schema encoding
             ...string("stuff"), // schema
@@ -374,7 +374,7 @@ describe("Mcap0StreamReader", () => {
           key: "schema name",
           channelInfo2: record(Opcode.CHANNEL_INFO, [
             ...uint16LE(42), // channel id
-            ...string("mytopic"), // topic
+            ...string("myTopic"), // topic
             ...string("utf12"), // message encoding
             ...string("json"), // schema encoding
             ...string("stuff"), // schema
@@ -386,7 +386,7 @@ describe("Mcap0StreamReader", () => {
           key: "schema",
           channelInfo2: record(Opcode.CHANNEL_INFO, [
             ...uint16LE(42), // channel id
-            ...string("mytopic"), // topic
+            ...string("myTopic"), // topic
             ...string("utf12"), // message encoding
             ...string("json"), // schema encoding
             ...string("XXXXXXXX"), // schema
@@ -398,7 +398,7 @@ describe("Mcap0StreamReader", () => {
           key: "data",
           channelInfo2: record(Opcode.CHANNEL_INFO, [
             ...uint16LE(42), // channel id
-            ...string("mytopic"), // topic
+            ...string("myTopic"), // topic
             ...string("utf12"), // message encoding
             ...string("json"), // schema encoding
             ...string("stuff"), // schema
@@ -412,7 +412,7 @@ describe("Mcap0StreamReader", () => {
       ])("differing in $key", ({ channelInfo2 }) => {
         const channelInfo = record(Opcode.CHANNEL_INFO, [
           ...uint16LE(42), // channel id
-          ...string("mytopic"), // topic
+          ...string("myTopic"), // topic
           ...string("utf12"), // message encoding
           ...string("json"), // schema encoding
           ...string("stuff"), // schema
@@ -467,13 +467,13 @@ describe("Mcap0StreamReader", () => {
         );
         expect(reader.nextRecord()).toEqual({
           type: "ChannelInfo",
-          channelId: 42,
-          topicName: "mytopic",
+          id: 42,
+          topic: "myTopic",
           messageEncoding: "utf12",
           schemaEncoding: "json",
           schemaName: "some data",
           schema: "stuff",
-          userData: [["foo", "bar"]],
+          metadata: [["foo", "bar"]],
         } as TypedMcapRecords["ChannelInfo"]);
         expect(() => reader.nextRecord()).toThrow("differing channel infos for 42");
       });
@@ -488,7 +488,7 @@ describe("Mcap0StreamReader", () => {
         ...record(
           Opcode.ATTACHMENT,
           crcSuffix([
-            ...string("myfile"), // name
+            ...string("myFile"), // name
             ...uint64LE(1n), // created at
             ...uint64LE(2n), // log time
             ...string("text/plain"), // content type
@@ -506,9 +506,9 @@ describe("Mcap0StreamReader", () => {
     );
     expect(reader.nextRecord()).toEqual({
       type: "Attachment",
-      name: "myfile",
+      name: "myFile",
       createdAt: 1n,
-      recordTime: 2n,
+      logTime: 2n,
       contentType: "text/plain",
       data: new TextEncoder().encode("hello"),
     } as TypedMcapRecords["Attachment"]);
@@ -516,7 +516,7 @@ describe("Mcap0StreamReader", () => {
       type: "Footer",
       summaryStart: 0n,
       summaryOffsetStart: 0n,
-      crc: 0,
+      summaryCrc: 0,
     });
     expect(reader.done()).toBe(true);
   });

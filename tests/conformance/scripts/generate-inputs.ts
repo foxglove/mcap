@@ -88,11 +88,11 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
         const length = builder.writeAttachment(record);
         attachmentIndexes.push({
           name: record.name,
-          attachmentRecordLength: length,
+          length,
           offset,
-          attachmentSize: BigInt(record.data.byteLength),
+          dataSize: BigInt(record.data.byteLength),
           contentType: record.contentType,
-          recordTime: record.recordTime,
+          logTime: record.logTime,
         });
         break;
       }
@@ -105,8 +105,8 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
     }
   }
   if (chunk) {
-    const offset = BigInt(builder.length);
-    const length = builder.writeChunk({
+    const chunkStartOffset = BigInt(builder.length);
+    const chunkLength = builder.writeChunk({
       compression: "",
       startTime: chunk.startTime,
       endTime: chunk.endTime,
@@ -126,8 +126,8 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
       endTime: chunk.endTime,
       uncompressedSize: BigInt(chunk.buffer.byteLength),
       compressedSize: BigInt(chunk.buffer.byteLength),
-      chunkStart: offset,
-      chunkLength: length,
+      chunkStartOffset,
+      chunkLength,
       messageIndexLength,
       messageIndexOffsets,
     });
@@ -220,7 +220,7 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   builder.writeFooter({
     summaryOffsetStart,
     summaryStart: hasSummary ? summaryStart : 0n,
-    crc: 0,
+    summaryCrc: 0,
   });
   builder.writeMagic();
   return builder.buffer;
@@ -233,19 +233,19 @@ const inputs: { name: string; records: TestDataRecord[] }[] = [
     records: [
       {
         type: "ChannelInfo",
-        channelId: 1,
-        topicName: "example",
+        id: 1,
+        topic: "example",
         schemaName: "Example",
         messageEncoding: "a",
         schema: "b",
         schemaEncoding: "c",
-        userData: [["foo", "bar"]],
+        metadata: [["foo", "bar"]],
       },
       {
         type: "Message",
         channelId: 1,
         publishTime: 1n,
-        recordTime: 2n,
+        logTime: 2n,
         messageData: new Uint8Array([1, 2, 3]),
         sequence: 10,
       },
@@ -256,10 +256,10 @@ const inputs: { name: string; records: TestDataRecord[] }[] = [
     records: [
       {
         type: "Attachment",
-        name: "myfile",
+        name: "myFile",
         contentType: "application/octet-stream",
         createdAt: 1n,
-        recordTime: 2n,
+        logTime: 2n,
         data: new Uint8Array([1, 2, 3]),
       },
     ],

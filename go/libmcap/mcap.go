@@ -101,21 +101,33 @@ func (w *WriteSizer) Reset() {
 	w.w.crc = crc32.NewIEEE()
 }
 
-func putByte(buf []byte, x byte) int {
+func putByte(buf []byte, x byte) (int, error) {
+	if len(buf) < 1 {
+		return 0, io.ErrShortBuffer
+	}
 	buf[0] = x
-	return 1
+	return 1, nil
 }
 
-func getUint16(buf []byte, offset int) (x uint16, newoffset int) {
-	return binary.LittleEndian.Uint16(buf[offset:]), offset + 2
+func getUint16(buf []byte, offset int) (x uint16, newoffset int, err error) {
+	if offset > len(buf)-2 {
+		return 0, 0, io.ErrShortBuffer
+	}
+	return binary.LittleEndian.Uint16(buf[offset:]), offset + 2, nil
 }
 
-func getUint32(buf []byte, offset int) (x uint32, newoffset int) {
-	return binary.LittleEndian.Uint32(buf[offset:]), offset + 4
+func getUint32(buf []byte, offset int) (x uint32, newoffset int, err error) {
+	if offset > len(buf)-4 {
+		return 0, 0, io.ErrShortBuffer
+	}
+	return binary.LittleEndian.Uint32(buf[offset:]), offset + 4, nil
 }
 
-func getUint64(buf []byte, offset int) (x uint64, newoffset int) {
-	return binary.LittleEndian.Uint64(buf[offset:]), offset + 8
+func getUint64(buf []byte, offset int) (x uint64, newoffset int, err error) {
+	if offset > len(buf)-8 {
+		return 0, 0, io.ErrShortBuffer
+	}
+	return binary.LittleEndian.Uint64(buf[offset:]), offset + 8, nil
 }
 
 func putUint16(buf []byte, i uint16) int {

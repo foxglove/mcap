@@ -114,7 +114,7 @@ export class Mcap0IndexedWriter {
     this.recordWriter.writeFooter({
       summaryStart,
       summaryOffsetStart,
-      crc: 0,
+      summaryCrc: 0,
     });
 
     this.recordWriter.writeMagic();
@@ -126,14 +126,14 @@ export class Mcap0IndexedWriter {
   /**
    * Add channel info and return a generated channel id. The channel id is used when adding messages.
    */
-  async registerChannel(info: Omit<ChannelInfo, "channelId">): Promise<number> {
-    const channelId = this.channelInfos.size + 1;
-    this.channelInfos.set(channelId, {
+  async registerChannel(info: Omit<ChannelInfo, "id">): Promise<number> {
+    const id = this.channelInfos.size + 1;
+    this.channelInfos.set(id, {
       ...info,
-      channelId,
+      id,
     });
 
-    return channelId;
+    return id;
   }
 
   async addMessage(message: Message): Promise<void> {
@@ -158,16 +158,16 @@ export class Mcap0IndexedWriter {
   }
 
   async addAttachment(attachment: Attachment): Promise<void> {
-    const attachmentRecordLength = this.recordWriter.writeAttachment(attachment);
+    const length = this.recordWriter.writeAttachment(attachment);
 
     const offset = this.writable.position();
     this.attachmentIndices.push({
-      recordTime: attachment.recordTime,
+      logTime: attachment.logTime,
       name: attachment.name,
       contentType: attachment.contentType,
       offset,
-      attachmentSize: BigInt(attachment.data.byteLength),
-      attachmentRecordLength,
+      dataSize: BigInt(attachment.data.byteLength),
+      length,
     });
 
     await this.writable.write(this.recordWriter.buffer);
@@ -203,15 +203,15 @@ export class Mcap0IndexedWriter {
       records: chunkData,
     };
 
-    const chunkStart = this.writable.position();
+    const chunkStartOffset = this.writable.position();
 
     const recordRecordSize = this.recordWriter.writeChunk(chunkRecord);
-    const chunkEnd = chunkStart + recordRecordSize;
+    const chunkEnd = chunkStartOffset + recordRecordSize;
 
     const chunkIndex: ChunkIndex = {
       startTime: chunkRecord.startTime,
       endTime: chunkRecord.endTime,
-      chunkStart,
+      chunkStartOffset,
       chunkLength: chunkEnd,
       messageIndexOffsets: new Map(),
       messageIndexLength: 0n,

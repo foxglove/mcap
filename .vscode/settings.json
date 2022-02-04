@@ -10,6 +10,8 @@
   },
   "jest.jestCommandLine": "yarn workspace @foxglove/mcap test",
 
+  "cSpell.enabled": true,
+
   "search.exclude": {
     "**/node_modules": true,
     "tests/conformance/data": true
