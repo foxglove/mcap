@@ -6,4 +6,4 @@ ChunkIndex chunk_length=139 chunk_start_offset=28 compressed_size=100 compressio
 SummaryOffset group_length=0 group_opcode=12 group_start=219
 SummaryOffset group_length=0 group_opcode=9 group_start=219
 SummaryOffset group_length=90 group_opcode=7 group_start=219
-Footer summary_offset_start=309 summary_start=219
+Footer summary_crc=0 summary_offset_start=309 summary_start=219

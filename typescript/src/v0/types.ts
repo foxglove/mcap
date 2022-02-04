@@ -8,22 +8,22 @@ export type Header = {
 export type Footer = {
   summaryStart: bigint;
   summaryOffsetStart: bigint;
-  crc: number;
+  summaryCrc: number;
 };
 export type ChannelInfo = {
-  channelId: number;
-  topicName: string;
+  id: number;
+  topic: string;
   messageEncoding: string;
   schemaEncoding: string;
   schema: string;
   schemaName: string;
-  userData: [key: string, value: string][];
+  metadata: [key: string, value: string][];
 };
 export type Message = {
   channelId: number;
   sequence: number;
   publishTime: bigint;
-  recordTime: bigint;
+  logTime: bigint;
   messageData: Uint8Array;
 };
 export type Chunk = {
@@ -36,12 +36,12 @@ export type Chunk = {
 };
 export type MessageIndex = {
   channelId: number;
-  records: [recordTime: bigint, offset: bigint][];
+  records: [logTime: bigint, offset: bigint][];
 };
 export type ChunkIndex = {
   startTime: bigint;
   endTime: bigint;
-  chunkStart: bigint;
+  chunkStartOffset: bigint;
   chunkLength: bigint;
   messageIndexOffsets: Map<number, bigint>;
   messageIndexLength: bigint;
@@ -52,17 +52,17 @@ export type ChunkIndex = {
 export type Attachment = {
   name: string;
   createdAt: bigint;
-  recordTime: bigint;
+  logTime: bigint;
   contentType: string;
   data: Uint8Array;
 };
 export type AttachmentIndex = {
-  recordTime: bigint;
-  attachmentSize: bigint;
+  offset: bigint;
+  length: bigint;
+  logTime: bigint;
+  dataSize: bigint;
   name: string;
   contentType: string;
-  offset: bigint;
-  attachmentRecordLength: bigint;
 };
 export type Statistics = {
   messageCount: bigint;

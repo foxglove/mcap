@@ -216,8 +216,8 @@ async function convert(filePath: string, options: { indexed: boolean }) {
 
     const descriptorMsgEncoded = descriptor.FileDescriptorSet.encode(descriptorMsg).finish();
 
-    const channelInfo: Omit<ChannelInfo, "channelId"> = {
-      topicName: connection.topic,
+    const channelInfo: Omit<ChannelInfo, "id"> = {
+      topic: connection.topic,
       messageEncoding: "protobuf",
       schemaEncoding: "proto",
       schemaName,
@@ -226,7 +226,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
         0,
         descriptorMsgEncoded.byteLength,
       ),
-      userData: [],
+      metadata: [],
     };
 
     const channelId = await mcapFile.registerChannel(channelInfo);
@@ -267,7 +267,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
         channelId,
         sequence: 0,
         publishTime: timestamp,
-        recordTime: timestamp,
+        logTime: timestamp,
         messageData: protoMsgBuffer,
       };
 

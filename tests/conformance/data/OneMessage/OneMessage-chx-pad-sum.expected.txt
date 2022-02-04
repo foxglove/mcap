@@ -4,4 +4,4 @@ Message channel_id=1 log_time=2 message_data=<010203> publish_time=1 sequence=10
 SummaryOffset group_length=0 group_opcode=12 group_start=147
 SummaryOffset group_length=0 group_opcode=9 group_start=147
 SummaryOffset group_length=0 group_opcode=7 group_start=147
-Footer summary_offset_start=147 summary_start=0
+Footer summary_crc=0 summary_offset_start=147 summary_start=0
