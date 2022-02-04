@@ -296,8 +296,6 @@ func (it *indexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 		}
 	}
 
-	fmt.Println(it.messageOffsetIdx, len(it.messageOffsets))
-
 	messageOffset := it.messageOffsets[it.messageOffsetIdx]
 	it.messageOffsetIdx++
 
