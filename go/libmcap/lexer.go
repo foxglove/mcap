@@ -161,11 +161,26 @@ func loadChunk(l *Lexer, recordSize int64) error {
 
 	// Skip the uncompressed size; the lexer will read messages out of the
 	// reader incrementally.
-	_, offset := getUint64(l.buf, 0)     // start
-	_, offset = getUint64(l.buf, offset) // end
-	_, offset = getUint64(l.buf, offset) // uncompressed size
-	uncompressedCRC, offset := getUint32(l.buf, offset)
-	compressionLen, offset := getUint32(l.buf, offset)
+	_, offset, err := getUint64(l.buf, 0) // start
+	if err != nil {
+		return fmt.Errorf("failed to read start: %w", err)
+	}
+	_, offset, err = getUint64(l.buf, offset) // end
+	if err != nil {
+		return fmt.Errorf("failed to read end: %w", err)
+	}
+	_, offset, err = getUint64(l.buf, offset) // uncompressed size
+	if err != nil {
+		return fmt.Errorf("failed to read uncompressed size: %w", err)
+	}
+	uncompressedCRC, offset, err := getUint32(l.buf, offset)
+	if err != nil {
+		return fmt.Errorf("failed to read uncompressed CRC: %w", err)
+	}
+	compressionLen, offset, err := getUint32(l.buf, offset)
+	if err != nil {
+		return fmt.Errorf("failed to read compression length: %w", err)
+	}
 
 	compression := make([]byte, compressionLen)
 	_, err = io.ReadFull(l.reader, compression)
