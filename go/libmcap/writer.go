@@ -75,7 +75,10 @@ func (w *Writer) writeChunk() error {
 	if len(w.chunk) < recordlen {
 		w.chunk = make([]byte, recordlen)
 	}
-	offset := putByte(w.chunk, byte(OpChunk))
+	offset, err := putByte(w.chunk, byte(OpChunk))
+	if err != nil {
+		return err
+	}
 	offset += putUint64(w.chunk[offset:], uint64(msglen))
 	offset += putUint64(w.chunk[offset:], start)
 	offset += putUint64(w.chunk[offset:], end)
