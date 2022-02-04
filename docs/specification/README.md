@@ -251,13 +251,14 @@ A Statistics record contains summary information about the recorded data. The st
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 8 | message_count | uint64 | Number of messages in the file across all topics. |
-| 4 | channel_count | uint32 | Number of channels in the file across all topics. |
-| 4 | attachment_count | uint32 | Number of attachments in the file. |
-| 4 | chunk_count | uint32 | Number of chunks in the file. |
+| 8 | message_count | uint64 | Number of Message records in the file. |
+| 4 | channel_count | uint32 | Number of unique channel ids in the file. |
+| 4 | attachment_count | uint32 | Number of Attachment records in the file. |
+| 4 | metadata_count | uint32 | Number of Metadata records in the file. |
+| 4 | chunk_count | uint32 | Number of Chunk records in the file. |
 | 4 + N | channel_message_counts | Map<uint16, uint64> | Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available. |
 
-When using a Statistics record with channel_message_counts, the Summary Data section MUST contain a copy of all Channel Info records. The Channel Info records MUST occur prior to the statistics record.
+When using a Statistics record with a non-empty channel_message_counts, the Summary Data section MUST contain a copy of all Channel Info records. The Channel Info records MUST occur prior to the statistics record.
 
 > Why? The typical use case for tools is to provide a listing of the types and quantities of messages stored in the file. Without an easy to access copy of the Channel Info records, tools would need to linearly scan the file for Channel Info records to display what types of messages exist in the file.
 
