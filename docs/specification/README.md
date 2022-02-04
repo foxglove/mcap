@@ -144,7 +144,7 @@ A Footer record contains end-of-file information. It must be the last record in 
 
 A Schema record defines an individual schema.
 
-Schema records are uniquely identified within a file by their schema ID. A Datatye record must occur at least once in the file prior to any Channel Info referring to its schema ID.
+Schema records are uniquely identified within a file by their schema ID. A Schema record must occur at least once in the file prior to any Channel Info referring to its ID.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
