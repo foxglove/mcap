@@ -106,16 +106,25 @@ func putByte(buf []byte, x byte) int {
 	return 1
 }
 
-func getUint16(buf []byte, offset int) (x uint16, newoffset int) {
-	return binary.LittleEndian.Uint16(buf[offset:]), offset + 2
+func getUint16(buf []byte, offset int) (x uint16, newoffset int, err error) {
+	if len(buf) < 2 {
+		return 0, 0, io.ErrShortBuffer
+	}
+	return binary.LittleEndian.Uint16(buf[offset:]), offset + 2, nil
 }
 
-func getUint32(buf []byte, offset int) (x uint32, newoffset int) {
-	return binary.LittleEndian.Uint32(buf[offset:]), offset + 4
+func getUint32(buf []byte, offset int) (x uint32, newoffset int, err error) {
+	if len(buf) < 4 {
+		return 0, 0, io.ErrShortBuffer
+	}
+	return binary.LittleEndian.Uint32(buf[offset:]), offset + 4, nil
 }
 
-func getUint64(buf []byte, offset int) (x uint64, newoffset int) {
-	return binary.LittleEndian.Uint64(buf[offset:]), offset + 8
+func getUint64(buf []byte, offset int) (x uint64, newoffset int, err error) {
+	if len(buf) < 8 {
+		return 0, 0, io.ErrShortBuffer
+	}
+	return binary.LittleEndian.Uint64(buf[offset:]), offset + 8, nil
 }
 
 func putUint16(buf []byte, i uint16) int {

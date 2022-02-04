@@ -1,15 +1,18 @@
 package libmcap
 
-import "io"
+import (
+	"fmt"
+	"io"
+)
 
 func ParseHeader(buf []byte) (*Header, error) {
 	profile, offset, err := readPrefixedString(buf, 0)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read profile: %w", err)
 	}
 	library, _, err := readPrefixedString(buf, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read library: %w", err)
 	}
 	return &Header{
 		Profile: profile,
@@ -18,10 +21,18 @@ func ParseHeader(buf []byte) (*Header, error) {
 }
 
 func ParseFooter(buf []byte) (*Footer, error) {
-	summaryStart, offset := getUint64(buf, 0)
-	summaryOffsetStart, offset := getUint64(buf, offset)
-	summaryCrc, _ := getUint32(buf, offset)
-
+	summaryStart, offset, err := getUint64(buf, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read summary start: %w", err)
+	}
+	summaryOffsetStart, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read summary offset start: %w", err)
+	}
+	summaryCrc, _, err := getUint32(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read summary CRC: %w", err)
+	}
 	return &Footer{
 		SummaryStart:       summaryStart,
 		SummaryOffsetStart: summaryOffsetStart,
@@ -30,13 +41,25 @@ func ParseFooter(buf []byte) (*Footer, error) {
 }
 
 func ParseChunk(buf []byte) (*Chunk, error) {
-	startTime, offset := getUint64(buf, 0)
-	endTime, offset := getUint64(buf, offset)
-	uncompressedSize, offset := getUint64(buf, offset)
-	uncompressedCRC, offset := getUint32(buf, offset)
+	startTime, offset, err := getUint64(buf, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read start time: %w", err)
+	}
+	endTime, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read end time: %w", err)
+	}
+	uncompressedSize, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read uncompressed size: %w", err)
+	}
+	uncompressedCRC, offset, err := getUint32(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read uncompressed CRC: %w", err)
+	}
 	compression, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read compression: %w", err)
 	}
 	records := buf[offset:]
 	return &Chunk{
@@ -50,8 +73,14 @@ func ParseChunk(buf []byte) (*Chunk, error) {
 }
 
 func ParseMessageIndex(buf []byte) (*MessageIndex, error) {
-	channelID, offset := getUint16(buf, 0)
-	records, _ := readMessageIndexEntries(buf, offset)
+	channelID, offset, err := getUint16(buf, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read channel ID: %w", err)
+	}
+	records, _, err := readMessageIndexEntries(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read message index entries: %w", err)
+	}
 	return &MessageIndex{
 		ChannelID: channelID,
 		Records:   records,
@@ -61,18 +90,30 @@ func ParseMessageIndex(buf []byte) (*MessageIndex, error) {
 func ParseAttachment(buf []byte) (*Attachment, error) {
 	name, offset, err := readPrefixedString(buf, 0)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read attachment name: %w", err)
 	}
-	createdAt, offset := getUint64(buf, offset)
-	recordTime, offset := getUint64(buf, offset)
+	createdAt, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read created at: %w", err)
+	}
+	recordTime, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read record time: %w", err)
+	}
 	contentType, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read content type: %w", err)
 	}
-	dataSize, offset := getUint64(buf, offset)
+	dataSize, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read attachment data size: %w", err)
+	}
 	data := buf[offset : offset+int(dataSize)]
 	offset += int(dataSize)
-	crc, _ := getUint32(buf, offset)
+	crc, _, err := getUint32(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CRC: %w", err)
+	}
 	return &Attachment{
 		Name:        name,
 		CreatedAt:   createdAt,
@@ -84,17 +125,29 @@ func ParseAttachment(buf []byte) (*Attachment, error) {
 }
 
 func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
-	attachmentOffset, offset := getUint64(buf, 0)
-	length, offset := getUint64(buf, offset)
-	recordTime, offset := getUint64(buf, offset)
-	dataSize, offset := getUint64(buf, offset)
+	attachmentOffset, offset, err := getUint64(buf, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read attachment offset: %w", err)
+	}
+	length, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read attachment length: %w", err)
+	}
+	recordTime, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read record time: %w", err)
+	}
+	dataSize, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read data size: %w", err)
+	}
 	name, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read attachment name: %w", err)
 	}
 	contentType, _, err := readPrefixedString(buf, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read content type: %w", err)
 	}
 	return &AttachmentIndex{
 		Offset:      attachmentOffset,
@@ -107,13 +160,22 @@ func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
 }
 
 func ParseMessage(buf []byte) (*Message, error) {
-	if len(buf) < 2+4+8+8 {
-		return nil, io.ErrShortBuffer
+	channelID, offset, err := getUint16(buf, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read channel ID: %w", err)
 	}
-	channelID, offset := getUint16(buf, 0)
-	sequence, offset := getUint32(buf, offset)
-	publishTime, offset := getUint64(buf, offset)
-	recordTime, offset := getUint64(buf, offset)
+	sequence, offset, err := getUint32(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read sequence: %w", err)
+	}
+	publishTime, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read publish time: %w", err)
+	}
+	recordTime, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read record time: %w", err)
+	}
 	data := buf[offset:]
 	return &Message{
 		ChannelID:   channelID,
@@ -125,28 +187,58 @@ func ParseMessage(buf []byte) (*Message, error) {
 }
 
 func ParseChunkIndex(buf []byte) (*ChunkIndex, error) {
-	startTime, offset := getUint64(buf, 0)
-	endTime, offset := getUint64(buf, offset)
-	chunkStartOffset, offset := getUint64(buf, offset)
-	chunkLength, offset := getUint64(buf, offset)
-	msgIndexLen, offset := getUint32(buf, offset)
+	startTime, offset, err := getUint64(buf, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read start time: %w", err)
+	}
+	endTime, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read end time: %w", err)
+	}
+	chunkStartOffset, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read chunk start offset: %w", err)
+	}
+	chunkLength, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read chunk length: %w", err)
+	}
+	msgIndexLen, offset, err := getUint32(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read message index length: %w", err)
+	}
 	messageIndexOffsets := make(map[uint16]uint64)
 	var chanID uint16
 	var indexOffset uint64
 	inset := 0
 	for inset < int(msgIndexLen) {
-		chanID, inset = getUint16(buf[offset:], inset)
-		indexOffset, inset = getUint64(buf[offset:], inset)
+		chanID, inset, err = getUint16(buf[offset:], inset)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read channel ID: %w", err)
+		}
+		indexOffset, inset, err = getUint64(buf[offset:], inset)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read index offset: %w", err)
+		}
 		messageIndexOffsets[chanID] = indexOffset
 	}
 	offset += inset
-	msgIndexLength, offset := getUint64(buf, offset)
+	msgIndexLength, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read message index length: %w", err)
+	}
 	compression, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read compression: %w", err)
 	}
-	compressedSize, offset := getUint64(buf, offset)
-	uncompressedSize, _ := getUint64(buf, offset)
+	compressedSize, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read compressed size: %w", err)
+	}
+	uncompressedSize, _, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read uncompressed size: %w", err)
+	}
 	return &ChunkIndex{
 		StartTime:           startTime,
 		EndTime:             endTime,
@@ -161,30 +253,33 @@ func ParseChunkIndex(buf []byte) (*ChunkIndex, error) {
 }
 
 func ParseChannelInfo(buf []byte) (*ChannelInfo, error) {
-	channelID, offset := getUint16(buf, 0)
+	channelID, offset, err := getUint16(buf, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read channel id: %w", err)
+	}
 	topicName, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read topic name: %w", err)
 	}
 	messageEncoding, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read message encoding: %w", err)
 	}
 	schemaEncoding, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read schema encoding: %w", err)
 	}
 	schema, offset, err := readPrefixedBytes(buf, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read schema: %w", err)
 	}
 	schemaName, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read schema name: %w", err)
 	}
 	metadata, _, err := readPrefixedMap(buf, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read metadata: %w", err)
 	}
 	return &ChannelInfo{
 		ChannelID:       channelID,
@@ -203,8 +298,14 @@ func ParseSummaryOffset(buf []byte) (*SummaryOffset, error) {
 	}
 	groupOpcode := buf[0]
 	offset := 1
-	groupStart, offset := getUint64(buf, offset)
-	groupLength, _ := getUint64(buf, offset)
+	groupStart, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read group start: %w", err)
+	}
+	groupLength, _, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read group length: %w", err)
+	}
 	return &SummaryOffset{
 		GroupOpcode: OpCode(groupOpcode),
 		GroupStart:  groupStart,
@@ -216,11 +317,26 @@ func ParseStatistics(buf []byte) (*Statistics, error) {
 	if len(buf) < 8+4+4+4+4 {
 		return nil, io.ErrShortBuffer
 	}
-	messageCount, offset := getUint64(buf, 0)
-	channelCount, offset := getUint32(buf, offset)
-	attachmentCount, offset := getUint32(buf, offset)
-	chunkCount, offset := getUint32(buf, offset)
-	messageCountLen, offset := getUint32(buf, offset)
+	messageCount, offset, err := getUint64(buf, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read message count: %w", err)
+	}
+	channelCount, offset, err := getUint32(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read channel count: %w", err)
+	}
+	attachmentCount, offset, err := getUint32(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read attachment count: %w", err)
+	}
+	chunkCount, offset, err := getUint32(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read chunk count: %w", err)
+	}
+	messageCountLen, offset, err := getUint32(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read message count length: %w", err)
+	}
 	var chanID uint16
 	var channelMessageCount uint64
 	channelMessageCounts := make(map[uint16]uint64)
@@ -229,8 +345,14 @@ func ParseStatistics(buf []byte) (*Statistics, error) {
 		return nil, io.ErrShortBuffer
 	}
 	for offset < start+int(messageCountLen) {
-		chanID, offset = getUint16(buf, offset)
-		channelMessageCount, offset = getUint64(buf, offset)
+		chanID, offset, err = getUint16(buf, offset)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read message count channel ID: %w", err)
+		}
+		channelMessageCount, offset, err = getUint64(buf, offset)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read channel message count: %w", err)
+		}
 		channelMessageCounts[chanID] = channelMessageCount
 	}
 	return &Statistics{
@@ -242,18 +364,27 @@ func ParseStatistics(buf []byte) (*Statistics, error) {
 	}, nil
 }
 
-func readMessageIndexEntries(data []byte, offset int) (entries []MessageIndexEntry, newoffset int) {
-	entriesByteLength, offset := getUint32(data, offset)
+func readMessageIndexEntries(data []byte, offset int) (entries []MessageIndexEntry, newoffset int, err error) {
+	entriesByteLength, offset, err := getUint32(data, offset)
+	if err != nil {
+		return nil, offset, fmt.Errorf("failed to read message index entries byte length: %w", err)
+	}
 	var value, stamp uint64
 	var start = offset
 	entries = make([]MessageIndexEntry, 0, (len(data)-2)/(8+8))
 	for uint32(offset) < uint32(start)+entriesByteLength {
-		stamp, offset = getUint64(data, offset)
-		value, offset = getUint64(data, offset)
+		stamp, offset, err = getUint64(data, offset)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to read message index entry stamp: %w", err)
+		}
+		value, offset, err = getUint64(data, offset)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to read message index entry value: %w", err)
+		}
 		entries = append(entries, MessageIndexEntry{
 			Timestamp: stamp,
 			Offset:    value,
 		})
 	}
-	return entries, offset
+	return entries, offset, nil
 }

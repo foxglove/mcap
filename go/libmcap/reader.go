@@ -33,15 +33,18 @@ func readPrefixedMap(data []byte, offset int) (result map[string]string, newoffs
 	var key, value string
 	var inset int
 	m := make(map[string]string)
-	maplen, offset := getUint32(data, offset)
+	maplen, offset, err := getUint32(data, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to read map length: %w", err)
+	}
 	for uint32(offset+inset) < uint32(offset)+maplen {
 		key, inset, err = readPrefixedString(data[offset:], inset)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, fmt.Errorf("failed to read map key: %w", err)
 		}
 		value, inset, err = readPrefixedString(data[offset:], inset)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, fmt.Errorf("failed to read map value: %w", err)
 		}
 		m[key] = value
 	}
