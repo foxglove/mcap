@@ -102,14 +102,14 @@ export function parseRecord({
     }
 
     case Opcode.SCHEMA: {
-      const schemId = reader.uint16();
+      const schemaId = reader.uint16();
       const schemaEncoding = reader.string();
       const schema = reader.string();
       const schemaName = reader.string();
 
       const record: TypedMcapRecord = {
         type: "Schema",
-        id: schemId,
+        id: schemaId,
         schemaEncoding,
         schemaName,
         schema,
