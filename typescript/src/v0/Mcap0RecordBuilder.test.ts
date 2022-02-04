@@ -55,7 +55,7 @@ describe("Mcap0RecordBuilder", () => {
       id: 1,
       topic: "/topic",
       messageEncoding: "encoding",
-      schemaEncoding: "someformat",
+      schemaEncoding: "some format",
       schemaName: "schema name",
       schema: "schema",
       metadata: [],
@@ -64,11 +64,11 @@ describe("Mcap0RecordBuilder", () => {
     const buffer = new BufferBuilder();
     buffer
       .uint8(3) // opcode
-      .uint64(BigInt(67)) // record content byte length
+      .uint64(BigInt(68)) // record content byte length
       .uint16(1)
       .string("/topic")
       .string("encoding")
-      .string("someformat")
+      .string("some format")
       .string("schema")
       .string("schema name")
       .uint32(0); // user data length

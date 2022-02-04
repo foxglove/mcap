@@ -16,5 +16,5 @@ MUST be `ros1msg`
 
 #### user_data
 
-- callerid (optional, string)
+- callerid (optional, string) <!-- cspell:disable-line -->
 - latching (optional, bool stringified as "true" or "false")

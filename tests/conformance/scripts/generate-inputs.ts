@@ -256,7 +256,7 @@ const inputs: { name: string; records: TestDataRecord[] }[] = [
     records: [
       {
         type: "Attachment",
-        name: "myfile",
+        name: "myFile",
         contentType: "application/octet-stream",
         createdAt: 1n,
         logTime: 2n,

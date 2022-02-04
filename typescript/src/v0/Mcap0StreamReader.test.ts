@@ -255,7 +255,7 @@ describe("Mcap0StreamReader", () => {
 
         ...record(Opcode.CHANNEL_INFO, [
           ...uint16LE(1), // channel id
-          ...string("mytopic"), // topic
+          ...string("myTopic"), // topic
           ...string("utf12"), // message encoding
           ...string("json"), // schema encoding
           ...string("stuff"), // schema
@@ -274,7 +274,7 @@ describe("Mcap0StreamReader", () => {
     expect(reader.nextRecord()).toEqual({
       type: "ChannelInfo",
       id: 1,
-      topic: "mytopic",
+      topic: "myTopic",
       messageEncoding: "utf12",
       schemaEncoding: "json",
       schemaName: "some data",
@@ -293,7 +293,7 @@ describe("Mcap0StreamReader", () => {
   it.each([true, false])("parses channel info in chunk (compressed: %s)", (compressed) => {
     const channelInfo = record(Opcode.CHANNEL_INFO, [
       ...uint16LE(1), // channel id
-      ...string("mytopic"), // topic
+      ...string("myTopic"), // topic
       ...string("utf12"), // message encoding
       ...string("json"), // schema encoding
       ...string("stuff"), // schema
@@ -326,7 +326,7 @@ describe("Mcap0StreamReader", () => {
     expect(reader.nextRecord()).toEqual({
       type: "ChannelInfo",
       id: 1,
-      topic: "mytopic",
+      topic: "myTopic",
       messageEncoding: "utf12",
       schemaEncoding: "json",
       schemaName: "some data",
@@ -362,7 +362,7 @@ describe("Mcap0StreamReader", () => {
           key: "encoding",
           channelInfo2: record(Opcode.CHANNEL_INFO, [
             ...uint16LE(42), // channel id
-            ...string("mytopic"), // topic
+            ...string("myTopic"), // topic
             ...string("XXXXXXXX"), // message encoding
             ...string("json"), // schema encoding
             ...string("stuff"), // schema
@@ -374,7 +374,7 @@ describe("Mcap0StreamReader", () => {
           key: "schema name",
           channelInfo2: record(Opcode.CHANNEL_INFO, [
             ...uint16LE(42), // channel id
-            ...string("mytopic"), // topic
+            ...string("myTopic"), // topic
             ...string("utf12"), // message encoding
             ...string("json"), // schema encoding
             ...string("stuff"), // schema
@@ -386,7 +386,7 @@ describe("Mcap0StreamReader", () => {
           key: "schema",
           channelInfo2: record(Opcode.CHANNEL_INFO, [
             ...uint16LE(42), // channel id
-            ...string("mytopic"), // topic
+            ...string("myTopic"), // topic
             ...string("utf12"), // message encoding
             ...string("json"), // schema encoding
             ...string("XXXXXXXX"), // schema
@@ -398,7 +398,7 @@ describe("Mcap0StreamReader", () => {
           key: "data",
           channelInfo2: record(Opcode.CHANNEL_INFO, [
             ...uint16LE(42), // channel id
-            ...string("mytopic"), // topic
+            ...string("myTopic"), // topic
             ...string("utf12"), // message encoding
             ...string("json"), // schema encoding
             ...string("stuff"), // schema
@@ -412,7 +412,7 @@ describe("Mcap0StreamReader", () => {
       ])("differing in $key", ({ channelInfo2 }) => {
         const channelInfo = record(Opcode.CHANNEL_INFO, [
           ...uint16LE(42), // channel id
-          ...string("mytopic"), // topic
+          ...string("myTopic"), // topic
           ...string("utf12"), // message encoding
           ...string("json"), // schema encoding
           ...string("stuff"), // schema
@@ -468,7 +468,7 @@ describe("Mcap0StreamReader", () => {
         expect(reader.nextRecord()).toEqual({
           type: "ChannelInfo",
           id: 42,
-          topic: "mytopic",
+          topic: "myTopic",
           messageEncoding: "utf12",
           schemaEncoding: "json",
           schemaName: "some data",
@@ -488,7 +488,7 @@ describe("Mcap0StreamReader", () => {
         ...record(
           Opcode.ATTACHMENT,
           crcSuffix([
-            ...string("myfile"), // name
+            ...string("myFile"), // name
             ...uint64LE(1n), // created at
             ...uint64LE(2n), // log time
             ...string("text/plain"), // content type
@@ -506,7 +506,7 @@ describe("Mcap0StreamReader", () => {
     );
     expect(reader.nextRecord()).toEqual({
       type: "Attachment",
-      name: "myfile",
+      name: "myFile",
       createdAt: 1n,
       logTime: 2n,
       contentType: "text/plain",

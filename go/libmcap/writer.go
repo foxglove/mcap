@@ -92,15 +92,15 @@ func (w *Writer) writeChunk() error {
 	w.compressedWriter.ResetSize()
 	w.compressedWriter.ResetCRC()
 
-	msgidxOffsets := make(map[uint16]uint64)
+	messageIndexOffsets := make(map[uint16]uint64)
 	messageIndexStart := w.w.Size()
 	for _, chanID := range w.channelIDs {
-		if msgidx, ok := w.MessageIndexes[chanID]; ok {
-			sort.Slice(msgidx.Records, func(i, j int) bool {
-				return msgidx.Records[i].Timestamp < msgidx.Records[j].Timestamp
+		if messageIndex, ok := w.MessageIndexes[chanID]; ok {
+			sort.Slice(messageIndex.Records, func(i, j int) bool {
+				return messageIndex.Records[i].Timestamp < messageIndex.Records[j].Timestamp
 			})
-			msgidxOffsets[msgidx.ChannelID] = w.w.Size()
-			err = w.WriteMessageIndex(msgidx)
+			messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
+			err = w.WriteMessageIndex(messageIndex)
 			if err != nil {
 				return err
 			}
@@ -112,7 +112,7 @@ func (w *Writer) writeChunk() error {
 		StartTime:           w.currentChunkStartTime,
 		EndTime:             w.currentChunkEndTime,
 		ChunkStartOffset:    chunkStartOffset,
-		MessageIndexOffsets: msgidxOffsets,
+		MessageIndexOffsets: messageIndexOffsets,
 		MessageIndexLength:  messageIndexLength,
 		Compression:         w.compression,
 		CompressedSize:      uint64(compressedlen),
@@ -296,14 +296,14 @@ func (w *Writer) WriteAttachmentIndex(idx *AttachmentIndex) error {
 }
 
 func (w *Writer) writeChunkIndex(idx *ChunkIndex) error {
-	msgidxlen := len(idx.MessageIndexOffsets) * (2 + 8)
-	msglen := 8 + 8 + 8 + 8 + 4 + msgidxlen + 8 + 4 + len(idx.Compression) + 8 + 8
+	messageIndexLength := len(idx.MessageIndexOffsets) * (2 + 8)
+	msglen := 8 + 8 + 8 + 8 + 4 + messageIndexLength + 8 + 4 + len(idx.Compression) + 8 + 8
 	w.ensureSized(msglen)
 	offset := putUint64(w.msg, idx.StartTime)
 	offset += putUint64(w.msg[offset:], idx.EndTime)
 	offset += putUint64(w.msg[offset:], idx.ChunkStartOffset)
 	offset += putUint64(w.msg[offset:], idx.ChunkLength)
-	offset += putUint32(w.msg[offset:], uint32(msgidxlen))
+	offset += putUint32(w.msg[offset:], uint32(messageIndexLength))
 	for _, chanID := range w.channelIDs {
 		if v, ok := idx.MessageIndexOffsets[chanID]; ok {
 			offset += putUint16(w.msg[offset:], chanID)
@@ -405,15 +405,15 @@ func (w *Writer) Close() error {
 		}
 	}
 	chunkIndexOffset := w.w.Size()
-	for _, chunkidx := range w.ChunkIndexes {
-		err := w.writeChunkIndex(chunkidx)
+	for _, chunkIndex := range w.ChunkIndexes {
+		err := w.writeChunkIndex(chunkIndex)
 		if err != nil {
 			return err
 		}
 	}
 	attachmentIndexOffset := w.w.Size()
-	for _, attachmentidx := range w.AttachmentIndexes {
-		err := w.WriteAttachmentIndex(attachmentidx)
+	for _, attachmentIndex := range w.AttachmentIndexes {
+		err := w.WriteAttachmentIndex(attachmentIndex)
 		if err != nil {
 			return err
 		}
