@@ -128,7 +128,6 @@ struct Chunk {
 
 struct MessageIndex {
   mcap::ChannelId channelId;
-  uint32_t count;
   std::vector<std::pair<mcap::Timestamp, mcap::ByteOffset>> records;
 };
 
@@ -141,30 +140,35 @@ struct ChunkIndex {
   mcap::ByteOffset messageIndexLength;
   std::string compression;
   mcap::ByteOffset compressedSize;
-  mcap::ByteOffset uncompressedSized;
+  mcap::ByteOffset uncompressedSize;
 };
 
 struct Attachment {
   std::string name;
-  mcap::Timestamp recordTime;
+  mcap::Timestamp createdAt;
+  mcap::Timestamp logTime;
   std::string contentType;
   uint64_t dataSize;
   const std::byte* data = nullptr;
+  uint32_t crc;
 };
 
 struct AttachmentIndex {
-  mcap::Timestamp recordTime;
-  uint64_t attachmentSize;
+  mcap::ByteOffset offset;
+  mcap::ByteOffset length;
+  mcap::Timestamp logTime;
+  uint64_t dataSize;
   std::string name;
   std::string contentType;
-  mcap::ByteOffset offset;
 
   AttachmentIndex(const Attachment& attachment, mcap::ByteOffset fileOffset)
-      : recordTime(attachment.recordTime)
-      , attachmentSize(attachment.dataSize)
+      : offset(fileOffset)
+      , length(4 + attachment.name.size() + 8 + 8 + 4 + attachment.contentType.size() + 8 +
+               attachment.dataSize + 4)
+      , logTime(attachment.logTime)
+      , dataSize(attachment.dataSize)
       , name(attachment.name)
-      , contentType(attachment.contentType)
-      , offset(fileOffset) {}
+      , contentType(attachment.contentType) {}
 };
 
 struct Statistics {
@@ -246,7 +250,17 @@ struct IReadable {
   virtual uint64_t read(std::byte** output, uint64_t offset, uint64_t size) = 0;
 };
 
-struct IChunkWriter {
+class IChunkReader {
+public:
+  virtual inline ~IChunkReader() = default;
+
+  virtual uint64_t read(const std::byte** output, uint64_t offset, uint64_t size) = 0;
+  virtual uint64_t size() const = 0;
+  virtual mcap::Status status() const = 0;
+};
+
+class IChunkWriter {
+public:
   virtual inline ~IChunkWriter() = default;
 
   virtual void write(const std::byte* data, uint64_t size) = 0;
@@ -257,11 +271,56 @@ struct IChunkWriter {
   virtual const std::byte* data() const = 0;
 };
 
+class BufferReader final : public IChunkReader {
+public:
+  BufferReader(const std::byte* data, uint64_t size);
+
+  uint64_t read(const std::byte** output, uint64_t offset, uint64_t size) override;
+  uint64_t size() const override;
+  mcap::Status status() const override;
+
+private:
+  const std::byte* data_;
+  uint64_t size_;
+};
+
+class LZ4Reader final : public IChunkReader {
+public:
+  LZ4Reader(const std::byte* data, uint64_t size, uint64_t uncompressedSize);
+
+  uint64_t read(const std::byte** output, uint64_t offset, uint64_t size) override;
+  uint64_t size() const override;
+  mcap::Status status() const override;
+
+private:
+  mcap::Status status_;
+  const std::byte* compressedData_;
+  ByteArray uncompressedData_;
+  uint64_t compressedSize_;
+  uint64_t uncompressedSize_;
+};
+
+class ZStdReader final : public IChunkReader {
+public:
+  ZStdReader(const std::byte* data, uint64_t size, uint64_t uncompressedSize);
+
+  uint64_t read(const std::byte** output, uint64_t offset, uint64_t size) override;
+  uint64_t size() const override;
+  mcap::Status status() const override;
+
+private:
+  mcap::Status status_;
+  const std::byte* compressedData_;
+  ByteArray uncompressedData_;
+  uint64_t compressedSize_;
+  uint64_t uncompressedSize_;
+};
+
 /**
  * @brief An in-memory IWritable/IChunkWriter implementation backed by a
  * growable buffer.
  */
-class BufferedWriter final : public IWritable, public IChunkWriter {
+class BufferWriter final : public IWritable, public IChunkWriter {
 public:
   void write(const std::byte* data, uint64_t size) override;
   void end() override;
@@ -342,113 +401,10 @@ struct Record {
   std::byte* data;
 };
 
+struct LinearMessageView;
+
 class McapReader final {
 public:
-  struct LinearMessageView {
-    struct ForwardMessageIterator {
-      using iterator_category = std::forward_iterator_tag;
-      using difference_type = int64_t;
-      using value_type = Message;
-      using pointer = Message*;
-      using reference = Message&;
-
-      ForwardMessageIterator(LinearMessageView& view)
-          : view_(view)
-          , offset_(view.startOffset())
-          , curRecord_{} {}
-
-      ForwardMessageIterator(LinearMessageView& view, uint64_t offset)
-          : view_(view)
-          , offset_(offset)
-          , curRecord_{} {}
-
-      reference operator*() const {
-        // FIXME
-        static Message message;
-        return message;
-      }
-      const pointer operator->() {
-        return &(operator*());
-      }
-      ForwardMessageIterator& operator++() {
-        // Mark any offset past the end of the file as EndOffset
-        auto* dataSource = view_.reader().dataSource();
-        if (!dataSource || offset_ >= dataSource->size()) {
-          offset_ = EndOffset;
-          return *this;
-        }
-
-        // Read the current record if needed
-        if (!curRecord_.data) {
-          if (!readCurrentRecord(*dataSource)) {
-            return *this;
-          }
-        }
-
-        // Advance to the next record
-        offset_ += 9 + curRecord_.dataSize;
-
-        // Read the next record
-        readCurrentRecord(*dataSource);
-
-        return *this;
-      }
-      ForwardMessageIterator operator++(int) {
-        ForwardMessageIterator tmp = *this;
-        ++(*this);
-        return tmp;
-      }
-      friend bool operator==(const ForwardMessageIterator& a, const ForwardMessageIterator& b) {
-        return a.offset_ == b.offset_;
-      }
-      friend bool operator!=(const ForwardMessageIterator& a, const ForwardMessageIterator& b) {
-        return a.offset_ != b.offset_;
-      }
-
-    private:
-      LinearMessageView& view_;
-      mcap::ByteOffset offset_;
-      mcap::Record curRecord_;
-
-      bool readCurrentRecord(mcap::IReadable& dataSource) {
-        if (auto status = McapReader::ReadRecord(dataSource, offset_, &curRecord_); !status.ok()) {
-          view_.reader().problems().push_back(status);
-          curRecord_.data = nullptr;
-          offset_ = EndOffset;
-          return false;
-        }
-        return true;
-      }
-    };
-
-    LinearMessageView(McapReader& reader, mcap::ByteOffset startOffset, mcap::Timestamp endTime)
-        : reader_(reader)
-        , startOffset_(startOffset)
-        , endTime_(endTime) {}
-
-    ForwardMessageIterator begin() {
-      return ForwardMessageIterator(*this, startOffset_);
-    }
-    ForwardMessageIterator end() {
-      return ForwardMessageIterator(*this, EndOffset);
-    }
-
-    mcap::McapReader& reader() {
-      return reader_;
-    }
-    mcap::ByteOffset startOffset() const {
-      return startOffset_;
-    }
-    mcap::Timestamp endTime() const {
-      return endTime_;
-    }
-
-  private:
-    mcap::McapReader& reader_;
-    mcap::ByteOffset startOffset_;
-    mcap::Timestamp endTime_;
-  };
-
   ~McapReader();
 
   mcap::Status open(mcap::IReadable& reader, const McapReaderOptions& options);
@@ -577,7 +533,7 @@ private:
   uint64_t chunkSize_ = DefaultChunkSize;
   mcap::IWritable* output_ = nullptr;
   std::unique_ptr<mcap::StreamWriter> streamOutput_;
-  std::unique_ptr<mcap::BufferedWriter> uncompressedChunk_;
+  std::unique_ptr<mcap::BufferWriter> uncompressedChunk_;
   std::unique_ptr<mcap::LZ4Writer> lz4Chunk_;
   std::unique_ptr<mcap::ZStdWriter> zstdChunk_;
   std::vector<mcap::ChannelInfo> channels_;
@@ -623,6 +579,210 @@ private:
   static void write(mcap::IWritable& output, uint64_t value);
   static void write(mcap::IWritable& output, const std::byte* data, uint64_t size);
   static void write(mcap::IWritable& output, const KeyValueMap& map, uint32_t size = 0);
+};
+
+// Iterators ///////////////////////////////////////////////////////////////////
+
+// struct ChunkIterator {
+//   using iterator_category = std::forward_iterator_tag;
+//   using difference_type = int64_t;
+//   using value_type = Message;
+//   using pointer = const Message*;
+//   using reference = const Message&;
+
+//   // FIXME: begin() needs to get as far as parsing the first message and caching it
+//   // operator*() just returns the current cached parsed message, or an invalid message @ End
+//   // operator++() advances offset_ and parses the next message
+
+//   // begin() {
+//   //   // parse records until encountering a message or chunk
+
+//   //   // if a chunk is encountered, use the chunk iterator
+//   // }
+
+//   ChunkIterator(const mcap::Chunk& chunk)
+//       : chunk_(chunk)
+//       , offset_(0) {}
+
+//   ChunkIterator(const mcap::Chunk& chunk, uint64_t offset)
+//       : chunk_(chunk)
+//       , offset(offset) {}
+
+//   reference operator*() const {
+//     return curMessage_;
+//   }
+//   pointer operator->() {
+//     return &curMessage_;
+//   }
+//   ChunkIterator& operator++() {
+//     // Mark any offset past the end of the file as EndOffset
+//     auto* dataSource = view_.reader().dataSource();
+//     if (!dataSource || offset_ >= dataSource->size()) {
+//       invalidate();
+//       return *this;
+//     }
+
+//     // Read the current record if needed
+//     if (!curRecord_.data) {
+//       if (!readCurrentRecord(*dataSource)) {
+//         return *this;
+//       }
+//     }
+
+//     // Advance to the next record
+//     offset_ += 9 + curRecord_.dataSize;
+
+//     // Read the next record
+//     readCurrentRecord(*dataSource);
+
+//     return *this;
+//   }
+//   ChunkIterator operator++(int) {
+//     ChunkIterator tmp = *this;
+//     ++(*this);
+//     return tmp;
+//   }
+//   friend bool operator==(const ChunkIterator& a, const ChunkIterator& b) {
+//     return a.offset_ == b.offset_;
+//   }
+//   friend bool operator!=(const ChunkIterator& a, const ChunkIterator& b) {
+//     return a.offset_ != b.offset_;
+//   }
+
+// private:
+//   const mcap::Chunk& chunk_;
+//   mcap::ByteOffset offset_;
+//   mcap::Message curMessage_;
+
+//   bool readCurrentRecord(mcap::IReadable& dataSource) {
+//     if (auto status = McapReader::ReadRecord(dataSource, offset_, &curRecord_); !status.ok()) {
+//       view_.reader().problems().push_back(status);
+//       invalidate();
+//       return false;
+//     }
+//     return true;
+//   }
+// };
+
+struct LinearMessageView {
+  struct ForwardMessageIterator {
+    using iterator_category = std::forward_iterator_tag;
+    using difference_type = int64_t;
+    using value_type = Message;
+    using pointer = const Message*;
+    using reference = const Message&;
+
+    // FIXME: begin() needs to get as far as parsing the first message and caching it
+    // operator*() just returns the current cached parsed message, or an invalid message @ End
+    // operator++() advances offset_ and parses the next message
+
+    // begin() {
+    //   // parse records until encountering a message or chunk
+
+    //   // if a chunk is encountered, use the chunk iterator
+    // }
+
+    ForwardMessageIterator(LinearMessageView& view)
+        : view_(view)
+        , offset_(view.startOffset())
+        , curRecord_{}
+        , curMessage_{} {}
+
+    ForwardMessageIterator(LinearMessageView& view, uint64_t offset)
+        : view_(view)
+        , offset_(offset)
+        , curRecord_{}
+        , curMessage_{} {}
+
+    reference operator*() const {
+      return curMessage_;
+    }
+    pointer operator->() {
+      return &curMessage_;
+    }
+    ForwardMessageIterator& operator++() {
+      // Mark any offset past the end of the file as EndOffset
+      auto* dataSource = view_.reader().dataSource();
+      if (!dataSource || offset_ >= dataSource->size()) {
+        invalidate();
+        return *this;
+      }
+
+      // Read the current record if needed
+      if (!curRecord_.data) {
+        if (!readCurrentRecord(*dataSource)) {
+          return *this;
+        }
+      }
+
+      // Advance to the next record
+      offset_ += 9 + curRecord_.dataSize;
+
+      // Read the next record
+      readCurrentRecord(*dataSource);
+
+      return *this;
+    }
+    ForwardMessageIterator operator++(int) {
+      ForwardMessageIterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+    friend bool operator==(const ForwardMessageIterator& a, const ForwardMessageIterator& b) {
+      return a.offset_ == b.offset_;
+    }
+    friend bool operator!=(const ForwardMessageIterator& a, const ForwardMessageIterator& b) {
+      return a.offset_ != b.offset_;
+    }
+
+  private:
+    LinearMessageView& view_;
+    mcap::ByteOffset offset_;
+    mcap::Record curRecord_;
+    mcap::Message curMessage_;
+
+    bool readCurrentRecord(mcap::IReadable& dataSource) {
+      if (auto status = McapReader::ReadRecord(dataSource, offset_, &curRecord_); !status.ok()) {
+        view_.reader().problems().push_back(status);
+        invalidate();
+        return false;
+      }
+      return true;
+    }
+
+    void invalidate() {
+      offset_ = EndOffset;
+      curRecord_ = {};
+      curMessage_ = {};
+    }
+  };
+
+  LinearMessageView(McapReader& reader, mcap::ByteOffset startOffset, mcap::Timestamp endTime)
+      : reader_(reader)
+      , startOffset_(startOffset)
+      , endTime_(endTime) {}
+
+  ForwardMessageIterator begin() {
+    return ForwardMessageIterator(*this, startOffset_);
+  }
+  ForwardMessageIterator end() {
+    return ForwardMessageIterator(*this, EndOffset);
+  }
+
+  mcap::McapReader& reader() {
+    return reader_;
+  }
+  mcap::ByteOffset startOffset() const {
+    return startOffset_;
+  }
+  mcap::Timestamp endTime() const {
+    return endTime_;
+  }
+
+private:
+  mcap::McapReader& reader_;
+  mcap::ByteOffset startOffset_;
+  mcap::Timestamp endTime_;
 };
 
 }  // namespace mcap

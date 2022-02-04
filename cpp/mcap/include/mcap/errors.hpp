@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fmt/core.h>
+
 #include <string>
 
 namespace mcap {
@@ -14,6 +15,8 @@ enum class StatusCode {
   MagicMismatch,
   InvalidFile,
   InvalidRecord,
+  DecompressionFailed,
+  DecompressionSizeMismatch,
 };
 
 struct Status {
@@ -48,6 +51,12 @@ struct Status {
         break;
       case StatusCode::InvalidRecord:
         message = "invalid record";
+        break;
+      case StatusCode::DecompressionFailed:
+        message = "decompression failed";
+        break;
+      case StatusCode::DecompressionSizeMismatch:
+        message = "decompression size mismatch";
         break;
       default:
         message = "unknown";
