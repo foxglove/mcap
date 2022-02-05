@@ -1,3 +1,5 @@
+import { Schema } from "inspector";
+
 export type McapMagic = {
   specVersion: "0";
 };
@@ -10,13 +12,17 @@ export type Footer = {
   summaryOffsetStart: bigint;
   summaryCrc: number;
 };
+export type Schema = {
+  id: number;
+  schemaEncoding: string;
+  schema: string;
+  schemaName: string;
+};
 export type ChannelInfo = {
   id: number;
   topic: string;
   messageEncoding: string;
-  schemaEncoding: string;
-  schema: string;
-  schemaName: string;
+  schemaId: number;
   metadata: [key: string, value: string][];
 };
 export type Message = {
@@ -96,6 +102,7 @@ export type UnknownRecord = {
 export type McapRecords = {
   Header: Header;
   Footer: Footer;
+  Schema: Schema;
   ChannelInfo: ChannelInfo;
   Message: Message;
   Chunk: Chunk;
