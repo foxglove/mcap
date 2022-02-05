@@ -2,18 +2,19 @@ import { Statistics, SummaryOffset } from ".";
 import { BufferBuilder } from "./BufferBuilder";
 import { MCAP0_MAGIC, Opcode } from "./constants";
 import {
-  ChannelInfo,
-  Header,
-  Footer,
-  Message,
   Attachment,
   AttachmentIndex,
+  ChannelInfo,
   Chunk,
   ChunkIndex,
+  DataEnd,
+  Footer,
+  Header,
+  Message,
   MessageIndex,
   Metadata,
   MetadataIndex,
-  DataEnd,
+  Schema,
 } from "./types";
 
 type Options = {
@@ -84,6 +85,29 @@ export class Mcap0RecordBuilder {
     return 20n;
   }
 
+  writeSchema(schema: Schema): bigint {
+    this.bufferBuilder.uint8(Opcode.SCHEMA);
+
+    const startPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .uint64(0n) // placeholder
+      .uint16(schema.id)
+      .string(schema.schemaName)
+      .string(schema.schemaEncoding)
+      .string(schema.schema);
+
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
+    const endPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .seek(startPosition)
+      .uint64(BigInt(endPosition - startPosition - 8))
+      .seek(endPosition);
+
+    return BigInt(endPosition - startPosition + 1);
+  }
+
   writeChannelInfo(info: ChannelInfo): bigint {
     this.bufferBuilder.uint8(Opcode.CHANNEL_INFO);
 
@@ -93,9 +117,7 @@ export class Mcap0RecordBuilder {
       .uint16(info.id)
       .string(info.topic)
       .string(info.messageEncoding)
-      .string(info.schemaEncoding)
-      .string(info.schema)
-      .string(info.schemaName)
+      .uint16(info.schemaId)
       .tupleArray(
         (key) => this.bufferBuilder.string(key),
         (value) => this.bufferBuilder.string(value),
@@ -193,6 +215,7 @@ export class Mcap0RecordBuilder {
       .uint64(chunk.uncompressedSize)
       .uint32(chunk.uncompressedCrc)
       .string(chunk.compression)
+      .uint64(BigInt(chunk.records.byteLength))
       .bytes(chunk.records);
     // chunk record cannot be padded
     const endPosition = this.bufferBuilder.length;

@@ -66,6 +66,7 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // decompressed size
           ...uint32LE(0), // decompressed crc32
           ...string("lz4"), // compression
+          ...uint64LE(BigInt(0n)),
           // no chunk data
         ]),
         ...record(Opcode.DATA_END, [
@@ -144,6 +145,7 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // decompressed size
           ...uint32LE(0), // decompressed crc32
           ...string(""), // compression
+          ...uint64LE(BigInt(0n)),
           // (no chunk data)
         ]),
 
@@ -176,7 +178,7 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(1n), // decompressed size
           ...uint32LE(crc32(new Uint8Array([Opcode.CHANNEL_INFO]))), // decompressed crc32
           ...string(""), // compression
-
+          ...uint64LE(BigInt(1n)),
           Opcode.CHANNEL_INFO, // truncated record
         ]),
 
@@ -199,7 +201,9 @@ describe("Mcap0StreamReader", () => {
 
         ...record(Opcode.MESSAGE, [
           ...uint16LE(42), // channel id
-          ...uint64LE(0n), // timestamp
+          ...uint64LE(0n), // sequence
+          ...uint64LE(0n), // publish time
+          ...uint64LE(0n), // log time
         ]),
 
         ...record(Opcode.FOOTER, [
@@ -218,7 +222,9 @@ describe("Mcap0StreamReader", () => {
   it("rejects message in chunk with no prior channel info", () => {
     const message = record(Opcode.MESSAGE, [
       ...uint16LE(42), // channel id
-      ...uint64LE(0n), // timestamp
+      ...uint64LE(0n), // sequence
+      ...uint64LE(0n), // publish time
+      ...uint64LE(0n), // log time
     ]);
     const reader = new Mcap0StreamReader();
     reader.append(
@@ -231,6 +237,7 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // decompressed size
           ...uint32LE(crc32(message)), // decompressed crc32
           ...string(""), // compression
+          ...uint64LE(BigInt(message.byteLength)),
           ...message,
         ]),
 
@@ -257,9 +264,7 @@ describe("Mcap0StreamReader", () => {
           ...uint16LE(1), // channel id
           ...string("myTopic"), // topic
           ...string("utf12"), // message encoding
-          ...string("json"), // schema encoding
-          ...string("stuff"), // schema
-          ...string("some data"), // schema name
+          ...uint16LE(1), // schema id
           ...keyValues(string, string, [["foo", "bar"]]), // user data
         ]),
 
@@ -276,9 +281,7 @@ describe("Mcap0StreamReader", () => {
       id: 1,
       topic: "myTopic",
       messageEncoding: "utf12",
-      schemaEncoding: "json",
-      schemaName: "some data",
-      schema: "stuff",
+      schemaId: 1,
       metadata: [["foo", "bar"]],
     } as TypedMcapRecords["ChannelInfo"]);
     expect(reader.nextRecord()).toEqual({
@@ -295,13 +298,13 @@ describe("Mcap0StreamReader", () => {
       ...uint16LE(1), // channel id
       ...string("myTopic"), // topic
       ...string("utf12"), // message encoding
-      ...string("json"), // schema encoding
-      ...string("stuff"), // schema
-      ...string("some data"), // schema name
+      ...uint16LE(1),
       ...keyValues(string, string, [["foo", "bar"]]), // user data
     ]);
     const decompressHandlers = { xyz: () => channelInfo };
     const reader = new Mcap0StreamReader(compressed ? { decompressHandlers } : undefined);
+
+    const payload = compressed ? new TextEncoder().encode("compressed bytes") : channelInfo;
     reader.append(
       new Uint8Array([
         ...MCAP0_MAGIC,
@@ -312,7 +315,8 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // decompressed size
           ...uint32LE(crc32(channelInfo)), // decompressed crc32
           ...string(compressed ? "xyz" : ""), // compression
-          ...(compressed ? new TextEncoder().encode("compressed bytes") : channelInfo),
+          ...uint64LE(BigInt(payload.byteLength)),
+          ...payload,
         ]),
 
         ...record(Opcode.FOOTER, [
@@ -328,9 +332,7 @@ describe("Mcap0StreamReader", () => {
       id: 1,
       topic: "myTopic",
       messageEncoding: "utf12",
-      schemaEncoding: "json",
-      schemaName: "some data",
-      schema: "stuff",
+      schemaId: 1,
       metadata: [["foo", "bar"]],
     } as TypedMcapRecords["ChannelInfo"]);
     expect(reader.nextRecord()).toEqual({
@@ -352,9 +354,7 @@ describe("Mcap0StreamReader", () => {
             ...uint16LE(42), // channel id
             ...string("XXXXXXXX"), // topic
             ...string("utf12"), // message encoding
-            ...string("json"), // schema encoding
-            ...string("stuff"), // schema
-            ...string("some data"), // schema name
+            ...uint16LE(1), // schema id
             ...keyValues(string, string, [["foo", "bar"]]), // user data
           ]),
         },
@@ -364,49 +364,18 @@ describe("Mcap0StreamReader", () => {
             ...uint16LE(42), // channel id
             ...string("myTopic"), // topic
             ...string("XXXXXXXX"), // message encoding
-            ...string("json"), // schema encoding
-            ...string("stuff"), // schema
-            ...string("some data"), // schema name
+            ...uint16LE(1), // schema id
             ...keyValues(string, string, [["foo", "bar"]]), // user data
           ]),
         },
         {
-          key: "schema name",
+          key: "schema_id",
           channelInfo2: record(Opcode.CHANNEL_INFO, [
             ...uint16LE(42), // channel id
             ...string("myTopic"), // topic
             ...string("utf12"), // message encoding
-            ...string("json"), // schema encoding
-            ...string("stuff"), // schema
-            ...string("XXXXXXXX"), // schema name
+            ...uint16LE(0), // schema id
             ...keyValues(string, string, [["foo", "bar"]]), // user data
-          ]),
-        },
-        {
-          key: "schema",
-          channelInfo2: record(Opcode.CHANNEL_INFO, [
-            ...uint16LE(42), // channel id
-            ...string("myTopic"), // topic
-            ...string("utf12"), // message encoding
-            ...string("json"), // schema encoding
-            ...string("XXXXXXXX"), // schema
-            ...string("some data"), // schema name
-            ...keyValues(string, string, [["foo", "bar"]]), // user data
-          ]),
-        },
-        {
-          key: "data",
-          channelInfo2: record(Opcode.CHANNEL_INFO, [
-            ...uint16LE(42), // channel id
-            ...string("myTopic"), // topic
-            ...string("utf12"), // message encoding
-            ...string("json"), // schema encoding
-            ...string("stuff"), // schema
-            ...string("some data"), // schema name
-            ...keyValues(string, string, [
-              ["foo", "bar"],
-              ["baz", "quux"],
-            ]), // user data
           ]),
         },
       ])("differing in $key", ({ channelInfo2 }) => {
@@ -414,9 +383,7 @@ describe("Mcap0StreamReader", () => {
           ...uint16LE(42), // channel id
           ...string("myTopic"), // topic
           ...string("utf12"), // message encoding
-          ...string("json"), // schema encoding
-          ...string("stuff"), // schema
-          ...string("some data"), // schema name
+          ...uint16LE(1), // schema id
           ...keyValues(string, string, [["foo", "bar"]]), // user data
         ]);
         const reader = new Mcap0StreamReader();
@@ -433,6 +400,7 @@ describe("Mcap0StreamReader", () => {
                   ...uint64LE(0n), // decompressed size
                   ...uint32LE(crc32(new Uint8Array([...channelInfo, ...channelInfo2]))), // decompressed crc32
                   ...string(""), // compression
+                  ...uint64LE(BigInt(channelInfo.byteLength + channelInfo2.byteLength)),
                   ...channelInfo,
                   ...channelInfo2,
                 ])
@@ -444,6 +412,7 @@ describe("Mcap0StreamReader", () => {
                     ...uint64LE(0n), // decompressed size
                     ...uint32LE(crc32(new Uint8Array(channelInfo))), // decompressed crc32
                     ...string(""), // compression
+                    ...uint64LE(BigInt(channelInfo.byteLength)),
                     ...channelInfo,
                   ]),
                   ...record(Opcode.CHUNK, [
@@ -452,6 +421,7 @@ describe("Mcap0StreamReader", () => {
                     ...uint64LE(0n), // decompressed size
                     ...uint32LE(crc32(new Uint8Array(channelInfo2))), // decompressed crc32
                     ...string(""), // compression
+                    ...uint64LE(BigInt(channelInfo2.byteLength)),
                     ...channelInfo2,
                   ]),
                 ]
@@ -470,9 +440,7 @@ describe("Mcap0StreamReader", () => {
           id: 42,
           topic: "myTopic",
           messageEncoding: "utf12",
-          schemaEncoding: "json",
-          schemaName: "some data",
-          schema: "stuff",
+          schemaId: 1,
           metadata: [["foo", "bar"]],
         } as TypedMcapRecords["ChannelInfo"]);
         expect(() => reader.nextRecord()).toThrow("differing channel infos for 42");
