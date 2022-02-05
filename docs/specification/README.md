@@ -119,7 +119,7 @@ Record type is a single byte opcode, and record content length is a uint64 value
 
 Records may be extended by adding new fields at the end of existing fields. Readers should ignore any unknown fields.
 
-> The Footer, Message, and Chunk records will not be extended, since their formats do not allow for backward-compatible size changes.
+> The Footer and Message records will not be extended, since their formats do not allow for backward-compatible size changes.
 
 Each record definition below contains a `Type` column. See the [Serialization](#serialization) section on how to serialize each type.
 
@@ -198,7 +198,7 @@ All messages in the chunk must reference channel infos recorded earlier in the f
 | 8 | uncompressed_size | uint64 | Uncompressed size of the `records` field. |
 | 4 | uncompressed_crc | uint32 | CRC32 checksum of uncompressed `records` field. A value of zero indicates that CRC validation should not be performed. |
 | 4 + N | compression | String | compression algorithm. i.e. `lz4`, `zstd`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression formats]. |
-| N | records | Bytes | Repeating sequences of `<record type><record content length><record content>`. Compressed with the algorithm in the `compression` field. |
+| 8 + N | records | uint64 length-prefixed Bytes | Repeating sequences of `<record type><record content length><record content>`. Compressed with the algorithm in the `compression` field. |
 
 ### Message Index (op=0x07)
 
