@@ -119,7 +119,7 @@ Record type is a single byte opcode, and record content length is a uint64 value
 
 Records may be extended by adding new fields at the end of existing fields. Readers should ignore any unknown fields.
 
-> The Footer, Message, and Chunk records will not be extended, since their formats do not allow for backward-compatible size changes.
+> The Footer and Message records will not be extended, since their formats do not allow for backward-compatible size changes.
 
 Each record definition below contains a `Type` column. See the [Serialization](#serialization) section on how to serialize each type.
 
@@ -149,9 +149,9 @@ Schema records are uniquely identified within a file by their schema ID. A Schem
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 2 | id | uint16 | A unique identifier for this schema within the file. |
+| 4 + N | name | String | An identifier for the schema. |
 | 4 + N | encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. |
-| 4 + N | schema | uint32 length-prefixed Bytes | Schema should conform to the encoding. |
-| 4 + N | name | String | An identifier for the schema. The schema name should conform to any encoding requirements. |
+| 4 + N | data | uint32 length-prefixed Bytes | Must conform to the schema encoding. |
 
 Schema records may be duplicated in the summary section.
 
@@ -183,7 +183,7 @@ The message encoding and schema must match that of the channel info record corre
 | 4 | sequence | uint32 | Optional message counter assigned by publisher. If not assigned by publisher, must be recorded by the recorder. |
 | 8 | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time. |
 | 8 | log_time | Timestamp | Time at which the message was recorded. |
-| N | message_data | Bytes | Message data, to be decoded according to the schema of the channel. |
+| N | data | Bytes | Message data, to be decoded according to the schema of the channel. |
 
 ### Chunk (op=0x06)
 
@@ -198,7 +198,7 @@ All messages in the chunk must reference channel infos recorded earlier in the f
 | 8 | uncompressed_size | uint64 | Uncompressed size of the `records` field. |
 | 4 | uncompressed_crc | uint32 | CRC32 checksum of uncompressed `records` field. A value of zero indicates that CRC validation should not be performed. |
 | 4 + N | compression | String | compression algorithm. i.e. `lz4`, `zstd`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression formats]. |
-| N | records | Bytes | Repeating sequences of `<record type><record content length><record content>`. Compressed with the algorithm in the `compression` field. |
+| 8 + N | records | uint64 length-prefixed Bytes | Repeating sequences of `<record type><record content length><record content>`. Compressed with the algorithm in the `compression` field. |
 
 ### Message Index (op=0x07)
 
