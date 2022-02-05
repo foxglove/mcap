@@ -103,9 +103,9 @@ export function parseRecord({
 
     case Opcode.SCHEMA: {
       const schemaId = reader.uint16();
+      const schemaName = reader.string();
       const schemaEncoding = reader.string();
       const schema = reader.string();
-      const schemaName = reader.string();
 
       const record: TypedMcapRecord = {
         type: "Schema",
@@ -168,10 +168,14 @@ export function parseRecord({
       const uncompressedSize = reader.uint64();
       const uncompressedCrc = reader.uint32();
       const compression = reader.string();
+      const recordByteLength = Number(reader.uint64());
+      if (recordByteLength + reader.offset > recordView.byteLength) {
+        throw new Error("Chunk records length exceeds remaining record size");
+      }
       const records = new Uint8Array(
         recordView.buffer.slice(
           recordView.byteOffset + reader.offset,
-          recordView.byteOffset + recordView.byteLength,
+          recordView.byteOffset + reader.offset + recordByteLength,
         ),
       );
       const record: TypedMcapRecord = {

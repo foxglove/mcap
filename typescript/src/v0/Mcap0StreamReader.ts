@@ -1,9 +1,10 @@
 import { crc32 } from "@foxglove/crc";
+import { isEqual } from "lodash";
 
 import StreamBuffer from "../common/StreamBuffer";
 import { MCAP0_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
-import { DecompressHandlers, McapStreamReader, TypedMcapRecord } from "./types";
+import { DecompressHandlers, McapStreamReader, TypedMcapRecord, TypedMcapRecords } from "./types";
 
 type McapReaderOptions = {
   /**
@@ -49,6 +50,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
   private validateCrcs;
   private doneReading = false;
   private generator = this.read();
+  private channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
 
   constructor({
     includeChunks = false,
@@ -93,6 +95,20 @@ export default class Mcap0StreamReader implements McapStreamReader {
       return undefined;
     }
     const result = this.generator.next();
+
+    if (result.value?.type === "ChannelInfo") {
+      const existing = this.channelInfosById.get(result.value.id);
+      this.channelInfosById.set(result.value.id, result.value);
+      if (existing && !isEqual(existing, result.value)) {
+        throw new Error(`differing channel infos for ${result.value.id}`);
+      }
+    } else if (result.value?.type === "Message") {
+      const existing = this.channelInfosById.get(result.value.channelId);
+      if (!existing) {
+        throw new Error("Encountered message on channel 42 without prior channel info");
+      }
+    }
+
     if (result.done === true) {
       this.doneReading = true;
     }

@@ -92,9 +92,9 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder
       .uint64(0n) // placeholder
       .uint16(schema.id)
+      .string(schema.schemaName)
       .string(schema.schemaEncoding)
-      .string(schema.schema)
-      .string(schema.schemaName);
+      .string(schema.schema);
 
     if (this.options?.padRecords === true) {
       this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
@@ -215,6 +215,7 @@ export class Mcap0RecordBuilder {
       .uint64(chunk.uncompressedSize)
       .uint32(chunk.uncompressedCrc)
       .string(chunk.compression)
+      .uint64(BigInt(chunk.records.byteLength))
       .bytes(chunk.records);
     // chunk record cannot be padded
     const endPosition = this.bufferBuilder.length;

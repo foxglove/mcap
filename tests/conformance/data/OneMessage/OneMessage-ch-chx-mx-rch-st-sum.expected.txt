@@ -5,10 +5,10 @@ Message channel_id=1 log_time=2 message_data=<010203> publish_time=1 sequence=10
 MessageIndex channel_id=1 records={2=79}
 ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema_id=1 topic=example
 Statistics attachment_count=0 channel_count=1 channel_message_counts={1=1} chunk_count=1 message_count=1
-ChunkIndex chunk_length=152 chunk_start_offset=25 compressed_size=113 compression="" end_time=2 message_index_length=31 message_index_offsets={1=179} start_time=2 uncompressed_size=113
-SummaryOffset group_length=47 group_opcode=13 group_start=223
-SummaryOffset group_length=0 group_opcode=13 group_start=313
-SummaryOffset group_length=43 group_opcode=11 group_start=270
-SummaryOffset group_length=0 group_opcode=10 group_start=313
-SummaryOffset group_length=87 group_opcode=8 group_start=313
-Footer summary_crc=0 summary_offset_start=400 summary_start=223
+ChunkIndex chunk_length=160 chunk_start_offset=25 compressed_size=113 compression="" end_time=2 message_index_length=31 message_index_offsets={1=187} start_time=2 uncompressed_size=113
+SummaryOffset group_length=47 group_opcode=4 group_start=231
+SummaryOffset group_length=0 group_opcode=13 group_start=321
+SummaryOffset group_length=43 group_opcode=11 group_start=278
+SummaryOffset group_length=0 group_opcode=10 group_start=321
+SummaryOffset group_length=87 group_opcode=8 group_start=321
+Footer summary_crc=0 summary_offset_start=408 summary_start=231

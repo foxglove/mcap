@@ -162,8 +162,11 @@ export default class Mcap0IndexedReader {
       offset += result.usedBytes
     ) {
       switch (result.record.type) {
+        case "Schema":
+          // duplicates
+          break;
         case "ChannelInfo":
-          // detection of duplicates is done in parseRecord
+          channelInfosById.set(result.record.id, result.record);
           break;
         case "ChunkIndex":
           chunkIndexes.push(result.record);
