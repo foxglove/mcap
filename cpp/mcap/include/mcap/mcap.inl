@@ -284,6 +284,11 @@ void McapWriter::terminate() {
   opened_ = false;
 }
 
+void McapWriter::addSchema(mcap::Schema& schema) {
+  schema.id = uint16_t(schemas_.size() + 1);
+  schemas_.push_back(schema);
+}
+
 void McapWriter::addChannel(mcap::ChannelInfo& info) {
   info.id = uint16_t(channels_.size() + 1);
   channels_.push_back(info);
@@ -296,15 +301,31 @@ mcap::Status McapWriter::write(const mcap::Message& message) {
   auto& output = getOutput();
   auto& channelMessageCounts = statistics_.channelMessageCounts;
 
-  // Write out channel info if we have not yet done so
+  // Write out ChannelInfo if we have not yet done so
   if (channelMessageCounts.find(message.channelId) == channelMessageCounts.end()) {
-    const size_t index = message.channelId - 1;
-    if (index >= channels_.size()) {
-      return StatusCode::InvalidChannelId;
+    const size_t channelIndex = message.channelId - 1;
+    if (channelIndex >= channels_.size()) {
+      const auto msg = internal::StrFormat("invalid channel id {}", message.channelId);
+      return Status{StatusCode::InvalidChannelId, msg};
     }
 
-    // Write the channel info record
-    uncompressedSize_ += write(output, channels_[index]);
+    const auto& channel = channels_[channelIndex];
+
+    // Check if the Schema record needs to be written
+    if (writtenSchemas_.find(channel.schemaId) == writtenSchemas_.end()) {
+      const size_t schemaIndex = channel.schemaId - 1;
+      if (schemaIndex >= schemas_.size()) {
+        const auto msg = internal::StrFormat("invalid schema id {}", channel.schemaId);
+        return Status{StatusCode::InvalidSchemaId, msg};
+      }
+
+      // Write the Schema record
+      write(output, schemas_[schemaIndex]);
+      writtenSchemas_.insert(channel.schemaId);
+    }
+
+    // Write the ChannelInfo record
+    uncompressedSize_ += write(output, channel);
 
     // Update channel statistics
     channelMessageCounts.emplace(message.channelId, 0);
@@ -503,23 +524,37 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Footer& footer) 
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::ChannelInfo& info) {
-  const uint32_t metadataSize = internal::KeyValueMapSize(info.metadata);
+uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Schema& schema) {
   const uint64_t recordSize = /* id */ 2 +
-                              /* topic */ 4 + info.topic.size() +
-                              /* message_encoding */ 4 + info.messageEncoding.size() +
-                              /* schema_encoding */ 4 + info.schemaEncoding.size() +
-                              /* schema */ 4 + info.schema.size() +
+                              /* name */ 4 + schema.name.size() +
+                              /* encoding */ 4 + schema.encoding.size() +
+                              /* data */ +4 + schema.data.size();
+
+  write(output, OpCode::Schema);
+  write(output, recordSize);
+  write(output, schema.id);
+  write(output, schema.name);
+  write(output, schema.encoding);
+  write(output, schema.data);
+
+  return 9 + recordSize;
+}
+
+uint64_t McapWriter::write(mcap::IWritable& output, const mcap::ChannelInfo& channelInfo) {
+  const uint32_t metadataSize = internal::KeyValueMapSize(channelInfo.metadata);
+  const uint64_t recordSize = /* id */ 2 +
+                              /* topic */ 4 + channelInfo.topic.size() +
+                              /* message_encoding */ 4 + channelInfo.messageEncoding.size() +
+                              /* schema_id */ 2 +
                               /* metadata */ 4 + metadataSize;
 
   write(output, OpCode::ChannelInfo);
   write(output, recordSize);
-  write(output, info.id);
-  write(output, info.topic);
-  write(output, info.messageEncoding);
-  write(output, info.schemaEncoding);
-  write(output, info.schema);
-  write(output, info.metadata, metadataSize);
+  write(output, channelInfo.id);
+  write(output, channelInfo.topic);
+  write(output, channelInfo.messageEncoding);
+  write(output, channelInfo.schemaId);
+  write(output, channelInfo.metadata, metadataSize);
 
   return 9 + recordSize;
 }
@@ -1129,14 +1164,15 @@ mcap::Status McapReader::open(mcap::IReadable& reader, const McapReaderOptions& 
   }
 
   // Read the Header record
-  header_ = Header{};
   Record record;
   if (auto status = ReadRecord(reader, sizeof(Magic), &record); !status.ok()) {
     return status;
   }
-  if (auto status = ParseHeader(record, &header_.value()); !status.ok()) {
+  Header header;
+  if (auto status = ParseHeader(record, &header); !status.ok()) {
     return status;
   }
+  header_ = header;
 
   // Read the footer
   auto footer = Footer{};
@@ -1179,9 +1215,7 @@ mcap::Status McapReader::ReadRecord(mcap::IReadable& reader, uint64_t offset,
 
   // Parse opcode and length
   record->opcode = mcap::OpCode(data[0]);
-  if (auto status = internal::ParseUint64(data, maxSize - 9, &record->dataSize); !status.ok()) {
-    return status;
-  }
+  record->dataSize = internal::ParseUint64(data + 1);
 
   // Read payload
   maxSize -= 9;
@@ -1260,9 +1294,45 @@ mcap::Status McapReader::ParseHeader(const mcap::Record& record, mcap::Header* h
   return StatusCode::Success;
 }
 
+mcap::Status McapReader::ParseSchema(const mcap::Record& record, mcap::Schema* schema) {
+  constexpr uint64_t MinSize = 2 + 4 + 4 + 4;
+
+  assert(record.opcode == OpCode::Schema);
+  if (record.dataSize < MinSize) {
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "Schema", record.dataSize);
+    return Status{StatusCode::InvalidRecord, msg};
+  }
+
+  size_t offset = 0;
+
+  // id
+  schema->id = internal::ParseUint16(record.data);
+  offset += 2;
+  // name
+  if (auto status = internal::ParseString(record.data, record.dataSize - offset, &schema->name);
+      !status.ok()) {
+    return status;
+  }
+  offset += 4 + schema->name.size();
+  // encoding
+  if (auto status = internal::ParseString(record.data, record.dataSize - offset, &schema->encoding);
+      !status.ok()) {
+    return status;
+  }
+  offset += 4 + schema->encoding.size();
+  // data
+  if (auto status = internal::ParseByteArray(record.data, record.dataSize - offset, &schema->data);
+      !status.ok()) {
+    return status;
+  }
+
+  return StatusCode::Success;
+}
+
 mcap::Status McapReader::ParseChannelInfo(const mcap::Record& record,
                                           mcap::ChannelInfo* channelInfo) {
-  constexpr uint64_t MinSize = 2 + 4 + 4 + 4 + 4 + 4 + 4;
+  constexpr uint64_t MinSize = 2 + 4 + 4 + 2 + 4;
 
   assert(record.opcode == OpCode::ChannelInfo);
   if (record.dataSize < MinSize) {
@@ -1290,27 +1360,9 @@ mcap::Status McapReader::ParseChannelInfo(const mcap::Record& record,
     return status;
   }
   offset += 4 + channelInfo->messageEncoding.size();
-  // schema_encoding
-  if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
-                                          &channelInfo->schemaEncoding);
-      !status.ok()) {
-    return status;
-  }
-  offset += 4 + channelInfo->schemaEncoding.size();
-  // schema
-  if (auto status = internal::ParseByteArray(record.data + offset, record.dataSize - offset,
-                                             &channelInfo->schema);
-      !status.ok()) {
-    return status;
-  }
-  offset += 4 + channelInfo->schema.size();
-  // schema_name
-  if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
-                                          &channelInfo->schemaName);
-      !status.ok()) {
-    return status;
-  }
-  offset += 4 + channelInfo->schemaName.size();
+  // schema_id
+  channelInfo->schemaId = internal::ParseUint16(record.data + offset);
+  offset += 2;
   // metadata
   if (auto status = internal::ParseKeyValueMap(record.data + offset, record.dataSize - offset,
                                                &channelInfo->metadata);
@@ -1741,48 +1793,41 @@ bool TypedChunkReader::next() {
   }
   const mcap::Record& record = maybeRecord.value();
   switch (record.opcode) {
+    case OpCode::Schema: {
+      if (onSchema) {
+        Schema schema;
+        status_ = McapReader::ParseSchema(record, &schema);
+        if (status_.ok()) {
+          onSchema(schema);
+        }
+      }
+    }
     case OpCode::ChannelInfo: {
-      if (handleChannelInfo) {
+      if (onChannelInfo) {
         ChannelInfo channelInfo;
         status_ = McapReader::ParseChannelInfo(record, &channelInfo);
-        if (!status_.ok()) {
-          return true;
+        if (status_.ok()) {
+          onChannelInfo(channelInfo);
         }
-        handleChannelInfo(channelInfo);
       }
       break;
     }
     case OpCode::Message: {
-      if (handleMessage) {
+      if (onMessage) {
         Message message;
         status_ = McapReader::ParseMessage(record, &message);
-        if (!status_.ok()) {
-          return true;
+        if (status_.ok()) {
+          onMessage(message);
         }
-        handleMessage(message);
       }
       break;
     }
-    case OpCode::Header:
-    case OpCode::Footer:
-    case OpCode::Chunk:
-    case OpCode::MessageIndex:
-    case OpCode::ChunkIndex:
-    case OpCode::Attachment:
-    case OpCode::AttachmentIndex:
-    case OpCode::Statistics:
-    case OpCode::Metadata:
-    case OpCode::MetadataIndex:
-    case OpCode::SummaryOffset:
-    case OpCode::DataEnd: {
+    default: {
       const auto msg =
         internal::StrFormat("record type {} cannot appear in Chunk", uint8_t(record.opcode));
       status_ = Status{StatusCode::InvalidOpCode, msg};
       break;
     }
-    default:
-      // Unrecognized opcode, skip it
-      break;
   }
 
   return true;
@@ -1799,15 +1844,19 @@ TypedRecordReader::TypedRecordReader(IReadable& dataSource, mcap::ByteOffset sta
     : reader_(dataSource, startOffset, endOffset)
     , status_(StatusCode::Success)
     , parsingChunk_(false) {
-  chunkReader_.handleChannelInfo = [&](const ChannelInfo& channelInfo) {
-    if (handleChannelInfo) {
-      handleChannelInfo(channelInfo);
+  chunkReader_.onSchema = [&](const Schema& schema) {
+    if (onSchema) {
+      onSchema(schema);
     }
   };
-
-  chunkReader_.handleMessage = [&](const Message& message) {
-    if (handleMessage) {
-      handleMessage(message);
+  chunkReader_.onChannelInfo = [&](const ChannelInfo& channelInfo) {
+    if (onChannelInfo) {
+      onChannelInfo(channelInfo);
+    }
+  };
+  chunkReader_.onMessage = [&](const Message& message) {
+    if (onMessage) {
+      onMessage(message);
     }
   };
 }
@@ -1829,39 +1878,44 @@ bool TypedRecordReader::next() {
   }
   const mcap::Record& record = maybeRecord.value();
   switch (record.opcode) {
-    case OpCode::ChannelInfo: {
-      if (handleChannelInfo) {
-        ChannelInfo channelInfo;
-        status_ = McapReader::ParseChannelInfo(record, &channelInfo);
-        if (!status_.ok()) {
-          return true;
+    case OpCode::Schema: {
+      if (onSchema) {
+        Schema schema;
+        if (status_ = McapReader::ParseSchema(record, &schema); status_.ok()) {
+          onSchema(schema);
         }
-        handleChannelInfo(channelInfo);
+      }
+      break;
+    }
+    case OpCode::ChannelInfo: {
+      if (onChannelInfo) {
+        ChannelInfo channelInfo;
+        if (status_ = McapReader::ParseChannelInfo(record, &channelInfo); status_.ok()) {
+          onChannelInfo(channelInfo);
+        }
       }
       break;
     }
     case OpCode::Message: {
-      if (handleMessage) {
+      if (onMessage) {
         Message message;
-        status_ = McapReader::ParseMessage(record, &message);
-        if (!status_.ok()) {
-          return true;
+        if (status_ = McapReader::ParseMessage(record, &message); status_.ok()) {
+          onMessage(message);
         }
-        handleMessage(message);
       }
       break;
     }
     case OpCode::Chunk: {
-      if (handleChunk || handleChannelInfo || handleMessage) {
+      if (onMessage || onChunk || onSchema || onChannelInfo) {
         Chunk chunk;
         status_ = McapReader::ParseChunk(record, &chunk);
         if (!status_.ok()) {
           return true;
         }
-        if (handleChunk) {
-          handleChunk(chunk);
+        if (onChunk) {
+          onChunk(chunk);
         }
-        if (handleChannelInfo || handleMessage) {
+        if (onMessage || onSchema || onChannelInfo) {
           const auto maybeCompression = McapReader::ParseCompression(chunk.compression);
           if (!maybeCompression.has_value()) {
             const auto msg =
@@ -1878,101 +1932,83 @@ bool TypedRecordReader::next() {
       break;
     }
     case OpCode::MessageIndex: {
-      if (handleMessageIndex) {
+      if (onMessageIndex) {
         MessageIndex messageIndex;
-        status_ = McapReader::ParseMessageIndex(record, &messageIndex);
-        if (!status_.ok()) {
-          return true;
+        if (status_ = McapReader::ParseMessageIndex(record, &messageIndex); status_.ok()) {
+          onMessageIndex(messageIndex);
         }
-        handleMessageIndex(messageIndex);
       }
       break;
     }
     case OpCode::ChunkIndex: {
-      if (handleChunkIndex) {
+      if (onChunkIndex) {
         ChunkIndex chunkIndex;
-        status_ = McapReader::ParseChunkIndex(record, &chunkIndex);
-        if (!status_.ok()) {
-          return true;
+        if (status_ = McapReader::ParseChunkIndex(record, &chunkIndex); status_.ok()) {
+          onChunkIndex(chunkIndex);
         }
-        handleChunkIndex(chunkIndex);
       }
       break;
     }
     case OpCode::Attachment: {
-      if (handleAttachment) {
+      if (onAttachment) {
         Attachment attachment;
-        status_ = McapReader::ParseAttachment(record, &attachment);
-        if (!status_.ok()) {
-          return true;
+        if (status_ = McapReader::ParseAttachment(record, &attachment); status_.ok()) {
+          onAttachment(attachment);
         }
-        handleAttachment(attachment);
       }
       break;
     }
     case OpCode::AttachmentIndex: {
-      if (handleAttachmentIndex) {
+      if (onAttachmentIndex) {
         AttachmentIndex attachmentIndex;
-        status_ = McapReader::ParseAttachmentIndex(record, &attachmentIndex);
-        if (!status_.ok()) {
-          return true;
+        if (status_ = McapReader::ParseAttachmentIndex(record, &attachmentIndex); status_.ok()) {
+          onAttachmentIndex(attachmentIndex);
         }
-        handleAttachmentIndex(attachmentIndex);
       }
       break;
     }
     case OpCode::Statistics: {
-      if (handleStatistics) {
+      if (onStatistics) {
         Statistics statistics;
-        status_ = McapReader::ParseStatistics(record, &statistics);
-        if (!status_.ok()) {
-          return true;
+        if (status_ = McapReader::ParseStatistics(record, &statistics); status_.ok()) {
+          onStatistics(statistics);
         }
-        handleStatistics(statistics);
       }
       break;
     }
     case OpCode::Metadata: {
-      if (handleMetadata) {
+      if (onMetadata) {
         Metadata metadata;
-        status_ = McapReader::ParseMetadata(record, &metadata);
-        if (!status_.ok()) {
-          return true;
+        if (status_ = McapReader::ParseMetadata(record, &metadata); status_.ok()) {
+          onMetadata(metadata);
         }
-        handleMetadata(metadata);
       }
       break;
     }
     case OpCode::MetadataIndex: {
-      if (handleMetadataIndex) {
+      if (onMetadataIndex) {
         MetadataIndex metadataIndex;
-        status_ = McapReader::ParseMetadataIndex(record, &metadataIndex);
-        if (!status_.ok()) {
-          return true;
+        if (status_ = McapReader::ParseMetadataIndex(record, &metadataIndex); status_.ok()) {
+          onMetadataIndex(metadataIndex);
         }
-        handleMetadataIndex(metadataIndex);
       }
       break;
     }
     case OpCode::SummaryOffset: {
-      if (handleSummaryOffset) {
+      if (onSummaryOffset) {
         SummaryOffset summaryOffset;
-        status_ = McapReader::ParseSummaryOffset(record, &summaryOffset);
-        if (!status_.ok()) {
-          return true;
+        if (status_ = McapReader::ParseSummaryOffset(record, &summaryOffset); status_.ok()) {
+          onSummaryOffset(summaryOffset);
         }
-        handleSummaryOffset(summaryOffset);
       }
       break;
     }
     case OpCode::DataEnd: {
-      if (handleDataEnd) {
+      if (onDataEnd) {
         DataEnd dataEnd;
-        status_ = McapReader::ParseDataEnd(record, &dataEnd);
-        if (!status_.ok()) {
-          return true;
+        if (status_ = McapReader::ParseDataEnd(record, &dataEnd); status_.ok()) {
+          onDataEnd(dataEnd);
         }
-        handleDataEnd(dataEnd);
       }
       break;
     }

@@ -9,6 +9,7 @@ namespace mcap {
 enum class StatusCode {
   Success = 0,
   NotOpen,
+  InvalidSchemaId,
   InvalidChannelId,
   FileTooSmall,
   ReadFailed,
@@ -35,6 +36,9 @@ struct Status {
         break;
       case StatusCode::NotOpen:
         message = "not open";
+        break;
+      case StatusCode::InvalidSchemaId:
+        message = "invalid schema id";
         break;
       case StatusCode::InvalidChannelId:
         message = "invalid channel id";

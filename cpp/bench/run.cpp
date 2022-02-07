@@ -27,8 +27,12 @@ static void BM_McapWriterBufferWriterUnchunkedUnindexed(benchmark::State& state)
   mcap::BufferWriter out{};
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
@@ -67,8 +71,12 @@ static void BM_McapWriterBufferWriterUnchunked(benchmark::State& state) {
   mcap::BufferWriter out{};
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
@@ -107,8 +115,12 @@ static void BM_McapWriterBufferWriterChunked(benchmark::State& state) {
   mcap::BufferWriter out{};
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
@@ -148,8 +160,12 @@ static void BM_McapWriterBufferWriterChunkedUnindexed(benchmark::State& state) {
   mcap::BufferWriter out{};
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
@@ -190,8 +206,12 @@ static void BM_McapWriterBufferWriterLZ4(benchmark::State& state) {
   mcap::BufferWriter out{};
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
@@ -232,8 +252,12 @@ static void BM_McapWriterBufferWriterZStd(benchmark::State& state) {
   mcap::BufferWriter out{};
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
@@ -272,8 +296,12 @@ static void BM_McapWriterStreamWriterUnchunked(benchmark::State& state) {
   std::ofstream out("benchmark.mcap", std::ios::binary);
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
@@ -313,8 +341,12 @@ static void BM_McapWriterStreamWriterChunked(benchmark::State& state) {
   std::ofstream out("benchmark.mcap", std::ios::binary);
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message

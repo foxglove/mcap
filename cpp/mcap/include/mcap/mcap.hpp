@@ -26,6 +26,7 @@ namespace mcap {
 
 #define LIBRARY_VERSION "0.0.1"
 
+using SchemaId = uint16_t;
 using ChannelId = uint16_t;
 using Timestamp = uint64_t;
 using ByteOffset = uint64_t;
@@ -55,18 +56,19 @@ enum struct CompressionLevel {
 enum struct OpCode : uint8_t {
   Header = 0x01,
   Footer = 0x02,
-  ChannelInfo = 0x03,
-  Message = 0x04,
-  Chunk = 0x05,
-  MessageIndex = 0x06,
-  ChunkIndex = 0x07,
-  Attachment = 0x08,
-  AttachmentIndex = 0x09,
-  Statistics = 0x0A,
-  Metadata = 0x0B,
-  MetadataIndex = 0x0C,
-  SummaryOffset = 0x0D,
-  DataEnd = 0x0E,
+  Schema = 0x03,
+  ChannelInfo = 0x04,
+  Message = 0x05,
+  Chunk = 0x06,
+  MessageIndex = 0x07,
+  ChunkIndex = 0x08,
+  Attachment = 0x09,
+  AttachmentIndex = 0x0A,
+  Statistics = 0x0B,
+  Metadata = 0x0C,
+  MetadataIndex = 0x0D,
+  SummaryOffset = 0x0E,
+  DataEnd = 0x0F,
 };
 
 struct Record {
@@ -86,36 +88,40 @@ struct Footer {
   uint32_t summaryCrc;
 };
 
+struct Schema {
+  mcap::SchemaId id;
+  std::string name;
+  std::string encoding;
+  mcap::ByteArray data;
+
+  Schema() = default;
+
+  Schema(const std::string_view name, const std::string_view encoding, const std::string_view data)
+      : name(name)
+      , encoding(encoding)
+      , data{reinterpret_cast<const std::byte*>(data.data()),
+             reinterpret_cast<const std::byte*>(data.data() + data.size())} {}
+
+  Schema(const std::string_view name, const std::string_view encoding, const mcap::ByteArray& data)
+      : name(name)
+      , encoding(encoding)
+      , data{data} {}
+};
+
 struct ChannelInfo {
   mcap::ChannelId id;
   std::string topic;
   std::string messageEncoding;
-  std::string schemaEncoding;
-  mcap::ByteArray schema;
-  std::string schemaName;
+  mcap::SchemaId schemaId;
   mcap::KeyValueMap metadata;
 
   ChannelInfo() = default;
 
   ChannelInfo(const std::string_view topic, const std::string_view messageEncoding,
-              const std::string_view schemaEncoding, const std::string_view schema,
-              const std::string_view schemaName, const KeyValueMap& metadata = {})
+              mcap::SchemaId schemaId, const KeyValueMap& metadata = {})
       : topic(topic)
       , messageEncoding(messageEncoding)
-      , schemaEncoding(schemaEncoding)
-      , schema{reinterpret_cast<const std::byte*>(schema.data()),
-               reinterpret_cast<const std::byte*>(schema.data() + schema.size())}
-      , schemaName(schemaName)
-      , metadata(metadata) {}
-
-  ChannelInfo(const std::string_view topic, const std::string_view messageEncoding,
-              const std::string_view schemaEncoding, const mcap::ByteArray& schema,
-              const std::string_view schemaName, const KeyValueMap& metadata = {})
-      : topic(topic)
-      , messageEncoding(messageEncoding)
-      , schemaEncoding(schemaEncoding)
-      , schema{schema}
-      , schemaName(schemaName)
+      , schemaId(schemaId)
       , metadata(metadata) {}
 };
 
@@ -436,10 +442,19 @@ public:
 
   void close();
 
+  const std::optional<Header>& header() const {
+    return header_;
+  }
+
+  const std::optional<Footer>& footer() const {
+    return footer_;
+  }
+
   static mcap::Status ReadRecord(mcap::IReadable& reader, uint64_t offset, mcap::Record* record);
   static mcap::Status ReadFooter(mcap::IReadable& reader, uint64_t offset, mcap::Footer* footer);
 
   static mcap::Status ParseHeader(const mcap::Record& record, mcap::Header* header);
+  static mcap::Status ParseSchema(const mcap::Record& record, mcap::Schema* schema);
   static mcap::Status ParseChannelInfo(const mcap::Record& record, mcap::ChannelInfo* channelInfo);
   static mcap::Status ParseMessage(const mcap::Record& record, mcap::Message* message);
   static mcap::Status ParseChunk(const mcap::Record& record, mcap::Chunk* chunk);
@@ -515,13 +530,23 @@ public:
   void terminate();
 
   /**
-   * @brief Add channel info and set `info.channelId` to a generated channel id.
-   * The channel id is used when adding messages.
+   * @brief Add a new schema to the MCAP file and set `schema.id` to a generated
+   * schema id. The schema id is used when adding channels to the file.
    *
-   * @param info Description of the channel to register. The `channelId` value
-   *   is ignored and will be set to a generated channel id.
+   * @param schema Description of the schema to register. The `id` field is
+   *   ignored and will be set to a generated schema id.
    */
-  void addChannel(mcap::ChannelInfo& info);
+  void addSchema(mcap::Schema& schema);
+
+  /**
+   * @brief Add a new channel to the MCAP file and set `channelInfo.id` to a
+   * generated channel id. The channel id is used when adding messages to the
+   * file.
+   *
+   * @param channelInfo Description of the channel to register. The `channelId`
+   *   value is ignored and will be set to a generated channel id.
+   */
+  void addChannel(mcap::ChannelInfo& channelInfo);
 
   /**
    * @brief Write a message to the output stream.
@@ -555,7 +580,8 @@ public:
 
   static uint64_t write(mcap::IWritable& output, const mcap::Header& header);
   static uint64_t write(mcap::IWritable& output, const mcap::Footer& footer);
-  static uint64_t write(mcap::IWritable& output, const mcap::ChannelInfo& info);
+  static uint64_t write(mcap::IWritable& output, const mcap::Schema& schema);
+  static uint64_t write(mcap::IWritable& output, const mcap::ChannelInfo& channelInfo);
   static uint64_t write(mcap::IWritable& output, const mcap::Message& message);
   static uint64_t write(mcap::IWritable& output, const mcap::Attachment& attachment);
   static uint64_t write(mcap::IWritable& output, const mcap::Metadata& metadata);
@@ -585,11 +611,13 @@ private:
   std::unique_ptr<mcap::BufferWriter> uncompressedChunk_;
   std::unique_ptr<mcap::LZ4Writer> lz4Chunk_;
   std::unique_ptr<mcap::ZStdWriter> zstdChunk_;
+  std::vector<mcap::Schema> schemas_;
   std::vector<mcap::ChannelInfo> channels_;
   std::vector<mcap::AttachmentIndex> attachmentIndex_;
   std::vector<mcap::MetadataIndex> metadataIndex_;
   std::vector<mcap::ChunkIndex> chunkIndex_;
   Statistics statistics_{};
+  std::unordered_set<mcap::SchemaId> writtenSchemas_;
   std::unordered_map<mcap::ChannelId, mcap::MessageIndex> currentMessageIndex_;
   uint64_t currentChunkStart_ = std::numeric_limits<uint64_t>::max();
   uint64_t currentChunkEnd_ = std::numeric_limits<uint64_t>::min();
@@ -623,8 +651,9 @@ private:
 };
 
 struct TypedChunkReader {
-  std::function<void(const mcap::ChannelInfo&)> handleChannelInfo;
-  std::function<void(const mcap::Message&)> handleMessage;
+  std::function<void(const mcap::Schema&)> onSchema;
+  std::function<void(const mcap::ChannelInfo&)> onChannelInfo;
+  std::function<void(const mcap::Message&)> onMessage;
 
   TypedChunkReader();
 
@@ -643,18 +672,19 @@ private:
 };
 
 struct TypedRecordReader {
-  std::function<void(const mcap::ChannelInfo&)> handleChannelInfo;
-  std::function<void(const mcap::Message&)> handleMessage;
-  std::function<void(const mcap::Chunk&)> handleChunk;
-  std::function<void(const mcap::MessageIndex&)> handleMessageIndex;
-  std::function<void(const mcap::ChunkIndex&)> handleChunkIndex;
-  std::function<void(const mcap::Attachment&)> handleAttachment;
-  std::function<void(const mcap::AttachmentIndex&)> handleAttachmentIndex;
-  std::function<void(const mcap::Statistics&)> handleStatistics;
-  std::function<void(const mcap::Metadata&)> handleMetadata;
-  std::function<void(const mcap::MetadataIndex&)> handleMetadataIndex;
-  std::function<void(const mcap::SummaryOffset&)> handleSummaryOffset;
-  std::function<void(const mcap::DataEnd&)> handleDataEnd;
+  std::function<void(const mcap::Schema&)> onSchema;
+  std::function<void(const mcap::ChannelInfo&)> onChannelInfo;
+  std::function<void(const mcap::Message&)> onMessage;
+  std::function<void(const mcap::Chunk&)> onChunk;
+  std::function<void(const mcap::MessageIndex&)> onMessageIndex;
+  std::function<void(const mcap::ChunkIndex&)> onChunkIndex;
+  std::function<void(const mcap::Attachment&)> onAttachment;
+  std::function<void(const mcap::AttachmentIndex&)> onAttachmentIndex;
+  std::function<void(const mcap::Statistics&)> onStatistics;
+  std::function<void(const mcap::Metadata&)> onMetadata;
+  std::function<void(const mcap::MetadataIndex&)> onMetadataIndex;
+  std::function<void(const mcap::SummaryOffset&)> onSummaryOffset;
+  std::function<void(const mcap::DataEnd&)> onDataEnd;
 
   TypedRecordReader(IReadable& dataSource, mcap::ByteOffset startOffset,
                     mcap::ByteOffset endOffset);
