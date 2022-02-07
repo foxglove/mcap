@@ -260,9 +260,9 @@ const inputs: { name: string; records: TestDataRecord[] }[] = [
       {
         type: "Schema",
         id: 1,
-        schemaName: "Example",
-        schema: "b",
-        schemaEncoding: "c",
+        name: "Example",
+        encoding: "c",
+        data: new Uint8Array([4, 5, 6]),
       },
       {
         type: "ChannelInfo",

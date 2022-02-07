@@ -1,12 +1,12 @@
 Header library="" profile=""
-Schema id=1 schema=b schema_encoding=c schema_name=Example
+Schema data=<040506> encoding=c id=1 name=Example
 ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema_id=1 topic=example
 Message channel_id=1 log_time=2 message_data=<010203> publish_time=1 sequence=10
-Schema id=1 schema=b schema_encoding=c schema_name=Example
+Schema data=<040506> encoding=c id=1 name=Example
 Statistics attachment_count=0 channel_count=1 channel_message_counts={1=1} chunk_count=0 message_count=1
-SummaryOffset group_length=35 group_opcode=3 group_start=163
-SummaryOffset group_length=0 group_opcode=13 group_start=244
-SummaryOffset group_length=46 group_opcode=11 group_start=198
-SummaryOffset group_length=0 group_opcode=10 group_start=244
-SummaryOffset group_length=0 group_opcode=8 group_start=244
-Footer summary_crc=0 summary_offset_start=244 summary_start=163
+SummaryOffset group_length=41 group_opcode=3 group_start=169
+SummaryOffset group_length=0 group_opcode=13 group_start=256
+SummaryOffset group_length=46 group_opcode=11 group_start=210
+SummaryOffset group_length=0 group_opcode=10 group_start=256
+SummaryOffset group_length=0 group_opcode=8 group_start=256
+Footer summary_crc=0 summary_offset_start=256 summary_start=169

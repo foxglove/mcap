@@ -92,9 +92,10 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder
       .uint64(0n) // placeholder
       .uint16(schema.id)
-      .string(schema.schemaName)
-      .string(schema.schemaEncoding)
-      .string(schema.schema);
+      .string(schema.name)
+      .string(schema.encoding)
+      .uint64(BigInt(schema.data.byteLength))
+      .bytes(schema.data);
 
     if (this.options?.padRecords === true) {
       this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);

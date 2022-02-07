@@ -1,7 +1,7 @@
 Header library="" profile=""
-Schema id=1 schema=b schema_encoding=c schema_name=Example
+Schema data=<040506> encoding=c id=1 name=Example
 ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema_id=1 topic=example
 Message channel_id=1 log_time=2 message_data=<010203> publish_time=1 sequence=10
-MessageIndex channel_id=1 records={2=79}
-ChunkIndex chunk_length=160 chunk_start_offset=28 compressed_size=113 compression="" end_time=2 message_index_length=34 message_index_offsets={1=190} start_time=2 uncompressed_size=113
-Footer summary_crc=0 summary_offset_start=0 summary_start=240
+MessageIndex channel_id=1 records={2=85}
+ChunkIndex chunk_length=166 chunk_start_offset=28 compressed_size=119 compression="" end_time=2 message_index_length=34 message_index_offsets={1=196} start_time=2 uncompressed_size=119
+Footer summary_crc=0 summary_offset_start=0 summary_start=246

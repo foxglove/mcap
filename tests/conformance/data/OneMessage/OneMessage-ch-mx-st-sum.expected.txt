@@ -1,12 +1,12 @@
 Header library="" profile=""
-Schema id=1 schema=b schema_encoding=c schema_name=Example
+Schema data=<040506> encoding=c id=1 name=Example
 ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema_id=1 topic=example
 Message channel_id=1 log_time=2 message_data=<010203> publish_time=1 sequence=10
-MessageIndex channel_id=1 records={2=79}
+MessageIndex channel_id=1 records={2=85}
 Statistics attachment_count=0 channel_count=1 channel_message_counts={1=1} chunk_count=1 message_count=1
-ChunkIndex chunk_length=160 chunk_start_offset=25 compressed_size=113 compression="" end_time=2 message_index_length=31 message_index_offsets={1=187} start_time=2 uncompressed_size=113
-SummaryOffset group_length=0 group_opcode=13 group_start=274
-SummaryOffset group_length=43 group_opcode=11 group_start=231
-SummaryOffset group_length=0 group_opcode=10 group_start=274
-SummaryOffset group_length=87 group_opcode=8 group_start=274
-Footer summary_crc=0 summary_offset_start=361 summary_start=231
+ChunkIndex chunk_length=166 chunk_start_offset=25 compressed_size=119 compression="" end_time=2 message_index_length=31 message_index_offsets={1=193} start_time=2 uncompressed_size=119
+SummaryOffset group_length=0 group_opcode=13 group_start=280
+SummaryOffset group_length=43 group_opcode=11 group_start=237
+SummaryOffset group_length=0 group_opcode=10 group_start=280
+SummaryOffset group_length=87 group_opcode=8 group_start=280
+Footer summary_crc=0 summary_offset_start=367 summary_start=237

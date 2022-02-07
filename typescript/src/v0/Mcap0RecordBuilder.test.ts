@@ -53,19 +53,20 @@ describe("Mcap0RecordBuilder", () => {
 
     const written = writer.writeSchema({
       id: 1,
-      schemaEncoding: "some format",
-      schemaName: "schema name",
-      schema: "schema",
+      encoding: "some format",
+      name: "schema name",
+      data: new TextEncoder().encode("schema"),
     });
 
     const buffer = new BufferBuilder();
     buffer
       .uint8(3) // opcode
-      .uint64(BigInt(42)) // record content byte length
+      .uint64(BigInt(46)) // record content byte length
       .uint16(1)
       .string("schema name")
       .string("some format")
-      .string("schema");
+      .uint64(BigInt(new TextEncoder().encode("schema").byteLength))
+      .bytes(new TextEncoder().encode("schema"));
 
     expect(writer.buffer).toEqual(buffer.buffer);
     expect(written).toEqual(BigInt(buffer.length));
