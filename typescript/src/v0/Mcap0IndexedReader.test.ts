@@ -165,7 +165,7 @@ describe("Mcap0IndexedReader", () => {
             schemaId: 1,
             topic: "myTopic",
             messageEncoding: "utf12",
-            metadata: [["foo", "bar"]],
+            metadata: new Map([["foo", "bar"]]),
           },
         ],
       ]),

@@ -373,7 +373,7 @@ export class Mcap0RecordBuilder {
       .tupleArray(
         (key) => this.bufferBuilder.uint16(key),
         (value) => this.bufferBuilder.uint64(value),
-        statistics.channelMessageCounts.entries(),
+        statistics.channelMessageCounts,
       );
     if (this.options?.padRecords === true) {
       this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);

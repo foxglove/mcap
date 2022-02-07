@@ -80,7 +80,7 @@ describe("Mcap0RecordBuilder", () => {
       topic: "/topic",
       messageEncoding: "encoding",
       schemaId: 1,
-      metadata: [],
+      metadata: new Map(),
     });
 
     const buffer = new BufferBuilder();
@@ -126,7 +126,7 @@ describe("Mcap0RecordBuilder", () => {
 
     const written = writer.writeMetadata({
       name: "name",
-      metadata: [["something", "magical"]],
+      metadata: new Map([["something", "magical"]]),
     });
 
     const buffer = new BufferBuilder();
