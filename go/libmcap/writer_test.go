@@ -344,3 +344,23 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		assert.Equal(t, expected, tok.TokenType, fmt.Sprintf("want %s got %s", Token{expected, 0, nil}, tok))
 	}
 }
+
+func TestMakePrefixedMap(t *testing.T) {
+	t.Run("output is deterministic", func(t *testing.T) {
+		bytes := makePrefixedMap(map[string]string{
+			"foo": "bar",
+			"bar": "foo",
+		})
+		assert.Equal(t, flatten(
+			encodedUint32(2*4+2*4+4*3), // map length
+			encodedUint32(3),
+			[]byte("bar"),
+			encodedUint32(3),
+			[]byte("foo"),
+			encodedUint32(3),
+			[]byte("foo"),
+			encodedUint32(3),
+			[]byte("bar"),
+		), bytes)
+	})
+}
