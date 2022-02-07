@@ -203,6 +203,7 @@ func makePrefixedMap(m map[string]string) []byte {
 		maplen += 4 + len(k) + 4 + len(v)
 		mapkeys = append(mapkeys, k)
 	}
+	sort.Strings(mapkeys)
 	buf := make([]byte, maplen+4)
 	offset := putUint32(buf, uint32(maplen))
 	for _, k := range mapkeys {
