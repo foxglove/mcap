@@ -343,7 +343,7 @@ describe("Mcap0StreamReader", () => {
       topic: "myTopic",
       messageEncoding: "utf12",
       schemaId: 1,
-      metadata: [["foo", "bar"]],
+      metadata: new Map([["foo", "bar"]]),
     } as TypedMcapRecords["ChannelInfo"]);
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
@@ -394,7 +394,7 @@ describe("Mcap0StreamReader", () => {
       topic: "myTopic",
       messageEncoding: "utf12",
       schemaId: 1,
-      metadata: [["foo", "bar"]],
+      metadata: new Map([["foo", "bar"]]),
     } as TypedMcapRecords["ChannelInfo"]);
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
@@ -502,7 +502,7 @@ describe("Mcap0StreamReader", () => {
           topic: "myTopic",
           messageEncoding: "utf12",
           schemaId: 1,
-          metadata: [["foo", "bar"]],
+          metadata: new Map([["foo", "bar"]]),
         } as TypedMcapRecords["ChannelInfo"]);
         expect(() => reader.nextRecord()).toThrow("differing channel infos for 42");
       });
