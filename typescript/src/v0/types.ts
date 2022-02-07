@@ -23,7 +23,7 @@ export type ChannelInfo = {
   topic: string;
   messageEncoding: string;
   schemaId: number;
-  metadata: [key: string, value: string][];
+  metadata: Map<string, string>;
 };
 export type Message = {
   channelId: number;
@@ -79,7 +79,7 @@ export type Statistics = {
 };
 export type Metadata = {
   name: string;
-  metadata: [key: string, value: string][];
+  metadata: Map<string, string>;
 };
 export type MetadataIndex = {
   offset: bigint;
