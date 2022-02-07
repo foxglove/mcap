@@ -2,7 +2,16 @@ import { crc32 } from "@foxglove/crc";
 
 import Mcap0IndexedReader from "./Mcap0IndexedReader";
 import { MCAP0_MAGIC, Opcode } from "./constants";
-import { record, uint64LE, uint32LE, string, keyValues, collect, uint16LE } from "./testUtils";
+import {
+  record,
+  uint64LE,
+  uint32LE,
+  string,
+  keyValues,
+  collect,
+  uint16LE,
+  uint32PrefixedBytes,
+} from "./testUtils";
 import { TypedMcapRecords } from "./types";
 
 function makeReadable(data: Uint8Array) {
@@ -127,7 +136,7 @@ describe("Mcap0IndexedReader", () => {
         ...uint16LE(1), // schema id
         ...string("some data"), // schema name
         ...string("json"), // schema format
-        ...string("stuff"), // schema
+        ...uint32PrefixedBytes(new TextEncoder().encode("stuff")), // schema
       ]),
       ...record(Opcode.CHANNEL_INFO, [
         ...uint16LE(42), // channel id
@@ -171,7 +180,7 @@ describe("Mcap0IndexedReader", () => {
       sequence: 1,
       publishTime: 0n,
       logTime: 10n,
-      messageData: new Uint8Array(),
+      data: new Uint8Array(),
     };
     const message2: TypedMcapRecords["Message"] = {
       type: "Message",
@@ -179,7 +188,7 @@ describe("Mcap0IndexedReader", () => {
       sequence: 2,
       publishTime: 1n,
       logTime: 11n,
-      messageData: new Uint8Array(),
+      data: new Uint8Array(),
     };
     const message3: TypedMcapRecords["Message"] = {
       type: "Message",
@@ -187,7 +196,7 @@ describe("Mcap0IndexedReader", () => {
       sequence: 3,
       publishTime: 2n,
       logTime: 12n,
-      messageData: new Uint8Array(),
+      data: new Uint8Array(),
     };
     it.each([
       { startTime: undefined, endTime: undefined, expected: [message1, message2, message3] },
@@ -202,7 +211,7 @@ describe("Mcap0IndexedReader", () => {
           ...uint16LE(1), // schema id
           ...string("some data"), // schema name
           ...string("json"), // schema format
-          ...string("stuff"), // schema
+          ...uint32PrefixedBytes(new TextEncoder().encode("stuff")), // schema
         ]);
         const channelInfo = record(Opcode.CHANNEL_INFO, [
           ...uint16LE(42), // channel id
