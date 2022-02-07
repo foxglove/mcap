@@ -105,7 +105,7 @@ describe("Mcap0RecordBuilder", () => {
       publishTime: 3n,
       logTime: 5n,
       sequence: 7,
-      messageData: new Uint8Array(),
+      data: new Uint8Array(),
     });
 
     const buffer = new BufferBuilder();

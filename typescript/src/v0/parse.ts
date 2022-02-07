@@ -158,7 +158,7 @@ export function parseRecord({
       const sequence = reader.uint32();
       const publishTime = reader.uint64();
       const logTime = reader.uint64();
-      const messageData = new Uint8Array(
+      const data = new Uint8Array(
         recordView.buffer.slice(
           recordView.byteOffset + reader.offset,
           recordView.byteOffset + recordView.byteLength,
@@ -170,7 +170,7 @@ export function parseRecord({
         sequence,
         publishTime,
         logTime,
-        messageData,
+        data,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }

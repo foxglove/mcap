@@ -277,7 +277,7 @@ const inputs: { name: string; records: TestDataRecord[] }[] = [
         channelId: 1,
         publishTime: 1n,
         logTime: 2n,
-        messageData: new Uint8Array([1, 2, 3]),
+        data: new Uint8Array([1, 2, 3]),
         sequence: 10,
       },
     ],

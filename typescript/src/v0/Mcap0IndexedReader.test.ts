@@ -180,7 +180,7 @@ describe("Mcap0IndexedReader", () => {
       sequence: 1,
       publishTime: 0n,
       logTime: 10n,
-      messageData: new Uint8Array(),
+      data: new Uint8Array(),
     };
     const message2: TypedMcapRecords["Message"] = {
       type: "Message",
@@ -188,7 +188,7 @@ describe("Mcap0IndexedReader", () => {
       sequence: 2,
       publishTime: 1n,
       logTime: 11n,
-      messageData: new Uint8Array(),
+      data: new Uint8Array(),
     };
     const message3: TypedMcapRecords["Message"] = {
       type: "Message",
@@ -196,7 +196,7 @@ describe("Mcap0IndexedReader", () => {
       sequence: 3,
       publishTime: 2n,
       logTime: 12n,
-      messageData: new Uint8Array(),
+      data: new Uint8Array(),
     };
     it.each([
       { startTime: undefined, endTime: undefined, expected: [message1, message2, message3] },

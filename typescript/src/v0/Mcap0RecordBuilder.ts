@@ -145,7 +145,7 @@ export class Mcap0RecordBuilder {
       .uint32(message.sequence)
       .uint64(message.publishTime)
       .uint64(message.logTime)
-      .bytes(message.messageData);
+      .bytes(message.data);
     // message record cannot be padded
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder

@@ -30,7 +30,7 @@ export type Message = {
   sequence: number;
   publishTime: bigint;
   logTime: bigint;
-  messageData: Uint8Array;
+  data: Uint8Array;
 };
 export type Chunk = {
   startTime: bigint;
