@@ -42,7 +42,7 @@ uint32_t ParseUint32(const std::byte* data) {
          (uint32_t(data[3]) << 24);
 }
 
-mcap::Status ParseUint32(const std::byte* data, uint64_t maxSize, uint32_t* output) {
+Status ParseUint32(const std::byte* data, uint64_t maxSize, uint32_t* output) {
   if (maxSize < 4) {
     const auto msg = internal::StrFormat("cannot read uint32 from {} bytes", maxSize);
     return Status{StatusCode::InvalidRecord, msg};
@@ -57,7 +57,7 @@ uint32_t ParseUint64(const std::byte* data) {
          (uint64_t(data[6]) << 48) | (uint64_t(data[7]) << 56);
 }
 
-mcap::Status ParseUint64(const std::byte* data, uint64_t maxSize, uint64_t* output) {
+Status ParseUint64(const std::byte* data, uint64_t maxSize, uint64_t* output) {
   if (maxSize < 8) {
     const auto msg = internal::StrFormat("cannot read uint64 from {} bytes", maxSize);
     return Status{StatusCode::InvalidRecord, msg};
@@ -66,7 +66,7 @@ mcap::Status ParseUint64(const std::byte* data, uint64_t maxSize, uint64_t* outp
   return StatusCode::Success;
 }
 
-mcap::Status ParseString(const std::byte* data, uint64_t maxSize, std::string_view* output) {
+Status ParseString(const std::byte* data, uint64_t maxSize, std::string_view* output) {
   uint32_t size;
   if (auto status = ParseUint32(data, maxSize, &size); !status.ok()) {
     return status;
@@ -74,13 +74,13 @@ mcap::Status ParseString(const std::byte* data, uint64_t maxSize, std::string_vi
   if (uint64_t(size) > (maxSize - 4)) {
     const auto msg =
       internal::StrFormat("string size {} exceeds remaining bytes {}", size, (maxSize - 4));
-    return mcap::Status(mcap::StatusCode::InvalidRecord, msg);
+    return Status(StatusCode::InvalidRecord, msg);
   }
   *output = std::string_view(reinterpret_cast<const char*>(data + 4), size);
   return StatusCode::Success;
 }
 
-mcap::Status ParseString(const std::byte* data, uint64_t maxSize, std::string* output) {
+Status ParseString(const std::byte* data, uint64_t maxSize, std::string* output) {
   uint32_t size;
   if (auto status = ParseUint32(data, maxSize, &size); !status.ok()) {
     return status;
@@ -88,13 +88,13 @@ mcap::Status ParseString(const std::byte* data, uint64_t maxSize, std::string* o
   if (uint64_t(size) > (maxSize - 4)) {
     const auto msg =
       internal::StrFormat("string size {} exceeds remaining bytes {}", size, (maxSize - 4));
-    return mcap::Status(mcap::StatusCode::InvalidRecord, msg);
+    return Status(StatusCode::InvalidRecord, msg);
   }
   *output = std::string(reinterpret_cast<const char*>(data + 4), size);
   return StatusCode::Success;
 }
 
-mcap::Status ParseByteArray(const std::byte* data, uint64_t maxSize, mcap::ByteArray* output) {
+Status ParseByteArray(const std::byte* data, uint64_t maxSize, ByteArray* output) {
   uint32_t size;
   if (auto status = ParseUint32(data, maxSize, &size); !status.ok()) {
     return status;
@@ -102,14 +102,14 @@ mcap::Status ParseByteArray(const std::byte* data, uint64_t maxSize, mcap::ByteA
   if (uint64_t(size) > (maxSize - 4)) {
     const auto msg =
       internal::StrFormat("byte array size {} exceeds remaining bytes {}", size, (maxSize - 4));
-    return mcap::Status(mcap::StatusCode::InvalidRecord, msg);
+    return Status(StatusCode::InvalidRecord, msg);
   }
   output->resize(size);
   std::memcpy(output->data(), data + 4, size);
   return StatusCode::Success;
 }
 
-mcap::Status ParseKeyValueMap(const std::byte* data, uint64_t maxSize, mcap::KeyValueMap* output) {
+Status ParseKeyValueMap(const std::byte* data, uint64_t maxSize, KeyValueMap* output) {
   uint32_t sizeInBytes;
   if (auto status = ParseUint32(data, maxSize, &sizeInBytes); !status.ok()) {
     return status;
@@ -117,7 +117,7 @@ mcap::Status ParseKeyValueMap(const std::byte* data, uint64_t maxSize, mcap::Key
   if (sizeInBytes > (maxSize - 4)) {
     const auto msg = internal::StrFormat("key-value map size {} exceeds remaining bytes {}",
                                          sizeInBytes, (maxSize - 4));
-    return mcap::Status(mcap::StatusCode::InvalidRecord, msg);
+    return Status(StatusCode::InvalidRecord, msg);
   }
   output->clear();
   uint64_t pos = 4;
@@ -144,7 +144,7 @@ std::string MagicToHex(const std::byte* data) {
 
 }  // namespace internal
 
-MetadataIndex::MetadataIndex(const Metadata& metadata, mcap::ByteOffset fileOffset)
+MetadataIndex::MetadataIndex(const Metadata& metadata, ByteOffset fileOffset)
     : offset(fileOffset)
     , length(9 + 4 + metadata.name.size() + 4 + internal::KeyValueMapSize(metadata.metadata))
     , name(metadata.name) {}
@@ -155,20 +155,20 @@ McapWriter::~McapWriter() {
   close();
 }
 
-void McapWriter::open(mcap::IWritable& writer, const McapWriterOptions& options) {
+void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
   opened_ = true;
   chunkSize_ = options.noChunking ? 0 : options.chunkSize;
   indexing_ = !options.noIndexing;
   compression_ = chunkSize_ > 0 ? options.compression : Compression::None;
   switch (compression_) {
     case Compression::None:
-      uncompressedChunk_ = std::make_unique<mcap::BufferWriter>();
+      uncompressedChunk_ = std::make_unique<BufferWriter>();
       break;
     case Compression::Lz4:
-      lz4Chunk_ = std::make_unique<mcap::LZ4Writer>(options.compressionLevel, chunkSize_);
+      lz4Chunk_ = std::make_unique<LZ4Writer>(options.compressionLevel, chunkSize_);
       break;
     case Compression::Zstd:
-      zstdChunk_ = std::make_unique<mcap::ZStdWriter>(options.compressionLevel, chunkSize_);
+      zstdChunk_ = std::make_unique<ZStdWriter>(options.compressionLevel, chunkSize_);
       break;
   }
   output_ = &writer;
@@ -179,7 +179,7 @@ void McapWriter::open(mcap::IWritable& writer, const McapWriterOptions& options)
 }
 
 void McapWriter::open(std::ostream& stream, const McapWriterOptions& options) {
-  streamOutput_ = std::make_unique<mcap::StreamWriter>(stream);
+  streamOutput_ = std::make_unique<StreamWriter>(stream);
   open(*streamOutput_, options);
 }
 
@@ -199,8 +199,8 @@ void McapWriter::close() {
   uint32_t dataSectionCrc = 0;
   write(fileOutput, DataEnd{dataSectionCrc});
 
-  mcap::ByteOffset summaryStart = 0;
-  mcap::ByteOffset summaryOffsetStart = 0;
+  ByteOffset summaryStart = 0;
+  ByteOffset summaryOffsetStart = 0;
   uint32_t summaryCrc = 0;
 
   if (indexing_) {
@@ -213,29 +213,29 @@ void McapWriter::close() {
     }
 
     // Write chunk index records
-    mcap::ByteOffset chunkIndexStart = fileOutput.size();
+    ByteOffset chunkIndexStart = fileOutput.size();
     for (const auto& chunkIndexRecord : chunkIndex_) {
       write(fileOutput, chunkIndexRecord);
     }
 
     // Write attachment index records
-    mcap::ByteOffset attachmentIndexStart = fileOutput.size();
+    ByteOffset attachmentIndexStart = fileOutput.size();
     for (const auto& attachmentIndexRecord : attachmentIndex_) {
       write(fileOutput, attachmentIndexRecord);
     }
 
     // Write metadata index records
-    mcap::ByteOffset metadataIndexStart = fileOutput.size();
+    ByteOffset metadataIndexStart = fileOutput.size();
     for (const auto& metadataIndexRecord : metadataIndex_) {
       write(fileOutput, metadataIndexRecord);
     }
 
     // Write the statistics record
-    mcap::ByteOffset statisticsStart = fileOutput.size();
+    ByteOffset statisticsStart = fileOutput.size();
     write(fileOutput, statistics_);
 
     // Write summary offset records
-    mcap::ByteOffset summaryOffsetStart = fileOutput.size();
+    ByteOffset summaryOffsetStart = fileOutput.size();
     if (!channels_.empty()) {
       write(fileOutput,
             SummaryOffset{OpCode::ChannelInfo, summaryStart, chunkIndexStart - summaryStart});
@@ -257,7 +257,7 @@ void McapWriter::close() {
   // TODO: Calculate the summary CRC
 
   // Write the footer and trailing magic
-  write(fileOutput, mcap::Footer{summaryStart, summaryOffsetStart, summaryCrc});
+  write(fileOutput, Footer{summaryStart, summaryOffsetStart, summaryCrc});
   writeMagic(fileOutput);
 
   // Flush output
@@ -284,17 +284,17 @@ void McapWriter::terminate() {
   opened_ = false;
 }
 
-void McapWriter::addSchema(mcap::Schema& schema) {
+void McapWriter::addSchema(Schema& schema) {
   schema.id = uint16_t(schemas_.size() + 1);
   schemas_.push_back(schema);
 }
 
-void McapWriter::addChannel(mcap::ChannelInfo& info) {
+void McapWriter::addChannel(ChannelInfo& info) {
   info.id = uint16_t(channels_.size() + 1);
   channels_.push_back(info);
 }
 
-mcap::Status McapWriter::write(const mcap::Message& message) {
+Status McapWriter::write(const Message& message) {
   if (!output_) {
     return StatusCode::NotOpen;
   }
@@ -366,7 +366,7 @@ mcap::Status McapWriter::write(const mcap::Message& message) {
   return StatusCode::Success;
 }
 
-mcap::Status McapWriter::write(const mcap::Attachment& attachment) {
+Status McapWriter::write(const Attachment& attachment) {
   if (!output_) {
     return StatusCode::NotOpen;
   }
@@ -392,7 +392,7 @@ mcap::Status McapWriter::write(const mcap::Attachment& attachment) {
   return StatusCode::Success;
 }
 
-mcap::Status McapWriter::write(const mcap::Metadata& metadata) {
+Status McapWriter::write(const Metadata& metadata) {
   if (!output_) {
     return StatusCode::NotOpen;
   }
@@ -420,7 +420,7 @@ mcap::Status McapWriter::write(const mcap::Metadata& metadata) {
 
 // Private methods /////////////////////////////////////////////////////////////
 
-mcap::IWritable& McapWriter::getOutput() {
+IWritable& McapWriter::getOutput() {
   if (chunkSize_ == 0) {
     return *output_;
   }
@@ -434,7 +434,7 @@ mcap::IWritable& McapWriter::getOutput() {
   }
 }
 
-mcap::IChunkWriter* McapWriter::getChunkWriter() {
+IChunkWriter* McapWriter::getChunkWriter() {
   switch (compression_) {
     case Compression::None:
       return uncompressedChunk_.get();
@@ -445,7 +445,7 @@ mcap::IChunkWriter* McapWriter::getChunkWriter() {
   }
 }
 
-void McapWriter::writeChunk(mcap::IWritable& output, mcap::IChunkWriter& chunkData) {
+void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
   const auto& compression = internal::CompressionString(compression_);
 
   // Flush any in-progress compression stream
@@ -497,11 +497,11 @@ void McapWriter::writeChunk(mcap::IWritable& output, mcap::IChunkWriter& chunkDa
   chunkData.clear();
 }
 
-void McapWriter::writeMagic(mcap::IWritable& output) {
+void McapWriter::writeMagic(IWritable& output) {
   write(output, reinterpret_cast<const std::byte*>(Magic), sizeof(Magic));
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Header& header) {
+uint64_t McapWriter::write(IWritable& output, const Header& header) {
   const uint64_t recordSize = 4 + header.profile.size() + 4 + header.library.size();
 
   write(output, OpCode::Header);
@@ -512,7 +512,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Header& header) 
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Footer& footer) {
+uint64_t McapWriter::write(IWritable& output, const Footer& footer) {
   const uint64_t recordSize = 12;
 
   write(output, OpCode::Footer);
@@ -524,7 +524,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Footer& footer) 
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Schema& schema) {
+uint64_t McapWriter::write(IWritable& output, const Schema& schema) {
   const uint64_t recordSize = /* id */ 2 +
                               /* name */ 4 + schema.name.size() +
                               /* encoding */ 4 + schema.encoding.size() +
@@ -540,7 +540,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Schema& schema) 
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::ChannelInfo& channelInfo) {
+uint64_t McapWriter::write(IWritable& output, const ChannelInfo& channelInfo) {
   const uint32_t metadataSize = internal::KeyValueMapSize(channelInfo.metadata);
   const uint64_t recordSize = /* id */ 2 +
                               /* topic */ 4 + channelInfo.topic.size() +
@@ -559,7 +559,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::ChannelInfo& cha
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Message& message) {
+uint64_t McapWriter::write(IWritable& output, const Message& message) {
   const uint64_t recordSize = 2 + 4 + 8 + 8 + message.dataSize;
 
   write(output, OpCode::Message);
@@ -573,7 +573,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Message& message
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Attachment& attachment) {
+uint64_t McapWriter::write(IWritable& output, const Attachment& attachment) {
   const uint64_t recordSize = 4 + attachment.name.size() + 8 + 8 + 4 +
                               attachment.contentType.size() + 8 + attachment.dataSize + 4;
 
@@ -593,7 +593,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Attachment& atta
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Metadata& metadata) {
+uint64_t McapWriter::write(IWritable& output, const Metadata& metadata) {
   const uint32_t metadataSize = internal::KeyValueMapSize(metadata.metadata);
   const uint64_t recordSize = 4 + metadata.name.size() + 4 + metadataSize;
 
@@ -605,7 +605,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Metadata& metada
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Chunk& chunk) {
+uint64_t McapWriter::write(IWritable& output, const Chunk& chunk) {
   const uint64_t recordSize = 8 + 4 + 4 + chunk.compression.size() + chunk.compressedSize;
 
   write(output, OpCode::Chunk);
@@ -618,7 +618,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Chunk& chunk) {
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::MessageIndex& index) {
+uint64_t McapWriter::write(IWritable& output, const MessageIndex& index) {
   const uint32_t recordsSize = index.records.size() * 16;
   const uint64_t recordSize = 2 + 4 + recordsSize;
 
@@ -635,7 +635,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::MessageIndex& in
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::ChunkIndex& index) {
+uint64_t McapWriter::write(IWritable& output, const ChunkIndex& index) {
   const uint32_t messageIndexOffsetsSize = index.messageIndexOffsets.size() * 10;
   const uint64_t recordSize =
     8 + 8 + 8 + 4 + messageIndexOffsetsSize + 8 + 4 + index.compression.size() + 8 + 8 + 4;
@@ -662,7 +662,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::ChunkIndex& inde
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::AttachmentIndex& index) {
+uint64_t McapWriter::write(IWritable& output, const AttachmentIndex& index) {
   const uint64_t recordSize = 8 + 8 + 8 + 8 + 4 + index.name.size() + 4 + index.contentType.size();
 
   write(output, OpCode::AttachmentIndex);
@@ -676,7 +676,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::AttachmentIndex&
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::MetadataIndex& index) {
+uint64_t McapWriter::write(IWritable& output, const MetadataIndex& index) {
   const uint64_t recordSize = 8 + 8 + 4 + index.name.size();
 
   write(output, OpCode::MetadataIndex);
@@ -688,7 +688,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::MetadataIndex& i
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Statistics& stats) {
+uint64_t McapWriter::write(IWritable& output, const Statistics& stats) {
   const uint32_t channelMessageCountsSize = stats.channelMessageCounts.size() * 10;
   const uint64_t recordSize = 8 + 4 + 4 + 4 + 4 + channelMessageCountsSize;
 
@@ -708,7 +708,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Statistics& stat
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::SummaryOffset& summaryOffset) {
+uint64_t McapWriter::write(IWritable& output, const SummaryOffset& summaryOffset) {
   const uint64_t recordSize = 1 + 8 + 8;
 
   write(output, OpCode::SummaryOffset);
@@ -720,7 +720,7 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::SummaryOffset& s
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::DataEnd& dataEnd) {
+uint64_t McapWriter::write(IWritable& output, const DataEnd& dataEnd) {
   const uint64_t recordSize = 4;
 
   write(output, OpCode::DataEnd);
@@ -730,45 +730,45 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::DataEnd& dataEnd
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(mcap::IWritable& output, const mcap::UnknownRecord& record) {
-  write(output, mcap::OpCode(record.opcode));
+uint64_t McapWriter::write(IWritable& output, const UnknownRecord& record) {
+  write(output, OpCode(record.opcode));
   write(output, record.dataSize);
   write(output, record.data, record.dataSize);
 
   return 9 + record.dataSize;
 }
 
-void McapWriter::write(mcap::IWritable& output, const std::string_view str) {
+void McapWriter::write(IWritable& output, const std::string_view str) {
   write(output, uint32_t(str.size()));
   output.write(reinterpret_cast<const std::byte*>(str.data()), str.size());
 }
 
-void McapWriter::write(mcap::IWritable& output, const mcap::ByteArray bytes) {
+void McapWriter::write(IWritable& output, const ByteArray bytes) {
   write(output, uint32_t(bytes.size()));
   output.write(bytes.data(), bytes.size());
 }
 
-void McapWriter::write(mcap::IWritable& output, OpCode value) {
+void McapWriter::write(IWritable& output, OpCode value) {
   output.write(reinterpret_cast<const std::byte*>(&value), sizeof(value));
 }
 
-void McapWriter::write(mcap::IWritable& output, uint16_t value) {
+void McapWriter::write(IWritable& output, uint16_t value) {
   output.write(reinterpret_cast<const std::byte*>(&value), sizeof(value));
 }
 
-void McapWriter::write(mcap::IWritable& output, uint32_t value) {
+void McapWriter::write(IWritable& output, uint32_t value) {
   output.write(reinterpret_cast<const std::byte*>(&value), sizeof(value));
 }
 
-void McapWriter::write(mcap::IWritable& output, uint64_t value) {
+void McapWriter::write(IWritable& output, uint64_t value) {
   output.write(reinterpret_cast<const std::byte*>(&value), sizeof(value));
 }
 
-void McapWriter::write(mcap::IWritable& output, const std::byte* data, uint64_t size) {
+void McapWriter::write(IWritable& output, const std::byte* data, uint64_t size) {
   output.write(reinterpret_cast<const std::byte*>(data), size);
 }
 
-void McapWriter::write(mcap::IWritable& output, const KeyValueMap& map, uint32_t size) {
+void McapWriter::write(IWritable& output, const KeyValueMap& map, uint32_t size) {
   // Create a vector of key-value pairs so we can lexicographically sort by key
   std::vector<std::pair<std::string, std::string>> pairs;
   pairs.reserve(map.size());
@@ -806,7 +806,7 @@ uint64_t BufferReader::size() const {
   return size_;
 }
 
-mcap::Status BufferReader::status() const {
+Status BufferReader::status() const {
   return StatusCode::Success;
 }
 
@@ -896,7 +896,7 @@ uint64_t LZ4Reader::size() const {
   return uncompressedSize_;
 }
 
-mcap::Status LZ4Reader::status() const {
+Status LZ4Reader::status() const {
   return status_;
 }
 
@@ -945,7 +945,7 @@ uint64_t ZStdReader::size() const {
   return uncompressedSize_;
 }
 
-mcap::Status ZStdReader::status() const {
+Status ZStdReader::status() const {
   return status_;
 }
 
@@ -1138,7 +1138,7 @@ McapReader::~McapReader() {
   close();
 }
 
-mcap::Status McapReader::open(mcap::IReadable& reader, const McapReaderOptions& options) {
+Status McapReader::open(IReadable& reader, const McapReaderOptions& options) {
   close();
 
   const uint64_t fileSize = reader.size();
@@ -1187,8 +1187,8 @@ mcap::Status McapReader::open(mcap::IReadable& reader, const McapReaderOptions& 
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::open(std::ifstream& stream, const McapReaderOptions& options) {
-  fileStreamInput_ = std::make_unique<mcap::FileStreamReader>(stream);
+Status McapReader::open(std::ifstream& stream, const McapReaderOptions& options) {
+  fileStreamInput_ = std::make_unique<FileStreamReader>(stream);
   return open(*fileStreamInput_, options);
 }
 
@@ -1196,8 +1196,7 @@ void McapReader::close() {
   input_ = nullptr;
 }
 
-mcap::Status McapReader::ReadRecord(mcap::IReadable& reader, uint64_t offset,
-                                    mcap::Record* record) {
+Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record* record) {
   // Check that we can read at least 9 bytes (opcode + length)
   auto maxSize = reader.size() - offset;
   if (maxSize < 9) {
@@ -1214,7 +1213,7 @@ mcap::Status McapReader::ReadRecord(mcap::IReadable& reader, uint64_t offset,
   }
 
   // Parse opcode and length
-  record->opcode = mcap::OpCode(data[0]);
+  record->opcode = OpCode(data[0]);
   record->dataSize = internal::ParseUint64(data + 1);
 
   // Read payload
@@ -1236,8 +1235,7 @@ mcap::Status McapReader::ReadRecord(mcap::IReadable& reader, uint64_t offset,
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ReadFooter(mcap::IReadable& reader, uint64_t offset,
-                                    mcap::Footer* footer) {
+Status McapReader::ReadFooter(IReadable& reader, uint64_t offset, Footer* footer) {
   std::byte* data;
   uint64_t bytesRead = reader.read(&data, offset, internal::FooterLength);
   if (bytesRead != internal::FooterLength) {
@@ -1271,7 +1269,7 @@ mcap::Status McapReader::ReadFooter(mcap::IReadable& reader, uint64_t offset,
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseHeader(const mcap::Record& record, mcap::Header* header) {
+Status McapReader::ParseHeader(const Record& record, Header* header) {
   if (record.opcode != OpCode::Header) {
     const auto msg =
       internal::StrFormat(internal::ErrorMsgInvalidOpcode, "Header", uint8_t(record.opcode));
@@ -1294,7 +1292,7 @@ mcap::Status McapReader::ParseHeader(const mcap::Record& record, mcap::Header* h
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseSchema(const mcap::Record& record, mcap::Schema* schema) {
+Status McapReader::ParseSchema(const Record& record, Schema* schema) {
   constexpr uint64_t MinSize = 2 + 4 + 4 + 4;
 
   assert(record.opcode == OpCode::Schema);
@@ -1330,8 +1328,7 @@ mcap::Status McapReader::ParseSchema(const mcap::Record& record, mcap::Schema* s
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseChannelInfo(const mcap::Record& record,
-                                          mcap::ChannelInfo* channelInfo) {
+Status McapReader::ParseChannelInfo(const Record& record, ChannelInfo* channelInfo) {
   constexpr uint64_t MinSize = 2 + 4 + 4 + 2 + 4;
 
   assert(record.opcode == OpCode::ChannelInfo);
@@ -1372,7 +1369,7 @@ mcap::Status McapReader::ParseChannelInfo(const mcap::Record& record,
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseMessage(const mcap::Record& record, mcap::Message* message) {
+Status McapReader::ParseMessage(const Record& record, Message* message) {
   constexpr uint64_t MessagePreambleSize = 2 + 4 + 8 + 8;
 
   assert(record.opcode == OpCode::Message);
@@ -1391,7 +1388,7 @@ mcap::Status McapReader::ParseMessage(const mcap::Record& record, mcap::Message*
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseChunk(const mcap::Record& record, mcap::Chunk* chunk) {
+Status McapReader::ParseChunk(const Record& record, Chunk* chunk) {
   constexpr uint64_t ChunkPreambleSize = 8 + 4 + 4;
 
   assert(record.opcode == OpCode::Chunk);
@@ -1412,8 +1409,7 @@ mcap::Status McapReader::ParseChunk(const mcap::Record& record, mcap::Chunk* chu
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseMessageIndex(const mcap::Record& record,
-                                           mcap::MessageIndex* messageIndex) {
+Status McapReader::ParseMessageIndex(const Record& record, MessageIndex* messageIndex) {
   constexpr uint64_t PreambleSize = 2 + 4;
 
   assert(record.opcode == OpCode::MessageIndex);
@@ -1442,7 +1438,7 @@ mcap::Status McapReader::ParseMessageIndex(const mcap::Record& record,
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseChunkIndex(const mcap::Record& record, mcap::ChunkIndex* chunkIndex) {
+Status McapReader::ParseChunkIndex(const Record& record, ChunkIndex* chunkIndex) {
   constexpr uint64_t PreambleSize = 8 + 8 + 8 + 8 + 4;
 
   assert(record.opcode == OpCode::ChunkIndex);
@@ -1505,7 +1501,7 @@ mcap::Status McapReader::ParseChunkIndex(const mcap::Record& record, mcap::Chunk
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseAttachment(const mcap::Record& record, mcap::Attachment* attachment) {
+Status McapReader::ParseAttachment(const Record& record, Attachment* attachment) {
   constexpr uint64_t MinSize = 4 + 8 + 8 + 4 + 8 + 4;
 
   assert(record.opcode == OpCode::Attachment);
@@ -1568,8 +1564,7 @@ mcap::Status McapReader::ParseAttachment(const mcap::Record& record, mcap::Attac
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseAttachmentIndex(const mcap::Record& record,
-                                              mcap::AttachmentIndex* attachmentIndex) {
+Status McapReader::ParseAttachmentIndex(const Record& record, AttachmentIndex* attachmentIndex) {
   constexpr uint64_t PreambleSize = 8 + 8 + 8 + 8 + 4;
 
   assert(record.opcode == OpCode::AttachmentIndex);
@@ -1603,7 +1598,7 @@ mcap::Status McapReader::ParseAttachmentIndex(const mcap::Record& record,
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseStatistics(const mcap::Record& record, mcap::Statistics* statistics) {
+Status McapReader::ParseStatistics(const Record& record, Statistics* statistics) {
   constexpr uint64_t PreambleSize = 8 + 4 + 4 + 4 + 4 + 4;
 
   assert(record.opcode == OpCode::Statistics);
@@ -1638,7 +1633,7 @@ mcap::Status McapReader::ParseStatistics(const mcap::Record& record, mcap::Stati
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseMetadata(const mcap::Record& record, mcap::Metadata* metadata) {
+Status McapReader::ParseMetadata(const Record& record, Metadata* metadata) {
   constexpr uint64_t MinSize = 4 + 4;
 
   assert(record.opcode == OpCode::Metadata);
@@ -1664,8 +1659,7 @@ mcap::Status McapReader::ParseMetadata(const mcap::Record& record, mcap::Metadat
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseMetadataIndex(const mcap::Record& record,
-                                            mcap::MetadataIndex* metadataIndex) {
+Status McapReader::ParseMetadataIndex(const Record& record, MetadataIndex* metadataIndex) {
   constexpr uint64_t PreambleSize = 8 + 8 + 4;
 
   assert(record.opcode == OpCode::MetadataIndex);
@@ -1687,8 +1681,7 @@ mcap::Status McapReader::ParseMetadataIndex(const mcap::Record& record,
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseSummaryOffset(const mcap::Record& record,
-                                            mcap::SummaryOffset* summaryOffset) {
+Status McapReader::ParseSummaryOffset(const Record& record, SummaryOffset* summaryOffset) {
   constexpr uint64_t MinSize = 1 + 8 + 8;
 
   assert(record.opcode == OpCode::SummaryOffset);
@@ -1698,14 +1691,14 @@ mcap::Status McapReader::ParseSummaryOffset(const mcap::Record& record,
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  summaryOffset->groupOpCode = mcap::OpCode(record.data[0]);
+  summaryOffset->groupOpCode = OpCode(record.data[0]);
   summaryOffset->groupStart = internal::ParseUint64(record.data + 1);
   summaryOffset->groupLength = internal::ParseUint64(record.data + 1 + 8);
 
   return StatusCode::Success;
 }
 
-mcap::Status McapReader::ParseDataEnd(const mcap::Record& record, mcap::DataEnd* dataEnd) {
+Status McapReader::ParseDataEnd(const Record& record, DataEnd* dataEnd) {
   constexpr uint64_t MinSize = 4;
 
   assert(record.opcode == OpCode::DataEnd);
@@ -1719,13 +1712,13 @@ mcap::Status McapReader::ParseDataEnd(const mcap::Record& record, mcap::DataEnd*
   return StatusCode::Success;
 }
 
-std::optional<mcap::Compression> McapReader::ParseCompression(const std::string_view compression) {
+std::optional<Compression> McapReader::ParseCompression(const std::string_view compression) {
   if (compression == "") {
-    return mcap::Compression::None;
+    return Compression::None;
   } else if (compression == "lz4") {
-    return mcap::Compression::Lz4;
+    return Compression::Lz4;
   } else if (compression == "zstd") {
-    return mcap::Compression::Zstd;
+    return Compression::Zstd;
   } else {
     return std::nullopt;
   }
@@ -1733,16 +1726,14 @@ std::optional<mcap::Compression> McapReader::ParseCompression(const std::string_
 
 // RecordReader ////////////////////////////////////////////////////////////////
 
-RecordReader::RecordReader(IReadable& dataSource, mcap::ByteOffset startOffset,
-                           mcap::ByteOffset endOffset)
+RecordReader::RecordReader(IReadable& dataSource, ByteOffset startOffset, ByteOffset endOffset)
     : dataSource_(dataSource)
     , offset_(startOffset)
     , endOffset_(endOffset)
     , status_(StatusCode::Success)
     , curRecord_{} {}
 
-void RecordReader::reset(IReadable& dataSource, mcap::ByteOffset startOffset,
-                         mcap::ByteOffset endOffset) {
+void RecordReader::reset(IReadable& dataSource, ByteOffset startOffset, ByteOffset endOffset) {
   dataSource_ = dataSource;
   offset_ = startOffset;
   endOffset_ = endOffset;
@@ -1750,7 +1741,7 @@ void RecordReader::reset(IReadable& dataSource, mcap::ByteOffset startOffset,
   curRecord_ = {};
 }
 
-std::optional<mcap::Record> RecordReader::next() {
+std::optional<Record> RecordReader::next() {
   if (offset_ >= endOffset_) {
     return std::nullopt;
   }
@@ -1763,7 +1754,7 @@ std::optional<mcap::Record> RecordReader::next() {
   return curRecord_;
 }
 
-const mcap::Status& RecordReader::status() {
+const Status& RecordReader::status() {
   return status_;
 }
 
@@ -1791,7 +1782,7 @@ bool TypedChunkReader::next() {
   if (!maybeRecord.has_value()) {
     return false;
   }
-  const mcap::Record& record = maybeRecord.value();
+  const Record& record = maybeRecord.value();
   switch (record.opcode) {
     case OpCode::Schema: {
       if (onSchema) {
@@ -1833,14 +1824,14 @@ bool TypedChunkReader::next() {
   return true;
 }
 
-const mcap::Status& TypedChunkReader::status() {
+const Status& TypedChunkReader::status() {
   return status_;
 }
 
 // TypedRecordReader ///////////////////////////////////////////////////////////
 
-TypedRecordReader::TypedRecordReader(IReadable& dataSource, mcap::ByteOffset startOffset,
-                                     mcap::ByteOffset endOffset)
+TypedRecordReader::TypedRecordReader(IReadable& dataSource, ByteOffset startOffset,
+                                     ByteOffset endOffset)
     : reader_(dataSource, startOffset, endOffset)
     , status_(StatusCode::Success)
     , parsingChunk_(false) {
@@ -1876,7 +1867,7 @@ bool TypedRecordReader::next() {
   if (!maybeRecord.has_value()) {
     return false;
   }
-  const mcap::Record& record = maybeRecord.value();
+  const Record& record = maybeRecord.value();
   switch (record.opcode) {
     case OpCode::Schema: {
       if (onSchema) {
@@ -2020,7 +2011,7 @@ bool TypedRecordReader::next() {
   return true;
 }
 
-const mcap::Status& TypedRecordReader::status() {
+const Status& TypedRecordReader::status() {
   return status_;
 }
 
