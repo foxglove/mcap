@@ -1,5 +1,3 @@
-import { Schema } from "inspector";
-
 export type McapMagic = {
   specVersion: "0";
 };
