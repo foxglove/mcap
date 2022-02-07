@@ -92,9 +92,10 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder
       .uint64(0n) // placeholder
       .uint16(schema.id)
-      .string(schema.schemaName)
-      .string(schema.schemaEncoding)
-      .string(schema.schema);
+      .string(schema.name)
+      .string(schema.encoding)
+      .uint32(schema.data.byteLength)
+      .bytes(schema.data);
 
     if (this.options?.padRecords === true) {
       this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
@@ -144,7 +145,7 @@ export class Mcap0RecordBuilder {
       .uint32(message.sequence)
       .uint64(message.publishTime)
       .uint64(message.logTime)
-      .bytes(message.messageData);
+      .bytes(message.data);
     // message record cannot be padded
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder

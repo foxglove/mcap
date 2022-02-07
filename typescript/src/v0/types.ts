@@ -14,9 +14,9 @@ export type Footer = {
 };
 export type Schema = {
   id: number;
-  schemaEncoding: string;
-  schema: string;
-  schemaName: string;
+  name: string;
+  encoding: string;
+  data: Uint8Array;
 };
 export type ChannelInfo = {
   id: number;
@@ -30,7 +30,7 @@ export type Message = {
   sequence: number;
   publishTime: bigint;
   logTime: bigint;
-  messageData: Uint8Array;
+  data: Uint8Array;
 };
 export type Chunk = {
   startTime: bigint;

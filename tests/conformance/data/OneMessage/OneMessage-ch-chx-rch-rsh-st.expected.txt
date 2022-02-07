@@ -1,10 +1,10 @@
 Header library="" profile=""
-Schema id=1 schema=b schema_encoding=c schema_name=Example
+Schema data=<040506> encoding=c id=1 name=Example
 ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema_id=1 topic=example
-Message channel_id=1 log_time=2 message_data=<010203> publish_time=1 sequence=10
-MessageIndex channel_id=1 records={2=79}
-Schema id=1 schema=b schema_encoding=c schema_name=Example
+Message channel_id=1 data=<010203> log_time=2 publish_time=1 sequence=10
+MessageIndex channel_id=1 records={2=81}
+Schema data=<040506> encoding=c id=1 name=Example
 ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema_id=1 topic=example
 Statistics attachment_count=0 channel_count=1 channel_message_counts={1=1} chunk_count=1 message_count=1
-ChunkIndex chunk_length=160 chunk_start_offset=25 compressed_size=113 compression="" end_time=2 message_index_length=31 message_index_offsets={1=187} start_time=2 uncompressed_size=113
-Footer summary_crc=0 summary_offset_start=0 summary_start=231
+ChunkIndex chunk_length=162 chunk_start_offset=25 compressed_size=115 compression="" end_time=2 message_index_length=31 message_index_offsets={1=189} start_time=2 uncompressed_size=115
+Footer summary_crc=0 summary_offset_start=0 summary_start=233

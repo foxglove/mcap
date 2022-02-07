@@ -102,17 +102,27 @@ export function parseRecord({
     }
 
     case Opcode.SCHEMA: {
-      const schemaId = reader.uint16();
-      const schemaName = reader.string();
-      const schemaEncoding = reader.string();
-      const schema = reader.string();
+      const id = reader.uint16();
+      const name = reader.string();
+      const encoding = reader.string();
+      const dataLen = reader.uint32();
+      if (reader.offset + dataLen > recordView.byteLength) {
+        throw new Error(`Schema data length ${dataLen} exceeds bounds of record`);
+      }
+      const data = new Uint8Array(
+        recordView.buffer.slice(
+          recordView.byteOffset + reader.offset,
+          recordView.byteOffset + reader.offset + dataLen,
+        ),
+      );
+      reader.offset += dataLen;
 
       const record: TypedMcapRecord = {
         type: "Schema",
-        id: schemaId,
-        schemaEncoding,
-        schemaName,
-        schema,
+        id,
+        encoding,
+        name,
+        data,
       };
 
       return { record, usedBytes: recordEndOffset - startOffset };
@@ -145,7 +155,7 @@ export function parseRecord({
       const sequence = reader.uint32();
       const publishTime = reader.uint64();
       const logTime = reader.uint64();
-      const messageData = new Uint8Array(
+      const data = new Uint8Array(
         recordView.buffer.slice(
           recordView.byteOffset + reader.offset,
           recordView.byteOffset + recordView.byteLength,
@@ -157,7 +167,7 @@ export function parseRecord({
         sequence,
         publishTime,
         logTime,
-        messageData,
+        data,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
@@ -238,6 +248,9 @@ export function parseRecord({
       const dataLen = reader.uint64();
       if (BigInt(recordView.byteOffset + reader.offset) + dataLen > Number.MAX_SAFE_INTEGER) {
         throw new Error(`Attachment too large: ${dataLen}`);
+      }
+      if (reader.offset + Number(dataLen) + 4 /*crc*/ > recordView.byteLength) {
+        throw new Error(`Attachment data length ${dataLen} exceeds bounds of record`);
       }
       const data = new Uint8Array(
         recordView.buffer.slice(

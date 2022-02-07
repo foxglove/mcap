@@ -3,7 +3,16 @@ import { crc32 } from "@foxglove/crc";
 import { TypedMcapRecords } from ".";
 import Mcap0StreamReader from "./Mcap0StreamReader";
 import { MCAP0_MAGIC, Opcode } from "./constants";
-import { record, uint64LE, uint32LE, string, uint16LE, keyValues, crcSuffix } from "./testUtils";
+import {
+  record,
+  uint64LE,
+  uint32LE,
+  string,
+  uint16LE,
+  keyValues,
+  crcSuffix,
+  uint64PrefixedBytes,
+} from "./testUtils";
 
 describe("Mcap0StreamReader", () => {
   it("rejects invalid header", () => {
@@ -254,6 +263,58 @@ describe("Mcap0StreamReader", () => {
     );
   });
 
+  it("rejects schema data with incorrect length prefix", () => {
+    const reader = new Mcap0StreamReader();
+    reader.append(
+      new Uint8Array([
+        ...MCAP0_MAGIC,
+        ...record(Opcode.SCHEMA, [
+          ...uint16LE(42), // id
+          ...string("name"), // name
+          ...string("encoding"), // encoding
+          ...uint32LE(3), // length prefix
+          10,
+          11,
+        ]),
+        ...record(Opcode.FOOTER, [
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
+          ...uint32LE(0), // summary crc
+        ]),
+        ...MCAP0_MAGIC,
+      ]),
+    );
+    expect(() => reader.nextRecord()).toThrow("Schema data length 3 exceeds bounds of record");
+  });
+
+  it("rejects attachment data with incorrect length prefix", () => {
+    const reader = new Mcap0StreamReader();
+    reader.append(
+      new Uint8Array([
+        ...MCAP0_MAGIC,
+        ...record(
+          Opcode.ATTACHMENT,
+          crcSuffix([
+            ...string("myFile"), // name
+            ...uint64LE(1n), // created at
+            ...uint64LE(2n), // log time
+            ...string("text/plain"), // content type
+            ...uint64LE(3n), // data length
+            10,
+            11,
+          ]),
+        ),
+        ...record(Opcode.FOOTER, [
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
+          ...uint32LE(0), // summary crc
+        ]),
+        ...MCAP0_MAGIC,
+      ]),
+    );
+    expect(() => reader.nextRecord()).toThrow("Attachment data length 3 exceeds bounds of record");
+  });
+
   it("parses channel info at top level", () => {
     const reader = new Mcap0StreamReader();
     reader.append(
@@ -460,8 +521,7 @@ describe("Mcap0StreamReader", () => {
             ...uint64LE(1n), // created at
             ...uint64LE(2n), // log time
             ...string("text/plain"), // content type
-            ...uint64LE(BigInt(new TextEncoder().encode("hello").byteLength)), // data length
-            ...new TextEncoder().encode("hello"), // data
+            ...uint64PrefixedBytes(new TextEncoder().encode("hello")), // data
           ]),
         ),
         ...record(Opcode.FOOTER, [
