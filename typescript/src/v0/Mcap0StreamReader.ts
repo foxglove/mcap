@@ -1,10 +1,10 @@
 import { crc32 } from "@foxglove/crc";
+import { isEqual } from "lodash";
 
-import { DecompressHandlers, TypedMcapRecords } from ".";
 import StreamBuffer from "../common/StreamBuffer";
 import { MCAP0_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
-import { McapStreamReader, TypedMcapRecord } from "./types";
+import { DecompressHandlers, McapStreamReader, TypedMcapRecord, TypedMcapRecords } from "./types";
 
 type McapReaderOptions = {
   /**
@@ -50,6 +50,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
   private validateCrcs;
   private doneReading = false;
   private generator = this.read();
+  private channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
 
   constructor({
     includeChunks = false,
@@ -94,6 +95,20 @@ export default class Mcap0StreamReader implements McapStreamReader {
       return undefined;
     }
     const result = this.generator.next();
+
+    if (result.value?.type === "ChannelInfo") {
+      const existing = this.channelInfosById.get(result.value.id);
+      this.channelInfosById.set(result.value.id, result.value);
+      if (existing && !isEqual(existing, result.value)) {
+        throw new Error(`differing channel infos for ${result.value.id}`);
+      }
+    } else if (result.value?.type === "Message") {
+      const existing = this.channelInfosById.get(result.value.channelId);
+      if (!existing) {
+        throw new Error("Encountered message on channel 42 without prior channel info");
+      }
+    }
+
     if (result.done === true) {
       this.doneReading = true;
     }
@@ -101,7 +116,6 @@ export default class Mcap0StreamReader implements McapStreamReader {
   }
 
   private *read(): Generator<TypedMcapRecord | undefined, TypedMcapRecord | undefined, void> {
-    const channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
     {
       let magic, usedBytes;
       while ((({ magic, usedBytes } = parseMagic(this.buffer.view, 0)), !magic)) {
@@ -118,7 +132,6 @@ export default class Mcap0StreamReader implements McapStreamReader {
           (({ record, usedBytes } = parseRecord({
             view: this.buffer.view,
             startOffset: 0,
-            channelInfosById,
             validateCrcs: this.validateCrcs,
           })),
           !record)
@@ -132,6 +145,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
         case "Unknown":
           break;
         case "Header":
+        case "Schema":
         case "ChannelInfo":
         case "Message":
         case "MessageIndex":
@@ -172,7 +186,6 @@ export default class Mcap0StreamReader implements McapStreamReader {
             (chunkResult = parseRecord({
               view,
               startOffset: chunkOffset,
-              channelInfosById,
               validateCrcs: this.validateCrcs,
             })),
               chunkResult.record;
@@ -194,6 +207,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
               case "SummaryOffset":
               case "DataEnd":
                 throw new Error(`${chunkResult.record.type} record not allowed inside a chunk`);
+              case "Schema":
               case "ChannelInfo":
               case "Message":
                 yield chunkResult.record;

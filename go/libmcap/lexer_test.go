@@ -337,8 +337,8 @@ func BenchmarkLexer(b *testing.B) {
 					bytecount += int64(n)
 				}
 				elapsed := time.Since(t0)
-				mbread := bytecount / (1024 * 1024)
-				b.ReportMetric(float64(mbread)/elapsed.Seconds(), "MB/sec")
+				mbRead := bytecount / (1024 * 1024)
+				b.ReportMetric(float64(mbRead)/elapsed.Seconds(), "MB/sec")
 				b.ReportMetric(float64(tokens)/elapsed.Seconds(), "tokens/sec")
 				b.ReportMetric(float64(elapsed.Nanoseconds())/float64(tokens), "ns/token")
 			}

@@ -24,6 +24,7 @@ async function main(options: { dataDir: string; runner?: string; update: boolean
   }
   await fs.mkdir(options.dataDir, { recursive: true });
 
+  let hadError = false;
   for (const runner of enabledRunners) {
     console.log("running", runner.name);
     for await (const fileName of listDirRecursive(options.dataDir)) {
@@ -42,15 +43,24 @@ async function main(options: { dataDir: string; runner?: string; update: boolean
       } else {
         const expectedOutput = await fs
           .readFile(expectedOutputPath, { encoding: "utf-8" })
-          .catch(() => {
-            throw new Error(`Missing expected output file ${expectedOutputPath}`);
-          });
+          .catch(() => undefined);
+        if (expectedOutput == undefined) {
+          console.error(`Error: missing expected output file ${expectedOutputPath}`);
+          hadError = true;
+          continue;
+        }
         if (output !== expectedOutput) {
+          console.error(`Error: output did not match expected for ${filePath}:`);
           console.error(Diff.createPatch(expectedOutputPath, expectedOutput, output));
-          throw new Error(`output did not match expected for ${filePath}`);
+          hadError = true;
+          continue;
         }
       }
     }
+  }
+
+  if (hadError) {
+    process.exit(1);
   }
 }
 

@@ -14,6 +14,7 @@ enum TestFeatures {
   UseChunks = "ch",
   UseMessageIndex = "mx",
   UseStatistics = "st",
+  UseRepeatedSchemas = "rsh",
   UseRepeatedChannelInfos = "rch",
   UseAttachmentIndex = "ax",
   UseMetadataIndex = "mdx",
@@ -35,6 +36,7 @@ function* generateVariants(...features: TestFeatures[]): Generator<Set<TestFeatu
 
 type TestDataRecord = Mcap0Types.TypedMcapRecords[
   | "Message"
+  | "Schema"
   | "ChannelInfo"
   | "Attachment"
   | "Metadata"];
@@ -60,6 +62,13 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
 
   for (const record of records) {
     switch (record.type) {
+      case "Schema":
+        if (chunk) {
+          chunk.addSchema(record);
+        } else {
+          builder.writeSchema(record);
+        }
+        break;
       case "ChannelInfo":
         channelCount++;
         if (chunk) {
@@ -88,11 +97,11 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
         const length = builder.writeAttachment(record);
         attachmentIndexes.push({
           name: record.name,
-          attachmentRecordLength: length,
+          length,
           offset,
-          attachmentSize: BigInt(record.data.byteLength),
+          dataSize: BigInt(record.data.byteLength),
           contentType: record.contentType,
-          recordTime: record.recordTime,
+          logTime: record.logTime,
         });
         break;
       }
@@ -105,8 +114,8 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
     }
   }
   if (chunk) {
-    const offset = BigInt(builder.length);
-    const length = builder.writeChunk({
+    const chunkStartOffset = BigInt(builder.length);
+    const chunkLength = builder.writeChunk({
       compression: "",
       startTime: chunk.startTime,
       endTime: chunk.endTime,
@@ -126,8 +135,8 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
       endTime: chunk.endTime,
       uncompressedSize: BigInt(chunk.buffer.byteLength),
       compressedSize: BigInt(chunk.buffer.byteLength),
-      chunkStart: offset,
-      chunkLength: length,
+      chunkStartOffset,
+      chunkLength,
       messageIndexLength,
       messageIndexOffsets,
     });
@@ -136,6 +145,16 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   builder.writeDataEnd({ dataSectionCrc: 0 });
 
   const summaryStart = BigInt(builder.length);
+
+  const repeatedSchemasStart = BigInt(builder.length);
+  if (variant.has(TestFeatures.UseRepeatedSchemas)) {
+    for (const record of records) {
+      if (record.type === "Schema") {
+        builder.writeSchema(record);
+      }
+    }
+  }
+  const repeatedSchemasLength = BigInt(builder.length) - repeatedSchemasStart;
 
   const repeatedChannelInfosStart = BigInt(builder.length);
   if (variant.has(TestFeatures.UseRepeatedChannelInfos)) {
@@ -186,9 +205,16 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   let summaryOffsetStart = 0n;
   if (variant.has(TestFeatures.UseSummaryOffset)) {
     summaryOffsetStart = BigInt(builder.length);
+    if (repeatedSchemasLength !== 0n) {
+      builder.writeSummaryOffset({
+        groupOpcode: Mcap0Constants.Opcode.SCHEMA,
+        groupStart: repeatedSchemasStart,
+        groupLength: repeatedSchemasLength,
+      });
+    }
     if (repeatedChannelInfosLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: Mcap0Constants.Opcode.METADATA_INDEX,
+        groupOpcode: Mcap0Constants.Opcode.CHANNEL_INFO,
         groupStart: repeatedChannelInfosStart,
         groupLength: repeatedChannelInfosLength,
       });
@@ -220,7 +246,7 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   builder.writeFooter({
     summaryOffsetStart,
     summaryStart: hasSummary ? summaryStart : 0n,
-    crc: 0,
+    summaryCrc: 0,
   });
   builder.writeMagic();
   return builder.buffer;
@@ -232,21 +258,26 @@ const inputs: { name: string; records: TestDataRecord[] }[] = [
     name: "OneMessage",
     records: [
       {
+        type: "Schema",
+        id: 1,
+        name: "Example",
+        encoding: "c",
+        data: new Uint8Array([4, 5, 6]),
+      },
+      {
         type: "ChannelInfo",
-        channelId: 1,
-        topicName: "example",
-        schemaName: "Example",
+        id: 1,
+        topic: "example",
+        schemaId: 1,
         messageEncoding: "a",
-        schema: "b",
-        schemaEncoding: "c",
-        userData: [["foo", "bar"]],
+        metadata: [["foo", "bar"]],
       },
       {
         type: "Message",
         channelId: 1,
         publishTime: 1n,
-        recordTime: 2n,
-        messageData: new Uint8Array([1, 2, 3]),
+        logTime: 2n,
+        data: new Uint8Array([1, 2, 3]),
         sequence: 10,
       },
     ],
@@ -256,10 +287,10 @@ const inputs: { name: string; records: TestDataRecord[] }[] = [
     records: [
       {
         type: "Attachment",
-        name: "myfile",
+        name: "myFile",
         contentType: "application/octet-stream",
         createdAt: 1n,
-        recordTime: 2n,
+        logTime: 2n,
         data: new Uint8Array([1, 2, 3]),
       },
     ],
@@ -291,13 +322,22 @@ async function main(options: { dataDir: string; verify: boolean }) {
         continue;
       }
       if (
+        variant.has(TestFeatures.UseRepeatedSchemas) &&
+        !records.some((record) => record.type === "Schema")
+      ) {
+        continue;
+      }
+      if (
         variant.has(TestFeatures.UseRepeatedChannelInfos) &&
         !records.some((record) => record.type === "ChannelInfo")
       ) {
         continue;
       }
       if (
-        !records.some((record) => record.type === "Message" || record.type === "ChannelInfo") &&
+        !records.some(
+          (record) =>
+            record.type === "Message" || record.type === "ChannelInfo" || record.type === "Schema",
+        ) &&
         (variant.has(TestFeatures.UseChunks) ||
           variant.has(TestFeatures.UseChunkIndex) ||
           variant.has(TestFeatures.UseMessageIndex))
@@ -308,6 +348,7 @@ async function main(options: { dataDir: string; verify: boolean }) {
         variant.has(TestFeatures.UseSummaryOffset) &&
         !(
           variant.has(TestFeatures.UseChunkIndex) ||
+          variant.has(TestFeatures.UseRepeatedSchemas) ||
           variant.has(TestFeatures.UseRepeatedChannelInfos) ||
           variant.has(TestFeatures.UseMetadataIndex) ||
           variant.has(TestFeatures.UseAttachmentIndex) ||

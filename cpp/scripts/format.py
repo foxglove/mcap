@@ -35,7 +35,7 @@ def main(dirs: List[str], fix: bool):
                         orig,
                         stdout,
                         fromfile=path,
-                        tofile=f"clang-format {path}",
+                        tofile=f"clang-format {path}",  # cspell:disable-line
                         lineterm="",
                     )
                     had_diff = False
@@ -58,7 +58,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Run clang-format and display changed files."
     )
-    parser.add_argument("dirs", help="List of directories to search", nargs="+")
+    parser.add_argument(
+        "dirs", help="List of directories to search", nargs="+")
     parser.add_argument("--fix", action="store_true")
     args = parser.parse_args()
     sys.exit(main(**vars(args)))

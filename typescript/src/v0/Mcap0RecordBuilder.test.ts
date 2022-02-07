@@ -34,7 +34,7 @@ describe("Mcap0RecordBuilder", () => {
     writer.writeFooter({
       summaryStart: 0n,
       summaryOffsetStart: 0n,
-      crc: 0,
+      summaryCrc: 0,
     });
 
     const buffer = new BufferBuilder();
@@ -48,29 +48,49 @@ describe("Mcap0RecordBuilder", () => {
     expect(writer.buffer).toEqual(buffer.buffer);
   });
 
-  it("writes channel info", () => {
+  it("writes schema", () => {
     const writer = new Mcap0RecordBuilder();
 
-    const written = writer.writeChannelInfo({
-      channelId: 1,
-      topicName: "/topic",
-      messageEncoding: "encoding",
-      schemaEncoding: "someformat",
-      schemaName: "schema name",
-      schema: "schema",
-      userData: [],
+    const written = writer.writeSchema({
+      id: 1,
+      encoding: "some format",
+      name: "schema name",
+      data: new TextEncoder().encode("schema"),
     });
 
     const buffer = new BufferBuilder();
     buffer
       .uint8(3) // opcode
-      .uint64(BigInt(67)) // record content byte length
+      .uint64(BigInt(42)) // record content byte length
+      .uint16(1)
+      .string("schema name")
+      .string("some format")
+      .uint32(new TextEncoder().encode("schema").byteLength)
+      .bytes(new TextEncoder().encode("schema"));
+
+    expect(writer.buffer).toEqual(buffer.buffer);
+    expect(written).toEqual(BigInt(buffer.length));
+  });
+
+  it("writes channel info", () => {
+    const writer = new Mcap0RecordBuilder();
+
+    const written = writer.writeChannelInfo({
+      id: 1,
+      topic: "/topic",
+      messageEncoding: "encoding",
+      schemaId: 1,
+      metadata: [],
+    });
+
+    const buffer = new BufferBuilder();
+    buffer
+      .uint8(4) // opcode
+      .uint64(BigInt(30)) // record content byte length
       .uint16(1)
       .string("/topic")
       .string("encoding")
-      .string("someformat")
-      .string("schema")
-      .string("schema name")
+      .uint16(1)
       .uint32(0); // user data length
 
     expect(writer.buffer).toEqual(buffer.buffer);
@@ -83,14 +103,14 @@ describe("Mcap0RecordBuilder", () => {
     writer.writeMessage({
       channelId: 1,
       publishTime: 3n,
-      recordTime: 5n,
+      logTime: 5n,
       sequence: 7,
-      messageData: new Uint8Array(),
+      data: new Uint8Array(),
     });
 
     const buffer = new BufferBuilder();
     buffer
-      .uint8(4) // opcode
+      .uint8(5) // opcode
       .uint64(BigInt(22)) // record content byte length
       .uint16(1)
       .uint32(7)
@@ -111,7 +131,7 @@ describe("Mcap0RecordBuilder", () => {
 
     const buffer = new BufferBuilder();
     buffer
-      .uint8(0x0b) // opcode
+      .uint8(0x0c) // opcode
       .uint64(BigInt(36)) // record content byte length
       .string("name")
       .uint32(24) // metadata byte length

@@ -1,7 +1,5 @@
 import { crc32 } from "@foxglove/crc";
-import { isEqual } from "lodash";
 
-import { TypedMcapRecords } from ".";
 import Reader from "./Reader";
 import { isKnownOpcode, MCAP0_MAGIC, Opcode } from "./constants";
 import { McapMagic, TypedMcapRecord } from "./types";
@@ -40,12 +38,10 @@ export function parseMagic(
 export function parseRecord({
   view,
   startOffset,
-  channelInfosById,
   validateCrcs,
 }: {
   view: DataView;
   startOffset: number;
-  channelInfosById: Map<number, TypedMcapRecords["ChannelInfo"]>;
   validateCrcs: boolean;
 }): { record: TypedMcapRecord; usedBytes: number } | { record?: undefined; usedBytes: 0 } {
   if (startOffset + /*opcode*/ 1 + /*record content length*/ 8 >= view.byteLength) {
@@ -95,8 +91,40 @@ export function parseRecord({
     case Opcode.FOOTER: {
       const summaryStart = reader.uint64();
       const summaryOffsetStart = reader.uint64();
-      const crc = reader.uint32();
-      const record: TypedMcapRecord = { type: "Footer", summaryStart, summaryOffsetStart, crc };
+      const summaryCrc = reader.uint32();
+      const record: TypedMcapRecord = {
+        type: "Footer",
+        summaryStart,
+        summaryOffsetStart,
+        summaryCrc,
+      };
+      return { record, usedBytes: recordEndOffset - startOffset };
+    }
+
+    case Opcode.SCHEMA: {
+      const id = reader.uint16();
+      const name = reader.string();
+      const encoding = reader.string();
+      const dataLen = reader.uint32();
+      if (reader.offset + dataLen > recordView.byteLength) {
+        throw new Error(`Schema data length ${dataLen} exceeds bounds of record`);
+      }
+      const data = new Uint8Array(
+        recordView.buffer.slice(
+          recordView.byteOffset + reader.offset,
+          recordView.byteOffset + reader.offset + dataLen,
+        ),
+      );
+      reader.offset += dataLen;
+
+      const record: TypedMcapRecord = {
+        type: "Schema",
+        id,
+        encoding,
+        name,
+        data,
+      };
+
       return { record, usedBytes: recordEndOffset - startOffset };
     }
 
@@ -104,49 +132,30 @@ export function parseRecord({
       const channelId = reader.uint16();
       const topicName = reader.string();
       const messageEncoding = reader.string();
-      const schemaEncoding = reader.string();
-      const schema = reader.string();
-      const schemaName = reader.string();
-      const userData = reader.keyValuePairs(
+      const schemaId = reader.uint16();
+      const metadata = reader.keyValuePairs(
         (r) => r.string(),
         (r) => r.string(),
       );
 
       const record: TypedMcapRecord = {
         type: "ChannelInfo",
-        channelId,
-        topicName,
+        id: channelId,
+        topic: topicName,
         messageEncoding,
-        schemaEncoding,
-        schemaName,
-        schema,
-        userData,
+        schemaId,
+        metadata,
       };
-      const existingInfo = channelInfosById.get(channelId);
-      if (existingInfo) {
-        if (!isEqual(existingInfo, record)) {
-          throw new Error(`differing channel infos for ${record.channelId}`);
-        }
-        return {
-          record: existingInfo,
-          usedBytes: recordEndOffset - startOffset,
-        };
-      } else {
-        channelInfosById.set(channelId, record);
-        return { record, usedBytes: recordEndOffset - startOffset };
-      }
+
+      return { record, usedBytes: recordEndOffset - startOffset };
     }
 
     case Opcode.MESSAGE: {
       const channelId = reader.uint16();
-      const channelInfo = channelInfosById.get(channelId);
-      if (!channelInfo) {
-        throw new Error(`Encountered message on channel ${channelId} without prior channel info`);
-      }
       const sequence = reader.uint32();
       const publishTime = reader.uint64();
-      const recordTime = reader.uint64();
-      const messageData = new Uint8Array(
+      const logTime = reader.uint64();
+      const data = new Uint8Array(
         recordView.buffer.slice(
           recordView.byteOffset + reader.offset,
           recordView.byteOffset + recordView.byteLength,
@@ -157,8 +166,8 @@ export function parseRecord({
         channelId,
         sequence,
         publishTime,
-        recordTime,
-        messageData,
+        logTime,
+        data,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
@@ -169,10 +178,14 @@ export function parseRecord({
       const uncompressedSize = reader.uint64();
       const uncompressedCrc = reader.uint32();
       const compression = reader.string();
+      const recordByteLength = Number(reader.uint64());
+      if (recordByteLength + reader.offset > recordView.byteLength) {
+        throw new Error("Chunk records length exceeds remaining record size");
+      }
       const records = new Uint8Array(
         recordView.buffer.slice(
           recordView.byteOffset + reader.offset,
-          recordView.byteOffset + recordView.byteLength,
+          recordView.byteOffset + reader.offset + recordByteLength,
         ),
       );
       const record: TypedMcapRecord = {
@@ -203,7 +216,7 @@ export function parseRecord({
     case Opcode.CHUNK_INDEX: {
       const startTime = reader.uint64();
       const endTime = reader.uint64();
-      const chunkStart = reader.uint64();
+      const chunkStartOffset = reader.uint64();
       const chunkLength = reader.uint64();
       const messageIndexOffsets = reader.map(
         (r) => r.uint16(),
@@ -217,7 +230,7 @@ export function parseRecord({
         type: "ChunkIndex",
         startTime,
         endTime,
-        chunkStart,
+        chunkStartOffset,
         chunkLength,
         messageIndexOffsets,
         messageIndexLength,
@@ -230,11 +243,14 @@ export function parseRecord({
     case Opcode.ATTACHMENT: {
       const name = reader.string();
       const createdAt = reader.uint64();
-      const recordTime = reader.uint64();
+      const logTime = reader.uint64();
       const contentType = reader.string();
       const dataLen = reader.uint64();
       if (BigInt(recordView.byteOffset + reader.offset) + dataLen > Number.MAX_SAFE_INTEGER) {
         throw new Error(`Attachment too large: ${dataLen}`);
+      }
+      if (reader.offset + Number(dataLen) + 4 /*crc*/ > recordView.byteLength) {
+        throw new Error(`Attachment data length ${dataLen} exceeds bounds of record`);
       }
       const data = new Uint8Array(
         recordView.buffer.slice(
@@ -258,28 +274,28 @@ export function parseRecord({
         type: "Attachment",
         name,
         createdAt,
-        recordTime,
+        logTime,
         contentType,
         data,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
     case Opcode.ATTACHMENT_INDEX: {
-      const attachmentOffset = reader.uint64();
-      const attachmentRecordLength = reader.uint64();
-      const recordTime = reader.uint64();
-      const attachmentSize = reader.uint64();
+      const offset = reader.uint64();
+      const length = reader.uint64();
+      const logTime = reader.uint64();
+      const dataSize = reader.uint64();
       const name = reader.string();
       const contentType = reader.string();
 
       const record: TypedMcapRecord = {
         type: "AttachmentIndex",
-        recordTime,
-        attachmentSize,
+        offset,
+        length,
+        logTime,
+        dataSize,
         name,
         contentType,
-        offset: attachmentOffset,
-        attachmentRecordLength,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }

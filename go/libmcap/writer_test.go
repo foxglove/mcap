@@ -87,7 +87,7 @@ func TestOutputDeterminism(t *testing.T) {
 	assert.Nil(t, w.Close())
 	t.Run("output hashes consistently", func(t *testing.T) {
 		hash := md5.Sum(buf.Bytes())
-		assert.Equal(t, "2565bf57aee807d7a0d2eed51f84d7f4", fmt.Sprintf("%x", hash))
+		assert.Equal(t, "e88a065b525c10d7d9d42f136c4475d1", fmt.Sprintf("%x", hash))
 	})
 }
 
@@ -116,7 +116,7 @@ func TestChunkedReadWrite(t *testing.T) {
 				SchemaName:      "foo",
 				Schema:          []byte{},
 				Metadata: map[string]string{
-					"callerid": "100",
+					"callerid": "100", // cspell:disable-line
 				},
 			})
 			assert.Nil(t, err)
@@ -161,6 +161,72 @@ func TestChunkedReadWrite(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIndexStructures(t *testing.T) {
+	buf := &bytes.Buffer{}
+	w, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   1024,
+		Compression: CompressionLZ4,
+	})
+	assert.Nil(t, err)
+	err = w.WriteHeader(&Header{
+		Profile: "ros1",
+	})
+	assert.Nil(t, err)
+	err = w.WriteChannelInfo(&ChannelInfo{
+		ChannelID:       1,
+		TopicName:       "/test",
+		MessageEncoding: "ros1",
+		SchemaName:      "foo",
+		Schema:          []byte{},
+		Metadata:        make(map[string]string),
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, w.WriteMessage(&Message{
+		ChannelID:   1,
+		Sequence:    uint32(1),
+		RecordTime:  uint64(1),
+		PublishTime: uint64(2),
+		Data:        []byte("Hello, world!"),
+	}))
+	assert.Nil(t, w.WriteAttachment(&Attachment{
+		Name:        "file.jpg",
+		RecordTime:  100,
+		ContentType: "image/jpeg",
+		Data:        []byte{0x01, 0x02, 0x03, 0x04},
+	}))
+	assert.Nil(t, w.Close())
+	t.Run("chunk indexes correct", func(t *testing.T) {
+		assert.Equal(t, 1, len(w.ChunkIndexes))
+		chunkIndex := w.ChunkIndexes[0]
+		assert.Equal(t, &ChunkIndex{
+			StartTime:        1,
+			EndTime:          1,
+			ChunkStartOffset: 96,
+			ChunkLength:      143,
+			MessageIndexOffsets: map[uint16]uint64{
+				1: 239,
+			},
+			MessageIndexLength: 31,
+			Compression:        "lz4",
+			CompressedSize:     99,
+			UncompressedSize:   91,
+		}, chunkIndex)
+	})
+	t.Run("attachment indexes correct", func(t *testing.T) {
+		assert.Equal(t, 1, len(w.AttachmentIndexes))
+		attachmentIndex := w.AttachmentIndexes[0]
+		assert.Equal(t, &AttachmentIndex{
+			Offset:      29,
+			Length:      67,
+			RecordTime:  100,
+			DataSize:    4,
+			Name:        "file.jpg",
+			ContentType: "image/jpeg",
+		}, attachmentIndex)
+	})
 }
 
 func TestStatistics(t *testing.T) {
@@ -223,7 +289,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		SchemaName:      "foo",
 		Schema:          []byte{},
 		Metadata: map[string]string{
-			"callerid": "100",
+			"callerid": "100", // cspell:disable-line
 		},
 	})
 	assert.Nil(t, err)
@@ -277,4 +343,24 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		_ = tok.bytes()
 		assert.Equal(t, expected, tok.TokenType, fmt.Sprintf("want %s got %s", Token{expected, 0, nil}, tok))
 	}
+}
+
+func TestMakePrefixedMap(t *testing.T) {
+	t.Run("output is deterministic", func(t *testing.T) {
+		bytes := makePrefixedMap(map[string]string{
+			"foo": "bar",
+			"bar": "foo",
+		})
+		assert.Equal(t, flatten(
+			encodedUint32(2*4+2*4+4*3), // map length
+			encodedUint32(3),
+			[]byte("bar"),
+			encodedUint32(3),
+			[]byte("foo"),
+			encodedUint32(3),
+			[]byte("foo"),
+			encodedUint32(3),
+			[]byte("bar"),
+		), bytes)
+	})
 }

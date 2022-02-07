@@ -9,39 +9,40 @@ for details:
 
     Usage:
       mcap [command]
-    
+
     Available Commands:
       cat         Cat the messages in an mcap file to stdout
       completion  Generate the autocompletion script for the specified shell
       convert     Convert a bag file to an mcap file
       help        Help about any command
       info        Report statistics about an mcap file
-    
+
     Flags:
           --config string   config file (default is $HOME/.mcap.yaml)
       -h, --help            help for mcap
       -t, --toggle          Help message for toggle
-    
+
     Use "mcap [command] --help" for more information about a command.
-
-
 
 Examples:
 
-
 Convert a bag file to mcap:
+
+<!-- cspell: disable -->
 
     [~/work/mcap/go/mcap] (task/mcap-client) $ mcap convert ../../testdata/bags/demo.bag demo.mcap
 
+<!-- cspell: enable -->
+
 Report summary statistics on an mcap file:
 
-    [~/work/mcap/go/mcap] (task/mcap-client) $ mcap info demo.mcap 
+    [~/work/mcap/go/mcap] (task/mcap-client) $ mcap info demo.mcap
     duration: 7.780758504s
     start: 2017-03-21T19:26:20.103843113-07:00
     end: 2017-03-21T19:26:27.884601617-07:00
     messages: 1606
     chunks:
-    	lz4: [27/27 chunks] (44.32%) 
+    	lz4: [27/27 chunks] (44.32%)
     channels
     	(0) /diagnostics: 52 msgs
     	(1) /image_color/compressed: 234 msgs

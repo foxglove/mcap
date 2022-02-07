@@ -2,7 +2,16 @@ import { crc32 } from "@foxglove/crc";
 
 import Mcap0IndexedReader from "./Mcap0IndexedReader";
 import { MCAP0_MAGIC, Opcode } from "./constants";
-import { record, uint64LE, uint32LE, string, keyValues, collect, uint16LE } from "./testUtils";
+import {
+  record,
+  uint64LE,
+  uint32LE,
+  string,
+  keyValues,
+  collect,
+  uint16LE,
+  uint32PrefixedBytes,
+} from "./testUtils";
 import { TypedMcapRecords } from "./types";
 
 function makeReadable(data: Uint8Array) {
@@ -109,7 +118,7 @@ describe("Mcap0IndexedReader", () => {
     );
     const readable = makeReadable(new Uint8Array(data));
     await expect(Mcap0IndexedReader.Initialize({ readable })).rejects.toThrow(
-      "Incorrect index CRC 2908647229 (expected 163128923)",
+      "Incorrect index CRC 491514153 (expected 163128923)",
     );
   });
 
@@ -123,13 +132,17 @@ describe("Mcap0IndexedReader", () => {
     ];
     const summaryStart = data.length;
     data.push(
+      ...record(Opcode.SCHEMA, [
+        ...uint16LE(1), // schema id
+        ...string("some data"), // schema name
+        ...string("json"), // schema format
+        ...uint32PrefixedBytes(new TextEncoder().encode("stuff")), // schema
+      ]),
       ...record(Opcode.CHANNEL_INFO, [
         ...uint16LE(42), // channel id
-        ...string("mytopic"), // topic
+        ...string("myTopic"), // topic
         ...string("utf12"), // encoding
-        ...string("json"), // schema format
-        ...string("stuff"), // schema
-        ...string("some data"), // schema name
+        ...uint16LE(1),
         ...keyValues(string, string, [["foo", "bar"]]), // user data
       ]),
       ...record(Opcode.FOOTER, [
@@ -148,13 +161,11 @@ describe("Mcap0IndexedReader", () => {
           42,
           {
             type: "ChannelInfo",
-            channelId: 42,
-            schemaEncoding: "json",
-            topicName: "mytopic",
+            id: 42,
+            schemaId: 1,
+            topic: "myTopic",
             messageEncoding: "utf12",
-            schemaName: "some data",
-            schema: "stuff",
-            userData: [["foo", "bar"]],
+            metadata: [["foo", "bar"]],
           },
         ],
       ]),
@@ -168,24 +179,24 @@ describe("Mcap0IndexedReader", () => {
       channelId: 42,
       sequence: 1,
       publishTime: 0n,
-      recordTime: 10n,
-      messageData: new Uint8Array(),
+      logTime: 10n,
+      data: new Uint8Array(),
     };
     const message2: TypedMcapRecords["Message"] = {
       type: "Message",
       channelId: 42,
       sequence: 2,
       publishTime: 1n,
-      recordTime: 11n,
-      messageData: new Uint8Array(),
+      logTime: 11n,
+      data: new Uint8Array(),
     };
     const message3: TypedMcapRecords["Message"] = {
       type: "Message",
       channelId: 42,
       sequence: 3,
       publishTime: 2n,
-      recordTime: 12n,
-      messageData: new Uint8Array(),
+      logTime: 12n,
+      data: new Uint8Array(),
     };
     it.each([
       { startTime: undefined, endTime: undefined, expected: [message1, message2, message3] },
@@ -196,34 +207,38 @@ describe("Mcap0IndexedReader", () => {
     ])(
       "fetches chunk data and reads requested messages between $startTime and $endTime",
       async ({ startTime, endTime, expected }) => {
+        const schema = record(Opcode.SCHEMA, [
+          ...uint16LE(1), // schema id
+          ...string("some data"), // schema name
+          ...string("json"), // schema format
+          ...uint32PrefixedBytes(new TextEncoder().encode("stuff")), // schema
+        ]);
         const channelInfo = record(Opcode.CHANNEL_INFO, [
           ...uint16LE(42), // channel id
-          ...string("mytopic"), // topic
+          ...string("myTopic"), // topic
           ...string("utf12"), // message encoding
-          ...string("json"), // schema format
-          ...string("stuff"), // schema
-          ...string("some data"), // schema name
+          ...uint16LE(1), // schema id
           ...keyValues(string, string, [["foo", "bar"]]), // user data
         ]);
         const message1Data = record(Opcode.MESSAGE, [
-          ...uint16LE(message1.channelId), // channel id
-          ...uint32LE(message1.sequence), // sequence
-          ...uint64LE(message1.publishTime), // publish time
-          ...uint64LE(message1.recordTime), // record time
+          ...uint16LE(message1.channelId),
+          ...uint32LE(message1.sequence),
+          ...uint64LE(message1.publishTime),
+          ...uint64LE(message1.logTime),
         ]);
         const message2Data = record(Opcode.MESSAGE, [
-          ...uint16LE(message2.channelId), // channel id
-          ...uint32LE(message2.sequence), // sequence
-          ...uint64LE(message2.publishTime), // publish time
-          ...uint64LE(message2.recordTime), // record time
+          ...uint16LE(message2.channelId),
+          ...uint32LE(message2.sequence),
+          ...uint64LE(message2.publishTime),
+          ...uint64LE(message2.logTime),
         ]);
         const message3Data = record(Opcode.MESSAGE, [
-          ...uint16LE(message3.channelId), // channel id
-          ...uint32LE(message3.sequence), // sequence
-          ...uint64LE(message3.publishTime), // publish time
-          ...uint64LE(message3.recordTime), // record time
+          ...uint16LE(message3.channelId),
+          ...uint32LE(message3.sequence),
+          ...uint64LE(message3.publishTime),
+          ...uint64LE(message3.logTime),
         ]);
-        const chunkContents = [...channelInfo];
+        const chunkContents = [...schema, ...channelInfo];
         const message1Offset = BigInt(chunkContents.length);
         chunkContents.push(...message1Data);
         const message2Offset = BigInt(chunkContents.length);
@@ -246,6 +261,7 @@ describe("Mcap0IndexedReader", () => {
             ...uint64LE(0n), // decompressed size
             ...uint32LE(crc32(new Uint8Array(chunkContents))), // decompressed crc32
             ...string(""), // compression
+            ...uint64LE(BigInt(chunkContents.length)),
             ...chunkContents,
           ]),
         );
@@ -254,9 +270,9 @@ describe("Mcap0IndexedReader", () => {
           ...record(Opcode.MESSAGE_INDEX, [
             ...uint16LE(42), // channel id
             ...keyValues(uint64LE, uint64LE, [
-              [message1.recordTime, message1Offset],
-              [message2.recordTime, message2Offset],
-              [message3.recordTime, message3Offset],
+              [message1.logTime, message1Offset],
+              [message2.logTime, message2Offset],
+              [message3.logTime, message3Offset],
             ]), // records
           ]),
         );
@@ -265,8 +281,8 @@ describe("Mcap0IndexedReader", () => {
         data.push(
           ...channelInfo,
           ...record(Opcode.CHUNK_INDEX, [
-            ...uint64LE(message1.recordTime), // start time
-            ...uint64LE(message3.recordTime), // end time
+            ...uint64LE(message1.logTime), // start time
+            ...uint64LE(message3.logTime), // end time
             ...uint64LE(chunkOffset), // offset
             ...uint64LE(0n), // chunk length
             ...keyValues(uint16LE, uint64LE, [[42, messageIndexOffset]]), // message index offsets
@@ -365,7 +381,7 @@ describe("Mcap0IndexedReader", () => {
       shouldThrow: true,
     },
   ])(
-    "requires message index offsets to be in order of recordTime",
+    "requires message index offsets to be in order of log time",
     async ({ records, shouldThrow }) => {
       const data = [
         ...MCAP0_MAGIC,
@@ -382,6 +398,7 @@ describe("Mcap0IndexedReader", () => {
           ...uint64LE(0n), // decompressed size
           ...uint32LE(crc32(new Uint8Array([]))), // decompressed crc32
           ...string(""), // compression
+          ...uint64LE(0n), // chunk data size
         ]),
       );
       const messageIndexOffset = BigInt(data.length);
@@ -418,7 +435,7 @@ describe("Mcap0IndexedReader", () => {
       if (shouldThrow) {
         // eslint-disable-next-line jest/no-conditional-expect
         await expect(collect(reader.readMessages())).rejects.toThrow(
-          /Message index entries for channel 42 .+ must be sorted by recordTime/,
+          /Message index entries for channel 42 .+ must be sorted by log time/,
         );
       } else {
         // Still fails because messages are not actually present in the chunk

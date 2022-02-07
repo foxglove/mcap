@@ -1,9 +1,9 @@
-Header profile="" library=""
-Attachment name=myfile created_at=1 log_time=2 content_type=application/octet-stream data=<010203>
-Statistics message_count=0 channel_count=0 attachment_count=1 chunk_count=0 channel_message_counts={}
-AttachmentIndex offset=25 length=78 log_time=2 data_size=3 name=myfile content_type=application/octet-stream
-SummaryOffset group_opcode=12 group_start=149 group_length=0
-SummaryOffset group_opcode=10 group_start=116 group_length=33
-SummaryOffset group_opcode=9 group_start=149 group_length=79
-SummaryOffset group_opcode=7 group_start=228 group_length=0
-Footer summary_start=116 summary_offset_start=228
+Header library="" profile=""
+Attachment content_type=application/octet-stream created_at=1 data=<010203> log_time=2 name=myFile
+Statistics attachment_count=1 channel_count=0 channel_message_counts={} chunk_count=0 message_count=0
+AttachmentIndex content_type=application/octet-stream data_size=3 length=78 log_time=2 name=myFile offset=25
+SummaryOffset group_length=0 group_opcode=13 group_start=149
+SummaryOffset group_length=33 group_opcode=11 group_start=116
+SummaryOffset group_length=79 group_opcode=10 group_start=149
+SummaryOffset group_length=0 group_opcode=8 group_start=228
+Footer summary_crc=0 summary_offset_start=228 summary_start=116

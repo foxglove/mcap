@@ -2,6 +2,7 @@ package libmcap
 
 import (
 	"bytes"
+	"encoding/binary"
 	"hash/crc32"
 	"io"
 	"testing"
@@ -10,6 +11,12 @@ import (
 	"github.com/pierrec/lz4/v4"
 	"github.com/stretchr/testify/assert"
 )
+
+func encodedUint32(x uint32) []byte {
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(buf, x)
+	return buf
+}
 
 func flatten(slices ...[]byte) []byte {
 	var flattened []byte
@@ -80,7 +87,8 @@ func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byt
 	uncompressedLen := len(data)
 	msglen := uint64(8 + 8 + 8 + 4 + 4 + compressionLen + compressedLen)
 	record := make([]byte, msglen+9)
-	offset := putByte(record, byte(OpChunk))
+	offset, err := putByte(record, byte(OpChunk))
+	assert.Nil(t, err)
 	offset += putUint64(record[offset:], msglen)
 
 	offset += putUint64(record[offset:], 0)   // start
