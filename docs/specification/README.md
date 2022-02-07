@@ -53,13 +53,13 @@ An MCAP file must begin and end with the following [magic bytes](https://en.wiki
 
 ### Header
 
-The first record after the leading magic bytes is the [Header](#header) record.
+The first record after the leading magic bytes is the [Header](#header-op0x01) record.
 
     <0x01><record content length><record>
 
 ### Footer
 
-The last record before the trailing magic bytes is the [Footer](#footer) record.
+The last record before the trailing magic bytes is the [Footer](#footer-op0x02) record.
 
     <0x02><record content length><record>
 
