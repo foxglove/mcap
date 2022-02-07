@@ -21,14 +21,17 @@ export function uint64LE(n: bigint): Uint8Array {
 }
 
 export function string(str: string): Uint8Array {
-  const encoded = new TextEncoder().encode(str);
-  const result = new Uint8Array(4 + encoded.length);
-  new DataView(result.buffer).setUint32(0, encoded.length, true);
-  result.set(encoded, 4);
+  return uint32PrefixedBytes(new TextEncoder().encode(str));
+}
+
+export function uint32PrefixedBytes(data: Uint8Array): Uint8Array {
+  const result = new Uint8Array(4 + data.length);
+  new DataView(result.buffer).setUint32(0, data.length, true);
+  result.set(data, 4);
   return result;
 }
 
-export function prefixedBytes(data: Uint8Array): Uint8Array {
+export function uint64PrefixedBytes(data: Uint8Array): Uint8Array {
   const result = new Uint8Array(8 + data.length);
   new DataView(result.buffer).setBigUint64(0, BigInt(data.length), true);
   result.set(data, 8);

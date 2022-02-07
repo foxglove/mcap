@@ -11,7 +11,7 @@ import {
   uint16LE,
   keyValues,
   crcSuffix,
-  prefixedBytes,
+  uint64PrefixedBytes,
 } from "./testUtils";
 
 describe("Mcap0StreamReader", () => {
@@ -272,7 +272,7 @@ describe("Mcap0StreamReader", () => {
           ...uint16LE(42), // id
           ...string("name"), // name
           ...string("encoding"), // encoding
-          ...uint64LE(3n), // length prefix
+          ...uint32LE(3), // length prefix
           10,
           11,
         ]),
@@ -521,7 +521,7 @@ describe("Mcap0StreamReader", () => {
             ...uint64LE(1n), // created at
             ...uint64LE(2n), // log time
             ...string("text/plain"), // content type
-            ...prefixedBytes(new TextEncoder().encode("hello")), // data
+            ...uint64PrefixedBytes(new TextEncoder().encode("hello")), // data
           ]),
         ),
         ...record(Opcode.FOOTER, [

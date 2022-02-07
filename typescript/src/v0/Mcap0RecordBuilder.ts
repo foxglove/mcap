@@ -94,7 +94,7 @@ export class Mcap0RecordBuilder {
       .uint16(schema.id)
       .string(schema.name)
       .string(schema.encoding)
-      .uint64(BigInt(schema.data.byteLength))
+      .uint32(schema.data.byteLength)
       .bytes(schema.data);
 
     if (this.options?.padRecords === true) {

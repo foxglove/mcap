@@ -61,11 +61,11 @@ describe("Mcap0RecordBuilder", () => {
     const buffer = new BufferBuilder();
     buffer
       .uint8(3) // opcode
-      .uint64(BigInt(46)) // record content byte length
+      .uint64(BigInt(42)) // record content byte length
       .uint16(1)
       .string("schema name")
       .string("some format")
-      .uint64(BigInt(new TextEncoder().encode("schema").byteLength))
+      .uint32(new TextEncoder().encode("schema").byteLength)
       .bytes(new TextEncoder().encode("schema"));
 
     expect(writer.buffer).toEqual(buffer.buffer);

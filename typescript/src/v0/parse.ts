@@ -105,20 +105,17 @@ export function parseRecord({
       const id = reader.uint16();
       const name = reader.string();
       const encoding = reader.string();
-      const dataLen = reader.uint64();
-      if (BigInt(recordView.byteOffset + reader.offset) + dataLen > Number.MAX_SAFE_INTEGER) {
-        throw new Error(`Schema data too large: ${dataLen}`);
-      }
-      if (reader.offset + Number(dataLen) > recordView.byteLength) {
+      const dataLen = reader.uint32();
+      if (reader.offset + dataLen > recordView.byteLength) {
         throw new Error(`Schema data length ${dataLen} exceeds bounds of record`);
       }
       const data = new Uint8Array(
         recordView.buffer.slice(
           recordView.byteOffset + reader.offset,
-          recordView.byteOffset + reader.offset + Number(dataLen),
+          recordView.byteOffset + reader.offset + dataLen,
         ),
       );
-      reader.offset += Number(dataLen);
+      reader.offset += dataLen;
 
       const record: TypedMcapRecord = {
         type: "Schema",

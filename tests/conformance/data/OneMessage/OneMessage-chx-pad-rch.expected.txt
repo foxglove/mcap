@@ -1,6 +1,6 @@
 Header library="" profile=""
 Schema data=<040506> encoding=c id=1 name=Example
 ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema_id=1 topic=example
-Message channel_id=1 log_time=2 message_data=<010203> publish_time=1 sequence=10
+Message channel_id=1 data=<010203> log_time=2 publish_time=1 sequence=10
 ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema_id=1 topic=example
-Footer summary_crc=0 summary_offset_start=0 summary_start=169
+Footer summary_crc=0 summary_offset_start=0 summary_start=165

@@ -10,7 +10,7 @@ import {
   keyValues,
   collect,
   uint16LE,
-  prefixedBytes,
+  uint32PrefixedBytes,
 } from "./testUtils";
 import { TypedMcapRecords } from "./types";
 
@@ -136,7 +136,7 @@ describe("Mcap0IndexedReader", () => {
         ...uint16LE(1), // schema id
         ...string("some data"), // schema name
         ...string("json"), // schema format
-        ...prefixedBytes(new TextEncoder().encode("stuff")), // schema
+        ...uint32PrefixedBytes(new TextEncoder().encode("stuff")), // schema
       ]),
       ...record(Opcode.CHANNEL_INFO, [
         ...uint16LE(42), // channel id
@@ -211,7 +211,7 @@ describe("Mcap0IndexedReader", () => {
           ...uint16LE(1), // schema id
           ...string("some data"), // schema name
           ...string("json"), // schema format
-          ...prefixedBytes(new TextEncoder().encode("stuff")), // schema
+          ...uint32PrefixedBytes(new TextEncoder().encode("stuff")), // schema
         ]);
         const channelInfo = record(Opcode.CHANNEL_INFO, [
           ...uint16LE(42), // channel id
