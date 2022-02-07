@@ -11,6 +11,7 @@ export default class Mcap0IndexedReader {
   readonly chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
   readonly attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
   readonly channelInfosById: ReadonlyMap<number, TypedMcapRecords["ChannelInfo"]>;
+  readonly schemasById: ReadonlyMap<number, TypedMcapRecords["Schema"]>;
   readonly statistics: TypedMcapRecords["Statistics"] | undefined;
 
   private readable: IReadable;
@@ -26,13 +27,15 @@ export default class Mcap0IndexedReader {
     statistics,
     decompressHandlers,
     channelInfosById,
+    schemasById,
   }: {
     readable: IReadable;
     chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
     attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
     statistics: TypedMcapRecords["Statistics"] | undefined;
     decompressHandlers?: DecompressHandlers;
-    channelInfosById: Map<number, TypedMcapRecords["ChannelInfo"]>;
+    channelInfosById: ReadonlyMap<number, TypedMcapRecords["ChannelInfo"]>;
+    schemasById: ReadonlyMap<number, TypedMcapRecords["Schema"]>;
   }) {
     this.readable = readable;
     this.chunkIndexes = chunkIndexes;
@@ -40,6 +43,7 @@ export default class Mcap0IndexedReader {
     this.statistics = statistics;
     this.decompressHandlers = decompressHandlers;
     this.channelInfosById = channelInfosById;
+    this.schemasById = schemasById;
 
     for (const chunk of chunkIndexes) {
       if (this.startTime == undefined || chunk.startTime < this.startTime) {
@@ -98,6 +102,7 @@ export default class Mcap0IndexedReader {
     void parseMagic(footerAndMagicView, footerAndMagicView.byteLength - MCAP0_MAGIC.length);
 
     const channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
+    const schemasById = new Map<number, TypedMcapRecords["Schema"]>();
 
     const footer = parseRecord({
       view: footerAndMagicView,
@@ -153,17 +158,13 @@ export default class Mcap0IndexedReader {
     let offset = 0;
     for (
       let result;
-      (result = parseRecord({
-        view: indexView,
-        startOffset: offset,
-        validateCrcs: true,
-      })),
+      (result = parseRecord({ view: indexView, startOffset: offset, validateCrcs: true })),
         result.record;
       offset += result.usedBytes
     ) {
       switch (result.record.type) {
         case "Schema":
-          // duplicates
+          schemasById.set(result.record.id, result.record);
           break;
         case "ChannelInfo":
           channelInfosById.set(result.record.id, result.record);
@@ -197,6 +198,7 @@ export default class Mcap0IndexedReader {
       statistics,
       decompressHandlers,
       channelInfosById,
+      schemasById,
     });
   }
 
