@@ -1,20 +1,35 @@
 import struct
 import zlib
 from io import BufferedReader, BytesIO, RawIOBase
-from typing import Iterator, Optional, Tuple, Union
-from xmlrpc.client import Boolean
+from typing import Iterator, List, Optional, Tuple, Union
 
 import lz4.frame  # type: ignore
 
-from .DataStream import ReadDataStream
-from .Exceptions import McapError
-from .Opcode import Opcode
-from .Records import *
+from .data_stream import ReadDataStream
+from .exceptions import McapError
+from .opcode import Opcode
+from .records import (
+    Attachment,
+    AttachmentIndex,
+    ChannelInfo,
+    Chunk,
+    ChunkIndex,
+    DataEnd,
+    Footer,
+    Header,
+    McapRecord,
+    Message,
+    MessageIndex,
+    MetadataIndex,
+    Schema,
+    Statistics,
+    SummaryOffset,
+)
 
 
-def breakup_chunk(chunk: Chunk) -> list[McapRecord]:
+def breakup_chunk(chunk: Chunk) -> List[McapRecord]:
     stream, stream_length = get_chunk_data_stream(chunk)
-    records: list[McapRecord] = []
+    records: List[McapRecord] = []
     while stream.count < stream_length:
         opcode = stream.read1()
         length = stream.read8()
@@ -44,7 +59,7 @@ def get_chunk_data_stream(chunk: Chunk) -> Tuple[ReadDataStream, int]:
         return ReadDataStream(BytesIO(chunk.data)), len(chunk.data)
 
 
-def read_magic(stream: ReadDataStream) -> Boolean:
+def read_magic(stream: ReadDataStream) -> bool:
     magic = struct.unpack("<8B", stream.read(8))
     if magic != (137, 77, 67, 65, 80, 48, 13, 10):
         raise McapError("Not valid mcap data.")

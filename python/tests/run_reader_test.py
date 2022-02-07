@@ -1,7 +1,7 @@
 import sys
 
-from mcap0.StreamReader import StreamReader
-from mcap0.Records import DataEnd
+from mcap.mcap0.stream_reader import StreamReader
+from mcap.mcap0.records import DataEnd
 
 
 def main():

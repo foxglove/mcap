@@ -2,8 +2,8 @@ import difflib
 import unittest
 from pathlib import Path
 
-from mcap0.StreamReader import StreamReader
-from mcap0.Records import DataEnd
+from mcap.mcap0.stream_reader import StreamReader
+from mcap.mcap0.records import DataEnd
 
 
 class McapStreamingReaderConformanceTestCase(unittest.TestCase):
@@ -11,7 +11,7 @@ class McapStreamingReaderConformanceTestCase(unittest.TestCase):
         path = Path("../tests/conformance/data/")
         self.files = list(path.rglob("*.mcap"))
 
-    def test_conformances(self):
+    def test_conformance(self):
         for file in self.files:
             print(file.name)
             expected_path = file.with_suffix(".expected.txt")

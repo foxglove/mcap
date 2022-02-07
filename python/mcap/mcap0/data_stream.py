@@ -1,8 +1,8 @@
 import struct
 from io import BufferedIOBase, BytesIO
 
-from .Exceptions import EndOfFile
-from .Opcode import Opcode
+from .exceptions import EndOfFile
+from .opcode import Opcode
 
 
 class ReadDataStream:

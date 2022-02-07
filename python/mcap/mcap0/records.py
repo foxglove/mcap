@@ -1,13 +1,13 @@
 from dataclasses import dataclass, field
-from typing import Tuple, Union
+from typing import Dict, List, Tuple, Union
 
-from .DataStream import ReadDataStream, WriteDataStream
-from .Opcode import Opcode
+from .data_stream import ReadDataStream, WriteDataStream
+from .opcode import Opcode
 
-ValueType = Union[bytes, str, int, list[Tuple[str, str]], dict[str, str]]
+ValueType = Union[bytes, str, int, List[Tuple[str, str]], Dict[str, str]]
 
 
-def stringify_key_value_list(list: list[Tuple[str, str]]) -> str:
+def stringify_key_value_list(list: List[Tuple[str, str]]) -> str:
     items = sorted(list, key=lambda kv: kv[0])
     return "{" + ",".join([f"{k}={v}" for k, v in items]) + "}"
 
@@ -107,7 +107,7 @@ class ChannelInfo(McapRecord):
     id: int
     topic: str
     message_encoding: str
-    metadata: dict[str, str]
+    metadata: Dict[str, str]
     schema_id: int
 
     def write(self, stream: WriteDataStream):
@@ -129,7 +129,7 @@ class ChannelInfo(McapRecord):
         schema_id = stream.read2()
         metadata_length = stream.read4()
         metadata_end = stream.count + metadata_length
-        metadata: dict[str, str] = {}
+        metadata: Dict[str, str] = {}
         while stream.count < metadata_end:
             key = stream.read_prefixed_string()
             value = stream.read_prefixed_string()
@@ -180,7 +180,7 @@ class ChunkIndex(McapRecord):
     compressed_size: int
     end_time: int
     message_index_length: int
-    message_index_offsets: dict[int, int]
+    message_index_offsets: Dict[int, int]
     start_time: int
     uncompressed_size: int
 
@@ -191,7 +191,7 @@ class ChunkIndex(McapRecord):
         chunk_start_offset = stream.read8()
         chunk_length = stream.read8()
         message_index_offsets_length = stream.read4()
-        message_index_offsets: dict[int, int] = {}
+        message_index_offsets: Dict[int, int] = {}
         offsets_end = stream.count + message_index_offsets_length
         while stream.count < offsets_end:
             channel_id = stream.read2()
@@ -303,7 +303,7 @@ class Message(McapRecord):
 @dataclass
 class MessageIndex(McapRecord):
     channel_id: int
-    records: list[Tuple[int, int]]
+    records: List[Tuple[int, int]]
 
     @staticmethod
     def read(stream: ReadDataStream):
@@ -362,18 +362,18 @@ class Schema(McapRecord):
 class Statistics(McapRecord):
     attachment_count: int
     channel_count: int
-    channel_message_counts: dict[int, int]
+    channel_message_counts: Dict[int, int]
     chunk_count: int
     message_count: int
 
     @staticmethod
     def read(stream: ReadDataStream):
-        messaage_count = stream.read8()
+        message_count = stream.read8()
         channel_count = stream.read4()
         attachment_count = stream.read4()
         chunk_count = stream.read4()
         channel_message_counts_length = stream.read4()
-        message_counts: dict[int, int] = {}
+        message_counts: Dict[int, int] = {}
         counts_end = stream.count + channel_message_counts_length
         while stream.count < counts_end:
             channel_id = stream.read2()
@@ -384,7 +384,7 @@ class Statistics(McapRecord):
             channel_count=channel_count,
             channel_message_counts=message_counts,
             chunk_count=chunk_count,
-            message_count=messaage_count,
+            message_count=message_count,
         )
 
 

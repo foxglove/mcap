@@ -7,9 +7,9 @@ import { ITestRunner } from ".";
 export default class PythonStreamedTestRunner implements ITestRunner {
   name = "py-stream";
   async run(filePath: string): Promise<string[]> {
-    const { stdout } = await promisify(exec)(
-      `python3 ../../python/tests/run_reader_test.py ${filePath}`,
-    );
+    const { stdout } = await promisify(exec)(`python3 tests/run_reader_test.py ${filePath}`, {
+      cwd: "../../python",
+    });
     return stdout.trim().split("\n");
   }
 

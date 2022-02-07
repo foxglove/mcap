@@ -1,5 +1,8 @@
-TODO
+## About
+
+These are preliminary python bindings for the mcap file format.
 
 ## Testing
 
-`python3 -m unittest discover`
+`pipenv install`
+`pipenv run pytest`
