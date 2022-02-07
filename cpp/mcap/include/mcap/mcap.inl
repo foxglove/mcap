@@ -33,42 +33,42 @@ const std::string& CompressionString(Compression compression) {
   }
 }
 
-uint16_t ReadUint16(const std::byte* data) {
+uint16_t ParseUint16(const std::byte* data) {
   return uint16_t(data[0]) | (uint16_t(data[1]) << 8);
 }
 
-uint32_t ReadUint32(const std::byte* data) {
+uint32_t ParseUint32(const std::byte* data) {
   return uint32_t(data[0]) | (uint32_t(data[1]) << 8) | (uint32_t(data[2]) << 16) |
          (uint32_t(data[3]) << 24);
 }
 
-mcap::Status ReadUint32(const std::byte* data, uint64_t maxSize, uint32_t* output) {
+mcap::Status ParseUint32(const std::byte* data, uint64_t maxSize, uint32_t* output) {
   if (maxSize < 4) {
     const auto msg = internal::StrFormat("cannot read uint32 from {} bytes", maxSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
-  *output = ReadUint32(data);
+  *output = ParseUint32(data);
   return StatusCode::Success;
 }
 
-uint32_t ReadUint64(const std::byte* data) {
+uint32_t ParseUint64(const std::byte* data) {
   return uint64_t(data[0]) | (uint64_t(data[1]) << 8) | (uint64_t(data[2]) << 16) |
          (uint64_t(data[3]) << 24) | (uint64_t(data[4]) << 32) | (uint64_t(data[5]) << 40) |
          (uint64_t(data[6]) << 48) | (uint64_t(data[7]) << 56);
 }
 
-mcap::Status ReadUint64(const std::byte* data, uint64_t maxSize, uint64_t* output) {
+mcap::Status ParseUint64(const std::byte* data, uint64_t maxSize, uint64_t* output) {
   if (maxSize < 8) {
     const auto msg = internal::StrFormat("cannot read uint64 from {} bytes", maxSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
-  *output = ReadUint64(data);
+  *output = ParseUint64(data);
   return StatusCode::Success;
 }
 
-mcap::Status ReadString(const std::byte* data, uint64_t maxSize, std::string_view* output) {
+mcap::Status ParseString(const std::byte* data, uint64_t maxSize, std::string_view* output) {
   uint32_t size;
-  if (auto status = ReadUint32(data, maxSize, &size); !status.ok()) {
+  if (auto status = ParseUint32(data, maxSize, &size); !status.ok()) {
     return status;
   }
   if (uint64_t(size) > (maxSize - 4)) {
@@ -80,9 +80,9 @@ mcap::Status ReadString(const std::byte* data, uint64_t maxSize, std::string_vie
   return StatusCode::Success;
 }
 
-mcap::Status ReadString(const std::byte* data, uint64_t maxSize, std::string* output) {
+mcap::Status ParseString(const std::byte* data, uint64_t maxSize, std::string* output) {
   uint32_t size;
-  if (auto status = ReadUint32(data, maxSize, &size); !status.ok()) {
+  if (auto status = ParseUint32(data, maxSize, &size); !status.ok()) {
     return status;
   }
   if (uint64_t(size) > (maxSize - 4)) {
@@ -94,9 +94,9 @@ mcap::Status ReadString(const std::byte* data, uint64_t maxSize, std::string* ou
   return StatusCode::Success;
 }
 
-mcap::Status ReadByteArray(const std::byte* data, uint64_t maxSize, mcap::ByteArray* output) {
+mcap::Status ParseByteArray(const std::byte* data, uint64_t maxSize, mcap::ByteArray* output) {
   uint32_t size;
-  if (auto status = ReadUint32(data, maxSize, &size); !status.ok()) {
+  if (auto status = ParseUint32(data, maxSize, &size); !status.ok()) {
     return status;
   }
   if (uint64_t(size) > (maxSize - 4)) {
@@ -109,9 +109,9 @@ mcap::Status ReadByteArray(const std::byte* data, uint64_t maxSize, mcap::ByteAr
   return StatusCode::Success;
 }
 
-mcap::Status ReadKeyValueMap(const std::byte* data, uint64_t maxSize, mcap::KeyValueMap* output) {
+mcap::Status ParseKeyValueMap(const std::byte* data, uint64_t maxSize, mcap::KeyValueMap* output) {
   uint32_t sizeInBytes;
-  if (auto status = ReadUint32(data, maxSize, &sizeInBytes); !status.ok()) {
+  if (auto status = ParseUint32(data, maxSize, &sizeInBytes); !status.ok()) {
     return status;
   }
   if (sizeInBytes > (maxSize - 4)) {
@@ -123,12 +123,12 @@ mcap::Status ReadKeyValueMap(const std::byte* data, uint64_t maxSize, mcap::KeyV
   uint64_t pos = 4;
   while (pos < sizeInBytes) {
     std::string_view key;
-    if (auto status = ReadString(data + pos, sizeInBytes - pos, &key); !status.ok()) {
+    if (auto status = ParseString(data + pos, sizeInBytes - pos, &key); !status.ok()) {
       return status;
     }
     pos += 4 + key.size();
     std::string_view value;
-    if (auto status = ReadString(data + pos, sizeInBytes - pos, &value); !status.ok()) {
+    if (auto status = ParseString(data + pos, sizeInBytes - pos, &value); !status.ok()) {
       return status;
     }
     pos += 4 + value.size();
@@ -571,14 +571,14 @@ uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Metadata& metada
 }
 
 uint64_t McapWriter::write(mcap::IWritable& output, const mcap::Chunk& chunk) {
-  const uint64_t recordSize = 8 + 4 + 4 + chunk.compression.size() + chunk.recordsSize;
+  const uint64_t recordSize = 8 + 4 + 4 + chunk.compression.size() + chunk.compressedSize;
 
   write(output, OpCode::Chunk);
   write(output, recordSize);
   write(output, chunk.uncompressedSize);
   write(output, chunk.uncompressedCrc);
   write(output, chunk.compression);
-  write(output, chunk.records, chunk.recordsSize);
+  write(output, chunk.records, chunk.compressedSize);
 
   return 9 + recordSize;
 }
@@ -751,17 +751,19 @@ void McapWriter::write(mcap::IWritable& output, const KeyValueMap& map, uint32_t
 
 // BufferReader ////////////////////////////////////////////////////////////////
 
-BufferReader::BufferReader(const std::byte* data, uint64_t size)
-    : data_(data)
-    , size_(size) {}
+void BufferReader::reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) {
+  assert(size == uncompressedSize);
+  data_ = data;
+  size_ = size;
+}
 
-uint64_t BufferReader::read(const std::byte** output, uint64_t offset, uint64_t size) {
+uint64_t BufferReader::read(std::byte** output, uint64_t offset, uint64_t size) {
   if (offset >= size_) {
     return 0;
   }
 
   const auto available = size_ - offset;
-  *output = data_ + offset;
+  *output = const_cast<std::byte*>(data_) + offset;
   return std::min(size, available);
 }
 
@@ -773,13 +775,54 @@ mcap::Status BufferReader::status() const {
   return StatusCode::Success;
 }
 
+// FileStreamReader ////////////////////////////////////////////////////////////
+
+FileStreamReader::FileStreamReader(std::ifstream& stream)
+    : stream_(stream) {
+  assert(stream.is_open());
+
+  // Determine the size of the file
+  stream_.seekg(0, stream.end);
+  size_ = stream_.tellg();
+  stream_.seekg(0, stream.beg);
+
+  position_ = 0;
+}
+
+uint64_t FileStreamReader::size() const {
+  return size_;
+}
+
+uint64_t FileStreamReader::read(std::byte** output, uint64_t offset, uint64_t size) {
+  if (offset >= size_) {
+    return 0;
+  }
+
+  if (offset != position_) {
+    stream_.seekg(offset);
+    position_ = offset;
+  }
+
+  if (size > buffer_.size()) {
+    buffer_.resize(size);
+  }
+
+  stream_.read(reinterpret_cast<char*>(buffer_.data()), size);
+  *output = buffer_.data();
+
+  const uint64_t bytesRead = stream_.gcount();
+  position_ += bytesRead;
+  return bytesRead;
+}
+
 // LZ4Reader ///////////////////////////////////////////////////////////////////
 
-LZ4Reader::LZ4Reader(const std::byte* data, uint64_t size, uint64_t uncompressedSize)
-    : status_(StatusCode::Success)
-    , compressedData_(data)
-    , compressedSize_(size)
-    , uncompressedSize_(uncompressedSize) {
+void LZ4Reader::reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) {
+  status_ = StatusCode::Success;
+  compressedData_ = data;
+  compressedSize_ = size;
+  uncompressedSize_ = uncompressedSize;
+
   // Allocate a buffer for the uncompressed data
   uncompressedData_.resize(uncompressedSize_);
 
@@ -804,7 +847,7 @@ LZ4Reader::LZ4Reader(const std::byte* data, uint64_t size, uint64_t uncompressed
   }
 }
 
-uint64_t LZ4Reader::read(const std::byte** output, uint64_t offset, uint64_t size) {
+uint64_t LZ4Reader::read(std::byte** output, uint64_t offset, uint64_t size) {
   if (offset >= uncompressedSize_) {
     return 0;
   }
@@ -824,11 +867,12 @@ mcap::Status LZ4Reader::status() const {
 
 // ZStdReader //////////////////////////////////////////////////////////////////
 
-ZStdReader::ZStdReader(const std::byte* data, uint64_t size, uint64_t uncompressedSize)
-    : status_(StatusCode::Success)
-    , compressedData_(data)
-    , compressedSize_(size)
-    , uncompressedSize_(uncompressedSize) {
+void ZStdReader::reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) {
+  status_ = StatusCode::Success;
+  compressedData_ = data;
+  compressedSize_ = size;
+  uncompressedSize_ = uncompressedSize;
+
   // Allocate a buffer for the uncompressed data
   uncompressedData_.resize(uncompressedSize_);
 
@@ -852,7 +896,7 @@ ZStdReader::ZStdReader(const std::byte* data, uint64_t size, uint64_t uncompress
   }
 }
 
-uint64_t ZStdReader::read(const std::byte** output, uint64_t offset, uint64_t size) {
+uint64_t ZStdReader::read(std::byte** output, uint64_t offset, uint64_t size) {
   if (offset >= uncompressedSize_) {
     return 0;
   }
@@ -1107,6 +1151,11 @@ mcap::Status McapReader::open(mcap::IReadable& reader, const McapReaderOptions& 
   return StatusCode::Success;
 }
 
+mcap::Status McapReader::open(std::ifstream& stream, const McapReaderOptions& options) {
+  fileStreamInput_ = std::make_unique<mcap::FileStreamReader>(stream);
+  return open(*fileStreamInput_, options);
+}
+
 void McapReader::close() {
   input_ = nullptr;
 }
@@ -1114,7 +1163,7 @@ void McapReader::close() {
 mcap::Status McapReader::ReadRecord(mcap::IReadable& reader, uint64_t offset,
                                     mcap::Record* record) {
   // Check that we can read at least 9 bytes (opcode + length)
-  const auto maxSize = reader.size() - offset;
+  auto maxSize = reader.size() - offset;
   if (maxSize < 9) {
     const auto msg =
       internal::StrFormat("cannot read record at offset {}, {} bytes remaining", offset, maxSize);
@@ -1128,11 +1177,28 @@ mcap::Status McapReader::ReadRecord(mcap::IReadable& reader, uint64_t offset,
     return StatusCode::ReadFailed;
   }
 
+  // Parse opcode and length
   record->opcode = mcap::OpCode(data[0]);
-  if (auto status = internal::ReadUint64(data, maxSize - 9, &record->dataSize); !status.ok()) {
+  if (auto status = internal::ParseUint64(data, maxSize - 9, &record->dataSize); !status.ok()) {
     return status;
   }
-  record->data = data + 9;
+
+  // Read payload
+  maxSize -= 9;
+  if (maxSize < record->dataSize) {
+    const auto msg = internal::StrFormat(
+      "record type 0x{:02x} at offset {} has length {} but only {} bytes remaining",
+      uint8_t(record->opcode), offset, record->dataSize, maxSize);
+    return Status{StatusCode::InvalidRecord, msg};
+  }
+  bytesRead = reader.read(&record->data, offset + 9, record->dataSize);
+  if (bytesRead != record->dataSize) {
+    const auto msg = internal::StrFormat(
+      "attempted to read {} bytes for record type 0x{:02x} at offset {} but only read {} bytes",
+      record->dataSize, uint8_t(record->opcode), offset, bytesRead);
+    return Status{StatusCode::ReadFailed, msg};
+  }
+
   return StatusCode::Success;
 }
 
@@ -1159,15 +1225,15 @@ mcap::Status McapReader::ReadFooter(mcap::IReadable& reader, uint64_t offset,
 
   // Sanity check the record length. This is just an additional safeguard, since the footer has a
   // fixed length
-  const uint64_t length = internal::ReadUint64(data + 1);
+  const uint64_t length = internal::ParseUint64(data + 1);
   if (length != 8 + 8 + 4) {
     const auto msg = internal::StrFormat(internal::ErrorMsgInvalidLength, "Footer", length);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  footer->summaryStart = internal::ReadUint64(data + 1 + 8);
-  footer->summaryOffsetStart = internal::ReadUint64(data + 1 + 8 + 8);
-  footer->summaryCrc = internal::ReadUint32(data + 1 + 8 + 8 + 8);
+  footer->summaryStart = internal::ParseUint64(data + 1 + 8);
+  footer->summaryOffsetStart = internal::ParseUint64(data + 1 + 8 + 8);
+  footer->summaryCrc = internal::ParseUint32(data + 1 + 8 + 8 + 8);
   return StatusCode::Success;
 }
 
@@ -1183,12 +1249,12 @@ mcap::Status McapReader::ParseHeader(const mcap::Record& record, mcap::Header* h
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  if (auto status = internal::ReadString(record.data, record.dataSize, &header->profile);
+  if (auto status = internal::ParseString(record.data, record.dataSize, &header->profile);
       !status.ok()) {
     return status;
   }
   const uint64_t maxSize = record.dataSize - 4 - header->profile.size();
-  if (auto status = internal::ReadString(record.data, maxSize, &header->library); !status.ok()) {
+  if (auto status = internal::ParseString(record.data, maxSize, &header->library); !status.ok()) {
     return status;
   }
   return StatusCode::Success;
@@ -1208,46 +1274,46 @@ mcap::Status McapReader::ParseChannelInfo(const mcap::Record& record,
   size_t offset = 0;
 
   // id
-  channelInfo->id = internal::ReadUint16(record.data);
+  channelInfo->id = internal::ParseUint16(record.data);
   offset += 2;
   // topic
   if (auto status =
-        internal::ReadString(record.data + offset, record.dataSize - offset, &channelInfo->topic);
+        internal::ParseString(record.data + offset, record.dataSize - offset, &channelInfo->topic);
       !status.ok()) {
     return status;
   }
   offset += 4 + channelInfo->topic.size();
   // message_encoding
-  if (auto status = internal::ReadString(record.data + offset, record.dataSize - offset,
-                                         &channelInfo->messageEncoding);
+  if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
+                                          &channelInfo->messageEncoding);
       !status.ok()) {
     return status;
   }
   offset += 4 + channelInfo->messageEncoding.size();
   // schema_encoding
-  if (auto status = internal::ReadString(record.data + offset, record.dataSize - offset,
-                                         &channelInfo->schemaEncoding);
+  if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
+                                          &channelInfo->schemaEncoding);
       !status.ok()) {
     return status;
   }
   offset += 4 + channelInfo->schemaEncoding.size();
   // schema
-  if (auto status = internal::ReadByteArray(record.data + offset, record.dataSize - offset,
-                                            &channelInfo->schema);
+  if (auto status = internal::ParseByteArray(record.data + offset, record.dataSize - offset,
+                                             &channelInfo->schema);
       !status.ok()) {
     return status;
   }
   offset += 4 + channelInfo->schema.size();
   // schema_name
-  if (auto status = internal::ReadString(record.data + offset, record.dataSize - offset,
-                                         &channelInfo->schemaName);
+  if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
+                                          &channelInfo->schemaName);
       !status.ok()) {
     return status;
   }
   offset += 4 + channelInfo->schemaName.size();
   // metadata
-  if (auto status = internal::ReadKeyValueMap(record.data + offset, record.dataSize - offset,
-                                              &channelInfo->metadata);
+  if (auto status = internal::ParseKeyValueMap(record.data + offset, record.dataSize - offset,
+                                               &channelInfo->metadata);
       !status.ok()) {
     return status;
   }
@@ -1264,10 +1330,10 @@ mcap::Status McapReader::ParseMessage(const mcap::Record& record, mcap::Message*
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  message->channelId = internal::ReadUint16(record.data);
-  message->sequence = internal::ReadUint32(record.data + 2);
-  message->publishTime = internal::ReadUint64(record.data + 2 + 4);
-  message->recordTime = internal::ReadUint64(record.data + 2 + 4 + 8);
+  message->channelId = internal::ParseUint16(record.data);
+  message->sequence = internal::ParseUint32(record.data + 2);
+  message->publishTime = internal::ParseUint64(record.data + 2 + 4);
+  message->recordTime = internal::ParseUint64(record.data + 2 + 4 + 8);
   message->dataSize = record.dataSize - MessagePreambleSize;
   message->data = record.data + MessagePreambleSize;
   return StatusCode::Success;
@@ -1282,14 +1348,14 @@ mcap::Status McapReader::ParseChunk(const mcap::Record& record, mcap::Chunk* chu
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  chunk->uncompressedSize = internal::ReadUint64(record.data);
-  chunk->uncompressedCrc = internal::ReadUint32(record.data + 8);
-  if (auto status = internal::ReadString(record.data + 8 + 4, record.dataSize - ChunkPreambleSize,
-                                         &chunk->compression);
+  chunk->uncompressedSize = internal::ParseUint64(record.data);
+  chunk->uncompressedCrc = internal::ParseUint32(record.data + 8);
+  if (auto status = internal::ParseString(record.data + 8 + 4, record.dataSize - ChunkPreambleSize,
+                                          &chunk->compression);
       !status.ok()) {
     return status;
   }
-  chunk->recordsSize = record.dataSize - ChunkPreambleSize - chunk->compression.size();
+  chunk->compressedSize = record.dataSize - ChunkPreambleSize - chunk->compression.size();
   chunk->records = record.data + ChunkPreambleSize + chunk->compression.size();
   return StatusCode::Success;
 }
@@ -1305,8 +1371,8 @@ mcap::Status McapReader::ParseMessageIndex(const mcap::Record& record,
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  messageIndex->channelId = internal::ReadUint16(record.data);
-  const uint32_t recordsSize = internal::ReadUint32(record.data + 2);
+  messageIndex->channelId = internal::ParseUint16(record.data);
+  const uint32_t recordsSize = internal::ParseUint32(record.data + 2);
 
   if (recordsSize % 16 != 0 || recordsSize > record.dataSize - PreambleSize) {
     const auto msg =
@@ -1317,8 +1383,8 @@ mcap::Status McapReader::ParseMessageIndex(const mcap::Record& record,
   const size_t recordsCount = size_t(recordsSize / 16);
   messageIndex->records.reserve(recordsCount);
   for (size_t i = 0; i < recordsCount; ++i) {
-    const auto timestamp = internal::ReadUint64(record.data + PreambleSize + i * 16);
-    const auto offset = internal::ReadUint64(record.data + PreambleSize + i * 16 + 8);
+    const auto timestamp = internal::ParseUint64(record.data + PreambleSize + i * 16);
+    const auto offset = internal::ParseUint64(record.data + PreambleSize + i * 16 + 8);
     messageIndex->records.emplace_back(timestamp, offset);
   }
   return StatusCode::Success;
@@ -1334,11 +1400,11 @@ mcap::Status McapReader::ParseChunkIndex(const mcap::Record& record, mcap::Chunk
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  chunkIndex->startTime = internal::ReadUint64(record.data);
-  chunkIndex->endTime = internal::ReadUint64(record.data + 8);
-  chunkIndex->chunkStartOffset = internal::ReadUint64(record.data + 8 + 8);
-  chunkIndex->chunkLength = internal::ReadUint64(record.data + 8 + 8 + 8);
-  const uint32_t messageIndexOffsetsSize = internal::ReadUint32(record.data + 8 + 8 + 8 + 8);
+  chunkIndex->startTime = internal::ParseUint64(record.data);
+  chunkIndex->endTime = internal::ParseUint64(record.data + 8);
+  chunkIndex->chunkStartOffset = internal::ParseUint64(record.data + 8 + 8);
+  chunkIndex->chunkLength = internal::ParseUint64(record.data + 8 + 8 + 8);
+  const uint32_t messageIndexOffsetsSize = internal::ParseUint32(record.data + 8 + 8 + 8 + 8);
 
   if (messageIndexOffsetsSize % 10 != 0 ||
       messageIndexOffsetsSize > record.dataSize - PreambleSize) {
@@ -1350,36 +1416,36 @@ mcap::Status McapReader::ParseChunkIndex(const mcap::Record& record, mcap::Chunk
   const size_t messageIndexOffsetsCount = size_t(messageIndexOffsetsSize / 10);
   chunkIndex->messageIndexOffsets.reserve(messageIndexOffsetsCount);
   for (size_t i = 0; i < messageIndexOffsetsCount; ++i) {
-    const auto channelId = internal::ReadUint16(record.data + PreambleSize + i * 10);
-    const auto offset = internal::ReadUint64(record.data + PreambleSize + i * 10 + 2);
+    const auto channelId = internal::ParseUint16(record.data + PreambleSize + i * 10);
+    const auto offset = internal::ParseUint64(record.data + PreambleSize + i * 10 + 2);
     chunkIndex->messageIndexOffsets.emplace(channelId, offset);
   }
 
   uint64_t offset = PreambleSize + messageIndexOffsetsSize;
   // message_index_length
-  if (auto status = internal::ReadUint64(record.data + offset, record.dataSize - offset,
-                                         &chunkIndex->messageIndexLength);
+  if (auto status = internal::ParseUint64(record.data + offset, record.dataSize - offset,
+                                          &chunkIndex->messageIndexLength);
       !status.ok()) {
     return status;
   }
   offset += 8;
   // compression
-  if (auto status = internal::ReadString(record.data + offset, record.dataSize - offset,
-                                         &chunkIndex->compression);
+  if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
+                                          &chunkIndex->compression);
       !status.ok()) {
     return status;
   }
   offset += 4 + chunkIndex->compression.size();
   // compressed_size
-  if (auto status = internal::ReadUint64(record.data + offset, record.dataSize - offset,
-                                         &chunkIndex->compressedSize);
+  if (auto status = internal::ParseUint64(record.data + offset, record.dataSize - offset,
+                                          &chunkIndex->compressedSize);
       !status.ok()) {
     return status;
   }
   offset += 8;
   // uncompressed_size
-  if (auto status = internal::ReadUint64(record.data + offset, record.dataSize - offset,
-                                         &chunkIndex->uncompressedSize);
+  if (auto status = internal::ParseUint64(record.data + offset, record.dataSize - offset,
+                                          &chunkIndex->uncompressedSize);
       !status.ok()) {
     return status;
   }
@@ -1399,35 +1465,35 @@ mcap::Status McapReader::ParseAttachment(const mcap::Record& record, mcap::Attac
 
   uint32_t offset = 0;
   // name
-  if (auto status = internal::ReadString(record.data, record.dataSize, &attachment->name);
+  if (auto status = internal::ParseString(record.data, record.dataSize, &attachment->name);
       !status.ok()) {
     return status;
   }
   offset += 4 + attachment->name.size();
   // created_at
-  if (auto status = internal::ReadUint64(record.data + offset, record.dataSize - offset,
-                                         &attachment->createdAt);
+  if (auto status = internal::ParseUint64(record.data + offset, record.dataSize - offset,
+                                          &attachment->createdAt);
       !status.ok()) {
     return status;
   }
   offset += 8;
   // log_time
   if (auto status =
-        internal::ReadUint64(record.data + offset, record.dataSize - offset, &attachment->logTime);
+        internal::ParseUint64(record.data + offset, record.dataSize - offset, &attachment->logTime);
       !status.ok()) {
     return status;
   }
   offset += 8;
   // content_type
-  if (auto status = internal::ReadString(record.data + offset, record.dataSize - offset,
-                                         &attachment->contentType);
+  if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
+                                          &attachment->contentType);
       !status.ok()) {
     return status;
   }
   offset += 4 + attachment->contentType.size();
   // data_size
-  if (auto status =
-        internal::ReadUint64(record.data + offset, record.dataSize - offset, &attachment->dataSize);
+  if (auto status = internal::ParseUint64(record.data + offset, record.dataSize - offset,
+                                          &attachment->dataSize);
       !status.ok()) {
     return status;
   }
@@ -1442,7 +1508,7 @@ mcap::Status McapReader::ParseAttachment(const mcap::Record& record, mcap::Attac
   offset += attachment->dataSize;
   // crc
   if (auto status =
-        internal::ReadUint32(record.data + offset, record.dataSize - offset, &attachment->crc);
+        internal::ParseUint32(record.data + offset, record.dataSize - offset, &attachment->crc);
       !status.ok()) {
     return status;
   }
@@ -1461,23 +1527,23 @@ mcap::Status McapReader::ParseAttachmentIndex(const mcap::Record& record,
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  attachmentIndex->offset = internal::ReadUint64(record.data);
-  attachmentIndex->length = internal::ReadUint64(record.data + 8);
-  attachmentIndex->logTime = internal::ReadUint64(record.data + 8 + 8);
-  attachmentIndex->dataSize = internal::ReadUint64(record.data + 8 + 8 + 8);
+  attachmentIndex->offset = internal::ParseUint64(record.data);
+  attachmentIndex->length = internal::ParseUint64(record.data + 8);
+  attachmentIndex->logTime = internal::ParseUint64(record.data + 8 + 8);
+  attachmentIndex->dataSize = internal::ParseUint64(record.data + 8 + 8 + 8);
 
   uint32_t offset = 8 + 8 + 8 + 8;
 
   // name
-  if (auto status = internal::ReadString(record.data + offset, record.dataSize - offset,
-                                         &attachmentIndex->name);
+  if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
+                                          &attachmentIndex->name);
       !status.ok()) {
     return status;
   }
   offset += 4 + attachmentIndex->name.size();
   // content_type
-  if (auto status = internal::ReadString(record.data + offset, record.dataSize - offset,
-                                         &attachmentIndex->contentType);
+  if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
+                                          &attachmentIndex->contentType);
       !status.ok()) {
     return status;
   }
@@ -1495,13 +1561,13 @@ mcap::Status McapReader::ParseStatistics(const mcap::Record& record, mcap::Stati
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  statistics->messageCount = internal::ReadUint64(record.data);
-  statistics->channelCount = internal::ReadUint32(record.data + 8);
-  statistics->attachmentCount = internal::ReadUint32(record.data + 8 + 4);
-  statistics->metadataCount = internal::ReadUint32(record.data + 8 + 4 + 4);
-  statistics->chunkCount = internal::ReadUint32(record.data + 8 + 4 + 4 + 4);
+  statistics->messageCount = internal::ParseUint64(record.data);
+  statistics->channelCount = internal::ParseUint32(record.data + 8);
+  statistics->attachmentCount = internal::ParseUint32(record.data + 8 + 4);
+  statistics->metadataCount = internal::ParseUint32(record.data + 8 + 4 + 4);
+  statistics->chunkCount = internal::ParseUint32(record.data + 8 + 4 + 4 + 4);
 
-  const uint32_t channelMessageCountsSize = internal::ReadUint32(record.data + 8 + 4 + 4 + 4 + 4);
+  const uint32_t channelMessageCountsSize = internal::ParseUint32(record.data + 8 + 4 + 4 + 4 + 4);
   if (channelMessageCountsSize % 10 != 0 ||
       channelMessageCountsSize > record.dataSize - PreambleSize) {
     const auto msg = internal::StrFormat(
@@ -1512,8 +1578,8 @@ mcap::Status McapReader::ParseStatistics(const mcap::Record& record, mcap::Stati
   const size_t channelMessageCountsCount = size_t(channelMessageCountsSize / 10);
   statistics->channelMessageCounts.reserve(channelMessageCountsCount);
   for (size_t i = 0; i < channelMessageCountsCount; ++i) {
-    const auto channelId = internal::ReadUint16(record.data + PreambleSize + i * 10);
-    const auto messageCount = internal::ReadUint64(record.data + PreambleSize + i * 10 + 2);
+    const auto channelId = internal::ParseUint16(record.data + PreambleSize + i * 10);
+    const auto messageCount = internal::ParseUint64(record.data + PreambleSize + i * 10 + 2);
     statistics->channelMessageCounts.emplace(channelId, messageCount);
   }
 
@@ -1531,14 +1597,14 @@ mcap::Status McapReader::ParseMetadata(const mcap::Record& record, mcap::Metadat
   }
 
   // name
-  if (auto status = internal::ReadString(record.data, record.dataSize, &metadata->name);
+  if (auto status = internal::ParseString(record.data, record.dataSize, &metadata->name);
       !status.ok()) {
     return status;
   }
   uint64_t offset = 4 + metadata->name.size();
   // metadata
-  if (auto status = internal::ReadKeyValueMap(record.data + offset, record.dataSize - offset,
-                                              &metadata->metadata);
+  if (auto status = internal::ParseKeyValueMap(record.data + offset, record.dataSize - offset,
+                                               &metadata->metadata);
       !status.ok()) {
     return status;
   }
@@ -1557,11 +1623,11 @@ mcap::Status McapReader::ParseMetadataIndex(const mcap::Record& record,
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  metadataIndex->offset = internal::ReadUint64(record.data);
-  metadataIndex->length = internal::ReadUint64(record.data + 8);
+  metadataIndex->offset = internal::ParseUint64(record.data);
+  metadataIndex->length = internal::ParseUint64(record.data + 8);
   uint64_t offset = 8 + 8;
   if (auto status =
-        internal::ReadString(record.data + offset, record.dataSize - offset, &metadataIndex->name);
+        internal::ParseString(record.data + offset, record.dataSize - offset, &metadataIndex->name);
       !status.ok()) {
     return status;
   }
@@ -1581,8 +1647,8 @@ mcap::Status McapReader::ParseSummaryOffset(const mcap::Record& record,
   }
 
   summaryOffset->groupOpCode = mcap::OpCode(record.data[0]);
-  summaryOffset->groupStart = internal::ReadUint64(record.data + 1);
-  summaryOffset->groupLength = internal::ReadUint64(record.data + 1 + 8);
+  summaryOffset->groupStart = internal::ParseUint64(record.data + 1);
+  summaryOffset->groupLength = internal::ParseUint64(record.data + 1 + 8);
 
   return StatusCode::Success;
 }
@@ -1597,8 +1663,329 @@ mcap::Status McapReader::ParseDataEnd(const mcap::Record& record, mcap::DataEnd*
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  dataEnd->dataSectionCrc = internal::ReadUint32(record.data);
+  dataEnd->dataSectionCrc = internal::ParseUint32(record.data);
   return StatusCode::Success;
+}
+
+std::optional<mcap::Compression> McapReader::ParseCompression(const std::string_view compression) {
+  if (compression == "") {
+    return mcap::Compression::None;
+  } else if (compression == "lz4") {
+    return mcap::Compression::Lz4;
+  } else if (compression == "zstd") {
+    return mcap::Compression::Zstd;
+  } else {
+    return std::nullopt;
+  }
+}
+
+// RecordReader ////////////////////////////////////////////////////////////////
+
+RecordReader::RecordReader(IReadable& dataSource, mcap::ByteOffset startOffset,
+                           mcap::ByteOffset endOffset)
+    : dataSource_(dataSource)
+    , offset_(startOffset)
+    , endOffset_(endOffset)
+    , status_(StatusCode::Success)
+    , curRecord_{} {}
+
+void RecordReader::reset(IReadable& dataSource, mcap::ByteOffset startOffset,
+                         mcap::ByteOffset endOffset) {
+  dataSource_ = dataSource;
+  offset_ = startOffset;
+  endOffset_ = endOffset;
+  status_ = StatusCode::Success;
+  curRecord_ = {};
+}
+
+std::optional<mcap::Record> RecordReader::next() {
+  if (offset_ >= endOffset_) {
+    return std::nullopt;
+  }
+  status_ = McapReader::ReadRecord(dataSource_, offset_, &curRecord_);
+  if (!status_.ok()) {
+    offset_ = EndOffset;
+    return std::nullopt;
+  }
+  offset_ += 9 + curRecord_.dataSize;
+  return curRecord_;
+}
+
+const mcap::Status& RecordReader::status() {
+  return status_;
+}
+
+// TypedChunkReader ////////////////////////////////////////////////////////////
+
+TypedChunkReader::TypedChunkReader()
+    : reader_{uncompressedReader_, 0, 0}
+    , status_{StatusCode::Success} {}
+
+void TypedChunkReader::reset(const Chunk& chunk, Compression compression) {
+  IChunkReader& decompressor = uncompressedReader_;
+  if (compression == Compression::Lz4) {
+    decompressor = lz4Reader_;
+  } else if (compression == Compression::Zstd) {
+    decompressor = zstdReader_;
+  }
+  decompressor.reset(chunk.records, chunk.compressedSize, chunk.uncompressedSize);
+  reader_.reset(decompressor, 0, decompressor.size());
+  status_ = StatusCode::Success;
+}
+
+bool TypedChunkReader::next() {
+  const auto maybeRecord = reader_.next();
+  status_ = reader_.status();
+  if (!maybeRecord.has_value()) {
+    return false;
+  }
+  const mcap::Record& record = maybeRecord.value();
+  switch (record.opcode) {
+    case OpCode::ChannelInfo: {
+      if (handleChannelInfo) {
+        ChannelInfo channelInfo;
+        status_ = McapReader::ParseChannelInfo(record, &channelInfo);
+        if (!status_.ok()) {
+          return true;
+        }
+        handleChannelInfo(channelInfo);
+      }
+      break;
+    }
+    case OpCode::Message: {
+      if (handleMessage) {
+        Message message;
+        status_ = McapReader::ParseMessage(record, &message);
+        if (!status_.ok()) {
+          return true;
+        }
+        handleMessage(message);
+      }
+      break;
+    }
+    case OpCode::Header:
+    case OpCode::Footer:
+    case OpCode::Chunk:
+    case OpCode::MessageIndex:
+    case OpCode::ChunkIndex:
+    case OpCode::Attachment:
+    case OpCode::AttachmentIndex:
+    case OpCode::Statistics:
+    case OpCode::Metadata:
+    case OpCode::MetadataIndex:
+    case OpCode::SummaryOffset:
+    case OpCode::DataEnd: {
+      const auto msg =
+        internal::StrFormat("record type {} cannot appear in Chunk", uint8_t(record.opcode));
+      status_ = Status{StatusCode::InvalidOpCode, msg};
+      break;
+    }
+    default:
+      // Unrecognized opcode, skip it
+      break;
+  }
+
+  return true;
+}
+
+const mcap::Status& TypedChunkReader::status() {
+  return status_;
+}
+
+// TypedRecordReader ///////////////////////////////////////////////////////////
+
+TypedRecordReader::TypedRecordReader(IReadable& dataSource, mcap::ByteOffset startOffset,
+                                     mcap::ByteOffset endOffset)
+    : reader_(dataSource, startOffset, endOffset)
+    , status_(StatusCode::Success)
+    , parsingChunk_(false) {
+  chunkReader_.handleChannelInfo = [&](const ChannelInfo& channelInfo) {
+    if (handleChannelInfo) {
+      handleChannelInfo(channelInfo);
+    }
+  };
+
+  chunkReader_.handleMessage = [&](const Message& message) {
+    if (handleMessage) {
+      handleMessage(message);
+    }
+  };
+}
+
+bool TypedRecordReader::next() {
+  if (parsingChunk_) {
+    const bool chunkInProgress = chunkReader_.next();
+    status_ = chunkReader_.status();
+    if (!chunkInProgress) {
+      parsingChunk_ = false;
+    }
+    return true;
+  }
+
+  const auto maybeRecord = reader_.next();
+  status_ = reader_.status();
+  if (!maybeRecord.has_value()) {
+    return false;
+  }
+  const mcap::Record& record = maybeRecord.value();
+  switch (record.opcode) {
+    case OpCode::ChannelInfo: {
+      if (handleChannelInfo) {
+        ChannelInfo channelInfo;
+        status_ = McapReader::ParseChannelInfo(record, &channelInfo);
+        if (!status_.ok()) {
+          return true;
+        }
+        handleChannelInfo(channelInfo);
+      }
+      break;
+    }
+    case OpCode::Message: {
+      if (handleMessage) {
+        Message message;
+        status_ = McapReader::ParseMessage(record, &message);
+        if (!status_.ok()) {
+          return true;
+        }
+        handleMessage(message);
+      }
+      break;
+    }
+    case OpCode::Chunk: {
+      if (handleChunk || handleChannelInfo || handleMessage) {
+        Chunk chunk;
+        status_ = McapReader::ParseChunk(record, &chunk);
+        if (!status_.ok()) {
+          return true;
+        }
+        if (handleChunk) {
+          handleChunk(chunk);
+        }
+        if (handleChannelInfo || handleMessage) {
+          const auto maybeCompression = McapReader::ParseCompression(chunk.compression);
+          if (!maybeCompression.has_value()) {
+            const auto msg =
+              internal::StrFormat("unrecognized compression \"{}\"", chunk.compression);
+            status_ = Status{StatusCode::UnrecognizedCompression, msg};
+            return true;
+          }
+
+          // Start iterating through this chunk
+          chunkReader_.reset(chunk, maybeCompression.value());
+          parsingChunk_ = true;
+        }
+      }
+      break;
+    }
+    case OpCode::MessageIndex: {
+      if (handleMessageIndex) {
+        MessageIndex messageIndex;
+        status_ = McapReader::ParseMessageIndex(record, &messageIndex);
+        if (!status_.ok()) {
+          return true;
+        }
+        handleMessageIndex(messageIndex);
+      }
+      break;
+    }
+    case OpCode::ChunkIndex: {
+      if (handleChunkIndex) {
+        ChunkIndex chunkIndex;
+        status_ = McapReader::ParseChunkIndex(record, &chunkIndex);
+        if (!status_.ok()) {
+          return true;
+        }
+        handleChunkIndex(chunkIndex);
+      }
+      break;
+    }
+    case OpCode::Attachment: {
+      if (handleAttachment) {
+        Attachment attachment;
+        status_ = McapReader::ParseAttachment(record, &attachment);
+        if (!status_.ok()) {
+          return true;
+        }
+        handleAttachment(attachment);
+      }
+      break;
+    }
+    case OpCode::AttachmentIndex: {
+      if (handleAttachmentIndex) {
+        AttachmentIndex attachmentIndex;
+        status_ = McapReader::ParseAttachmentIndex(record, &attachmentIndex);
+        if (!status_.ok()) {
+          return true;
+        }
+        handleAttachmentIndex(attachmentIndex);
+      }
+      break;
+    }
+    case OpCode::Statistics: {
+      if (handleStatistics) {
+        Statistics statistics;
+        status_ = McapReader::ParseStatistics(record, &statistics);
+        if (!status_.ok()) {
+          return true;
+        }
+        handleStatistics(statistics);
+      }
+      break;
+    }
+    case OpCode::Metadata: {
+      if (handleMetadata) {
+        Metadata metadata;
+        status_ = McapReader::ParseMetadata(record, &metadata);
+        if (!status_.ok()) {
+          return true;
+        }
+        handleMetadata(metadata);
+      }
+      break;
+    }
+    case OpCode::MetadataIndex: {
+      if (handleMetadataIndex) {
+        MetadataIndex metadataIndex;
+        status_ = McapReader::ParseMetadataIndex(record, &metadataIndex);
+        if (!status_.ok()) {
+          return true;
+        }
+        handleMetadataIndex(metadataIndex);
+      }
+      break;
+    }
+    case OpCode::SummaryOffset: {
+      if (handleSummaryOffset) {
+        SummaryOffset summaryOffset;
+        status_ = McapReader::ParseSummaryOffset(record, &summaryOffset);
+        if (!status_.ok()) {
+          return true;
+        }
+        handleSummaryOffset(summaryOffset);
+      }
+      break;
+    }
+    case OpCode::DataEnd: {
+      if (handleDataEnd) {
+        DataEnd dataEnd;
+        status_ = McapReader::ParseDataEnd(record, &dataEnd);
+        if (!status_.ok()) {
+          return true;
+        }
+        handleDataEnd(dataEnd);
+      }
+      break;
+    }
+    default:
+      // Unrecognized opcode, skip it
+      break;
+  }
+
+  return true;
+}
+
+const mcap::Status& TypedRecordReader::status() {
+  return status_;
 }
 
 }  // namespace mcap

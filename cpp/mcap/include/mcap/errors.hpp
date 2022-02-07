@@ -15,8 +15,10 @@ enum class StatusCode {
   MagicMismatch,
   InvalidFile,
   InvalidRecord,
+  InvalidOpCode,
   DecompressionFailed,
   DecompressionSizeMismatch,
+  UnrecognizedCompression,
 };
 
 struct Status {
@@ -52,11 +54,17 @@ struct Status {
       case StatusCode::InvalidRecord:
         message = "invalid record";
         break;
+      case StatusCode::InvalidOpCode:
+        message = "invalid opcode";
+        break;
       case StatusCode::DecompressionFailed:
         message = "decompression failed";
         break;
       case StatusCode::DecompressionSizeMismatch:
         message = "decompression size mismatch";
+        break;
+      case StatusCode::UnrecognizedCompression:
+        message = "unrecognized compression";
         break;
       default:
         message = "unknown";
