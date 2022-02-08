@@ -419,16 +419,12 @@ private:
   ZSTD_CCtx* zstdContext_ = nullptr;
 };
 
-struct LinearMessageView;
-
 class McapReader final {
 public:
   ~McapReader();
 
   Status open(IReadable& reader, const McapReaderOptions& options = {});
   Status open(std::ifstream& stream, const McapReaderOptions& options = {});
-
-  LinearMessageView read() const;
 
   IReadable* dataSource() {
     return input_;
@@ -699,130 +695,6 @@ private:
   Status status_;
   bool parsingChunk_;
 };
-
-// Iterators ///////////////////////////////////////////////////////////////////
-
-// struct LinearMessageView {
-//   struct ForwardMessageIterator {
-//     using iterator_category = std::forward_iterator_tag;
-//     using difference_type = int64_t;
-//     using value_type = Message;
-//     using pointer = const Message*;
-//     using reference = const Message&;
-
-//     // FIXME: begin() needs to get as far as parsing the first message and caching it
-//     // operator*() just returns the current cached parsed message, or an invalid message @ End
-//     // operator++() advances offset_ and parses the next message
-
-//     // begin() {
-//     //   // parse records until encountering a message or chunk
-
-//     //   // if a chunk is encountered, use the chunk iterator
-//     // }
-
-//     ForwardMessageIterator(LinearMessageView& view)
-//         : view_(view)
-//         , offset_(view.startOffset())
-//         , curRecord_{}
-//         , curMessage_{} {}
-
-//     ForwardMessageIterator(LinearMessageView& view, uint64_t offset)
-//         : view_(view)
-//         , offset_(offset)
-//         , curRecord_{}
-//         , curMessage_{} {}
-
-//     reference operator*() const {
-//       return curMessage_;
-//     }
-//     pointer operator->() {
-//       return &curMessage_;
-//     }
-//     ForwardMessageIterator& operator++() {
-//       // Mark any offset past the end of the file as EndOffset
-//       auto* dataSource = view_.reader().dataSource();
-//       if (!dataSource || offset_ >= dataSource->size()) {
-//         invalidate();
-//         return *this;
-//       }
-
-//       // Read the current record if needed
-//       if (!curRecord_.data) {
-//         if (!readCurrentRecord(*dataSource)) {
-//           return *this;
-//         }
-//       }
-
-//       // Advance to the next record
-//       offset_ += 9 + curRecord_.dataSize;
-
-//       // Read the next record
-//       readCurrentRecord(*dataSource);
-
-//       return *this;
-//     }
-//     ForwardMessageIterator operator++(int) {
-//       ForwardMessageIterator tmp = *this;
-//       ++(*this);
-//       return tmp;
-//     }
-//     friend bool operator==(const ForwardMessageIterator& a, const ForwardMessageIterator& b) {
-//       return a.offset_ == b.offset_;
-//     }
-//     friend bool operator!=(const ForwardMessageIterator& a, const ForwardMessageIterator& b) {
-//       return a.offset_ != b.offset_;
-//     }
-
-//   private:
-//     LinearMessageView& view_;
-//     ByteOffset offset_;
-//     Record curRecord_;
-//     Message curMessage_;
-
-//     bool readCurrentRecord(IReadable& dataSource) {
-//       if (auto status = McapReader::ReadRecord(dataSource, offset_, &curRecord_); !status.ok())
-//       {
-//         view_.reader().problems().push_back(status);
-//         invalidate();
-//         return false;
-//       }
-//       return true;
-//     }
-
-//     void invalidate() {
-//       offset_ = EndOffset;
-//       curRecord_ = {};
-//       curMessage_ = {};
-//     }
-//   };
-
-//   LinearMessageView(McapReader& reader, ByteOffset startOffset, Timestamp endTime)
-//       : reader_(reader)
-//       , startOffset_(startOffset)
-//       , endTime_(endTime) {}
-
-//   ForwardMessageIterator begin() {
-//     return ForwardMessageIterator(*this, startOffset_);
-//   }
-//   ForwardMessageIterator end() {
-//     return ForwardMessageIterator(*this, EndOffset);
-//   }
-
-//   McapReader& reader() {
-//     return reader_;
-//   }
-//   ByteOffset startOffset() const {
-//     return startOffset_;
-//   }
-//   Timestamp endTime() const {
-//     return endTime_;
-//   }
-
-// private:
-//   McapReader& reader_;
-//   ByteOffset startOffset_;
-//   Timestamp endTime_;
-// };
 
 }  // namespace mcap
 
