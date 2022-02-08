@@ -17,7 +17,7 @@ MCAP files are designed to work well under various workloads, resource constrain
   - [Header](#header-op0x01)
   - [Footer](#footer-op0x02)
   - [Schema](#schema-op0x03)
-  - [Channel Info](#channel-info-op0x04)
+  - [Channel](#channel-op0x04)
   - [Message](#message-op0x05)
   - [Chunk](#chunk-op0x06)
   - [Message Index](#message-index-op0x07)
@@ -70,7 +70,7 @@ The data section contains records with message data, attachments, and supporting
 The following records are allowed to appear in the data section:
 
 - Schema
-- Channel Info
+- Channel
 - Message
 - Attachment
 - Chunk
@@ -87,7 +87,7 @@ The optional summary section contains records for fast lookup of file informatio
 The following records are allowed to appear in the summary section:
 
 - Schema
-- Channel Info
+- Channel
 - Chunk Index
 - Attachment Index
 - Statistics
@@ -97,7 +97,7 @@ All records in the summary section MUST be grouped by opcode.
 
 > Why? Grouping Summary records by record opcode enables more efficient indexing of the summary in the Summary Offset section.
 
-Channel Info records in the summary are duplicates of Channel Info records throughout the Data section.
+Channel records in the summary are duplicates of Channel records throughout the Data section.
 
 Schema records in the summary are duplicates of Schema records throughout the Data section.
 
@@ -144,7 +144,7 @@ A Footer record contains end-of-file information. It must be the last record in 
 
 A Schema record defines an individual schema.
 
-Schema records are uniquely identified within a file by their schema ID. A Schema record must occur at least once in the file prior to any Channel Info referring to its ID.
+Schema records are uniquely identified within a file by their schema ID. A Schema record must occur at least once in the file prior to any Channel referring to its ID.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -155,11 +155,11 @@ Schema records are uniquely identified within a file by their schema ID. A Schem
 
 Schema records may be duplicated in the summary section.
 
-### Channel Info (op=0x04)
+### Channel (op=0x04)
 
-A Channel Info record defines an encoded stream of messages on a topic.
+A Channel record defines an encoded stream of messages on a topic.
 
-Channel Info records are uniquely identified within a file by their channel ID. A Channel Info record must occur at least once in the file prior to any message referring to its channel ID.
+Channel records are uniquely identified within a file by their channel ID. A Channel record must occur at least once in the file prior to any message referring to its channel ID.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -169,13 +169,13 @@ Channel Info records are uniquely identified within a file by their channel ID. 
 | 2 | schema_id | uint16 | The schema for messages on this channel. |
 | 4 + N | metadata | Map<string, string> | Metadata about this channel |
 
-Channel Info records may be duplicated in the summary section.
+Channel records may be duplicated in the summary section.
 
 ### Message (op=0x05)
 
 A message record encodes a single timestamped message on a channel.
 
-The message encoding and schema must match that of the channel info record corresponding to the message's channel ID.
+The message encoding and schema must match that of the Channel record corresponding to the message's channel ID.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -187,9 +187,9 @@ The message encoding and schema must match that of the channel info record corre
 
 ### Chunk (op=0x06)
 
-A Chunk contains a batch of schema, channel info, and message records. The batch of records contained in a chunk may be compressed or uncompressed.
+A Chunk contains a batch of Schema, Channel, and Message records. The batch of records contained in a chunk may be compressed or uncompressed.
 
-All messages in the chunk must reference channel infos recorded earlier in the file (in a previous chunk or earlier in the current chunk).
+All messages in the chunk must reference channels recorded earlier in the file (in a previous chunk or earlier in the current chunk).
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -231,9 +231,9 @@ A Chunk Index record exists for every Chunk in the file.
 | 8 | compressed_size | uint64 | The size of the chunk `records` field. |
 | 8 | uncompressed_size | uint64 | The uncompressed size of the chunk `records` field. This field should match the value in the corresponding Chunk record. |
 
-A Schema and Channel Info record MUST exist in the summary section for all channels referenced by chunk index records.
+A Schema and Channel record MUST exist in the summary section for all channels referenced by chunk index records.
 
-> Why? The typical use case for file readers using an index is fast random access to a specific message timestamp. Channel Info is a prerequisite for decoding Message record data. Without an easy-to-access copy of the Channel Info records, readers would need to search for Channel Info records from the start of the file, degrading random access read performance.
+> Why? The typical use case for file readers using an index is fast random access to a specific message timestamp. Channel is a prerequisite for decoding Message record data. Without an easy-to-access copy of the Channel records, readers would need to search for Channel records from the start of the file, degrading random access read performance.
 
 ### Attachment (op=0x09)
 
@@ -276,9 +276,9 @@ A Statistics record contains summary information about the recorded data. The st
 | 4 | chunk_count | uint32 | Number of Chunk records in the file. |
 | 4 + N | channel_message_counts | Map<uint16, uint64> | Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available. |
 
-When using a Statistics record with a non-empty channel_message_counts, the Summary Data section MUST contain a copy of all Channel Info records. The Channel Info records MUST occur prior to the statistics record.
+When using a Statistics record with a non-empty channel_message_counts, the Summary Data section MUST contain a copy of all Channel records. The Channel records MUST occur prior to the statistics record.
 
-> Why? The typical use case for tools is to provide a listing of the types and quantities of messages stored in the file. Without an easy to access copy of the Channel Info records, tools would need to linearly scan the file for Channel Info records to display what types of messages exist in the file.
+> Why? The typical use case for tools is to provide a listing of the types and quantities of messages stored in the file. Without an easy to access copy of the Channel records, tools would need to linearly scan the file for Channel records to display what types of messages exist in the file.
 
 ### Metadata (op=0x0C)
 
@@ -313,7 +313,7 @@ A Summary Offset record contains the location of records within the summary sect
 
 A Data End record indicates the end of the data section.
 
-> Why? When reading a file from start to end, there is ambiguity when the data section ends and the summary section starts because some records (i.e. Channel Info) can repeat for summary data. The Data End record provides a clear delineation the data section has ended.
+> Why? When reading a file from start to end, there is ambiguity when the data section ends and the summary section starts because some records (i.e. Channel) can repeat for summary data. The Data End record provides a clear delineation the data section has ended.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -405,7 +405,7 @@ An MCAP file containing 1 message.
 ```
 [Header]
 [Schema A]
-[Channel Info 1 (A)]
+[Channel 1 (A)]
 [Message on Channel 1]
 [Footer]
 ```
@@ -425,13 +425,13 @@ An MCAP file containing 1 attachment
 ```
 [Header]
 [Schema A]
-[Channel Info 1 (A)]
-[Channel Info 2 (A)]
+[Channel 1 (A)]
+[Channel 2 (A)]
 [Message on 1]
 [Message on 1]
 [Message on 2]
 [Schema B]
-[Channel Info 3 (B)]
+[Channel 3 (B)]
 [Attachment]
 [Message on 3]
 [Message on 1]
@@ -446,15 +446,15 @@ A writer may choose to put messages in Chunks to compress record data. This MCAP
 [Header]
 [Chunk]
   [Schema A]
-  [Channel Info 1 (A)]
-  [Channel Info 2 (A)]
+  [Channel 1 (A)]
+  [Channel 2 (A)]
   [Message on 1]
   [Message on 1]
   [Message on 2]
 [Attachment]
 [Chunk]
   [Schema B]
-  [Channel Info 3 (B)]
+  [Channel 3 (B)]
   [Message on 3]
   [Message on 1]
 [Footer]
@@ -465,13 +465,13 @@ A writer may choose to put messages in Chunks to compress record data. This MCAP
 ```
 [Header]
 [Schema A]
-[Channel Info 1 (A)]
-[Channel Info 2 (A)]
+[Channel 1 (A)]
+[Channel 2 (A)]
 [Message on 1]
 [Message on 1]
 [Message on 2]
 [Schema B]
-[Channel Info 3 (B)]
+[Channel 3 (B)]
 [Attachment]
 [Message on 3]
 [Message on 1]
@@ -479,9 +479,9 @@ A writer may choose to put messages in Chunks to compress record data. This MCAP
 [Statistics]
 [Schema A]
 [Schema B]
-[Channel Info 1]
-[Channel Info 2]
-[Channel Info 3]
+[Channel 1]
+[Channel 2]
+[Channel 3]
 [Summary Offset 0x01]
 [Footer]
 ```
@@ -492,8 +492,8 @@ A writer may choose to put messages in Chunks to compress record data. This MCAP
 [Header]
 [Chunk A]
   [Schema A]
-  [Channel Info 1 (A)]
-  [Channel Info 2 (B)]
+  [Channel 1 (A)]
+  [Channel 2 (B)]
   [Message on 1]
   [Message on 1]
   [Message on 2]
@@ -502,7 +502,7 @@ A writer may choose to put messages in Chunks to compress record data. This MCAP
 [Attachment 1]
 [Chunk B]
   [Schema B]
-  [Channel Info 3 (B)]
+  [Channel 3 (B)]
   [Message on 3]
   [Message on 1]
 [Message Index 3]
@@ -510,9 +510,9 @@ A writer may choose to put messages in Chunks to compress record data. This MCAP
 [Data End]
 [Schema A]
 [Schema B]
-[Channel Info 1]
-[Channel Info 2]
-[Channel Info 3]
+[Channel 1]
+[Channel 2]
+[Channel 3]
 [Chunk Index A]
 [Chunk Index B]
 [Attachment Index 1]
