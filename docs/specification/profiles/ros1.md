@@ -4,7 +4,7 @@ Profile: **`ros1`**
 
 The `ros1` profile describes how to create mcap files for v1 of the [ROS](https://ros.org/) framework.
 
-### Channel Info
+### Channel
 
 #### message_encoding
 
