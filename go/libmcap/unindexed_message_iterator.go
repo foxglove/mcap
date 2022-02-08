@@ -2,7 +2,6 @@ package libmcap
 
 import (
 	"fmt"
-	"io"
 )
 
 type unindexedMessageIterator struct {
@@ -14,15 +13,15 @@ type unindexedMessageIterator struct {
 	end      uint64
 }
 
-func (it *unindexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
+func (it *unindexedMessageIterator) Next(p []byte) (*ChannelInfo, *Message, error) {
 	for {
-		token, err := it.lexer.Next()
+		tokenType, record, err := it.lexer.Next(p)
 		if err != nil {
 			return nil, nil, err
 		}
-		switch token.TokenType {
+		switch tokenType {
 		case TokenSchema:
-			schema, err := ParseSchema(token.bytes())
+			schema, err := ParseSchema(record)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to parse schema: %w", err)
 			}
@@ -30,7 +29,7 @@ func (it *unindexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 				it.schemas[schema.ID] = schema
 			}
 		case TokenChannelInfo:
-			channelInfo, err := ParseChannelInfo(token.bytes())
+			channelInfo, err := ParseChannelInfo(record)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to parse channel info: %w", err)
 			}
@@ -40,7 +39,7 @@ func (it *unindexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 				}
 			}
 		case TokenMessage:
-			message, err := ParseMessage(token.bytes())
+			message, err := ParseMessage(record)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -56,10 +55,6 @@ func (it *unindexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 			}
 		default:
 			// skip all other tokens
-			_, err := io.CopyN(io.Discard, token.Reader, token.ByteCount)
-			if err != nil {
-				return nil, nil, err
-			}
 		}
 	}
 }

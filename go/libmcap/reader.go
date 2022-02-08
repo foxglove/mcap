@@ -59,7 +59,7 @@ type Reader struct {
 }
 
 type MessageIterator interface {
-	Next() (*ChannelInfo, *Message, error)
+	Next([]byte) (*ChannelInfo, *Message, error)
 }
 
 func (r *Reader) unindexedIterator(topics []string, start uint64, end uint64) *unindexedMessageIterator {

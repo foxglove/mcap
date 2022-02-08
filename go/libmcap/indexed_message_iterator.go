@@ -69,14 +69,13 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 		return fmt.Errorf("failed to seek to summary start")
 	}
 	for {
-		tk, err := it.lexer.Next()
+		tokenType, record, err := it.lexer.Next(nil)
 		if err != nil {
 			return fmt.Errorf("failed to get next token: %w", err)
 		}
-		data := tk.bytes()
-		switch tk.TokenType {
+		switch tokenType {
 		case TokenChannelInfo:
-			channelInfo, err := ParseChannelInfo(data)
+			channelInfo, err := ParseChannelInfo(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse channel info: %w", err)
 			}
@@ -84,13 +83,13 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 				it.channels[channelInfo.ID] = channelInfo
 			}
 		case TokenAttachmentIndex:
-			idx, err := ParseAttachmentIndex(data)
+			idx, err := ParseAttachmentIndex(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse attachment index: %w", err)
 			}
 			it.attachmentIndexes = append(it.attachmentIndexes, idx)
 		case TokenChunkIndex:
-			idx, err := ParseChunkIndex(data)
+			idx, err := ParseChunkIndex(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse attachment index: %w", err)
 			}
@@ -103,9 +102,8 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 					break
 				}
 			}
-
 		case TokenStatistics:
-			stats, err := ParseStatistics(data)
+			stats, err := ParseStatistics(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse statistics: %w", err)
 			}
@@ -166,20 +164,19 @@ func (it *indexedMessageIterator) loadChunk(index int) error {
 	if err != nil {
 		return err
 	}
-	tok, err := it.lexer.Next()
+	tokenType, record, err := it.lexer.Next(nil)
 	if err != nil {
 		return err
 	}
 	var chunk *Chunk
-	switch tok.TokenType {
+	switch tokenType {
 	case TokenChunk:
-		chunk, err = ParseChunk(tok.bytes())
+		chunk, err = ParseChunk(record)
 		if err != nil {
 			return fmt.Errorf("failed to parse chunk: %w", err)
 		}
 	default:
-		_ = tok.bytes()
-		return fmt.Errorf("unexpected token %s in chunk section", tok)
+		return fmt.Errorf("unexpected token %s in chunk section", tokenType)
 	}
 	switch CompressionFormat(chunk.Compression) {
 	case CompressionNone:
@@ -206,7 +203,6 @@ func (it *indexedMessageIterator) loadChunk(index int) error {
 	default:
 		return fmt.Errorf("unsupported compression format %s", chunk.Compression)
 	}
-
 	it.activeChunkIndex = index
 	it.activeChunkLexer, err = NewLexer(it.activeChunkReader, &LexOpts{
 		SkipMagic: true,
@@ -231,15 +227,14 @@ func (it *indexedMessageIterator) loadNextChunkset() error {
 				return err
 			}
 			// now we're at the message index implicated by the chunk; parse one record
-			tk, err := it.lexer.Next()
+			tokenType, record, err := it.lexer.Next(nil)
 			if err != nil {
 				return err
 			}
-			data := tk.bytes()
-			if tk.TokenType != TokenMessageIndex {
-				return fmt.Errorf("unexpected token %s in message index section", tk)
+			if tokenType != TokenMessageIndex {
+				return fmt.Errorf("unexpected token %s in message index section", tokenType)
 			}
-			messageIndex, err := ParseMessageIndex(data)
+			messageIndex, err := ParseMessageIndex(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse message index at %d", offset)
 			}
@@ -277,7 +272,7 @@ func (it *indexedMessageIterator) seekChunk(offset int64) error {
 	return nil
 }
 
-func (it *indexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
+func (it *indexedMessageIterator) Next(p []byte) (*ChannelInfo, *Message, error) {
 	if it.statistics == nil {
 		err := it.parseSummarySection()
 		if err != nil {
@@ -313,19 +308,18 @@ func (it *indexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	tok, err := it.activeChunkLexer.Next()
+	tokenType, record, err := it.activeChunkLexer.Next(p)
 	if err != nil {
 		return nil, nil, err
 	}
-	switch tok.TokenType {
+	switch tokenType {
 	case TokenMessage:
-		msg, err := ParseMessage(tok.bytes())
+		msg, err := ParseMessage(record)
 		if err != nil {
 			return nil, nil, err
 		}
 		return it.channels[msg.ChannelID], msg, nil
 	default:
-		_ = tok.bytes()
-		return nil, nil, fmt.Errorf("unexpected token %s in message section", tok)
+		return nil, nil, fmt.Errorf("unexpected token %s in message section", tokenType)
 	}
 }

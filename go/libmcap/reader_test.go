@@ -214,7 +214,7 @@ func TestMessageReading(t *testing.T) {
 						assert.Nil(t, err)
 						c := 0
 						for {
-							ci, msg, err := it.Next()
+							ci, msg, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
@@ -234,7 +234,7 @@ func TestMessageReading(t *testing.T) {
 						assert.Nil(t, err)
 						c := 0
 						for {
-							ci, msg, err := it.Next()
+							ci, msg, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
@@ -254,7 +254,7 @@ func TestMessageReading(t *testing.T) {
 						assert.Nil(t, err)
 						c := 0
 						for {
-							ci, msg, err := it.Next()
+							ci, msg, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
@@ -274,7 +274,7 @@ func TestMessageReading(t *testing.T) {
 						assert.Nil(t, err)
 						c := 0
 						for {
-							_, _, err := it.Next()
+							_, _, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
@@ -304,7 +304,7 @@ func TestReaderCounting(t *testing.T) {
 			assert.Nil(t, err)
 			c := 0
 			for {
-				_, _, err := it.Next()
+				_, _, err := it.Next(nil)
 				if errors.Is(err, io.EOF) {
 					break
 				}
@@ -353,7 +353,7 @@ func TestReadingDiagnostics(t *testing.T) {
 	assert.Nil(t, err)
 	c := 0
 	for {
-		_, _, err := it.Next()
+		_, _, err := it.Next(nil)
 		if errors.Is(err, io.EOF) {
 			break
 		}
