@@ -6,6 +6,7 @@ ignorePaths:
   - go.mod
   - go.sum
   - testdata
+  - CMakeLists.txt
   - "*.Dockerfile"
   - "*.mcap"
 
