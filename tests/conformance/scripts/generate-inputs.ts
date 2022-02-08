@@ -270,7 +270,7 @@ const inputs: { name: string; records: TestDataRecord[] }[] = [
         topic: "example",
         schemaId: 1,
         messageEncoding: "a",
-        metadata: [["foo", "bar"]],
+        metadata: new Map([["foo", "bar"]]),
       },
       {
         type: "Message",

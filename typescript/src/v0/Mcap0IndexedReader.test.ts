@@ -122,7 +122,7 @@ describe("Mcap0IndexedReader", () => {
     );
   });
 
-  it("parses index with channel info", async () => {
+  it("parses index with schema and channel info", async () => {
     const data = [
       ...MCAP0_MAGIC,
       ...record(Opcode.HEADER, [
@@ -165,7 +165,21 @@ describe("Mcap0IndexedReader", () => {
             schemaId: 1,
             topic: "myTopic",
             messageEncoding: "utf12",
-            metadata: [["foo", "bar"]],
+            metadata: new Map([["foo", "bar"]]),
+          },
+        ],
+      ]),
+    );
+    expect(reader.schemasById).toEqual(
+      new Map<number, TypedMcapRecords["Schema"]>([
+        [
+          1,
+          {
+            type: "Schema",
+            id: 1,
+            name: "some data",
+            encoding: "json",
+            data: new TextEncoder().encode("stuff"),
           },
         ],
       ]),

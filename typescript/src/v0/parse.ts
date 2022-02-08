@@ -133,7 +133,7 @@ export function parseRecord({
       const topicName = reader.string();
       const messageEncoding = reader.string();
       const schemaId = reader.uint16();
-      const metadata = reader.keyValuePairs(
+      const metadata = reader.map(
         (r) => r.string(),
         (r) => r.string(),
       );
@@ -321,7 +321,7 @@ export function parseRecord({
     }
     case Opcode.METADATA: {
       const name = reader.string();
-      const metadata = reader.keyValuePairs(
+      const metadata = reader.map(
         (r) => r.string(),
         (r) => r.string(),
       );
