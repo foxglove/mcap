@@ -21,6 +21,7 @@ words:
   - mcap
   - nsec
   - nsecs
+  - pipenv
   - proto
   - protobuf
   - rosbag
@@ -55,3 +56,15 @@ overrides:
   - filename: "**/{*.js,*.ts,*.tsx}"
     ignoreRegExpList:
       - "0x[0-9a-f]+n?"
+
+  - filename: "(Pipfile|README.md|pyproject.toml)"
+    words:
+      - pypi
+      - pyright
+      - pytest
+      - setuptools
+
+  - filename: "**/*.py"
+    words:
+      - rglob
+      - uncompress
