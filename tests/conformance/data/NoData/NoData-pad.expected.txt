@@ -1,2 +1,2 @@
-Header library="" profile=""
-Footer summary_crc=0 summary_offset_start=0 summary_start=0
+Header library=s:"" profile=s:""
+Footer summary_crc=i:0 summary_offset_start=n:0 summary_start=n:0
