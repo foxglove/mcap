@@ -52,7 +52,7 @@ describe("Mcap0IndexedReader", () => {
           ]),
         ),
       }),
-    ).rejects.toThrow("too small to be valid MCAP");
+    ).rejects.toThrow("Unable to read header at beginning of file; found Footer");
 
     await expect(
       Mcap0IndexedReader.Initialize({
@@ -184,7 +184,7 @@ describe("Mcap0IndexedReader", () => {
         ],
       ]),
     );
-    expect(readable.readCalls).toBe(2);
+    expect(readable.readCalls).toBe(4);
   });
 
   describe("indexed with single channel", () => {
@@ -317,7 +317,7 @@ describe("Mcap0IndexedReader", () => {
         await expect(collect(reader.readMessages({ startTime, endTime }))).resolves.toEqual(
           expected,
         );
-        expect(readable.readCalls).toBe(4);
+        expect(readable.readCalls).toBe(6);
       },
     );
   });
