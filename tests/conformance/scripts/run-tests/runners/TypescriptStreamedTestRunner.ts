@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import { TestVariant } from "variants/types";
 
 import ITestRunner from "./ITestRunner";
-import stringifyRecord from "./stringifyRecord";
+import { stringifyRecords } from "./stringifyRecords";
 
 export default class TypescriptStreamedTestRunner implements ITestRunner {
   name = "ts-streamed";
@@ -12,7 +12,7 @@ export default class TypescriptStreamedTestRunner implements ITestRunner {
     return true;
   }
 
-  async run(filePath: string): Promise<string[]> {
+  async run(filePath: string): Promise<string> {
     const result = [];
     const reader = new Mcap0StreamReader({ validateCrcs: true });
     reader.append(await fs.readFile(filePath));
@@ -21,11 +21,12 @@ export default class TypescriptStreamedTestRunner implements ITestRunner {
       if (record.type === "MessageIndex") {
         continue;
       }
-      result.push(stringifyRecord(record));
+      result.push(record);
     }
     if (!reader.done()) {
       throw new Error("Reader not done");
     }
-    return result;
+
+    return stringifyRecords(result);
   }
 }

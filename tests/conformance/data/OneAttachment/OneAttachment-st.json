@@ -1,0 +1,31 @@
+[
+  {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
+  {
+    "type": "Attachment",
+    "fields": [
+      ["content_type", "application/octet-stream"],
+      ["created_at", 1],
+      ["data", [1, 2, 3]],
+      ["log_time", 2],
+      ["name", "myFile"]
+    ]
+  },
+  {
+    "type": "Statistics",
+    "fields": [
+      ["attachment_count", 1],
+      ["channel_count", 0],
+      ["channel_message_counts", {}],
+      ["chunk_count", 0],
+      ["message_count", 0]
+    ]
+  },
+  {
+    "type": "Footer",
+    "fields": [
+      ["summary_crc", 0],
+      ["summary_offset_start", 0],
+      ["summary_start", 116]
+    ]
+  }
+]

@@ -1,0 +1,61 @@
+[
+  {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
+  {
+    "type": "Schema",
+    "fields": [
+      ["data", [4, 5, 6]],
+      ["encoding", "c"],
+      ["id", 1],
+      ["name", "Example"]
+    ]
+  },
+  {
+    "type": "ChannelInfo",
+    "fields": [
+      ["id", 1],
+      ["message_encoding", "a"],
+      ["metadata", {"foo": "bar"}],
+      ["schema_id", 1],
+      ["topic", "example"]
+    ]
+  },
+  {
+    "type": "Message",
+    "fields": [
+      ["channel_id", 1],
+      ["data", [1, 2, 3]],
+      ["log_time", 2],
+      ["publish_time", 1],
+      ["sequence", 10]
+    ]
+  },
+  {
+    "type": "Schema",
+    "fields": [
+      ["data", [4, 5, 6]],
+      ["encoding", "c"],
+      ["id", 1],
+      ["name", "Example"]
+    ]
+  },
+  {
+    "type": "SummaryOffset",
+    "fields": [["group_length", 34], ["group_opcode", 3], ["group_start", 153]]
+  },
+  {
+    "type": "SummaryOffset",
+    "fields": [["group_length", 0], ["group_opcode", 13], ["group_start", 187]]
+  },
+  {
+    "type": "SummaryOffset",
+    "fields": [["group_length", 0], ["group_opcode", 8], ["group_start", 187]]
+  },
+  {
+    "type": "Footer",
+    "fields": [
+      ["summary_crc", 0],
+      ["summary_offset_start", 187],
+      ["summary_start", 153]
+    ]
+  }
+]
