@@ -2,6 +2,5 @@ Header library=s:"" profile=s:""
 Schema data=b:<040506> encoding=s:c id=i:1 name=s:Example
 ChannelInfo id=i:1 message_encoding=s:a metadata=m:{s:foo=s:bar} schema_id=i:1 topic=s:example
 Message channel_id=i:1 data=b:<010203> log_time=n:2 publish_time=n:1 sequence=i:10
-MessageIndex channel_id=i:1 records=a:{n:2=n:81}
-ChunkIndex chunk_length=n:162 chunk_start_offset=n:25 compressed_size=n:115 compression=s:"" end_time=n:2 message_index_length=n:31 message_index_offsets=m:{i:1=n:189} start_time=n:2 uncompressed_size=n:115
-Footer summary_crc=i:0 summary_offset_start=n:0 summary_start=n:233
+ChunkIndex chunk_length=n:162 chunk_start_offset=n:25 compressed_size=n:115 compression=s:"" end_time=n:2 message_index_length=n:0 message_index_offsets=m:{} start_time=n:2 uncompressed_size=n:115
+Footer summary_crc=i:0 summary_offset_start=n:0 summary_start=n:202
