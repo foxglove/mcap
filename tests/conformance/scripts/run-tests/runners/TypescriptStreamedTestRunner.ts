@@ -7,9 +7,47 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
   function camelToSnake(str: string): string {
     return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
   }
+
+  function typePrefix(value: unknown): string {
+    switch (typeof value) {
+      case "bigint":
+        return "n";
+      case "number":
+        return "i";
+      case "string":
+        return "s";
+      case "object":
+        if (Array.isArray(value)) {
+          return "a";
+        } else if (value instanceof Uint8Array) {
+          return "b";
+        } else {
+          return "m";
+        }
+      default:
+        throw new Error(`Unknown value type: ${typeof value}.`);
+    }
+  }
+
+  function stringifyKeyValuePairs(pairs: [unknown, unknown][]): string {
+    return (
+      "{" +
+      pairs
+        .sort(([nameA], [nameB]) => String(nameA).localeCompare(String(nameB)))
+        .map(([k, v]) => [stringifyTypedValue(k), stringifyTypedValue(v)].join("="))
+        .join(",") +
+      "}"
+    );
+  }
+
+  function stringifyTypedValue(value: unknown): string {
+    return [typePrefix(value), stringifyValue(value)].join(":");
+  }
+
   function stringifyData(data: Uint8Array): string {
     return `<${Array.from(data, (value) => value.toString(16).padStart(2, "0")).join("")}>`;
   }
+
   function stringifyValue(value: unknown): string {
     if (value instanceof Uint8Array) {
       return stringifyData(value);
@@ -22,17 +60,14 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
             if (!Array.isArray(item) || item.length !== 2) {
               throw new Error("Invalid array item, expected tuple of length 2");
             }
-            return `${String(item[0])}=${stringifyValue(item[1])}`;
+            return `${stringifyTypedValue(item[0])}=${stringifyTypedValue(item[1])}`;
           })
           .join(" ") +
         "}"
       );
     }
     if (value instanceof Map) {
-      const keys = [...value.keys()].sort();
-      return (
-        "{" + keys.map((key) => `${String(key)}=${stringifyValue(value.get(key)!)}`).join(" ") + "}"
-      );
+      return stringifyKeyValuePairs(Array.from(value.entries()));
     }
     switch (typeof value) {
       case "string":
@@ -45,8 +80,8 @@ function stringifyRecord(record: Mcap0Types.TypedMcapRecord): string {
   }
   function stringifyFields(fields: [unknown, unknown][]): string {
     return fields
-      .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
-      .map(([name, value]) => `${camelToSnake(String(name))}=${stringifyValue(value)}`)
+      .sort(([nameA], [nameB]) => String(nameA).localeCompare(String(nameB)))
+      .map(([name, value]) => `${camelToSnake(String(name))}=${stringifyTypedValue(value)}`)
       .join(" ");
   }
   const fields = Object.entries(record)
