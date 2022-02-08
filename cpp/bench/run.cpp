@@ -10,7 +10,7 @@
 constexpr char StringSchema[] = "string data";
 constexpr size_t WriteIterations = 10000;
 
-static void BM_McapWriterBufferedWriterUnchunkedUnindexed(benchmark::State& state) {
+static void BM_McapWriterBufferWriterUnchunkedUnindexed(benchmark::State& state) {
   // Create a message payload
   std::array<std::byte, 4 + 13> payload;
   const uint32_t length = 13;
@@ -24,16 +24,20 @@ static void BM_McapWriterBufferedWriterUnchunkedUnindexed(benchmark::State& stat
   options.noIndexing = true;
 
   // Open an output memory buffer and write the file header
-  mcap::BufferedWriter out{};
+  mcap::BufferWriter out{};
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -51,7 +55,7 @@ static void BM_McapWriterBufferedWriterUnchunkedUnindexed(benchmark::State& stat
   writer.close();
 }
 
-static void BM_McapWriterBufferedWriterUnchunked(benchmark::State& state) {
+static void BM_McapWriterBufferWriterUnchunked(benchmark::State& state) {
   // Create a message payload
   std::array<std::byte, 4 + 13> payload;
   const uint32_t length = 13;
@@ -64,16 +68,20 @@ static void BM_McapWriterBufferedWriterUnchunked(benchmark::State& state) {
   options.noChunking = true;
 
   // Open an output memory buffer and write the file header
-  mcap::BufferedWriter out{};
+  mcap::BufferWriter out{};
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -91,7 +99,7 @@ static void BM_McapWriterBufferedWriterUnchunked(benchmark::State& state) {
   writer.close();
 }
 
-static void BM_McapWriterBufferedWriterChunked(benchmark::State& state) {
+static void BM_McapWriterBufferWriterChunked(benchmark::State& state) {
   // Create a message payload
   std::array<std::byte, 4 + 13> payload;
   const uint32_t length = 13;
@@ -104,16 +112,20 @@ static void BM_McapWriterBufferedWriterChunked(benchmark::State& state) {
   options.chunkSize = uint64_t(state.range(0));
 
   // Open an output memory buffer and write the file header
-  mcap::BufferedWriter out{};
+  mcap::BufferWriter out{};
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -131,7 +143,7 @@ static void BM_McapWriterBufferedWriterChunked(benchmark::State& state) {
   writer.close();
 }
 
-static void BM_McapWriterBufferedWriterChunkedUnindexed(benchmark::State& state) {
+static void BM_McapWriterBufferWriterChunkedUnindexed(benchmark::State& state) {
   // Create a message payload
   std::array<std::byte, 4 + 13> payload;
   const uint32_t length = 13;
@@ -145,16 +157,20 @@ static void BM_McapWriterBufferedWriterChunkedUnindexed(benchmark::State& state)
   options.chunkSize = uint64_t(state.range(0));
 
   // Open an output memory buffer and write the file header
-  mcap::BufferedWriter out{};
+  mcap::BufferWriter out{};
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -172,7 +188,7 @@ static void BM_McapWriterBufferedWriterChunkedUnindexed(benchmark::State& state)
   writer.close();
 }
 
-static void BM_McapWriterBufferedWriterLZ4(benchmark::State& state) {
+static void BM_McapWriterBufferWriterLZ4(benchmark::State& state) {
   // Create a message payload
   std::array<std::byte, 4 + 13> payload;
   const uint32_t length = 13;
@@ -187,16 +203,20 @@ static void BM_McapWriterBufferedWriterLZ4(benchmark::State& state) {
   options.compressionLevel = mcap::CompressionLevel(state.range(1));
 
   // Open an output memory buffer and write the file header
-  mcap::BufferedWriter out{};
+  mcap::BufferWriter out{};
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -214,7 +234,7 @@ static void BM_McapWriterBufferedWriterLZ4(benchmark::State& state) {
   writer.close();
 }
 
-static void BM_McapWriterBufferedWriterZStd(benchmark::State& state) {
+static void BM_McapWriterBufferWriterZStd(benchmark::State& state) {
   // Create a message payload
   std::array<std::byte, 4 + 13> payload;
   const uint32_t length = 13;
@@ -229,16 +249,20 @@ static void BM_McapWriterBufferedWriterZStd(benchmark::State& state) {
   options.compressionLevel = mcap::CompressionLevel(state.range(1));
 
   // Open an output memory buffer and write the file header
-  mcap::BufferedWriter out{};
+  mcap::BufferWriter out{};
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -272,13 +296,17 @@ static void BM_McapWriterStreamWriterUnchunked(benchmark::State& state) {
   std::ofstream out("benchmark.mcap", std::ios::binary);
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -313,13 +341,17 @@ static void BM_McapWriterStreamWriterChunked(benchmark::State& state) {
   std::ofstream out("benchmark.mcap", std::ios::binary);
   writer.open(out, options);
 
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  writer.addSchema(stdMsgsString);
+
   // Register a Channel Info record
-  mcap::ChannelInfo topic("/chatter", "ros1", "std_msgs/String", StringSchema);
+  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   // Create a message
   mcap::Message msg;
-  msg.channelId = topic.channelId;
+  msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
   msg.recordTime = msg.publishTime;
@@ -339,12 +371,11 @@ static void BM_McapWriterStreamWriterChunked(benchmark::State& state) {
 }
 
 int main(int argc, char* argv[]) {
-  benchmark::RegisterBenchmark("BM_McapWriterBufferedWriterUnchunkedUnindexed",
-                               BM_McapWriterBufferedWriterUnchunkedUnindexed);
-  benchmark::RegisterBenchmark("BM_McapWriterBufferedWriterUnchunked",
-                               BM_McapWriterBufferedWriterUnchunked);
-  benchmark::RegisterBenchmark("BM_McapWriterBufferedWriterChunked",
-                               BM_McapWriterBufferedWriterChunked)
+  benchmark::RegisterBenchmark("BM_McapWriterBufferWriterUnchunkedUnindexed",
+                               BM_McapWriterBufferWriterUnchunkedUnindexed);
+  benchmark::RegisterBenchmark("BM_McapWriterBufferWriterUnchunked",
+                               BM_McapWriterBufferWriterUnchunked);
+  benchmark::RegisterBenchmark("BM_McapWriterBufferWriterChunked", BM_McapWriterBufferWriterChunked)
     ->Arg(1)
     ->Arg(10)
     ->Arg(100)
@@ -353,8 +384,8 @@ int main(int argc, char* argv[]) {
     ->Arg(100000)
     ->Arg(1000000)
     ->Arg(10000000);
-  benchmark::RegisterBenchmark("BM_McapWriterBufferedWriterChunkedUnindexed",
-                               BM_McapWriterBufferedWriterChunkedUnindexed)
+  benchmark::RegisterBenchmark("BM_McapWriterBufferWriterChunkedUnindexed",
+                               BM_McapWriterBufferWriterChunkedUnindexed)
     ->Arg(1)
     ->Arg(10)
     ->Arg(100)
@@ -363,14 +394,14 @@ int main(int argc, char* argv[]) {
     ->Arg(100000)
     ->Arg(1000000)
     ->Arg(10000000);
-  benchmark::RegisterBenchmark("BM_McapWriterBufferedWriterLZ4", BM_McapWriterBufferedWriterLZ4)
+  benchmark::RegisterBenchmark("BM_McapWriterBufferWriterLZ4", BM_McapWriterBufferWriterLZ4)
     ->Args({1, 0})
     ->Args({1, 1})
     ->Args({1, 2})
     ->Args({100000, 0})
     ->Args({100000, 1})
     ->Args({100000, 2});
-  benchmark::RegisterBenchmark("BM_McapWriterBufferedWriterZStd", BM_McapWriterBufferedWriterZStd)
+  benchmark::RegisterBenchmark("BM_McapWriterBufferWriterZStd", BM_McapWriterBufferWriterZStd)
     ->Args({1, 0})
     ->Args({1, 1})
     ->Args({1, 2})
