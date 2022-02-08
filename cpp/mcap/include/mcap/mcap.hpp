@@ -258,15 +258,15 @@ struct IReadable {
   virtual uint64_t read(std::byte** output, uint64_t offset, uint64_t size) = 0;
 };
 
-class IChunkReader : public IReadable {
+class ICompressedReader : public IReadable {
 public:
-  virtual inline ~IChunkReader() = default;
+  virtual inline ~ICompressedReader() = default;
 
   virtual void reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) = 0;
   virtual Status status() const = 0;
 };
 
-class BufferReader final : public IChunkReader {
+class BufferReader final : public ICompressedReader {
 public:
   void reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) override;
   uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override;
@@ -292,7 +292,7 @@ private:
   uint64_t position_;
 };
 
-class LZ4Reader final : public IChunkReader {
+class LZ4Reader final : public ICompressedReader {
 public:
   void reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) override;
   uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override;
@@ -307,7 +307,7 @@ private:
   uint64_t uncompressedSize_;
 };
 
-class ZStdReader final : public IChunkReader {
+class ZStdReader final : public ICompressedReader {
 public:
   void reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) override;
   uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override;
