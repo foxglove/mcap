@@ -11,7 +11,7 @@ class McapConan(ConanFile):
     topics = ("mcap", "serialization", "deserialization", "recording")
 
     settings = ("os", "compiler", "build_type", "arch")
-    requires = ("lz4/1.9.3", "zstd/1.5.1")
+    requires = ("fmt/8.1.1", "lz4/1.9.3", "zstd/1.5.1")
     generators = "cmake"
 
     def validate(self):

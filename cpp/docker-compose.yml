@@ -17,6 +17,12 @@ services:
       dockerfile: dev.Dockerfile
       target: bench
 
+  test:
+    build:
+      context: .
+      dockerfile: dev.Dockerfile
+      target: test
+
   bag2mcap:
     build:
       context: .
