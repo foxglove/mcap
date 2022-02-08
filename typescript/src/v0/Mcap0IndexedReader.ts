@@ -2,10 +2,9 @@ import { crc32, crc32Final, crc32Init, crc32Update } from "@foxglove/crc";
 import Heap from "heap-js";
 
 import { getBigUint64 } from "../common/getBigUint64";
-import { IReadable } from "./IReadable";
 import { MCAP0_MAGIC, Opcode } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
-import { DecompressHandlers, TypedMcapRecords } from "./types";
+import { DecompressHandlers, IReadable, TypedMcapRecords } from "./types";
 
 export default class Mcap0IndexedReader {
   readonly chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];

@@ -134,3 +134,11 @@ export interface McapStreamReader {
 export type DecompressHandlers = {
   [compression: string]: (buffer: Uint8Array, decompressedSize: bigint) => Uint8Array;
 };
+
+/**
+ * IReadable describes a random-access reader interface.
+ */
+export interface IReadable {
+  size(): Promise<bigint>;
+  read(offset: bigint, size: bigint): Promise<Uint8Array>;
+}
