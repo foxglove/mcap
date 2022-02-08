@@ -7,6 +7,5 @@ Statistics attachment_count=i:0 channel_count=i:1 channel_message_counts=m:{i:1=
 SummaryOffset group_length=n:50 group_opcode=i:4 group_start=n:165
 SummaryOffset group_length=n:0 group_opcode=i:13 group_start=n:261
 SummaryOffset group_length=n:46 group_opcode=i:11 group_start=n:215
-SummaryOffset group_length=n:0 group_opcode=i:10 group_start=n:261
 SummaryOffset group_length=n:0 group_opcode=i:8 group_start=n:261
 Footer summary_crc=i:0 summary_offset_start=n:261 summary_start=n:165
