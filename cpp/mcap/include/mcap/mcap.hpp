@@ -71,6 +71,8 @@ enum struct OpCode : uint8_t {
   DataEnd = 0x0F,
 };
 
+constexpr std::string_view OpCodeString(OpCode opcode);
+
 struct Record {
   OpCode opcode;
   uint64_t dataSize;
@@ -135,10 +137,12 @@ struct Message {
 };
 
 struct Chunk {
-  uint64_t uncompressedSize;
+  Timestamp startTime;
+  Timestamp endTime;
+  ByteOffset uncompressedSize;
   uint32_t uncompressedCrc;
   std::string compression;
-  uint64_t compressedSize;
+  ByteOffset compressedSize;
   const std::byte* records = nullptr;
 };
 
@@ -219,12 +223,6 @@ struct SummaryOffset {
 
 struct DataEnd {
   uint32_t dataSectionCrc;
-};
-
-struct UnknownRecord {
-  uint8_t opcode;
-  uint64_t dataSize;
-  std::byte* data = nullptr;
 };
 
 struct McapReaderOptions {
@@ -454,6 +452,7 @@ public:
   static Status ReadFooter(IReadable& reader, uint64_t offset, Footer* footer);
 
   static Status ParseHeader(const Record& record, Header* header);
+  static Status ParseFooter(const Record& record, Footer* footer);
   static Status ParseSchema(const Record& record, Schema* schema);
   static Status ParseChannelInfo(const Record& record, ChannelInfo* channelInfo);
   static Status ParseMessage(const Record& record, Message* message);
@@ -588,7 +587,7 @@ public:
   static uint64_t write(IWritable& output, const Statistics& stats);
   static uint64_t write(IWritable& output, const SummaryOffset& summaryOffset);
   static uint64_t write(IWritable& output, const DataEnd& dataEnd);
-  static uint64_t write(IWritable& output, const UnknownRecord& record);
+  static uint64_t write(IWritable& output, const Record& record);
 
   static void write(IWritable& output, const std::string_view str);
   static void write(IWritable& output, const ByteArray bytes);
@@ -629,7 +628,10 @@ private:
 // RecordReader ////////////////////////////////////////////////////////////////
 
 struct RecordReader {
-  RecordReader(IReadable& dataSource, ByteOffset startOffset, ByteOffset endOffset);
+  ByteOffset offset;
+  ByteOffset endOffset;
+
+  RecordReader(IReadable& dataSource, ByteOffset startOffset, ByteOffset endOffset = EndOffset);
 
   void reset(IReadable& dataSource, ByteOffset startOffset, ByteOffset endOffset);
 
@@ -638,9 +640,7 @@ struct RecordReader {
   const Status& status();
 
 private:
-  IReadable& dataSource_;
-  ByteOffset offset_;
-  ByteOffset endOffset_;
+  IReadable* dataSource_ = nullptr;
   Status status_;
   Record curRecord_;
 };
@@ -649,6 +649,7 @@ struct TypedChunkReader {
   std::function<void(const Schema&)> onSchema;
   std::function<void(const ChannelInfo&)> onChannelInfo;
   std::function<void(const Message&)> onMessage;
+  std::function<void(const Record&)> onUnknownRecord;
 
   TypedChunkReader();
 
@@ -667,6 +668,8 @@ private:
 };
 
 struct TypedRecordReader {
+  std::function<void(const Header&)> onHeader;
+  std::function<void(const Footer&)> onFooter;
   std::function<void(const Schema&)> onSchema;
   std::function<void(const ChannelInfo&)> onChannelInfo;
   std::function<void(const Message&)> onMessage;
@@ -680,8 +683,11 @@ struct TypedRecordReader {
   std::function<void(const MetadataIndex&)> onMetadataIndex;
   std::function<void(const SummaryOffset&)> onSummaryOffset;
   std::function<void(const DataEnd&)> onDataEnd;
+  std::function<void(const Record&)> onUnknownRecord;
+  std::function<void(void)> onChunkEnd;
 
-  TypedRecordReader(IReadable& dataSource, ByteOffset startOffset, ByteOffset endOffset);
+  TypedRecordReader(IReadable& dataSource, ByteOffset startOffset,
+                    ByteOffset endOffset = EndOffset);
 
   bool next();
 
