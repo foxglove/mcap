@@ -1,12 +1,8 @@
 # MCAP file format ![](https://img.shields.io/badge/alpha-orange)
 
-MCAP is a modular container format for recording pub/sub messages with arbitrary message serialization.
+MCAP is a modular container format for recording pub/sub messages with arbitrary message serialization. It is primarily intended for use in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
 
-It is primarily intended for use in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
-
-## Documentation
-
-- [File format specification](./docs/specification)
+The file format specification is documented [here](./docs/specification).
 
 ## Developer quick start
 
