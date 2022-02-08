@@ -1,8 +1,8 @@
-Header library="" profile=""
-Schema data=<040506> encoding=c id=1 name=Example
-ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema_id=1 topic=example
-Message channel_id=1 data=<010203> log_time=2 publish_time=1 sequence=10
-Schema data=<040506> encoding=c id=1 name=Example
-ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema_id=1 topic=example
-Statistics attachment_count=0 channel_count=1 channel_message_counts={1=1} chunk_count=0 message_count=1
-Footer summary_crc=0 summary_offset_start=0 summary_start=153
+Header library=s:"" profile=s:""
+Schema data=b:<040506> encoding=s:c id=i:1 name=s:Example
+ChannelInfo id=i:1 message_encoding=s:a metadata=m:{s:foo=s:bar} schema_id=i:1 topic=s:example
+Message channel_id=i:1 data=b:<010203> log_time=n:2 publish_time=n:1 sequence=i:10
+Schema data=b:<040506> encoding=s:c id=i:1 name=s:Example
+ChannelInfo id=i:1 message_encoding=s:a metadata=m:{s:foo=s:bar} schema_id=i:1 topic=s:example
+Statistics attachment_count=i:0 channel_count=i:1 channel_message_counts=m:{i:1=n:1} chunk_count=i:0 message_count=n:1
+Footer summary_crc=i:0 summary_offset_start=n:0 summary_start=n:153
