@@ -1,8 +1,7 @@
 import struct
-import zlib
 from io import BufferedReader, BytesIO, RawIOBase
 from typing import Iterator, List, Optional, Tuple, Union
-
+from zstd import ZSTD_uncompress  # type: ignore
 import lz4.frame  # type: ignore
 
 from .data_stream import ReadDataStream
@@ -53,7 +52,7 @@ def get_chunk_data_stream(chunk: Chunk) -> Tuple[ReadDataStream, int]:
         data: bytes = lz4.frame.decompress(chunk.data)  # type: ignore
         return ReadDataStream(BytesIO(data)), len(data)
     elif chunk.compression == "zstd":
-        data = zlib.decompress(chunk.data)
+        data: bytes = ZSTD_uncompress(chunk.data)
         return ReadDataStream(BytesIO(data)), len(data)
     else:
         return ReadDataStream(BytesIO(chunk.data)), len(chunk.data)
