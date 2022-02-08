@@ -35,12 +35,13 @@ var catCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
+		buf := make([]byte, 1024*1024)
 		for {
-			ci, msg, err := it.Next()
+			ci, msg, err := it.Next(buf)
 			if err != nil {
 				log.Fatal(err)
 			}
-			fmt.Printf("%d %s %v...\n", msg.RecordTime, ci.TopicName, msg.Data[:10])
+			fmt.Printf("%d %s %v...\n", msg.LogTime, ci.Topic, msg.Data[:10])
 		}
 	},
 }

@@ -26,5 +26,5 @@ func TestDB3MCAPConversion(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, uint64(7), info.Statistics.MessageCount)
 	assert.Equal(t, 1, len(info.Channels))
-	assert.Equal(t, "/chatter", info.Channels[1].TopicName)
+	assert.Equal(t, "/chatter", info.Channels[1].Topic)
 }
