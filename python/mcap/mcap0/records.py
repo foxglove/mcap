@@ -1,41 +1,14 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple
 
 from .data_stream import ReadDataStream, WriteDataStream
 from .opcode import Opcode
-
-ValueType = Union[bytes, str, int, List[Tuple[str, str]], Dict[str, str]]
-
-
-def stringify_key_value_list(list: List[Tuple[str, str]]) -> str:
-    items = sorted(list, key=lambda kv: kv[0])
-    return "{" + ",".join([f"{k}={v}" for k, v in items]) + "}"
-
-
-def stringify_value(value: ValueType) -> str:
-    if isinstance(value, bytes):
-        values = ["{0:#0{1}}".format(b, 2) for b in value]
-        return "".join(["<", *values, ">"])
-    if isinstance(value, dict):
-        return stringify_key_value_list(list(value.items()))
-    if isinstance(value, list):
-        return stringify_key_value_list(value)
-    if isinstance(value, str):
-        return '""' if len(value) == 0 else value
-    else:
-        return str(value)
 
 
 @dataclass
 class McapRecord:
     def write(self, stream: WriteDataStream):
         pass
-
-    def stringify(self) -> str:
-        items = sorted(self.__dict__.items(), key=lambda kv: kv[0])
-        name = type(self).__name__
-        fields = [f"{k}={stringify_value(v)}" for k, v in items]
-        return " ".join([name, *fields])
 
 
 @dataclass
@@ -104,11 +77,11 @@ class AttachmentIndex(McapRecord):
 
 @dataclass
 class ChannelInfo(McapRecord):
-    id: int
+    id: int = field(metadata={"value_type": ["int"]})
     topic: str
     message_encoding: str
     metadata: Dict[str, str]
-    schema_id: int
+    schema_id: int = field(metadata={"value_type": ["int"]})
 
     def write(self, stream: WriteDataStream):
         stream.start_record(Opcode.CHANNEL_INFO)
@@ -116,7 +89,7 @@ class ChannelInfo(McapRecord):
         stream.write_prefixed_string(self.topic)
         stream.write_prefixed_string(self.message_encoding)
         stream.write2(self.id)
-        for k, v in self.metadata:
+        for k, v in self.metadata.items():
             stream.write_prefixed_string(k)
             stream.write_prefixed_string(v)
         stream.finish_record()
@@ -180,7 +153,9 @@ class ChunkIndex(McapRecord):
     compressed_size: int
     end_time: int
     message_index_length: int
-    message_index_offsets: Dict[int, int]
+    message_index_offsets: Dict[int, int] = field(
+        metadata={"value_type": ["int", "long"]}
+    )
     start_time: int
     uncompressed_size: int
 
@@ -228,7 +203,7 @@ class DataEnd(McapRecord):
 class Footer(McapRecord):
     summary_start: int
     summary_offset_start: int
-    summary_crc: int
+    summary_crc: int = field(metadata={"value_type": ["int"]})
 
     def write(self, stream: WriteDataStream):
         stream.start_record(Opcode.FOOTER)
@@ -269,11 +244,11 @@ class Header(McapRecord):
 
 @dataclass
 class Message(McapRecord):
-    channel_id: int
+    channel_id: int = field(metadata={"value_type": ["int"]})
     log_time: int
     data: bytes
     publish_time: int
-    sequence: int
+    sequence: int = field(metadata={"value_type": ["int"]})
 
     def write(self, stream: WriteDataStream):
         stream.start_record(Opcode.MESSAGE)
@@ -302,8 +277,8 @@ class Message(McapRecord):
 
 @dataclass
 class MessageIndex(McapRecord):
-    channel_id: int
-    records: List[Tuple[int, int]]
+    channel_id: int = field(metadata={"value_type": ["int"]})
+    records: List[Tuple[int, int]] = field(metadata={"value_type": ["long", "long"]})
 
     @staticmethod
     def read(stream: ReadDataStream):
@@ -334,7 +309,7 @@ class MetadataIndex(McapRecord):
 
 @dataclass
 class Schema(McapRecord):
-    id: int
+    id: int = field(metadata={"value_type": ["int"]})
     data: bytes
     encoding: str
     name: str
@@ -360,10 +335,12 @@ class Schema(McapRecord):
 
 @dataclass
 class Statistics(McapRecord):
-    attachment_count: int
-    channel_count: int
-    channel_message_counts: Dict[int, int]
-    chunk_count: int
+    attachment_count: int = field(metadata={"value_type": ["int"]})
+    channel_count: int = field(metadata={"value_type": ["int"]})
+    channel_message_counts: Dict[int, int] = field(
+        metadata={"value_type": ["int", "long"]}
+    )
+    chunk_count: int = field(metadata={"value_type": ["int"]})
     message_count: int
 
     @staticmethod
@@ -390,7 +367,7 @@ class Statistics(McapRecord):
 
 @dataclass
 class SummaryOffset(McapRecord):
-    group_opcode: int
+    group_opcode: int = field(metadata={"value_type": ["int"]})
     group_start: int
     group_length: int
 

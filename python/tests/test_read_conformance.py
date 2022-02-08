@@ -2,8 +2,9 @@ import difflib
 import unittest
 from pathlib import Path
 
-from mcap.mcap0.stream_reader import StreamReader
 from mcap.mcap0.records import DataEnd
+from mcap.mcap0.serialization import stringify_record
+from mcap.mcap0.stream_reader import StreamReader
 
 
 class McapStreamingReaderConformanceTestCase(unittest.TestCase):
@@ -18,7 +19,9 @@ class McapStreamingReaderConformanceTestCase(unittest.TestCase):
             expected_text = expected_path.read_text().splitlines()
             reader = StreamReader(open(file, "rb"))
             output = [
-                r.stringify() for r in reader.records() if not isinstance(r, DataEnd)
+                stringify_record(r)
+                for r in reader.records()
+                if not isinstance(r, DataEnd)
             ]
             diff = difflib.unified_diff(expected_text, output)
             if any(diff):
