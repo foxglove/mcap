@@ -110,9 +110,10 @@ async function runWriterTest(
     }
     foundAnyTests = true;
     const filePath = path.join(options.dataDir, variant.baseName, `${variant.name}.json`);
+    const basePath = path.basename(filePath);
 
     if (!runner.supportsVariant(variant)) {
-      console.log(colors.yellow("unsupported"), filePath);
+      console.log(colors.yellow("unsupported"), basePath);
       continue;
     }
 
@@ -142,15 +143,13 @@ async function runWriterTest(
           part.added === true ? colors.green : part.removed === true ? colors.red : colors.grey;
         colorDiff += color(part.value);
       });
-      console.error(splitAnsiString(splitAnsiString(colorDiff, 8, " "), 81, "\n"));
+      console.error(splitAnsiString(splitAnsiString(colorDiff, 8, " "), 90, "\n"));
       console.error();
       hadError = true;
       continue;
     }
 
-    if (!hadError) {
-      console.error(colors.green("pass       "), filePath);
-    }
+    console.error(colors.green("pass       "), basePath);
   }
 
   return { foundAnyTests, hadError };
@@ -189,6 +188,8 @@ async function main(options: TestOptions) {
         runner,
         options,
       );
+      console.log("RUN WRITEr", runner);
+
       hadError ||= newHadError;
       foundAnyTests ||= newFoundAnyTests;
     }
