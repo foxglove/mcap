@@ -57,7 +57,7 @@ enum struct OpCode : uint8_t {
   Header = 0x01,
   Footer = 0x02,
   Schema = 0x03,
-  ChannelInfo = 0x04,
+  Channel = 0x04,
   Message = 0x05,
   Chunk = 0x06,
   MessageIndex = 0x07,
@@ -110,17 +110,17 @@ struct Schema {
       , data{data} {}
 };
 
-struct ChannelInfo {
+struct Channel {
   ChannelId id;
   std::string topic;
   std::string messageEncoding;
   SchemaId schemaId;
   KeyValueMap metadata;
 
-  ChannelInfo() = default;
+  Channel() = default;
 
-  ChannelInfo(const std::string_view topic, const std::string_view messageEncoding,
-              SchemaId schemaId, const KeyValueMap& metadata = {})
+  Channel(const std::string_view topic, const std::string_view messageEncoding, SchemaId schemaId,
+          const KeyValueMap& metadata = {})
       : topic(topic)
       , messageEncoding(messageEncoding)
       , schemaId(schemaId)
@@ -450,7 +450,7 @@ public:
   static Status ParseHeader(const Record& record, Header* header);
   static Status ParseFooter(const Record& record, Footer* footer);
   static Status ParseSchema(const Record& record, Schema* schema);
-  static Status ParseChannelInfo(const Record& record, ChannelInfo* channelInfo);
+  static Status ParseChannel(const Record& record, Channel* channel);
   static Status ParseMessage(const Record& record, Message* message);
   static Status ParseChunk(const Record& record, Chunk* chunk);
   static Status ParseMessageIndex(const Record& record, MessageIndex* messageIndex);
@@ -475,7 +475,7 @@ private:
   std::optional<Statistics> statistics_;
   std::vector<ChunkIndex> chunkIndexes_;
   std::vector<AttachmentIndex> attachmentIndexes_;
-  std::unordered_map<ChannelId, ChannelInfo> channelInfos_;
+  std::unordered_map<ChannelId, Channel> channels_;
   // Used for uncompressed messages
   std::unordered_map<ChannelId, std::map<Timestamp, ByteOffset>> messageIndex_;
   // Used for messages inside compressed chunks
@@ -529,14 +529,14 @@ public:
   void addSchema(Schema& schema);
 
   /**
-   * @brief Add a new channel to the MCAP file and set `channelInfo.id` to a
+   * @brief Add a new channel to the MCAP file and set `channel.id` to a
    * generated channel id. The channel id is used when adding messages to the
    * file.
    *
-   * @param channelInfo Description of the channel to register. The `channelId`
-   *   value is ignored and will be set to a generated channel id.
+   * @param channel Description of the channel to register. The `id` value is
+   *   ignored and will be set to a generated channel id.
    */
-  void addChannel(ChannelInfo& channelInfo);
+  void addChannel(Channel& channel);
 
   /**
    * @brief Write a message to the output stream.
@@ -571,7 +571,7 @@ public:
   static uint64_t write(IWritable& output, const Header& header);
   static uint64_t write(IWritable& output, const Footer& footer);
   static uint64_t write(IWritable& output, const Schema& schema);
-  static uint64_t write(IWritable& output, const ChannelInfo& channelInfo);
+  static uint64_t write(IWritable& output, const Channel& channel);
   static uint64_t write(IWritable& output, const Message& message);
   static uint64_t write(IWritable& output, const Attachment& attachment);
   static uint64_t write(IWritable& output, const Metadata& metadata);
@@ -602,7 +602,7 @@ private:
   std::unique_ptr<LZ4Writer> lz4Chunk_;
   std::unique_ptr<ZStdWriter> zstdChunk_;
   std::vector<Schema> schemas_;
-  std::vector<ChannelInfo> channels_;
+  std::vector<Channel> channels_;
   std::vector<AttachmentIndex> attachmentIndex_;
   std::vector<MetadataIndex> metadataIndex_;
   std::vector<ChunkIndex> chunkIndex_;
@@ -643,7 +643,7 @@ private:
 
 struct TypedChunkReader {
   std::function<void(const Schema&)> onSchema;
-  std::function<void(const ChannelInfo&)> onChannelInfo;
+  std::function<void(const Channel&)> onChannel;
   std::function<void(const Message&)> onMessage;
   std::function<void(const Record&)> onUnknownRecord;
 
@@ -667,7 +667,7 @@ struct TypedRecordReader {
   std::function<void(const Header&)> onHeader;
   std::function<void(const Footer&)> onFooter;
   std::function<void(const Schema&)> onSchema;
-  std::function<void(const ChannelInfo&)> onChannelInfo;
+  std::function<void(const Channel&)> onChannel;
   std::function<void(const Message&)> onMessage;
   std::function<void(const Chunk&)> onChunk;
   std::function<void(const MessageIndex&)> onMessageIndex;

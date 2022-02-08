@@ -11,8 +11,8 @@ constexpr std::string_view OpCodeString(OpCode opcode) {
       return "Footer";
     case OpCode::Schema:
       return "Schema";
-    case OpCode::ChannelInfo:
-      return "ChannelInfo";
+    case OpCode::Channel:
+      return "Channel";
     case OpCode::Message:
       return "Message";
     case OpCode::Chunk:
@@ -250,8 +250,8 @@ void McapWriter::close() {
       write(fileOutput, schema);
     }
 
-    // Write all channel info records
-    ByteOffset channelInfoStart = fileOutput.size();
+    // Write all channel records
+    ByteOffset channelStart = fileOutput.size();
     for (const auto& channel : channels_) {
       write(fileOutput, channel);
     }
@@ -281,11 +281,11 @@ void McapWriter::close() {
     // Write summary offset records
     summaryOffsetStart = fileOutput.size();
     if (!schemas_.empty()) {
-      write(fileOutput, SummaryOffset{OpCode::Schema, schemaStart, channelInfoStart - schemaStart});
+      write(fileOutput, SummaryOffset{OpCode::Schema, schemaStart, channelStart - schemaStart});
     }
     if (!channels_.empty()) {
-      write(fileOutput, SummaryOffset{OpCode::ChannelInfo, channelInfoStart,
-                                      chunkIndexStart - channelInfoStart});
+      write(fileOutput,
+            SummaryOffset{OpCode::Channel, channelStart, chunkIndexStart - channelStart});
     }
     if (!chunkIndex_.empty()) {
       write(fileOutput, SummaryOffset{OpCode::ChunkIndex, chunkIndexStart,
@@ -336,9 +336,9 @@ void McapWriter::addSchema(Schema& schema) {
   schemas_.push_back(schema);
 }
 
-void McapWriter::addChannel(ChannelInfo& info) {
-  info.id = uint16_t(channels_.size() + 1);
-  channels_.push_back(info);
+void McapWriter::addChannel(Channel& channel) {
+  channel.id = uint16_t(channels_.size() + 1);
+  channels_.push_back(channel);
 }
 
 Status McapWriter::write(const Message& message) {
@@ -348,7 +348,7 @@ Status McapWriter::write(const Message& message) {
   auto& output = getOutput();
   auto& channelMessageCounts = statistics_.channelMessageCounts;
 
-  // Write out ChannelInfo if we have not yet done so
+  // Write out Channel if we have not yet done so
   if (channelMessageCounts.find(message.channelId) == channelMessageCounts.end()) {
     const size_t channelIndex = message.channelId - 1;
     if (channelIndex >= channels_.size()) {
@@ -371,7 +371,7 @@ Status McapWriter::write(const Message& message) {
       writtenSchemas_.insert(channel.schemaId);
     }
 
-    // Write the ChannelInfo record
+    // Write the Channel record
     uncompressedSize_ += write(output, channel);
 
     // Update channel statistics
@@ -590,21 +590,21 @@ uint64_t McapWriter::write(IWritable& output, const Schema& schema) {
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(IWritable& output, const ChannelInfo& channelInfo) {
-  const uint32_t metadataSize = internal::KeyValueMapSize(channelInfo.metadata);
+uint64_t McapWriter::write(IWritable& output, const Channel& channel) {
+  const uint32_t metadataSize = internal::KeyValueMapSize(channel.metadata);
   const uint64_t recordSize = /* id */ 2 +
-                              /* topic */ 4 + channelInfo.topic.size() +
-                              /* message_encoding */ 4 + channelInfo.messageEncoding.size() +
+                              /* topic */ 4 + channel.topic.size() +
+                              /* message_encoding */ 4 + channel.messageEncoding.size() +
                               /* schema_id */ 2 +
                               /* metadata */ 4 + metadataSize;
 
-  write(output, OpCode::ChannelInfo);
+  write(output, OpCode::Channel);
   write(output, recordSize);
-  write(output, channelInfo.id);
-  write(output, channelInfo.topic);
-  write(output, channelInfo.messageEncoding);
-  write(output, channelInfo.schemaId);
-  write(output, channelInfo.metadata, metadataSize);
+  write(output, channel.id);
+  write(output, channel.topic);
+  write(output, channel.messageEncoding);
+  write(output, channel.schemaId);
+  write(output, channel.metadata, metadataSize);
 
   return 9 + recordSize;
 }
@@ -1427,41 +1427,41 @@ Status McapReader::ParseSchema(const Record& record, Schema* schema) {
   return StatusCode::Success;
 }
 
-Status McapReader::ParseChannelInfo(const Record& record, ChannelInfo* channelInfo) {
+Status McapReader::ParseChannel(const Record& record, Channel* channel) {
   constexpr uint64_t MinSize = 2 + 4 + 4 + 2 + 4;
 
-  assert(record.opcode == OpCode::ChannelInfo);
+  assert(record.opcode == OpCode::Channel);
   if (record.dataSize < MinSize) {
     const auto msg =
-      internal::StrFormat(internal::ErrorMsgInvalidLength, "ChannelInfo", record.dataSize);
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "Channel", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
   size_t offset = 0;
 
   // id
-  channelInfo->id = internal::ParseUint16(record.data);
+  channel->id = internal::ParseUint16(record.data);
   offset += 2;
   // topic
   if (auto status =
-        internal::ParseString(record.data + offset, record.dataSize - offset, &channelInfo->topic);
+        internal::ParseString(record.data + offset, record.dataSize - offset, &channel->topic);
       !status.ok()) {
     return status;
   }
-  offset += 4 + channelInfo->topic.size();
+  offset += 4 + channel->topic.size();
   // message_encoding
   if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
-                                          &channelInfo->messageEncoding);
+                                          &channel->messageEncoding);
       !status.ok()) {
     return status;
   }
-  offset += 4 + channelInfo->messageEncoding.size();
+  offset += 4 + channel->messageEncoding.size();
   // schema_id
-  channelInfo->schemaId = internal::ParseUint16(record.data + offset);
+  channel->schemaId = internal::ParseUint16(record.data + offset);
   offset += 2;
   // metadata
   if (auto status = internal::ParseKeyValueMap(record.data + offset, record.dataSize - offset,
-                                               &channelInfo->metadata);
+                                               &channel->metadata);
       !status.ok()) {
     return status;
   }
@@ -1884,10 +1884,10 @@ TypedChunkReader::TypedChunkReader()
     , status_{StatusCode::Success} {}
 
 void TypedChunkReader::reset(const Chunk& chunk, Compression compression) {
-  IChunkReader* decompressor =
-    (compression == Compression::None)  ? static_cast<IChunkReader*>(&uncompressedReader_)
-    : (compression == Compression::Lz4) ? static_cast<IChunkReader*>(&lz4Reader_)
-                                        : static_cast<IChunkReader*>(&zstdReader_);
+  ICompressedReader* decompressor =
+    (compression == Compression::None)  ? static_cast<ICompressedReader*>(&uncompressedReader_)
+    : (compression == Compression::Lz4) ? static_cast<ICompressedReader*>(&lz4Reader_)
+                                        : static_cast<ICompressedReader*>(&zstdReader_);
   decompressor->reset(chunk.records, chunk.compressedSize, chunk.uncompressedSize);
   reader_.reset(*decompressor, 0, decompressor->size());
   status_ = decompressor->status();
@@ -1911,12 +1911,12 @@ bool TypedChunkReader::next() {
       }
       break;
     }
-    case OpCode::ChannelInfo: {
-      if (onChannelInfo) {
-        ChannelInfo channelInfo;
-        status_ = McapReader::ParseChannelInfo(record, &channelInfo);
+    case OpCode::Channel: {
+      if (onChannel) {
+        Channel channel;
+        status_ = McapReader::ParseChannel(record, &channel);
         if (status_.ok()) {
-          onChannelInfo(channelInfo);
+          onChannel(channel);
         }
       }
       break;
@@ -1974,9 +1974,9 @@ TypedRecordReader::TypedRecordReader(IReadable& dataSource, ByteOffset startOffs
       onSchema(schema);
     }
   };
-  chunkReader_.onChannelInfo = [&](const ChannelInfo& channelInfo) {
-    if (onChannelInfo) {
-      onChannelInfo(channelInfo);
+  chunkReader_.onChannel = [&](const Channel& channel) {
+    if (onChannel) {
+      onChannel(channel);
     }
   };
   chunkReader_.onMessage = [&](const Message& message) {
@@ -2035,11 +2035,11 @@ bool TypedRecordReader::next() {
       }
       break;
     }
-    case OpCode::ChannelInfo: {
-      if (onChannelInfo) {
-        ChannelInfo channelInfo;
-        if (status_ = McapReader::ParseChannelInfo(record, &channelInfo); status_.ok()) {
-          onChannelInfo(channelInfo);
+    case OpCode::Channel: {
+      if (onChannel) {
+        Channel channel;
+        if (status_ = McapReader::ParseChannel(record, &channel); status_.ok()) {
+          onChannel(channel);
         }
       }
       break;
@@ -2054,7 +2054,7 @@ bool TypedRecordReader::next() {
       break;
     }
     case OpCode::Chunk: {
-      if (onMessage || onChunk || onSchema || onChannelInfo) {
+      if (onMessage || onChunk || onSchema || onChannel) {
         Chunk chunk;
         status_ = McapReader::ParseChunk(record, &chunk);
         if (!status_.ok()) {
@@ -2063,7 +2063,7 @@ bool TypedRecordReader::next() {
         if (onChunk) {
           onChunk(chunk);
         }
-        if (onMessage || onSchema || onChannelInfo) {
+        if (onMessage || onSchema || onChannel) {
           const auto maybeCompression = McapReader::ParseCompression(chunk.compression);
           if (!maybeCompression.has_value()) {
             const auto msg =

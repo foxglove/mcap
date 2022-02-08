@@ -25,7 +25,7 @@ int main() {
   mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
   writer.addSchema(stdMsgsString);
 
-  mcap::ChannelInfo topic("/chatter", "ros1", stdMsgsString.id);
+  mcap::Channel topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
   std::array<std::byte, 4 + 13> payload;
