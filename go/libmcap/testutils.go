@@ -12,9 +12,35 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func encodedUint16(x uint16) []byte {
+	buf := make([]byte, 2)
+	binary.LittleEndian.PutUint16(buf, x)
+	return buf
+}
+
 func encodedUint32(x uint32) []byte {
 	buf := make([]byte, 4)
 	binary.LittleEndian.PutUint32(buf, x)
+	return buf
+}
+
+func encodedUint64(x uint64) []byte {
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, x)
+	return buf
+}
+
+func prefixedString(s string) []byte {
+	buf := make([]byte, len(s)+4)
+	binary.LittleEndian.PutUint32(buf, uint32(len(s)))
+	copy(buf[4:], s)
+	return buf
+}
+
+func prefixedBytes(s []byte) []byte {
+	buf := make([]byte, len(s)+4)
+	binary.LittleEndian.PutUint32(buf, uint32(len(s)))
+	copy(buf[4:], s)
 	return buf
 }
 

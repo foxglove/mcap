@@ -52,6 +52,68 @@ func TestReadPrefixedBytes(t *testing.T) {
 	}
 }
 
+func TestReadPrefixedMap(t *testing.T) {
+	cases := []struct {
+		assertion string
+		input     []byte
+		output    map[string]string
+		newOffset int
+		err       error
+	}{
+		{
+			"short length",
+			[]byte{},
+			nil,
+			0,
+			io.ErrShortBuffer,
+		},
+		{
+			"short key",
+			flatten(
+				encodedUint32(16),
+				encodedUint32(4),
+				[]byte("foo"),
+			),
+			nil,
+			0,
+			io.ErrShortBuffer,
+		},
+		{
+			"short value",
+			flatten(
+				encodedUint32(16),
+				prefixedString("food"),
+				encodedUint32(4),
+				[]byte("foo"),
+			),
+			nil,
+			0,
+			io.ErrShortBuffer,
+		},
+		{
+			"valid map",
+			flatten(
+				encodedUint32(14),
+				prefixedString("foo"),
+				prefixedString("bar"),
+			),
+			map[string]string{
+				"foo": "bar",
+			},
+			18,
+			nil,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.assertion, func(t *testing.T) {
+			output, offset, err := readPrefixedMap(c.input, 0)
+			assert.ErrorIs(t, err, c.err)
+			assert.Equal(t, offset, c.newOffset)
+			assert.Equal(t, output, c.output)
+		})
+	}
+}
+
 func TestReadPrefixedString(t *testing.T) {
 	cases := []struct {
 		assertion      string
@@ -115,27 +177,29 @@ func TestMessageReading(t *testing.T) {
 						Profile: "ros1",
 					})
 					assert.Nil(t, err)
-					assert.Nil(t, w.WriteChannelInfo(&ChannelInfo{
-						ChannelID:       0,
-						TopicName:       "/test1",
-						SchemaEncoding:  "msg",
-						MessageEncoding: "ros1",
-						SchemaName:      "foo",
-						Schema:          []byte{},
+					assert.Nil(t, w.WriteSchema(&Schema{
+						ID:       1,
+						Name:     "foo",
+						Encoding: "msg",
+						Data:     []byte{},
 					}))
 					assert.Nil(t, w.WriteChannelInfo(&ChannelInfo{
-						ChannelID:       1,
-						TopicName:       "/test2",
+						ID:              0,
+						Topic:           "/test1",
+						SchemaID:        1,
 						MessageEncoding: "ros1",
-						SchemaEncoding:  "msg",
-						SchemaName:      "foo",
-						Schema:          []byte{},
+					}))
+					assert.Nil(t, w.WriteChannelInfo(&ChannelInfo{
+						ID:              1,
+						Topic:           "/test2",
+						MessageEncoding: "ros1",
+						SchemaID:        1,
 					}))
 					for i := 0; i < 1000; i++ {
 						err := w.WriteMessage(&Message{
 							ChannelID:   uint16(i % 2),
 							Sequence:    0,
-							RecordTime:  uint64(i),
+							LogTime:     uint64(i),
 							PublishTime: uint64(i),
 							Data:        []byte{1, 2, 3, 4},
 						})
@@ -157,7 +221,7 @@ func TestMessageReading(t *testing.T) {
 							assert.Nil(t, err)
 							assert.NotNil(t, ci)
 							assert.NotNil(t, msg)
-							assert.Equal(t, msg.ChannelID, ci.ChannelID)
+							assert.Equal(t, msg.ChannelID, ci.ID)
 							c++
 						}
 						assert.Equal(t, 1000, c)
@@ -177,7 +241,7 @@ func TestMessageReading(t *testing.T) {
 							assert.Nil(t, err)
 							assert.NotNil(t, ci)
 							assert.NotNil(t, msg)
-							assert.Equal(t, msg.ChannelID, ci.ChannelID)
+							assert.Equal(t, msg.ChannelID, ci.ID)
 							c++
 						}
 						assert.Equal(t, 500, c)
@@ -197,7 +261,7 @@ func TestMessageReading(t *testing.T) {
 							assert.Nil(t, err)
 							assert.NotNil(t, ci)
 							assert.NotNil(t, msg)
-							assert.Equal(t, msg.ChannelID, ci.ChannelID)
+							assert.Equal(t, msg.ChannelID, ci.ID)
 							c++
 						}
 						assert.Equal(t, 1000, c)

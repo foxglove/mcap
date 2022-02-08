@@ -7,6 +7,7 @@ import (
 
 type unindexedMessageIterator struct {
 	lexer    *Lexer
+	schemas  map[uint16]*Schema
 	channels map[uint16]*ChannelInfo
 	topics   map[string]bool
 	start    uint64
@@ -20,14 +21,22 @@ func (it *unindexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 			return nil, nil, err
 		}
 		switch token.TokenType {
+		case TokenSchema:
+			schema, err := ParseSchema(token.bytes())
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to parse schema: %w", err)
+			}
+			if _, ok := it.schemas[schema.ID]; !ok {
+				it.schemas[schema.ID] = schema
+			}
 		case TokenChannelInfo:
 			channelInfo, err := ParseChannelInfo(token.bytes())
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to parse channel info: %w", err)
 			}
-			if _, ok := it.channels[channelInfo.ChannelID]; !ok {
-				if len(it.topics) == 0 || it.topics[channelInfo.TopicName] {
-					it.channels[channelInfo.ChannelID] = channelInfo
+			if _, ok := it.channels[channelInfo.ID]; !ok {
+				if len(it.topics) == 0 || it.topics[channelInfo.Topic] {
+					it.channels[channelInfo.ID] = channelInfo
 				}
 			}
 		case TokenMessage:
@@ -42,7 +51,7 @@ func (it *unindexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 				// channel ID, it has no option but to skip.
 				continue
 			}
-			if message.RecordTime >= it.start && message.RecordTime < it.end {
+			if message.LogTime >= it.start && message.LogTime < it.end {
 				return it.channels[message.ChannelID], message, nil
 			}
 		default:

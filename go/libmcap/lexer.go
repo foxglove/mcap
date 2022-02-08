@@ -18,19 +18,21 @@ var (
 )
 
 const (
-	TokenMessage TokenType = iota
-	TokenChannelInfo
+	TokenHeader TokenType = iota
 	TokenFooter
-	TokenHeader
-	TokenAttachment
-	TokenAttachmentIndex
-	TokenChunkIndex
-	TokenStatistics
+	TokenSchema
+	TokenChannelInfo
+	TokenMessage
 	TokenChunk
 	TokenMessageIndex
+	TokenChunkIndex
+	TokenAttachment
+	TokenAttachmentIndex
+	TokenStatistics
 	TokenMetadata
 	TokenMetadataIndex
 	TokenSummaryOffset
+	TokenDataEnd
 )
 
 type TokenType int
@@ -43,32 +45,34 @@ type Token struct {
 
 func (t TokenType) String() string {
 	switch t {
-	case TokenMessage:
-		return "message"
-	case TokenChannelInfo:
-		return "channel info"
-	case TokenFooter:
-		return "footer"
 	case TokenHeader:
 		return "header"
+	case TokenFooter:
+		return "footer"
+	case TokenSchema:
+		return "schema"
+	case TokenChannelInfo:
+		return "channel info"
+	case TokenMessage:
+		return "message"
+	case TokenChunk:
+		return "chunk"
+	case TokenMessageIndex:
+		return "message index"
+	case TokenChunkIndex:
+		return "chunk index"
 	case TokenAttachment:
 		return "attachment"
 	case TokenAttachmentIndex:
 		return "attachment index"
-	case TokenChunk:
-		return "chunk"
-	case TokenChunkIndex:
-		return "chunk index"
 	case TokenStatistics:
 		return "statistics"
-	case TokenMessageIndex:
-		return "message index"
 	case TokenMetadata:
 		return "metadata"
-	case TokenMetadataIndex:
-		return "metadata index"
 	case TokenSummaryOffset:
 		return "summary offset"
+	case TokenDataEnd:
+		return "data end"
 	default:
 		return "unknown"
 	}
@@ -245,6 +249,10 @@ func (l *Lexer) Next() (Token, error) {
 		switch opcode {
 		case OpHeader:
 			return Token{TokenHeader, recordLen, l.reader}, nil
+		case OpSchema:
+			return Token{TokenSchema, recordLen, l.reader}, nil
+		case OpDataEnd:
+			return Token{TokenDataEnd, recordLen, l.reader}, nil
 		case OpChannelInfo:
 			return Token{TokenChannelInfo, recordLen, l.reader}, nil
 		case OpFooter:
@@ -287,7 +295,7 @@ func (l *Lexer) Next() (Token, error) {
 		case OpMetadata:
 			return Token{TokenMetadata, recordLen, l.reader}, nil
 		case OpMetadataIndex:
-			return Token{TokenMetadata, recordLen, l.reader}, nil
+			return Token{TokenMetadataIndex, recordLen, l.reader}, nil
 		case OpSummaryOffset:
 			return Token{TokenSummaryOffset, recordLen, l.reader}, nil
 		case OpInvalidZero:

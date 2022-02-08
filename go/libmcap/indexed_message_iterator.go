@@ -80,8 +80,8 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			if err != nil {
 				return fmt.Errorf("failed to parse channel info: %w", err)
 			}
-			if len(it.topics) == 0 || it.topics[channelInfo.TopicName] {
-				it.channels[channelInfo.ChannelID] = channelInfo
+			if len(it.topics) == 0 || it.topics[channelInfo.Topic] {
+				it.channels[channelInfo.ID] = channelInfo
 			}
 		case TokenAttachmentIndex:
 			idx, err := ParseAttachmentIndex(data)
@@ -95,8 +95,8 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 				return fmt.Errorf("failed to parse attachment index: %w", err)
 			}
 			// if the chunk overlaps with the requested parameters, load it
-			for _, c := range it.channels {
-				if idx.MessageIndexOffsets[c.ChannelID] > 0 {
+			for _, channel := range it.channels {
+				if idx.MessageIndexOffsets[channel.ID] > 0 {
 					if (it.end == 0 && it.start == 0) || (idx.StartTime < it.end && idx.EndTime >= it.start) {
 						it.chunkIndexes = append(it.chunkIndexes, idx)
 					}
