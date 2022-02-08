@@ -2,11 +2,16 @@ import { program } from "commander";
 import * as Diff from "diff";
 import fs from "fs/promises";
 import path from "path";
-import listDirRecursive from "scripts/util/listDirRecursive";
+import generateTestVariants from "variants/generateTestVariants";
 
 import runners from "./runners";
 
-async function main(options: { dataDir: string; runner?: string; update: boolean }) {
+async function main(options: {
+  dataDir: string;
+  runner?: string;
+  update: boolean;
+  testRegex?: RegExp;
+}) {
   if (options.update && !options.runner) {
     throw new Error(
       "A test runner must be specified using --runner when updating expected outputs",
@@ -25,16 +30,31 @@ async function main(options: { dataDir: string; runner?: string; update: boolean
   await fs.mkdir(options.dataDir, { recursive: true });
 
   let hadError = false;
+  let foundAnyTests = false;
   for (const runner of enabledRunners) {
     console.log("running", runner.name);
-    for await (const fileName of listDirRecursive(options.dataDir)) {
-      if (!fileName.endsWith(".mcap")) {
+    for (const variant of generateTestVariants()) {
+      if (options.testRegex && !options.testRegex.test(variant.name)) {
         continue;
       }
-      const filePath = path.join(options.dataDir, fileName);
+      foundAnyTests = true;
+      const filePath = path.join(options.dataDir, variant.baseName, `${variant.name}.mcap`);
 
-      console.log("  testing", filePath);
-      const outputLines = await runner.run(filePath);
+      if (runner.supportsVariant(variant)) {
+        console.log("  testing", filePath);
+      } else {
+        console.log("  not supported", filePath);
+        continue;
+      }
+
+      let outputLines: string[];
+      try {
+        outputLines = await runner.run(filePath);
+      } catch (error) {
+        console.error(error);
+        hadError = true;
+        continue;
+      }
       const output = outputLines.join("\n") + "\n";
 
       const expectedOutputPath = filePath.replace(/\.mcap$/, ".expected.txt");
@@ -59,6 +79,11 @@ async function main(options: { dataDir: string; runner?: string; update: boolean
     }
   }
 
+  if (!foundAnyTests) {
+    console.error("No tests found");
+    hadError = true;
+  }
+
   if (hadError) {
     process.exit(1);
   }
@@ -72,5 +97,10 @@ program
       .choices(runners.map((r) => r.name)),
   )
   .option("--update", "update expected output files", false)
+  .option(
+    "--test-regex <pattern>",
+    "filter tests to run",
+    (value: string) => new RegExp(value, "i"),
+  )
   .action(main)
   .parse();
