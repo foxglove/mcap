@@ -19,7 +19,7 @@ var (
 const (
 	CompressionLZ4  CompressionFormat = "lz4"
 	CompressionZSTD CompressionFormat = "zstd"
-	CompressionNone CompressionFormat = "none"
+	CompressionNone CompressionFormat = ""
 )
 
 type BufCloser struct {

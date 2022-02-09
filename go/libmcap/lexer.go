@@ -166,19 +166,22 @@ func loadChunk(l *Lexer, recordSize int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to read uncompressed CRC: %w", err)
 	}
-	compressionLen, offset, err := getUint32(l.buf, offset)
+	compressionLen, _, err := getUint32(l.buf, offset)
 	if err != nil {
 		return fmt.Errorf("failed to read compression length: %w", err)
 	}
-
-	compression := make([]byte, compressionLen)
-	_, err = io.ReadFull(l.reader, compression)
+	_, err = io.ReadFull(l.reader, l.buf[:compressionLen+8])
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read compression from chunk: %w", err)
+	}
+	compression := CompressionFormat(l.buf[:compressionLen])
+	recordsLength, _, err := getUint64(l.buf, int(compressionLen))
+	if err != nil {
+		return fmt.Errorf("failed to read records length: %w", err)
 	}
 
 	// remaining bytes in the record are the chunk data
-	lr := io.LimitReader(l.reader, recordSize-int64(offset+len(compression)))
+	lr := io.LimitReader(l.reader, int64(recordsLength))
 	switch CompressionFormat(compression) {
 	case CompressionNone:
 		l.reader = lr
