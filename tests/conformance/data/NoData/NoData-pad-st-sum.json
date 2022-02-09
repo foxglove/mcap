@@ -3,31 +3,43 @@
   {
     "type": "Statistics",
     "fields": [
-      ["attachment_count", 0],
-      ["channel_count", 0],
+      ["attachment_count", "0"],
+      ["channel_count", "0"],
       ["channel_message_counts", {}],
-      ["chunk_count", 0],
-      ["message_count", 0]
+      ["chunk_count", "0"],
+      ["message_count", "0"]
     ]
   },
   {
     "type": "SummaryOffset",
-    "fields": [["group_length", 0], ["group_opcode", 13], ["group_start", 80]]
+    "fields": [
+      ["group_length", "0"],
+      ["group_opcode", "13"],
+      ["group_start", "80"]
+    ]
   },
   {
     "type": "SummaryOffset",
-    "fields": [["group_length", 36], ["group_opcode", 11], ["group_start", 44]]
+    "fields": [
+      ["group_length", "36"],
+      ["group_opcode", "11"],
+      ["group_start", "44"]
+    ]
   },
   {
     "type": "SummaryOffset",
-    "fields": [["group_length", 0], ["group_opcode", 8], ["group_start", 80]]
+    "fields": [
+      ["group_length", "0"],
+      ["group_opcode", "8"],
+      ["group_start", "80"]
+    ]
   },
   {
     "type": "Footer",
     "fields": [
-      ["summary_crc", 0],
-      ["summary_offset_start", 80],
-      ["summary_start", 44]
+      ["summary_crc", "0"],
+      ["summary_offset_start", "80"],
+      ["summary_start", "44"]
     ]
   }
 ]

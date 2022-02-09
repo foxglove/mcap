@@ -11,8 +11,8 @@ function replacer(_key: string, value: unknown): unknown {
     return Object.fromEntries(value);
   }
 
-  if (typeof value === "bigint") {
-    return Number(value);
+  if (typeof value === "bigint" || typeof value === "number") {
+    return String(value);
   }
 
   return value;
@@ -29,5 +29,5 @@ function normalizeRecord(record: Mcap0Types.TypedMcapRecord): { type: string; fi
 }
 
 export function stringifyRecords(records: Mcap0Types.TypedMcapRecord[]): string {
-  return stringify(records.map(normalizeRecord), { replacer });
+  return stringify(records.map(normalizeRecord), { replacer }) + "\n";
 }

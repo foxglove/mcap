@@ -9,6 +9,5 @@ const runners: readonly ITestRunner[] = [
   new PythonStreamedTestRunner(),
   new TypescriptIndexedTestRunner(),
   new TypescriptStreamedTestRunner(),
-  new TypescriptStreamedTestRunner(),
 ];
 export default runners;

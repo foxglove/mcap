@@ -3,19 +3,19 @@
   {
     "type": "Statistics",
     "fields": [
-      ["attachment_count", 0],
-      ["channel_count", 0],
+      ["attachment_count", "0"],
+      ["channel_count", "0"],
       ["channel_message_counts", {}],
-      ["chunk_count", 0],
-      ["message_count", 0]
+      ["chunk_count", "0"],
+      ["message_count", "0"]
     ]
   },
   {
     "type": "Footer",
     "fields": [
-      ["summary_crc", 0],
-      ["summary_offset_start", 0],
-      ["summary_start", 44]
+      ["summary_crc", "0"],
+      ["summary_offset_start", "0"],
+      ["summary_start", "44"]
     ]
   }
 ]

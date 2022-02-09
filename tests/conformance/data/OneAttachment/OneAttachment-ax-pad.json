@@ -4,9 +4,9 @@
     "type": "Attachment",
     "fields": [
       ["content_type", "application/octet-stream"],
-      ["created_at", 1],
-      ["data", [1, 2, 3]],
-      ["log_time", 2],
+      ["created_at", "1"],
+      ["data", ["1", "2", "3"]],
+      ["log_time", "2"],
       ["name", "myFile"]
     ]
   },
@@ -14,19 +14,19 @@
     "type": "AttachmentIndex",
     "fields": [
       ["content_type", "application/octet-stream"],
-      ["data_size", 3],
-      ["length", 81],
-      ["log_time", 2],
+      ["data_size", "3"],
+      ["length", "81"],
+      ["log_time", "2"],
       ["name", "myFile"],
-      ["offset", 28]
+      ["offset", "28"]
     ]
   },
   {
     "type": "Footer",
     "fields": [
-      ["summary_crc", 0],
-      ["summary_offset_start", 0],
-      ["summary_start", 125]
+      ["summary_crc", "0"],
+      ["summary_offset_start", "0"],
+      ["summary_start", "125"]
     ]
   }
 ]
