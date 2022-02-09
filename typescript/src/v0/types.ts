@@ -72,6 +72,7 @@ export type Statistics = {
   messageCount: bigint;
   channelCount: number;
   attachmentCount: number;
+  metadataCount: number;
   chunkCount: number;
   channelMessageCounts: Map<number, bigint>;
 };

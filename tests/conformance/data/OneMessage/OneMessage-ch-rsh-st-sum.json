@@ -46,7 +46,8 @@
         ["channel_count", "1"],
         ["channel_message_counts", {"1": "1"}],
         ["chunk_count", "1"],
-        ["message_count", "1"]
+        ["message_count", "1"],
+        ["metadata_count", "0"]
       ]
     },
     {
@@ -74,15 +75,7 @@
     {
       "type": "SummaryOffset",
       "fields": [
-        ["group_length", "0"],
-        ["group_opcode", "13"],
-        ["group_start", "279"]
-      ]
-    },
-    {
-      "type": "SummaryOffset",
-      "fields": [
-        ["group_length", "43"],
+        ["group_length", "47"],
         ["group_opcode", "11"],
         ["group_start", "236"]
       ]
@@ -92,14 +85,14 @@
       "fields": [
         ["group_length", "77"],
         ["group_opcode", "8"],
-        ["group_start", "279"]
+        ["group_start", "283"]
       ]
     },
     {
       "type": "Footer",
       "fields": [
         ["summary_crc", "0"],
-        ["summary_offset_start", "356"],
+        ["summary_offset_start", "360"],
         ["summary_start", "202"]
       ]
     }

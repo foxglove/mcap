@@ -25,25 +25,9 @@
     {
       "type": "SummaryOffset",
       "fields": [
-        ["group_length", "0"],
-        ["group_opcode", "13"],
-        ["group_start", "116"]
-      ]
-    },
-    {
-      "type": "SummaryOffset",
-      "fields": [
         ["group_length", "79"],
         ["group_opcode", "10"],
         ["group_start", "116"]
-      ]
-    },
-    {
-      "type": "SummaryOffset",
-      "fields": [
-        ["group_length", "0"],
-        ["group_opcode", "8"],
-        ["group_start", "195"]
       ]
     },
     {
