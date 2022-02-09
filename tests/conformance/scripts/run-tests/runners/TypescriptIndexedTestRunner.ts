@@ -7,10 +7,10 @@ import { stringifyRecords } from "./stringifyRecords";
 
 export default class TypescriptIndexedTestRunner implements ITestRunner {
   name = "ts-indexed";
-  async run(filePath: string): Promise<string> {
+  async run(filePath: string, variant: TestVariant): Promise<string> {
     const handle = await fs.open(filePath, "r");
     try {
-      return await this._run(handle);
+      return await this._run(handle, variant);
     } finally {
       await handle.close();
     }
@@ -38,7 +38,7 @@ export default class TypescriptIndexedTestRunner implements ITestRunner {
     return true;
   }
 
-  private async _run(fileHandle: fs.FileHandle): Promise<string> {
+  private async _run(fileHandle: fs.FileHandle, variant: TestVariant): Promise<string> {
     const testResult = [];
     let buffer = new ArrayBuffer(4096);
     const readable = {
@@ -104,6 +104,6 @@ export default class TypescriptIndexedTestRunner implements ITestRunner {
     }
     testResult.push(reader.footer);
 
-    return stringifyRecords(testResult);
+    return stringifyRecords(testResult, variant);
   }
 }
