@@ -2311,7 +2311,7 @@ LinearMessageView::Iterator::reference LinearMessageView::Iterator::operator*() 
   return curMessage_;
 }
 
-LinearMessageView::Iterator::pointer LinearMessageView::Iterator::operator->() {
+LinearMessageView::Iterator::pointer LinearMessageView::Iterator::operator->() const {
   return &curMessage_;
 }
 

@@ -712,7 +712,7 @@ struct LinearMessageView {
     using reference = const Message&;
 
     reference operator*() const;
-    pointer operator->();
+    pointer operator->() const;
     Iterator& operator++();
     Iterator operator++(int);
     friend bool operator==(const Iterator& a, const Iterator& b);
