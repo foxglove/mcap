@@ -8,9 +8,9 @@
 constexpr char StringSchema[] = "string data";
 
 mcap::Timestamp now() {
-  const auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
-    std::chrono::system_clock::now().time_since_epoch());
-  return mcap::Timestamp(timestamp.count());
+  return mcap::Timestamp(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           std::chrono::system_clock::now().time_since_epoch())
+                           .count());
 }
 
 int main() {
@@ -37,7 +37,7 @@ int main() {
   msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = now();
-  msg.recordTime = msg.publishTime;
+  msg.logTime = msg.publishTime;
   msg.data = payload.data();
   msg.dataSize = payload.size();
 

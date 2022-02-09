@@ -76,8 +76,8 @@ std::string ToString(const mcap::Channel& channel) {
 
 std::string ToString(const mcap::Message& message) {
   return mcap::internal::StrFormat(
-    "[Message] channel_id={}, sequence={}, publish_time={}, record_time={}, data=<{} bytes>",
-    message.channelId, message.sequence, message.publishTime, message.recordTime, message.dataSize);
+    "[Message] channel_id={}, sequence={}, publish_time={}, log_time={}, data=<{} bytes>",
+    message.channelId, message.sequence, message.publishTime, message.logTime, message.dataSize);
 }
 
 std::string ToString(const mcap::Chunk& chunk) {
@@ -244,6 +244,27 @@ void Dump(mcap::IReadable& dataSource) {
   }
 }
 
+void DumpMessages(mcap::IReadable& dataSource) {
+  mcap::McapReader reader;
+  auto status = reader.open(dataSource);
+  if (!status.ok()) {
+    std::cerr << "! " << status.message << "\n";
+    return;
+  }
+
+  auto messages = reader.readMessages();
+
+  for (const auto& msg : messages) {
+    std::cout << ToString(msg) << "\n";
+  }
+
+  for (const auto& problem : messages.problems()) {
+    std::cerr << "! " << problem.message << "\n";
+  }
+
+  reader.close();
+}
+
 int main(int argc, char* argv[]) {
   if (argc != 2) {
     std::cerr << "Usage: " << argv[0] << " <input.mcap>\n";
@@ -254,7 +275,9 @@ int main(int argc, char* argv[]) {
   std::ifstream input(inputFile, std::ios::binary);
   mcap::FileStreamReader dataSource{input};
 
+  // DumpRaw(dataSource);
   Dump(dataSource);
+  // DumpMessages(dataSource);
 
   return 0;
 }

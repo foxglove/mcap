@@ -32,12 +32,14 @@ using Timestamp = uint64_t;
 using ByteOffset = uint64_t;
 using KeyValueMap = std::unordered_map<std::string, std::string>;
 using ByteArray = std::vector<std::byte>;
+using ProblemsList = std::vector<Status>;
 
 constexpr char SpecVersion = '0';
 constexpr char LibraryVersion[] = LIBRARY_VERSION;
 constexpr uint8_t Magic[] = {137, 77, 67, 65, 80, SpecVersion, 13, 10};  // "\x89MCAP0\r\n"
 constexpr uint64_t DefaultChunkSize = 1024 * 768;
 constexpr ByteOffset EndOffset = std::numeric_limits<ByteOffset>::max();
+constexpr Timestamp MaxTime = std::numeric_limits<Timestamp>::max();
 
 enum struct Compression {
   None,
@@ -77,6 +79,10 @@ struct Record {
   OpCode opcode;
   uint64_t dataSize;
   std::byte* data;
+
+  uint64_t recordSize() const {
+    return sizeof(opcode) + sizeof(dataSize) + dataSize;
+  }
 };
 
 struct Header {
@@ -131,7 +137,7 @@ struct Message {
   ChannelId channelId;
   uint32_t sequence;
   Timestamp publishTime;
-  Timestamp recordTime;
+  Timestamp logTime;
   uint64_t dataSize;
   const std::byte* data = nullptr;
 };
@@ -419,6 +425,8 @@ private:
   ZSTD_CCtx* zstdContext_ = nullptr;
 };
 
+struct LinearMessageView;
+
 class McapReader final {
 public:
   ~McapReader();
@@ -426,23 +434,15 @@ public:
   Status open(IReadable& reader, const McapReaderOptions& options = {});
   Status open(std::ifstream& stream, const McapReaderOptions& options = {});
 
-  IReadable* dataSource() {
-    return input_;
-  }
-
-  std::vector<Status>& problems() {
-    return problems_;
-  }
-
   void close();
 
-  const std::optional<Header>& header() const {
-    return header_;
-  }
+  Status readSummary();
 
-  const std::optional<Footer>& footer() const {
-    return footer_;
-  }
+  LinearMessageView readMessages(Timestamp startTime = 0, Timestamp endTime = MaxTime);
+
+  IReadable* dataSource();
+  const std::optional<Header>& header() const;
+  const std::optional<Footer>& footer() const;
 
   static Status ReadRecord(IReadable& reader, uint64_t offset, Record* record);
   static Status ReadFooter(IReadable& reader, uint64_t offset, Footer* footer);
@@ -469,7 +469,6 @@ private:
   IReadable* input_ = nullptr;
   McapReaderOptions options_{};
   std::unique_ptr<FileStreamReader> fileStreamInput_;
-  std::vector<Status> problems_;
   std::optional<Header> header_;
   std::optional<Footer> footer_;
   std::optional<Statistics> statistics_;
@@ -480,8 +479,10 @@ private:
   std::unordered_map<ChannelId, std::map<Timestamp, ByteOffset>> messageIndex_;
   // Used for messages inside compressed chunks
   std::unordered_map<ChannelId, std::map<Timestamp, ByteOffset>> messageChunkIndex_;
-  uint64_t startTime_ = 0;
-  uint64_t endTime_ = 0;
+  ByteOffset dataStart_ = 0;
+  ByteOffset dataEnd_ = EndOffset;
+  Timestamp startTime_ = 0;
+  Timestamp endTime_ = 0;
   bool parsedSummary_ = false;
 };
 
@@ -653,7 +654,9 @@ struct TypedChunkReader {
 
   bool next();
 
-  const Status& status();
+  ByteOffset offset() const;
+
+  const Status& status() const;
 
 private:
   RecordReader reader_;
@@ -687,13 +690,71 @@ struct TypedRecordReader {
 
   bool next();
 
-  const Status& status();
+  ByteOffset offset() const;
+
+  const Status& status() const;
 
 private:
   RecordReader reader_;
   TypedChunkReader chunkReader_;
   Status status_;
   bool parsingChunk_;
+};
+
+struct LinearMessageView {
+  struct Iterator {
+    using iterator_category = std::forward_iterator_tag;
+    using difference_type = int64_t;
+    using value_type = Message;
+    using pointer = const Message*;
+    using reference = const Message&;
+
+    reference operator*() const;
+    pointer operator->();
+    Iterator& operator++();
+    Iterator operator++(int);
+    friend bool operator==(const Iterator& a, const Iterator& b);
+    friend bool operator!=(const Iterator& a, const Iterator& b);
+
+    static const Iterator& end() {
+      static LinearMessageView::Iterator emptyIterator;
+      return emptyIterator;
+    }
+
+  private:
+    friend LinearMessageView;
+
+    ProblemsList* problems_;
+    std::optional<TypedRecordReader> reader_;
+    Timestamp startTime_;
+    Timestamp endTime_;
+    Message curMessage_;
+
+    Iterator() = default;
+    Iterator(ProblemsList* problems, IReadable& dataSource, ByteOffset dataStart,
+             ByteOffset dataEnd, Timestamp startTime, Timestamp endTime);
+
+    void readNext();
+  };
+
+  LinearMessageView(const Status& status);
+  LinearMessageView(IReadable* dataSource, ByteOffset dataStart, ByteOffset dataEnd,
+                    Timestamp startTime, Timestamp endTime);
+
+  Iterator begin();
+  Iterator end();
+
+  ProblemsList& problems();
+  const ProblemsList& problems() const;
+
+private:
+  IReadable* dataSource_;
+  ByteOffset dataStart_;
+  ByteOffset dataEnd_;
+  Timestamp startTime_;
+  Timestamp endTime_;
+  ProblemsList problems_;
+  const BufferReader emptyDataSource_;
 };
 
 }  // namespace mcap

@@ -40,7 +40,7 @@ static void BM_McapWriterBufferWriterUnchunkedUnindexed(benchmark::State& state)
   msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
-  msg.recordTime = msg.publishTime;
+  msg.logTime = msg.publishTime;
   msg.data = payload.data();
   msg.dataSize = payload.size();
 
@@ -84,7 +84,7 @@ static void BM_McapWriterBufferWriterUnchunked(benchmark::State& state) {
   msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
-  msg.recordTime = msg.publishTime;
+  msg.logTime = msg.publishTime;
   msg.data = payload.data();
   msg.dataSize = payload.size();
 
@@ -128,7 +128,7 @@ static void BM_McapWriterBufferWriterChunked(benchmark::State& state) {
   msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
-  msg.recordTime = msg.publishTime;
+  msg.logTime = msg.publishTime;
   msg.data = payload.data();
   msg.dataSize = payload.size();
 
@@ -173,7 +173,7 @@ static void BM_McapWriterBufferWriterChunkedUnindexed(benchmark::State& state) {
   msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
-  msg.recordTime = msg.publishTime;
+  msg.logTime = msg.publishTime;
   msg.data = payload.data();
   msg.dataSize = payload.size();
 
@@ -219,7 +219,7 @@ static void BM_McapWriterBufferWriterLZ4(benchmark::State& state) {
   msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
-  msg.recordTime = msg.publishTime;
+  msg.logTime = msg.publishTime;
   msg.data = payload.data();
   msg.dataSize = payload.size();
 
@@ -265,7 +265,7 @@ static void BM_McapWriterBufferWriterZStd(benchmark::State& state) {
   msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
-  msg.recordTime = msg.publishTime;
+  msg.logTime = msg.publishTime;
   msg.data = payload.data();
   msg.dataSize = payload.size();
 
@@ -309,7 +309,7 @@ static void BM_McapWriterStreamWriterUnchunked(benchmark::State& state) {
   msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
-  msg.recordTime = msg.publishTime;
+  msg.logTime = msg.publishTime;
   msg.data = payload.data();
   msg.dataSize = payload.size();
 
@@ -354,7 +354,7 @@ static void BM_McapWriterStreamWriterChunked(benchmark::State& state) {
   msg.channelId = topic.id;
   msg.sequence = 0;
   msg.publishTime = 0;
-  msg.recordTime = msg.publishTime;
+  msg.logTime = msg.publishTime;
   msg.data = payload.data();
   msg.dataSize = payload.size();
 

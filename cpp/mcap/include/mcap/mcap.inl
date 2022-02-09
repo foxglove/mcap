@@ -88,7 +88,7 @@ Status ParseUint32(const std::byte* data, uint64_t maxSize, uint32_t* output) {
   return StatusCode::Success;
 }
 
-uint32_t ParseUint64(const std::byte* data) {
+uint64_t ParseUint64(const std::byte* data) {
   return uint64_t(data[0]) | (uint64_t(data[1]) << 8) | (uint64_t(data[2]) << 16) |
          (uint64_t(data[3]) << 24) | (uint64_t(data[4]) << 32) | (uint64_t(data[5]) << 40) |
          (uint64_t(data[6]) << 48) | (uint64_t(data[7]) << 56);
@@ -396,11 +396,11 @@ Status McapWriter::write(const Message& message) {
       // Update the message index
       auto& messageIndex = currentMessageIndex_[message.channelId];
       messageIndex.channelId = message.channelId;
-      messageIndex.records.emplace_back(message.recordTime, messageOffset);
+      messageIndex.records.emplace_back(message.logTime, messageOffset);
 
       // Update the chunk index start/end times
-      currentChunkStart_ = std::min(currentChunkStart_, message.recordTime);
-      currentChunkEnd_ = std::max(currentChunkEnd_, message.recordTime);
+      currentChunkStart_ = std::min(currentChunkStart_, message.logTime);
+      currentChunkEnd_ = std::max(currentChunkEnd_, message.logTime);
     }
 
     // Check if the current chunk is ready to close
@@ -617,7 +617,7 @@ uint64_t McapWriter::write(IWritable& output, const Message& message) {
   write(output, message.channelId);
   write(output, message.sequence);
   write(output, message.publishTime);
-  write(output, message.recordTime);
+  write(output, message.logTime);
   write(output, message.data, message.dataSize);
 
   return 9 + recordSize;
@@ -869,7 +869,7 @@ void BufferReader::reset(const std::byte* data, uint64_t size, uint64_t uncompre
 }
 
 uint64_t BufferReader::read(std::byte** output, uint64_t offset, uint64_t size) {
-  if (offset >= size_) {
+  if (!data_ || offset >= size_) {
     return 0;
   }
 
@@ -1216,6 +1216,7 @@ McapReader::~McapReader() {
 
 Status McapReader::open(IReadable& reader, const McapReaderOptions& options) {
   close();
+  options_ = options;
 
   const uint64_t fileSize = reader.size();
 
@@ -1255,16 +1256,14 @@ Status McapReader::open(IReadable& reader, const McapReaderOptions& options) {
   }
   header_ = header;
 
-  // Read the footer
-  auto footer = Footer{};
-  if (auto status = ReadFooter(reader, fileSize - internal::FooterLength, &footer); !status.ok()) {
-    problems_.push_back(status);
-  } else {
-    footer_ = footer;
-  }
+  // The Data section starts after the magic bytes and Header record
+  dataStart_ = sizeof(Magic) + record.recordSize();
+  // Set dataEnd_ to just before the Footer for now. This will be updated when
+  // the Data End record is encountered and/or the summary section is parsed
+  dataEnd_ = fileSize - internal::FooterLength;
 
   input_ = &reader;
-  options_ = options;
+
   return StatusCode::Success;
 }
 
@@ -1275,6 +1274,62 @@ Status McapReader::open(std::ifstream& stream, const McapReaderOptions& options)
 
 void McapReader::close() {
   input_ = nullptr;
+  fileStreamInput_.reset();
+  header_ = std::nullopt;
+  footer_ = std::nullopt;
+  statistics_ = std::nullopt;
+  chunkIndexes_.clear();
+  attachmentIndexes_.clear();
+  channels_.clear();
+  messageIndex_.clear();
+  messageChunkIndex_.clear();
+  dataStart_ = 0;
+  dataEnd_ = EndOffset;
+  startTime_ = 0;
+  endTime_ = 0;
+  parsedSummary_ = false;
+}
+
+Status McapReader::readSummary() {
+  if (!input_) {
+    return StatusCode::NotOpen;
+  }
+
+  parsedSummary_ = true;
+
+  auto& reader = *input_;
+  const uint64_t fileSize = reader.size();
+
+  // Read the footer
+  auto footer = Footer{};
+  if (auto status = ReadFooter(reader, fileSize - internal::FooterLength, &footer); !status.ok()) {
+    return status;
+  }
+  footer_ = footer;
+
+  return StatusCode::Success;
+}
+
+LinearMessageView McapReader::readMessages(Timestamp startTime, Timestamp endTime) {
+  // Check that open() has been successfully called
+  auto* dataSourcePtr = dataSource();
+  if (!dataSourcePtr || dataStart_ == 0) {
+    return LinearMessageView{StatusCode::NotOpen};
+  }
+
+  return LinearMessageView{dataSourcePtr, dataStart_, dataEnd_, startTime, endTime};
+}
+
+IReadable* McapReader::dataSource() {
+  return input_;
+}
+
+const std::optional<Header>& McapReader::header() const {
+  return header_;
+}
+
+const std::optional<Footer>& McapReader::footer() const {
+  return footer_;
 }
 
 Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record* record) {
@@ -1481,7 +1536,7 @@ Status McapReader::ParseMessage(const Record& record, Message* message) {
   message->channelId = internal::ParseUint16(record.data);
   message->sequence = internal::ParseUint32(record.data + 2);
   message->publishTime = internal::ParseUint64(record.data + 2 + 4);
-  message->recordTime = internal::ParseUint64(record.data + 2 + 4 + 8);
+  message->logTime = internal::ParseUint64(record.data + 2 + 4 + 8);
   message->dataSize = record.dataSize - MessagePreambleSize;
   message->data = record.data + MessagePreambleSize;
   return StatusCode::Success;
@@ -1869,7 +1924,7 @@ std::optional<Record> RecordReader::next() {
     offset = EndOffset;
     return std::nullopt;
   }
-  offset += 9 + curRecord_.dataSize;
+  offset += curRecord_.recordSize();
   return curRecord_;
 }
 
@@ -1958,7 +2013,11 @@ bool TypedChunkReader::next() {
   return true;
 }
 
-const Status& TypedChunkReader::status() {
+ByteOffset TypedChunkReader::offset() const {
+  return reader_.offset;
+}
+
+const Status& TypedChunkReader::status() const {
   return status_;
 }
 
@@ -2171,8 +2230,144 @@ bool TypedRecordReader::next() {
   return true;
 }
 
-const Status& TypedRecordReader::status() {
+ByteOffset TypedRecordReader::offset() const {
+  return reader_.offset + (parsingChunk_ ? chunkReader_.offset() : 0);
+}
+
+const Status& TypedRecordReader::status() const {
   return status_;
+}
+
+// LinearMessageView ///////////////////////////////////////////////////////////
+
+LinearMessageView::LinearMessageView(const Status& status)
+    : dataSource_(nullptr)
+    , dataStart_(0)
+    , dataEnd_(0)
+    , startTime_(0)
+    , endTime_(0)
+    , emptyDataSource_{} {
+  problems_.push_back(status);
+}
+
+LinearMessageView::LinearMessageView(IReadable* dataSource, ByteOffset dataStart,
+                                     ByteOffset dataEnd, Timestamp startTime, Timestamp endTime)
+    : dataSource_(dataSource)
+    , dataStart_(dataStart)
+    , dataEnd_(dataEnd)
+    , startTime_(startTime)
+    , endTime_(endTime)
+    , emptyDataSource_{} {}
+
+LinearMessageView::Iterator LinearMessageView::begin() {
+  if (!dataSource_) {
+    return end();
+  }
+  return LinearMessageView::Iterator{&problems_, *dataSource_, dataStart_,
+                                     dataEnd_,   startTime_,   endTime_};
+}
+
+LinearMessageView::Iterator LinearMessageView::end() {
+  return LinearMessageView::Iterator::end();
+}
+
+ProblemsList& LinearMessageView::problems() {
+  return problems_;
+}
+
+const ProblemsList& LinearMessageView::problems() const {
+  return problems_;
+}
+
+// LinearMessageView::Iterator /////////////////////////////////////////////////
+
+LinearMessageView::Iterator::Iterator(ProblemsList* problems, IReadable& dataSource,
+                                      ByteOffset dataStart, ByteOffset dataEnd, Timestamp startTime,
+                                      Timestamp endTime)
+    : problems_(problems)
+    , reader_(std::in_place, dataSource, dataStart, dataEnd)
+    , startTime_(startTime)
+    , endTime_(endTime)
+    , curMessage_{} {
+  bool foundMessage = false;
+  reader_->onMessage = [this](const Message& message) {
+    curMessage_ = message;
+  };
+  while (!curMessage_.data || curMessage_.logTime < startTime_) {
+    const bool found = reader_->next();
+
+    // Capture any problem that may have occurred while reading
+    auto& status = reader_->status();
+    if (problems_ && !status.ok()) {
+      problems_->push_back(status);
+    }
+
+    if (!found) {
+      reader_ = std::nullopt;
+      return;
+    }
+  }
+
+  if (curMessage_.logTime >= endTime_) {
+    reader_ = std::nullopt;
+  }
+}
+
+LinearMessageView::Iterator::reference LinearMessageView::Iterator::operator*() const {
+  return curMessage_;
+}
+
+LinearMessageView::Iterator::pointer LinearMessageView::Iterator::operator->() {
+  return &curMessage_;
+}
+
+LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
+  curMessage_.data = nullptr;
+
+  if (!reader_.has_value()) {
+    return *this;
+  }
+
+  while (!curMessage_.data || curMessage_.logTime < startTime_) {
+    const bool found = reader_->next();
+
+    // Capture any problem that may have occurred while reading
+    auto& status = reader_->status();
+    if (problems_ && !status.ok()) {
+      problems_->push_back(status);
+    }
+
+    if (!found) {
+      reader_ = std::nullopt;
+      return *this;
+    }
+  }
+
+  if (curMessage_.logTime >= endTime_) {
+    reader_ = std::nullopt;
+  }
+  return *this;
+}
+
+LinearMessageView::Iterator LinearMessageView::Iterator::operator++(int) {
+  LinearMessageView::Iterator tmp = *this;
+  ++(*this);
+  return tmp;
+}
+
+bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
+  const bool aEnd = !a.reader_.has_value();
+  const bool bEnd = !b.reader_.has_value();
+  if (aEnd && bEnd) {
+    return true;
+  } else if (aEnd || bEnd) {
+    return false;
+  }
+  return a.reader_->offset() == b.reader_->offset();
+}
+
+bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
+  return !(a == b);
 }
 
 }  // namespace mcap
