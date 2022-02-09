@@ -100,12 +100,12 @@ export default class Mcap0StreamReader implements McapStreamReader {
       const existing = this.channelsById.get(result.value.id);
       this.channelsById.set(result.value.id, result.value);
       if (existing && !isEqual(existing, result.value)) {
-        throw new Error(`differing channel infos for ${result.value.id}`);
+        throw new Error(`differing channels for ${result.value.id}`);
       }
     } else if (result.value?.type === "Message") {
       const existing = this.channelsById.get(result.value.channelId);
       if (!existing) {
-        throw new Error("Encountered message on channel 42 without prior channel info");
+        throw new Error("Encountered message on channel 42 without prior channel");
       }
     }
 

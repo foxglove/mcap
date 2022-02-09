@@ -41,7 +41,7 @@ export class Mcap0UnindexedWriter {
   }
 
   /**
-   * Add channel info and return a generated channel id. The channel id is used when adding messages.
+   * Add channel and return a generated channel id. The channel id is used when adding messages.
    */
   async registerChannel(info: Omit<Channel, "id">): Promise<number> {
     const channelId = this.nextChannelId;

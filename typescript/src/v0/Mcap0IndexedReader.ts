@@ -306,9 +306,9 @@ export default class Mcap0IndexedReader {
     let relevantChannels: Set<number> | undefined;
     if (topics) {
       relevantChannels = new Set();
-      for (const channelInfo of this.channelsById.values()) {
-        if (topics.includes(channelInfo.topic)) {
-          relevantChannels.add(channelInfo.id);
+      for (const channel of this.channelsById.values()) {
+        if (topics.includes(channel.topic)) {
+          relevantChannels.add(channel.id);
         }
       }
     }

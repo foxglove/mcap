@@ -54,15 +54,15 @@ export class Mcap0IndexedWriter {
 
     const summaryStart = this.writable.position();
 
-    const channelInfoStart = this.writable.position();
-    let channelInfoLength = 0n;
-    for (const channelInfo of this.channels.values()) {
-      channelInfoLength += this.recordWriter.writeChannel(channelInfo);
+    const channelStart = this.writable.position();
+    let channelLength = 0n;
+    for (const channel of this.channels.values()) {
+      channelLength += this.recordWriter.writeChannel(channel);
     }
     summaryOffsets.push({
       groupOpcode: Opcode.CHANNEL,
-      groupStart: channelInfoStart,
-      groupLength: channelInfoLength,
+      groupStart: channelStart,
+      groupLength: channelLength,
     });
 
     await this.writable.write(this.recordWriter.buffer);
@@ -124,7 +124,7 @@ export class Mcap0IndexedWriter {
   }
 
   /**
-   * Add channel info and return a generated channel id. The channel id is used when adding messages.
+   * Add channel and return a generated channel id. The channel id is used when adding messages.
    */
   async registerChannel(info: Omit<Channel, "id">): Promise<number> {
     const id = this.channels.size + 1;
@@ -139,14 +139,14 @@ export class Mcap0IndexedWriter {
   async addMessage(message: Message): Promise<void> {
     // write out channel id if we have not yet done so
     if (!this.writtenChannelIds.has(message.channelId)) {
-      const channelInfo = this.channels.get(message.channelId);
-      if (!channelInfo) {
+      const channel = this.channels.get(message.channelId);
+      if (!channel) {
         throw new Error(
-          `Mcap0UnindexedWriter#addMessage failed: missing channel info for id ${message.channelId}`,
+          `Mcap0UnindexedWriter#addMessage failed: missing channel for id ${message.channelId}`,
         );
       }
 
-      this.chunkBuilder.addChannel(channelInfo);
+      this.chunkBuilder.addChannel(channel);
       this.writtenChannelIds.add(message.channelId);
     }
 

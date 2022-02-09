@@ -31,9 +31,6 @@ export function parseMagic(
 
 /**
  * Parse a MCAP record beginning at `startOffset` in `view`.
- *
- * @param channelInfosById Used to track ChannelInfo objects across calls to `parseRecord` and
- * associate them with newly parsed Message records.
  */
 export function parseRecord({
   view,
