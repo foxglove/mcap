@@ -41,12 +41,12 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
           builder.writeSchema(record);
         }
         break;
-      case "ChannelInfo":
+      case "Channel":
         channelCount++;
         if (chunk) {
-          chunk.addChannelInfo(record);
+          chunk.addChannel(record);
         } else {
-          builder.writeChannelInfo(record);
+          builder.writeChannel(record);
         }
         break;
 
@@ -138,8 +138,8 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
   const repeatedChannelInfosStart = BigInt(builder.length);
   if (features.has(TestFeatures.UseRepeatedChannelInfos)) {
     for (const record of records) {
-      if (record.type === "ChannelInfo") {
-        builder.writeChannelInfo(record);
+      if (record.type === "Channel") {
+        builder.writeChannel(record);
       }
     }
   }
@@ -194,7 +194,7 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
     }
     if (repeatedChannelInfosLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: Mcap0Constants.Opcode.CHANNEL_INFO,
+        groupOpcode: Mcap0Constants.Opcode.CHANNEL,
         groupStart: repeatedChannelInfosStart,
         groupLength: repeatedChannelInfosLength,
       });

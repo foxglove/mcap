@@ -38,14 +38,14 @@ export default function* generateTestVariants(): Generator<TestVariant, void, vo
       }
       if (
         features.has(TestFeatures.UseRepeatedChannelInfos) &&
-        !input.records.some((record) => record.type === "ChannelInfo")
+        !input.records.some((record) => record.type === "Channel")
       ) {
         continue;
       }
       if (
         !input.records.some(
           (record) =>
-            record.type === "Message" || record.type === "ChannelInfo" || record.type === "Schema",
+            record.type === "Message" || record.type === "Channel" || record.type === "Schema",
         ) &&
         (features.has(TestFeatures.UseChunks) ||
           features.has(TestFeatures.UseChunkIndex) ||

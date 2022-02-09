@@ -5,7 +5,7 @@ from enum import IntEnum, unique
 class Opcode(IntEnum):
     ATTACHMENT = 0x09
     ATTACHMENT_INDEX = 0x0A
-    CHANNEL_INFO = 0x04
+    CHANNEL = 0x04
     CHUNK = 0x06
     CHUNK_INDEX = 0x08
     DATA_END = 0x0F

@@ -72,7 +72,7 @@ export default class TypescriptIndexedTestRunner implements ITestRunner {
     for (const record of reader.schemasById.values()) {
       testResult.push(record);
     }
-    for (const record of reader.channelInfosById.values()) {
+    for (const record of reader.channelsById.values()) {
       testResult.push(record);
     }
     for await (const record of reader.readMessages()) {
@@ -83,7 +83,7 @@ export default class TypescriptIndexedTestRunner implements ITestRunner {
     for (const record of reader.schemasById.values()) {
       testResult.push(record);
     }
-    for (const record of reader.channelInfosById.values()) {
+    for (const record of reader.channelsById.values()) {
       testResult.push(record);
     }
 

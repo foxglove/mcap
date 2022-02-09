@@ -76,7 +76,7 @@ class AttachmentIndex(McapRecord):
 
 
 @dataclass
-class ChannelInfo(McapRecord):
+class Channel(McapRecord):
     id: int = field(metadata={"value_type": ["int"]})
     topic: str
     message_encoding: str
@@ -84,7 +84,7 @@ class ChannelInfo(McapRecord):
     schema_id: int = field(metadata={"value_type": ["int"]})
 
     def write(self, stream: WriteDataStream):
-        stream.start_record(Opcode.CHANNEL_INFO)
+        stream.start_record(Opcode.CHANNEL)
         stream.write2(self.id)
         stream.write_prefixed_string(self.topic)
         stream.write_prefixed_string(self.message_encoding)
@@ -107,7 +107,7 @@ class ChannelInfo(McapRecord):
             key = stream.read_prefixed_string()
             value = stream.read_prefixed_string()
             metadata[key] = value
-        return ChannelInfo(
+        return Channel(
             id=id,
             topic=topic,
             message_encoding=message_encoding,

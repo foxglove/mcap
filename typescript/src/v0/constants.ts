@@ -6,7 +6,7 @@ export enum Opcode {
   HEADER = 0x01,
   FOOTER = 0x02,
   SCHEMA = 0x03,
-  CHANNEL_INFO = 0x04,
+  CHANNEL = 0x04,
   MESSAGE = 0x05,
   CHUNK = 0x06,
   MESSAGE_INDEX = 0x07,

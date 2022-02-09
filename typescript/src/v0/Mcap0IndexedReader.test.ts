@@ -122,7 +122,7 @@ describe("Mcap0IndexedReader", () => {
     );
   });
 
-  it("parses index with schema and channel info", async () => {
+  it("parses index with schema and channel", async () => {
     const data = [
       ...MCAP0_MAGIC,
       ...record(Opcode.HEADER, [
@@ -138,7 +138,7 @@ describe("Mcap0IndexedReader", () => {
         ...string("json"), // schema format
         ...uint32PrefixedBytes(new TextEncoder().encode("stuff")), // schema
       ]),
-      ...record(Opcode.CHANNEL_INFO, [
+      ...record(Opcode.CHANNEL, [
         ...uint16LE(42), // channel id
         ...string("myTopic"), // topic
         ...string("utf12"), // encoding
@@ -155,12 +155,12 @@ describe("Mcap0IndexedReader", () => {
     const readable = makeReadable(new Uint8Array(data));
     const reader = await Mcap0IndexedReader.Initialize({ readable });
     await expect(collect(reader.readMessages())).resolves.toEqual([]);
-    expect(reader.channelInfosById).toEqual(
-      new Map<number, TypedMcapRecords["ChannelInfo"]>([
+    expect(reader.channelsById).toEqual(
+      new Map<number, TypedMcapRecords["Channel"]>([
         [
           42,
           {
-            type: "ChannelInfo",
+            type: "Channel",
             id: 42,
             schemaId: 1,
             topic: "myTopic",
@@ -227,7 +227,7 @@ describe("Mcap0IndexedReader", () => {
           ...string("json"), // schema format
           ...uint32PrefixedBytes(new TextEncoder().encode("stuff")), // schema
         ]);
-        const channelInfo = record(Opcode.CHANNEL_INFO, [
+        const channel = record(Opcode.CHANNEL, [
           ...uint16LE(42), // channel id
           ...string("myTopic"), // topic
           ...string("utf12"), // message encoding
@@ -252,7 +252,7 @@ describe("Mcap0IndexedReader", () => {
           ...uint64LE(message3.publishTime),
           ...uint64LE(message3.logTime),
         ]);
-        const chunkContents = [...schema, ...channelInfo];
+        const chunkContents = [...schema, ...channel];
         const message1Offset = BigInt(chunkContents.length);
         chunkContents.push(...message1Data);
         const message2Offset = BigInt(chunkContents.length);
@@ -293,7 +293,7 @@ describe("Mcap0IndexedReader", () => {
         const messageIndexLength = BigInt(data.length) - messageIndexOffset;
         const summaryStart = data.length;
         data.push(
-          ...channelInfo,
+          ...channel,
           ...record(Opcode.CHUNK_INDEX, [
             ...uint64LE(message1.logTime), // start time
             ...uint64LE(message3.logTime), // end time
