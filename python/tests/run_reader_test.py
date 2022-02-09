@@ -13,7 +13,7 @@ def main():
         for r in reader.records()
         if not isinstance(r, DataEnd) and not isinstance(r, MessageIndex)
     ]
-    print(json.dumps(records, indent=2))
+    print(json.dumps({"records": records}, indent=2))
 
 
 if __name__ == "__main__":
