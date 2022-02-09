@@ -31,9 +31,6 @@ export function parseMagic(
 
 /**
  * Parse a MCAP record beginning at `startOffset` in `view`.
- *
- * @param channelInfosById Used to track ChannelInfo objects across calls to `parseRecord` and
- * associate them with newly parsed Message records.
  */
 export function parseRecord({
   view,
@@ -128,7 +125,7 @@ export function parseRecord({
       return { record, usedBytes: recordEndOffset - startOffset };
     }
 
-    case Opcode.CHANNEL_INFO: {
+    case Opcode.CHANNEL: {
       const channelId = reader.uint16();
       const topicName = reader.string();
       const messageEncoding = reader.string();
@@ -139,7 +136,7 @@ export function parseRecord({
       );
 
       const record: TypedMcapRecord = {
-        type: "ChannelInfo",
+        type: "Channel",
         id: channelId,
         topic: topicName,
         messageEncoding,

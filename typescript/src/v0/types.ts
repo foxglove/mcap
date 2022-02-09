@@ -16,7 +16,7 @@ export type Schema = {
   encoding: string;
   data: Uint8Array;
 };
-export type ChannelInfo = {
+export type Channel = {
   id: number;
   topic: string;
   messageEncoding: string;
@@ -102,7 +102,7 @@ export type McapRecords = {
   Header: Header;
   Footer: Footer;
   Schema: Schema;
-  ChannelInfo: ChannelInfo;
+  Channel: Channel;
   Message: Message;
   Chunk: Chunk;
   MessageIndex: MessageIndex;

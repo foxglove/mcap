@@ -13,7 +13,7 @@ const inputs: TestInput[] = [
         data: new Uint8Array([4, 5, 6]),
       },
       {
-        type: "ChannelInfo",
+        type: "Channel",
         id: 1,
         topic: "example",
         schemaId: 1,

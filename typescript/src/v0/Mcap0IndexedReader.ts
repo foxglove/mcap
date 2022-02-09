@@ -10,7 +10,7 @@ export default class Mcap0IndexedReader {
   readonly chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
   readonly attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
   readonly metadataIndexes: readonly TypedMcapRecords["MetadataIndex"][] = [];
-  readonly channelInfosById: ReadonlyMap<number, TypedMcapRecords["ChannelInfo"]>;
+  readonly channelsById: ReadonlyMap<number, TypedMcapRecords["Channel"]>;
   readonly schemasById: ReadonlyMap<number, TypedMcapRecords["Schema"]>;
   readonly statistics: TypedMcapRecords["Statistics"] | undefined;
   readonly summaryOffsetsByOpcode: ReadonlyMap<number, TypedMcapRecords["SummaryOffset"]>;
@@ -30,7 +30,7 @@ export default class Mcap0IndexedReader {
     metadataIndexes,
     statistics,
     decompressHandlers,
-    channelInfosById,
+    channelsById,
     schemasById,
     summaryOffsetsByOpcode,
     header,
@@ -42,7 +42,7 @@ export default class Mcap0IndexedReader {
     metadataIndexes: readonly TypedMcapRecords["MetadataIndex"][];
     statistics: TypedMcapRecords["Statistics"] | undefined;
     decompressHandlers?: DecompressHandlers;
-    channelInfosById: ReadonlyMap<number, TypedMcapRecords["ChannelInfo"]>;
+    channelsById: ReadonlyMap<number, TypedMcapRecords["Channel"]>;
     schemasById: ReadonlyMap<number, TypedMcapRecords["Schema"]>;
     summaryOffsetsByOpcode: ReadonlyMap<number, TypedMcapRecords["SummaryOffset"]>;
     header: TypedMcapRecords["Header"];
@@ -54,7 +54,7 @@ export default class Mcap0IndexedReader {
     this.metadataIndexes = metadataIndexes;
     this.statistics = statistics;
     this.decompressHandlers = decompressHandlers;
-    this.channelInfosById = channelInfosById;
+    this.channelsById = channelsById;
     this.schemasById = schemasById;
     this.summaryOffsetsByOpcode = summaryOffsetsByOpcode;
     this.header = header;
@@ -218,7 +218,7 @@ export default class Mcap0IndexedReader {
       allSummaryData.byteLength,
     );
 
-    const channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
+    const channelsById = new Map<number, TypedMcapRecords["Channel"]>();
     const schemasById = new Map<number, TypedMcapRecords["Schema"]>();
     const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
     const attachmentIndexes: TypedMcapRecords["AttachmentIndex"][] = [];
@@ -237,8 +237,8 @@ export default class Mcap0IndexedReader {
         case "Schema":
           schemasById.set(result.record.id, result.record);
           break;
-        case "ChannelInfo":
-          channelInfosById.set(result.record.id, result.record);
+        case "Channel":
+          channelsById.set(result.record.id, result.record);
           break;
         case "ChunkIndex":
           chunkIndexes.push(result.record);
@@ -282,7 +282,7 @@ export default class Mcap0IndexedReader {
       metadataIndexes,
       statistics,
       decompressHandlers,
-      channelInfosById,
+      channelsById,
       schemasById,
       summaryOffsetsByOpcode,
       header,
@@ -306,9 +306,9 @@ export default class Mcap0IndexedReader {
     let relevantChannels: Set<number> | undefined;
     if (topics) {
       relevantChannels = new Set();
-      for (const channelInfo of this.channelInfosById.values()) {
-        if (topics.includes(channelInfo.topic)) {
-          relevantChannels.add(channelInfo.id);
+      for (const channel of this.channelsById.values()) {
+        if (topics.includes(channel.topic)) {
+          relevantChannels.add(channel.id);
         }
       }
     }

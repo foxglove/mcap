@@ -10,7 +10,7 @@ from .opcode import Opcode
 from .records import (
     Attachment,
     AttachmentIndex,
-    ChannelInfo,
+    Channel,
     Chunk,
     ChunkIndex,
     DataEnd,
@@ -32,9 +32,9 @@ def breakup_chunk(chunk: Chunk) -> List[McapRecord]:
     while stream.count < stream_length:
         opcode = stream.read1()
         length = stream.read8()
-        if opcode == Opcode.CHANNEL_INFO:
-            channel_info = ChannelInfo.read(stream)
-            records.append(channel_info)
+        if opcode == Opcode.CHANNEL:
+            channel = Channel.read(stream)
+            records.append(channel)
         elif opcode == Opcode.MESSAGE:
             message = Message.read(stream, length)
             records.append(message)
@@ -103,8 +103,8 @@ class StreamReader:
             return Attachment.read(self.__stream)
         if opcode == Opcode.ATTACHMENT_INDEX:
             return AttachmentIndex.read(self.__stream)
-        if opcode == Opcode.CHANNEL_INFO:
-            return ChannelInfo.read(self.__stream)
+        if opcode == Opcode.CHANNEL:
+            return Channel.read(self.__stream)
         if opcode == Opcode.CHUNK:
             return Chunk.read(self.__stream)
         if opcode == Opcode.CHUNK_INDEX:
