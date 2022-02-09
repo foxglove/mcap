@@ -301,6 +301,7 @@ export function parseRecord({
     }
     case Opcode.STATISTICS: {
       const messageCount = reader.uint64();
+      const schemaCount = reader.uint16();
       const channelCount = reader.uint32();
       const attachmentCount = reader.uint32();
       const metadataCount = reader.uint32();
@@ -314,6 +315,7 @@ export function parseRecord({
         type: "Statistics",
         messageCount,
         channelCount,
+        schemaCount,
         attachmentCount,
         metadataCount,
         chunkCount,

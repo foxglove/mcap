@@ -343,10 +343,12 @@ class Statistics(McapRecord):
     chunk_count: int = field(metadata={"value_type": ["int"]})
     message_count: int
     metadata_count: int = field(metadata={"value_type": ["int"]})
+    schema_count: int = field(metadata={"value_type": ["int"]})
 
     @staticmethod
     def read(stream: ReadDataStream):
         message_count = stream.read8()
+        schema_count = stream.read2()
         channel_count = stream.read4()
         attachment_count = stream.read4()
         metadata_count = stream.read4()
@@ -365,6 +367,7 @@ class Statistics(McapRecord):
             chunk_count=chunk_count,
             message_count=message_count,
             metadata_count=metadata_count,
+            schema_count=schema_count,
         )
 
 

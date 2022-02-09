@@ -367,6 +367,7 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder
       .uint64(0n) // placeholder size
       .uint64(statistics.messageCount)
+      .uint16(statistics.schemaCount)
       .uint32(statistics.channelCount)
       .uint32(statistics.attachmentCount)
       .uint32(statistics.metadataCount)

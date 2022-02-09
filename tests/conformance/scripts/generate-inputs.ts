@@ -27,6 +27,7 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
   const chunkIndexes: ChunkIndex[] = [];
 
   let messageCount = 0n;
+  let schemaCount = 0;
   let channelCount = 0;
   let attachmentCount = 0;
   let metadataCount = 0;
@@ -35,6 +36,7 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
   for (const record of records) {
     switch (record.type) {
       case "Schema":
+        ++schemaCount;
         if (chunk) {
           chunk.addSchema(record);
         } else {
@@ -150,6 +152,7 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
     builder.writeStatistics({
       messageCount,
       channelCount,
+      schemaCount,
       attachmentCount,
       metadataCount,
       chunkCount,

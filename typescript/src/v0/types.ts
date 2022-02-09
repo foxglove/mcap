@@ -70,6 +70,7 @@ export type AttachmentIndex = {
 };
 export type Statistics = {
   messageCount: bigint;
+  schemaCount: number;
   channelCount: number;
   attachmentCount: number;
   metadataCount: number;
