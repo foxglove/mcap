@@ -252,14 +252,14 @@ void DumpMessages(mcap::IReadable& dataSource) {
     return;
   }
 
-  auto messages = reader.readMessages();
+  auto onProblem = [](const mcap::Status& problem) {
+    std::cerr << "! " << problem.message << "\n";
+  };
+
+  auto messages = reader.readMessages(onProblem);
 
   for (const auto& msg : messages) {
     std::cout << ToString(msg) << "\n";
-  }
-
-  for (const auto& problem : messages.problems()) {
-    std::cerr << "! " << problem.message << "\n";
   }
 
   reader.close();

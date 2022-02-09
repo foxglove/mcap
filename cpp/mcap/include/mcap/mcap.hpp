@@ -32,7 +32,7 @@ using Timestamp = uint64_t;
 using ByteOffset = uint64_t;
 using KeyValueMap = std::unordered_map<std::string, std::string>;
 using ByteArray = std::vector<std::byte>;
-using ProblemsList = std::vector<Status>;
+using ProblemCallback = std::function<void(const Status&)>;
 
 constexpr char SpecVersion = '0';
 constexpr char LibraryVersion[] = LIBRARY_VERSION;
@@ -439,6 +439,8 @@ public:
   Status readSummary();
 
   LinearMessageView readMessages(Timestamp startTime = 0, Timestamp endTime = MaxTime);
+  LinearMessageView readMessages(const ProblemCallback& onProblem, Timestamp startTime = 0,
+                                 Timestamp endTime = MaxTime);
 
   IReadable* dataSource();
   const std::optional<Header>& header() const;
@@ -717,35 +719,33 @@ struct LinearMessageView {
     friend bool operator!=(const Iterator& a, const Iterator& b);
 
     static const Iterator& end() {
-      static LinearMessageView::Iterator emptyIterator;
+      static auto onProblem = [](const Status& problem) {};
+      static LinearMessageView::Iterator emptyIterator{onProblem};
       return emptyIterator;
     }
 
   private:
     friend LinearMessageView;
 
-    ProblemsList* problems_;
     std::optional<TypedRecordReader> reader_;
     Timestamp startTime_;
     Timestamp endTime_;
+    const ProblemCallback& onProblem_;
     Message curMessage_;
 
-    Iterator() = default;
-    Iterator(ProblemsList* problems, IReadable& dataSource, ByteOffset dataStart,
-             ByteOffset dataEnd, Timestamp startTime, Timestamp endTime);
+    explicit Iterator(const ProblemCallback& onProblem);
+    Iterator(IReadable& dataSource, ByteOffset dataStart, ByteOffset dataEnd, Timestamp startTime,
+             Timestamp endTime, const ProblemCallback& onProblem);
 
     void readNext();
   };
 
-  LinearMessageView(const Status& status);
+  explicit LinearMessageView(const ProblemCallback& onProblem);
   LinearMessageView(IReadable* dataSource, ByteOffset dataStart, ByteOffset dataEnd,
-                    Timestamp startTime, Timestamp endTime);
+                    Timestamp startTime, Timestamp endTime, const ProblemCallback& onProblem);
 
   Iterator begin();
   Iterator end();
-
-  ProblemsList& problems();
-  const ProblemsList& problems() const;
 
 private:
   IReadable* dataSource_;
@@ -753,8 +753,7 @@ private:
   ByteOffset dataEnd_;
   Timestamp startTime_;
   Timestamp endTime_;
-  ProblemsList problems_;
-  const BufferReader emptyDataSource_;
+  const ProblemCallback onProblem_;
 };
 
 }  // namespace mcap

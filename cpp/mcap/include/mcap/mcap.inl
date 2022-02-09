@@ -1311,13 +1311,20 @@ Status McapReader::readSummary() {
 }
 
 LinearMessageView McapReader::readMessages(Timestamp startTime, Timestamp endTime) {
+  const auto onProblem = [](const Status& problem) {};
+  return readMessages(onProblem, startTime, endTime);
+}
+
+LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem, Timestamp startTime,
+                                           Timestamp endTime) {
   // Check that open() has been successfully called
   auto* dataSourcePtr = dataSource();
   if (!dataSourcePtr || dataStart_ == 0) {
-    return LinearMessageView{StatusCode::NotOpen};
+    onProblem(StatusCode::NotOpen);
+    return LinearMessageView{onProblem};
   }
 
-  return LinearMessageView{dataSourcePtr, dataStart_, dataEnd_, startTime, endTime};
+  return LinearMessageView{dataSourcePtr, dataStart_, dataEnd_, startTime, endTime, onProblem};
 }
 
 IReadable* McapReader::dataSource() {
@@ -2240,77 +2247,64 @@ const Status& TypedRecordReader::status() const {
 
 // LinearMessageView ///////////////////////////////////////////////////////////
 
-LinearMessageView::LinearMessageView(const Status& status)
+LinearMessageView::LinearMessageView(const ProblemCallback& onProblem)
     : dataSource_(nullptr)
     , dataStart_(0)
     , dataEnd_(0)
     , startTime_(0)
     , endTime_(0)
-    , emptyDataSource_{} {
-  problems_.push_back(status);
-}
+    , onProblem_(onProblem) {}
 
 LinearMessageView::LinearMessageView(IReadable* dataSource, ByteOffset dataStart,
-                                     ByteOffset dataEnd, Timestamp startTime, Timestamp endTime)
+                                     ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
+                                     const ProblemCallback& onProblem)
     : dataSource_(dataSource)
     , dataStart_(dataStart)
     , dataEnd_(dataEnd)
     , startTime_(startTime)
     , endTime_(endTime)
-    , emptyDataSource_{} {}
+    , onProblem_(onProblem) {}
 
 LinearMessageView::Iterator LinearMessageView::begin() {
   if (!dataSource_) {
     return end();
   }
-  return LinearMessageView::Iterator{&problems_, *dataSource_, dataStart_,
-                                     dataEnd_,   startTime_,   endTime_};
+  return LinearMessageView::Iterator{*dataSource_, dataStart_, dataEnd_,
+                                     startTime_,   endTime_,   onProblem_};
 }
 
 LinearMessageView::Iterator LinearMessageView::end() {
   return LinearMessageView::Iterator::end();
 }
 
-ProblemsList& LinearMessageView::problems() {
-  return problems_;
-}
-
-const ProblemsList& LinearMessageView::problems() const {
-  return problems_;
-}
-
 // LinearMessageView::Iterator /////////////////////////////////////////////////
 
-LinearMessageView::Iterator::Iterator(ProblemsList* problems, IReadable& dataSource,
-                                      ByteOffset dataStart, ByteOffset dataEnd, Timestamp startTime,
-                                      Timestamp endTime)
-    : problems_(problems)
-    , reader_(std::in_place, dataSource, dataStart, dataEnd)
-    , startTime_(startTime)
-    , endTime_(endTime)
+LinearMessageView::Iterator::Iterator(const ProblemCallback& onProblem)
+    : reader_(std::nullopt)
+    , startTime_(0)
+    , endTime_(0)
+    , onProblem_(onProblem)
     , curMessage_{} {
-  bool foundMessage = false;
   reader_->onMessage = [this](const Message& message) {
     curMessage_ = message;
   };
-  while (!curMessage_.data || curMessage_.logTime < startTime_) {
-    const bool found = reader_->next();
 
-    // Capture any problem that may have occurred while reading
-    auto& status = reader_->status();
-    if (problems_ && !status.ok()) {
-      problems_->push_back(status);
-    }
+  ++(*this);
+}
 
-    if (!found) {
-      reader_ = std::nullopt;
-      return;
-    }
-  }
+LinearMessageView::Iterator::Iterator(IReadable& dataSource, ByteOffset dataStart,
+                                      ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
+                                      const ProblemCallback& onProblem)
+    : reader_(std::in_place, dataSource, dataStart, dataEnd)
+    , startTime_(startTime)
+    , endTime_(endTime)
+    , onProblem_(onProblem)
+    , curMessage_{} {
+  reader_->onMessage = [this](const Message& message) {
+    curMessage_ = message;
+  };
 
-  if (curMessage_.logTime >= endTime_) {
-    reader_ = std::nullopt;
-  }
+  ++(*this);
 }
 
 LinearMessageView::Iterator::reference LinearMessageView::Iterator::operator*() const {
@@ -2331,10 +2325,10 @@ LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
   while (!curMessage_.data || curMessage_.logTime < startTime_) {
     const bool found = reader_->next();
 
-    // Capture any problem that may have occurred while reading
+    // Surface any problem that may have occurred while reading
     auto& status = reader_->status();
-    if (problems_ && !status.ok()) {
-      problems_->push_back(status);
+    if (!status.ok()) {
+      onProblem_(status);
     }
 
     if (!found) {
