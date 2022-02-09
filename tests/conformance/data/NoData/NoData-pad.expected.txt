@@ -1,2 +1,0 @@
-Header library=s:"" profile=s:""
-Footer summary_crc=i:0 summary_offset_start=n:0 summary_start=n:0

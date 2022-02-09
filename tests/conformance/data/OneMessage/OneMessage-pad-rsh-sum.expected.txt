@@ -1,9 +1,0 @@
-Header library=s:"" profile=s:""
-Schema data=b:<040506> encoding=s:c id=i:1 name=s:Example
-ChannelInfo id=i:1 message_encoding=s:a metadata=m:{s:foo=s:bar} schema_id=i:1 topic=s:example
-Message channel_id=i:1 data=b:<010203> log_time=n:2 publish_time=n:1 sequence=i:10
-Schema data=b:<040506> encoding=s:c id=i:1 name=s:Example
-SummaryOffset group_length=n:37 group_opcode=i:3 group_start=n:165
-SummaryOffset group_length=n:0 group_opcode=i:13 group_start=n:202
-SummaryOffset group_length=n:0 group_opcode=i:8 group_start=n:202
-Footer summary_crc=i:0 summary_offset_start=n:202 summary_start=n:165

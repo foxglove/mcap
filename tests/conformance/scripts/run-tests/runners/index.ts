@@ -6,9 +6,8 @@ import TypescriptStreamedTestRunner from "./TypescriptStreamedTestRunner";
 export type { ITestRunner };
 
 const runners: readonly ITestRunner[] = [
-  new TypescriptStreamedTestRunner(),
-  new TypescriptIndexedTestRunner(),
   new PythonStreamedTestRunner(),
+  new TypescriptIndexedTestRunner(),
   new TypescriptStreamedTestRunner(),
 ];
 export default runners;
