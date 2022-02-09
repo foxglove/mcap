@@ -222,10 +222,10 @@ describe("McapReader", () => {
 
         ...record(RecordType.CHUNK, [
           ...uint64LE(1n), // decompressed size
-          ...uint32LE(crc32(new Uint8Array([RecordType.CHANNEL]))), // decompressed crc32
+          ...uint32LE(crc32(new Uint8Array([RecordType.CHANNEL_INFO]))), // decompressed crc32
           ...string(""), // compression
 
-          RecordType.CHANNEL, // truncated record
+          RecordType.CHANNEL_INFO, // truncated record
         ]),
 
         ...record(RecordType.FOOTER, [
@@ -296,7 +296,7 @@ describe("McapReader", () => {
   });
 
   it("rejects message in chunk with no prior channel info in the same chunk", () => {
-    const channelInfo = record(RecordType.CHANNEL, [
+    const channelInfo = record(RecordType.CHANNEL_INFO, [
       ...uint32LE(42), // channel id
       ...string("myTopic"), // topic
       ...string("utf12"), // encoding
@@ -338,7 +338,7 @@ describe("McapReader", () => {
       ]),
     );
     const expectedChannelInfo = {
-      type: "Channel",
+      type: "ChannelInfo",
       id: 42,
       topic: "myTopic",
       encoding: "utf12",
@@ -349,7 +349,7 @@ describe("McapReader", () => {
     expect(reader.nextRecord()).toEqual(expectedChannelInfo);
     expect(reader.nextRecord()).toEqual({
       type: "Message",
-      channel: expectedChannelInfo,
+      channelInfo: expectedChannelInfo,
       timestamp: 1n,
       data: new ArrayBuffer(0),
     });
@@ -359,7 +359,7 @@ describe("McapReader", () => {
   });
 
   it("parses message and returns reference-equal channel info on the same channel in different chunks", () => {
-    const channelInfo = record(RecordType.CHANNEL, [
+    const channelInfo = record(RecordType.CHANNEL_INFO, [
       ...uint32LE(42), // channel id
       ...string("myTopic"), // topic
       ...string("utf12"), // encoding
@@ -402,7 +402,7 @@ describe("McapReader", () => {
       ]),
     );
     const expectedChannelInfo = {
-      type: "Channel",
+      type: "ChannelInfo",
       id: 42,
       topic: "myTopic",
       encoding: "utf12",
@@ -414,14 +414,14 @@ describe("McapReader", () => {
     expect(actualChannelInfo).toEqual(expectedChannelInfo);
     expect(reader.nextRecord()).toEqual({
       type: "Message",
-      channel: expectedChannelInfo,
+      channelInfo: expectedChannelInfo,
       timestamp: 1n,
       data: new ArrayBuffer(0),
     });
     expect(reader.nextRecord()).toBe(actualChannelInfo);
     expect(reader.nextRecord()).toEqual({
       type: "Message",
-      channel: expectedChannelInfo,
+      channelInfo: expectedChannelInfo,
       timestamp: 1n,
       data: new ArrayBuffer(0),
     });
@@ -434,7 +434,7 @@ describe("McapReader", () => {
         ...MCAP_MAGIC,
         formatVersion,
 
-        ...record(RecordType.CHANNEL, [
+        ...record(RecordType.CHANNEL_INFO, [
           ...uint32LE(1), // channel id
           ...string("myTopic"), // topic
           ...string("utf12"), // encoding
@@ -452,7 +452,7 @@ describe("McapReader", () => {
       ]),
     );
     expect(reader.nextRecord()).toEqual({
-      type: "Channel",
+      type: "ChannelInfo",
       id: 1,
       topic: "myTopic",
       encoding: "utf12",
@@ -469,7 +469,7 @@ describe("McapReader", () => {
   });
 
   it.each([true, false])("parses channel info in chunk (compressed: %s)", (compressed) => {
-    const channelInfo = record(RecordType.CHANNEL, [
+    const channelInfo = record(RecordType.CHANNEL_INFO, [
       ...uint32LE(1), // channel id
       ...string("myTopic"), // topic
       ...string("utf12"), // encoding
@@ -500,7 +500,7 @@ describe("McapReader", () => {
       ]),
     );
     expect(reader.nextRecord()).toEqual({
-      type: "Channel",
+      type: "ChannelInfo",
       id: 1,
       topic: "myTopic",
       encoding: "utf12",
@@ -522,7 +522,7 @@ describe("McapReader", () => {
       it.each([
         {
           key: "topic",
-          channelInfo2: record(RecordType.CHANNEL, [
+          channelInfo2: record(RecordType.CHANNEL_INFO, [
             ...uint32LE(42), // channel id
             ...string("XXXXXXXX"), // topic
             ...string("utf12"), // encoding
@@ -533,7 +533,7 @@ describe("McapReader", () => {
         },
         {
           key: "encoding",
-          channelInfo2: record(RecordType.CHANNEL, [
+          channelInfo2: record(RecordType.CHANNEL_INFO, [
             ...uint32LE(42), // channel id
             ...string("myTopic"), // topic
             ...string("XXXXXXXX"), // encoding
@@ -544,7 +544,7 @@ describe("McapReader", () => {
         },
         {
           key: "schema name",
-          channelInfo2: record(RecordType.CHANNEL, [
+          channelInfo2: record(RecordType.CHANNEL_INFO, [
             ...uint32LE(42), // channel id
             ...string("myTopic"), // topic
             ...string("utf12"), // encoding
@@ -555,7 +555,7 @@ describe("McapReader", () => {
         },
         {
           key: "schema",
-          channelInfo2: record(RecordType.CHANNEL, [
+          channelInfo2: record(RecordType.CHANNEL_INFO, [
             ...uint32LE(42), // channel id
             ...string("myTopic"), // topic
             ...string("utf12"), // encoding
@@ -566,7 +566,7 @@ describe("McapReader", () => {
         },
         {
           key: "data",
-          channelInfo2: record(RecordType.CHANNEL, [
+          channelInfo2: record(RecordType.CHANNEL_INFO, [
             ...uint32LE(42), // channel id
             ...string("myTopic"), // topic
             ...string("utf12"), // encoding
@@ -576,7 +576,7 @@ describe("McapReader", () => {
           ]),
         },
       ])("differing in $key", ({ channelInfo2 }) => {
-        const channelInfo = record(RecordType.CHANNEL, [
+        const channelInfo = record(RecordType.CHANNEL_INFO, [
           ...uint32LE(42), // channel id
           ...string("myTopic"), // topic
           ...string("utf12"), // encoding
@@ -626,7 +626,7 @@ describe("McapReader", () => {
           ]),
         );
         expect(reader.nextRecord()).toEqual({
-          type: "Channel",
+          type: "ChannelInfo",
           id: 42,
           topic: "myTopic",
           encoding: "utf12",

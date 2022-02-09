@@ -1,6 +1,6 @@
 export enum RecordType {
   MIN = 0x01,
-  CHANNEL = 0x01,
+  CHANNEL_INFO = 0x01,
   MESSAGE = 0x02,
   CHUNK = 0x03,
   INDEX_DATA = 0x04,

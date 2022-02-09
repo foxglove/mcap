@@ -2,7 +2,7 @@ import { open, FileHandle } from "fs/promises";
 
 import { BufferBuilder } from "./BufferBuilder";
 import { MCAP_MAGIC, RecordType } from "./constants";
-import { Channel, McapRecord, Message } from "./types";
+import { ChannelInfo, McapRecord, Message } from "./types";
 
 export default class McapPre0Writer {
   private writeStream?: FileHandle;
@@ -20,8 +20,8 @@ export default class McapPre0Writer {
 
   async write(record: McapRecord): Promise<void> {
     switch (record.type) {
-      case "Channel":
-        await this.writeChannelRecord(record);
+      case "ChannelInfo":
+        await this.writeChannelInfoRecord(record);
         break;
       case "Message":
         await this.writeMessageRecord(record);
@@ -46,7 +46,7 @@ export default class McapPre0Writer {
     await this.writeStream?.close();
   }
 
-  private async writeChannelRecord(info: Channel): Promise<void> {
+  private async writeChannelInfoRecord(info: ChannelInfo): Promise<void> {
     if (!this.writeStream) {
       return;
     }
@@ -58,7 +58,7 @@ export default class McapPre0Writer {
     serializer.string(info.schema);
 
     const preamble = new BufferBuilder();
-    preamble.uint8(RecordType.CHANNEL);
+    preamble.uint8(RecordType.CHANNEL_INFO);
     preamble.uint32(serializer.length);
 
     await this.writeStream.write(preamble.buffer);
@@ -70,7 +70,7 @@ export default class McapPre0Writer {
       return;
     }
     const serializer = new BufferBuilder();
-    serializer.uint32(message.channel.id);
+    serializer.uint32(message.channelInfo.id);
     serializer.uint64(message.timestamp);
 
     const preamble = new BufferBuilder();
