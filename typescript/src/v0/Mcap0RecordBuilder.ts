@@ -369,6 +369,7 @@ export class Mcap0RecordBuilder {
       .uint64(statistics.messageCount)
       .uint32(statistics.channelCount)
       .uint32(statistics.attachmentCount)
+      .uint32(statistics.metadataCount)
       .uint32(statistics.chunkCount)
       .tupleArray(
         (key) => this.bufferBuilder.uint16(key),

@@ -144,10 +144,11 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
   const statisticsStart = BigInt(builder.length);
   if (features.has(TestFeatures.UseStatistics)) {
     builder.writeStatistics({
-      attachmentCount,
-      chunkCount,
       messageCount,
       channelCount,
+      attachmentCount,
+      metadataCount: 0,
+      chunkCount,
       channelMessageCounts,
     });
   }
