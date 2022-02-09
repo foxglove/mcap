@@ -65,7 +65,7 @@ func ParseSchema(buf []byte) (*Schema, error) {
 	}, nil
 }
 
-func ParseChannelInfo(buf []byte) (*ChannelInfo, error) {
+func ParseChannel(buf []byte) (*Channel, error) {
 	channelID, offset, err := getUint16(buf, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read channel id: %w", err)
@@ -86,7 +86,7 @@ func ParseChannelInfo(buf []byte) (*ChannelInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata: %w", err)
 	}
-	return &ChannelInfo{
+	return &Channel{
 		ID:              channelID,
 		Topic:           topic,
 		MessageEncoding: messageEncoding,
@@ -143,7 +143,11 @@ func ParseChunk(buf []byte) (*Chunk, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read compression: %w", err)
 	}
-	records := buf[offset:]
+	recordsLength, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read compression: %w", err)
+	}
+	records := buf[offset : offset+int(recordsLength)]
 	return &Chunk{
 		StartTime:        startTime,
 		EndTime:          endTime,
@@ -307,8 +311,8 @@ func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
 	}, nil
 }
 func ParseStatistics(buf []byte) (*Statistics, error) {
-	if len(buf) < 8+4+4+4+4+4 {
-		return nil, io.ErrShortBuffer
+	if minLength := 8 + 4 + 4 + 4 + 4 + 4; len(buf) < minLength {
+		return nil, fmt.Errorf("short statistics record %d < %d: %w", len(buf), minLength, io.ErrShortBuffer)
 	}
 	messageCount, offset, err := getUint64(buf, 0)
 	if err != nil {
@@ -339,7 +343,7 @@ func ParseStatistics(buf []byte) (*Statistics, error) {
 	channelMessageCounts := make(map[uint16]uint64)
 	start := offset
 	if len(buf) < start+int(channelMessageCountLength) {
-		return nil, io.ErrShortBuffer
+		return nil, fmt.Errorf("short channel message count lengths: %w", io.ErrShortBuffer)
 	}
 	for offset < start+int(channelMessageCountLength) {
 		chanID, offset, err = getUint16(buf, offset)
