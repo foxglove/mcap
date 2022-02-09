@@ -17,6 +17,9 @@
     "tests/conformance/data": true
   },
 
+  "python.formatting.provider": "black",
+  "python.analysis.typeCheckingMode": "strict",
+
   // https://github.com/microsoft/vscode-cpptools/issues/722
   "C_Cpp.autoAddFileAssociations": false,
   "C_Cpp.default.cppStandard": "c++17"

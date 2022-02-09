@@ -303,6 +303,7 @@ export function parseRecord({
       const messageCount = reader.uint64();
       const channelCount = reader.uint32();
       const attachmentCount = reader.uint32();
+      const metadataCount = reader.uint32();
       const chunkCount = reader.uint32();
       const channelMessageCounts = reader.map(
         (r) => r.uint16(),
@@ -314,6 +315,7 @@ export function parseRecord({
         messageCount,
         channelCount,
         attachmentCount,
+        metadataCount,
         chunkCount,
         channelMessageCounts,
       };
