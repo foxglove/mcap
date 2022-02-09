@@ -1,12 +1,26 @@
 import { program } from "commander";
 import * as Diff from "diff";
 import fs from "fs/promises";
+import stringify from "json-stringify-pretty-compact";
 import path from "path";
-import listDirRecursive from "scripts/util/listDirRecursive";
+import generateTestVariants from "variants/generateTestVariants";
 
 import runners from "./runners";
 
-async function main(options: { dataDir: string; runner?: string; update: boolean }) {
+function normalizeJson(json: string): string {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const data = JSON.parse(json);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+  delete data.meta;
+  return stringify(data);
+}
+
+async function main(options: {
+  dataDir: string;
+  runner?: string;
+  update: boolean;
+  testRegex?: RegExp;
+}) {
   if (options.update && !options.runner) {
     throw new Error(
       "A test runner must be specified using --runner when updating expected outputs",
@@ -25,19 +39,32 @@ async function main(options: { dataDir: string; runner?: string; update: boolean
   await fs.mkdir(options.dataDir, { recursive: true });
 
   let hadError = false;
+  let foundAnyTests = false;
   for (const runner of enabledRunners) {
     console.log("running", runner.name);
-    for await (const fileName of listDirRecursive(options.dataDir)) {
-      if (!fileName.endsWith(".mcap")) {
+    for (const variant of generateTestVariants()) {
+      if (options.testRegex && !options.testRegex.test(variant.name)) {
         continue;
       }
-      const filePath = path.join(options.dataDir, fileName);
+      foundAnyTests = true;
+      const filePath = path.join(options.dataDir, variant.baseName, `${variant.name}.mcap`);
 
-      console.log("  testing", filePath);
-      const outputLines = await runner.run(filePath);
-      const output = outputLines.join("\n") + "\n";
+      if (runner.supportsVariant(variant)) {
+        console.log("  testing", filePath);
+      } else {
+        console.log("  not supported", filePath);
+        continue;
+      }
 
-      const expectedOutputPath = filePath.replace(/\.mcap$/, ".expected.txt");
+      let output: string;
+      try {
+        output = await runner.run(filePath, variant);
+      } catch (error) {
+        console.error(error);
+        hadError = true;
+        continue;
+      }
+      const expectedOutputPath = filePath.replace(/\.mcap$/, ".json");
       if (options.update) {
         await fs.writeFile(expectedOutputPath, output);
       } else {
@@ -49,14 +76,21 @@ async function main(options: { dataDir: string; runner?: string; update: boolean
           hadError = true;
           continue;
         }
-        if (output !== expectedOutput) {
+        const outputNorm = normalizeJson(output);
+        const expectedNorm = normalizeJson(expectedOutput);
+        if (outputNorm !== expectedNorm) {
           console.error(`Error: output did not match expected for ${filePath}:`);
-          console.error(Diff.createPatch(expectedOutputPath, expectedOutput, output));
+          console.error(Diff.createPatch(expectedOutputPath, expectedNorm, outputNorm));
           hadError = true;
           continue;
         }
       }
     }
+  }
+
+  if (!foundAnyTests) {
+    console.error("No tests found");
+    hadError = true;
   }
 
   if (hadError) {
@@ -72,5 +106,10 @@ program
       .choices(runners.map((r) => r.name)),
   )
   .option("--update", "update expected output files", false)
+  .option(
+    "--test-regex <pattern>",
+    "filter tests to run",
+    (value: string) => new RegExp(value, "i"),
+  )
   .action(main)
   .parse();

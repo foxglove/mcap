@@ -32,7 +32,8 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-
+      - uses: actions/setup-python@v2
+      - run: cd python && pip install .
       - run: yarn install --frozen-lockfile
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance
@@ -67,11 +68,27 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-
       - run: yarn install --frozen-lockfile
       - run: yarn workspace @foxglove/mcap lint:ci
       - run: yarn workspace @foxglove/mcap typecheck
       - run: yarn workspace @foxglove/mcap test
+
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+          cache: pipenv
+      - run: pip install pipenv
+      - run: pipenv install --dev --deploy
+      - run: pipenv run black --check --diff --color .
+      - run: pipenv run pyright mcap tests
+      - run: pipenv run python -m build
 
   go:
     runs-on: ubuntu-latest

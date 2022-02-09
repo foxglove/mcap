@@ -1,0 +1,97 @@
+{
+  "records": [
+    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
+    {
+      "type": "Schema",
+      "fields": [
+        ["data", ["4", "5", "6"]],
+        ["encoding", "c"],
+        ["id", "1"],
+        ["name", "Example"]
+      ]
+    },
+    {
+      "type": "Channel",
+      "fields": [
+        ["id", "1"],
+        ["message_encoding", "a"],
+        ["metadata", {"foo": "bar"}],
+        ["schema_id", "1"],
+        ["topic", "example"]
+      ]
+    },
+    {
+      "type": "Message",
+      "fields": [
+        ["channel_id", "1"],
+        ["data", ["1", "2", "3"]],
+        ["log_time", "2"],
+        ["publish_time", "1"],
+        ["sequence", "10"]
+      ]
+    },
+    {
+      "type": "Schema",
+      "fields": [
+        ["data", ["4", "5", "6"]],
+        ["encoding", "c"],
+        ["id", "1"],
+        ["name", "Example"]
+      ]
+    },
+    {
+      "type": "Channel",
+      "fields": [
+        ["id", "1"],
+        ["message_encoding", "a"],
+        ["metadata", {"foo": "bar"}],
+        ["schema_id", "1"],
+        ["topic", "example"]
+      ]
+    },
+    {
+      "type": "Statistics",
+      "fields": [
+        ["attachment_count", "0"],
+        ["channel_count", "1"],
+        ["channel_message_counts", {"1": "1"}],
+        ["chunk_count", "0"],
+        ["message_count", "1"],
+        ["metadata_count", "0"]
+      ]
+    },
+    {
+      "type": "SummaryOffset",
+      "fields": [
+        ["group_length", "34"],
+        ["group_opcode", "3"],
+        ["group_start", "153"]
+      ]
+    },
+    {
+      "type": "SummaryOffset",
+      "fields": [
+        ["group_length", "47"],
+        ["group_opcode", "4"],
+        ["group_start", "187"]
+      ]
+    },
+    {
+      "type": "SummaryOffset",
+      "fields": [
+        ["group_length", "47"],
+        ["group_opcode", "11"],
+        ["group_start", "234"]
+      ]
+    },
+    {
+      "type": "Footer",
+      "fields": [
+        ["summary_crc", "0"],
+        ["summary_offset_start", "281"],
+        ["summary_start", "153"]
+      ]
+    }
+  ],
+  "meta": {"variant": {"features": ["mx", "st", "rsh", "rch", "chx", "sum"]}}
+}
