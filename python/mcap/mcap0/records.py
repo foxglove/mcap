@@ -278,8 +278,7 @@ class Message(McapRecord):
 @dataclass
 class MessageIndex(McapRecord):
     channel_id: int = field(metadata={"value_type": ["int"]})
-    records: List[Tuple[int, int]] = field(
-        metadata={"value_type": ["long", "long"]})
+    records: List[Tuple[int, int]] = field(metadata={"value_type": ["long", "long"]})
 
     @staticmethod
     def read(stream: ReadDataStream):
