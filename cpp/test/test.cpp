@@ -8,6 +8,15 @@ std::string_view StringView(const std::byte* data, size_t size) {
   return std::string_view{reinterpret_cast<const char*>(data), size};
 }
 
+TEST_CASE("internal::Parse*()", "[reader]") {
+  SECTION("uint64_t") {
+    const std::array<std::byte, 8> input = {std::byte(0xef), std::byte(0xcd), std::byte(0xab),
+                                            std::byte(0x90), std::byte(0x78), std::byte(0x56),
+                                            std::byte(0x34), std::byte(0x12)};
+    REQUIRE(mcap::internal::ParseUint64(input.data()) == 0x1234567890abcdefull);
+  }
+}
+
 TEST_CASE("McapWriter::write()", "[writer]") {
   SECTION("uint8_t") {
     mcap::BufferWriter output;
