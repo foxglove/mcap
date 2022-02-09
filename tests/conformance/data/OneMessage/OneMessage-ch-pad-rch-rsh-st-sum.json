@@ -93,14 +93,6 @@
     {
       "type": "SummaryOffset",
       "fields": [
-        ["group_length", "0"],
-        ["group_opcode", "13"],
-        ["group_start", "345"]
-      ]
-    },
-    {
-      "type": "SummaryOffset",
-      "fields": [
         ["group_length", "50"],
         ["group_opcode", "11"],
         ["group_start", "295"]

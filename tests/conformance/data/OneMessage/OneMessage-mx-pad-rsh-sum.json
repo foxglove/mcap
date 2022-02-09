@@ -48,22 +48,6 @@
       ]
     },
     {
-      "type": "SummaryOffset",
-      "fields": [
-        ["group_length", "0"],
-        ["group_opcode", "13"],
-        ["group_start", "202"]
-      ]
-    },
-    {
-      "type": "SummaryOffset",
-      "fields": [
-        ["group_length", "0"],
-        ["group_opcode", "8"],
-        ["group_start", "202"]
-      ]
-    },
-    {
       "type": "Footer",
       "fields": [
         ["summary_crc", "0"],

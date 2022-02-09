@@ -29,6 +29,7 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
   let messageCount = 0n;
   let channelCount = 0;
   let attachmentCount = 0;
+  let metadataCount = 0;
   const channelMessageCounts = new Map<number, bigint>();
 
   for (const record of records) {
@@ -79,9 +80,12 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
         break;
       }
       case "Metadata": {
+        metadataCount++;
         const offset = BigInt(builder.length);
         const length = builder.writeMetadata(record);
-        metadataIndexes.push({ name: record.name, length, offset });
+        if (features.has(TestFeatures.UseMetadataIndex)) {
+          metadataIndexes.push({ name: record.name, length, offset });
+        }
         break;
       }
     }
@@ -147,7 +151,7 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
       messageCount,
       channelCount,
       attachmentCount,
-      metadataCount: 0,
+      metadataCount,
       chunkCount,
       channelMessageCounts,
     });
@@ -195,11 +199,13 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
         groupLength: repeatedChannelInfosLength,
       });
     }
-    builder.writeSummaryOffset({
-      groupOpcode: Mcap0Constants.Opcode.METADATA_INDEX,
-      groupStart: metadataIndexStart,
-      groupLength: metadataIndexLength,
-    });
+    if (metadataIndexLength !== 0n) {
+      builder.writeSummaryOffset({
+        groupOpcode: Mcap0Constants.Opcode.METADATA_INDEX,
+        groupStart: metadataIndexStart,
+        groupLength: metadataIndexLength,
+      });
+    }
     if (statisticsLength !== 0n) {
       builder.writeSummaryOffset({
         groupOpcode: Mcap0Constants.Opcode.STATISTICS,
@@ -214,11 +220,13 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
         groupLength: attachmentIndexLength,
       });
     }
-    builder.writeSummaryOffset({
-      groupOpcode: Mcap0Constants.Opcode.CHUNK_INDEX,
-      groupStart: chunkIndexStart,
-      groupLength: chunkIndexLength,
-    });
+    if (chunkIndexLength !== 0n) {
+      builder.writeSummaryOffset({
+        groupOpcode: Mcap0Constants.Opcode.CHUNK_INDEX,
+        groupStart: chunkIndexStart,
+        groupLength: chunkIndexLength,
+      });
+    }
   }
 
   builder.writeFooter({
