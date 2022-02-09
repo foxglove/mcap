@@ -50,7 +50,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
   private validateCrcs;
   private doneReading = false;
   private generator = this.read();
-  private channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
+  private channelsById = new Map<number, TypedMcapRecords["Channel"]>();
 
   constructor({
     includeChunks = false,
@@ -96,14 +96,14 @@ export default class Mcap0StreamReader implements McapStreamReader {
     }
     const result = this.generator.next();
 
-    if (result.value?.type === "ChannelInfo") {
-      const existing = this.channelInfosById.get(result.value.id);
-      this.channelInfosById.set(result.value.id, result.value);
+    if (result.value?.type === "Channel") {
+      const existing = this.channelsById.get(result.value.id);
+      this.channelsById.set(result.value.id, result.value);
       if (existing && !isEqual(existing, result.value)) {
         throw new Error(`differing channel infos for ${result.value.id}`);
       }
     } else if (result.value?.type === "Message") {
-      const existing = this.channelInfosById.get(result.value.channelId);
+      const existing = this.channelsById.get(result.value.channelId);
       if (!existing) {
         throw new Error("Encountered message on channel 42 without prior channel info");
       }
@@ -146,7 +146,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
           break;
         case "Header":
         case "Schema":
-        case "ChannelInfo":
+        case "Channel":
         case "Message":
         case "MessageIndex":
         case "ChunkIndex":
@@ -208,7 +208,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
               case "DataEnd":
                 throw new Error(`${chunkResult.record.type} record not allowed inside a chunk`);
               case "Schema":
-              case "ChannelInfo":
+              case "Channel":
               case "Message":
                 yield chunkResult.record;
                 break;

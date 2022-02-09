@@ -4,7 +4,7 @@ import { MCAP0_MAGIC, Opcode } from "./constants";
 import {
   Attachment,
   AttachmentIndex,
-  ChannelInfo,
+  Channel,
   Chunk,
   ChunkIndex,
   DataEnd,
@@ -109,8 +109,8 @@ export class Mcap0RecordBuilder {
     return BigInt(endPosition - startPosition + 1);
   }
 
-  writeChannelInfo(info: ChannelInfo): bigint {
-    this.bufferBuilder.uint8(Opcode.CHANNEL_INFO);
+  writeChannel(info: Channel): bigint {
+    this.bufferBuilder.uint8(Opcode.CHANNEL);
 
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder

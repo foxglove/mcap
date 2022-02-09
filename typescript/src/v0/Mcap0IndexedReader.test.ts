@@ -138,7 +138,7 @@ describe("Mcap0IndexedReader", () => {
         ...string("json"), // schema format
         ...uint32PrefixedBytes(new TextEncoder().encode("stuff")), // schema
       ]),
-      ...record(Opcode.CHANNEL_INFO, [
+      ...record(Opcode.CHANNEL, [
         ...uint16LE(42), // channel id
         ...string("myTopic"), // topic
         ...string("utf12"), // encoding
@@ -155,12 +155,12 @@ describe("Mcap0IndexedReader", () => {
     const readable = makeReadable(new Uint8Array(data));
     const reader = await Mcap0IndexedReader.Initialize({ readable });
     await expect(collect(reader.readMessages())).resolves.toEqual([]);
-    expect(reader.channelInfosById).toEqual(
-      new Map<number, TypedMcapRecords["ChannelInfo"]>([
+    expect(reader.channelsById).toEqual(
+      new Map<number, TypedMcapRecords["Channel"]>([
         [
           42,
           {
-            type: "ChannelInfo",
+            type: "Channel",
             id: 42,
             schemaId: 1,
             topic: "myTopic",
@@ -227,7 +227,7 @@ describe("Mcap0IndexedReader", () => {
           ...string("json"), // schema format
           ...uint32PrefixedBytes(new TextEncoder().encode("stuff")), // schema
         ]);
-        const channelInfo = record(Opcode.CHANNEL_INFO, [
+        const channelInfo = record(Opcode.CHANNEL, [
           ...uint16LE(42), // channel id
           ...string("myTopic"), // topic
           ...string("utf12"), // message encoding

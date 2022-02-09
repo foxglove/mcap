@@ -2,8 +2,8 @@ export type McapMagic = {
   type: "Magic";
   formatVersion: 1;
 };
-export type ChannelInfo = {
-  type: "ChannelInfo";
+export type Channel = {
+  type: "Channel";
   id: number;
   topic: string;
   encoding: string;
@@ -13,7 +13,7 @@ export type ChannelInfo = {
 };
 export type Message = {
   type: "Message";
-  channelInfo: ChannelInfo;
+  channel: Channel;
   timestamp: bigint;
   data: ArrayBuffer;
 };
@@ -30,4 +30,4 @@ export type Footer = {
   indexCrc: number;
 };
 
-export type McapRecord = ChannelInfo | Message | Chunk | Footer;
+export type McapRecord = Channel | Message | Chunk | Footer;

@@ -3,7 +3,7 @@ import { crc32 } from "@foxglove/crc";
 import StreamBuffer from "../common/StreamBuffer";
 import { MCAP_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
-import { ChannelInfo, McapRecord } from "./types";
+import { Channel, McapRecord } from "./types";
 
 type McapReaderOptions = {
   /**
@@ -102,8 +102,8 @@ export default class McapPre0Reader {
   }
 
   private *read(): Generator<McapRecord | undefined, McapRecord | undefined, void> {
-    const channelInfosById = new Map<number, ChannelInfo>();
-    const channelInfosSeenInThisChunk = new Set<number>();
+    const channelInfosById = new Map<number, Channel>();
+    const channelsSeenInThisChunk = new Set<number>();
     {
       let magic, usedBytes;
       while ((({ magic, usedBytes } = parseMagic(this.buffer.view, 0)), !magic)) {
@@ -121,7 +121,7 @@ export default class McapPre0Reader {
             this.buffer.view,
             0,
             channelInfosById,
-            channelInfosSeenInThisChunk,
+            channelsSeenInThisChunk,
           )),
           !record)
         ) {
@@ -130,7 +130,7 @@ export default class McapPre0Reader {
         this.buffer.consume(usedBytes);
       }
       switch (record.type) {
-        case "ChannelInfo":
+        case "Channel":
         case "Message":
           yield record;
           break;
@@ -163,7 +163,7 @@ export default class McapPre0Reader {
               view,
               chunkOffset,
               channelInfosById,
-              channelInfosSeenInThisChunk,
+              channelsSeenInThisChunk,
             )),
               chunkResult.record;
             chunkOffset += chunkResult.usedBytes
@@ -172,7 +172,7 @@ export default class McapPre0Reader {
               case "Chunk":
               case "Footer":
                 throw new Error(`${chunkResult.record.type} record not allowed inside a chunk`);
-              case "ChannelInfo":
+              case "Channel":
               case "Message":
                 yield chunkResult.record;
             }

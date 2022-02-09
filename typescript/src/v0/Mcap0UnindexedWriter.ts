@@ -1,6 +1,6 @@
 import { IWritable } from "../common/IWritable";
 import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
-import { ChannelInfo, Message, Header, Attachment, Metadata } from "./types";
+import { Channel, Message, Header, Attachment, Metadata } from "./types";
 
 /**
  * Mcap0UnindexedWriter provides an interface for writing messages
@@ -43,9 +43,9 @@ export class Mcap0UnindexedWriter {
   /**
    * Add channel info and return a generated channel id. The channel id is used when adding messages.
    */
-  async registerChannel(info: Omit<ChannelInfo, "id">): Promise<number> {
+  async registerChannel(info: Omit<Channel, "id">): Promise<number> {
     const channelId = this.nextChannelId;
-    this.bufferRecordBuilder.writeChannelInfo({
+    this.bufferRecordBuilder.writeChannel({
       ...info,
       id: channelId,
     });

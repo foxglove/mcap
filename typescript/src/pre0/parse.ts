@@ -2,7 +2,7 @@ import { isEqual } from "lodash";
 
 import { getBigUint64 } from "../common/getBigUint64";
 import { MCAP_MAGIC, RecordType } from "./constants";
-import { McapMagic, McapRecord, ChannelInfo } from "./types";
+import { McapMagic, McapRecord, Channel } from "./types";
 
 /**
  * Parse a MCAP magic string and format version at `startOffset` in `view`.
@@ -36,16 +36,16 @@ export function parseMagic(
 /**
  * Parse a MCAP record beginning at `startOffset` in `view`.
  *
- * @param channelInfosById Used to track ChannelInfo objects across calls to `parseRecord` and
+ * @param channelsById Used to track Channel objects across calls to `parseRecord` and
  * associate them with newly parsed Message records.
- * @param channelInfosSeenInThisChunk Used to validate that messages are preceded by a corresponding
- * ChannelInfo within the same chunk.
+ * @param channelsSeenInThisChunk Used to validate that messages are preceded by a corresponding
+ * Channel within the same chunk.
  */
 export function parseRecord(
   view: DataView,
   startOffset: number,
-  channelInfosById: Map<number, ChannelInfo>,
-  channelInfosSeenInThisChunk: Set<number>,
+  channelsById: Map<number, Channel>,
+  channelsSeenInThisChunk: Set<number>,
 ): { record: McapRecord; usedBytes: number } | { record?: undefined; usedBytes: 0 } {
   if (startOffset + 5 >= view.byteLength) {
     return { usedBytes: 0 };
@@ -81,7 +81,7 @@ export function parseRecord(
   }
 
   switch (type) {
-    case RecordType.CHANNEL_INFO: {
+    case RecordType.CHANNEL: {
       const id = view.getUint32(offset, true);
       offset += 4;
       const topicLength = view.getUint32(offset, true);
@@ -111,7 +111,7 @@ export function parseRecord(
       const data = view.buffer.slice(view.byteOffset + offset, view.byteOffset + recordEndOffset);
 
       const record: McapRecord = {
-        type: "ChannelInfo",
+        type: "Channel",
         id,
         topic,
         encoding,
@@ -119,8 +119,8 @@ export function parseRecord(
         schema,
         data,
       };
-      channelInfosSeenInThisChunk.add(id);
-      const existingInfo = channelInfosById.get(id);
+      channelsSeenInThisChunk.add(id);
+      const existingInfo = channelsById.get(id);
       if (existingInfo) {
         if (!isEqual(existingInfo, record)) {
           throw new Error(`differing channel infos for ${record.id}`);
@@ -130,7 +130,7 @@ export function parseRecord(
           usedBytes: recordEndOffset - startOffset,
         };
       } else {
-        channelInfosById.set(id, record);
+        channelsById.set(id, record);
         return { record, usedBytes: recordEndOffset - startOffset };
       }
     }
@@ -138,11 +138,11 @@ export function parseRecord(
     case RecordType.MESSAGE: {
       const channelId = view.getUint32(offset, true);
       offset += 4;
-      const channelInfo = channelInfosById.get(channelId);
-      if (!channelInfo) {
+      const channel = channelsById.get(channelId);
+      if (!channel) {
         throw new Error(`Encountered message on channel ${channelId} without prior channel info`);
       }
-      if (!channelInfosSeenInThisChunk.has(channelId)) {
+      if (!channelsSeenInThisChunk.has(channelId)) {
         throw new Error(
           `Encountered message on channel ${channelId} without prior channel info in this chunk; channel info must be repeated within each chunk where the channel is used`,
         );
@@ -153,7 +153,7 @@ export function parseRecord(
 
       const record: McapRecord = {
         type: "Message",
-        channelInfo,
+        channel,
         timestamp,
         data,
       };
@@ -180,7 +180,7 @@ export function parseRecord(
         decompressedCrc,
         data,
       };
-      channelInfosSeenInThisChunk.clear();
+      channelsSeenInThisChunk.clear();
       return { record, usedBytes: recordEndOffset - startOffset };
     }
 

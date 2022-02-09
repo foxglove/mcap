@@ -75,7 +75,7 @@ describe("Mcap0RecordBuilder", () => {
   it("writes channel info", () => {
     const writer = new Mcap0RecordBuilder();
 
-    const written = writer.writeChannelInfo({
+    const written = writer.writeChannel({
       id: 1,
       topic: "/topic",
       messageEncoding: "encoding",

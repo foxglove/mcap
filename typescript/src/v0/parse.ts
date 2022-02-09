@@ -128,7 +128,7 @@ export function parseRecord({
       return { record, usedBytes: recordEndOffset - startOffset };
     }
 
-    case Opcode.CHANNEL_INFO: {
+    case Opcode.CHANNEL: {
       const channelId = reader.uint16();
       const topicName = reader.string();
       const messageEncoding = reader.string();
@@ -139,7 +139,7 @@ export function parseRecord({
       );
 
       const record: TypedMcapRecord = {
-        type: "ChannelInfo",
+        type: "Channel",
         id: channelId,
         topic: topicName,
         messageEncoding,
