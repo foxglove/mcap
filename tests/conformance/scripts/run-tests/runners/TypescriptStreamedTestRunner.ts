@@ -12,7 +12,7 @@ export default class TypescriptStreamedTestRunner implements ITestRunner {
     return true;
   }
 
-  async run(filePath: string): Promise<string> {
+  async run(filePath: string, variant: TestVariant): Promise<string> {
     const result = [];
     const reader = new Mcap0StreamReader({ validateCrcs: true });
     reader.append(await fs.readFile(filePath));
@@ -27,6 +27,6 @@ export default class TypescriptStreamedTestRunner implements ITestRunner {
       throw new Error("Reader not done");
     }
 
-    return stringifyRecords(result);
+    return stringifyRecords(result, variant);
   }
 }

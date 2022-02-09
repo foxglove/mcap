@@ -1,73 +1,76 @@
-[
-  {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
-  {
-    "type": "Schema",
-    "fields": [
-      ["data", ["4", "5", "6"]],
-      ["encoding", "c"],
-      ["id", "1"],
-      ["name", "Example"]
-    ]
-  },
-  {
-    "type": "ChannelInfo",
-    "fields": [
-      ["id", "1"],
-      ["message_encoding", "a"],
-      ["metadata", {"foo": "bar"}],
-      ["schema_id", "1"],
-      ["topic", "example"]
-    ]
-  },
-  {
-    "type": "Message",
-    "fields": [
-      ["channel_id", "1"],
-      ["data", ["1", "2", "3"]],
-      ["log_time", "2"],
-      ["publish_time", "1"],
-      ["sequence", "10"]
-    ]
-  },
-  {
-    "type": "Schema",
-    "fields": [
-      ["data", ["4", "5", "6"]],
-      ["encoding", "c"],
-      ["id", "1"],
-      ["name", "Example"]
-    ]
-  },
-  {
-    "type": "ChannelInfo",
-    "fields": [
-      ["id", "1"],
-      ["message_encoding", "a"],
-      ["metadata", {"foo": "bar"}],
-      ["schema_id", "1"],
-      ["topic", "example"]
-    ]
-  },
-  {
-    "type": "ChunkIndex",
-    "fields": [
-      ["chunk_length", "162"],
-      ["chunk_start_offset", "25"],
-      ["compressed_size", "115"],
-      ["compression", ""],
-      ["end_time", "2"],
-      ["message_index_length", "31"],
-      ["message_index_offsets", {"1": "189"}],
-      ["start_time", "2"],
-      ["uncompressed_size", "115"]
-    ]
-  },
-  {
-    "type": "Footer",
-    "fields": [
-      ["summary_crc", "0"],
-      ["summary_offset_start", "0"],
-      ["summary_start", "233"]
-    ]
-  }
-]
+{
+  "records": [
+    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
+    {
+      "type": "Schema",
+      "fields": [
+        ["data", ["4", "5", "6"]],
+        ["encoding", "c"],
+        ["id", "1"],
+        ["name", "Example"]
+      ]
+    },
+    {
+      "type": "ChannelInfo",
+      "fields": [
+        ["id", "1"],
+        ["message_encoding", "a"],
+        ["metadata", {"foo": "bar"}],
+        ["schema_id", "1"],
+        ["topic", "example"]
+      ]
+    },
+    {
+      "type": "Message",
+      "fields": [
+        ["channel_id", "1"],
+        ["data", ["1", "2", "3"]],
+        ["log_time", "2"],
+        ["publish_time", "1"],
+        ["sequence", "10"]
+      ]
+    },
+    {
+      "type": "Schema",
+      "fields": [
+        ["data", ["4", "5", "6"]],
+        ["encoding", "c"],
+        ["id", "1"],
+        ["name", "Example"]
+      ]
+    },
+    {
+      "type": "ChannelInfo",
+      "fields": [
+        ["id", "1"],
+        ["message_encoding", "a"],
+        ["metadata", {"foo": "bar"}],
+        ["schema_id", "1"],
+        ["topic", "example"]
+      ]
+    },
+    {
+      "type": "ChunkIndex",
+      "fields": [
+        ["chunk_length", "162"],
+        ["chunk_start_offset", "25"],
+        ["compressed_size", "115"],
+        ["compression", ""],
+        ["end_time", "2"],
+        ["message_index_length", "31"],
+        ["message_index_offsets", {"1": "189"}],
+        ["start_time", "2"],
+        ["uncompressed_size", "115"]
+      ]
+    },
+    {
+      "type": "Footer",
+      "fields": [
+        ["summary_crc", "0"],
+        ["summary_offset_start", "0"],
+        ["summary_start", "233"]
+      ]
+    }
+  ],
+  "meta": {"variant": {"features": ["ch", "mx", "rsh", "rch", "chx"]}}
+}

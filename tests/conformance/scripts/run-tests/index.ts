@@ -8,8 +8,11 @@ import generateTestVariants from "variants/generateTestVariants";
 import runners from "./runners";
 
 function normalizeJson(json: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
-  return stringify(JSON.parse(json));
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const data = JSON.parse(json);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+  delete data.meta;
+  return stringify(data);
 }
 
 async function main(options: {
@@ -55,7 +58,7 @@ async function main(options: {
 
       let output: string;
       try {
-        output = await runner.run(filePath);
+        output = await runner.run(filePath, variant);
       } catch (error) {
         console.error(error);
         hadError = true;
