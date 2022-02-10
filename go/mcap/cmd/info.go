@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"os"
 	"sort"
 	"time"
@@ -23,38 +22,32 @@ func printInfo(w io.Writer, info *libmcap.Info) error {
 	buf := &bytes.Buffer{}
 
 	fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
+
+	start := info.Statistics.MessageStartTime
+	end := info.Statistics.MessageEndTime
+	starttime := time.Unix(int64(start/1e9), int64(start%1e9))
+	endtime := time.Unix(int64(end/1e9), int64(end%1e9))
+	fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
+	if starttime.After(LongAgo) {
+		fmt.Fprintf(buf, "start: %s\n", starttime.Format(time.RFC3339Nano))
+		fmt.Fprintf(buf, "end: %s\n", endtime.Format(time.RFC3339Nano))
+	} else {
+		fmt.Fprintf(buf, "start: %.3f\n", float64(starttime.UnixNano())/1e9)
+		fmt.Fprintf(buf, "end: %.3f\n", float64(endtime.UnixNano())/1e9)
+	}
+
 	if len(info.ChunkIndexes) > 0 {
-		start := uint64(math.MaxUint64)
-		end := uint64(0)
 		compressionFormatStats := make(map[libmcap.CompressionFormat]struct {
 			count            int
 			compressedSize   uint64
 			uncompressedSize uint64
 		})
-
 		for _, ci := range info.ChunkIndexes {
-			if ci.StartTime < start {
-				start = ci.StartTime
-			}
-			if ci.EndTime > end {
-				end = ci.EndTime
-			}
 			stats := compressionFormatStats[ci.Compression]
 			stats.count++
 			stats.compressedSize += ci.CompressedSize
 			stats.uncompressedSize += ci.UncompressedSize
 			compressionFormatStats[ci.Compression] = stats
-		}
-
-		starttime := time.Unix(int64(start/1e9), int64(start%1e9))
-		endtime := time.Unix(int64(end/1e9), int64(end%1e9))
-		fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
-		if starttime.After(LongAgo) {
-			fmt.Fprintf(buf, "start: %s\n", starttime.Format(time.RFC3339Nano))
-			fmt.Fprintf(buf, "end: %s\n", endtime.Format(time.RFC3339Nano))
-		} else {
-			fmt.Fprintf(buf, "start: %.3f\n", float64(starttime.UnixNano())/1e9)
-			fmt.Fprintf(buf, "end: %.3f\n", float64(endtime.UnixNano())/1e9)
 		}
 		fmt.Fprintf(buf, "chunks:\n")
 		chunkCount := len(info.ChunkIndexes)

@@ -333,7 +333,7 @@ func TestMCAPInfo(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, uint64(1606), info.Statistics.MessageCount)
 	assert.Equal(t, uint32(7), info.Statistics.ChannelCount)
-	assert.Equal(t, uint32(27), info.Statistics.ChunkCount)
+	assert.Equal(t, 14, int(info.Statistics.ChunkCount))
 	expectedCounts := map[string]uint64{
 		"/radar/points":           156,
 		"/radar/tracks":           156,

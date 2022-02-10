@@ -103,7 +103,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			// if the chunk overlaps with the requested parameters, load it
 			for _, channel := range it.channels {
 				if idx.MessageIndexOffsets[channel.ID] > 0 {
-					if (it.end == 0 && it.start == 0) || (idx.StartTime < it.end && idx.EndTime >= it.start) {
+					if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
 						it.chunkIndexes = append(it.chunkIndexes, idx)
 					}
 					break
@@ -125,26 +125,26 @@ func sortOverlappingChunks(chunkIndexes []*ChunkIndex) [][]*ChunkIndex {
 	output := [][]*ChunkIndex{}
 	chunkset := []*ChunkIndex{}
 	sort.Slice(chunkIndexes, func(i, j int) bool {
-		return chunkIndexes[i].StartTime < chunkIndexes[j].StartTime
+		return chunkIndexes[i].MessageStartTime < chunkIndexes[j].MessageStartTime
 	})
 
 	var maxend, minstart uint64
 	for _, chunkIndex := range chunkIndexes {
 		if len(chunkset) == 0 {
 			chunkset = append(chunkset, chunkIndex)
-			maxend = chunkIndex.EndTime
-			minstart = chunkIndex.StartTime
+			maxend = chunkIndex.MessageEndTime
+			minstart = chunkIndex.MessageStartTime
 			continue
 		}
 
 		// if this chunk index overlaps with the chunkset in hand, add it
-		if chunkIndex.EndTime >= minstart && chunkIndex.StartTime < maxend {
+		if chunkIndex.MessageEndTime >= minstart && chunkIndex.MessageStartTime < maxend {
 			chunkset = append(chunkset, chunkIndex)
-			if minstart > chunkIndex.StartTime {
-				minstart = chunkIndex.StartTime
+			if minstart > chunkIndex.MessageStartTime {
+				minstart = chunkIndex.MessageStartTime
 			}
-			if maxend < chunkIndex.EndTime {
-				maxend = chunkIndex.EndTime
+			if maxend < chunkIndex.MessageEndTime {
+				maxend = chunkIndex.MessageEndTime
 			}
 			continue
 		}
@@ -153,8 +153,8 @@ func sortOverlappingChunks(chunkIndexes []*ChunkIndex) [][]*ChunkIndex {
 		// initialize a new one
 		output = append(output, chunkset)
 		chunkset = []*ChunkIndex{chunkIndex}
-		maxend = chunkIndex.EndTime
-		minstart = chunkIndex.StartTime
+		maxend = chunkIndex.MessageEndTime
+		minstart = chunkIndex.MessageStartTime
 	}
 
 	if len(chunkset) > 0 {

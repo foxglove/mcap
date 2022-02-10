@@ -198,11 +198,17 @@ func (w *Writer) WriteMessage(m *Message) error {
 		if m.LogTime < w.currentChunkStartTime {
 			w.currentChunkStartTime = m.LogTime
 		}
-		return nil
+	} else {
+		_, err := w.writeRecord(w.w, OpMessage, w.msg[:offset])
+		if err != nil {
+			return err
+		}
 	}
-	_, err := w.writeRecord(w.w, OpMessage, w.msg[:offset])
-	if err != nil {
-		return err
+	if m.LogTime > w.Statistics.MessageEndTime {
+		w.Statistics.MessageEndTime = m.LogTime
+	}
+	if m.LogTime < w.Statistics.MessageStartTime {
+		w.Statistics.MessageStartTime = m.LogTime
 	}
 	return nil
 }
@@ -277,7 +283,7 @@ func (w *Writer) WriteAttachmentIndex(idx *AttachmentIndex) error {
 // contains summary information about the recorded data. The statistics record
 // is optional, but the file should contain at most one.
 func (w *Writer) WriteStatistics(s *Statistics) error {
-	msglen := 8 + 4 + 4 + 4 + 4 + len(s.ChannelMessageCounts)*(2+8)
+	msglen := 8 + 4 + 4 + 4 + 4 + 4 + 8 + 8 + 4 + len(s.ChannelMessageCounts)*(2+8)
 	w.ensureSized(msglen)
 	offset := putUint64(w.msg, s.MessageCount)
 	offset += putUint32(w.msg[offset:], s.ChannelCount)
@@ -285,6 +291,8 @@ func (w *Writer) WriteStatistics(s *Statistics) error {
 	offset += putUint32(w.msg[offset:], s.AttachmentCount)
 	offset += putUint32(w.msg[offset:], s.MetadataCount)
 	offset += putUint32(w.msg[offset:], s.ChunkCount)
+	offset += putUint64(w.msg[offset:], s.MessageStartTime)
+	offset += putUint64(w.msg[offset:], s.MessageEndTime)
 	offset += putUint32(w.msg[offset:], uint32(len(s.ChannelMessageCounts)*(2+8)))
 	for _, chanID := range w.channelIDs {
 		if messageCount, ok := s.ChannelMessageCounts[chanID]; ok {
@@ -402,8 +410,8 @@ func (w *Writer) flushActiveChunk() error {
 	messageIndexEnd := w.w.Size()
 	messageIndexLength := messageIndexEnd - messageIndexStart
 	w.ChunkIndexes = append(w.ChunkIndexes, &ChunkIndex{
-		StartTime:           w.currentChunkStartTime,
-		EndTime:             w.currentChunkEndTime,
+		MessageStartTime:    w.currentChunkStartTime,
+		MessageEndTime:      w.currentChunkEndTime,
 		ChunkStartOffset:    chunkStartOffset,
 		ChunkLength:         messageIndexStart - chunkStartOffset,
 		MessageIndexOffsets: messageIndexOffsets,
@@ -443,8 +451,8 @@ func (w *Writer) writeChunkIndex(idx *ChunkIndex) error {
 	messageIndexLength := len(idx.MessageIndexOffsets) * (2 + 8)
 	msglen := 8 + 8 + 8 + 8 + 4 + messageIndexLength + 8 + 4 + len(idx.Compression) + 8 + 8
 	w.ensureSized(msglen)
-	offset := putUint64(w.msg, idx.StartTime)
-	offset += putUint64(w.msg[offset:], idx.EndTime)
+	offset := putUint64(w.msg, idx.MessageStartTime)
+	offset += putUint64(w.msg[offset:], idx.MessageEndTime)
 	offset += putUint64(w.msg[offset:], idx.ChunkStartOffset)
 	offset += putUint64(w.msg[offset:], idx.ChunkLength)
 	offset += putUint32(w.msg[offset:], uint32(messageIndexLength))
@@ -644,6 +652,8 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 		currentChunkEndTime:   0,
 		Statistics: &Statistics{
 			ChannelMessageCounts: make(map[uint16]uint64),
+			MessageStartTime:     math.MaxUint64,
+			MessageEndTime:       0,
 		},
 	}, nil
 }

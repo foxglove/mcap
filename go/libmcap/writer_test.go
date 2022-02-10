@@ -254,8 +254,8 @@ func TestIndexStructures(t *testing.T) {
 		assert.Equal(t, 1, len(w.ChunkIndexes))
 		chunkIndex := w.ChunkIndexes[0]
 		assert.Equal(t, &ChunkIndex{
-			StartTime:        1,
-			EndTime:          1,
+			MessageStartTime: 1,
+			MessageEndTime:   1,
 			ChunkStartOffset: 96,
 			ChunkLength:      144,
 			MessageIndexOffsets: map[uint16]uint64{

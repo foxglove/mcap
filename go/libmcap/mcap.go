@@ -276,8 +276,8 @@ type MetadataIndex struct {
 }
 
 type ChunkIndex struct {
-	StartTime           uint64
-	EndTime             uint64
+	MessageStartTime    uint64
+	MessageEndTime      uint64
 	ChunkStartOffset    uint64
 	ChunkLength         uint64
 	MessageIndexOffsets map[uint16]uint64
@@ -294,6 +294,8 @@ type Statistics struct {
 	AttachmentCount      uint32
 	MetadataCount        uint32
 	ChunkCount           uint32
+	MessageStartTime     uint64
+	MessageEndTime       uint64
 	ChannelMessageCounts map[uint16]uint64
 }
 
@@ -302,8 +304,6 @@ type Info struct {
 	Channels     map[uint16]*Channel
 	Schemas      map[uint16]*Schema
 	ChunkIndexes []*ChunkIndex
-	Start        time.Time
-	End          time.Time
 }
 
 func (i *Info) ChannelCounts() map[string]uint64 {
@@ -326,8 +326,8 @@ type MessageIndex struct {
 }
 
 type Chunk struct {
-	StartTime        uint64
-	EndTime          uint64
+	MessageStartTime uint64
+	MessageEndTime   uint64
 	UncompressedSize uint64
 	UncompressedCRC  uint32
 	Compression      string
