@@ -69,14 +69,14 @@ The data section contains records with message data, attachments, and supporting
 
 The following records are allowed to appear in the data section:
 
-- Schema
-- Channel
-- Message
-- Attachment
-- Chunk
-- Message Index
-- Metadata
-- Data End
+- [Schema](#schema-op0x03)
+- [Channel](#channel-op0x04)
+- [Message](#message-op0x05)
+- [Attachment](#attachment-op0x09)
+- [Chunk](#chunk-op0x06)
+- [Message Index](#message-index-op0x07)
+- [Metadata](#metadata-op0x0C)
+- [Data End](#data-end-op0x0F)
 
 The last record in the data section MUST be the [Data End](#data-end-op0x0F) record.
 
@@ -86,12 +86,12 @@ The optional summary section contains records for fast lookup of file informatio
 
 The following records are allowed to appear in the summary section:
 
-- Schema
-- Channel
-- Chunk Index
-- Attachment Index
-- Statistics
-- Metadata Index
+- [Schema](#schema-op0x03)
+- [Channel](#channel-op0x04)
+- [Chunk Index](#chunk-index-op0x08)
+- [Attachment Index](#attachment-index-op0x0A)
+- [Statistics](#statistics-op0x0B)
+- [Metadata Index](#metadata-index-op0x0D)
 
 All records in the summary section MUST be grouped by opcode.
 
