@@ -15,6 +15,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	LongAgo = time.Now().Add(-20 * 365 * 24 * time.Hour)
+)
+
 func printInfo(w io.Writer, info *libmcap.Info) error {
 	buf := &bytes.Buffer{}
 	start := uint64(math.MaxUint64)
@@ -42,8 +46,15 @@ func printInfo(w io.Writer, info *libmcap.Info) error {
 	endtime := time.Unix(int64(end/1e9), int64(end%1e9))
 
 	fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
-	fmt.Fprintf(buf, "start: %s\n", starttime.Format(time.RFC3339Nano))
-	fmt.Fprintf(buf, "end: %s\n", endtime.Format(time.RFC3339Nano))
+	if starttime.After(LongAgo) {
+		fmt.Fprintf(buf, "start: %s\n", starttime.Format(time.RFC3339Nano))
+		fmt.Fprintf(buf, "end: %s\n", endtime.Format(time.RFC3339Nano))
+	} else {
+		fmt.Fprintf(buf, "start: %.3f\n", float64(starttime.UnixNano())/1e9)
+		fmt.Fprintf(buf, "end: %.3f\n", float64(endtime.UnixNano())/1e9)
+
+	}
+
 	fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
 	fmt.Fprintf(buf, "chunks:\n")
 	chunkCount := len(info.ChunkIndexes)
