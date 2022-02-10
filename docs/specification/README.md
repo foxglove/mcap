@@ -69,14 +69,14 @@ The data section contains records with message data, attachments, and supporting
 
 The following records are allowed to appear in the data section:
 
-- Schema
-- Channel
-- Message
-- Attachment
-- Chunk
-- Message Index
-- Metadata
-- Data End
+- [Schema](#schema-op0x03)
+- [Channel](#channel-op0x04)
+- [Message](#message-op0x05)
+- [Attachment](#attachment-op0x09)
+- [Chunk](#chunk-op0x06)
+- [Message Index](#message-index-op0x07)
+- [Metadata](#metadata-op0x0C)
+- [Data End](#data-end-op0x0F)
 
 The last record in the data section MUST be the [Data End](#data-end-op0x0F) record.
 
@@ -86,12 +86,12 @@ The optional summary section contains records for fast lookup of file informatio
 
 The following records are allowed to appear in the summary section:
 
-- Schema
-- Channel
-- Chunk Index
-- Attachment Index
-- Statistics
-- Metadata Index
+- [Schema](#schema-op0x03)
+- [Channel](#channel-op0x04)
+- [Chunk Index](#chunk-index-op0x08)
+- [Attachment Index](#attachment-index-op0x0A)
+- [Statistics](#statistics-op0x0B)
+- [Metadata Index](#metadata-index-op0x0D)
 
 All records in the summary section MUST be grouped by opcode.
 
@@ -144,7 +144,7 @@ A Footer record contains end-of-file information. It must be the last record in 
 
 A Schema record defines an individual schema.
 
-Schema records are uniquely identified within a file by their schema ID. A Schema record must occur at least once in the file prior to any Channel referring to its ID.
+Schema records are uniquely identified within a file by their schema ID. A Schema record must occur at least once in the file prior to any Channel referring to its ID. Any two schema records sharing a common ID must be identical.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -159,7 +159,7 @@ Schema records may be duplicated in the summary section. A Schema record with an
 
 A Channel record defines an encoded stream of messages on a topic.
 
-Channel records are uniquely identified within a file by their channel ID. A Channel record must occur at least once in the file prior to any message referring to its channel ID.
+Channel records are uniquely identified within a file by their channel ID. A Channel record must occur at least once in the file prior to any message referring to its channel ID. Any two channel records sharing a common ID must be identical.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -197,7 +197,7 @@ All messages in the chunk must reference channels recorded earlier in the file (
 | 8 | end_time | Timestamp | Latest message log_time in the chunk. |
 | 8 | uncompressed_size | uint64 | Uncompressed size of the `records` field. |
 | 4 | uncompressed_crc | uint32 | CRC32 checksum of uncompressed `records` field. A value of zero indicates that CRC validation should not be performed. |
-| 4 + N | compression | String | compression algorithm. i.e. `lz4`, `zstd`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression formats]. |
+| 4 + N | compression | String | compression algorithm. i.e. `zstd`, `lz4`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression formats]. |
 | 8 + N | records | uint64 length-prefixed Bytes | Repeating sequences of `<record type><record content length><record content>`. Compressed with the algorithm in the `compression` field. |
 
 ### Message Index (op=0x07)
@@ -270,8 +270,8 @@ A Statistics record contains summary information about the recorded data. The st
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 8 | message_count | uint64 | Number of Message records in the file. |
-| 4 | channel_count | uint32 | Number of unique channel ids in the file. |
-| 4 | schema_count | uint32 | Number of unique schema ids in the file. |
+| 2 | schema_count | uint16 | Number of unique schema IDs in the file, not including zero. |
+| 4 | channel_count | uint32 | Number of unique channel IDs in the file. |
 | 4 | attachment_count | uint32 | Number of Attachment records in the file. |
 | 4 | metadata_count | uint32 | Number of Metadata records in the file. |
 | 4 | chunk_count | uint32 | Number of Chunk records in the file. |
