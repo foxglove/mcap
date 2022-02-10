@@ -56,10 +56,10 @@
         ["chunk_start_offset", "28"],
         ["compressed_size", "115"],
         ["compression", ""],
-        ["end_time", "2"],
+        ["message_end_time", "2"],
         ["message_index_length", "0"],
         ["message_index_offsets", {}],
-        ["start_time", "2"],
+        ["message_start_time", "2"],
         ["uncompressed_size", "115"]
       ]
     },

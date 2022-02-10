@@ -135,13 +135,8 @@ func transformMessages(db *sql.DB, f func(*sql.Rows) error) error {
 	return nil
 }
 
-func DB3ToMCAP(w io.Writer, db *sql.DB, searchdirs []string) error {
-	writer, err := libmcap.NewWriter(w, &libmcap.WriterOptions{
-		Chunked:     true,
-		ChunkSize:   4 * 1024 * 1024,
-		Compression: libmcap.CompressionZSTD,
-		IncludeCRC:  true,
-	})
+func DB3ToMCAP(w io.Writer, db *sql.DB, opts *libmcap.WriterOptions, searchdirs []string) error {
+	writer, err := libmcap.NewWriter(w, opts)
 	if err != nil {
 		return err
 	}
