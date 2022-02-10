@@ -120,15 +120,15 @@ class Channel(McapRecord):
 class Chunk(McapRecord):
     compression: str
     data: bytes = field(repr=False)
-    end_time: int
-    start_time: int
+    message_end_time: int
+    message_start_time: int
     uncompressed_crc: int
     uncompressed_size: int
 
     @staticmethod
     def read(stream: ReadDataStream):
-        start_time = stream.read8()
-        end_time = stream.read8()
+        message_start_time = stream.read8()
+        message_end_time = stream.read8()
         uncompressed_size = stream.read8()
         uncompressed_crc = stream.read4()
         compression_length = stream.read4()
@@ -138,8 +138,8 @@ class Chunk(McapRecord):
         return Chunk(
             compression=compression,
             data=data,
-            end_time=end_time,
-            start_time=start_time,
+            message_end_time=message_end_time,
+            message_start_time=message_start_time,
             uncompressed_crc=uncompressed_crc,
             uncompressed_size=uncompressed_size,
         )
@@ -151,18 +151,18 @@ class ChunkIndex(McapRecord):
     chunk_start_offset: int
     compression: str
     compressed_size: int
-    end_time: int
+    message_end_time: int
     message_index_length: int
     message_index_offsets: Dict[int, int] = field(
         metadata={"value_type": ["int", "long"]}
     )
-    start_time: int
+    message_start_time: int
     uncompressed_size: int
 
     @staticmethod
     def read(stream: ReadDataStream):
-        start_time = stream.read8()
-        end_time = stream.read8()
+        message_start_time = stream.read8()
+        message_end_time = stream.read8()
         chunk_start_offset = stream.read8()
         chunk_length = stream.read8()
         message_index_offsets_length = stream.read4()
@@ -182,9 +182,9 @@ class ChunkIndex(McapRecord):
             chunk_length=chunk_length,
             compression=compression,
             compressed_size=compressed_size,
-            end_time=end_time,
+            message_end_time=message_end_time,
             message_index_length=message_index_length,
-            start_time=start_time,
+            message_start_time=message_start_time,
             uncompressed_size=uncompressed_size,
         )
 

@@ -31,8 +31,8 @@ export type Message = {
   data: Uint8Array;
 };
 export type Chunk = {
-  startTime: bigint;
-  endTime: bigint;
+  messageStartTime: bigint;
+  messageEndTime: bigint;
   uncompressedSize: bigint;
   uncompressedCrc: number;
   compression: string;
@@ -43,8 +43,8 @@ export type MessageIndex = {
   records: [logTime: bigint, offset: bigint][];
 };
 export type ChunkIndex = {
-  startTime: bigint;
-  endTime: bigint;
+  messageStartTime: bigint;
+  messageEndTime: bigint;
   chunkStartOffset: bigint;
   chunkLength: bigint;
   messageIndexOffsets: Map<number, bigint>;

@@ -143,8 +143,8 @@ struct Message {
 };
 
 struct Chunk {
-  Timestamp startTime;
-  Timestamp endTime;
+  Timestamp messageStartTime;
+  Timestamp messageEndTime;
   ByteOffset uncompressedSize;
   uint32_t uncompressedCrc;
   std::string compression;
@@ -158,8 +158,8 @@ struct MessageIndex {
 };
 
 struct ChunkIndex {
-  Timestamp startTime;
-  Timestamp endTime;
+  Timestamp messageStartTime;
+  Timestamp messageEndTime;
   ByteOffset chunkStartOffset;
   ByteOffset chunkLength;
   std::unordered_map<ChannelId, ByteOffset> messageIndexOffsets;

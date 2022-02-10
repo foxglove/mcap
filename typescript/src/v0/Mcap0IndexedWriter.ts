@@ -195,8 +195,8 @@ export class Mcap0IndexedWriter {
 
     const chunkData = this.chunkBuilder.buffer;
     const chunkRecord: Chunk = {
-      startTime: this.chunkBuilder.startTime,
-      endTime: this.chunkBuilder.endTime,
+      messageStartTime: this.chunkBuilder.startTime,
+      messageEndTime: this.chunkBuilder.endTime,
       uncompressedSize: BigInt(chunkData.length),
       uncompressedCrc: 0,
       compression: "",
@@ -209,8 +209,8 @@ export class Mcap0IndexedWriter {
     const chunkEnd = chunkStartOffset + recordRecordSize;
 
     const chunkIndex: ChunkIndex = {
-      startTime: chunkRecord.startTime,
-      endTime: chunkRecord.endTime,
+      messageStartTime: chunkRecord.messageStartTime,
+      messageEndTime: chunkRecord.messageEndTime,
       chunkStartOffset,
       chunkLength: chunkEnd,
       messageIndexOffsets: new Map(),

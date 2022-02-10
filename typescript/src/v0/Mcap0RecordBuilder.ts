@@ -211,8 +211,8 @@ export class Mcap0RecordBuilder {
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .uint64(0n) // placeholder
-      .uint64(chunk.startTime)
-      .uint64(chunk.endTime)
+      .uint64(chunk.messageStartTime)
+      .uint64(chunk.messageEndTime)
       .uint64(chunk.uncompressedSize)
       .uint32(chunk.uncompressedCrc)
       .string(chunk.compression)
@@ -234,8 +234,8 @@ export class Mcap0RecordBuilder {
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .uint64(0n) // placeholder
-      .uint64(chunkIndex.startTime)
-      .uint64(chunkIndex.endTime)
+      .uint64(chunkIndex.messageStartTime)
+      .uint64(chunkIndex.messageEndTime)
       .uint64(chunkIndex.chunkStartOffset)
       .uint64(chunkIndex.chunkLength)
       .uint32(chunkIndex.messageIndexOffsets.size * 10);

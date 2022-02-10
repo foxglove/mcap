@@ -187,8 +187,8 @@ export function parseRecord({
       );
       const record: TypedMcapRecord = {
         type: "Chunk",
-        startTime,
-        endTime,
+        messageStartTime: startTime,
+        messageEndTime: endTime,
         compression,
         uncompressedSize,
         uncompressedCrc,
@@ -211,8 +211,8 @@ export function parseRecord({
       return { record, usedBytes: recordEndOffset - startOffset };
     }
     case Opcode.CHUNK_INDEX: {
-      const startTime = reader.uint64();
-      const endTime = reader.uint64();
+      const messageStartTime = reader.uint64();
+      const messageEndTime = reader.uint64();
       const chunkStartOffset = reader.uint64();
       const chunkLength = reader.uint64();
       const messageIndexOffsets = reader.map(
@@ -225,8 +225,8 @@ export function parseRecord({
       const uncompressedSize = reader.uint64();
       const record: TypedMcapRecord = {
         type: "ChunkIndex",
-        startTime,
-        endTime,
+        messageStartTime,
+        messageEndTime,
         chunkStartOffset,
         chunkLength,
         messageIndexOffsets,

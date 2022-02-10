@@ -96,9 +96,9 @@ std::string ToString(const mcap::ChunkIndex& chunkIndex) {
     "[ChunkIndex] start_time={}, end_time={}, chunk_start_offset={}, chunk_length={}, "
     "message_index_offsets={}, message_index_length={}, compression={}, "
     "compressed_size={}, uncompressed_size={}",
-    chunkIndex.startTime, chunkIndex.endTime, chunkIndex.chunkStartOffset, chunkIndex.chunkLength,
-    ToString(chunkIndex.messageIndexOffsets), chunkIndex.messageIndexLength, chunkIndex.compression,
-    chunkIndex.compressedSize, chunkIndex.uncompressedSize);
+    chunkIndex.messageStartTime, chunkIndex.messageEndTime, chunkIndex.chunkStartOffset,
+    chunkIndex.chunkLength, ToString(chunkIndex.messageIndexOffsets), chunkIndex.messageIndexLength,
+    chunkIndex.compression, chunkIndex.compressedSize, chunkIndex.uncompressedSize);
 }
 
 std::string ToString(const mcap::Attachment& attachment) {

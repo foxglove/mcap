@@ -100,8 +100,8 @@ int main(int argc, char** argv) {
   //     {"fields", json::array({
   //                  {"compressed_size", std::to_string(chunk.compressedSize)},
   //                  {"compression", chunk.compression},
-  //                  {"end_time", std::to_string(chunk.endTime)},
-  //                  {"start_time", std::to_string(chunk.startTime)},
+  //                  {"message_end_time", std::to_string(chunk.messageEndTime)},
+  //                  {"message_start_time", std::to_string(chunk.messageStartTime)},
   //                  {"uncompressed_crc", std::to_string(chunk.uncompressedCrc)},
   //                  {"uncompressed_size", std::to_string(chunk.uncompressedSize)},
   //                })},
@@ -126,10 +126,10 @@ int main(int argc, char** argv) {
                    {"chunk_start_offset", std::to_string(chunkIndex.chunkStartOffset)},
                    {"compressed_size", std::to_string(chunkIndex.compressedSize)},
                    {"compression", chunkIndex.compression},
-                   {"end_time", std::to_string(chunkIndex.endTime)},
+                   {"message_end_time", std::to_string(chunkIndex.messageEndTime)},
                    {"message_index_length", std::to_string(chunkIndex.messageIndexLength)},
                    {"message_index_offsets", ToJson(chunkIndex.messageIndexOffsets)},
-                   {"start_time", std::to_string(chunkIndex.startTime)},
+                   {"message_start_time", std::to_string(chunkIndex.messageStartTime)},
                    {"uncompressed_size", std::to_string(chunkIndex.uncompressedSize)},
                  })},
     }));

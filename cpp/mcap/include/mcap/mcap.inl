@@ -539,8 +539,8 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
 
     // Fill in the newly created chunk index record. This will be written into
     // the summary section when close() is called
-    chunkIndexRecord.startTime = currentChunkStart_;
-    chunkIndexRecord.endTime = currentChunkEnd_;
+    chunkIndexRecord.messageStartTime = currentChunkStart_;
+    chunkIndexRecord.messageEndTime = currentChunkEnd_;
     chunkIndexRecord.chunkStartOffset = chunkStartOffset;
     chunkIndexRecord.chunkLength = chunkLength;
     chunkIndexRecord.messageIndexLength = messageIndexLength;
@@ -674,8 +674,8 @@ uint64_t McapWriter::write(IWritable& output, const Chunk& chunk) {
 
   write(output, OpCode::Chunk);
   write(output, recordSize);
-  write(output, chunk.startTime);
-  write(output, chunk.endTime);
+  write(output, chunk.messageStartTime);
+  write(output, chunk.messageEndTime);
   write(output, chunk.uncompressedSize);
   write(output, chunk.uncompressedCrc);
   write(output, chunk.compression);
@@ -716,8 +716,8 @@ uint64_t McapWriter::write(IWritable& output, const ChunkIndex& index) {
 
   write(output, OpCode::ChunkIndex);
   write(output, recordSize);
-  write(output, index.startTime);
-  write(output, index.endTime);
+  write(output, index.messageStartTime);
+  write(output, index.messageEndTime);
   write(output, index.chunkStartOffset);
   write(output, index.chunkLength);
 
@@ -1573,8 +1573,8 @@ Status McapReader::ParseChunk(const Record& record, Chunk* chunk) {
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  chunk->startTime = internal::ParseUint64(record.data);
-  chunk->endTime = internal::ParseUint64(record.data + 8);
+  chunk->messageStartTime = internal::ParseUint64(record.data);
+  chunk->messageEndTime = internal::ParseUint64(record.data + 8);
   chunk->uncompressedSize = internal::ParseUint64(record.data + 8 + 8);
   chunk->uncompressedCrc = internal::ParseUint32(record.data + 8 + 8 + 8);
 
@@ -1644,8 +1644,8 @@ Status McapReader::ParseChunkIndex(const Record& record, ChunkIndex* chunkIndex)
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  chunkIndex->startTime = internal::ParseUint64(record.data);
-  chunkIndex->endTime = internal::ParseUint64(record.data + 8);
+  chunkIndex->messageStartTime = internal::ParseUint64(record.data);
+  chunkIndex->messageEndTime = internal::ParseUint64(record.data + 8);
   chunkIndex->chunkStartOffset = internal::ParseUint64(record.data + 8 + 8);
   chunkIndex->chunkLength = internal::ParseUint64(record.data + 8 + 8 + 8);
   const uint32_t messageIndexOffsetsSize = internal::ParseUint32(record.data + 8 + 8 + 8 + 8);
