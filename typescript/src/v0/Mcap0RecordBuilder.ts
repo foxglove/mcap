@@ -116,9 +116,9 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder
       .uint64(0n) // placeholder
       .uint16(info.id)
+      .uint16(info.schemaId)
       .string(info.topic)
       .string(info.messageEncoding)
-      .uint16(info.schemaId)
       .tupleArray(
         (key) => this.bufferBuilder.string(key),
         (value) => this.bufferBuilder.string(value),
@@ -143,8 +143,8 @@ export class Mcap0RecordBuilder {
       .uint64(0n) // placeholder
       .uint16(message.channelId)
       .uint32(message.sequence)
-      .uint64(message.publishTime)
       .uint64(message.logTime)
+      .uint64(message.publishTime)
       .bytes(message.data);
     // message record cannot be padded
     const endPosition = this.bufferBuilder.length;
@@ -211,8 +211,8 @@ export class Mcap0RecordBuilder {
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .uint64(0n) // placeholder
-      .uint64(chunk.startTime)
-      .uint64(chunk.endTime)
+      .uint64(chunk.messageStartTime)
+      .uint64(chunk.messageEndTime)
       .uint64(chunk.uncompressedSize)
       .uint32(chunk.uncompressedCrc)
       .string(chunk.compression)
@@ -234,8 +234,8 @@ export class Mcap0RecordBuilder {
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .uint64(0n) // placeholder
-      .uint64(chunkIndex.startTime)
-      .uint64(chunkIndex.endTime)
+      .uint64(chunkIndex.messageStartTime)
+      .uint64(chunkIndex.messageEndTime)
       .uint64(chunkIndex.chunkStartOffset)
       .uint64(chunkIndex.chunkLength)
       .uint32(chunkIndex.messageIndexOffsets.size * 10);
@@ -367,10 +367,13 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder
       .uint64(0n) // placeholder size
       .uint64(statistics.messageCount)
+      .uint16(statistics.schemaCount)
       .uint32(statistics.channelCount)
       .uint32(statistics.attachmentCount)
       .uint32(statistics.metadataCount)
       .uint32(statistics.chunkCount)
+      .uint64(statistics.messageStartTime)
+      .uint64(statistics.messageEndTime)
       .tupleArray(
         (key) => this.bufferBuilder.uint16(key),
         (value) => this.bufferBuilder.uint64(value),

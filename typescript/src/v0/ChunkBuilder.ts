@@ -6,8 +6,8 @@ class ChunkBuilder {
   private messageIndices = new Map<number, MessageIndex>();
   private totalMessageCount = 0;
 
-  startTime = 0n;
-  endTime = 0n;
+  messageStartTime = 0n;
+  messageEndTime = 0n;
 
   get numMessages(): number {
     return this.totalMessageCount;
@@ -36,10 +36,10 @@ class ChunkBuilder {
   }
 
   addMessage(message: Message): void {
-    if (this.startTime === 0n) {
-      this.startTime = message.logTime;
+    if (this.messageStartTime === 0n) {
+      this.messageStartTime = message.logTime;
     }
-    this.endTime = message.logTime;
+    this.messageEndTime = message.logTime;
 
     let messageIndex = this.messageIndices.get(message.channelId);
     if (!messageIndex) {
@@ -57,8 +57,8 @@ class ChunkBuilder {
   }
 
   reset(): void {
-    this.startTime = 0n;
-    this.endTime = 0n;
+    this.messageStartTime = 0n;
+    this.messageEndTime = 0n;
     this.totalMessageCount = 0;
     this.messageIndices.clear();
   }

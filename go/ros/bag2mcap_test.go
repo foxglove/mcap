@@ -6,10 +6,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/foxglove/mcap/go/libmcap"
 	"github.com/stretchr/testify/assert"
 )
 
 func BenchmarkBag2MCAP(b *testing.B) {
+	opts := &libmcap.WriterOptions{
+		IncludeCRC:  true,
+		Chunked:     true,
+		ChunkSize:   4 * 1024 * 1024,
+		Compression: "lz4",
+	}
 	cases := []struct {
 		assertion string
 		inputfile string
@@ -36,7 +43,7 @@ func BenchmarkBag2MCAP(b *testing.B) {
 				t0 := time.Now()
 				reader.Reset(input)
 				writer.Reset()
-				err = Bag2MCAP(writer, reader)
+				err = Bag2MCAP(writer, reader, opts)
 				assert.Nil(b, err)
 				elapsed := time.Since(t0)
 				megabytesRead := stats.Size() / (1024 * 1024)
