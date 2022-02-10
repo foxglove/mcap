@@ -1,17 +1,16 @@
 import { exec } from "child_process";
-import { join } from "path";
 import { promisify } from "util";
 import { TestVariant } from "variants/types";
 
 import { ITestRunner } from ".";
 
-export default class GoStreamedTestRunner implements ITestRunner {
-  name = "go-streamed";
+export default class PythonStreamedReaderTestRunner implements ITestRunner {
+  name = "py-streamed-reader";
   mode = "read" as const;
 
   async run(filePath: string): Promise<string> {
-    const { stdout } = await promisify(exec)(`./check-conformance ${filePath}`, {
-      cwd: join(__dirname, "../../../../../go/conformance"),
+    const { stdout } = await promisify(exec)(`python3 tests/run_reader_test.py ${filePath}`, {
+      cwd: "../../python",
     });
     return stdout.trim();
   }
