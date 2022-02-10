@@ -65,64 +65,70 @@ func TestMCAPReadWrite(t *testing.T) {
 }
 
 func TestOutputDeterminism(t *testing.T) {
-	buf := &bytes.Buffer{}
-	w, err := NewWriter(buf, &WriterOptions{
-		Chunked:     true,
-		Compression: CompressionZSTD,
-		IncludeCRC:  true,
-		ChunkSize:   1024,
-	})
-	assert.Nil(t, err)
-	assert.Nil(t, w.WriteHeader(&Header{
-		Profile: "ros1",
-	}))
-	assert.Nil(t, w.WriteSchema(&Schema{
-		ID:       1,
-		Name:     "foo",
-		Encoding: "ros1",
-		Data:     []byte{},
-	}))
-	for i := 0; i < 3; i++ {
-		assert.Nil(t, w.WriteChannel(&Channel{
-			ID:              uint16(i),
-			Topic:           fmt.Sprintf("/test-%d", i),
-			MessageEncoding: "ros1",
-			SchemaID:        1,
-			Metadata:        map[string]string{},
+	var hash string
+	for i := 0; i < 10; i++ {
+		buf := &bytes.Buffer{}
+		w, err := NewWriter(buf, &WriterOptions{
+			Chunked:     true,
+			Compression: CompressionZSTD,
+			IncludeCRC:  true,
+			ChunkSize:   1024,
+		})
+		assert.Nil(t, err)
+		assert.Nil(t, w.WriteHeader(&Header{
+			Profile: "ros1",
 		}))
-	}
-	for i := 0; i < 1000; i++ {
-		channelID := uint16(i % 3)
-		assert.Nil(t, w.WriteMessage(&Message{
-			ChannelID:   channelID,
-			Sequence:    0,
-			LogTime:     100,
-			PublishTime: 100,
-			Data: []byte{
-				1,
-				2,
-				3,
-				4,
-			},
+		assert.Nil(t, w.WriteSchema(&Schema{
+			ID:       1,
+			Name:     "foo",
+			Encoding: "ros1",
+			Data:     []byte{},
 		}))
+		for i := 0; i < 3; i++ {
+			assert.Nil(t, w.WriteChannel(&Channel{
+				ID:              uint16(i),
+				Topic:           fmt.Sprintf("/test-%d", i),
+				MessageEncoding: "ros1",
+				SchemaID:        1,
+				Metadata:        map[string]string{},
+			}))
+		}
+		for i := 0; i < 1000; i++ {
+			channelID := uint16(i % 3)
+			assert.Nil(t, w.WriteMessage(&Message{
+				ChannelID:   channelID,
+				Sequence:    0,
+				LogTime:     100,
+				PublishTime: 100,
+				Data: []byte{
+					1,
+					2,
+					3,
+					4,
+				},
+			}))
+		}
+		assert.Nil(t, w.WriteAttachment(&Attachment{
+			Name:        "file.jpg",
+			LogTime:     0,
+			ContentType: "image/jpeg",
+			Data:        []byte{0x01, 0x02, 0x03, 0x04},
+		}))
+		assert.Nil(t, w.WriteAttachment(&Attachment{
+			Name:        "file2.jpg",
+			LogTime:     0,
+			ContentType: "image/jpeg",
+			Data:        []byte{0x01, 0x02, 0x03, 0x04},
+		}))
+		assert.Nil(t, w.Close())
+		if i == 0 {
+			hash = fmt.Sprintf("%x", md5.Sum(buf.Bytes()))
+		}
+		t.Run("output hashes consistently", func(t *testing.T) {
+			newHash := fmt.Sprintf("%x", md5.Sum(buf.Bytes()))
+			assert.Equal(t, hash, newHash)
+		})
 	}
-	assert.Nil(t, w.WriteAttachment(&Attachment{
-		Name:        "file.jpg",
-		LogTime:     0,
-		ContentType: "image/jpeg",
-		Data:        []byte{0x01, 0x02, 0x03, 0x04},
-	}))
-	assert.Nil(t, w.WriteAttachment(&Attachment{
-		Name:        "file2.jpg",
-		LogTime:     0,
-		ContentType: "image/jpeg",
-		Data:        []byte{0x01, 0x02, 0x03, 0x04},
-	}))
-	assert.Nil(t, w.Close())
-	t.Run("output hashes consistently", func(t *testing.T) {
-		hash := md5.Sum(buf.Bytes())
-		assert.Equal(t, "ee4cf4142c141db374f234db853fea40", fmt.Sprintf("%x", hash))
-	})
 }
 
 func TestChunkedReadWrite(t *testing.T) {
@@ -251,13 +257,13 @@ func TestIndexStructures(t *testing.T) {
 			StartTime:        1,
 			EndTime:          1,
 			ChunkStartOffset: 96,
-			ChunkLength:      145,
+			ChunkLength:      144,
 			MessageIndexOffsets: map[uint16]uint64{
-				1: 241,
+				1: 240,
 			},
 			MessageIndexLength: 31,
 			Compression:        "zstd",
-			CompressedSize:     92,
+			CompressedSize:     91,
 			UncompressedSize:   110,
 		}, chunkIndex)
 	})
