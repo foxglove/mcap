@@ -163,7 +163,7 @@ func Bag2MCAP(w io.Writer, r io.Reader) error {
 	writer, err := libmcap.NewWriter(w, &libmcap.WriterOptions{
 		Chunked:     true,
 		ChunkSize:   4 * 1024 * 1024,
-		Compression: libmcap.CompressionLZ4,
+		Compression: libmcap.CompressionZSTD,
 		IncludeCRC:  true,
 	})
 	if err != nil {
