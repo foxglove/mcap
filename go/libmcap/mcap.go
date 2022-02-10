@@ -289,8 +289,8 @@ type ChunkIndex struct {
 
 type Statistics struct {
 	MessageCount         uint64
+	SchemaCount          uint16
 	ChannelCount         uint32
-	SchemaCount          uint32
 	AttachmentCount      uint32
 	MetadataCount        uint32
 	ChunkCount           uint32

@@ -298,8 +298,8 @@ export function parseRecord({
     }
     case Opcode.STATISTICS: {
       const messageCount = reader.uint64();
+      const schemaCount = reader.uint16();
       const channelCount = reader.uint32();
-      const schemaCount = reader.uint32();
       const attachmentCount = reader.uint32();
       const metadataCount = reader.uint32();
       const chunkCount = reader.uint32();
@@ -311,8 +311,8 @@ export function parseRecord({
       const record: TypedMcapRecord = {
         type: "Statistics",
         messageCount,
-        channelCount,
         schemaCount,
+        channelCount,
         attachmentCount,
         metadataCount,
         chunkCount,

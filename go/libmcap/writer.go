@@ -277,11 +277,11 @@ func (w *Writer) WriteAttachmentIndex(idx *AttachmentIndex) error {
 // contains summary information about the recorded data. The statistics record
 // is optional, but the file should contain at most one.
 func (w *Writer) WriteStatistics(s *Statistics) error {
-	msglen := 8 + 4 + 4 + 4 + 4 + len(s.ChannelMessageCounts)*(2+8)
+	msglen := 8 + 2 + 4 + 4 + 4 + len(s.ChannelMessageCounts)*(2+8)
 	w.ensureSized(msglen)
 	offset := putUint64(w.msg, s.MessageCount)
+	offset += putUint16(w.msg[offset:], s.SchemaCount)
 	offset += putUint32(w.msg[offset:], s.ChannelCount)
-	offset += putUint32(w.msg[offset:], s.SchemaCount)
 	offset += putUint32(w.msg[offset:], s.AttachmentCount)
 	offset += putUint32(w.msg[offset:], s.MetadataCount)
 	offset += putUint32(w.msg[offset:], s.ChunkCount)
