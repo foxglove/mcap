@@ -86,9 +86,9 @@ class Channel(McapRecord):
     def write(self, stream: WriteDataStream):
         stream.start_record(Opcode.CHANNEL)
         stream.write2(self.id)
+        stream.write2(self.schema_id)
         stream.write_prefixed_string(self.topic)
         stream.write_prefixed_string(self.message_encoding)
-        stream.write2(self.id)
         for k, v in self.metadata.items():
             stream.write_prefixed_string(k)
             stream.write_prefixed_string(v)
@@ -97,9 +97,9 @@ class Channel(McapRecord):
     @staticmethod
     def read(stream: ReadDataStream):
         id = stream.read2()
+        schema_id = stream.read2()
         topic = stream.read_prefixed_string()
         message_encoding = stream.read_prefixed_string()
-        schema_id = stream.read2()
         metadata_length = stream.read4()
         metadata_end = stream.count + metadata_length
         metadata: Dict[str, str] = {}
@@ -254,8 +254,8 @@ class Message(McapRecord):
         stream.start_record(Opcode.MESSAGE)
         stream.write2(self.channel_id)
         stream.write4(self.sequence)
-        stream.write8(self.publish_time)
         stream.write8(self.log_time)
+        stream.write8(self.publish_time)
         stream.write(self.data)
         stream.finish_record()
 
@@ -263,8 +263,8 @@ class Message(McapRecord):
     def read(stream: ReadDataStream, length: int):
         channel_id = stream.read2()
         sequence = stream.read4()
-        publish_time = stream.read8()
         log_time = stream.read8()
+        publish_time = stream.read8()
         data = stream.read(length - 22)
         return Message(
             channel_id=channel_id,
@@ -343,11 +343,13 @@ class Statistics(McapRecord):
     chunk_count: int = field(metadata={"value_type": ["int"]})
     message_count: int
     metadata_count: int = field(metadata={"value_type": ["int"]})
+    schema_count: int = field(metadata={"value_type": ["int"]})
 
     @staticmethod
     def read(stream: ReadDataStream):
         message_count = stream.read8()
         channel_count = stream.read4()
+        schema_count = stream.read4()
         attachment_count = stream.read4()
         metadata_count = stream.read4()
         chunk_count = stream.read4()
@@ -365,6 +367,7 @@ class Statistics(McapRecord):
             chunk_count=chunk_count,
             message_count=message_count,
             metadata_count=metadata_count,
+            schema_count=schema_count,
         )
 
 
