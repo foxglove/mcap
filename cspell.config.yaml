@@ -8,6 +8,7 @@ ignorePaths:
   - go.sum
   - testdata
   - CMakeLists.txt
+  - Makefile
   - "*.Dockerfile"
   - "*.mcap"
 
