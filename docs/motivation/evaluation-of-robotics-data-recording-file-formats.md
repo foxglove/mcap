@@ -1,5 +1,7 @@
 # Evaluation of robotics data recording file formats
 
+<!-- cspell:words packetized pluggable checksumming mitigations Karsten Knese Hurliman jhurliman -->
+
 _Oct 6, 2021_  
 _John Hurliman (@jhurliman)_  
 _Foxglove Technologies Inc_
@@ -14,7 +16,7 @@ The goal of recording robotics data is to store and analyze or replay the data l
 
 ### Serialization Agnostic
 
-The robotics world has not standardized on a single message serialization format. ROS1 included its own serialization format, while ROS2 uses CDR as the default but includes a pluggable middleware layer to support other serializations. Non-ROS robots may be using Protocol Buffers, CBOR, JSON, or a proprietary format. A generic recording container must include support for different serialization formats to support the breadth of choices for message serialization in use today.
+The robotics world has not standardized on a single message serialization format. ROS1 included its own serialization format, while ROS2 uses CDR as the default but includes a pluggable middleware layer to support other serializations. Non-ROS robots may be using Protocol Buffers (Protobuf), CBOR, JSON, or a proprietary format. A generic recording container must include support for different serialization formats to support the breadth of choices for message serialization in use today.
 
 ### Determinism
 
@@ -42,11 +44,11 @@ Robots operate in chaotic environments. The most critical recording files are of
 
 ### Read-Optimized
 
-There are many kinds of read-optimization, and often there is a direct tradeoff between read-optimization and write optimization. A recording format should be optimized for write throughput first and foremost. However, the generated files should be readable without loading the entire file into memory, parseable in different environments (desktop, server, web), and support efficient random access and range requests if possible. Although it is possible to use different file formats for recording and archiving with a transcoding process, if a file format can support high write throughput and speed up these read operations, it simplifies the development ecosystem. Tooling can then converge around a single file format.
+There are many kinds of read-optimization, and often there is a direct tradeoff between read-optimization and write optimization. A recording format should be optimized for write throughput first and foremost. However, the generated files should be readable without loading the entire file into memory, parsable in different environments (desktop, server, web), and support efficient random access and range requests if possible. Although it is possible to use different file formats for recording and archiving with a transcoding process, if a file format can support high write throughput and speed up these read operations, it simplifies the development ecosystem. Tooling can then converge around a single file format.
 
 ### Standards Compatible
 
-If a universal robotics recording file format is adopted, it should be eligible to become a standard. The standard could take the form of an Internet Engineering Task Force RFC or a normalized specification through another standards body. Typical requirements include real-world usage in multiple places, complete documentation, no patent encumberment, and at least two independent implementations.
+If a universal robotics recording file format is adopted, it should be eligible to become a standard. The standard could take the form of an Internet Engineering Task Force RFC or a normalized specification through another standards body. Typical requirements include real-world usage in multiple places, complete documentation, no patent encumbrance, and at least two independent implementations.
 
 ## Existing Robotics Recording Formats
 
@@ -60,13 +62,13 @@ The original ROS1 .bag file format meets several of our requirements. It is dete
 
 Whereas rosbag1 refers to both a file format definition and two reference implementations (C++ and Python), rosbag2 is a C API with a plugin interface for implementations, plus a default implementation using SQLite as the on-disk format. Since this document is focused on serialization formats, rosbag2 will be defined as the default SQLite implementation. This format is serialization agnostic, deterministic, but not (yet) self-describing, although there is [ongoing work](https://github.com/ros2/rosbag2/issues/782) to address that. It does not require a priori channel knowledge, is [corruption resistant](https://www.sqlite.org/howtocorrupt.html), and is read-optimized except in the web use case. The significant shortcomings are around write-optimization (not append-only, the index is updated per row insert), lack of compression support at write time beyond the individual message level, and requiring the entire file to be read into memory in the web use case (via [sql.js](https://sql.js.org/)). SQLite also poses challenges to standardization. The Internet Engineering Task Force, W3C, and other standards bodies require any specification to have two independent implementations to graduate to a standard. SQLite has only ever had a single implementation that is cross-compiled to different platforms, which caused the Web SQL Database proposal to [reach an impasse](https://www.w3.org/TR/webdatabase/).
 
-### Length-delimited Protobufs
+### Length-delimited Protobuf
 
-From interviewing various robotics companies, the most popular serialization format outside of ROS is to write protobuf messages to disk with a simple length delimiter or short message header. If timestamps are included in every message, this can be deterministic, but the initial .proto schemas must be bundled as well to meet the self-describing criteria. This approach does not require a priori channel knowledge and supports big and small data. It does not provide any explicit corruption resistance, although a truncated final message can sometimes be detected by a serialization failure. It is a write-optimized append-only approach, and compression can be supported by piping the write output through a compressor. Protobufs have been submitted as an [Internet-Draft](https://datatracker.ietf.org/doc/html/draft-rfernando-protocol-buffers-00) (I-D) standard. The significant shortcomings are that by nature of defining around a single serialization format, it is not serialization agnostic, and that without a well-defined standard, the files produced by different implementations will be incompatible. The lack of read-optimization excludes its use in playback or analysis tools that require random seeking.
+From interviewing various robotics companies, the most popular serialization format outside of ROS is to write protobuf messages to disk with a simple length delimiter or short message header. If timestamps are included in every message, this can be deterministic, but the initial .proto schemas must be bundled as well to meet the self-describing criteria. This approach does not require a priori channel knowledge and supports big and small data. It does not provide any explicit corruption resistance, although a truncated final message can sometimes be detected by a serialization failure. It is a write-optimized append-only approach, and compression can be supported by piping the write output through a compressor. Protobuf has been submitted as an [Internet-Draft](https://datatracker.ietf.org/doc/html/draft-rfernando-protocol-buffers-00) (I-D) standard. The significant shortcomings are that by nature of defining around a single serialization format, it is not serialization agnostic, and that without a well-defined standard, the files produced by different implementations will be incompatible. The lack of read-optimization excludes its use in playback or analysis tools that require random seeking.
 
 ### Apollo Cyber RT
 
-Cyber RT includes its own recording file format. However, the documentation of the format itself (opposed to the software APIs surrounding it) is scarce. It is likely similar to Length-delimited Protobufs for the purpose of this discussion.
+Cyber RT includes its own recording file format. However, the documentation of the format itself (opposed to the software APIs surrounding it) is scarce. It is likely similar to Length-delimited Protobuf for the purpose of this discussion.
 
 ## Existing Big Data Formats
 

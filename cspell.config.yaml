@@ -1,7 +1,6 @@
 $schema: https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json
 version: "0.2"
 ignorePaths:
-  - conanfile.py
   - cspell.config.yaml
   - node_modules
   - go.mod
@@ -9,8 +8,10 @@ ignorePaths:
   - testdata
   - CMakeLists.txt
   - Makefile
+  - build
   - "*.Dockerfile"
   - "*.mcap"
+  - "*.egg-info"
 
 words:
   - cbor
@@ -21,7 +22,6 @@ words:
   - golangci
   - libmcap
   - mcap
-  - nlohmann
   - nsec
   - nsecs
   - pipenv
@@ -55,6 +55,7 @@ overrides:
   - filename: "cpp/**"
     words:
       - cppstd
+      - nlohmann
 
   - filename: "**/{*.js,*.ts,*.tsx}"
     ignoreRegExpList:
