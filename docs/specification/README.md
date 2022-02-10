@@ -150,8 +150,8 @@ Schema records are uniquely identified within a file by their schema ID. A Schem
 | --- | --- | --- | --- |
 | 2 | id | uint16 | A unique identifier for this schema within the file. |
 | 4 + N | name | String | An identifier for the schema. |
-| 4 + N | encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. |
-| 4 + N | data | uint32 length-prefixed Bytes | Must conform to the schema encoding. |
+| 4 + N | encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. An empty string indicates no schema is available. |
+| 4 + N | data | uint32 length-prefixed Bytes | Must conform to the schema encoding. If `encoding` is an empty string, `data` should be 0 length. |
 
 Schema records may be duplicated in the summary section.
 
