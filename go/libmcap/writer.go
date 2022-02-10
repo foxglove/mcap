@@ -584,14 +584,14 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	var compressedWriter *CountingCRCWriter
 	if opts.Chunked {
 		switch opts.Compression {
-		case CompressionLZ4:
-			compressedWriter = NewCountingCRCWriter(lz4.NewWriter(&compressed), opts.IncludeCRC)
 		case CompressionZSTD:
 			zw, err := zstd.NewWriter(&compressed)
 			if err != nil {
 				return nil, err
 			}
 			compressedWriter = NewCountingCRCWriter(zw, opts.IncludeCRC)
+		case CompressionLZ4:
+			compressedWriter = NewCountingCRCWriter(lz4.NewWriter(&compressed), opts.IncludeCRC)
 		case CompressionNone:
 			compressedWriter = NewCountingCRCWriter(BufCloser{&compressed}, opts.IncludeCRC)
 		default:
