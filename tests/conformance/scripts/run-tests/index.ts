@@ -1,10 +1,19 @@
 import { program } from "commander";
 import * as Diff from "diff";
 import fs from "fs/promises";
+import stringify from "json-stringify-pretty-compact";
 import path from "path";
 import generateTestVariants from "variants/generateTestVariants";
 
 import runners from "./runners";
+
+function normalizeJson(json: string): string {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  const data = JSON.parse(json);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+  delete data.meta;
+  return stringify(data);
+}
 
 async function main(options: {
   dataDir: string;
@@ -47,17 +56,15 @@ async function main(options: {
         continue;
       }
 
-      let outputLines: string[];
+      let output: string;
       try {
-        outputLines = await runner.run(filePath);
+        output = await runner.run(filePath, variant);
       } catch (error) {
         console.error(error);
         hadError = true;
         continue;
       }
-      const output = outputLines.join("\n") + "\n";
-
-      const expectedOutputPath = filePath.replace(/\.mcap$/, ".expected.txt");
+      const expectedOutputPath = filePath.replace(/\.mcap$/, ".json");
       if (options.update) {
         await fs.writeFile(expectedOutputPath, output);
       } else {
@@ -69,9 +76,11 @@ async function main(options: {
           hadError = true;
           continue;
         }
-        if (output !== expectedOutput) {
+        const outputNorm = normalizeJson(output);
+        const expectedNorm = normalizeJson(expectedOutput);
+        if (outputNorm !== expectedNorm) {
           console.error(`Error: output did not match expected for ${filePath}:`);
-          console.error(Diff.createPatch(expectedOutputPath, expectedOutput, output));
+          console.error(Diff.createPatch(expectedOutputPath, expectedNorm, outputNorm));
           hadError = true;
           continue;
         }

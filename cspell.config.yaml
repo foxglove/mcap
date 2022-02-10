@@ -1,12 +1,14 @@
 $schema: https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json
 version: "0.2"
 ignorePaths:
+  - conanfile.py
   - cspell.config.yaml
   - node_modules
   - go.mod
   - go.sum
   - testdata
   - CMakeLists.txt
+  - Makefile
   - "*.Dockerfile"
   - "*.mcap"
 
@@ -19,6 +21,7 @@ words:
   - golangci
   - libmcap
   - mcap
+  - nlohmann
   - nsec
   - nsecs
   - pipenv

@@ -163,7 +163,7 @@ func Bag2MCAP(w io.Writer, r io.Reader) error {
 	writer, err := libmcap.NewWriter(w, &libmcap.WriterOptions{
 		Chunked:     true,
 		ChunkSize:   4 * 1024 * 1024,
-		Compression: libmcap.CompressionLZ4,
+		Compression: libmcap.CompressionZSTD,
 		IncludeCRC:  true,
 	})
 	if err != nil {
@@ -217,7 +217,7 @@ func Bag2MCAP(w io.Writer, r io.Reader) error {
 				}
 				schemas[key] = schemaID
 			}
-			channelInfo := &libmcap.ChannelInfo{
+			channelInfo := &libmcap.Channel{
 				ID:              connID,
 				Topic:           string(topic),
 				MessageEncoding: "ros1",
@@ -226,7 +226,7 @@ func Bag2MCAP(w io.Writer, r io.Reader) error {
 					"md5sum": string(md5sum),
 				},
 			}
-			return writer.WriteChannelInfo(channelInfo)
+			return writer.WriteChannel(channelInfo)
 		},
 		func(header, data []byte) error {
 			conn, err := extractHeaderValue(header, []byte("conn"))

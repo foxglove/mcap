@@ -7,13 +7,13 @@ import (
 type unindexedMessageIterator struct {
 	lexer    *Lexer
 	schemas  map[uint16]*Schema
-	channels map[uint16]*ChannelInfo
+	channels map[uint16]*Channel
 	topics   map[string]bool
 	start    uint64
 	end      uint64
 }
 
-func (it *unindexedMessageIterator) Next(p []byte) (*ChannelInfo, *Message, error) {
+func (it *unindexedMessageIterator) Next(p []byte) (*Channel, *Message, error) {
 	for {
 		tokenType, record, err := it.lexer.Next(p)
 		if err != nil {
@@ -28,8 +28,8 @@ func (it *unindexedMessageIterator) Next(p []byte) (*ChannelInfo, *Message, erro
 			if _, ok := it.schemas[schema.ID]; !ok {
 				it.schemas[schema.ID] = schema
 			}
-		case TokenChannelInfo:
-			channelInfo, err := ParseChannelInfo(record)
+		case TokenChannel:
+			channelInfo, err := ParseChannel(record)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to parse channel info: %w", err)
 			}

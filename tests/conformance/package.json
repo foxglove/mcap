@@ -24,6 +24,8 @@
     "eslint-plugin-import": "2.25.3",
     "eslint-plugin-jest": "25.2.4",
     "eslint-plugin-prettier": "4.0.0",
+    "json-stringify-pretty-compact": "3.0.0",
+    "lodash": "4.17.21",
     "prettier": "2.4.1",
     "ts-node": "10.4.0",
     "tsconfig-paths": "^3.12.0",

@@ -3,7 +3,7 @@ import { Mcap0Types } from "@foxglove/mcap";
 export type TestDataRecord = Mcap0Types.TypedMcapRecords[
   | "Message"
   | "Schema"
-  | "ChannelInfo"
+  | "Channel"
   | "Attachment"
   | "Metadata"];
 

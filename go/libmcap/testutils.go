@@ -74,7 +74,7 @@ func header() []byte {
 
 func channelInfo() []byte {
 	buf := make([]byte, 9)
-	buf[0] = byte(OpChannelInfo)
+	buf[0] = byte(OpChannel)
 	return buf
 }
 
@@ -88,17 +88,17 @@ func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byt
 	data := flatten(records...)
 	buf := &bytes.Buffer{}
 	switch compression {
-	case CompressionLZ4:
-		w := lz4.NewWriter(buf)
-		_, err := io.Copy(w, bytes.NewReader(data))
-		assert.Nil(t, err)
-		w.Close()
 	case CompressionZSTD:
 		w, err := zstd.NewWriter(buf)
 		if err != nil {
 			t.Errorf("failed to create zstd writer: %s", err)
 		}
 		_, err = io.Copy(w, bytes.NewReader(data))
+		assert.Nil(t, err)
+		w.Close()
+	case CompressionLZ4:
+		w := lz4.NewWriter(buf)
+		_, err := io.Copy(w, bytes.NewReader(data))
 		assert.Nil(t, err)
 		w.Close()
 	case CompressionNone:
@@ -111,7 +111,7 @@ func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byt
 	compressionLen := len(compression)
 	compressedLen := buf.Len()
 	uncompressedLen := len(data)
-	msglen := uint64(8 + 8 + 8 + 4 + 4 + compressionLen + compressedLen)
+	msglen := uint64(8 + 8 + 8 + 4 + 4 + compressionLen + 8 + compressedLen)
 	record := make([]byte, msglen+9)
 	offset, err := putByte(record, byte(OpChunk))
 	assert.Nil(t, err)
@@ -124,6 +124,7 @@ func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byt
 	_, _ = crc.Write(data)
 	offset += putUint32(record[offset:], crc.Sum32())
 	offset += putPrefixedString(record[offset:], string(compression))
+	offset += putUint64(record[offset:], uint64(buf.Len()))
 	_ = copy(record[offset:], buf.Bytes())
 	return record
 }

@@ -31,7 +31,7 @@ var catCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		it, err := reader.Messages(start, end, topics, true)
+		it, err := reader.Messages(start, end, topics, false)
 		if err != nil {
 			log.Fatal(err)
 		}

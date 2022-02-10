@@ -72,10 +72,10 @@ describe("Mcap0RecordBuilder", () => {
     expect(written).toEqual(BigInt(buffer.length));
   });
 
-  it("writes channel info", () => {
+  it("writes channel", () => {
     const writer = new Mcap0RecordBuilder();
 
-    const written = writer.writeChannelInfo({
+    const written = writer.writeChannel({
       id: 1,
       topic: "/topic",
       messageEncoding: "encoding",

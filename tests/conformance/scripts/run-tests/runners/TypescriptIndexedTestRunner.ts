@@ -3,14 +3,14 @@ import fs from "fs/promises";
 import { TestFeatures, TestVariant } from "variants/types";
 
 import ITestRunner from "./ITestRunner";
-import stringifyRecord from "./stringifyRecord";
+import { stringifyRecords } from "./stringifyRecords";
 
 export default class TypescriptIndexedTestRunner implements ITestRunner {
   name = "ts-indexed";
-  async run(filePath: string): Promise<string[]> {
+  async run(filePath: string, variant: TestVariant): Promise<string> {
     const handle = await fs.open(filePath, "r");
     try {
-      return await this._run(handle);
+      return await this._run(handle, variant);
     } finally {
       await handle.close();
     }
@@ -38,7 +38,7 @@ export default class TypescriptIndexedTestRunner implements ITestRunner {
     return true;
   }
 
-  private async _run(fileHandle: fs.FileHandle): Promise<string[]> {
+  private async _run(fileHandle: fs.FileHandle, variant: TestVariant): Promise<string> {
     const testResult = [];
     let buffer = new ArrayBuffer(4096);
     const readable = {
@@ -68,41 +68,42 @@ export default class TypescriptIndexedTestRunner implements ITestRunner {
       throw new Error("No chunk indexes");
     }
 
-    testResult.push(stringifyRecord(reader.header));
+    testResult.push(reader.header);
     for (const record of reader.schemasById.values()) {
-      testResult.push(stringifyRecord(record));
+      testResult.push(record);
     }
-    for (const record of reader.channelInfosById.values()) {
-      testResult.push(stringifyRecord(record));
+    for (const record of reader.channelsById.values()) {
+      testResult.push(record);
     }
     for await (const record of reader.readMessages()) {
-      testResult.push(stringifyRecord(record));
+      testResult.push(record);
     }
 
     // repeat schemas & channel infos
     for (const record of reader.schemasById.values()) {
-      testResult.push(stringifyRecord(record));
+      testResult.push(record);
     }
-    for (const record of reader.channelInfosById.values()) {
-      testResult.push(stringifyRecord(record));
+    for (const record of reader.channelsById.values()) {
+      testResult.push(record);
     }
 
     if (reader.statistics) {
-      testResult.push(stringifyRecord(reader.statistics));
+      testResult.push(reader.statistics);
     }
     for (const record of reader.chunkIndexes) {
-      testResult.push(stringifyRecord(record));
+      testResult.push(record);
     }
     for (const record of reader.attachmentIndexes) {
-      testResult.push(stringifyRecord(record));
+      testResult.push(record);
     }
     for (const record of reader.metadataIndexes) {
-      testResult.push(stringifyRecord(record));
+      testResult.push(record);
     }
     for (const summaryOffset of reader.summaryOffsetsByOpcode.values()) {
-      testResult.push(stringifyRecord(summaryOffset));
+      testResult.push(summaryOffset);
     }
-    testResult.push(stringifyRecord(reader.footer));
-    return testResult;
+    testResult.push(reader.footer);
+
+    return stringifyRecords(testResult, variant);
   }
 }

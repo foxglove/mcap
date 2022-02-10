@@ -32,8 +32,13 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
+      - uses: actions/setup-go@v2
+        with:
+          go-version: 1.17.x
       - uses: actions/setup-python@v2
       - run: cd python && pip install .
+      - run: cd cpp && make
+      - run: cd go && make build-conformance-check
       - run: yarn install --frozen-lockfile
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance
@@ -58,6 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: make format-check
+      - run: make
       - run: make test
 
   typescript:

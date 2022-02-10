@@ -22,7 +22,7 @@ type Writer struct {
 	AttachmentIndexes []*AttachmentIndex
 
 	channelIDs       []uint16
-	channels         map[uint16]*ChannelInfo
+	channels         map[uint16]*Channel
 	schemas          map[uint16]*Schema
 	w                *WriteSizer
 	buf8             []byte
@@ -105,11 +105,11 @@ func (w *Writer) WriteSchema(s *Schema) (err error) {
 	return nil
 }
 
-// WriteChannelInfo writes a channel info record to the output. Channel Info
+// WriteChannel writes a channel info record to the output. Channel Info
 // records are uniquely identified within a file by their channel ID. A Channel
 // Info record must occur at least once in the file prior to any message
 // referring to its channel ID.
-func (w *Writer) WriteChannelInfo(c *ChannelInfo) error {
+func (w *Writer) WriteChannel(c *Channel) error {
 	if _, ok := w.schemas[c.SchemaID]; !ok {
 		return ErrUnknownSchema
 	}
@@ -127,12 +127,12 @@ func (w *Writer) WriteChannelInfo(c *ChannelInfo) error {
 	offset += copy(w.msg[offset:], userdata)
 	var err error
 	if w.chunked {
-		_, err = w.writeRecord(w.compressedWriter, OpChannelInfo, w.msg[:offset])
+		_, err = w.writeRecord(w.compressedWriter, OpChannel, w.msg[:offset])
 		if err != nil {
 			return err
 		}
 	} else {
-		_, err = w.writeRecord(w.w, OpChannelInfo, w.msg[:offset])
+		_, err = w.writeRecord(w.w, OpChannel, w.msg[:offset])
 		if err != nil {
 			return err
 		}
@@ -344,7 +344,7 @@ func (w *Writer) flushActiveChunk() error {
 	crc := w.compressedWriter.CRC()
 	compressedlen := w.compressed.Len()
 	uncompressedlen := w.compressedWriter.Size()
-	msglen := 8 + 8 + 8 + 4 + 4 + len(w.compression) + compressedlen
+	msglen := 8 + 8 + 8 + 4 + 4 + len(w.compression) + 8 + compressedlen
 	chunkStartOffset := w.w.Size()
 	start := w.currentChunkStartTime
 	end := w.currentChunkEndTime
@@ -366,6 +366,7 @@ func (w *Writer) flushActiveChunk() error {
 	offset += putUint64(w.chunk[offset:], uint64(uncompressedlen))
 	offset += putUint32(w.chunk[offset:], crc)
 	offset += putPrefixedString(w.chunk[offset:], string(w.compression))
+	offset += putUint64(w.chunk[offset:], uint64(w.compressed.Len()))
 	offset += copy(w.chunk[offset:recordlen], w.compressed.Bytes())
 	_, err = w.w.Write(w.chunk[:offset])
 	if err != nil {
@@ -480,7 +481,7 @@ func (w *Writer) Close() error {
 
 	for _, chanID := range w.channelIDs {
 		if channelInfo, ok := w.channels[chanID]; ok {
-			err := w.WriteChannelInfo(channelInfo)
+			err := w.WriteChannel(channelInfo)
 			if err != nil {
 				return fmt.Errorf("failed to write channel info: %w", err)
 			}
@@ -511,7 +512,7 @@ func (w *Writer) Close() error {
 
 	if len(w.channels) > 0 {
 		err = w.WriteSummaryOffset(&SummaryOffset{
-			GroupOpcode: OpChannelInfo,
+			GroupOpcode: OpChannel,
 			GroupStart:  channelInfoOffset,
 			GroupLength: chunkIndexOffset - channelInfoOffset,
 		})
@@ -583,14 +584,14 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	var compressedWriter *CountingCRCWriter
 	if opts.Chunked {
 		switch opts.Compression {
-		case CompressionLZ4:
-			compressedWriter = NewCountingCRCWriter(lz4.NewWriter(&compressed), opts.IncludeCRC)
 		case CompressionZSTD:
 			zw, err := zstd.NewWriter(&compressed)
 			if err != nil {
 				return nil, err
 			}
 			compressedWriter = NewCountingCRCWriter(zw, opts.IncludeCRC)
+		case CompressionLZ4:
+			compressedWriter = NewCountingCRCWriter(lz4.NewWriter(&compressed), opts.IncludeCRC)
 		case CompressionNone:
 			compressedWriter = NewCountingCRCWriter(BufCloser{&compressed}, opts.IncludeCRC)
 		default:
@@ -603,7 +604,7 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	return &Writer{
 		w:                     writer,
 		buf8:                  make([]byte, 8),
-		channels:              make(map[uint16]*ChannelInfo),
+		channels:              make(map[uint16]*Channel),
 		schemas:               make(map[uint16]*Schema),
 		MessageIndexes:        make(map[uint16]*MessageIndex),
 		uncompressed:          &bytes.Buffer{},

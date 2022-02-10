@@ -17,9 +17,9 @@ var (
 )
 
 const (
-	CompressionLZ4  CompressionFormat = "lz4"
 	CompressionZSTD CompressionFormat = "zstd"
-	CompressionNone CompressionFormat = "none"
+	CompressionLZ4  CompressionFormat = "lz4"
+	CompressionNone CompressionFormat = ""
 )
 
 type BufCloser struct {
@@ -159,12 +159,16 @@ func putPrefixedBytes(buf []byte, s []byte) int {
 
 type CompressionFormat string
 
+func (c CompressionFormat) String() string {
+	return string(c)
+}
+
 const (
 	OpInvalidZero     OpCode = 0x00
 	OpHeader          OpCode = 0x01
 	OpFooter          OpCode = 0x02
 	OpSchema          OpCode = 0x03
-	OpChannelInfo     OpCode = 0x04
+	OpChannel         OpCode = 0x04
 	OpMessage         OpCode = 0x05
 	OpChunk           OpCode = 0x06
 	OpMessageIndex    OpCode = 0x07
@@ -193,7 +197,7 @@ type Message struct {
 	Data        []byte
 }
 
-type ChannelInfo struct {
+type Channel struct {
 	ID              uint16
 	Topic           string
 	MessageEncoding string
@@ -297,7 +301,7 @@ type Statistics struct {
 
 type Info struct {
 	Statistics   *Statistics
-	Channels     map[uint16]*ChannelInfo
+	Channels     map[uint16]*Channel
 	ChunkIndexes []*ChunkIndex
 	Start        time.Time
 	End          time.Time

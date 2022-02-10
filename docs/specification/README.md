@@ -148,10 +148,10 @@ Schema records are uniquely identified within a file by their schema ID. A Schem
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 2 | id | uint16 | A unique identifier for this schema within the file. |
+| 2 | id | uint16 | A unique identifier for this schema within the file. Must not be zero |
 | 4 + N | name | String | An identifier for the schema. |
-| 4 + N | encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. |
-| 4 + N | data | uint32 length-prefixed Bytes | Must conform to the schema encoding. |
+| 4 + N | encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. An empty string indicates no schema is available. |
+| 4 + N | data | uint32 length-prefixed Bytes | Must conform to the schema encoding. If `encoding` is an empty string, `data` should be 0 length. |
 
 Schema records may be duplicated in the summary section.
 
@@ -164,9 +164,9 @@ Channel records are uniquely identified within a file by their channel ID. A Cha
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 2 | id | uint16 | A unique identifier for this channel within the file. |
+| 2 | schema_id | uint16 | The schema for messages on this channel. A schema_id of 0 indicates no schema for this channel |
 | 4 + N | topic | String | The channel topic. |
 | 4 + N | message_encoding | String | Encoding for messages on this channel. The value should be one of the [well-known message encodings](./well-known-encodings.md). Custom values should use `x-` prefix. |
-| 2 | schema_id | uint16 | The schema for messages on this channel. |
 | 4 + N | metadata | Map<string, string> | Metadata about this channel |
 
 Channel records may be duplicated in the summary section.
@@ -181,8 +181,8 @@ The message encoding and schema must match that of the Channel record correspond
 | --- | --- | --- | --- |
 | 2 | channel_id | uint16 | Channel ID |
 | 4 | sequence | uint32 | Optional message counter assigned by publisher. If not assigned by publisher, must be recorded by the recorder. |
-| 8 | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time. |
 | 8 | log_time | Timestamp | Time at which the message was recorded. |
+| 8 | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time. |
 | N | data | Bytes | Message data, to be decoded according to the schema of the channel. |
 
 ### Chunk (op=0x06)
@@ -197,7 +197,7 @@ All messages in the chunk must reference channels recorded earlier in the file (
 | 8 | end_time | Timestamp | Latest message log_time in the chunk. |
 | 8 | uncompressed_size | uint64 | Uncompressed size of the `records` field. |
 | 4 | uncompressed_crc | uint32 | CRC32 checksum of uncompressed `records` field. A value of zero indicates that CRC validation should not be performed. |
-| 4 + N | compression | String | compression algorithm. i.e. `lz4`, `zstd`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression formats]. |
+| 4 + N | compression | String | compression algorithm. i.e. `zstd`, `lz4`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression formats]. |
 | 8 + N | records | uint64 length-prefixed Bytes | Repeating sequences of `<record type><record content length><record content>`. Compressed with the algorithm in the `compression` field. |
 
 ### Message Index (op=0x07)
@@ -271,6 +271,7 @@ A Statistics record contains summary information about the recorded data. The st
 | --- | --- | --- | --- |
 | 8 | message_count | uint64 | Number of Message records in the file. |
 | 4 | channel_count | uint32 | Number of unique channel ids in the file. |
+| 4 | schema_count | uint32 | Number of unique schema ids in the file. |
 | 4 | attachment_count | uint32 | Number of Attachment records in the file. |
 | 4 | metadata_count | uint32 | Number of Metadata records in the file. |
 | 4 | chunk_count | uint32 | Number of Chunk records in the file. |
@@ -291,7 +292,7 @@ A metadata record contains arbitrary user data in key-value pairs.
 
 ### Metadata Index (op=0x0D)
 
-A metadata record contains arbitrary user data in key-value pairs.
+A metadata index record contains the location of a metadata record within the file.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
