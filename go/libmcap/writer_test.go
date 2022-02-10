@@ -32,6 +32,36 @@ func TestMCAPReadWrite(t *testing.T) {
 		assert.Equal(t, "", library)
 		assert.Equal(t, TokenHeader, tokenType)
 	})
+	t.Run("zero-valued schema IDs permitted", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionLZ4})
+		assert.Nil(t, err)
+		err = w.WriteChannel(&Channel{
+			ID:              0,
+			SchemaID:        0,
+			Topic:           "/foo",
+			MessageEncoding: "msg",
+			Metadata: map[string]string{
+				"key": "val",
+			},
+		})
+		assert.Nil(t, err)
+	})
+	t.Run("positive schema IDs rejected if schema unknown", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionLZ4})
+		assert.Nil(t, err)
+		err = w.WriteChannel(&Channel{
+			ID:              0,
+			SchemaID:        1,
+			Topic:           "/foo",
+			MessageEncoding: "msg",
+			Metadata: map[string]string{
+				"key": "val",
+			},
+		})
+		assert.ErrorIs(t, err, ErrUnknownSchema)
+	})
 }
 
 func TestOutputDeterminism(t *testing.T) {

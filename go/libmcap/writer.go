@@ -115,8 +115,10 @@ func (w *Writer) WriteSchema(s *Schema) (err error) {
 // Info record must occur at least once in the file prior to any message
 // referring to its channel ID.
 func (w *Writer) WriteChannel(c *Channel) error {
-	if _, ok := w.schemas[c.SchemaID]; !ok {
-		return ErrUnknownSchema
+	if c.SchemaID > 0 {
+		if _, ok := w.schemas[c.SchemaID]; !ok {
+			return ErrUnknownSchema
+		}
 	}
 	userdata := makePrefixedMap(c.Metadata)
 	msglen := (2 +
