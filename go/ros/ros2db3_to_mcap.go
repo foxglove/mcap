@@ -183,7 +183,7 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, searchdirs []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to write schema: %w", err)
 		}
-		err = writer.WriteChannelInfo(&libmcap.ChannelInfo{
+		err = writer.WriteChannel(&libmcap.Channel{
 			ID:              t.id,
 			Topic:           t.name,
 			MessageEncoding: t.serializationFormat,

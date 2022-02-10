@@ -26,7 +26,7 @@ type indexedMessageIterator struct {
 	start  uint64
 	end    uint64
 
-	channels          map[uint16]*ChannelInfo
+	channels          map[uint16]*Channel
 	statistics        *Statistics
 	chunksets         [][]*ChunkIndex
 	chunkIndexes      []*ChunkIndex
@@ -74,8 +74,8 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			return fmt.Errorf("failed to get next token: %w", err)
 		}
 		switch tokenType {
-		case TokenChannelInfo:
-			channelInfo, err := ParseChannelInfo(record)
+		case TokenChannel:
+			channelInfo, err := ParseChannel(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse channel info: %w", err)
 			}
@@ -272,7 +272,7 @@ func (it *indexedMessageIterator) seekChunk(offset int64) error {
 	return nil
 }
 
-func (it *indexedMessageIterator) Next(p []byte) (*ChannelInfo, *Message, error) {
+func (it *indexedMessageIterator) Next(p []byte) (*Channel, *Message, error) {
 	if it.statistics == nil {
 		err := it.parseSummarySection()
 		if err != nil {

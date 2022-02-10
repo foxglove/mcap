@@ -21,7 +21,7 @@ const (
 	TokenHeader TokenType = iota
 	TokenFooter
 	TokenSchema
-	TokenChannelInfo
+	TokenChannel
 	TokenMessage
 	TokenChunk
 	TokenMessageIndex
@@ -46,8 +46,8 @@ func (t TokenType) String() string {
 		return "footer"
 	case TokenSchema:
 		return "schema"
-	case TokenChannelInfo:
-		return "channel info"
+	case TokenChannel:
+		return "channel"
 	case TokenMessage:
 		return "message"
 	case TokenChunk:
@@ -68,6 +68,8 @@ func (t TokenType) String() string {
 		return "summary offset"
 	case TokenDataEnd:
 		return "data end"
+	case TokenError:
+		return "error"
 	default:
 		return "unknown"
 	}
@@ -136,7 +138,7 @@ func (l *Lexer) setZSTDDecoder(r io.Reader) error {
 	return nil
 }
 
-func loadChunk(l *Lexer, recordSize int64) error {
+func loadChunk(l *Lexer) error {
 	if l.inChunk {
 		return ErrNestedChunk
 	}
@@ -166,20 +168,25 @@ func loadChunk(l *Lexer, recordSize int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to read uncompressed CRC: %w", err)
 	}
-	compressionLen, offset, err := getUint32(l.buf, offset)
+	compressionLen, _, err := getUint32(l.buf, offset)
 	if err != nil {
 		return fmt.Errorf("failed to read compression length: %w", err)
 	}
 
-	compression := make([]byte, compressionLen)
-	_, err = io.ReadFull(l.reader, compression)
+	// read compression and records length into buffer
+	_, err = io.ReadFull(l.reader, l.buf[:compressionLen+8])
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read compression from chunk: %w", err)
+	}
+	compression := CompressionFormat(l.buf[:compressionLen])
+	recordsLength, _, err := getUint64(l.buf, int(compressionLen))
+	if err != nil {
+		return fmt.Errorf("failed to read records length: %w", err)
 	}
 
 	// remaining bytes in the record are the chunk data
-	lr := io.LimitReader(l.reader, recordSize-int64(offset+len(compression)))
-	switch CompressionFormat(compression) {
+	lr := io.LimitReader(l.reader, int64(recordsLength))
+	switch compression {
 	case CompressionNone:
 		l.reader = lr
 	case CompressionLZ4:
@@ -237,7 +244,7 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 		recordLen := int64(binary.LittleEndian.Uint64(l.buf[1:9]))
 
 		if opcode == OpChunk && !l.emitChunks {
-			err := loadChunk(l, recordLen)
+			err := loadChunk(l)
 			if err != nil {
 				return TokenError, nil, err
 			}
@@ -261,8 +268,8 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			return TokenSchema, record, nil
 		case OpDataEnd:
 			return TokenDataEnd, record, nil
-		case OpChannelInfo:
-			return TokenChannelInfo, record, nil
+		case OpChannel:
+			return TokenChannel, record, nil
 		case OpFooter:
 			return TokenFooter, record, nil
 		case OpMessage:
@@ -272,16 +279,10 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 		case OpAttachmentIndex:
 			return TokenAttachmentIndex, record, nil
 		case OpChunkIndex:
-			if !l.emitChunks {
-				continue
-			}
 			return TokenChunkIndex, record, nil
 		case OpStatistics:
 			return TokenStatistics, record, nil
 		case OpMessageIndex:
-			if !l.emitChunks {
-				continue
-			}
 			return TokenMessageIndex, record, nil
 		case OpChunk:
 			return TokenChunk, record, nil

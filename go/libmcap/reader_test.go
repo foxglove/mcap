@@ -183,13 +183,13 @@ func TestMessageReading(t *testing.T) {
 						Encoding: "msg",
 						Data:     []byte{},
 					}))
-					assert.Nil(t, w.WriteChannelInfo(&ChannelInfo{
+					assert.Nil(t, w.WriteChannel(&Channel{
 						ID:              0,
 						Topic:           "/test1",
 						SchemaID:        1,
 						MessageEncoding: "ros1",
 					}))
-					assert.Nil(t, w.WriteChannelInfo(&ChannelInfo{
+					assert.Nil(t, w.WriteChannel(&Channel{
 						ID:              1,
 						Topic:           "/test2",
 						MessageEncoding: "ros1",

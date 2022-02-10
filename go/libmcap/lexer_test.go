@@ -29,12 +29,12 @@ func TestLexUnchunkedFile(t *testing.T) {
 	assert.Nil(t, err)
 	expected := []TokenType{
 		TokenHeader,
-		TokenChannelInfo,
+		TokenChannel,
 		TokenMessage,
 		TokenMessage,
 		TokenAttachment,
 		TokenAttachment,
-		TokenChannelInfo,
+		TokenChannel,
 		TokenAttachmentIndex,
 		TokenFooter,
 	}
@@ -68,7 +68,7 @@ func TestRejectsNestedChunks(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, tokenType, TokenHeader)
 	_, _, err = lexer.Next(nil)
-	assert.ErrorIs(t, ErrNestedChunk, err)
+	assert.ErrorIs(t, err, ErrNestedChunk)
 }
 
 func TestBadMagic(t *testing.T) {
@@ -127,10 +127,10 @@ func TestLexChunkedFile(t *testing.T) {
 					assert.Nil(t, err)
 					expected := []TokenType{
 						TokenHeader,
-						TokenChannelInfo,
+						TokenChannel,
 						TokenMessage,
 						TokenMessage,
-						TokenChannelInfo,
+						TokenChannel,
 						TokenMessage,
 						TokenMessage,
 						TokenAttachment,
@@ -186,10 +186,10 @@ func TestChunkCRCValidation(t *testing.T) {
 		assert.Nil(t, err)
 		expected := []TokenType{
 			TokenHeader,
-			TokenChannelInfo,
+			TokenChannel,
 			TokenMessage,
 			TokenMessage,
-			TokenChannelInfo,
+			TokenChannel,
 			TokenMessage,
 			TokenMessage,
 			TokenAttachment,
@@ -221,7 +221,7 @@ func TestChunkCRCValidation(t *testing.T) {
 		assert.Nil(t, err)
 		expected := []TokenType{
 			TokenHeader,
-			TokenChannelInfo,
+			TokenChannel,
 			TokenMessage,
 			TokenMessage,
 		}
