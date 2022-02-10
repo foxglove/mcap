@@ -181,8 +181,8 @@ The message encoding and schema must match that of the Channel record correspond
 | --- | --- | --- | --- |
 | 2 | channel_id | uint16 | Channel ID |
 | 4 | sequence | uint32 | Optional message counter assigned by publisher. If not assigned by publisher, must be recorded by the recorder. |
-| 8 | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time. |
 | 8 | log_time | Timestamp | Time at which the message was recorded. |
+| 8 | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time. |
 | N | data | Bytes | Message data, to be decoded according to the schema of the channel. |
 
 ### Chunk (op=0x06)
