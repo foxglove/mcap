@@ -379,6 +379,9 @@ Status McapWriter::write(const Message& message) {
       // Write the Schema record
       uncompressedSize_ += write(output, schemas_[schemaIndex]);
       writtenSchemas_.insert(channel.schemaId);
+
+      // Update schema statistics
+      ++statistics_.channelCount;
     }
 
     // Write the Channel record
@@ -611,9 +614,9 @@ uint64_t McapWriter::write(IWritable& output, const Channel& channel) {
   write(output, OpCode::Channel);
   write(output, recordSize);
   write(output, channel.id);
+  write(output, channel.schemaId);
   write(output, channel.topic);
   write(output, channel.messageEncoding);
-  write(output, channel.schemaId);
   write(output, channel.metadata, metadataSize);
 
   return 9 + recordSize;
@@ -626,8 +629,8 @@ uint64_t McapWriter::write(IWritable& output, const Message& message) {
   write(output, recordSize);
   write(output, message.channelId);
   write(output, message.sequence);
-  write(output, message.publishTime);
   write(output, message.logTime);
+  write(output, message.publishTime);
   write(output, message.data, message.dataSize);
 
   return 9 + recordSize;
@@ -770,6 +773,7 @@ uint64_t McapWriter::write(IWritable& output, const Statistics& stats) {
   const uint32_t channelMessageCountsSize = stats.channelMessageCounts.size() * 10;
   const uint64_t recordSize = /* message_count */ 8 +
                               /* channel_count */ 4 +
+                              /* schema_count */ 4 +
                               /* attachment_count */ 4 +
                               /* metadata_count */ 4 +
                               /* chunk_count */ 4 +
@@ -779,6 +783,7 @@ uint64_t McapWriter::write(IWritable& output, const Statistics& stats) {
   write(output, recordSize);
   write(output, stats.messageCount);
   write(output, stats.channelCount);
+  write(output, stats.schemaCount);
   write(output, stats.attachmentCount);
   write(output, stats.metadataCount);
   write(output, stats.chunkCount);
@@ -1514,6 +1519,9 @@ Status McapReader::ParseChannel(const Record& record, Channel* channel) {
   // id
   channel->id = internal::ParseUint16(record.data);
   offset += 2;
+  // schema_id
+  channel->schemaId = internal::ParseUint16(record.data + offset);
+  offset += 2;
   // topic
   if (auto status =
         internal::ParseString(record.data + offset, record.dataSize - offset, &channel->topic);
@@ -1528,9 +1536,6 @@ Status McapReader::ParseChannel(const Record& record, Channel* channel) {
     return status;
   }
   offset += 4 + channel->messageEncoding.size();
-  // schema_id
-  channel->schemaId = internal::ParseUint16(record.data + offset);
-  offset += 2;
   // metadata
   if (auto status = internal::ParseKeyValueMap(record.data + offset, record.dataSize - offset,
                                                &channel->metadata);
@@ -1552,8 +1557,8 @@ Status McapReader::ParseMessage(const Record& record, Message* message) {
 
   message->channelId = internal::ParseUint16(record.data);
   message->sequence = internal::ParseUint32(record.data + 2);
-  message->publishTime = internal::ParseUint64(record.data + 2 + 4);
-  message->logTime = internal::ParseUint64(record.data + 2 + 4 + 8);
+  message->logTime = internal::ParseUint64(record.data + 2 + 4);
+  message->publishTime = internal::ParseUint64(record.data + 2 + 4 + 8);
   message->dataSize = record.dataSize - MessagePreambleSize;
   message->data = record.data + MessagePreambleSize;
   return StatusCode::Success;
@@ -1790,7 +1795,7 @@ Status McapReader::ParseAttachmentIndex(const Record& record, AttachmentIndex* a
 }
 
 Status McapReader::ParseStatistics(const Record& record, Statistics* statistics) {
-  constexpr uint64_t PreambleSize = 8 + 4 + 4 + 4 + 4 + 4;
+  constexpr uint64_t PreambleSize = 8 + 4 + 4 + 4 + 4 + 4 + 4;
 
   assert(record.opcode == OpCode::Statistics);
   if (record.dataSize < PreambleSize) {
@@ -1801,11 +1806,13 @@ Status McapReader::ParseStatistics(const Record& record, Statistics* statistics)
 
   statistics->messageCount = internal::ParseUint64(record.data);
   statistics->channelCount = internal::ParseUint32(record.data + 8);
-  statistics->attachmentCount = internal::ParseUint32(record.data + 8 + 4);
-  statistics->metadataCount = internal::ParseUint32(record.data + 8 + 4 + 4);
-  statistics->chunkCount = internal::ParseUint32(record.data + 8 + 4 + 4 + 4);
+  statistics->schemaCount = internal::ParseUint32(record.data + 8 + 4);
+  statistics->attachmentCount = internal::ParseUint32(record.data + 8 + 4 + 4);
+  statistics->metadataCount = internal::ParseUint32(record.data + 8 + 4 + 4 + 4);
+  statistics->chunkCount = internal::ParseUint32(record.data + 8 + 4 + 4 + 4 + 4);
 
-  const uint32_t channelMessageCountsSize = internal::ParseUint32(record.data + 8 + 4 + 4 + 4 + 4);
+  const uint32_t channelMessageCountsSize =
+    internal::ParseUint32(record.data + 8 + 4 + 4 + 4 + 4 + 4);
   if (channelMessageCountsSize % 10 != 0 ||
       channelMessageCountsSize > record.dataSize - PreambleSize) {
     const auto msg = internal::StrFormat(
