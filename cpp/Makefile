@@ -2,7 +2,8 @@ default: build
 
 .PHONY: build
 build:
-	docker compose build
+	docker build -t mcap_cpp -f dev.Dockerfile .
+	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp
 
 .PHONE: build-host
 build-host:
@@ -16,22 +17,27 @@ build-host:
 	conan build bench --build-folder bench/build/Release
 	conan build test --build-folder test/build/Debug
 
+clean:
+	docker rm -f mcap_cpp
+	docker rmi -f mcap_cpp
+	rm -rf bench/build
+	rm -rf examples/build
+	rm -rf test/build
+
 .PHONY: format-check
 format-check:
-	docker compose run --rm -v .:/src base python3 scripts/format.py /src
+	docker build -t mcap_cpp -f dev.Dockerfile .
+	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp python3 scripts/format.py /src
 
 .PHONY: format-fix
 format-fix:
-	docker compose run --rm -v .:/src base python3 scripts/format.py --fix /src
+	docker build -t mcap_cpp -f dev.Dockerfile .
+	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp python3 scripts/format.py --fix /src
 
 .PHONY: bench
 bench:
-	docker compose run bench
+	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp ./bench/build/Release/bin/bench-tests
 
 .PHONY: test
 test:
-	docker compose run test
-
-.PHONY: bag2mcap
-bag2mcap:
-	docker compose run bag2mcap
+	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp ./test/build/Debug/bin/unit-tests
