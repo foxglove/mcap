@@ -292,7 +292,7 @@ A metadata record contains arbitrary user data in key-value pairs.
 
 ### Metadata Index (op=0x0D)
 
-A metadata record contains arbitrary user data in key-value pairs.
+A metadata index record contains the location of a metadata record within the file.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
