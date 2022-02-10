@@ -106,7 +106,8 @@ Status ParseUint64(const std::byte* data, uint64_t maxSize, uint64_t* output) {
 Status ParseString(const std::byte* data, uint64_t maxSize, std::string_view* output) {
   uint32_t size;
   if (auto status = ParseUint32(data, maxSize, &size); !status.ok()) {
-    return status;
+    const auto msg = internal::StrFormat("cannot read string size: {}", status.message);
+    return Status{StatusCode::InvalidRecord, msg};
   }
   if (uint64_t(size) > (maxSize - 4)) {
     const auto msg =
@@ -156,17 +157,26 @@ Status ParseKeyValueMap(const std::byte* data, uint64_t maxSize, KeyValueMap* ou
                                          sizeInBytes, (maxSize - 4));
     return Status(StatusCode::InvalidRecord, msg);
   }
+
+  // Account for the byte size prefix in sizeInBytes to make the bounds checking
+  // below simpler
+  sizeInBytes += 4;
+
   output->clear();
   uint64_t pos = 4;
   while (pos < sizeInBytes) {
     std::string_view key;
     if (auto status = ParseString(data + pos, sizeInBytes - pos, &key); !status.ok()) {
-      return status;
+      const auto msg =
+        internal::StrFormat("cannot read key-value map key at pos {}: {}", pos, status.message);
+      return Status{StatusCode::InvalidRecord, msg};
     }
     pos += 4 + key.size();
     std::string_view value;
     if (auto status = ParseString(data + pos, sizeInBytes - pos, &value); !status.ok()) {
-      return status;
+      const auto msg = internal::StrFormat(
+        "cannot read key-value map value for key \"{}\" at pos {}: {}", key, pos, status.message);
+      return Status{StatusCode::InvalidRecord, msg};
     }
     pos += 4 + value.size();
     output->emplace(key, value);
