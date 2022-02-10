@@ -1,18 +1,17 @@
 {
   "records": [
-    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
+    {"fields": [["library", ""], ["profile", ""]], "type": "Header"},
     {
-      "type": "Attachment",
       "fields": [
         ["content_type", "application/octet-stream"],
         ["created_at", "1"],
         ["data", ["1", "2", "3"]],
         ["log_time", "2"],
         ["name", "myFile"]
-      ]
+      ],
+      "type": "Attachment"
     },
     {
-      "type": "Statistics",
       "fields": [
         ["attachment_count", "1"],
         ["channel_count", "0"],
@@ -20,15 +19,16 @@
         ["chunk_count", "0"],
         ["message_count", "0"],
         ["metadata_count", "0"]
-      ]
+      ],
+      "type": "Statistics"
     },
     {
-      "type": "Footer",
       "fields": [
         ["summary_crc", "0"],
         ["summary_offset_start", "0"],
         ["summary_start", "116"]
-      ]
+      ],
+      "type": "Footer"
     }
   ],
   "meta": {"variant": {"features": ["st"]}}

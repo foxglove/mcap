@@ -1,47 +1,46 @@
 {
   "records": [
-    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
+    {"fields": [["library", ""], ["profile", ""]], "type": "Header"},
     {
-      "type": "Schema",
       "fields": [
         ["data", ["4", "5", "6"]],
         ["encoding", "c"],
         ["id", "1"],
         ["name", "Example"]
-      ]
+      ],
+      "type": "Schema"
     },
     {
-      "type": "Channel",
       "fields": [
         ["id", "1"],
         ["message_encoding", "a"],
         ["metadata", {"foo": "bar"}],
         ["schema_id", "1"],
         ["topic", "example"]
-      ]
+      ],
+      "type": "Channel"
     },
     {
-      "type": "Message",
       "fields": [
         ["channel_id", "1"],
         ["data", ["1", "2", "3"]],
         ["log_time", "2"],
         ["publish_time", "1"],
         ["sequence", "10"]
-      ]
+      ],
+      "type": "Message"
     },
     {
-      "type": "Channel",
       "fields": [
         ["id", "1"],
         ["message_encoding", "a"],
         ["metadata", {"foo": "bar"}],
         ["schema_id", "1"],
         ["topic", "example"]
-      ]
+      ],
+      "type": "Channel"
     },
     {
-      "type": "Statistics",
       "fields": [
         ["attachment_count", "0"],
         ["channel_count", "1"],
@@ -49,10 +48,10 @@
         ["chunk_count", "1"],
         ["message_count", "1"],
         ["metadata_count", "0"]
-      ]
+      ],
+      "type": "Statistics"
     },
     {
-      "type": "ChunkIndex",
       "fields": [
         ["chunk_length", "162"],
         ["chunk_start_offset", "28"],
@@ -63,39 +62,40 @@
         ["message_index_offsets", {}],
         ["start_time", "2"],
         ["uncompressed_size", "115"]
-      ]
+      ],
+      "type": "ChunkIndex"
     },
     {
-      "type": "SummaryOffset",
       "fields": [
         ["group_length", "50"],
         ["group_opcode", "4"],
         ["group_start", "208"]
-      ]
+      ],
+      "type": "SummaryOffset"
     },
     {
-      "type": "SummaryOffset",
       "fields": [
         ["group_length", "50"],
         ["group_opcode", "11"],
         ["group_start", "258"]
-      ]
+      ],
+      "type": "SummaryOffset"
     },
     {
-      "type": "SummaryOffset",
       "fields": [
         ["group_length", "80"],
         ["group_opcode", "8"],
         ["group_start", "308"]
-      ]
+      ],
+      "type": "SummaryOffset"
     },
     {
-      "type": "Footer",
       "fields": [
         ["summary_crc", "0"],
         ["summary_offset_start", "388"],
         ["summary_start", "208"]
-      ]
+      ],
+      "type": "Footer"
     }
   ],
   "meta": {"variant": {"features": ["ch", "st", "rch", "sum", "pad"]}}

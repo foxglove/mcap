@@ -1,37 +1,36 @@
 {
   "records": [
-    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
+    {"fields": [["library", ""], ["profile", ""]], "type": "Header"},
     {
-      "type": "Schema",
       "fields": [
         ["data", ["4", "5", "6"]],
         ["encoding", "c"],
         ["id", "1"],
         ["name", "Example"]
-      ]
+      ],
+      "type": "Schema"
     },
     {
-      "type": "Channel",
       "fields": [
         ["id", "1"],
         ["message_encoding", "a"],
         ["metadata", {"foo": "bar"}],
         ["schema_id", "1"],
         ["topic", "example"]
-      ]
+      ],
+      "type": "Channel"
     },
     {
-      "type": "Message",
       "fields": [
         ["channel_id", "1"],
         ["data", ["1", "2", "3"]],
         ["log_time", "2"],
         ["publish_time", "1"],
         ["sequence", "10"]
-      ]
+      ],
+      "type": "Message"
     },
     {
-      "type": "Statistics",
       "fields": [
         ["attachment_count", "0"],
         ["channel_count", "1"],
@@ -39,23 +38,24 @@
         ["chunk_count", "0"],
         ["message_count", "1"],
         ["metadata_count", "0"]
-      ]
+      ],
+      "type": "Statistics"
     },
     {
-      "type": "SummaryOffset",
       "fields": [
         ["group_length", "50"],
         ["group_opcode", "11"],
         ["group_start", "165"]
-      ]
+      ],
+      "type": "SummaryOffset"
     },
     {
-      "type": "Footer",
       "fields": [
         ["summary_crc", "0"],
         ["summary_offset_start", "215"],
         ["summary_start", "165"]
-      ]
+      ],
+      "type": "Footer"
     }
   ],
   "meta": {"variant": {"features": ["st", "sum", "pad"]}}

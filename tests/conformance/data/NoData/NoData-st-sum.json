@@ -1,8 +1,7 @@
 {
   "records": [
-    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
+    {"fields": [["library", ""], ["profile", ""]], "type": "Header"},
     {
-      "type": "Statistics",
       "fields": [
         ["attachment_count", "0"],
         ["channel_count", "0"],
@@ -10,23 +9,24 @@
         ["chunk_count", "0"],
         ["message_count", "0"],
         ["metadata_count", "0"]
-      ]
+      ],
+      "type": "Statistics"
     },
     {
-      "type": "SummaryOffset",
       "fields": [
         ["group_length", "37"],
         ["group_opcode", "11"],
         ["group_start", "38"]
-      ]
+      ],
+      "type": "SummaryOffset"
     },
     {
-      "type": "Footer",
       "fields": [
         ["summary_crc", "0"],
         ["summary_offset_start", "75"],
         ["summary_start", "38"]
-      ]
+      ],
+      "type": "Footer"
     }
   ],
   "meta": {"variant": {"features": ["st", "sum"]}}

@@ -1,18 +1,17 @@
 {
   "records": [
-    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
+    {"fields": [["library", ""], ["profile", ""]], "type": "Header"},
     {
-      "type": "Attachment",
       "fields": [
         ["content_type", "application/octet-stream"],
         ["created_at", "1"],
         ["data", ["1", "2", "3"]],
         ["log_time", "2"],
         ["name", "myFile"]
-      ]
+      ],
+      "type": "Attachment"
     },
     {
-      "type": "Statistics",
       "fields": [
         ["attachment_count", "1"],
         ["channel_count", "0"],
@@ -20,10 +19,10 @@
         ["chunk_count", "0"],
         ["message_count", "0"],
         ["metadata_count", "0"]
-      ]
+      ],
+      "type": "Statistics"
     },
     {
-      "type": "AttachmentIndex",
       "fields": [
         ["content_type", "application/octet-stream"],
         ["data_size", "3"],
@@ -31,31 +30,32 @@
         ["log_time", "2"],
         ["name", "myFile"],
         ["offset", "28"]
-      ]
+      ],
+      "type": "AttachmentIndex"
     },
     {
-      "type": "SummaryOffset",
       "fields": [
         ["group_length", "40"],
         ["group_opcode", "11"],
         ["group_start", "125"]
-      ]
+      ],
+      "type": "SummaryOffset"
     },
     {
-      "type": "SummaryOffset",
       "fields": [
         ["group_length", "82"],
         ["group_opcode", "10"],
         ["group_start", "165"]
-      ]
+      ],
+      "type": "SummaryOffset"
     },
     {
-      "type": "Footer",
       "fields": [
         ["summary_crc", "0"],
         ["summary_offset_start", "247"],
         ["summary_start", "125"]
-      ]
+      ],
+      "type": "Footer"
     }
   ],
   "meta": {"variant": {"features": ["st", "ax", "sum", "pad"]}}

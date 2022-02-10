@@ -25,7 +25,7 @@ function normalizeRecord(record: Mcap0Types.TypedMcapRecord) {
     .filter(([k]) => k !== "type")
     .map(([k, v]) => [snakeCase(k), v])
     .sortBy((p) => p[0])
-    .thru((p) => ({ type: record.type, fields: p }))
+    .thru((p) => ({ fields: p, type: record.type }))
     .value();
 }
 

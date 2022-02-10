@@ -18,4 +18,4 @@ def normalize_value(value: ValueType) -> Any:
 
 def stringify_record(record: McapRecord):
     fields = [(k, normalize_value(v)) for k, v in sorted(record.__dict__.items())]
-    return {"type": type(record).__name__, "fields": fields}
+    return {"fields": fields, "type": type(record).__name__}
