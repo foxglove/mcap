@@ -139,7 +139,7 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, searchdirs []string) error {
 	writer, err := libmcap.NewWriter(w, &libmcap.WriterOptions{
 		Chunked:     true,
 		ChunkSize:   4 * 1024 * 1024,
-		Compression: libmcap.CompressionLZ4,
+		Compression: libmcap.CompressionZSTD,
 		IncludeCRC:  true,
 	})
 	if err != nil {

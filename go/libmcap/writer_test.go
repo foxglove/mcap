@@ -12,7 +12,7 @@ import (
 func TestMCAPReadWrite(t *testing.T) {
 	t.Run("test header", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionLZ4})
+		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionZSTD})
 		assert.Nil(t, err)
 		err = w.WriteHeader(&Header{
 			Profile: "ros1",
@@ -68,7 +68,7 @@ func TestOutputDeterminism(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w, err := NewWriter(buf, &WriterOptions{
 		Chunked:     true,
-		Compression: CompressionLZ4,
+		Compression: CompressionZSTD,
 		IncludeCRC:  true,
 		ChunkSize:   1024,
 	})
@@ -121,14 +121,14 @@ func TestOutputDeterminism(t *testing.T) {
 	assert.Nil(t, w.Close())
 	t.Run("output hashes consistently", func(t *testing.T) {
 		hash := md5.Sum(buf.Bytes())
-		assert.Equal(t, "b2f022253c8dee1d1a0361328b052139", fmt.Sprintf("%x", hash))
+		assert.Equal(t, "ee4cf4142c141db374f234db853fea40", fmt.Sprintf("%x", hash))
 	})
 }
 
 func TestChunkedReadWrite(t *testing.T) {
 	for _, compression := range []CompressionFormat{
-		CompressionLZ4,
 		CompressionZSTD,
+		CompressionLZ4,
 		CompressionNone,
 	} {
 		t.Run(fmt.Sprintf("chunked file with %s", compression), func(t *testing.T) {
@@ -209,7 +209,7 @@ func TestIndexStructures(t *testing.T) {
 	w, err := NewWriter(buf, &WriterOptions{
 		Chunked:     true,
 		ChunkSize:   1024,
-		Compression: CompressionLZ4,
+		Compression: CompressionZSTD,
 	})
 	assert.Nil(t, err)
 	err = w.WriteHeader(&Header{
@@ -251,13 +251,13 @@ func TestIndexStructures(t *testing.T) {
 			StartTime:        1,
 			EndTime:          1,
 			ChunkStartOffset: 96,
-			ChunkLength:      171,
+			ChunkLength:      145,
 			MessageIndexOffsets: map[uint16]uint64{
-				1: 267,
+				1: 241,
 			},
 			MessageIndexLength: 31,
-			Compression:        "lz4",
-			CompressedSize:     119,
+			Compression:        "zstd",
+			CompressedSize:     92,
 			UncompressedSize:   110,
 		}, chunkIndex)
 	})
@@ -280,7 +280,7 @@ func TestStatistics(t *testing.T) {
 	w, err := NewWriter(buf, &WriterOptions{
 		Chunked:     true,
 		ChunkSize:   1024,
-		Compression: CompressionLZ4,
+		Compression: CompressionZSTD,
 	})
 	assert.Nil(t, err)
 	assert.Nil(t, w.WriteHeader(&Header{
