@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/foxglove/mcap/go/libmcap"
 	"github.com/foxglove/mcap/go/ros"
 	_ "github.com/mattn/go-sqlite3" // sqlite3 driver
 	"github.com/spf13/cobra"
@@ -20,6 +21,10 @@ var (
 )
 
 var directories string
+var compression string
+var chunkSize int64
+var includeCRC bool
+var chunked bool
 
 func checkMagic(path string) (string, error) {
 	f, err := os.Open(path)
@@ -70,9 +75,26 @@ var convertCmd = &cobra.Command{
 		}
 		defer w.Close()
 
+		var compressionFormat libmcap.CompressionFormat
+		switch compression {
+		case "lz4":
+			compressionFormat = libmcap.CompressionLZ4
+		case "zstd":
+			compressionFormat = libmcap.CompressionZSTD
+		case "none":
+			compressionFormat = libmcap.CompressionNone
+		}
+
+		opts := &libmcap.WriterOptions{
+			IncludeCRC:  includeCRC,
+			Chunked:     chunked,
+			ChunkSize:   chunkSize,
+			Compression: compressionFormat,
+		}
+
 		switch filetype {
 		case "ros1":
-			err = ros.Bag2MCAP(w, f)
+			err = ros.Bag2MCAP(w, f, opts)
 			if err != nil && !errors.Is(err, io.EOF) {
 				die("failed to convert file: %s", err)
 			}
@@ -87,7 +109,7 @@ var convertCmd = &cobra.Command{
 			if prefix != "" {
 				dirs = append(dirs, prefix)
 			}
-			err = ros.DB3ToMCAP(w, db, dirs)
+			err = ros.DB3ToMCAP(w, db, opts, dirs)
 			if err != nil {
 				die("failed to convert file: %s", err)
 			}
@@ -104,6 +126,34 @@ func init() {
 		"directories",
 		"",
 		"",
-		"comma-separated list of directories to search for messages, e.g /opt/ros/galactic",
+		"(ros2) comma-separated list of directories to search for message definitions, e.g /opt/ros/galactic",
+	)
+	convertCmd.PersistentFlags().StringVarP(
+		&compression,
+		"compression",
+		"",
+		"zstd",
+		"chunk compression algorithm (supported: zstd, lz4, none)",
+	)
+	convertCmd.PersistentFlags().Int64VarP(
+		&chunkSize,
+		"chunk-size",
+		"",
+		8*1024*1024,
+		"chunk size to target",
+	)
+	convertCmd.PersistentFlags().BoolVarP(
+		&includeCRC,
+		"include-crc",
+		"",
+		true,
+		"include chunk CRC checksums in output",
+	)
+	convertCmd.PersistentFlags().BoolVarP(
+		&chunked,
+		"chunked",
+		"",
+		true,
+		"chunk the output file",
 	)
 }
