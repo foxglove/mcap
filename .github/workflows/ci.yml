@@ -34,6 +34,7 @@ jobs:
           cache: yarn
       - uses: actions/setup-python@v2
       - run: cd python && pip install .
+      - run: cd cpp && make
       - run: yarn install --frozen-lockfile
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance
@@ -58,6 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: make format-check
+      - run: make
       - run: make test
 
   typescript:
