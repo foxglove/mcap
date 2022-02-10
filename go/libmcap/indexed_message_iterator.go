@@ -27,6 +27,7 @@ type indexedMessageIterator struct {
 	end    uint64
 
 	channels          map[uint16]*Channel
+	schemas           map[uint16]*Schema
 	statistics        *Statistics
 	chunksets         [][]*ChunkIndex
 	chunkIndexes      []*ChunkIndex
@@ -74,6 +75,12 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			return fmt.Errorf("failed to get next token: %w", err)
 		}
 		switch tokenType {
+		case TokenSchema:
+			schema, err := ParseSchema(record)
+			if err != nil {
+				return fmt.Errorf("failed to parse schema: %w", err)
+			}
+			it.schemas[schema.ID] = schema
 		case TokenChannel:
 			channelInfo, err := ParseChannel(record)
 			if err != nil {
@@ -96,7 +103,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			// if the chunk overlaps with the requested parameters, load it
 			for _, channel := range it.channels {
 				if idx.MessageIndexOffsets[channel.ID] > 0 {
-					if (it.end == 0 && it.start == 0) || (idx.StartTime < it.end && idx.EndTime >= it.start) {
+					if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
 						it.chunkIndexes = append(it.chunkIndexes, idx)
 					}
 					break
@@ -118,26 +125,26 @@ func sortOverlappingChunks(chunkIndexes []*ChunkIndex) [][]*ChunkIndex {
 	output := [][]*ChunkIndex{}
 	chunkset := []*ChunkIndex{}
 	sort.Slice(chunkIndexes, func(i, j int) bool {
-		return chunkIndexes[i].StartTime < chunkIndexes[j].StartTime
+		return chunkIndexes[i].MessageStartTime < chunkIndexes[j].MessageStartTime
 	})
 
 	var maxend, minstart uint64
 	for _, chunkIndex := range chunkIndexes {
 		if len(chunkset) == 0 {
 			chunkset = append(chunkset, chunkIndex)
-			maxend = chunkIndex.EndTime
-			minstart = chunkIndex.StartTime
+			maxend = chunkIndex.MessageEndTime
+			minstart = chunkIndex.MessageStartTime
 			continue
 		}
 
 		// if this chunk index overlaps with the chunkset in hand, add it
-		if chunkIndex.EndTime >= minstart && chunkIndex.StartTime < maxend {
+		if chunkIndex.MessageEndTime >= minstart && chunkIndex.MessageStartTime < maxend {
 			chunkset = append(chunkset, chunkIndex)
-			if minstart > chunkIndex.StartTime {
-				minstart = chunkIndex.StartTime
+			if minstart > chunkIndex.MessageStartTime {
+				minstart = chunkIndex.MessageStartTime
 			}
-			if maxend < chunkIndex.EndTime {
-				maxend = chunkIndex.EndTime
+			if maxend < chunkIndex.MessageEndTime {
+				maxend = chunkIndex.MessageEndTime
 			}
 			continue
 		}
@@ -146,8 +153,8 @@ func sortOverlappingChunks(chunkIndexes []*ChunkIndex) [][]*ChunkIndex {
 		// initialize a new one
 		output = append(output, chunkset)
 		chunkset = []*ChunkIndex{chunkIndex}
-		maxend = chunkIndex.EndTime
-		minstart = chunkIndex.StartTime
+		maxend = chunkIndex.MessageEndTime
+		minstart = chunkIndex.MessageStartTime
 	}
 
 	if len(chunkset) > 0 {
@@ -272,22 +279,22 @@ func (it *indexedMessageIterator) seekChunk(offset int64) error {
 	return nil
 }
 
-func (it *indexedMessageIterator) Next(p []byte) (*Channel, *Message, error) {
+func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, error) {
 	if it.statistics == nil {
 		err := it.parseSummarySection()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		it.chunksets = sortOverlappingChunks(it.chunkIndexes)
 	}
 
 	if it.messageOffsetIdx >= len(it.messageOffsets) {
 		if it.activeChunksetIndex >= len(it.chunksets)-1 {
-			return nil, nil, io.EOF
+			return nil, nil, nil, io.EOF
 		}
 		err := it.loadNextChunkset()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 
@@ -299,27 +306,29 @@ func (it *indexedMessageIterator) Next(p []byte) (*Channel, *Message, error) {
 	if messageOffset.chunkIndex != it.activeChunkIndex {
 		err := it.loadChunk(messageOffset.chunkIndex)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 
 	// now the active chunk matches the one for this message
 	err := it.seekChunk(int64(messageOffset.chunkOffset))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	tokenType, record, err := it.activeChunkLexer.Next(p)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	switch tokenType {
 	case TokenMessage:
-		msg, err := ParseMessage(record)
+		message, err := ParseMessage(record)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		return it.channels[msg.ChannelID], msg, nil
+		channel := it.channels[message.ChannelID]
+		schema := it.schemas[channel.SchemaID]
+		return schema, channel, message, nil
 	default:
-		return nil, nil, fmt.Errorf("unexpected token %s in message section", tokenType)
+		return nil, nil, nil, fmt.Errorf("unexpected token %s in message section", tokenType)
 	}
 }

@@ -47,7 +47,10 @@
         ["channel_message_counts", {"1": "1"}],
         ["chunk_count", "1"],
         ["message_count", "1"],
-        ["metadata_count", "0"]
+        ["message_end_time", "2"],
+        ["message_start_time", "2"],
+        ["metadata_count", "0"],
+        ["schema_count", "1"]
       ]
     },
     {
@@ -57,10 +60,10 @@
         ["chunk_start_offset", "25"],
         ["compressed_size", "115"],
         ["compression", ""],
-        ["end_time", "2"],
+        ["message_end_time", "2"],
         ["message_index_length", "31"],
         ["message_index_offsets", {"1": "189"}],
-        ["start_time", "2"],
+        ["message_start_time", "2"],
         ["uncompressed_size", "115"]
       ]
     },

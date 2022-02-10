@@ -19,7 +19,10 @@
         ["channel_message_counts", {}],
         ["chunk_count", "0"],
         ["message_count", "0"],
-        ["metadata_count", "0"]
+        ["message_end_time", "0"],
+        ["message_start_time", "0"],
+        ["metadata_count", "0"],
+        ["schema_count", "0"]
       ]
     },
     {
@@ -36,7 +39,7 @@
     {
       "type": "SummaryOffset",
       "fields": [
-        ["group_length", "37"],
+        ["group_length", "55"],
         ["group_opcode", "11"],
         ["group_start", "116"]
       ]
@@ -46,14 +49,14 @@
       "fields": [
         ["group_length", "79"],
         ["group_opcode", "10"],
-        ["group_start", "153"]
+        ["group_start", "171"]
       ]
     },
     {
       "type": "Footer",
       "fields": [
         ["summary_crc", "0"],
-        ["summary_offset_start", "232"],
+        ["summary_offset_start", "250"],
         ["summary_start", "116"]
       ]
     }
