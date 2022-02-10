@@ -52,7 +52,6 @@ func printInfo(w io.Writer, info *libmcap.Info) error {
 	} else {
 		fmt.Fprintf(buf, "start: %.3f\n", float64(starttime.UnixNano())/1e9)
 		fmt.Fprintf(buf, "end: %.3f\n", float64(endtime.UnixNano())/1e9)
-
 	}
 
 	fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
