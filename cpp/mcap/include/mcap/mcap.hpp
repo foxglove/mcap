@@ -231,6 +231,17 @@ struct DataEnd {
   uint32_t dataSectionCrc;
 };
 
+struct MessageView {
+  const Message& message;
+  const Channel& channel;
+  const Schema const* schema;
+
+  MessageView(const Message& message, const Channel& channel, const Schema const* schema)
+      : message(message)
+      , channel(channel)
+      , schema(schema) {}
+};
+
 struct McapReaderOptions {
   bool noSeeking;
   bool forceScan;
