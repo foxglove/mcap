@@ -381,7 +381,7 @@ Status McapWriter::write(const Message& message) {
       writtenSchemas_.insert(channel.schemaId);
 
       // Update schema statistics
-      ++statistics_.channelCount;
+      ++statistics_.schemaCount;
     }
 
     // Write the Channel record
