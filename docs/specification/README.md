@@ -193,8 +193,8 @@ All messages in the chunk must reference channels recorded earlier in the file (
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 8 | message_start_time | Timestamp | Earliest message log_time in the chunk. |
-| 8 | message_end_time | Timestamp | Latest message log_time in the chunk. |
+| 8 | message_start_time | Timestamp | Earliest message log_time in the chunk. Zero if the chunk has no messages. |
+| 8 | message_end_time | Timestamp | Latest message log_time in the chunk. Zero if the chunk has no messages. |
 | 8 | uncompressed_size | uint64 | Uncompressed size of the `records` field. |
 | 4 | uncompressed_crc | uint32 | CRC32 checksum of uncompressed `records` field. A value of zero indicates that CRC validation should not be performed. |
 | 4 + N | compression | String | compression algorithm. i.e. `zstd`, `lz4`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression formats]. |
@@ -221,8 +221,8 @@ A Chunk Index record exists for every Chunk in the file.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 8 | message_start_time | Timestamp | Earliest message log_time in the chunk. |
-| 8 | message_end_time | Timestamp | Latest message log_time in the chunk. |
+| 8 | message_start_time | Timestamp | Earliest message log_time in the chunk. Zero if the chunk has no messages. |
+| 8 | message_end_time | Timestamp | Latest message log_time in the chunk. Zero if the chunk has no messages. |
 | 8 | chunk_start_offset | uint64 | Offset to the chunk record from the start of the file. |
 | 8 | chunk_length | uint64 | The byte length of the chunk record. |
 | 4 + N | message_index_offsets | Map<uint16, uint64> | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. An empty map indicates no message indexing is available. |
@@ -275,8 +275,8 @@ A Statistics record contains summary information about the recorded data. The st
 | 4 | attachment_count | uint32 | Number of Attachment records in the file. |
 | 4 | metadata_count | uint32 | Number of Metadata records in the file. |
 | 4 | chunk_count | uint32 | Number of Chunk records in the file. |
-| 8 | message_start_time | Timestamp | Earliest message log_time in the file. |
-| 8 | message_end_time | Timestamp | Latest message log_time in the file. |
+| 8 | message_start_time | Timestamp | Earliest message log_time in the file. Zero if the file has no messages. |
+| 8 | message_end_time | Timestamp | Latest message log_time in the file. Zero if the file has no messages. |
 | 4 + N | channel_message_counts | Map<uint16, uint64> | Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available. |
 
 When using a Statistics record with a non-empty channel_message_counts, the Summary Data section MUST contain a copy of all Channel records. The Channel records MUST occur prior to the statistics record.
