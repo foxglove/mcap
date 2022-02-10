@@ -5,8 +5,9 @@ import { TestVariant } from "variants/types";
 import ITestRunner from "./ITestRunner";
 import { stringifyRecords } from "./stringifyRecords";
 
-export default class TypescriptStreamedTestRunner implements ITestRunner {
-  name = "ts-streamed";
+export default class TypescriptStreamedReaderTestRunner implements ITestRunner {
+  name = "ts-streamed-reader";
+  mode = "read" as const;
 
   supportsVariant(_variant: TestVariant): boolean {
     return true;
