@@ -48,11 +48,11 @@ def breakup_chunk(chunk: Chunk) -> List[McapRecord]:
 
 
 def get_chunk_data_stream(chunk: Chunk) -> Tuple[ReadDataStream, int]:
-    if chunk.compression == "lz4":
-        data: bytes = lz4.frame.decompress(chunk.data)  # type: ignore
-        return ReadDataStream(BytesIO(data)), len(data)
-    elif chunk.compression == "zstd":
+    if chunk.compression == "zstd":
         data: bytes = ZSTD_uncompress(chunk.data)
+        return ReadDataStream(BytesIO(data)), len(data)
+    elif chunk.compression == "lz4":
+        data: bytes = lz4.frame.decompress(chunk.data)  # type: ignore
         return ReadDataStream(BytesIO(data)), len(data)
     else:
         return ReadDataStream(BytesIO(chunk.data)), len(chunk.data)

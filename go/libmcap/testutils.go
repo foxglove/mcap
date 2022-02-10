@@ -88,17 +88,17 @@ func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byt
 	data := flatten(records...)
 	buf := &bytes.Buffer{}
 	switch compression {
-	case CompressionLZ4:
-		w := lz4.NewWriter(buf)
-		_, err := io.Copy(w, bytes.NewReader(data))
-		assert.Nil(t, err)
-		w.Close()
 	case CompressionZSTD:
 		w, err := zstd.NewWriter(buf)
 		if err != nil {
 			t.Errorf("failed to create zstd writer: %s", err)
 		}
 		_, err = io.Copy(w, bytes.NewReader(data))
+		assert.Nil(t, err)
+		w.Close()
+	case CompressionLZ4:
+		w := lz4.NewWriter(buf)
+		_, err := io.Copy(w, bytes.NewReader(data))
 		assert.Nil(t, err)
 		w.Close()
 	case CompressionNone:

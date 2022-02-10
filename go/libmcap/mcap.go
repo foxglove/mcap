@@ -17,8 +17,8 @@ var (
 )
 
 const (
-	CompressionLZ4  CompressionFormat = "lz4"
 	CompressionZSTD CompressionFormat = "zstd"
+	CompressionLZ4  CompressionFormat = "lz4"
 	CompressionNone CompressionFormat = ""
 )
 

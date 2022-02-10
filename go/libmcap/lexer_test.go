@@ -47,7 +47,7 @@ func TestLexUnchunkedFile(t *testing.T) {
 
 func TestRejectsUnsupportedCompression(t *testing.T) {
 	file := file(
-		chunk(t, CompressionFormat("unknown"), chunk(t, CompressionLZ4, channelInfo(), message(), message())),
+		chunk(t, CompressionFormat("unknown"), chunk(t, CompressionZSTD, channelInfo(), message(), message())),
 	)
 	lexer, err := NewLexer(bytes.NewReader(file))
 	assert.Nil(t, err)
@@ -58,7 +58,7 @@ func TestRejectsUnsupportedCompression(t *testing.T) {
 func TestRejectsNestedChunks(t *testing.T) {
 	file := file(
 		header(),
-		chunk(t, CompressionLZ4, chunk(t, CompressionLZ4, channelInfo(), message(), message())),
+		chunk(t, CompressionZSTD, chunk(t, CompressionZSTD, channelInfo(), message(), message())),
 		footer(),
 	)
 	lexer, err := NewLexer(bytes.NewReader(file))
@@ -109,8 +109,8 @@ func TestLexChunkedFile(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("crc validation %v", validateCRC), func(t *testing.T) {
 			for _, compression := range []CompressionFormat{
-				CompressionLZ4,
 				CompressionZSTD,
+				CompressionLZ4,
 				CompressionNone,
 			} {
 				t.Run(fmt.Sprintf("chunked %s", compression), func(t *testing.T) {
@@ -175,8 +175,8 @@ func TestChunkCRCValidation(t *testing.T) {
 	t.Run("validates valid file", func(t *testing.T) {
 		file := file(
 			header(),
-			chunk(t, CompressionLZ4, channelInfo(), message(), message()),
-			chunk(t, CompressionLZ4, channelInfo(), message(), message()),
+			chunk(t, CompressionZSTD, channelInfo(), message(), message()),
+			chunk(t, CompressionZSTD, channelInfo(), message(), message()),
 			attachment(), attachment(),
 			footer(),
 		)
@@ -203,14 +203,14 @@ func TestChunkCRCValidation(t *testing.T) {
 		}
 	})
 	t.Run("validation fails on corrupted file", func(t *testing.T) {
-		badchunk := chunk(t, CompressionLZ4, channelInfo(), message(), message())
+		badchunk := chunk(t, CompressionZSTD, channelInfo(), message(), message())
 
 		// chunk must be corrupted at a deep enough offset to hit the compressed data section
 		assert.NotEqual(t, badchunk[35], 0x00)
 		badchunk[35] = 0x00
 		file := file(
 			header(),
-			chunk(t, CompressionLZ4, channelInfo(), message(), message()),
+			chunk(t, CompressionZSTD, channelInfo(), message(), message()),
 			badchunk,
 			attachment(), attachment(),
 			footer(),
