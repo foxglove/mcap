@@ -7,6 +7,8 @@ import { stringifyRecords } from "./stringifyRecords";
 
 export default class TypescriptIndexedTestRunner implements ITestRunner {
   name = "ts-indexed";
+  mode = "read" as const;
+
   async run(filePath: string, variant: TestVariant): Promise<string> {
     const handle = await fs.open(filePath, "r");
     try {

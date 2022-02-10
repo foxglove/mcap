@@ -1,3 +1,4 @@
+import colors from "colors";
 import { program } from "commander";
 import * as Diff from "diff";
 import fs from "fs/promises";
@@ -5,7 +6,14 @@ import stringify from "json-stringify-pretty-compact";
 import path from "path";
 import generateTestVariants from "variants/generateTestVariants";
 
-import runners from "./runners";
+import runners, { ITestRunner } from "./runners";
+
+type TestOptions = {
+  dataDir: string;
+  runner?: string;
+  update: boolean;
+  testRegex?: RegExp;
+};
 
 function normalizeJson(json: string): string {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -15,12 +23,138 @@ function normalizeJson(json: string): string {
   return stringify(data);
 }
 
-async function main(options: {
-  dataDir: string;
-  runner?: string;
-  update: boolean;
-  testRegex?: RegExp;
-}) {
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function splitAnsiString(s: string, length: number, replace: string): string {
+  const regex = RegExp(String.raw`(?:(?:\033\[[0-9;]*m)*.?){1,${length}}`, "g");
+  const chunks = s.match(regex);
+  const arr: string[] = [];
+  (chunks ?? []).forEach((a) => {
+    if (!/^(?:\033\[[0-9;]*m)*$/.test(a)) {
+      arr.push(a);
+    }
+  });
+  return arr.join(replace);
+}
+
+async function runReaderTest(
+  runner: ITestRunner,
+  options: TestOptions,
+): Promise<{ foundAnyTests: boolean; hadError: boolean }> {
+  let foundAnyTests = false;
+  let hadError = false;
+  console.log("running", runner.name);
+  for (const variant of generateTestVariants()) {
+    if (options.testRegex && !options.testRegex.test(variant.name)) {
+      continue;
+    }
+    foundAnyTests = true;
+    const filePath = path.join(options.dataDir, variant.baseName, `${variant.name}.mcap`);
+
+    if (runner.supportsVariant(variant)) {
+      console.log("  testing", filePath);
+    } else {
+      console.log("  not supported", filePath);
+      continue;
+    }
+
+    let output: string;
+    try {
+      output = await runner.run(filePath, variant);
+    } catch (error) {
+      console.error(error);
+      hadError = true;
+      continue;
+    }
+    const expectedOutputPath = filePath.replace(/\.mcap$/, ".json");
+    if (options.update) {
+      await fs.writeFile(expectedOutputPath, output);
+    } else {
+      const expectedOutput = await fs
+        .readFile(expectedOutputPath, { encoding: "utf-8" })
+        .catch(() => undefined);
+      if (expectedOutput == undefined) {
+        console.error(`Error: missing expected output file ${expectedOutputPath}`);
+        hadError = true;
+        continue;
+      }
+      const outputNorm = normalizeJson(output);
+      const expectedNorm = normalizeJson(expectedOutput);
+      if (outputNorm !== expectedNorm) {
+        console.error(`Error: output did not match expected for ${filePath}:`);
+        console.error(Diff.createPatch(expectedOutputPath, expectedNorm, outputNorm));
+        hadError = true;
+        continue;
+      }
+    }
+  }
+
+  return { foundAnyTests, hadError };
+}
+
+async function runWriterTest(
+  runner: ITestRunner,
+  options: TestOptions,
+): Promise<{ foundAnyTests: boolean; hadError: boolean }> {
+  let foundAnyTests = false;
+  let hadError = false;
+  console.log("running", runner.name);
+  for (const variant of generateTestVariants()) {
+    if (options.testRegex && !options.testRegex.test(variant.name)) {
+      continue;
+    }
+    foundAnyTests = true;
+    const filePath = path.join(options.dataDir, variant.baseName, `${variant.name}.json`);
+
+    if (!runner.supportsVariant(variant)) {
+      console.log(colors.yellow("unsupported"), filePath);
+      continue;
+    }
+
+    let output: string;
+    try {
+      output = await runner.run(filePath, variant);
+    } catch (error) {
+      console.error(error);
+      hadError = true;
+      continue;
+    }
+    const expectedOutputPath = filePath.replace(/\.json$/, ".mcap");
+    const expectedOutput = await fs.readFile(expectedOutputPath).catch(() => undefined);
+    if (expectedOutput == undefined) {
+      console.error(`Error: missing expected output file ${expectedOutputPath}`);
+      hadError = true;
+      continue;
+    }
+    const expectedOutputHex = bytesToHex(expectedOutput as Uint8Array);
+    if (output !== expectedOutputHex) {
+      console.error(colors.red("fail       "), filePath);
+      let colorDiff = "";
+      const charDiff = Diff.diffChars(expectedOutputHex, output);
+      charDiff.forEach((part) => {
+        const color =
+          part.added === true ? colors.green : part.removed === true ? colors.red : colors.grey;
+        colorDiff += color(part.value);
+      });
+      console.error(splitAnsiString(splitAnsiString(colorDiff, 8, " "), 81, "\n"));
+      console.error();
+      hadError = true;
+      continue;
+    }
+
+    if (!hadError) {
+      console.error(colors.green("pass       "), filePath);
+    }
+  }
+
+  return { foundAnyTests, hadError };
+}
+
+async function main(options: TestOptions) {
   if (options.update && !options.runner) {
     throw new Error(
       "A test runner must be specified using --runner when updating expected outputs",
@@ -41,51 +175,13 @@ async function main(options: {
   let hadError = false;
   let foundAnyTests = false;
   for (const runner of enabledRunners) {
-    console.log("running", runner.name);
-    for (const variant of generateTestVariants()) {
-      if (options.testRegex && !options.testRegex.test(variant.name)) {
-        continue;
-      }
-      foundAnyTests = true;
-      const filePath = path.join(options.dataDir, variant.baseName, `${variant.name}.mcap`);
-
-      if (runner.supportsVariant(variant)) {
-        console.log("  testing", filePath);
-      } else {
-        console.log("  not supported", filePath);
-        continue;
-      }
-
-      let output: string;
-      try {
-        output = await runner.run(filePath, variant);
-      } catch (error) {
-        console.error(error);
-        hadError = true;
-        continue;
-      }
-      const expectedOutputPath = filePath.replace(/\.mcap$/, ".json");
-      if (options.update) {
-        await fs.writeFile(expectedOutputPath, output);
-      } else {
-        const expectedOutput = await fs
-          .readFile(expectedOutputPath, { encoding: "utf-8" })
-          .catch(() => undefined);
-        if (expectedOutput == undefined) {
-          console.error(`Error: missing expected output file ${expectedOutputPath}`);
-          hadError = true;
-          continue;
-        }
-        const outputNorm = normalizeJson(output);
-        const expectedNorm = normalizeJson(expectedOutput);
-        if (outputNorm !== expectedNorm) {
-          console.error(`Error: output did not match expected for ${filePath}:`);
-          console.error(Diff.createPatch(expectedOutputPath, expectedNorm, outputNorm));
-          hadError = true;
-          continue;
-        }
-      }
-    }
+    const testFunction = runner.mode === "read" ? runReaderTest : runWriterTest;
+    const { hadError: newHadError, foundAnyTests: newFoundAnyTests } = await testFunction(
+      runner,
+      options,
+    );
+    hadError ||= newHadError;
+    foundAnyTests ||= newFoundAnyTests;
   }
 
   if (!foundAnyTests) {
