@@ -3,7 +3,7 @@
 <!-- cspell:words packetized pluggable checksumming mitigations Karsten Knese Hurliman jhurliman -->
 
 _Oct 6, 2021_  
-_John Hurliman ([@jhurliman](https://twitter.com/jhurliman))_  
+_John Hurliman ([@jhurliman](https://github.com/jhurliman))_  
 _[Foxglove Technologies Inc](https://foxglove.dev)_
 
 _Originally posted on [ROS Discourse](https://discourse.ros.org/t/evaluation-of-robotics-data-recording-file-formats/22588)_
