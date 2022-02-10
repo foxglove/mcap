@@ -164,9 +164,9 @@ Channel records are uniquely identified within a file by their channel ID. A Cha
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 2 | id | uint16 | A unique identifier for this channel within the file. |
+| 2 | schema_id | uint16 | The schema for messages on this channel. |
 | 4 + N | topic | String | The channel topic. |
 | 4 + N | message_encoding | String | Encoding for messages on this channel. The value should be one of the [well-known message encodings](./well-known-encodings.md). Custom values should use `x-` prefix. |
-| 2 | schema_id | uint16 | The schema for messages on this channel. |
 | 4 + N | metadata | Map<string, string> | Metadata about this channel |
 
 Channel records may be duplicated in the summary section.
