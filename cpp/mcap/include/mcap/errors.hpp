@@ -85,13 +85,9 @@ struct Status {
   }
 };
 
-namespace internal {
-
 template <typename... T>
 [[nodiscard]] inline std::string StrFormat(std::string_view msg, T&&... args) {
   return fmt::format(msg, std::forward<T>(args)...);
 }
-
-}  // namespace internal
 
 }  // namespace mcap
