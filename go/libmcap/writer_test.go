@@ -12,7 +12,7 @@ import (
 func TestMCAPReadWrite(t *testing.T) {
 	t.Run("test header", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionLZ4})
+		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionZSTD})
 		assert.Nil(t, err)
 		err = w.WriteHeader(&Header{
 			Profile: "ros1",
@@ -38,7 +38,7 @@ func TestOutputDeterminism(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w, err := NewWriter(buf, &WriterOptions{
 		Chunked:     true,
-		Compression: CompressionLZ4,
+		Compression: CompressionZSTD,
 		IncludeCRC:  true,
 		ChunkSize:   1024,
 	})
@@ -97,8 +97,8 @@ func TestOutputDeterminism(t *testing.T) {
 
 func TestChunkedReadWrite(t *testing.T) {
 	for _, compression := range []CompressionFormat{
-		CompressionLZ4,
 		CompressionZSTD,
+		CompressionLZ4,
 		CompressionNone,
 	} {
 		t.Run(fmt.Sprintf("chunked file with %s", compression), func(t *testing.T) {
@@ -177,7 +177,7 @@ func TestIndexStructures(t *testing.T) {
 	w, err := NewWriter(buf, &WriterOptions{
 		Chunked:     true,
 		ChunkSize:   1024,
-		Compression: CompressionLZ4,
+		Compression: CompressionZSTD,
 	})
 	assert.Nil(t, err)
 	err = w.WriteHeader(&Header{
@@ -224,7 +224,7 @@ func TestIndexStructures(t *testing.T) {
 				1: 269,
 			},
 			MessageIndexLength: 31,
-			Compression:        "lz4",
+			Compression:        "zstd",
 			CompressedSize:     121,
 			UncompressedSize:   110,
 		}, chunkIndex)
@@ -248,7 +248,7 @@ func TestStatistics(t *testing.T) {
 	w, err := NewWriter(buf, &WriterOptions{
 		Chunked:     true,
 		ChunkSize:   1024,
-		Compression: CompressionLZ4,
+		Compression: CompressionZSTD,
 	})
 	assert.Nil(t, err)
 	assert.Nil(t, w.WriteHeader(&Header{
