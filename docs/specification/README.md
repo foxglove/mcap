@@ -275,6 +275,8 @@ A Statistics record contains summary information about the recorded data. The st
 | 4 | attachment_count | uint32 | Number of Attachment records in the file. |
 | 4 | metadata_count | uint32 | Number of Metadata records in the file. |
 | 4 | chunk_count | uint32 | Number of Chunk records in the file. |
+| 8 | start_time | Timestamp | Earliest message log_time in the file. |
+| 8 | end_time | Timestamp | Latest message log_time in the file. |
 | 4 + N | channel_message_counts | Map<uint16, uint64> | Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available. |
 
 When using a Statistics record with a non-empty channel_message_counts, the Summary Data section MUST contain a copy of all Channel records. The Channel records MUST occur prior to the statistics record.
