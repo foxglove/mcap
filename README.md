@@ -5,6 +5,7 @@ MCAP is a modular container format for recording pub/sub messages with arbitrary
 ## Documentation
 
 - [File format specification](./docs/specification)
+- [Motivation](./docs/motivation/evaluation-of-robotics-data-recording-file-formats.pdf)
 
 ## Developer quick start
 
