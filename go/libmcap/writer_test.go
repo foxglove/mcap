@@ -91,7 +91,7 @@ func TestOutputDeterminism(t *testing.T) {
 	assert.Nil(t, w.Close())
 	t.Run("output hashes consistently", func(t *testing.T) {
 		hash := md5.Sum(buf.Bytes())
-		assert.Equal(t, "0cab01b3264ca185085bf868fef73d97", fmt.Sprintf("%x", hash))
+		assert.Equal(t, "ee4cf4142c141db374f234db853fea40", fmt.Sprintf("%x", hash))
 	})
 }
 
@@ -219,13 +219,13 @@ func TestIndexStructures(t *testing.T) {
 			StartTime:        1,
 			EndTime:          1,
 			ChunkStartOffset: 96,
-			ChunkLength:      173,
+			ChunkLength:      145,
 			MessageIndexOffsets: map[uint16]uint64{
-				1: 269,
+				1: 241,
 			},
 			MessageIndexLength: 31,
 			Compression:        "zstd",
-			CompressedSize:     121,
+			CompressedSize:     92,
 			UncompressedSize:   110,
 		}, chunkIndex)
 	})

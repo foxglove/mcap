@@ -9,7 +9,6 @@ import (
 	"log"
 
 	"github.com/foxglove/mcap/go/libmcap"
-	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
 )
 
