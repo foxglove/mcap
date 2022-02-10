@@ -61,12 +61,22 @@ func printInfo(w io.Writer, info *libmcap.Info) error {
 		return chanIDs[i] < chanIDs[j]
 	})
 	rows := [][]string{}
+
+	maxCountWidth := 0
+	for _, v := range info.Statistics.ChannelMessageCounts {
+		count := fmt.Sprintf("%d", v)
+		if len(count) > maxCountWidth {
+			maxCountWidth = len(count)
+		}
+	}
+
 	for _, chanID := range chanIDs {
 		channel := info.Channels[chanID]
 		schema := info.Schemas[channel.SchemaID]
-		channelMessageCounts := info.Statistics.ChannelMessageCounts[chanID]
+		channelMessageCount := info.Statistics.ChannelMessageCounts[chanID]
 		row := []string{
-			fmt.Sprintf("\t(%d) %s: %d msgs", channel.ID, channel.Topic, channelMessageCounts),
+			fmt.Sprintf("\t(%d) %s", channel.ID, channel.Topic),
+			fmt.Sprintf("%*d msgs", maxCountWidth, channelMessageCount),
 			fmt.Sprintf(" : %s [%s]", schema.Name, schema.Encoding),
 		}
 		rows = append(rows, row)
