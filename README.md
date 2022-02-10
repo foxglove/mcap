@@ -6,6 +6,7 @@ It is primarily intended for use in robotics applications, and works well under 
 ## Documentation
 
 - [File format specification](./docs/specification)
+- [Motivation: evaluation of existing data recording file formats](./docs/motivation.md)
 
 ## Developer quick start
 
