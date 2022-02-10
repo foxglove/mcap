@@ -1,0 +1,19 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+lz4 = "*"
+zstd = "*"
+mcap = {editable = true, path = "."}
+
+[dev-packages]
+black = "*"
+build = "*"
+pipenv = "*"
+pytest = "*"
+pyright = "*"
+
+[requires]
+python_version = "3.8"

@@ -19,7 +19,7 @@ var (
 const (
 	CompressionLZ4  CompressionFormat = "lz4"
 	CompressionZSTD CompressionFormat = "zstd"
-	CompressionNone CompressionFormat = "none"
+	CompressionNone CompressionFormat = ""
 )
 
 type BufCloser struct {
@@ -159,21 +159,27 @@ func putPrefixedBytes(buf []byte, s []byte) int {
 
 type CompressionFormat string
 
+func (c CompressionFormat) String() string {
+	return string(c)
+}
+
 const (
 	OpInvalidZero     OpCode = 0x00
 	OpHeader          OpCode = 0x01
 	OpFooter          OpCode = 0x02
-	OpChannelInfo     OpCode = 0x03
-	OpMessage         OpCode = 0x04
-	OpChunk           OpCode = 0x05
-	OpMessageIndex    OpCode = 0x06
-	OpChunkIndex      OpCode = 0x07
-	OpAttachment      OpCode = 0x08
-	OpAttachmentIndex OpCode = 0x09
-	OpStatistics      OpCode = 0x0A
-	OpMetadata        OpCode = 0x0B
-	OpMetadataIndex   OpCode = 0x0C
-	OpSummaryOffset   OpCode = 0x0D
+	OpSchema          OpCode = 0x03
+	OpChannel         OpCode = 0x04
+	OpMessage         OpCode = 0x05
+	OpChunk           OpCode = 0x06
+	OpMessageIndex    OpCode = 0x07
+	OpChunkIndex      OpCode = 0x08
+	OpAttachment      OpCode = 0x09
+	OpAttachmentIndex OpCode = 0x0A
+	OpStatistics      OpCode = 0x0B
+	OpMetadata        OpCode = 0x0C
+	OpMetadataIndex   OpCode = 0x0D
+	OpSummaryOffset   OpCode = 0x0E
+	OpDataEnd         OpCode = 0x0F
 )
 
 type OpCode byte
@@ -186,25 +192,23 @@ type Header struct {
 type Message struct {
 	ChannelID   uint16
 	Sequence    uint32
-	RecordTime  uint64
 	PublishTime uint64
+	LogTime     uint64
 	Data        []byte
 }
 
-type ChannelInfo struct {
-	ChannelID       uint16
-	TopicName       string
+type Channel struct {
+	ID              uint16
+	Topic           string
 	MessageEncoding string
-	SchemaEncoding  string
-	Schema          []byte
-	SchemaName      string
+	SchemaID        uint16
 	Metadata        map[string]string
 }
 
 type Attachment struct {
 	Name        string
 	CreatedAt   uint64
-	RecordTime  uint64
+	LogTime     uint64
 	ContentType string
 	Data        []byte
 	CRC         uint32
@@ -238,10 +242,17 @@ type Summary struct {
 type AttachmentIndex struct {
 	Offset      uint64
 	Length      uint64
-	RecordTime  uint64
+	LogTime     uint64
 	DataSize    uint64
 	Name        string
 	ContentType string
+}
+
+type Schema struct {
+	ID       uint16
+	Name     string
+	Encoding string
+	Data     []byte
 }
 
 type Footer struct {
@@ -283,13 +294,14 @@ type Statistics struct {
 	MessageCount         uint64
 	ChannelCount         uint32
 	AttachmentCount      uint32
+	MetadataCount        uint32
 	ChunkCount           uint32
 	ChannelMessageCounts map[uint16]uint64
 }
 
 type Info struct {
 	Statistics   *Statistics
-	Channels     map[uint16]*ChannelInfo
+	Channels     map[uint16]*Channel
 	ChunkIndexes []*ChunkIndex
 	Start        time.Time
 	End          time.Time
@@ -299,7 +311,7 @@ func (i *Info) ChannelCounts() map[string]uint64 {
 	counts := make(map[string]uint64)
 	for k, v := range i.Statistics.ChannelMessageCounts {
 		channel := i.Channels[k]
-		counts[channel.TopicName] = v
+		counts[channel.Topic] = v
 	}
 	return counts
 }
@@ -353,8 +365,8 @@ func (i *Info) String() string {
 	for _, chanID := range chanIDs {
 		channel := i.Channels[chanID]
 		fmt.Fprintf(buf, "\t(%d) %s: %d msgs\n",
-			channel.ChannelID,
-			channel.TopicName,
+			channel.ID,
+			channel.Topic,
 			i.Statistics.ChannelMessageCounts[chanID],
 		)
 	}
@@ -379,4 +391,8 @@ type Chunk struct {
 	UncompressedCRC  uint32
 	Compression      string
 	Records          []byte
+}
+
+type DataEnd struct {
+	DataSectionCRC uint32
 }

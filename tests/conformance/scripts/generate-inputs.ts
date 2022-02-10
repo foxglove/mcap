@@ -2,53 +2,24 @@ import { Mcap0Types, Mcap0Constants, Mcap0RecordBuilder, Mcap0ChunkBuilder } fro
 import { program } from "commander";
 import fs from "fs/promises";
 import path from "path";
+import generateTestVariants from "variants/generateTestVariants";
 
-import { collect } from "./util/collect";
-import listDirRecursive from "./util/listDirRecursive";
+import { collect } from "../util/collect";
+import listDirRecursive from "../util/listDirRecursive";
+import { TestDataRecord, TestFeatures } from "../variants/types";
 
 type MetadataIndex = Mcap0Types.MetadataIndex;
 type ChunkIndex = Mcap0Types.ChunkIndex;
 type AttachmentIndex = Mcap0Types.AttachmentIndex;
 
-enum TestFeatures {
-  UseChunks = "ch",
-  UseMessageIndex = "mx",
-  UseStatistics = "st",
-  UseRepeatedSchemas = "rsh",
-  UseRepeatedChannelInfos = "rch",
-  UseAttachmentIndex = "ax",
-  UseMetadataIndex = "mdx",
-  UseChunkIndex = "chx",
-  UseSummaryOffset = "sum",
-  AddExtraDataToRecords = "pad",
-}
-
-function* generateVariants(...features: TestFeatures[]): Generator<Set<TestFeatures>, void, void> {
-  if (features.length === 0) {
-    yield new Set();
-    return;
-  }
-  for (const variant of generateVariants(...features.slice(1))) {
-    yield variant;
-    yield new Set([features[0]!, ...variant]);
-  }
-}
-
-type TestDataRecord = Mcap0Types.TypedMcapRecords[
-  | "Message"
-  | "Schema"
-  | "ChannelInfo"
-  | "Attachment"
-  | "Metadata"];
-
-function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
+function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
   const builder = new Mcap0RecordBuilder({
-    padRecords: variant.has(TestFeatures.AddExtraDataToRecords),
+    padRecords: features.has(TestFeatures.AddExtraDataToRecords),
   });
   builder.writeMagic();
   builder.writeHeader({ profile: "", library: "" });
 
-  const chunk = variant.has(TestFeatures.UseChunks) ? new Mcap0ChunkBuilder() : undefined;
+  const chunk = features.has(TestFeatures.UseChunks) ? new Mcap0ChunkBuilder() : undefined;
   const chunkCount = chunk ? 1 : 0;
 
   const metadataIndexes: MetadataIndex[] = [];
@@ -58,6 +29,7 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   let messageCount = 0n;
   let channelCount = 0;
   let attachmentCount = 0;
+  let metadataCount = 0;
   const channelMessageCounts = new Map<number, bigint>();
 
   for (const record of records) {
@@ -69,12 +41,12 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
           builder.writeSchema(record);
         }
         break;
-      case "ChannelInfo":
+      case "Channel":
         channelCount++;
         if (chunk) {
-          chunk.addChannelInfo(record);
+          chunk.addChannel(record);
         } else {
-          builder.writeChannelInfo(record);
+          builder.writeChannel(record);
         }
         break;
 
@@ -95,20 +67,25 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
         attachmentCount++;
         const offset = BigInt(builder.length);
         const length = builder.writeAttachment(record);
-        attachmentIndexes.push({
-          name: record.name,
-          length,
-          offset,
-          dataSize: BigInt(record.data.byteLength),
-          contentType: record.contentType,
-          logTime: record.logTime,
-        });
+        if (features.has(TestFeatures.UseAttachmentIndex)) {
+          attachmentIndexes.push({
+            name: record.name,
+            length,
+            offset,
+            dataSize: BigInt(record.data.byteLength),
+            contentType: record.contentType,
+            logTime: record.logTime,
+          });
+        }
         break;
       }
       case "Metadata": {
+        metadataCount++;
         const offset = BigInt(builder.length);
         const length = builder.writeMetadata(record);
-        metadataIndexes.push({ name: record.name, length, offset });
+        if (features.has(TestFeatures.UseMetadataIndex)) {
+          metadataIndexes.push({ name: record.name, length, offset });
+        }
         break;
       }
     }
@@ -125,9 +102,11 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
     });
     const messageIndexOffsets = new Map<number, bigint>();
     let messageIndexLength = 0n;
-    for (const index of chunk.indices) {
-      messageIndexOffsets.set(index.channelId, BigInt(builder.length));
-      messageIndexLength += builder.writeMessageIndex(index);
+    if (features.has(TestFeatures.UseMessageIndex)) {
+      for (const index of chunk.indices) {
+        messageIndexOffsets.set(index.channelId, BigInt(builder.length));
+        messageIndexLength += builder.writeMessageIndex(index);
+      }
     }
     chunkIndexes.push({
       compression: "",
@@ -147,7 +126,7 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   const summaryStart = BigInt(builder.length);
 
   const repeatedSchemasStart = BigInt(builder.length);
-  if (variant.has(TestFeatures.UseRepeatedSchemas)) {
+  if (features.has(TestFeatures.UseRepeatedSchemas)) {
     for (const record of records) {
       if (record.type === "Schema") {
         builder.writeSchema(record);
@@ -157,22 +136,23 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   const repeatedSchemasLength = BigInt(builder.length) - repeatedSchemasStart;
 
   const repeatedChannelInfosStart = BigInt(builder.length);
-  if (variant.has(TestFeatures.UseRepeatedChannelInfos)) {
+  if (features.has(TestFeatures.UseRepeatedChannelInfos)) {
     for (const record of records) {
-      if (record.type === "ChannelInfo") {
-        builder.writeChannelInfo(record);
+      if (record.type === "Channel") {
+        builder.writeChannel(record);
       }
     }
   }
   const repeatedChannelInfosLength = BigInt(builder.length) - repeatedChannelInfosStart;
 
   const statisticsStart = BigInt(builder.length);
-  if (variant.has(TestFeatures.UseStatistics)) {
+  if (features.has(TestFeatures.UseStatistics)) {
     builder.writeStatistics({
-      attachmentCount,
-      chunkCount,
       messageCount,
       channelCount,
+      attachmentCount,
+      metadataCount,
+      chunkCount,
       channelMessageCounts,
     });
   }
@@ -203,7 +183,7 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
 
   // summary offsets
   let summaryOffsetStart = 0n;
-  if (variant.has(TestFeatures.UseSummaryOffset)) {
+  if (features.has(TestFeatures.UseSummaryOffset)) {
     summaryOffsetStart = BigInt(builder.length);
     if (repeatedSchemasLength !== 0n) {
       builder.writeSummaryOffset({
@@ -214,16 +194,18 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
     }
     if (repeatedChannelInfosLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: Mcap0Constants.Opcode.CHANNEL_INFO,
+        groupOpcode: Mcap0Constants.Opcode.CHANNEL,
         groupStart: repeatedChannelInfosStart,
         groupLength: repeatedChannelInfosLength,
       });
     }
-    builder.writeSummaryOffset({
-      groupOpcode: Mcap0Constants.Opcode.METADATA_INDEX,
-      groupStart: metadataIndexStart,
-      groupLength: metadataIndexLength,
-    });
+    if (metadataIndexLength !== 0n) {
+      builder.writeSummaryOffset({
+        groupOpcode: Mcap0Constants.Opcode.METADATA_INDEX,
+        groupStart: metadataIndexStart,
+        groupLength: metadataIndexLength,
+      });
+    }
     if (statisticsLength !== 0n) {
       builder.writeSummaryOffset({
         groupOpcode: Mcap0Constants.Opcode.STATISTICS,
@@ -231,16 +213,20 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
         groupLength: statisticsLength,
       });
     }
-    builder.writeSummaryOffset({
-      groupOpcode: Mcap0Constants.Opcode.ATTACHMENT_INDEX,
-      groupStart: attachmentIndexStart,
-      groupLength: attachmentIndexLength,
-    });
-    builder.writeSummaryOffset({
-      groupOpcode: Mcap0Constants.Opcode.CHUNK_INDEX,
-      groupStart: chunkIndexStart,
-      groupLength: chunkIndexLength,
-    });
+    if (attachmentIndexLength !== 0n) {
+      builder.writeSummaryOffset({
+        groupOpcode: Mcap0Constants.Opcode.ATTACHMENT_INDEX,
+        groupStart: attachmentIndexStart,
+        groupLength: attachmentIndexLength,
+      });
+    }
+    if (chunkIndexLength !== 0n) {
+      builder.writeSummaryOffset({
+        groupOpcode: Mcap0Constants.Opcode.CHUNK_INDEX,
+        groupStart: chunkIndexStart,
+        groupLength: chunkIndexLength,
+      });
+    }
   }
 
   builder.writeFooter({
@@ -252,51 +238,6 @@ function generateFile(variant: Set<TestFeatures>, records: TestDataRecord[]) {
   return builder.buffer;
 }
 
-const inputs: { name: string; records: TestDataRecord[] }[] = [
-  { name: "NoData", records: [] },
-  {
-    name: "OneMessage",
-    records: [
-      {
-        type: "Schema",
-        id: 1,
-        name: "Example",
-        encoding: "c",
-        data: new Uint8Array([4, 5, 6]),
-      },
-      {
-        type: "ChannelInfo",
-        id: 1,
-        topic: "example",
-        schemaId: 1,
-        messageEncoding: "a",
-        metadata: new Map([["foo", "bar"]]),
-      },
-      {
-        type: "Message",
-        channelId: 1,
-        publishTime: 1n,
-        logTime: 2n,
-        data: new Uint8Array([1, 2, 3]),
-        sequence: 10,
-      },
-    ],
-  },
-  {
-    name: "OneAttachment",
-    records: [
-      {
-        type: "Attachment",
-        name: "myFile",
-        contentType: "application/octet-stream",
-        createdAt: 1n,
-        logTime: 2n,
-        data: new Uint8Array([1, 2, 3]),
-      },
-    ],
-  },
-];
-
 async function main(options: { dataDir: string; verify: boolean }) {
   let hadError = false;
   await fs.mkdir(options.dataDir, { recursive: true });
@@ -306,83 +247,30 @@ async function main(options: { dataDir: string; verify: boolean }) {
       .map((name) => path.join(options.dataDir, name)),
   );
 
-  for (const { name: testName, records } of inputs) {
-    for (const variant of generateVariants(...Object.values(TestFeatures))) {
-      // validate that variant features make sense for the data
-      if (
-        variant.has(TestFeatures.UseAttachmentIndex) &&
-        !records.some((record) => record.type === "Attachment")
-      ) {
-        continue;
-      }
-      if (
-        variant.has(TestFeatures.UseMetadataIndex) &&
-        !records.some((record) => record.type === "Metadata")
-      ) {
-        continue;
-      }
-      if (
-        variant.has(TestFeatures.UseRepeatedSchemas) &&
-        !records.some((record) => record.type === "Schema")
-      ) {
-        continue;
-      }
-      if (
-        variant.has(TestFeatures.UseRepeatedChannelInfos) &&
-        !records.some((record) => record.type === "ChannelInfo")
-      ) {
-        continue;
-      }
-      if (
-        !records.some(
-          (record) =>
-            record.type === "Message" || record.type === "ChannelInfo" || record.type === "Schema",
-        ) &&
-        (variant.has(TestFeatures.UseChunks) ||
-          variant.has(TestFeatures.UseChunkIndex) ||
-          variant.has(TestFeatures.UseMessageIndex))
-      ) {
-        continue;
-      }
-      if (
-        variant.has(TestFeatures.UseSummaryOffset) &&
-        !(
-          variant.has(TestFeatures.UseChunkIndex) ||
-          variant.has(TestFeatures.UseRepeatedSchemas) ||
-          variant.has(TestFeatures.UseRepeatedChannelInfos) ||
-          variant.has(TestFeatures.UseMetadataIndex) ||
-          variant.has(TestFeatures.UseAttachmentIndex) ||
-          variant.has(TestFeatures.UseStatistics)
-        )
-      ) {
-        continue;
-      }
+  for (const { baseName, name: testName, records, features } of generateTestVariants()) {
+    const testDir = path.join(options.dataDir, baseName);
+    const filePath = path.join(options.dataDir, baseName, `${testName}.mcap`);
+    const data = generateFile(features, records);
 
-      const prefix = [testName, ...Array.from(variant).sort()].join("-");
-      const testDir = path.join(options.dataDir, testName);
-      const filePath = path.join(options.dataDir, testName, `${prefix}.mcap`);
-      const data = generateFile(variant, records);
+    unexpectedFilePaths.delete(filePath);
 
-      unexpectedFilePaths.delete(filePath);
-
-      if (options.verify) {
-        try {
-          const existingData = await fs.readFile(filePath);
-          if (existingData.equals(data)) {
-            console.log(`  ok         ${filePath}`);
-          } else {
-            console.log(`* outdated   ${filePath}`);
-            hadError = true;
-          }
-        } catch (error) {
-          console.log(`- missing    ${filePath}`);
+    if (options.verify) {
+      try {
+        const existingData = await fs.readFile(filePath);
+        if (existingData.equals(data)) {
+          console.log(`  ok         ${filePath}`);
+        } else {
+          console.log(`* outdated   ${filePath}`);
           hadError = true;
         }
-      } else {
-        console.log("generated", filePath);
-        await fs.mkdir(testDir, { recursive: true });
-        await fs.writeFile(filePath, data);
+      } catch (error) {
+        console.log(`- missing    ${filePath}`);
+        hadError = true;
       }
+    } else {
+      console.log("generated", filePath);
+      await fs.mkdir(testDir, { recursive: true });
+      await fs.writeFile(filePath, data);
     }
   }
 

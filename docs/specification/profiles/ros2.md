@@ -4,7 +4,7 @@ Profile: **`ros2`**
 
 The `ros2` profile describes how to create MCAP files for v2 of the [ROS](https://ros.org/) framework.
 
-### Channel Info
+### Channel
 
 #### message_encoding
 

@@ -16,7 +16,7 @@ export type Schema = {
   encoding: string;
   data: Uint8Array;
 };
-export type ChannelInfo = {
+export type Channel = {
   id: number;
   topic: string;
   messageEncoding: string;
@@ -72,6 +72,7 @@ export type Statistics = {
   messageCount: bigint;
   channelCount: number;
   attachmentCount: number;
+  metadataCount: number;
   chunkCount: number;
   channelMessageCounts: Map<number, bigint>;
 };
@@ -101,7 +102,7 @@ export type McapRecords = {
   Header: Header;
   Footer: Footer;
   Schema: Schema;
-  ChannelInfo: ChannelInfo;
+  Channel: Channel;
   Message: Message;
   Chunk: Chunk;
   MessageIndex: MessageIndex;
@@ -134,3 +135,11 @@ export interface McapStreamReader {
 export type DecompressHandlers = {
   [compression: string]: (buffer: Uint8Array, decompressedSize: bigint) => Uint8Array;
 };
+
+/**
+ * IReadable describes a random-access reader interface.
+ */
+export interface IReadable {
+  size(): Promise<bigint>;
+  read(offset: bigint, size: bigint): Promise<Uint8Array>;
+}

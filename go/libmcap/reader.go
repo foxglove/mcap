@@ -55,11 +55,11 @@ type Reader struct {
 	l        *Lexer
 	r        io.Reader
 	rs       io.ReadSeeker
-	channels map[uint16]*ChannelInfo
+	channels map[uint16]*Channel
 }
 
 type MessageIterator interface {
-	Next() (*ChannelInfo, *Message, error)
+	Next([]byte) (*Channel, *Message, error)
 }
 
 func (r *Reader) unindexedIterator(topics []string, start uint64, end uint64) *unindexedMessageIterator {
@@ -70,7 +70,8 @@ func (r *Reader) unindexedIterator(topics []string, start uint64, end uint64) *u
 	r.l.emitChunks = false
 	return &unindexedMessageIterator{
 		lexer:    r.l,
-		channels: make(map[uint16]*ChannelInfo),
+		channels: make(map[uint16]*Channel),
+		schemas:  make(map[uint16]*Schema),
 		topics:   topicMap,
 		start:    start,
 		end:      end,
@@ -86,7 +87,7 @@ func (r *Reader) indexedMessageIterator(topics []string, start uint64, end uint6
 	return &indexedMessageIterator{
 		lexer:               r.l,
 		rs:                  r.rs,
-		channels:            make(map[uint16]*ChannelInfo),
+		channels:            make(map[uint16]*Channel),
 		topics:              topicMap,
 		start:               start,
 		end:                 end,
@@ -140,6 +141,6 @@ func NewReader(r io.Reader) (*Reader, error) {
 		l:        lexer,
 		r:        r,
 		rs:       rs,
-		channels: make(map[uint16]*ChannelInfo),
+		channels: make(map[uint16]*Channel),
 	}, nil
 }

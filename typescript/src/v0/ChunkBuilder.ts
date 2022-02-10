@@ -1,5 +1,5 @@
 import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
-import { ChannelInfo, Message, MessageIndex, Schema } from "./types";
+import { Channel, Message, MessageIndex, Schema } from "./types";
 
 class ChunkBuilder {
   private recordWriter = new Mcap0RecordBuilder();
@@ -25,14 +25,14 @@ class ChunkBuilder {
     this.recordWriter.writeSchema(schema);
   }
 
-  addChannelInfo(info: ChannelInfo): void {
+  addChannel(info: Channel): void {
     if (!this.messageIndices.has(info.id)) {
       this.messageIndices.set(info.id, {
         channelId: info.id,
         records: [],
       });
     }
-    this.recordWriter.writeChannelInfo(info);
+    this.recordWriter.writeChannel(info);
   }
 
   addMessage(message: Message): void {

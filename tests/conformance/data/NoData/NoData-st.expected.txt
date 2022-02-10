@@ -1,3 +1,0 @@
-Header library="" profile=""
-Statistics attachment_count=0 channel_count=0 channel_message_counts={} chunk_count=0 message_count=0
-Footer summary_crc=0 summary_offset_start=0 summary_start=38

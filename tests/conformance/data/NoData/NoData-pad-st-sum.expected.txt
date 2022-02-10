@@ -1,7 +1,0 @@
-Header library="" profile=""
-Statistics attachment_count=0 channel_count=0 channel_message_counts={} chunk_count=0 message_count=0
-SummaryOffset group_length=0 group_opcode=13 group_start=80
-SummaryOffset group_length=36 group_opcode=11 group_start=44
-SummaryOffset group_length=0 group_opcode=10 group_start=80
-SummaryOffset group_length=0 group_opcode=8 group_start=80
-Footer summary_crc=0 summary_offset_start=80 summary_start=44

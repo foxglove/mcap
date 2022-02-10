@@ -20,18 +20,17 @@ func TestMCAPReadWrite(t *testing.T) {
 		assert.Nil(t, err)
 		lexer, err := NewLexer(buf)
 		assert.Nil(t, err)
-		token, err := lexer.Next()
+		tokenType, record, err := lexer.Next(nil)
 		assert.Nil(t, err)
 		// body of the header is the profile, followed by the metadata map
 		offset := 0
-		data := token.bytes()
-		profile, offset, err := readPrefixedString(data, offset)
+		profile, offset, err := readPrefixedString(record, offset)
 		assert.Nil(t, err)
 		assert.Equal(t, "ros1", profile)
-		library, _, err := readPrefixedString(data, offset)
+		library, _, err := readPrefixedString(record, offset)
 		assert.Nil(t, err)
 		assert.Equal(t, "", library)
-		assert.Equal(t, TokenHeader, token.TokenType)
+		assert.Equal(t, TokenHeader, tokenType)
 	})
 }
 
@@ -47,13 +46,18 @@ func TestOutputDeterminism(t *testing.T) {
 	assert.Nil(t, w.WriteHeader(&Header{
 		Profile: "ros1",
 	}))
+	assert.Nil(t, w.WriteSchema(&Schema{
+		ID:       1,
+		Name:     "foo",
+		Encoding: "ros1",
+		Data:     []byte{},
+	}))
 	for i := 0; i < 3; i++ {
-		assert.Nil(t, w.WriteChannelInfo(&ChannelInfo{
-			ChannelID:       uint16(i),
-			TopicName:       fmt.Sprintf("/test-%d", i),
+		assert.Nil(t, w.WriteChannel(&Channel{
+			ID:              uint16(i),
+			Topic:           fmt.Sprintf("/test-%d", i),
 			MessageEncoding: "ros1",
-			SchemaName:      "foo",
-			Schema:          []byte{},
+			SchemaID:        1,
 			Metadata:        map[string]string{},
 		}))
 	}
@@ -62,7 +66,7 @@ func TestOutputDeterminism(t *testing.T) {
 		assert.Nil(t, w.WriteMessage(&Message{
 			ChannelID:   channelID,
 			Sequence:    0,
-			RecordTime:  100,
+			LogTime:     100,
 			PublishTime: 100,
 			Data: []byte{
 				1,
@@ -74,20 +78,20 @@ func TestOutputDeterminism(t *testing.T) {
 	}
 	assert.Nil(t, w.WriteAttachment(&Attachment{
 		Name:        "file.jpg",
-		RecordTime:  0,
+		LogTime:     0,
 		ContentType: "image/jpeg",
 		Data:        []byte{0x01, 0x02, 0x03, 0x04},
 	}))
 	assert.Nil(t, w.WriteAttachment(&Attachment{
 		Name:        "file2.jpg",
-		RecordTime:  0,
+		LogTime:     0,
 		ContentType: "image/jpeg",
 		Data:        []byte{0x01, 0x02, 0x03, 0x04},
 	}))
 	assert.Nil(t, w.Close())
 	t.Run("output hashes consistently", func(t *testing.T) {
 		hash := md5.Sum(buf.Bytes())
-		assert.Equal(t, "e88a065b525c10d7d9d42f136c4475d1", fmt.Sprintf("%x", hash))
+		assert.Equal(t, "0cab01b3264ca185085bf868fef73d97", fmt.Sprintf("%x", hash))
 	})
 }
 
@@ -105,25 +109,28 @@ func TestChunkedReadWrite(t *testing.T) {
 				IncludeCRC:  true,
 			})
 			assert.Nil(t, err)
-			err = w.WriteHeader(&Header{
+			assert.Nil(t, w.WriteHeader(&Header{
 				Profile: "ros1",
-			})
-			assert.Nil(t, err)
-			err = w.WriteChannelInfo(&ChannelInfo{
-				ChannelID:       1,
-				TopicName:       "/test",
+			}))
+			assert.Nil(t, w.WriteSchema(&Schema{
+				ID:       1,
+				Name:     "schema",
+				Encoding: "msg",
+				Data:     []byte{},
+			}))
+			assert.Nil(t, w.WriteChannel(&Channel{
+				ID:              1,
+				Topic:           "/test",
 				MessageEncoding: "ros1",
-				SchemaName:      "foo",
-				Schema:          []byte{},
+				SchemaID:        1,
 				Metadata: map[string]string{
 					"callerid": "100", // cspell:disable-line
 				},
-			})
-			assert.Nil(t, err)
-			err = w.WriteMessage(&Message{
+			}))
+			assert.Nil(t, w.WriteMessage(&Message{
 				ChannelID:   1,
 				Sequence:    0,
-				RecordTime:  100,
+				LogTime:     100,
 				PublishTime: 100,
 				Data: []byte{
 					1,
@@ -131,8 +138,7 @@ func TestChunkedReadWrite(t *testing.T) {
 					3,
 					4,
 				},
-			})
-			assert.Nil(t, err)
+			}))
 			assert.Nil(t, w.Close())
 			assert.Equal(t, 1, len(w.ChunkIndexes))
 			assert.Equal(t, 0, len(w.AttachmentIndexes))
@@ -144,20 +150,23 @@ func TestChunkedReadWrite(t *testing.T) {
 			assert.Nil(t, err)
 			for i, expected := range []TokenType{
 				TokenHeader,
-				TokenChannelInfo,
+				TokenSchema,
+				TokenChannel,
 				TokenMessage,
-				TokenChannelInfo,
+				TokenMessageIndex,
+				TokenDataEnd,
+				TokenChannel,
+				TokenChunkIndex,
 				TokenStatistics,
 				TokenSummaryOffset,
 				TokenSummaryOffset,
 				TokenSummaryOffset,
 				TokenFooter,
 			} {
-				tok, err := lexer.Next()
+				tokenType, _, err := lexer.Next(nil)
 				assert.Nil(t, err)
-				_ = tok.bytes() // need to read the data
-				assert.Equal(t, expected, tok.TokenType,
-					fmt.Sprintf("want %s got %s at %d", Token{expected, 0, nil}, tok.TokenType, i))
+				assert.Equal(t, expected, tokenType,
+					fmt.Sprintf("want %s got %s at %d", expected, tokenType, i))
 			}
 		})
 	}
@@ -175,25 +184,30 @@ func TestIndexStructures(t *testing.T) {
 		Profile: "ros1",
 	})
 	assert.Nil(t, err)
-	err = w.WriteChannelInfo(&ChannelInfo{
-		ChannelID:       1,
-		TopicName:       "/test",
+	assert.Nil(t, w.WriteSchema(&Schema{
+		ID:       1,
+		Name:     "schema",
+		Data:     []byte{},
+		Encoding: "msg",
+	}))
+	err = w.WriteChannel(&Channel{
+		ID:              1,
+		SchemaID:        1,
+		Topic:           "/test",
 		MessageEncoding: "ros1",
-		SchemaName:      "foo",
-		Schema:          []byte{},
 		Metadata:        make(map[string]string),
 	})
 	assert.Nil(t, err)
 	assert.Nil(t, w.WriteMessage(&Message{
 		ChannelID:   1,
 		Sequence:    uint32(1),
-		RecordTime:  uint64(1),
+		LogTime:     uint64(1),
 		PublishTime: uint64(2),
 		Data:        []byte("Hello, world!"),
 	}))
 	assert.Nil(t, w.WriteAttachment(&Attachment{
 		Name:        "file.jpg",
-		RecordTime:  100,
+		LogTime:     100,
 		ContentType: "image/jpeg",
 		Data:        []byte{0x01, 0x02, 0x03, 0x04},
 	}))
@@ -205,14 +219,14 @@ func TestIndexStructures(t *testing.T) {
 			StartTime:        1,
 			EndTime:          1,
 			ChunkStartOffset: 96,
-			ChunkLength:      143,
+			ChunkLength:      173,
 			MessageIndexOffsets: map[uint16]uint64{
-				1: 239,
+				1: 269,
 			},
 			MessageIndexLength: 31,
 			Compression:        "lz4",
-			CompressedSize:     99,
-			UncompressedSize:   91,
+			CompressedSize:     121,
+			UncompressedSize:   110,
 		}, chunkIndex)
 	})
 	t.Run("attachment indexes correct", func(t *testing.T) {
@@ -221,7 +235,7 @@ func TestIndexStructures(t *testing.T) {
 		assert.Equal(t, &AttachmentIndex{
 			Offset:      29,
 			Length:      67,
-			RecordTime:  100,
+			LogTime:     100,
 			DataSize:    4,
 			Name:        "file.jpg",
 			ContentType: "image/jpeg",
@@ -237,31 +251,34 @@ func TestStatistics(t *testing.T) {
 		Compression: CompressionLZ4,
 	})
 	assert.Nil(t, err)
-	err = w.WriteHeader(&Header{
+	assert.Nil(t, w.WriteHeader(&Header{
 		Profile: "ros1",
-	})
-	assert.Nil(t, err)
-	err = w.WriteChannelInfo(&ChannelInfo{
-		ChannelID:       1,
-		TopicName:       "/test",
+	}))
+	assert.Nil(t, w.WriteSchema(&Schema{
+		ID:       1,
+		Name:     "schema",
+		Encoding: "msg",
+		Data:     []byte{},
+	}))
+	assert.Nil(t, w.WriteChannel(&Channel{
+		ID:              1,
+		SchemaID:        1,
+		Topic:           "/test",
 		MessageEncoding: "ros1",
-		SchemaName:      "foo",
-		Schema:          []byte{},
 		Metadata:        make(map[string]string),
-	})
-	assert.Nil(t, err)
+	}))
 	for i := 0; i < 1000; i++ {
 		assert.Nil(t, w.WriteMessage(&Message{
 			ChannelID:   1,
 			Sequence:    uint32(i),
-			RecordTime:  uint64(i),
+			LogTime:     uint64(i),
 			PublishTime: uint64(i),
 			Data:        []byte("Hello, world!"),
 		}))
 	}
 	assert.Nil(t, w.WriteAttachment(&Attachment{
 		Name:        "file.jpg",
-		RecordTime:  0,
+		LogTime:     0,
 		ContentType: "image/jpeg",
 		Data:        []byte{0x01, 0x02, 0x03, 0x04},
 	}))
@@ -282,12 +299,18 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		Profile: "ros1",
 	})
 	assert.Nil(t, err)
-	err = w.WriteChannelInfo(&ChannelInfo{
-		ChannelID:       1,
-		TopicName:       "/test",
+	err = w.WriteSchema(&Schema{
+		ID:       1,
+		Name:     "schema",
+		Encoding: "msg",
+		Data:     []byte{},
+	})
+	assert.Nil(t, err)
+	err = w.WriteChannel(&Channel{
+		ID:              1,
+		SchemaID:        1,
+		Topic:           "/test",
 		MessageEncoding: "ros1",
-		SchemaName:      "foo",
-		Schema:          []byte{},
 		Metadata: map[string]string{
 			"callerid": "100", // cspell:disable-line
 		},
@@ -296,7 +319,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 	err = w.WriteMessage(&Message{
 		ChannelID:   1,
 		Sequence:    0,
-		RecordTime:  100,
+		LogTime:     100,
 		PublishTime: 100,
 		Data: []byte{
 			1,
@@ -309,7 +332,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 
 	err = w.WriteAttachment(&Attachment{
 		Name:        "file.jpg",
-		RecordTime:  0,
+		LogTime:     0,
 		ContentType: "image/jpeg",
 		Data:        []byte{0x01, 0x02, 0x03, 0x04},
 	})
@@ -327,10 +350,12 @@ func TestUnchunkedReadWrite(t *testing.T) {
 	assert.Nil(t, err)
 	for _, expected := range []TokenType{
 		TokenHeader,
-		TokenChannelInfo,
+		TokenSchema,
+		TokenChannel,
 		TokenMessage,
 		TokenAttachment,
-		TokenChannelInfo,
+		TokenDataEnd,
+		TokenChannel,
 		TokenAttachmentIndex,
 		TokenStatistics,
 		TokenSummaryOffset,
@@ -338,10 +363,9 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		TokenSummaryOffset,
 		TokenFooter,
 	} {
-		tok, err := lexer.Next()
+		tokenType, _, err := lexer.Next(nil)
 		assert.Nil(t, err)
-		_ = tok.bytes()
-		assert.Equal(t, expected, tok.TokenType, fmt.Sprintf("want %s got %s", Token{expected, 0, nil}, tok))
+		assert.Equal(t, expected, tokenType, fmt.Sprintf("want %s got %s", expected, tokenType))
 	}
 }
 

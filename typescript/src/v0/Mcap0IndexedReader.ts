@@ -2,17 +2,20 @@ import { crc32, crc32Final, crc32Init, crc32Update } from "@foxglove/crc";
 import Heap from "heap-js";
 
 import { getBigUint64 } from "../common/getBigUint64";
-import { IReadable } from "./IReadable";
 import { MCAP0_MAGIC, Opcode } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
-import { DecompressHandlers, TypedMcapRecords } from "./types";
+import { DecompressHandlers, IReadable, TypedMcapRecords } from "./types";
 
 export default class Mcap0IndexedReader {
   readonly chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
   readonly attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
-  readonly channelInfosById: ReadonlyMap<number, TypedMcapRecords["ChannelInfo"]>;
+  readonly metadataIndexes: readonly TypedMcapRecords["MetadataIndex"][] = [];
+  readonly channelsById: ReadonlyMap<number, TypedMcapRecords["Channel"]>;
   readonly schemasById: ReadonlyMap<number, TypedMcapRecords["Schema"]>;
   readonly statistics: TypedMcapRecords["Statistics"] | undefined;
+  readonly summaryOffsetsByOpcode: ReadonlyMap<number, TypedMcapRecords["SummaryOffset"]>;
+  readonly header: TypedMcapRecords["Header"];
+  readonly footer: TypedMcapRecords["Footer"];
 
   private readable: IReadable;
   private decompressHandlers?: DecompressHandlers;
@@ -24,26 +27,38 @@ export default class Mcap0IndexedReader {
     readable,
     chunkIndexes,
     attachmentIndexes,
+    metadataIndexes,
     statistics,
     decompressHandlers,
-    channelInfosById,
+    channelsById,
     schemasById,
+    summaryOffsetsByOpcode,
+    header,
+    footer,
   }: {
     readable: IReadable;
     chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
     attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
+    metadataIndexes: readonly TypedMcapRecords["MetadataIndex"][];
     statistics: TypedMcapRecords["Statistics"] | undefined;
     decompressHandlers?: DecompressHandlers;
-    channelInfosById: ReadonlyMap<number, TypedMcapRecords["ChannelInfo"]>;
+    channelsById: ReadonlyMap<number, TypedMcapRecords["Channel"]>;
     schemasById: ReadonlyMap<number, TypedMcapRecords["Schema"]>;
+    summaryOffsetsByOpcode: ReadonlyMap<number, TypedMcapRecords["SummaryOffset"]>;
+    header: TypedMcapRecords["Header"];
+    footer: TypedMcapRecords["Footer"];
   }) {
     this.readable = readable;
     this.chunkIndexes = chunkIndexes;
     this.attachmentIndexes = attachmentIndexes;
+    this.metadataIndexes = metadataIndexes;
     this.statistics = statistics;
     this.decompressHandlers = decompressHandlers;
-    this.channelInfosById = channelInfosById;
+    this.channelsById = channelsById;
     this.schemasById = schemasById;
+    this.summaryOffsetsByOpcode = summaryOffsetsByOpcode;
+    this.header = header;
+    this.footer = footer;
 
     for (const chunk of chunkIndexes) {
       if (this.startTime == undefined || chunk.startTime < this.startTime) {
@@ -68,6 +83,50 @@ export default class Mcap0IndexedReader {
     decompressHandlers?: DecompressHandlers;
   }): Promise<Mcap0IndexedReader> {
     const size = await readable.size();
+
+    let header: TypedMcapRecords["Header"];
+    {
+      const headerPrefix = await readable.read(
+        0n,
+        BigInt(MCAP0_MAGIC.length + /* Opcode.HEADER */ 1 + /* record content length */ 8),
+      );
+      const headerPrefixView = new DataView(
+        headerPrefix.buffer,
+        headerPrefix.byteOffset,
+        headerPrefix.byteLength,
+      );
+      void parseMagic(headerPrefixView, 0);
+      const headerLength = headerPrefixView.getBigUint64(
+        MCAP0_MAGIC.length + /* Opcode.HEADER */ 1,
+        true,
+      );
+
+      const headerRecord = await readable.read(
+        BigInt(MCAP0_MAGIC.length),
+        /* Opcode.HEADER */ 1n + /* record content length */ 8n + headerLength,
+      );
+      const headerResult = parseRecord({
+        view: new DataView(headerRecord.buffer, headerRecord.byteOffset, headerRecord.byteLength),
+        startOffset: 0,
+        validateCrcs: true,
+      });
+      if (headerResult.record?.type !== "Header") {
+        throw new Error(
+          `Unable to read header at beginning of file; found ${
+            headerResult.record?.type ?? "nothing"
+          }`,
+        );
+      }
+      if (headerResult.usedBytes !== headerRecord.byteLength) {
+        throw new Error(
+          `${
+            headerRecord.byteLength - headerResult.usedBytes
+          } bytes remaining after parsing header`,
+        );
+      }
+      header = headerResult.record;
+    }
+
     let footerOffset: bigint;
     let footerAndMagicView: DataView;
     {
@@ -101,20 +160,28 @@ export default class Mcap0IndexedReader {
 
     void parseMagic(footerAndMagicView, footerAndMagicView.byteLength - MCAP0_MAGIC.length);
 
-    const channelInfosById = new Map<number, TypedMcapRecords["ChannelInfo"]>();
-    const schemasById = new Map<number, TypedMcapRecords["Schema"]>();
-
-    const footer = parseRecord({
-      view: footerAndMagicView,
-      startOffset: 0,
-      validateCrcs: true,
-    }).record;
-    if (footer?.type !== "Footer") {
-      throw new Error(
-        `Unable to read footer from end of file (offset ${footerOffset}); found ${
-          footer?.type ?? "nothing"
-        }`,
-      );
+    let footer: TypedMcapRecords["Footer"];
+    {
+      const footerResult = parseRecord({
+        view: footerAndMagicView,
+        startOffset: 0,
+        validateCrcs: true,
+      });
+      if (footerResult.record?.type !== "Footer") {
+        throw new Error(
+          `Unable to read footer from end of file (offset ${footerOffset}); found ${
+            footerResult.record?.type ?? "nothing"
+          }`,
+        );
+      }
+      if (footerResult.usedBytes !== footerAndMagicView.byteLength - MCAP0_MAGIC.length) {
+        throw new Error(
+          `${
+            footerAndMagicView.byteLength - MCAP0_MAGIC.length - footerResult.usedBytes
+          } bytes remaining after parsing footer`,
+        );
+      }
+      footer = footerResult.record;
     }
     if (footer.summaryStart === 0n) {
       throw new Error("File is not indexed");
@@ -151,8 +218,12 @@ export default class Mcap0IndexedReader {
       allSummaryData.byteLength,
     );
 
+    const channelsById = new Map<number, TypedMcapRecords["Channel"]>();
+    const schemasById = new Map<number, TypedMcapRecords["Schema"]>();
     const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
     const attachmentIndexes: TypedMcapRecords["AttachmentIndex"][] = [];
+    const metadataIndexes: TypedMcapRecords["MetadataIndex"][] = [];
+    const summaryOffsetsByOpcode = new Map<number, TypedMcapRecords["SummaryOffset"]>();
     let statistics: TypedMcapRecords["Statistics"] | undefined;
 
     let offset = 0;
@@ -166,8 +237,8 @@ export default class Mcap0IndexedReader {
         case "Schema":
           schemasById.set(result.record.id, result.record);
           break;
-        case "ChannelInfo":
-          channelInfosById.set(result.record.id, result.record);
+        case "Channel":
+          channelsById.set(result.record.id, result.record);
           break;
         case "ChunkIndex":
           chunkIndexes.push(result.record);
@@ -175,16 +246,29 @@ export default class Mcap0IndexedReader {
         case "AttachmentIndex":
           attachmentIndexes.push(result.record);
           break;
+        case "MetadataIndex":
+          metadataIndexes.push(result.record);
+          break;
         case "Statistics":
           if (statistics) {
             throw new Error("Duplicate Statistics record");
           }
           statistics = result.record;
           break;
+        case "SummaryOffset":
+          summaryOffsetsByOpcode.set(result.record.groupOpcode, result.record);
+          break;
+        case "Header":
+        case "Footer":
+        case "Message":
+        case "Chunk":
+        case "MessageIndex":
+        case "Attachment":
+        case "Metadata":
+        case "DataEnd":
+          throw new Error(`${result.record.type} record not allowed in index section`);
         case "Unknown":
           break;
-        default:
-          throw new Error(`${result.record.type} record not allowed in index section`);
       }
     }
     if (offset !== indexView.byteLength) {
@@ -195,10 +279,14 @@ export default class Mcap0IndexedReader {
       readable,
       chunkIndexes,
       attachmentIndexes,
+      metadataIndexes,
       statistics,
       decompressHandlers,
-      channelInfosById,
+      channelsById,
       schemasById,
+      summaryOffsetsByOpcode,
+      header,
+      footer,
     });
   }
 
@@ -218,9 +306,9 @@ export default class Mcap0IndexedReader {
     let relevantChannels: Set<number> | undefined;
     if (topics) {
       relevantChannels = new Set();
-      for (const channelInfo of this.channelInfosById.values()) {
-        if (topics.includes(channelInfo.topic)) {
-          relevantChannels.add(channelInfo.id);
+      for (const channel of this.channelsById.values()) {
+        if (topics.includes(channel.topic)) {
+          relevantChannels.add(channel.id);
         }
       }
     }

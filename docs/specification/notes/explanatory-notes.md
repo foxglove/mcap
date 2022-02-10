@@ -13,14 +13,14 @@ The index is designed to support fast local and remote seek/filter operations wi
 1. Client queries for all messages on topics /a, /b, /c between t0 and t1
 2. Reader reads the fixed-length footer off the end of the file
 3. Reader parses the index_offset from the footer, and starts reading from that offset to the end of the file. During this read it will encounter the following in order:
-   - A run of channel info records, one per channel in the file
+   - A run of Channel records, one per channel in the file
    - A run of Message Group Index records, one per chunk in the file
    - The attachment index records
    - The statistics record
 
 The reader in this case will stop after the chunk index records.
 
-4. Using the channel info records at the start of the read, the reader converts topic names to channel IDs.
+4. Using the channel records at the start of the read, the reader converts topic names to channel IDs.
 5. Using the chunk index records, the reader locates the chunks that must be read, based on the requested start times, channel IDs, and end times. These chunks will be a contiguous run.
 6. Readers may access the message data in at least two ways,
    - “full scan”: Seek from the chunk index to the start of the chunk using chunk_offset. Read/decompress the entire chunk, discarding messages not on the requested channels. Skip through the index data and into the next chunk if it is targeted too.
@@ -70,11 +70,11 @@ topics:        /diagnostics               52 msgs    : diagnostic_msgs/Diagnosti
 The reader will recover this data from the index as follows:
 
 1. Read the fixed length footer and seek to the index_offset.
-2. Read the run of channel info records that follow to get topic names, types, and MD5 data (which in case of ROS1 will be in the user data section), as well as channel IDs to interpret the chunk index records.
-3. After the channel infos are the chunk index records, if the file is chunked. From each chunk index record extract the compression algorithm and compressed/uncompressed size. From these the reader can compute the compression statistics shown in the rosbag info summary. For unchunked files this field is omitted.
+2. Read the run of channel records that follow to get topic names, types, and MD5 data (which in case of ROS1 will be in the user data section), as well as channel IDs to interpret the chunk index records.
+3. After the channel are the chunk index records, if the file is chunked. From each chunk index record extract the compression algorithm and compressed/uncompressed size. From these the reader can compute the compression statistics shown in the rosbag info summary. For unchunked files this field is omitted.
 4. The MCAP version of “rosbag info” will display information about included attachments as well. After reading the chunk index records, the attachment index records will be scanned and incorporated into the summary.
 5. Finally, the statistics record is used to compute the start, end, total, and per-channel message counts. The per-channel message counts must be grouped/summed over topics for display.
 
 The only difference between the chunked and unchunked versions of this output will be the chunk compression statistics (“compressed”, “uncompressed”, “compression”), which will be omitted in the case of unchunked files. The summary should be very fast to generate in either local or remote contexts, requiring no seeking around the file to visit chunks.
 
-The above is not meant to prescribe a summary formatting, but to demonstrate that parity with the rosbag summary is supported by MCAP. There are other details we may consider including, like references to per-channel encryption or compression if these features get uptake. We could also enable more interaction with the channel info records, such as quickly obtaining schemas from the file for particular topics.
+The above is not meant to prescribe a summary formatting, but to demonstrate that parity with the rosbag summary is supported by MCAP. There are other details we may consider including, like references to per-channel encryption or compression if these features get uptake. We could also enable more interaction with the channel records, such as quickly obtaining schemas from the file for particular topics.

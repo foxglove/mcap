@@ -3,7 +3,7 @@ import { ChunkBuilder } from "./ChunkBuilder";
 import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
 import { Opcode } from "./constants";
 import {
-  ChannelInfo,
+  Channel,
   Message,
   Header,
   Attachment,
@@ -26,7 +26,7 @@ import {
 export class Mcap0IndexedWriter {
   private writable: IWritable;
   private recordWriter = new Mcap0RecordBuilder();
-  private channelInfos = new Map<number, ChannelInfo>();
+  private channels = new Map<number, Channel>();
   private writtenChannelIds = new Set<number>();
   private chunkBuilder: ChunkBuilder = new ChunkBuilder();
 
@@ -54,15 +54,15 @@ export class Mcap0IndexedWriter {
 
     const summaryStart = this.writable.position();
 
-    const channelInfoStart = this.writable.position();
-    let channelInfoLength = 0n;
-    for (const channelInfo of this.channelInfos.values()) {
-      channelInfoLength += this.recordWriter.writeChannelInfo(channelInfo);
+    const channelStart = this.writable.position();
+    let channelLength = 0n;
+    for (const channel of this.channels.values()) {
+      channelLength += this.recordWriter.writeChannel(channel);
     }
     summaryOffsets.push({
-      groupOpcode: Opcode.CHANNEL_INFO,
-      groupStart: channelInfoStart,
-      groupLength: channelInfoLength,
+      groupOpcode: Opcode.CHANNEL,
+      groupStart: channelStart,
+      groupLength: channelLength,
     });
 
     await this.writable.write(this.recordWriter.buffer);
@@ -124,11 +124,11 @@ export class Mcap0IndexedWriter {
   }
 
   /**
-   * Add channel info and return a generated channel id. The channel id is used when adding messages.
+   * Add channel and return a generated channel id. The channel id is used when adding messages.
    */
-  async registerChannel(info: Omit<ChannelInfo, "id">): Promise<number> {
-    const id = this.channelInfos.size + 1;
-    this.channelInfos.set(id, {
+  async registerChannel(info: Omit<Channel, "id">): Promise<number> {
+    const id = this.channels.size + 1;
+    this.channels.set(id, {
       ...info,
       id,
     });
@@ -139,14 +139,14 @@ export class Mcap0IndexedWriter {
   async addMessage(message: Message): Promise<void> {
     // write out channel id if we have not yet done so
     if (!this.writtenChannelIds.has(message.channelId)) {
-      const channelInfo = this.channelInfos.get(message.channelId);
-      if (!channelInfo) {
+      const channel = this.channels.get(message.channelId);
+      if (!channel) {
         throw new Error(
-          `Mcap0UnindexedWriter#addMessage failed: missing channel info for id ${message.channelId}`,
+          `Mcap0UnindexedWriter#addMessage failed: missing channel for id ${message.channelId}`,
         );
       }
 
-      this.chunkBuilder.addChannelInfo(channelInfo);
+      this.chunkBuilder.addChannel(channel);
       this.writtenChannelIds.add(message.channelId);
     }
 

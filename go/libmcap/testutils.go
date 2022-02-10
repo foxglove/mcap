@@ -12,9 +12,35 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func encodedUint16(x uint16) []byte {
+	buf := make([]byte, 2)
+	binary.LittleEndian.PutUint16(buf, x)
+	return buf
+}
+
 func encodedUint32(x uint32) []byte {
 	buf := make([]byte, 4)
 	binary.LittleEndian.PutUint32(buf, x)
+	return buf
+}
+
+func encodedUint64(x uint64) []byte {
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, x)
+	return buf
+}
+
+func prefixedString(s string) []byte {
+	buf := make([]byte, len(s)+4)
+	binary.LittleEndian.PutUint32(buf, uint32(len(s)))
+	copy(buf[4:], s)
+	return buf
+}
+
+func prefixedBytes(s []byte) []byte {
+	buf := make([]byte, len(s)+4)
+	binary.LittleEndian.PutUint32(buf, uint32(len(s)))
+	copy(buf[4:], s)
 	return buf
 }
 
@@ -48,7 +74,7 @@ func header() []byte {
 
 func channelInfo() []byte {
 	buf := make([]byte, 9)
-	buf[0] = byte(OpChannelInfo)
+	buf[0] = byte(OpChannel)
 	return buf
 }
 
@@ -85,7 +111,7 @@ func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byt
 	compressionLen := len(compression)
 	compressedLen := buf.Len()
 	uncompressedLen := len(data)
-	msglen := uint64(8 + 8 + 8 + 4 + 4 + compressionLen + compressedLen)
+	msglen := uint64(8 + 8 + 8 + 4 + 4 + compressionLen + 8 + compressedLen)
 	record := make([]byte, msglen+9)
 	offset, err := putByte(record, byte(OpChunk))
 	assert.Nil(t, err)
@@ -98,6 +124,7 @@ func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byt
 	_, _ = crc.Write(data)
 	offset += putUint32(record[offset:], crc.Sum32())
 	offset += putPrefixedString(record[offset:], string(compression))
+	offset += putUint64(record[offset:], uint64(buf.Len()))
 	_ = copy(record[offset:], buf.Bytes())
 	return record
 }
