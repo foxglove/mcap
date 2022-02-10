@@ -4,7 +4,6 @@ go 1.17
 
 require (
 	github.com/klauspost/compress v1.14.1
-	github.com/mattn/go-sqlite3 v1.14.11
 	github.com/pierrec/lz4/v4 v4.1.12
 	github.com/stretchr/testify v1.7.0
 )

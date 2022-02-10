@@ -76,8 +76,8 @@ func (t TokenType) String() string {
 }
 
 type decoders struct {
-	lz4  *lz4.Reader
 	zstd *zstd.Decoder
+	lz4  *lz4.Reader
 	none *bytes.Reader
 }
 
@@ -112,15 +112,6 @@ func (l *Lexer) setNoneDecoder(buf []byte) {
 	l.reader = l.decoders.none
 }
 
-func (l *Lexer) setLZ4Decoder(r io.Reader) {
-	if l.decoders.lz4 == nil {
-		l.decoders.lz4 = lz4.NewReader(r)
-	} else {
-		l.decoders.lz4.Reset(r)
-	}
-	l.reader = l.decoders.lz4
-}
-
 func (l *Lexer) setZSTDDecoder(r io.Reader) error {
 	if l.decoders.zstd == nil {
 		decoder, err := zstd.NewReader(r)
@@ -136,6 +127,15 @@ func (l *Lexer) setZSTDDecoder(r io.Reader) error {
 	}
 	l.reader = l.decoders.zstd
 	return nil
+}
+
+func (l *Lexer) setLZ4Decoder(r io.Reader) {
+	if l.decoders.lz4 == nil {
+		l.decoders.lz4 = lz4.NewReader(r)
+	} else {
+		l.decoders.lz4.Reset(r)
+	}
+	l.reader = l.decoders.lz4
 }
 
 func loadChunk(l *Lexer) error {
@@ -189,13 +189,13 @@ func loadChunk(l *Lexer) error {
 	switch compression {
 	case CompressionNone:
 		l.reader = lr
-	case CompressionLZ4:
-		l.setLZ4Decoder(lr)
 	case CompressionZSTD:
 		err = l.setZSTDDecoder(lr)
 		if err != nil {
 			return err
 		}
+	case CompressionLZ4:
+		l.setLZ4Decoder(lr)
 	default:
 		return fmt.Errorf("unsupported compression: %s", string(compression))
 	}
