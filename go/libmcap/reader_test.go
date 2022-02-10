@@ -214,14 +214,16 @@ func TestMessageReading(t *testing.T) {
 						assert.Nil(t, err)
 						c := 0
 						for {
-							ci, msg, err := it.Next(nil)
+							schema, channel, message, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
 							assert.Nil(t, err)
-							assert.NotNil(t, ci)
-							assert.NotNil(t, msg)
-							assert.Equal(t, msg.ChannelID, ci.ID)
+							assert.NotNil(t, channel)
+							assert.NotNil(t, message)
+							assert.Equal(t, message.ChannelID, channel.ID)
+							assert.NotNil(t, schema)
+							assert.Equal(t, schema.ID, channel.SchemaID)
 							c++
 						}
 						assert.Equal(t, 1000, c)
@@ -234,14 +236,16 @@ func TestMessageReading(t *testing.T) {
 						assert.Nil(t, err)
 						c := 0
 						for {
-							ci, msg, err := it.Next(nil)
+							schema, channel, message, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
 							assert.Nil(t, err)
-							assert.NotNil(t, ci)
-							assert.NotNil(t, msg)
-							assert.Equal(t, msg.ChannelID, ci.ID)
+							assert.NotNil(t, channel)
+							assert.NotNil(t, message)
+							assert.NotNil(t, schema)
+							assert.Equal(t, message.ChannelID, channel.ID)
+							assert.Equal(t, schema.ID, channel.SchemaID)
 							c++
 						}
 						assert.Equal(t, 500, c)
@@ -254,14 +258,16 @@ func TestMessageReading(t *testing.T) {
 						assert.Nil(t, err)
 						c := 0
 						for {
-							ci, msg, err := it.Next(nil)
+							schema, channel, message, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
 							assert.Nil(t, err)
-							assert.NotNil(t, ci)
-							assert.NotNil(t, msg)
-							assert.Equal(t, msg.ChannelID, ci.ID)
+							assert.NotNil(t, channel)
+							assert.NotNil(t, message)
+							assert.NotNil(t, schema)
+							assert.Equal(t, message.ChannelID, channel.ID)
+							assert.Equal(t, channel.SchemaID, schema.ID)
 							c++
 						}
 						assert.Equal(t, 1000, c)
@@ -274,7 +280,7 @@ func TestMessageReading(t *testing.T) {
 						assert.Nil(t, err)
 						c := 0
 						for {
-							_, _, err := it.Next(nil)
+							_, _, _, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
@@ -304,7 +310,7 @@ func TestReaderCounting(t *testing.T) {
 			assert.Nil(t, err)
 			c := 0
 			for {
-				_, _, err := it.Next(nil)
+				_, _, _, err := it.Next(nil)
 				if errors.Is(err, io.EOF) {
 					break
 				}
@@ -353,7 +359,7 @@ func TestReadingDiagnostics(t *testing.T) {
 	assert.Nil(t, err)
 	c := 0
 	for {
-		_, _, err := it.Next(nil)
+		_, _, _, err := it.Next(nil)
 		if errors.Is(err, io.EOF) {
 			break
 		}

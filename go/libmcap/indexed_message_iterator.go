@@ -279,22 +279,22 @@ func (it *indexedMessageIterator) seekChunk(offset int64) error {
 	return nil
 }
 
-func (it *indexedMessageIterator) Next(p []byte) (*Channel, *Message, error) {
+func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, error) {
 	if it.statistics == nil {
 		err := it.parseSummarySection()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		it.chunksets = sortOverlappingChunks(it.chunkIndexes)
 	}
 
 	if it.messageOffsetIdx >= len(it.messageOffsets) {
 		if it.activeChunksetIndex >= len(it.chunksets)-1 {
-			return nil, nil, io.EOF
+			return nil, nil, nil, io.EOF
 		}
 		err := it.loadNextChunkset()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 
@@ -306,27 +306,29 @@ func (it *indexedMessageIterator) Next(p []byte) (*Channel, *Message, error) {
 	if messageOffset.chunkIndex != it.activeChunkIndex {
 		err := it.loadChunk(messageOffset.chunkIndex)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 
 	// now the active chunk matches the one for this message
 	err := it.seekChunk(int64(messageOffset.chunkOffset))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	tokenType, record, err := it.activeChunkLexer.Next(p)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	switch tokenType {
 	case TokenMessage:
-		msg, err := ParseMessage(record)
+		message, err := ParseMessage(record)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		return it.channels[msg.ChannelID], msg, nil
+		channel := it.channels[message.ChannelID]
+		schema := it.schemas[channel.SchemaID]
+		return schema, channel, message, nil
 	default:
-		return nil, nil, fmt.Errorf("unexpected token %s in message section", tokenType)
+		return nil, nil, nil, fmt.Errorf("unexpected token %s in message section", tokenType)
 	}
 }
