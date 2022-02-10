@@ -53,7 +53,7 @@ func TestOutputDeterminism(t *testing.T) {
 		Data:     []byte{},
 	}))
 	for i := 0; i < 3; i++ {
-		assert.Nil(t, w.WriteChannelInfo(&ChannelInfo{
+		assert.Nil(t, w.WriteChannel(&Channel{
 			ID:              uint16(i),
 			Topic:           fmt.Sprintf("/test-%d", i),
 			MessageEncoding: "ros1",
@@ -91,7 +91,7 @@ func TestOutputDeterminism(t *testing.T) {
 	assert.Nil(t, w.Close())
 	t.Run("output hashes consistently", func(t *testing.T) {
 		hash := md5.Sum(buf.Bytes())
-		assert.Equal(t, "4338a951a7edb513f4d54b41b766cfc8", fmt.Sprintf("%x", hash))
+		assert.Equal(t, "0cab01b3264ca185085bf868fef73d97", fmt.Sprintf("%x", hash))
 	})
 }
 
@@ -118,7 +118,7 @@ func TestChunkedReadWrite(t *testing.T) {
 				Encoding: "msg",
 				Data:     []byte{},
 			}))
-			assert.Nil(t, w.WriteChannelInfo(&ChannelInfo{
+			assert.Nil(t, w.WriteChannel(&Channel{
 				ID:              1,
 				Topic:           "/test",
 				MessageEncoding: "ros1",
@@ -151,10 +151,12 @@ func TestChunkedReadWrite(t *testing.T) {
 			for i, expected := range []TokenType{
 				TokenHeader,
 				TokenSchema,
-				TokenChannelInfo,
+				TokenChannel,
 				TokenMessage,
+				TokenMessageIndex,
 				TokenDataEnd,
-				TokenChannelInfo,
+				TokenChannel,
+				TokenChunkIndex,
 				TokenStatistics,
 				TokenSummaryOffset,
 				TokenSummaryOffset,
@@ -188,7 +190,7 @@ func TestIndexStructures(t *testing.T) {
 		Data:     []byte{},
 		Encoding: "msg",
 	}))
-	err = w.WriteChannelInfo(&ChannelInfo{
+	err = w.WriteChannel(&Channel{
 		ID:              1,
 		SchemaID:        1,
 		Topic:           "/test",
@@ -217,9 +219,9 @@ func TestIndexStructures(t *testing.T) {
 			StartTime:        1,
 			EndTime:          1,
 			ChunkStartOffset: 96,
-			ChunkLength:      165,
+			ChunkLength:      173,
 			MessageIndexOffsets: map[uint16]uint64{
-				1: 261,
+				1: 269,
 			},
 			MessageIndexLength: 31,
 			Compression:        "lz4",
@@ -258,7 +260,7 @@ func TestStatistics(t *testing.T) {
 		Encoding: "msg",
 		Data:     []byte{},
 	}))
-	assert.Nil(t, w.WriteChannelInfo(&ChannelInfo{
+	assert.Nil(t, w.WriteChannel(&Channel{
 		ID:              1,
 		SchemaID:        1,
 		Topic:           "/test",
@@ -304,7 +306,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		Data:     []byte{},
 	})
 	assert.Nil(t, err)
-	err = w.WriteChannelInfo(&ChannelInfo{
+	err = w.WriteChannel(&Channel{
 		ID:              1,
 		SchemaID:        1,
 		Topic:           "/test",
@@ -349,11 +351,11 @@ func TestUnchunkedReadWrite(t *testing.T) {
 	for _, expected := range []TokenType{
 		TokenHeader,
 		TokenSchema,
-		TokenChannelInfo,
+		TokenChannel,
 		TokenMessage,
 		TokenAttachment,
 		TokenDataEnd,
-		TokenChannelInfo,
+		TokenChannel,
 		TokenAttachmentIndex,
 		TokenStatistics,
 		TokenSummaryOffset,
