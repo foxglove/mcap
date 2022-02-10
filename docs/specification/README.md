@@ -144,7 +144,7 @@ A Footer record contains end-of-file information. It must be the last record in 
 
 A Schema record defines an individual schema.
 
-Schema records are uniquely identified within a file by their schema ID. A Schema record must occur at least once in the file prior to any Channel referring to its ID.
+Schema records are uniquely identified within a file by their schema ID. A Schema record must occur at least once in the file prior to any Channel referring to its ID. Any two schema records sharing a common ID must be identical.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -159,7 +159,7 @@ Schema records may be duplicated in the summary section.
 
 A Channel record defines an encoded stream of messages on a topic.
 
-Channel records are uniquely identified within a file by their channel ID. A Channel record must occur at least once in the file prior to any message referring to its channel ID.
+Channel records are uniquely identified within a file by their channel ID. A Channel record must occur at least once in the file prior to any message referring to its channel ID. Any two channel records sharing a common ID must be identical.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
@@ -270,8 +270,8 @@ A Statistics record contains summary information about the recorded data. The st
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 8 | message_count | uint64 | Number of Message records in the file. |
-| 4 | schema_count | uint16 | Number of unique schema ids in the file. |
-| 4 | channel_count | uint32 | Number of unique channel ids in the file. |
+| 2 | schema_count | uint16 | Number of unique schema IDs in the file, not including zero. |
+| 4 | channel_count | uint32 | Number of unique channel IDs in the file. |
 | 4 | attachment_count | uint32 | Number of Attachment records in the file. |
 | 4 | metadata_count | uint32 | Number of Metadata records in the file. |
 | 4 | chunk_count | uint32 | Number of Chunk records in the file. |
