@@ -148,7 +148,7 @@ Schema records are uniquely identified within a file by their schema ID. A Schem
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 2 | id | uint16 | A unique identifier for this schema within the file. |
+| 2 | id | uint16 | A unique identifier for this schema within the file. Must not be zero |
 | 4 + N | name | String | An identifier for the schema. |
 | 4 + N | encoding | String | Format for the schema. The value should be one of the [well-known schema formats](./well-known-schema-formats.md). Custom values should use the `x-` prefix. An empty string indicates no schema is available. |
 | 4 + N | data | uint32 length-prefixed Bytes | Must conform to the schema encoding. If `encoding` is an empty string, `data` should be 0 length. |
@@ -164,7 +164,7 @@ Channel records are uniquely identified within a file by their channel ID. A Cha
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 2 | id | uint16 | A unique identifier for this channel within the file. |
-| 2 | schema_id | uint16 | The schema for messages on this channel. |
+| 2 | schema_id | uint16 | The schema for messages on this channel. A schema_id of 0 indicates no schema for this channel |
 | 4 + N | topic | String | The channel topic. |
 | 4 + N | message_encoding | String | Encoding for messages on this channel. The value should be one of the [well-known message encodings](./well-known-encodings.md). Custom values should use `x-` prefix. |
 | 4 + N | metadata | Map<string, string> | Metadata about this channel |
