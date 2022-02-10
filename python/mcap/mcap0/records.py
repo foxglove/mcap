@@ -348,8 +348,8 @@ class Statistics(McapRecord):
     @staticmethod
     def read(stream: ReadDataStream):
         message_count = stream.read8()
+        schema_count = stream.read2()
         channel_count = stream.read4()
-        schema_count = stream.read4()
         attachment_count = stream.read4()
         metadata_count = stream.read4()
         chunk_count = stream.read4()

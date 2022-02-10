@@ -311,18 +311,18 @@ func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
 	}, nil
 }
 func ParseStatistics(buf []byte) (*Statistics, error) {
-	if minLength := 8 + 4 + 4 + 4 + 4 + 4 + 4 + 8 + 8; len(buf) < minLength {
+	if minLength := 8 + 2 + 4 + 4 + 4 + 4 + 4 + 8 + 8; len(buf) < minLength {
 		return nil, fmt.Errorf("short statistics record %d < %d: %w", len(buf), minLength, io.ErrShortBuffer)
 	}
 	messageCount, offset, err := getUint64(buf, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read message count: %w", err)
 	}
-	channelCount, offset, err := getUint32(buf, offset)
+	schemaCount, offset, err := getUint16(buf, offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read channel count: %w", err)
+		return nil, fmt.Errorf("failed to read schema count: %w", err)
 	}
-	schemaCount, offset, err := getUint32(buf, offset)
+	channelCount, offset, err := getUint32(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read channel count: %w", err)
 	}
@@ -370,8 +370,8 @@ func ParseStatistics(buf []byte) (*Statistics, error) {
 	}
 	return &Statistics{
 		MessageCount:         messageCount,
-		ChannelCount:         channelCount,
 		SchemaCount:          schemaCount,
+		ChannelCount:         channelCount,
 		AttachmentCount:      attachmentCount,
 		MetadataCount:        metadataCount,
 		ChunkCount:           chunkCount,

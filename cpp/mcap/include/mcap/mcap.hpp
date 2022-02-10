@@ -200,8 +200,8 @@ struct AttachmentIndex {
 
 struct Statistics {
   uint64_t messageCount;
+  uint16_t schemaCount;
   uint32_t channelCount;
-  uint32_t schemaCount;
   uint32_t attachmentCount;
   uint32_t metadataCount;
   uint32_t chunkCount;

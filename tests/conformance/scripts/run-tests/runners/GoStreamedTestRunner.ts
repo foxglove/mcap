@@ -6,7 +6,7 @@ import { TestVariant } from "variants/types";
 import { ITestRunner } from ".";
 
 export default class GoStreamedTestRunner implements ITestRunner {
-  name = "go-streamed";
+  name = "go-streamed-reader";
   mode = "read" as const;
 
   async run(filePath: string): Promise<string> {
