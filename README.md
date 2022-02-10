@@ -18,7 +18,7 @@ yarn workspace @foxglove/mcap lint
 yarn workspace @foxglove/mcap test
 ```
 
-Read and validate an mcap file:
+Read and validate an MCAP file:
 
 ```
 yarn workspace @foxglove/mcap validate file.mcap

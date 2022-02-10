@@ -1,21 +1,21 @@
-## mcap tool
+## `mcap` tool
 
 > Note: this tool is experimental and will change without warning until finalization of the MCAP spec.
 
-A basic command line tool to demonstrate the mcap file format. See `mcap -h`
+A basic command line tool to demonstrate the MCAP file format. See `mcap -h`
 for details:
 
-    A small utility for demonstration of the mcap file format
+    A small utility for demonstration of the MCAP file format
 
     Usage:
       mcap [command]
 
     Available Commands:
-      cat         Cat the messages in an mcap file to stdout
+      cat         Cat the messages in an MCAP file to stdout
       completion  Generate the autocompletion script for the specified shell
-      convert     Convert a bag file to an mcap file
+      convert     Convert a bag file to an MCAP file
       help        Help about any command
-      info        Report statistics about an mcap file
+      info        Report statistics about an MCAP file
 
     Flags:
           --config string   config file (default is $HOME/.mcap.yaml)
@@ -26,7 +26,7 @@ for details:
 
 Examples:
 
-Convert a bag file to mcap:
+Convert a bag file to MCAP:
 
 <!-- cspell: disable -->
 
@@ -34,7 +34,7 @@ Convert a bag file to mcap:
 
 <!-- cspell: enable -->
 
-Report summary statistics on an mcap file:
+Report summary statistics on an MCAP file:
 
     [~/work/mcap/go/mcap] (task/mcap-client) $ mcap info demo.mcap
     duration: 7.780758504s
