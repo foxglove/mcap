@@ -127,9 +127,9 @@ export function parseRecord({
 
     case Opcode.CHANNEL: {
       const channelId = reader.uint16();
+      const schemaId = reader.uint16();
       const topicName = reader.string();
       const messageEncoding = reader.string();
-      const schemaId = reader.uint16();
       const metadata = reader.map(
         (r) => r.string(),
         (r) => r.string(),
@@ -138,9 +138,9 @@ export function parseRecord({
       const record: TypedMcapRecord = {
         type: "Channel",
         id: channelId,
+        schemaId,
         topic: topicName,
         messageEncoding,
-        schemaId,
         metadata,
       };
 
@@ -150,8 +150,8 @@ export function parseRecord({
     case Opcode.MESSAGE: {
       const channelId = reader.uint16();
       const sequence = reader.uint32();
-      const publishTime = reader.uint64();
       const logTime = reader.uint64();
+      const publishTime = reader.uint64();
       const data = new Uint8Array(
         recordView.buffer.slice(
           recordView.byteOffset + reader.offset,
@@ -162,8 +162,8 @@ export function parseRecord({
         type: "Message",
         channelId,
         sequence,
-        publishTime,
         logTime,
+        publishTime,
         data,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
@@ -299,6 +299,7 @@ export function parseRecord({
     case Opcode.STATISTICS: {
       const messageCount = reader.uint64();
       const channelCount = reader.uint32();
+      const schemaCount = reader.uint32();
       const attachmentCount = reader.uint32();
       const metadataCount = reader.uint32();
       const chunkCount = reader.uint32();
@@ -311,6 +312,7 @@ export function parseRecord({
         type: "Statistics",
         messageCount,
         channelCount,
+        schemaCount,
         attachmentCount,
         metadataCount,
         chunkCount,

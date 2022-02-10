@@ -116,9 +116,9 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder
       .uint64(0n) // placeholder
       .uint16(info.id)
+      .uint16(info.schemaId)
       .string(info.topic)
       .string(info.messageEncoding)
-      .uint16(info.schemaId)
       .tupleArray(
         (key) => this.bufferBuilder.string(key),
         (value) => this.bufferBuilder.string(value),
@@ -143,8 +143,8 @@ export class Mcap0RecordBuilder {
       .uint64(0n) // placeholder
       .uint16(message.channelId)
       .uint32(message.sequence)
-      .uint64(message.publishTime)
       .uint64(message.logTime)
+      .uint64(message.publishTime)
       .bytes(message.data);
     // message record cannot be padded
     const endPosition = this.bufferBuilder.length;
@@ -368,6 +368,7 @@ export class Mcap0RecordBuilder {
       .uint64(0n) // placeholder size
       .uint64(statistics.messageCount)
       .uint32(statistics.channelCount)
+      .uint32(statistics.schemaCount)
       .uint32(statistics.attachmentCount)
       .uint32(statistics.metadataCount)
       .uint32(statistics.chunkCount)

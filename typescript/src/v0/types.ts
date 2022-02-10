@@ -18,16 +18,16 @@ export type Schema = {
 };
 export type Channel = {
   id: number;
+  schemaId: number;
   topic: string;
   messageEncoding: string;
-  schemaId: number;
   metadata: Map<string, string>;
 };
 export type Message = {
   channelId: number;
   sequence: number;
-  publishTime: bigint;
   logTime: bigint;
+  publishTime: bigint;
   data: Uint8Array;
 };
 export type Chunk = {
@@ -71,6 +71,7 @@ export type AttachmentIndex = {
 export type Statistics = {
   messageCount: bigint;
   channelCount: number;
+  schemaCount: number;
   attachmentCount: number;
   metadataCount: number;
   chunkCount: number;

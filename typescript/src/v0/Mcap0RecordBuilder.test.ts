@@ -79,7 +79,7 @@ describe("Mcap0RecordBuilder", () => {
       id: 1,
       topic: "/topic",
       messageEncoding: "encoding",
-      schemaId: 1,
+      schemaId: 2,
       metadata: new Map(),
     });
 
@@ -88,9 +88,9 @@ describe("Mcap0RecordBuilder", () => {
       .uint8(4) // opcode
       .uint64(BigInt(30)) // record content byte length
       .uint16(1)
+      .uint16(2)
       .string("/topic")
       .string("encoding")
-      .uint16(1)
       .uint32(0); // user data length
 
     expect(writer.buffer).toEqual(buffer.buffer);
@@ -102,8 +102,8 @@ describe("Mcap0RecordBuilder", () => {
 
     writer.writeMessage({
       channelId: 1,
-      publishTime: 3n,
       logTime: 5n,
+      publishTime: 3n,
       sequence: 7,
       data: new Uint8Array(),
     });
@@ -114,8 +114,8 @@ describe("Mcap0RecordBuilder", () => {
       .uint64(BigInt(22)) // record content byte length
       .uint16(1)
       .uint32(7)
-      .uint64(3n)
-      .uint64(5n);
+      .uint64(5n)
+      .uint64(3n);
 
     expect(buffer.length).toEqual(22 + 9);
     expect(writer.buffer).toEqual(buffer.buffer);
