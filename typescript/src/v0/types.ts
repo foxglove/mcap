@@ -75,6 +75,8 @@ export type Statistics = {
   attachmentCount: number;
   metadataCount: number;
   chunkCount: number;
+  messageStartTime: bigint;
+  messageEndTime: bigint;
   channelMessageCounts: Map<number, bigint>;
 };
 export type Metadata = {

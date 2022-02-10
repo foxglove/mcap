@@ -303,6 +303,8 @@ export function parseRecord({
       const attachmentCount = reader.uint32();
       const metadataCount = reader.uint32();
       const chunkCount = reader.uint32();
+      const messageStartTime = reader.uint64();
+      const messageEndTime = reader.uint64();
       const channelMessageCounts = reader.map(
         (r) => r.uint16(),
         (r) => r.uint64(),
@@ -316,6 +318,8 @@ export function parseRecord({
         attachmentCount,
         metadataCount,
         chunkCount,
+        messageStartTime,
+        messageEndTime,
         channelMessageCounts,
       };
       return { record, usedBytes: recordEndOffset - startOffset };

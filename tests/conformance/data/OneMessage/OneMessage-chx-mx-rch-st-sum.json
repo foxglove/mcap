@@ -48,6 +48,8 @@
         ["channel_message_counts", {"1": "1"}],
         ["chunk_count", "0"],
         ["message_count", "1"],
+        ["message_end_time", "2"],
+        ["message_start_time", "2"],
         ["metadata_count", "0"],
         ["schema_count", "1"]
       ]
@@ -63,7 +65,7 @@
     {
       "type": "SummaryOffset",
       "fields": [
-        ["group_length", "49"],
+        ["group_length", "65"],
         ["group_opcode", "11"],
         ["group_start", "200"]
       ]
@@ -72,7 +74,7 @@
       "type": "Footer",
       "fields": [
         ["summary_crc", "0"],
-        ["summary_offset_start", "249"],
+        ["summary_offset_start", "265"],
         ["summary_start", "153"]
       ]
     }

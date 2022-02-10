@@ -47,6 +47,8 @@
         ["channel_message_counts", {"1": "1"}],
         ["chunk_count", "1"],
         ["message_count", "1"],
+        ["message_end_time", "2"],
+        ["message_start_time", "2"],
         ["metadata_count", "0"],
         ["schema_count", "1"]
       ]

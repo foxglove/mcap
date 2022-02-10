@@ -205,6 +205,8 @@ struct Statistics {
   uint32_t attachmentCount;
   uint32_t metadataCount;
   uint32_t chunkCount;
+  Timestamp messageStartTime;
+  Timestamp messageEndTime;
   std::unordered_map<ChannelId, uint64_t> channelMessageCounts;
 };
 

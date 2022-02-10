@@ -195,8 +195,8 @@ export class Mcap0IndexedWriter {
 
     const chunkData = this.chunkBuilder.buffer;
     const chunkRecord: Chunk = {
-      messageStartTime: this.chunkBuilder.startTime,
-      messageEndTime: this.chunkBuilder.endTime,
+      messageStartTime: this.chunkBuilder.messageStartTime,
+      messageEndTime: this.chunkBuilder.messageEndTime,
       uncompressedSize: BigInt(chunkData.length),
       uncompressedCrc: 0,
       compression: "",

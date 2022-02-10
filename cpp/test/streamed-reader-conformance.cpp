@@ -171,6 +171,8 @@ int main(int argc, char** argv) {
                    {"channel_message_counts", ToJson(statistics.channelMessageCounts)},
                    {"chunk_count", std::to_string(statistics.chunkCount)},
                    {"message_count", std::to_string(statistics.messageCount)},
+                   {"message_end_time", std::to_string(statistics.messageEndTime)},
+                   {"message_start_time", std::to_string(statistics.messageStartTime)},
                    {"metadata_count", std::to_string(statistics.metadataCount)},
                    {"schema_count", std::to_string(statistics.schemaCount)},
                  })},

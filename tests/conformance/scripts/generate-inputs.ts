@@ -31,6 +31,8 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
   let schemaCount = 0;
   let attachmentCount = 0;
   let metadataCount = 0;
+  let messageStartTime: bigint | undefined;
+  let messageEndTime: bigint | undefined;
   const channelMessageCounts = new Map<number, bigint>();
 
   for (const record of records) {
@@ -62,6 +64,12 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
           chunk.addMessage(record);
         } else {
           builder.writeMessage(record);
+        }
+        if (messageStartTime == undefined || record.logTime < messageStartTime) {
+          messageStartTime = record.logTime;
+        }
+        if (messageEndTime == undefined || record.logTime > messageEndTime) {
+          messageEndTime = record.logTime;
         }
         break;
 
@@ -96,8 +104,8 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
     const chunkStartOffset = BigInt(builder.length);
     const chunkLength = builder.writeChunk({
       compression: "",
-      startTime: chunk.startTime,
-      endTime: chunk.endTime,
+      messageStartTime: chunk.messageStartTime,
+      messageEndTime: chunk.messageEndTime,
       uncompressedCrc: 0,
       uncompressedSize: BigInt(chunk.buffer.byteLength),
       records: chunk.buffer,
@@ -112,8 +120,8 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
     }
     chunkIndexes.push({
       compression: "",
-      startTime: chunk.startTime,
-      endTime: chunk.endTime,
+      messageStartTime: chunk.messageStartTime,
+      messageEndTime: chunk.messageEndTime,
       uncompressedSize: BigInt(chunk.buffer.byteLength),
       compressedSize: BigInt(chunk.buffer.byteLength),
       chunkStartOffset,
@@ -156,6 +164,8 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
       attachmentCount,
       metadataCount,
       chunkCount,
+      messageStartTime: messageStartTime ?? 0n,
+      messageEndTime: messageEndTime ?? 0n,
       channelMessageCounts,
     });
   }
