@@ -27,6 +27,7 @@ type indexedMessageIterator struct {
 	end    uint64
 
 	channels          map[uint16]*Channel
+	schemas           map[uint16]*Schema
 	statistics        *Statistics
 	chunksets         [][]*ChunkIndex
 	chunkIndexes      []*ChunkIndex
@@ -74,6 +75,12 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			return fmt.Errorf("failed to get next token: %w", err)
 		}
 		switch tokenType {
+		case TokenSchema:
+			schema, err := ParseSchema(record)
+			if err != nil {
+				return fmt.Errorf("failed to parse schema: %w", err)
+			}
+			it.schemas[schema.ID] = schema
 		case TokenChannel:
 			channelInfo, err := ParseChannel(record)
 			if err != nil {

@@ -1,13 +1,88 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"log"
+	"math"
 	"os"
+	"sort"
+	"time"
 
 	"github.com/foxglove/mcap/go/libmcap"
+	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
+
+func printInfo(w io.Writer, info *libmcap.Info) error {
+	buf := &bytes.Buffer{}
+	start := uint64(math.MaxUint64)
+	end := uint64(0)
+	compressionFormatStats := make(map[libmcap.CompressionFormat]struct {
+		count            int
+		compressedSize   uint64
+		uncompressedSize uint64
+	})
+	for _, ci := range info.ChunkIndexes {
+		if ci.StartTime < start {
+			start = ci.StartTime
+		}
+		if ci.EndTime > end {
+			end = ci.EndTime
+		}
+		stats := compressionFormatStats[ci.Compression]
+		stats.count++
+		stats.compressedSize += ci.CompressedSize
+		stats.uncompressedSize += ci.UncompressedSize
+		compressionFormatStats[ci.Compression] = stats
+	}
+
+	starttime := time.Unix(int64(start/1e9), int64(start%1e9))
+	endtime := time.Unix(int64(end/1e9), int64(end%1e9))
+
+	fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
+	fmt.Fprintf(buf, "start: %s\n", starttime.Format(time.RFC3339Nano))
+	fmt.Fprintf(buf, "end: %s\n", endtime.Format(time.RFC3339Nano))
+	fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
+	fmt.Fprintf(buf, "chunks:\n")
+	chunkCount := len(info.ChunkIndexes)
+	for k, v := range compressionFormatStats {
+		compressionRatio := 100 * (1 - float64(v.compressedSize)/float64(v.uncompressedSize))
+		fmt.Fprintf(buf, "\t%s: [%d/%d chunks] (%.2f%%) \n", k, v.count, chunkCount, compressionRatio)
+	}
+	fmt.Fprintf(buf, "channels:\n")
+
+	chanIDs := []uint16{}
+	for chanID := range info.Channels {
+		chanIDs = append(chanIDs, chanID)
+	}
+	sort.Slice(chanIDs, func(i, j int) bool {
+		return chanIDs[i] < chanIDs[j]
+	})
+	rows := [][]string{}
+	for _, chanID := range chanIDs {
+		channel := info.Channels[chanID]
+		schema := info.Schemas[channel.SchemaID]
+		channelMessageCounts := info.Statistics.ChannelMessageCounts[chanID]
+		row := []string{
+			fmt.Sprintf("\t(%d) %s: %d msgs", channel.ID, channel.Topic, channelMessageCounts),
+			fmt.Sprintf(" : %s [%s]", schema.Name, schema.Encoding),
+		}
+		rows = append(rows, row)
+	}
+	tw := tablewriter.NewWriter(buf)
+	tw.SetBorder(false)
+	tw.SetAutoWrapText(false)
+	tw.SetAlignment(tablewriter.ALIGN_LEFT)
+	tw.SetColumnSeparator("")
+	tw.AppendBulk(rows)
+	tw.Render()
+
+	fmt.Fprintf(buf, "attachments: %d\n", info.Statistics.AttachmentCount)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 var infoCmd = &cobra.Command{
 	Use:   "info",
@@ -28,7 +103,10 @@ var infoCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("%+v\n", info)
+		err = printInfo(os.Stdout, info)
+		if err != nil {
+			log.Fatal(err)
+		}
 	},
 }
 

@@ -91,7 +91,7 @@ func TestOutputDeterminism(t *testing.T) {
 	assert.Nil(t, w.Close())
 	t.Run("output hashes consistently", func(t *testing.T) {
 		hash := md5.Sum(buf.Bytes())
-		assert.Equal(t, "0cab01b3264ca185085bf868fef73d97", fmt.Sprintf("%x", hash))
+		assert.Equal(t, "b2f022253c8dee1d1a0361328b052139", fmt.Sprintf("%x", hash))
 	})
 }
 
@@ -156,8 +156,10 @@ func TestChunkedReadWrite(t *testing.T) {
 				TokenMessageIndex,
 				TokenDataEnd,
 				TokenChannel,
+				TokenSchema,
 				TokenChunkIndex,
 				TokenStatistics,
+				TokenSummaryOffset,
 				TokenSummaryOffset,
 				TokenSummaryOffset,
 				TokenSummaryOffset,
@@ -219,13 +221,13 @@ func TestIndexStructures(t *testing.T) {
 			StartTime:        1,
 			EndTime:          1,
 			ChunkStartOffset: 96,
-			ChunkLength:      173,
+			ChunkLength:      171,
 			MessageIndexOffsets: map[uint16]uint64{
-				1: 269,
+				1: 267,
 			},
 			MessageIndexLength: 31,
 			Compression:        "lz4",
-			CompressedSize:     121,
+			CompressedSize:     119,
 			UncompressedSize:   110,
 		}, chunkIndex)
 	})
@@ -356,8 +358,10 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		TokenAttachment,
 		TokenDataEnd,
 		TokenChannel,
+		TokenSchema,
 		TokenAttachmentIndex,
 		TokenStatistics,
+		TokenSummaryOffset,
 		TokenSummaryOffset,
 		TokenSummaryOffset,
 		TokenSummaryOffset,

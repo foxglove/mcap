@@ -70,6 +70,10 @@ func ParseChannel(buf []byte) (*Channel, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read channel id: %w", err)
 	}
+	schemaID, offset, err := getUint16(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read schema ID: %w", err)
+	}
 	topic, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read topic name: %w", err)
@@ -78,19 +82,15 @@ func ParseChannel(buf []byte) (*Channel, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read message encoding: %w", err)
 	}
-	schemaID, offset, err := getUint16(buf, offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read schema ID: %w", err)
-	}
 	metadata, _, err := readPrefixedMap(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata: %w", err)
 	}
 	return &Channel{
 		ID:              channelID,
+		SchemaID:        schemaID,
 		Topic:           topic,
 		MessageEncoding: messageEncoding,
-		SchemaID:        schemaID,
 		Metadata:        metadata,
 	}, nil
 }
@@ -104,13 +104,13 @@ func ParseMessage(buf []byte) (*Message, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read sequence: %w", err)
 	}
-	publishTime, offset, err := getUint64(buf, offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read publish time: %w", err)
-	}
 	logTime, offset, err := getUint64(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read record time: %w", err)
+	}
+	publishTime, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read publish time: %w", err)
 	}
 	data := buf[offset:]
 	return &Message{
@@ -311,7 +311,7 @@ func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
 	}, nil
 }
 func ParseStatistics(buf []byte) (*Statistics, error) {
-	if minLength := 8 + 4 + 4 + 4 + 4 + 4; len(buf) < minLength {
+	if minLength := 8 + 4 + 4 + 4 + 4 + 4 + 4; len(buf) < minLength {
 		return nil, fmt.Errorf("short statistics record %d < %d: %w", len(buf), minLength, io.ErrShortBuffer)
 	}
 	messageCount, offset, err := getUint64(buf, 0)
@@ -319,6 +319,10 @@ func ParseStatistics(buf []byte) (*Statistics, error) {
 		return nil, fmt.Errorf("failed to read message count: %w", err)
 	}
 	channelCount, offset, err := getUint32(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read channel count: %w", err)
+	}
+	schemaCount, offset, err := getUint32(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read channel count: %w", err)
 	}
@@ -359,6 +363,7 @@ func ParseStatistics(buf []byte) (*Statistics, error) {
 	return &Statistics{
 		MessageCount:         messageCount,
 		ChannelCount:         channelCount,
+		SchemaCount:          schemaCount,
 		AttachmentCount:      attachmentCount,
 		ChunkCount:           chunkCount,
 		MetadataCount:        metadataCount,

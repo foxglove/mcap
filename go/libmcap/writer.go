@@ -22,6 +22,7 @@ type Writer struct {
 	AttachmentIndexes []*AttachmentIndex
 
 	channelIDs       []uint16
+	schemaIDs        []uint16
 	channels         map[uint16]*Channel
 	schemas          map[uint16]*Schema
 	w                *WriteSizer
@@ -101,7 +102,11 @@ func (w *Writer) WriteSchema(s *Schema) (err error) {
 	if err != nil {
 		return err
 	}
-	w.schemas[s.ID] = s
+	if _, ok := w.schemas[s.ID]; !ok {
+		w.schemaIDs = append(w.schemaIDs, s.ID)
+		w.schemas[s.ID] = s
+		w.Statistics.SchemaCount++
+	}
 	return nil
 }
 
@@ -121,9 +126,9 @@ func (w *Writer) WriteChannel(c *Channel) error {
 		len(userdata))
 	w.ensureSized(msglen)
 	offset := putUint16(w.msg, c.ID)
+	offset += putUint16(w.msg[offset:], c.SchemaID)
 	offset += putPrefixedString(w.msg[offset:], c.Topic)
 	offset += putPrefixedString(w.msg[offset:], c.MessageEncoding)
-	offset += putUint16(w.msg[offset:], c.SchemaID)
 	offset += copy(w.msg[offset:], userdata)
 	var err error
 	if w.chunked {
@@ -157,8 +162,8 @@ func (w *Writer) WriteMessage(m *Message) error {
 	w.ensureSized(msglen)
 	offset := putUint16(w.msg, m.ChannelID)
 	offset += putUint32(w.msg[offset:], m.Sequence)
-	offset += putUint64(w.msg[offset:], m.PublishTime)
 	offset += putUint64(w.msg[offset:], m.LogTime)
+	offset += putUint64(w.msg[offset:], m.PublishTime)
 	offset += copy(w.msg[offset:], m.Data)
 	w.Statistics.ChannelMessageCounts[m.ChannelID]++
 	w.Statistics.MessageCount++
@@ -270,10 +275,11 @@ func (w *Writer) WriteAttachmentIndex(idx *AttachmentIndex) error {
 // contains summary information about the recorded data. The statistics record
 // is optional, but the file should contain at most one.
 func (w *Writer) WriteStatistics(s *Statistics) error {
-	msglen := 8 + 4 + 4 + 4 + len(s.ChannelMessageCounts)*(2+8)
+	msglen := 8 + 4 + 4 + 4 + 4 + len(s.ChannelMessageCounts)*(2+8)
 	w.ensureSized(msglen)
 	offset := putUint64(w.msg, s.MessageCount)
 	offset += putUint32(w.msg[offset:], s.ChannelCount)
+	offset += putUint32(w.msg[offset:], s.SchemaCount)
 	offset += putUint32(w.msg[offset:], s.AttachmentCount)
 	offset += putUint32(w.msg[offset:], s.MetadataCount)
 	offset += putUint32(w.msg[offset:], s.ChunkCount)
@@ -478,12 +484,20 @@ func (w *Writer) Close() error {
 
 	// summary section
 	channelInfoOffset := w.w.Size()
-
 	for _, chanID := range w.channelIDs {
 		if channelInfo, ok := w.channels[chanID]; ok {
 			err := w.WriteChannel(channelInfo)
 			if err != nil {
 				return fmt.Errorf("failed to write channel info: %w", err)
+			}
+		}
+	}
+	schemaOffset := w.w.Size()
+	for _, schemaID := range w.schemaIDs {
+		if schema, ok := w.schemas[schemaID]; ok {
+			err := w.WriteSchema(schema)
+			if err != nil {
+				return fmt.Errorf("failed to write schema: %w", err)
 			}
 		}
 	}
@@ -514,6 +528,16 @@ func (w *Writer) Close() error {
 		err = w.WriteSummaryOffset(&SummaryOffset{
 			GroupOpcode: OpChannel,
 			GroupStart:  channelInfoOffset,
+			GroupLength: schemaOffset - channelInfoOffset,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to write summary offset: %w", err)
+		}
+	}
+	if len(w.schemas) > 0 {
+		err = w.WriteSummaryOffset(&SummaryOffset{
+			GroupOpcode: OpSchema,
+			GroupStart:  schemaOffset,
 			GroupLength: chunkIndexOffset - channelInfoOffset,
 		})
 		if err != nil {

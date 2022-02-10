@@ -3,12 +3,9 @@ package libmcap
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"hash"
 	"hash/crc32"
 	"io"
-	"math"
-	"sort"
 	"time"
 )
 
@@ -192,16 +189,16 @@ type Header struct {
 type Message struct {
 	ChannelID   uint16
 	Sequence    uint32
-	PublishTime uint64
 	LogTime     uint64
+	PublishTime uint64
 	Data        []byte
 }
 
 type Channel struct {
 	ID              uint16
+	SchemaID        uint16
 	Topic           string
 	MessageEncoding string
-	SchemaID        uint16
 	Metadata        map[string]string
 }
 
@@ -293,6 +290,7 @@ type ChunkIndex struct {
 type Statistics struct {
 	MessageCount         uint64
 	ChannelCount         uint32
+	SchemaCount          uint32
 	AttachmentCount      uint32
 	MetadataCount        uint32
 	ChunkCount           uint32
@@ -302,6 +300,7 @@ type Statistics struct {
 type Info struct {
 	Statistics   *Statistics
 	Channels     map[uint16]*Channel
+	Schemas      map[uint16]*Schema
 	ChunkIndexes []*ChunkIndex
 	Start        time.Time
 	End          time.Time
@@ -314,64 +313,6 @@ func (i *Info) ChannelCounts() map[string]uint64 {
 		counts[channel.Topic] = v
 	}
 	return counts
-}
-
-func (i *Info) String() string {
-	buf := &bytes.Buffer{}
-	start := uint64(math.MaxUint64)
-	end := uint64(0)
-
-	compressionFormatStats := make(map[CompressionFormat]struct {
-		count            int
-		compressedSize   uint64
-		uncompressedSize uint64
-	})
-	for _, ci := range i.ChunkIndexes {
-		if ci.StartTime < start {
-			start = ci.StartTime
-		}
-		if ci.EndTime > end {
-			end = ci.EndTime
-		}
-		stats := compressionFormatStats[ci.Compression]
-		stats.count++
-		stats.compressedSize += ci.CompressedSize
-		stats.uncompressedSize += ci.UncompressedSize
-		compressionFormatStats[ci.Compression] = stats
-	}
-
-	starttime := time.Unix(int64(start/1e9), int64(start%1e9))
-	endtime := time.Unix(int64(end/1e9), int64(end%1e9))
-
-	fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
-	fmt.Fprintf(buf, "start: %s\n", starttime.Format(time.RFC3339Nano))
-	fmt.Fprintf(buf, "end: %s\n", endtime.Format(time.RFC3339Nano))
-	fmt.Fprintf(buf, "messages: %d\n", i.Statistics.MessageCount)
-	fmt.Fprintf(buf, "chunks:\n")
-	chunkCount := len(i.ChunkIndexes)
-	for k, v := range compressionFormatStats {
-		compressionRatio := 100 * (1 - float64(v.compressedSize)/float64(v.uncompressedSize))
-		fmt.Fprintf(buf, "\t%s: [%d/%d chunks] (%.2f%%) \n", k, v.count, chunkCount, compressionRatio)
-	}
-	fmt.Fprintf(buf, "channels:\n")
-
-	chanIDs := []uint16{}
-	for chanID := range i.Channels {
-		chanIDs = append(chanIDs, chanID)
-	}
-	sort.Slice(chanIDs, func(i, j int) bool {
-		return chanIDs[i] < chanIDs[j]
-	})
-	for _, chanID := range chanIDs {
-		channel := i.Channels[chanID]
-		fmt.Fprintf(buf, "\t(%d) %s: %d msgs\n",
-			channel.ID,
-			channel.Topic,
-			i.Statistics.ChannelMessageCounts[chanID],
-		)
-	}
-	fmt.Fprintf(buf, "attachments: %d", i.Statistics.AttachmentCount)
-	return buf.String()
 }
 
 type MessageIndexEntry struct {
