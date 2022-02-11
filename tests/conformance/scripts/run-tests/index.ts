@@ -4,12 +4,14 @@ import { program } from "commander";
 import * as Diff from "diff";
 import fs from "fs/promises";
 import stringify from "json-stringify-pretty-compact";
+import { chunk } from "lodash";
 import path from "path";
-import { stringifyRecords } from "scripts/run-tests/runners/stringifyRecords";
-import generateTestVariants from "variants/generateTestVariants";
 
+import { splitMcapRecords } from "../../util/splitMcapRecords";
+import generateTestVariants from "../../variants/generateTestVariants";
 import runners from "./runners";
 import { ReadTestRunner, WriteTestRunner } from "./runners/TestRunner";
+import { stringifyRecords } from "./runners/stringifyRecords";
 
 type TestOptions = {
   dataDir: string;
@@ -26,22 +28,10 @@ function normalizeJson(json: string): string {
   return stringify(data) + "\n";
 }
 
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function splitAnsiString(s: string, length: number, replace: string): string {
-  const regex = RegExp(String.raw`(?:(?:\033\[[0-9;]*m)*.?){1,${length}}`, "g");
-  const chunks = s.match(regex);
-  const arr: string[] = [];
-  (chunks ?? []).forEach((a) => {
-    if (!/^(?:\033\[[0-9;]*m)*$/.test(a)) {
-      arr.push(a);
-    }
-  });
-  return arr.join(replace);
+function spaceHexString(s: string): string {
+  return chunk(s, 8)
+    .map((p) => p.join(""))
+    .join(" ");
 }
 
 async function runReaderTest(
@@ -112,9 +102,10 @@ async function runWriterTest(
     }
     foundAnyTests = true;
     const filePath = path.join(options.dataDir, variant.baseName, `${variant.name}.json`);
+    const basePath = path.basename(filePath);
 
     if (!runner.supportsVariant(variant)) {
-      console.log(colors.yellow("unsupported"), filePath);
+      console.log(colors.yellow("unsupported"), basePath);
       continue;
     }
 
@@ -128,19 +119,18 @@ async function runWriterTest(
     }
 
     const expectedOutputPath = filePath.replace(/\.json$/, ".mcap");
-    const expectedOutputJson = await fs.readFile(filePath, { encoding: "utf-8" });
     const expectedOutput = await fs.readFile(expectedOutputPath);
     if (expectedOutput == undefined) {
       console.error(`Error: missing expected output file ${expectedOutputPath}`);
       hadError = true;
       continue;
     }
-    const outputHex = bytesToHex(output);
-    const expectedOutputHex = bytesToHex(expectedOutput as Uint8Array);
-    if (outputHex !== expectedOutputHex) {
-      console.error(colors.red("fail       "), filePath);
-      // If the file produced was valid parsable MCAP, we can re-stringify it and display a JSON diff.
+    const expectedParts = splitMcapRecords(expectedOutput).map(spaceHexString).join("\n");
+    const outputParts = splitMcapRecords(output).map(spaceHexString).join("\n");
+    if (expectedParts !== outputParts) {
+      console.error(colors.red("fail       "), path.basename(filePath));
       try {
+        const expectedOutputJson = await fs.readFile(filePath, { encoding: "utf-8" });
         const reader = new Mcap0StreamReader({ validateCrcs: true });
         reader.append(output);
         const records: Mcap0Types.TypedMcapRecord[] = [];
@@ -152,31 +142,36 @@ async function runWriterTest(
         const outputNorm = normalizeJson(actualOutputJson);
         const expectedNorm = normalizeJson(expectedOutputJson);
         if (outputNorm !== expectedNorm) {
-          console.error(Diff.createPatch(filePath, expectedNorm, outputNorm));
+          console.error(
+            Diff.createPatch(
+              path.basename(filePath),
+              expectedNorm,
+              outputNorm,
+              "expected",
+              "output",
+            ),
+          );
         }
       } catch (err) {
-        console.error("invalid mcap:", err);
+        console.error("Invalid mcap:", err);
       }
-
-      // Display a diff of the raw bytes.
-      let colorDiff = "";
-      const charDiff = Diff.diffChars(expectedOutputHex, outputHex);
-      charDiff.forEach((part) => {
-        const color =
-          part.added === true ? colors.green : part.removed === true ? colors.red : colors.grey;
-        colorDiff += color(part.value);
+      const diff = Diff.diffLines(expectedParts, outputParts);
+      diff.forEach((part) => {
+        if (part.added === true) {
+          console.error(colors.green(part.value.trimEnd()));
+        } else if (part.removed === true) {
+          console.error(colors.red(part.value.trimEnd()));
+        } else {
+          console.error(part.value.trim());
+        }
       });
-      console.error(splitAnsiString(splitAnsiString(colorDiff, 8, " "), 81, "\n"));
-
       console.error();
 
       hadError = true;
       continue;
     }
 
-    if (!hadError) {
-      console.error(colors.green("pass       "), filePath);
-    }
+    console.error(colors.green("pass       "), basePath);
   }
 
   return { foundAnyTests, hadError };
@@ -215,6 +210,7 @@ async function main(options: TestOptions) {
         runner,
         options,
       );
+
       hadError ||= newHadError;
       foundAnyTests ||= newFoundAnyTests;
     }
