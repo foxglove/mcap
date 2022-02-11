@@ -15,6 +15,7 @@ ignorePaths:
 
 words:
   - cbor
+  - conanfile
   - cmake
   - crc
   - crcs
