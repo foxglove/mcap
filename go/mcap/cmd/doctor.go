@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"log"
 	"math"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/foxglove/mcap/go/libmcap"
+	"github.com/klauspost/compress/zstd"
+	"github.com/pierrec/lz4/v4"
 	"github.com/spf13/cobra"
 )
 
@@ -43,23 +46,75 @@ func (doctor *mcapDoctor) fatalf(format string, v ...interface{}) {
 }
 
 func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
-	if chunk.Compression != "lz4" && chunk.Compression != "zstd" && chunk.Compression != "" {
+
+	compressionFormat := libmcap.CompressionFormat(chunk.Compression)
+	var uncompressedBytes []byte
+
+	switch compressionFormat {
+	case libmcap.CompressionNone:
+		uncompressedBytes = chunk.Records
+	case libmcap.CompressionZSTD:
+		compressedDataReader := bytes.NewReader(chunk.Records)
+		chunkDataReader, err := zstd.NewReader(compressedDataReader)
+		if err != nil {
+			doctor.error("Could not make zstd decoder: %s", err)
+			return
+		}
+		uncompressedBytes, err = io.ReadAll(chunkDataReader)
+		if err != nil {
+			doctor.error("Could not decompress: %s", err)
+			return
+		}
+	case libmcap.CompressionLZ4:
+		var err error
+		compressedDataReader := bytes.NewReader(chunk.Records)
+		chunkDataReader := lz4.NewReader(compressedDataReader)
+		uncompressedBytes, err = io.ReadAll(chunkDataReader)
+		if err != nil {
+			doctor.error("Could not decompress: %s", err)
+			return
+		}
+	default:
 		doctor.error("Unsupported compression format: %s", chunk.Compression)
+		return
 	}
 
-	byteReader := bytes.NewReader(chunk.Records)
-	lexer, err := libmcap.NewLexer(byteReader, &libmcap.LexOpts{
+	/*
+		if l.validateCRC {
+			uncompressed, err := io.ReadAll(chunkDataReader)
+			if err != nil {
+				return err
+			}
+			crc := crc32.ChecksumIEEE(uncompressed)
+			if crc != uncompressedCRC {
+				doctor.error("invalid CRC: %x != %x", crc, uncompressedCRC)
+				return
+			}
+		}
+	*/
+
+	if uint64(len(uncompressedBytes)) != chunk.UncompressedSize {
+		doctor.error("Uncompressed chunk data size != Chunk.uncompressed_size")
+		return
+	}
+
+	if chunk.UncompressedCRC != 0 {
+		crc := crc32.ChecksumIEEE(uncompressedBytes)
+		if crc != chunk.UncompressedCRC {
+			doctor.error("invalid CRC: %x != %x", crc, chunk.UncompressedCRC)
+			return
+		}
+	}
+
+	uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
+
+	lexer, err := libmcap.NewLexer(uncompressedBytesReader, &libmcap.LexOpts{
 		SkipMagic:   true,
 		ValidateCRC: true,
 		EmitChunks:  true,
 	})
 	if err != nil {
 		doctor.error("Failed to make lexer for chunk bytes", err)
-		return
-	}
-
-	if uint64(len(chunk.Records)) != chunk.UncompressedSize {
-		doctor.error("Uncompressed chunk data size != Chunk.uncompressed_size")
 		return
 	}
 
