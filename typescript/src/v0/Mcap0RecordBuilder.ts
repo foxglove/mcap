@@ -160,9 +160,9 @@ export class Mcap0RecordBuilder {
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .uint64(0n) // placeholder
-      .string(attachment.name)
       .uint64(attachment.logTime)
       .uint64(attachment.createTime)
+      .string(attachment.name)
       .string(attachment.contentType)
       .uint64(BigInt(attachment.data.byteLength))
       .bytes(attachment.data)
