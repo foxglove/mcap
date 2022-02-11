@@ -300,8 +300,8 @@ describe("Mcap0StreamReader", () => {
           Opcode.ATTACHMENT,
           crcSuffix([
             ...string("myFile"), // name
-            ...uint64LE(1n), // created at
             ...uint64LE(2n), // log time
+            ...uint64LE(1n), // create time
             ...string("text/plain"), // content type
             ...uint64LE(3n), // data length
             10,
@@ -522,8 +522,8 @@ describe("Mcap0StreamReader", () => {
           Opcode.ATTACHMENT,
           crcSuffix([
             ...string("myFile"), // name
-            ...uint64LE(1n), // created at
             ...uint64LE(2n), // log time
+            ...uint64LE(1n), // create time
             ...string("text/plain"), // content type
             ...uint64PrefixedBytes(new TextEncoder().encode("hello")), // data
           ]),
@@ -539,8 +539,8 @@ describe("Mcap0StreamReader", () => {
     expect(reader.nextRecord()).toEqual({
       type: "Attachment",
       name: "myFile",
-      createdAt: 1n,
       logTime: 2n,
+      createTime: 1n,
       contentType: "text/plain",
       data: new TextEncoder().encode("hello"),
     } as TypedMcapRecords["Attachment"]);

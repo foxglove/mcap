@@ -87,6 +87,7 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
             dataSize: BigInt(record.data.byteLength),
             contentType: record.contentType,
             logTime: record.logTime,
+            createTime: record.createTime,
           });
         }
         break;

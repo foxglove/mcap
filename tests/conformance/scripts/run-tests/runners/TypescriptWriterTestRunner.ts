@@ -87,8 +87,8 @@ function parseJsonRecord(record: {
       return {
         type: jsonRecord.type,
         name: jsonRecord.fields.name,
-        createdAt: BigInt(jsonRecord.fields.createdAt),
         logTime: BigInt(jsonRecord.fields.logTime),
+        createTime: BigInt(jsonRecord.fields.createTime),
         contentType: jsonRecord.fields.contentType,
         data: Uint8Array.from(jsonRecord.fields.data),
       };

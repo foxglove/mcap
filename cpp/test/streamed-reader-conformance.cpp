@@ -142,7 +142,7 @@ int main(int argc, char** argv) {
       {"type", "Attachment"},
       {"fields", json::array({
                    {"content_type", attachment.contentType},
-                   {"created_at", std::to_string(attachment.createdAt)},
+                   {"create_time", std::to_string(attachment.createTime)},
                    {"data", ToJson(attachment.data, attachment.dataSize)},
                    {"log_time", std::to_string(attachment.logTime)},
                    {"name", attachment.name},
@@ -155,6 +155,7 @@ int main(int argc, char** argv) {
       {"type", "AttachmentIndex"},
       {"fields", json::array({
                    {"content_type", attachmentIndex.contentType},
+                   {"create_time", std::to_string(attachmentIndex.createTime)},
                    {"data_size", std::to_string(attachmentIndex.dataSize)},
                    {"length", std::to_string(attachmentIndex.length)},
                    {"log_time", std::to_string(attachmentIndex.logTime)},

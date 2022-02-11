@@ -133,7 +133,7 @@ func NewReader(r io.Reader) (*Reader, error) {
 	if readseeker, ok := r.(io.ReadSeeker); ok {
 		rs = readseeker
 	}
-	lexer, err := NewLexer(r, &LexOpts{
+	lexer, err := NewLexer(r, &LexerOptions{
 		EmitChunks: true,
 	})
 	if err != nil {

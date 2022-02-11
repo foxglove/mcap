@@ -204,8 +204,8 @@ type Channel struct {
 
 type Attachment struct {
 	Name        string
-	CreatedAt   uint64
 	LogTime     uint64
+	CreateTime  uint64
 	ContentType string
 	Data        []byte
 	CRC         uint32
@@ -240,6 +240,7 @@ type AttachmentIndex struct {
 	Offset      uint64
 	Length      uint64
 	LogTime     uint64
+	CreateTime  uint64
 	DataSize    uint64
 	Name        string
 	ContentType string
