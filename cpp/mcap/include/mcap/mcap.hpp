@@ -387,10 +387,10 @@ struct McapReaderOptions {
  */
 struct McapWriterOptions {
   /**
-   * @brief Enable CRC calculations for Chunks, Attachments, and the Data and
+   * @brief Disable CRC calculations for Chunks, Attachments, and the Data and
    * Summary sections.
    */
-  bool enableCRC;
+  bool noCRC;
   /**
    * @brief Do not write Chunks to the file, instead writing Schema, Channel,
    * and Message records directly into the Data section.
