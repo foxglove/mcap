@@ -1766,7 +1766,8 @@ Status McapReader::ParseAttachment(const Record& record, Attachment* attachment)
   }
   offset += 8;
   // name
-  if (auto status = internal::ParseString(record.data, record.dataSize, &attachment->name);
+  if (auto status =
+        internal::ParseString(record.data + offset, record.dataSize - offset, &attachment->name);
       !status.ok()) {
     return status;
   }
