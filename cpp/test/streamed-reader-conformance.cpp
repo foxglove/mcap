@@ -56,7 +56,8 @@ int main(int argc, char** argv) {
     }));
   };
 
-  reader.onSchema = [&](const mcap::Schema& schema) {
+  reader.onSchema = [&](const mcap::SchemaPtr schemaPtr) {
+    const auto& schema = *schemaPtr;
     recordsJson.push_back(json::object({
       {"type", "Schema"},
       {"fields", json::array({
@@ -68,7 +69,8 @@ int main(int argc, char** argv) {
     }));
   };
 
-  reader.onChannel = [&](const mcap::Channel& channel) {
+  reader.onChannel = [&](const mcap::ChannelPtr channelPtr) {
+    const auto& channel = *channelPtr;
     recordsJson.push_back(json::object({
       {"type", "Channel"},
       {"fields", json::array({
