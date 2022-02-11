@@ -104,6 +104,11 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 		return
 	}
 
+	if uint64(len(chunk.Records)) != chunk.UncompressedSize {
+		doctor.error("Uncompressed chunk data size != Chunk.uncompressed_size")
+		return
+	}
+
 	var minLogTime uint64 = math.MaxUint64
 	var maxLogTime uint64 = 0
 
