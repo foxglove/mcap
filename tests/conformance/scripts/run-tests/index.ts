@@ -6,12 +6,12 @@ import fs from "fs/promises";
 import stringify from "json-stringify-pretty-compact";
 import { chunk } from "lodash";
 import path from "path";
-import { splitMcapRecords } from "util/splitMcapRecords";
-import generateTestVariants from "variants/generateTestVariants";
 
+import { splitMcapRecords } from "../../util/splitMcapRecords";
+import generateTestVariants from "../../variants/generateTestVariants";
 import runners from "./runners";
-import { stringifyRecords } from "./runners/stringifyRecords";
 import { ReadTestRunner, WriteTestRunner } from "./runners/TestRunner";
+import { stringifyRecords } from "./runners/stringifyRecords";
 
 type TestOptions = {
   dataDir: string;
@@ -25,7 +25,7 @@ function normalizeJson(json: string): string {
   const data = JSON.parse(json);
   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   delete data.meta;
-  return stringify(data);
+  return stringify(data) + "\n";
 }
 
 function spaceHexString(s: string): string {
@@ -117,6 +117,7 @@ async function runWriterTest(
       hadError = true;
       continue;
     }
+
     const expectedOutputPath = filePath.replace(/\.json$/, ".mcap");
     const expectedOutput = await fs.readFile(expectedOutputPath).catch(() => undefined);
     if (expectedOutput == undefined) {
