@@ -79,20 +79,6 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 		return
 	}
 
-	/*
-		if l.validateCRC {
-			uncompressed, err := io.ReadAll(chunkDataReader)
-			if err != nil {
-				return err
-			}
-			crc := crc32.ChecksumIEEE(uncompressed)
-			if crc != uncompressedCRC {
-				doctor.error("invalid CRC: %x != %x", crc, uncompressedCRC)
-				return
-			}
-		}
-	*/
-
 	if uint64(len(uncompressedBytes)) != chunk.UncompressedSize {
 		doctor.error("Uncompressed chunk data size != Chunk.uncompressed_size")
 		return
