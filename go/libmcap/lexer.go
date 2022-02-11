@@ -300,13 +300,13 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 	}
 }
 
-type LexOpts struct {
+type LexerOptions struct {
 	SkipMagic   bool
 	ValidateCRC bool
 	EmitChunks  bool
 }
 
-func NewLexer(r io.Reader, opts ...*LexOpts) (*Lexer, error) {
+func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 	var validateCRC, emitChunks, skipMagic bool
 	if len(opts) > 0 {
 		validateCRC = opts[0].ValidateCRC
