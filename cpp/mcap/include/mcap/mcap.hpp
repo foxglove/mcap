@@ -133,6 +133,9 @@ struct Channel {
       , metadata(metadata) {}
 };
 
+using SchemaPtr = std::shared_ptr<Schema>;
+using ChannelPtr = std::shared_ptr<Channel>;
+
 struct Message {
   ChannelId channelId;
   uint32_t sequence;
@@ -233,10 +236,10 @@ struct DataEnd {
 
 struct MessageView {
   const Message& message;
-  const Channel& channel;
-  const Schema const* schema;
+  const ChannelPtr channel;
+  const SchemaPtr schema;
 
-  MessageView(const Message& message, const Channel& channel, const Schema const* schema)
+  MessageView(const Message& message, const ChannelPtr channel, const SchemaPtr schema)
       : message(message)
       , channel(channel)
       , schema(schema) {}
@@ -454,8 +457,12 @@ public:
                                  Timestamp endTime = MaxTime);
 
   IReadable* dataSource();
+
   const std::optional<Header>& header() const;
   const std::optional<Footer>& footer() const;
+
+  ChannelPtr channel(ChannelId channelId) const;
+  SchemaPtr schema(SchemaId schemaId) const;
 
   static Status ReadRecord(IReadable& reader, uint64_t offset, Record* record);
   static Status ReadFooter(IReadable& reader, uint64_t offset, Footer* footer);
@@ -479,6 +486,8 @@ public:
   static std::optional<Compression> ParseCompression(const std::string_view compression);
 
 private:
+  friend LinearMessageView;
+
   IReadable* input_ = nullptr;
   McapReaderOptions options_{};
   std::unique_ptr<FileStreamReader> fileStreamInput_;
@@ -487,7 +496,8 @@ private:
   std::optional<Statistics> statistics_;
   std::vector<ChunkIndex> chunkIndexes_;
   std::vector<AttachmentIndex> attachmentIndexes_;
-  std::unordered_map<ChannelId, Channel> channels_;
+  std::unordered_map<SchemaId, SchemaPtr> schemas_;
+  std::unordered_map<ChannelId, ChannelPtr> channels_;
   // Used for uncompressed messages
   std::unordered_map<ChannelId, std::map<Timestamp, ByteOffset>> messageIndex_;
   // Used for messages inside compressed chunks
@@ -656,8 +666,8 @@ private:
 };
 
 struct TypedChunkReader {
-  std::function<void(const Schema&)> onSchema;
-  std::function<void(const Channel&)> onChannel;
+  std::function<void(const SchemaPtr)> onSchema;
+  std::function<void(const ChannelPtr)> onChannel;
   std::function<void(const Message&)> onMessage;
   std::function<void(const Record&)> onUnknownRecord;
 
@@ -682,8 +692,8 @@ private:
 struct TypedRecordReader {
   std::function<void(const Header&)> onHeader;
   std::function<void(const Footer&)> onFooter;
-  std::function<void(const Schema&)> onSchema;
-  std::function<void(const Channel&)> onChannel;
+  std::function<void(const SchemaPtr)> onSchema;
+  std::function<void(const ChannelPtr)> onChannel;
   std::function<void(const Message&)> onMessage;
   std::function<void(const Chunk&)> onChunk;
   std::function<void(const MessageIndex&)> onMessageIndex;
@@ -718,9 +728,9 @@ struct LinearMessageView {
   struct Iterator {
     using iterator_category = std::forward_iterator_tag;
     using difference_type = int64_t;
-    using value_type = Message;
-    using pointer = const Message*;
-    using reference = const Message&;
+    using value_type = MessageView;
+    using pointer = const MessageView*;
+    using reference = const MessageView&;
 
     reference operator*() const;
     pointer operator->() const;
@@ -730,36 +740,38 @@ struct LinearMessageView {
     friend bool operator!=(const Iterator& a, const Iterator& b);
 
     static const Iterator& end() {
+      static McapReader emptyReader;
       static auto onProblem = [](const Status& problem) {};
-      static LinearMessageView::Iterator emptyIterator{onProblem};
+      static LinearMessageView::Iterator emptyIterator{emptyReader, onProblem};
       return emptyIterator;
     }
 
   private:
     friend LinearMessageView;
 
-    std::optional<TypedRecordReader> reader_;
+    McapReader& mcapReader_;
+    std::optional<TypedRecordReader> recordReader_;
     Timestamp startTime_;
     Timestamp endTime_;
     const ProblemCallback& onProblem_;
-    Message curMessage_;
+    std::optional<MessageView> curMessage_;
 
-    explicit Iterator(const ProblemCallback& onProblem);
-    Iterator(IReadable& dataSource, ByteOffset dataStart, ByteOffset dataEnd, Timestamp startTime,
+    Iterator(McapReader& mcapReader, const ProblemCallback& onProblem);
+    Iterator(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd, Timestamp startTime,
              Timestamp endTime, const ProblemCallback& onProblem);
 
     void readNext();
   };
 
-  explicit LinearMessageView(const ProblemCallback& onProblem);
-  LinearMessageView(IReadable* dataSource, ByteOffset dataStart, ByteOffset dataEnd,
+  LinearMessageView(McapReader& mcapReader, const ProblemCallback& onProblem);
+  LinearMessageView(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd,
                     Timestamp startTime, Timestamp endTime, const ProblemCallback& onProblem);
 
   Iterator begin();
   Iterator end();
 
 private:
-  IReadable* dataSource_;
+  McapReader& mcapReader_;
   ByteOffset dataStart_;
   ByteOffset dataEnd_;
   Timestamp startTime_;

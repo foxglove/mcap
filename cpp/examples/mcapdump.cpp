@@ -185,11 +185,11 @@ void Dump(mcap::IReadable& dataSource) {
   reader.onFooter = [](const mcap::Footer& record) {
     std::cout << ToString(record) << "\n";
   };
-  reader.onSchema = [&](const mcap::Schema& record) {
-    std::cout << (inChunk ? "  " : "") << ToString(record) << "\n";
+  reader.onSchema = [&](const mcap::SchemaPtr recordPtr) {
+    std::cout << (inChunk ? "  " : "") << ToString(*recordPtr) << "\n";
   };
-  reader.onChannel = [&](const mcap::Channel& record) {
-    std::cout << (inChunk ? "  " : "") << ToString(record) << "\n";
+  reader.onChannel = [&](const mcap::ChannelPtr recordPtr) {
+    std::cout << (inChunk ? "  " : "") << ToString(*recordPtr) << "\n";
   };
   reader.onMessage = [&](const mcap::Message& record) {
     std::cout << (inChunk ? "  " : "") << ToString(record) << "\n";
@@ -255,8 +255,9 @@ void DumpMessages(mcap::IReadable& dataSource) {
 
   auto messages = reader.readMessages(onProblem);
 
-  for (const auto& msg : messages) {
-    std::cout << ToString(msg) << "\n";
+  for (const auto& msgView : messages) {
+    const mcap::Channel& channel = *msgView.channel;
+    std::cout << "[" << channel.topic << "] " << ToString(msgView.message) << "\n";
   }
 
   reader.close();
@@ -272,9 +273,12 @@ int main(int argc, char* argv[]) {
   std::ifstream input(inputFile, std::ios::binary);
   mcap::FileStreamReader dataSource{input};
 
-  // DumpRaw(dataSource);
+  std::cout << "Raw records:\n";
+  DumpRaw(dataSource);
+  std::cout << "\nParsed records:\n";
   Dump(dataSource);
-  // DumpMessages(dataSource);
+  std::cout << "\nMessage iterator:\n";
+  DumpMessages(dataSource);
 
   return 0;
 }

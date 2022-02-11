@@ -1287,6 +1287,7 @@ void McapReader::close() {
   statistics_ = std::nullopt;
   chunkIndexes_.clear();
   attachmentIndexes_.clear();
+  schemas_.clear();
   channels_.clear();
   messageIndex_.clear();
   messageChunkIndex_.clear();
@@ -1325,13 +1326,12 @@ LinearMessageView McapReader::readMessages(Timestamp startTime, Timestamp endTim
 LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem, Timestamp startTime,
                                            Timestamp endTime) {
   // Check that open() has been successfully called
-  auto* dataSourcePtr = dataSource();
-  if (!dataSourcePtr || dataStart_ == 0) {
+  if (!dataSource() || dataStart_ == 0) {
     onProblem(StatusCode::NotOpen);
-    return LinearMessageView{onProblem};
+    return LinearMessageView{*this, onProblem};
   }
 
-  return LinearMessageView{dataSourcePtr, dataStart_, dataEnd_, startTime, endTime, onProblem};
+  return LinearMessageView{*this, dataStart_, dataEnd_, startTime, endTime, onProblem};
 }
 
 IReadable* McapReader::dataSource() {
@@ -1344,6 +1344,16 @@ const std::optional<Header>& McapReader::header() const {
 
 const std::optional<Footer>& McapReader::footer() const {
   return footer_;
+}
+
+ChannelPtr McapReader::channel(ChannelId channelId) const {
+  const auto& maybeChannel = channels_.find(channelId);
+  return (maybeChannel == channels_.end()) ? nullptr : maybeChannel->second;
+}
+
+SchemaPtr McapReader::schema(SchemaId schemaId) const {
+  const auto& maybeSchema = schemas_.find(schemaId);
+  return (maybeSchema == schemas_.end()) ? nullptr : maybeSchema->second;
 }
 
 Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record* record) {
@@ -1957,20 +1967,20 @@ bool TypedChunkReader::next() {
   switch (record.opcode) {
     case OpCode::Schema: {
       if (onSchema) {
-        Schema schema;
-        status_ = McapReader::ParseSchema(record, &schema);
+        SchemaPtr schemaPtr = std::make_shared<Schema>();
+        status_ = McapReader::ParseSchema(record, schemaPtr.get());
         if (status_.ok()) {
-          onSchema(schema);
+          onSchema(schemaPtr);
         }
       }
       break;
     }
     case OpCode::Channel: {
       if (onChannel) {
-        Channel channel;
-        status_ = McapReader::ParseChannel(record, &channel);
+        ChannelPtr channelPtr = std::make_shared<Channel>();
+        status_ = McapReader::ParseChannel(record, channelPtr.get());
         if (status_.ok()) {
-          onChannel(channel);
+          onChannel(channelPtr);
         }
       }
       break;
@@ -2026,12 +2036,12 @@ TypedRecordReader::TypedRecordReader(IReadable& dataSource, ByteOffset startOffs
     : reader_(dataSource, startOffset, std::min(endOffset, dataSource.size()))
     , status_(StatusCode::Success)
     , parsingChunk_(false) {
-  chunkReader_.onSchema = [&](const Schema& schema) {
+  chunkReader_.onSchema = [&](const SchemaPtr schema) {
     if (onSchema) {
       onSchema(schema);
     }
   };
-  chunkReader_.onChannel = [&](const Channel& channel) {
+  chunkReader_.onChannel = [&](const ChannelPtr channel) {
     if (onChannel) {
       onChannel(channel);
     }
@@ -2085,18 +2095,18 @@ bool TypedRecordReader::next() {
     }
     case OpCode::Schema: {
       if (onSchema) {
-        Schema schema;
-        if (status_ = McapReader::ParseSchema(record, &schema); status_.ok()) {
-          onSchema(schema);
+        SchemaPtr schemaPtr = std::make_shared<Schema>();
+        if (status_ = McapReader::ParseSchema(record, schemaPtr.get()); status_.ok()) {
+          onSchema(schemaPtr);
         }
       }
       break;
     }
     case OpCode::Channel: {
       if (onChannel) {
-        Channel channel;
-        if (status_ = McapReader::ParseChannel(record, &channel); status_.ok()) {
-          onChannel(channel);
+        ChannelPtr channelPtr = std::make_shared<Channel>();
+        if (status_ = McapReader::ParseChannel(record, channelPtr.get()); status_.ok()) {
+          onChannel(channelPtr);
         }
       }
       break;
@@ -2237,18 +2247,18 @@ const Status& TypedRecordReader::status() const {
 
 // LinearMessageView ///////////////////////////////////////////////////////////
 
-LinearMessageView::LinearMessageView(const ProblemCallback& onProblem)
-    : dataSource_(nullptr)
+LinearMessageView::LinearMessageView(McapReader& mcapReader, const ProblemCallback& onProblem)
+    : mcapReader_(mcapReader)
     , dataStart_(0)
     , dataEnd_(0)
     , startTime_(0)
     , endTime_(0)
     , onProblem_(onProblem) {}
 
-LinearMessageView::LinearMessageView(IReadable* dataSource, ByteOffset dataStart,
+LinearMessageView::LinearMessageView(McapReader& mcapReader, ByteOffset dataStart,
                                      ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
                                      const ProblemCallback& onProblem)
-    : dataSource_(dataSource)
+    : mcapReader_(mcapReader)
     , dataStart_(dataStart)
     , dataEnd_(dataEnd)
     , startTime_(startTime)
@@ -2256,11 +2266,11 @@ LinearMessageView::LinearMessageView(IReadable* dataSource, ByteOffset dataStart
     , onProblem_(onProblem) {}
 
 LinearMessageView::Iterator LinearMessageView::begin() {
-  if (!dataSource_) {
+  if (dataStart_ == dataEnd_ || !mcapReader_.dataSource()) {
     return end();
   }
-  return LinearMessageView::Iterator{*dataSource_, dataStart_, dataEnd_,
-                                     startTime_,   endTime_,   onProblem_};
+  return LinearMessageView::Iterator{mcapReader_, dataStart_, dataEnd_,
+                                     startTime_,  endTime_,   onProblem_};
 }
 
 LinearMessageView::Iterator LinearMessageView::end() {
@@ -2269,66 +2279,89 @@ LinearMessageView::Iterator LinearMessageView::end() {
 
 // LinearMessageView::Iterator /////////////////////////////////////////////////
 
-LinearMessageView::Iterator::Iterator(const ProblemCallback& onProblem)
-    : reader_(std::nullopt)
+LinearMessageView::Iterator::Iterator(McapReader& mcapReader, const ProblemCallback& onProblem)
+    : mcapReader_(mcapReader)
+    , recordReader_(std::nullopt)
     , startTime_(0)
     , endTime_(0)
-    , onProblem_(onProblem)
-    , curMessage_{} {
-  reader_->onMessage = [this](const Message& message) {
-    curMessage_ = message;
-  };
+    , onProblem_(onProblem) {}
 
-  ++(*this);
-}
-
-LinearMessageView::Iterator::Iterator(IReadable& dataSource, ByteOffset dataStart,
+LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataStart,
                                       ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
                                       const ProblemCallback& onProblem)
-    : reader_(std::in_place, dataSource, dataStart, dataEnd)
+    : mcapReader_(mcapReader)
+    , recordReader_(std::in_place, *mcapReader.dataSource(), dataStart, dataEnd)
     , startTime_(startTime)
     , endTime_(endTime)
-    , onProblem_(onProblem)
-    , curMessage_{} {
-  reader_->onMessage = [this](const Message& message) {
-    curMessage_ = message;
+    , onProblem_(onProblem) {
+  recordReader_->onSchema = [this](const SchemaPtr schema) {
+    mcapReader_.schemas_.insert_or_assign(schema->id, schema);
+  };
+  recordReader_->onChannel = [this](const ChannelPtr channel) {
+    mcapReader_.channels_.insert_or_assign(channel->id, channel);
+  };
+  recordReader_->onMessage = [this](const Message& message) {
+    auto maybeChannel = mcapReader_.channel(message.channelId);
+    if (!maybeChannel) {
+      onProblem_(
+        Status{StatusCode::InvalidChannelId,
+               StrFormat("message at log_time {} (seq {}) references missing channel id {}",
+                         message.logTime, message.sequence, message.channelId)});
+      return;
+    }
+
+    auto& channel = *maybeChannel;
+    SchemaPtr maybeSchema;
+    if (channel.schemaId != 0) {
+      maybeSchema = mcapReader_.schema(channel.schemaId);
+      if (!maybeSchema) {
+        onProblem_(Status{StatusCode::InvalidSchemaId,
+                          StrFormat("channel {} ({}) references missing schema id {}", channel.id,
+                                    channel.topic, channel.schemaId)});
+        return;
+      }
+    }
+
+    curMessage_.emplace(message, maybeChannel, maybeSchema);
   };
 
   ++(*this);
 }
 
 LinearMessageView::Iterator::reference LinearMessageView::Iterator::operator*() const {
-  return curMessage_;
+  return *curMessage_;
 }
 
 LinearMessageView::Iterator::pointer LinearMessageView::Iterator::operator->() const {
-  return &curMessage_;
+  return &*curMessage_;
 }
 
 LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
-  curMessage_.data = nullptr;
+  curMessage_ = std::nullopt;
 
-  if (!reader_.has_value()) {
+  if (!recordReader_.has_value()) {
     return *this;
   }
 
-  while (!curMessage_.data || curMessage_.logTime < startTime_) {
-    const bool found = reader_->next();
+  // Keep iterate through records until we find a message with a logTime >= startTime_
+  while (!curMessage_.has_value() || curMessage_->message.logTime < startTime_) {
+    const bool found = recordReader_->next();
 
     // Surface any problem that may have occurred while reading
-    auto& status = reader_->status();
+    auto& status = recordReader_->status();
     if (!status.ok()) {
       onProblem_(status);
     }
 
     if (!found) {
-      reader_ = std::nullopt;
+      recordReader_ = std::nullopt;
       return *this;
     }
   }
 
-  if (curMessage_.logTime >= endTime_) {
-    reader_ = std::nullopt;
+  // Check if this message is past the time range of this view
+  if (curMessage_->message.logTime >= endTime_) {
+    recordReader_ = std::nullopt;
   }
   return *this;
 }
@@ -2340,14 +2373,14 @@ LinearMessageView::Iterator LinearMessageView::Iterator::operator++(int) {
 }
 
 bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
-  const bool aEnd = !a.reader_.has_value();
-  const bool bEnd = !b.reader_.has_value();
+  const bool aEnd = !a.recordReader_.has_value();
+  const bool bEnd = !b.recordReader_.has_value();
   if (aEnd && bEnd) {
     return true;
   } else if (aEnd || bEnd) {
     return false;
   }
-  return a.reader_->offset() == b.reader_->offset();
+  return a.recordReader_->offset() == b.recordReader_->offset();
 }
 
 bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
