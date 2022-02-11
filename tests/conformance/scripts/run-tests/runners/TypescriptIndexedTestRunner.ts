@@ -2,14 +2,13 @@ import { Mcap0IndexedReader } from "@foxglove/mcap";
 import fs from "fs/promises";
 import { TestFeatures, TestVariant } from "variants/types";
 
-import ITestRunner from "./ITestRunner";
+import { ReadTestRunner } from "./TestRunner";
 import { stringifyRecords } from "./stringifyRecords";
 
-export default class TypescriptIndexedTestRunner implements ITestRunner {
+export default class TypescriptIndexedTestRunner extends ReadTestRunner {
   name = "ts-indexed";
-  mode = "read" as const;
 
-  async run(filePath: string, variant: TestVariant): Promise<string> {
+  async runReadTest(filePath: string, variant: TestVariant): Promise<string> {
     const handle = await fs.open(filePath, "r");
     try {
       return await this._run(handle, variant);
