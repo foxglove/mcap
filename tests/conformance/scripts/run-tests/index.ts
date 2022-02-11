@@ -1,12 +1,17 @@
+import { Mcap0StreamReader, Mcap0Types } from "@foxglove/mcap";
 import colors from "colors";
 import { program } from "commander";
 import * as Diff from "diff";
 import fs from "fs/promises";
 import stringify from "json-stringify-pretty-compact";
+import { chunk } from "lodash";
 import path from "path";
-import generateTestVariants from "variants/generateTestVariants";
 
-import runners, { ITestRunner } from "./runners";
+import { splitMcapRecords } from "../../util/splitMcapRecords";
+import generateTestVariants from "../../variants/generateTestVariants";
+import runners from "./runners";
+import { ReadTestRunner, WriteTestRunner } from "./runners/TestRunner";
+import { stringifyRecords } from "./runners/stringifyRecords";
 
 type TestOptions = {
   dataDir: string;
@@ -20,29 +25,17 @@ function normalizeJson(json: string): string {
   const data = JSON.parse(json);
   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   delete data.meta;
-  return stringify(data);
+  return stringify(data) + "\n";
 }
 
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function splitAnsiString(s: string, length: number, replace: string): string {
-  const regex = RegExp(String.raw`(?:(?:\033\[[0-9;]*m)*.?){1,${length}}`, "g");
-  const chunks = s.match(regex);
-  const arr: string[] = [];
-  (chunks ?? []).forEach((a) => {
-    if (!/^(?:\033\[[0-9;]*m)*$/.test(a)) {
-      arr.push(a);
-    }
-  });
-  return arr.join(replace);
+function spaceHexString(s: string): string {
+  return chunk(s, 8)
+    .map((p) => p.join(""))
+    .join(" ");
 }
 
 async function runReaderTest(
-  runner: ITestRunner,
+  runner: ReadTestRunner,
   options: TestOptions,
 ): Promise<{ foundAnyTests: boolean; hadError: boolean }> {
   let foundAnyTests = false;
@@ -64,7 +57,7 @@ async function runReaderTest(
 
     let output: string;
     try {
-      output = await runner.run(filePath, variant);
+      output = await runner.runReadTest(filePath, variant);
     } catch (error) {
       console.error(error);
       hadError = true;
@@ -97,7 +90,7 @@ async function runReaderTest(
 }
 
 async function runWriterTest(
-  runner: ITestRunner,
+  runner: WriteTestRunner,
   options: TestOptions,
 ): Promise<{ foundAnyTests: boolean; hadError: boolean }> {
   let foundAnyTests = false;
@@ -109,20 +102,22 @@ async function runWriterTest(
     }
     foundAnyTests = true;
     const filePath = path.join(options.dataDir, variant.baseName, `${variant.name}.json`);
+    const basePath = path.basename(filePath);
 
     if (!runner.supportsVariant(variant)) {
-      console.log(colors.yellow("unsupported"), filePath);
+      console.log(colors.yellow("unsupported"), basePath);
       continue;
     }
 
-    let output: string;
+    let output: Uint8Array;
     try {
-      output = await runner.run(filePath, variant);
+      output = await runner.runWriteTest(filePath, variant);
     } catch (error) {
       console.error(error);
       hadError = true;
       continue;
     }
+
     const expectedOutputPath = filePath.replace(/\.json$/, ".mcap");
     const expectedOutput = await fs.readFile(expectedOutputPath).catch(() => undefined);
     if (expectedOutput == undefined) {
@@ -130,25 +125,52 @@ async function runWriterTest(
       hadError = true;
       continue;
     }
-    const expectedOutputHex = bytesToHex(expectedOutput as Uint8Array);
-    if (output !== expectedOutputHex) {
-      console.error(colors.red("fail       "), filePath);
-      let colorDiff = "";
-      const charDiff = Diff.diffChars(expectedOutputHex, output);
-      charDiff.forEach((part) => {
-        const color =
-          part.added === true ? colors.green : part.removed === true ? colors.red : colors.grey;
-        colorDiff += color(part.value);
+    const expectedParts = splitMcapRecords(expectedOutput).map(spaceHexString).join("\n");
+    const outputParts = splitMcapRecords(output).map(spaceHexString).join("\n");
+    if (expectedParts !== outputParts) {
+      console.error(colors.red("fail       "), path.basename(filePath));
+      try {
+        const expectedOutputJson = await fs.readFile(filePath, { encoding: "utf-8" });
+        const reader = new Mcap0StreamReader({ validateCrcs: true });
+        reader.append(output);
+        const records: Mcap0Types.TypedMcapRecord[] = [];
+        for (let record; (record = reader.nextRecord()); ) {
+          records.push(record);
+        }
+
+        const actualOutputJson = stringifyRecords(records, variant);
+        const outputNorm = normalizeJson(actualOutputJson);
+        const expectedNorm = normalizeJson(expectedOutputJson);
+        if (outputNorm !== expectedNorm) {
+          console.error(
+            Diff.createPatch(
+              path.basename(filePath),
+              expectedNorm,
+              outputNorm,
+              "expected",
+              "output",
+            ),
+          );
+        }
+      } catch (err) {
+        console.error("Invalid mcap:", err);
+      }
+      const diff = Diff.diffLines(expectedParts, outputParts);
+      diff.forEach((part) => {
+        if (part.added === true) {
+          console.error(colors.green(part.value.trimEnd()));
+        } else if (part.removed === true) {
+          console.error(colors.red(part.value.trimEnd()));
+        } else {
+          console.error(part.value.trim());
+        }
       });
-      console.error(splitAnsiString(splitAnsiString(colorDiff, 8, " "), 81, "\n"));
       console.error();
       hadError = true;
       continue;
     }
 
-    if (!hadError) {
-      console.error(colors.green("pass       "), filePath);
-    }
+    console.error(colors.green("pass       "), basePath);
   }
 
   return { foundAnyTests, hadError };
@@ -175,13 +197,22 @@ async function main(options: TestOptions) {
   let hadError = false;
   let foundAnyTests = false;
   for (const runner of enabledRunners) {
-    const testFunction = runner.mode === "read" ? runReaderTest : runWriterTest;
-    const { hadError: newHadError, foundAnyTests: newFoundAnyTests } = await testFunction(
-      runner,
-      options,
-    );
-    hadError ||= newHadError;
-    foundAnyTests ||= newFoundAnyTests;
+    if (runner instanceof ReadTestRunner) {
+      const { hadError: newHadError, foundAnyTests: newFoundAnyTests } = await runReaderTest(
+        runner,
+        options,
+      );
+      hadError ||= newHadError;
+      foundAnyTests ||= newFoundAnyTests;
+    } else if (runner instanceof WriteTestRunner) {
+      const { hadError: newHadError, foundAnyTests: newFoundAnyTests } = await runWriterTest(
+        runner,
+        options,
+      );
+
+      hadError ||= newHadError;
+      foundAnyTests ||= newFoundAnyTests;
+    }
   }
 
   if (!foundAnyTests) {

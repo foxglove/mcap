@@ -27,11 +27,39 @@ const (
 	OpBagChunkInfo   = 0x06
 )
 
+var (
+	headerCompression       = []byte("compression")
+	headerOp                = []byte("op")
+	headerTopic             = []byte("topic")
+	headerConn              = []byte("conn")
+	headerType              = []byte("type")
+	headerMD5Sum            = []byte("md5sum")
+	headerMessageDefinition = []byte("message_definition")
+	headerTime              = []byte("time")
+)
+
 func getUint32(buf []byte, offset int) (result uint32, newoffset int, err error) {
 	if len(buf[offset:]) < 4 {
 		return 0, 0, fmt.Errorf("short buffer")
 	}
 	return binary.LittleEndian.Uint32(buf[offset:]), offset + 4, nil
+}
+
+type ResettableReader interface {
+	io.Reader
+	Reset(io.Reader)
+}
+
+type resettableByteReader struct {
+	r io.Reader
+}
+
+func (r *resettableByteReader) Read(p []byte) (int, error) {
+	return r.r.Read(p)
+}
+
+func (r *resettableByteReader) Reset(reader io.Reader) {
+	r.r = reader
 }
 
 func extractHeaderValue(header []byte, key []byte) ([]byte, error) {
@@ -44,12 +72,14 @@ func extractHeaderValue(header []byte, key []byte) ([]byte, error) {
 			return nil, fmt.Errorf("failed to extract field length: %w", err)
 		}
 		field := header[offset : offset+int(fieldlen)]
-		parts := bytes.SplitN(field, []byte{'='}, 2)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid header field: %s", string(field))
+		separatorIdx := bytes.Index(field, []byte{'='})
+		if separatorIdx < 0 {
+			return nil, fmt.Errorf("no field separator found")
 		}
-		if bytes.Equal(key, parts[0]) {
-			return parts[1], nil
+		k := field[:separatorIdx]
+		v := field[separatorIdx+1:]
+		if bytes.Equal(key, k) {
+			return v, nil
 		}
 		offset += int(fieldlen)
 	}
@@ -73,14 +103,26 @@ func processBag(
 		}
 	}
 
+	var inChunk bool
 	header := make([]byte, 1024)
 	buf := make([]byte, 8)
 	data := make([]byte, 1024*1024)
+	chunkData := make([]byte, 1024*1024)
+
+	var chunkReader ResettableReader
+	var activeReader, baseReader io.Reader
+	baseReader = r
+	activeReader = r
 	for {
 		// header len
-		_, err := io.ReadFull(r, buf[:4])
+		_, err := io.ReadFull(activeReader, buf[:4])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
+				if inChunk {
+					activeReader = baseReader
+					inChunk = false
+					continue
+				}
 				break
 			}
 			return err
@@ -91,7 +133,7 @@ func processBag(
 		if len(header) < int(headerlen) {
 			header = make([]byte, headerlen*2)
 		}
-		_, err = io.ReadFull(r, header[:headerlen])
+		_, err = io.ReadFull(activeReader, header[:headerlen])
 		if err != nil {
 			return err
 		}
@@ -99,47 +141,65 @@ func processBag(
 		headerData := header[:headerlen]
 
 		// data len
-		_, err = io.ReadFull(r, buf[4:8])
+		_, err = io.ReadFull(activeReader, buf[4:8])
 		if err != nil {
 			return err
 		}
 		datalen := binary.LittleEndian.Uint32(buf[4:8])
 
 		// opcode
-		opcode, err := extractHeaderValue(headerData, []byte("op"))
+		opcode, err := extractHeaderValue(headerData, headerOp)
 		if err != nil {
 			return err
 		}
 
-		// data
-		if len(data) < int(datalen) {
-			data = make([]byte, datalen*2)
+		if opcode[0] == OpBagChunk {
+			// data
+			if len(chunkData) < int(datalen) {
+				chunkData = make([]byte, datalen*2)
+			}
+			_, err = io.ReadFull(activeReader, chunkData[:datalen])
+			if err != nil {
+				return err
+			}
+		} else {
+			if len(data) < int(datalen) {
+				data = make([]byte, datalen*2)
+			}
+			_, err = io.ReadFull(activeReader, data[:datalen])
+			if err != nil {
+				return err
+			}
 		}
-		_, err = io.ReadFull(r, data[:datalen])
-		if err != nil {
-			return err
-		}
+
 		switch opcode[0] {
 		case OpBagHeader:
 			continue
 		case OpBagChunk:
-			compression, err := extractHeaderValue(headerData, []byte("compression"))
+			compression, err := extractHeaderValue(headerData, headerCompression)
 			if err != nil {
 				return err
 			}
-			var reader io.Reader
+			r := bytes.NewReader(chunkData[:datalen])
 			switch string(compression) {
 			case "lz4":
-				reader = lz4.NewReader(bytes.NewReader(data[:datalen]))
+				if chunkReader == nil {
+					chunkReader = lz4.NewReader(r)
+				} else {
+					chunkReader.Reset(r)
+				}
 			case "none":
-				reader = bytes.NewReader(data[:datalen])
+				if chunkReader == nil {
+					chunkReader = &resettableByteReader{r}
+				} else {
+					chunkReader.Reset(r)
+				}
 			default:
 				return fmt.Errorf("unsupported compression: %s", compression)
 			}
-			err = processBag(reader, connectionCallback, msgcallback, false)
-			if err != nil && !errors.Is(err, io.EOF) {
-				return err
-			}
+			activeReader = chunkReader
+			inChunk = true
+			continue
 		case OpBagConnection:
 			err := connectionCallback(headerData, data[:datalen])
 			if err != nil {
@@ -177,24 +237,24 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *libmcap.WriterOptions) error {
 	schemas := make(map[string]uint16)
 	return processBag(r,
 		func(header, data []byte) error {
-			conn, err := extractHeaderValue(header, []byte("conn"))
+			conn, err := extractHeaderValue(header, headerConn)
 			if err != nil {
 				return err
 			}
 			connID := binary.LittleEndian.Uint16(conn)
-			topic, err := extractHeaderValue(header, []byte("topic"))
+			topic, err := extractHeaderValue(header, headerTopic)
 			if err != nil {
 				return err
 			}
-			typ, err := extractHeaderValue(data, []byte("type"))
+			typ, err := extractHeaderValue(data, headerType)
 			if err != nil {
 				return err
 			}
-			md5sum, err := extractHeaderValue(data, []byte("md5sum"))
+			md5sum, err := extractHeaderValue(data, headerMD5Sum)
 			if err != nil {
 				return err
 			}
-			msgdef, err := extractHeaderValue(data, []byte("message_definition"))
+			msgdef, err := extractHeaderValue(data, headerMessageDefinition)
 			if err != nil {
 				return err
 			}
@@ -224,12 +284,12 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *libmcap.WriterOptions) error {
 			return writer.WriteChannel(channelInfo)
 		},
 		func(header, data []byte) error {
-			conn, err := extractHeaderValue(header, []byte("conn"))
+			conn, err := extractHeaderValue(header, headerConn)
 			if err != nil {
 				return err
 			}
 			connID := binary.LittleEndian.Uint16(conn)
-			time, err := extractHeaderValue(header, []byte("time"))
+			time, err := extractHeaderValue(header, headerTime)
 			if err != nil {
 				return err
 			}

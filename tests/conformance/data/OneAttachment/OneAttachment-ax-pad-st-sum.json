@@ -11,6 +11,7 @@
         ["name", "myFile"]
       ]
     },
+    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
     {
       "type": "Statistics",
       "fields": [

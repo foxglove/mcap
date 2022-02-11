@@ -1,13 +1,22 @@
 import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
 import { Channel, Message, MessageIndex, Schema } from "./types";
 
+type ChunkBuilderOptions = {
+  useMessageIndex?: boolean;
+};
 class ChunkBuilder {
   private recordWriter = new Mcap0RecordBuilder();
-  private messageIndices = new Map<number, MessageIndex>();
+  private messageIndices: Map<number, MessageIndex> | undefined;
   private totalMessageCount = 0;
 
   messageStartTime = 0n;
   messageEndTime = 0n;
+
+  constructor({ useMessageIndex = true }: ChunkBuilderOptions) {
+    if (useMessageIndex) {
+      this.messageIndices = new Map();
+    }
+  }
 
   get numMessages(): number {
     return this.totalMessageCount;
@@ -17,8 +26,11 @@ class ChunkBuilder {
     return this.recordWriter.buffer;
   }
 
-  get indices(): IterableIterator<MessageIndex> {
-    return this.messageIndices.values();
+  get indices(): Iterable<MessageIndex> {
+    if (this.messageIndices) {
+      return this.messageIndices.values();
+    }
+    return [];
   }
 
   addSchema(schema: Schema): void {
@@ -26,7 +38,7 @@ class ChunkBuilder {
   }
 
   addChannel(info: Channel): void {
-    if (!this.messageIndices.has(info.id)) {
+    if (this.messageIndices && !this.messageIndices.has(info.id)) {
       this.messageIndices.set(info.id, {
         channelId: info.id,
         records: [],
@@ -41,16 +53,17 @@ class ChunkBuilder {
     }
     this.messageEndTime = message.logTime;
 
-    let messageIndex = this.messageIndices.get(message.channelId);
-    if (!messageIndex) {
-      messageIndex = {
-        channelId: message.channelId,
-        records: [],
-      };
-      this.messageIndices.set(message.channelId, messageIndex);
+    if (this.messageIndices) {
+      let messageIndex = this.messageIndices.get(message.channelId);
+      if (!messageIndex) {
+        messageIndex = {
+          channelId: message.channelId,
+          records: [],
+        };
+        this.messageIndices.set(message.channelId, messageIndex);
+      }
+      messageIndex.records.push([message.logTime, BigInt(this.recordWriter.length)]);
     }
-
-    messageIndex.records.push([message.logTime, BigInt(this.recordWriter.length)]);
 
     this.totalMessageCount += 1;
     this.recordWriter.writeMessage(message);
@@ -60,7 +73,7 @@ class ChunkBuilder {
     this.messageStartTime = 0n;
     this.messageEndTime = 0n;
     this.totalMessageCount = 0;
-    this.messageIndices.clear();
+    this.messageIndices?.clear();
   }
 }
 

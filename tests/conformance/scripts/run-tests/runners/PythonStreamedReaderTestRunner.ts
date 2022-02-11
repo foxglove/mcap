@@ -2,13 +2,12 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { TestVariant } from "variants/types";
 
-import { ITestRunner } from ".";
+import { ReadTestRunner } from "./TestRunner";
 
-export default class PythonStreamedReaderTestRunner implements ITestRunner {
+export default class PythonStreamedReaderTestRunner extends ReadTestRunner {
   name = "py-streamed-reader";
-  mode = "read" as const;
 
-  async run(filePath: string): Promise<string> {
+  async runReadTest(filePath: string): Promise<string> {
     const { stdout } = await promisify(exec)(`python3 tests/run_reader_test.py ${filePath}`, {
       cwd: "../../python",
     });

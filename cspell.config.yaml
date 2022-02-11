@@ -19,6 +19,7 @@ words:
   - cmake
   - crc
   - crcs
+  - cryptopp
   - deserialization
   - golangci
   - libmcap
@@ -72,5 +73,6 @@ overrides:
 
   - filename: "**/*.py"
     words:
+      - klass
       - rglob
       - uncompress

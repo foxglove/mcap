@@ -1,21 +1,33 @@
 import { exec } from "child_process";
+import { intersection } from "lodash";
 import { promisify } from "util";
-import { TestVariant } from "variants/types";
+import { TestFeatures, TestVariant } from "variants/types";
 
-import { ITestRunner } from ".";
+import { WriteTestRunner } from "./TestRunner";
 
-export default class PythonStreamedWriterTestRunner implements ITestRunner {
+export default class PythonStreamedWriterTestRunner extends WriteTestRunner {
   name = "py-streamed-writer";
-  mode = "write" as const;
 
-  async run(filePath: string): Promise<string> {
+  async runWriteTest(filePath: string): Promise<Uint8Array> {
     const { stdout } = await promisify(exec)(`python3 tests/run_writer_test.py ${filePath}`, {
       cwd: "../../python",
+      encoding: undefined,
     });
-    return stdout.trim();
+
+    return stdout as unknown as Uint8Array;
   }
 
-  supportsVariant(_variant: TestVariant): boolean {
-    return true;
+  supportsVariant(variant: TestVariant): boolean {
+    const unsupported = [
+      TestFeatures.AddExtraDataToRecords,
+      TestFeatures.UseChunkIndex,
+      TestFeatures.UseChunks,
+      TestFeatures.UseMessageIndex,
+      TestFeatures.UseMetadataIndex,
+      TestFeatures.UseRepeatedChannelInfos,
+      TestFeatures.UseRepeatedSchemas,
+      TestFeatures.UseSummaryOffset,
+    ];
+    return intersection(Array.from(variant.features), unsupported).length === 0;
   }
 }

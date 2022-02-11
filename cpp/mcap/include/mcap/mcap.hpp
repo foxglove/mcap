@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cryptopp/crc.h>
+
 #include "errors.hpp"
 #include <algorithm>
 #include <cassert>
@@ -622,6 +624,8 @@ private:
  */
 class IChunkWriter : public IWritable {
 public:
+  bool crcEnabled = false;
+
   virtual inline ~IChunkWriter() = default;
 
   /**
@@ -631,7 +635,7 @@ public:
    * @param data A pointer to the data to write.
    * @param size Size of the data in bytes.
    */
-  virtual void write(const std::byte* data, uint64_t size) = 0;
+  void write(const std::byte* data, uint64_t size);
   /**
    * @brief Called when the writer wants to close the current output Chunk.
    * After this call, `data()` and `size()` should return the data and size of
@@ -652,12 +656,23 @@ public:
    * @brief Clear the internal state of the writer, discarding any input or
    * output buffers.
    */
-  virtual void clear() = 0;
+  void clear();
   /**
    * @brief Returns a pointer to the compressed data. This will only be called
    * after `end()`.
    */
   virtual const std::byte* data() const = 0;
+  /**
+   * @brief Returns the CRC32 of the uncompressed data.
+   */
+  uint32_t crc() const;
+
+protected:
+  virtual void handleWrite(const std::byte* data, uint64_t size) = 0;
+  virtual void handleClear() = 0;
+
+private:
+  mutable CryptoPP::CRC32 crc_;
 };
 
 /**
@@ -666,11 +681,11 @@ public:
  */
 class BufferWriter final : public IChunkWriter {
 public:
-  void write(const std::byte* data, uint64_t size) override;
+  void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
   uint64_t size() const override;
   bool empty() const override;
-  void clear() override;
+  void handleClear() override;
   const std::byte* data() const override;
 
 private:
@@ -685,11 +700,11 @@ class LZ4Writer final : public IChunkWriter {
 public:
   LZ4Writer(CompressionLevel compressionLevel, uint64_t chunkSize);
 
-  void write(const std::byte* data, uint64_t size) override;
+  void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
   uint64_t size() const override;
   bool empty() const override;
-  void clear() override;
+  void handleClear() override;
   const std::byte* data() const override;
 
 private:
@@ -707,11 +722,11 @@ public:
   ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize);
   ~ZStdWriter() override;
 
-  void write(const std::byte* data, uint64_t size) override;
+  void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
   uint64_t size() const override;
   bool empty() const override;
-  void clear() override;
+  void handleClear() override;
   const std::byte* data() const override;
 
 private:
@@ -948,10 +963,11 @@ public:
   /**
    * @brief Write an attachment to the output stream.
    *
-   * @param attachment Attachment to add.
+   * @param attachment Attachment to add. The `attachment.crc` will be
+   * calculated and set if configuration options allow CRC calculation.
    * @return A non-zero error code on failure.
    */
-  Status write(const Attachment& attachment);
+  Status write(Attachment& attachment);
 
   /**
    * @brief Write a metadata record to the output stream.
@@ -994,6 +1010,7 @@ public:
   static void write(IWritable& output, const KeyValueMap& map, uint32_t size = 0);
 
 private:
+  McapWriterOptions options_{""};
   uint64_t chunkSize_ = DefaultChunkSize;
   IWritable* output_ = nullptr;
   std::unique_ptr<StreamWriter> streamOutput_;
@@ -1008,11 +1025,10 @@ private:
   Statistics statistics_{};
   std::unordered_set<SchemaId> writtenSchemas_;
   std::unordered_map<ChannelId, MessageIndex> currentMessageIndex_;
-  uint64_t currentChunkStart_ = std::numeric_limits<uint64_t>::max();
-  uint64_t currentChunkEnd_ = std::numeric_limits<uint64_t>::min();
+  Timestamp currentChunkStart_ = MaxTime;
+  Timestamp currentChunkEnd_ = 0;
   Compression compression_ = Compression::None;
   uint64_t uncompressedSize_ = 0;
-  bool writeSummary_ = true;
   bool opened_ = false;
 
   IWritable& getOutput();

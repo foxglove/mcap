@@ -66,6 +66,12 @@ export default function* generateTestVariants(): Generator<TestVariant, void, vo
       ) {
         continue;
       }
+      if (
+        (features.has(TestFeatures.UseChunkIndex) || features.has(TestFeatures.UseMessageIndex)) &&
+        !features.has(TestFeatures.UseChunks)
+      ) {
+        continue;
+      }
 
       const name = [input.baseName, ...Array.from(features).sort()].join("-");
 

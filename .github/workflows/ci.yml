@@ -40,6 +40,8 @@ jobs:
       - run: cd cpp && make
       - run: cd go && make build-conformance-check
       - run: yarn install --frozen-lockfile
+      - run: yarn workspace @foxglove/mcap-conformance lint:ci
+      - run: yarn workspace @foxglove/mcap-conformance typecheck
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance
 

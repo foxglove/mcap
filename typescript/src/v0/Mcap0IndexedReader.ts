@@ -414,7 +414,7 @@ export default class Mcap0IndexedReader {
         offset += result.usedBytes
       ) {
         if (result.record.type !== "MessageIndex") {
-          throw new Error(`Unexpected record type ${result.record.type} in message index section`);
+          continue;
         }
         if (
           result.record.records.length > 0 &&
