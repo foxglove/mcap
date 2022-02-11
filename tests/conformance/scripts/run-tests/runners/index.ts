@@ -2,18 +2,19 @@ import CppStreamedTestRunner from "./CppStreamedTestRunner";
 import GoStreamedTestRunner from "./GoStreamedTestRunner";
 import PythonStreamedReaderTestRunner from "./PythonStreamedReaderTestRunner";
 import PythonStreamedWriterTestRunner from "./PythonStreamedWriterTestRunner";
-import TypescriptIndexedTestRunner from "./TypescriptIndexedTestRunner";
+import { ReadTestRunner, WriteTestRunner } from "./TestRunner";
+import TypescriptIndexedReaderTestRunner from "./TypescriptIndexedReaderTestRunner";
 import TypescriptStreamedReaderTestRunner from "./TypescriptStreamedReaderTestRunner";
-import TypescriptStreamedWriterTestRunner from "./TypescriptStreamedWriterTestRunner";
+import TypescriptWriterTestRunner from "./TypescriptWriterTestRunner";
 
-const runners = [
+const runners: readonly (ReadTestRunner | WriteTestRunner)[] = [
   new CppStreamedTestRunner(),
   new GoStreamedTestRunner(),
   new PythonStreamedReaderTestRunner(),
   new PythonStreamedWriterTestRunner(),
-  new TypescriptIndexedTestRunner(),
+  new TypescriptIndexedReaderTestRunner(),
   new TypescriptStreamedReaderTestRunner(),
-  new TypescriptStreamedWriterTestRunner(),
-] as const;
+  new TypescriptWriterTestRunner(),
+];
 
 export default runners;
