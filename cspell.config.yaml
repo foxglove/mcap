@@ -19,6 +19,7 @@ words:
   - cmake
   - crc
   - crcs
+  - cryptopp
   - deserialization
   - golangci
   - libmcap
