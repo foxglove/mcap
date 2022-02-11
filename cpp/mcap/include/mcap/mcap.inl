@@ -203,7 +203,7 @@ McapWriter::~McapWriter() {
 void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
   opened_ = true;
   chunkSize_ = options.noChunking ? 0 : options.chunkSize;
-  indexing_ = !options.noIndexing;
+  writeSummary_ = !options.noSummary;
   compression_ = chunkSize_ > 0 ? options.compression : Compression::None;
   switch (compression_) {
     case Compression::None:
@@ -248,7 +248,7 @@ void McapWriter::close() {
   ByteOffset summaryOffsetStart = 0;
   uint32_t summaryCrc = 0;
 
-  if (indexing_) {
+  if (writeSummary_) {
     // Get the offset of the End Of File section
     summaryStart = fileOutput.size();
 
@@ -396,7 +396,7 @@ Status McapWriter::write(const Message& message) {
   uncompressedSize_ += write(output, message);
 
   // Update message statistics
-  if (indexing_) {
+  if (writeSummary_) {
     if (statistics_.messageCount == 0) {
       statistics_.messageStartTime = message.logTime;
       statistics_.messageEndTime = message.logTime;
@@ -410,7 +410,7 @@ Status McapWriter::write(const Message& message) {
 
   auto* chunkWriter = getChunkWriter();
   if (chunkWriter) {
-    if (indexing_) {
+    if (writeSummary_) {
       // Update the message index
       auto& messageIndex = currentMessageIndex_[message.channelId];
       messageIndex.channelId = message.channelId;
@@ -449,7 +449,7 @@ Status McapWriter::write(const Attachment& attachment) {
   write(fileOutput, attachment);
 
   // Update statistics and attachment index
-  if (indexing_) {
+  if (writeSummary_) {
     ++statistics_.attachmentCount;
     attachmentIndex_.emplace_back(attachment, fileOffset);
   }
@@ -475,7 +475,7 @@ Status McapWriter::write(const Metadata& metadata) {
   write(fileOutput, metadata);
 
   // Update statistics and metadata index
-  if (indexing_) {
+  if (writeSummary_) {
     ++statistics_.metadataCount;
     metadataIndex_.emplace_back(metadata, fileOffset);
   }
@@ -525,7 +525,7 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
   write(output, Chunk{currentChunkStart_, currentChunkEnd_, uncompressedSize_, uncompressedCrc,
                       compression, compressedSize, records});
 
-  if (indexing_) {
+  if (writeSummary_) {
     // Update statistics
     const uint64_t chunkLength = output.size() - chunkStartOffset;
     ++statistics_.chunkCount;

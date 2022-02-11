@@ -21,7 +21,7 @@ static void BM_McapWriterBufferWriterUnchunkedUnindexed(benchmark::State& state)
   mcap::McapWriter writer;
   auto options = mcap::McapWriterOptions("ros1");
   options.noChunking = true;
-  options.noIndexing = true;
+  options.noSummary = true;
 
   // Open an output memory buffer and write the file header
   mcap::BufferWriter out{};
@@ -153,7 +153,7 @@ static void BM_McapWriterBufferWriterChunkedUnindexed(benchmark::State& state) {
   // Create a chunked writer using the ros1 profile
   mcap::McapWriter writer;
   auto options = mcap::McapWriterOptions("ros1");
-  options.noIndexing = true;
+  options.noSummary = true;
   options.chunkSize = uint64_t(state.range(0));
 
   // Open an output memory buffer and write the file header
