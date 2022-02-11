@@ -110,8 +110,7 @@ function parseJsonRecord(record: {
 }
 
 export default class TypescriptWriterTestRunner extends WriteTestRunner {
-  readonly name = "ts-writer";
-  readonly mode = "write";
+  name = "ts-writer";
 
   supportsVariant(variant: TestVariant): boolean {
     if (variant.features.has(TestFeatures.AddExtraDataToRecords)) {
@@ -120,7 +119,7 @@ export default class TypescriptWriterTestRunner extends WriteTestRunner {
     return true;
   }
 
-  async run(filePath: string, variant: TestVariant): Promise<string> {
+  async runWriteTest(filePath: string, variant: TestVariant): Promise<Uint8Array> {
     const json = await fs.readFile(filePath, { encoding: "utf-8" });
     const jsonRecords = (
       JSON.parse(json) as { records: Array<{ fields: Array<[string, unknown]> }> }
@@ -209,8 +208,6 @@ export default class TypescriptWriterTestRunner extends WriteTestRunner {
       }
     }
 
-    return Array.from(new Uint8Array(buffer.buffer, 0, usedBytes))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+    return new Uint8Array(buffer.buffer, 0, usedBytes);
   }
 }

@@ -1,12 +1,6 @@
 {
   "records": [
-    {
-      "type": "Header",
-      "fields": [
-        ["library", ""],
-        ["profile", ""]
-      ]
-    },
+    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
     {
       "type": "Schema",
       "fields": [
@@ -21,7 +15,7 @@
       "fields": [
         ["id", "1"],
         ["message_encoding", "a"],
-        ["metadata", { "foo": "bar" }],
+        ["metadata", {"foo": "bar"}],
         ["schema_id", "1"],
         ["topic", "example"]
       ]
@@ -36,7 +30,7 @@
         ["sequence", "10"]
       ]
     },
-    { "type": "DataEnd", "fields": [["data_section_crc", "0"]] },
+    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
     {
       "type": "Footer",
       "fields": [
@@ -46,5 +40,5 @@
       ]
     }
   ],
-  "meta": { "variant": { "features": ["ch", "pad"] } }
+  "meta": {"variant": {"features": ["ch", "pad"]}}
 }

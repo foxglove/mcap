@@ -32,11 +32,6 @@
     },
     {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
     {
-      "type": "MessageIndex",
-      "fields": [["channel_id", "1"], ["records", [["2", "81"]]]]
-    },
-    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
-    {
       "type": "Statistics",
       "fields": [
         ["attachment_count", "0"],

@@ -18,6 +18,9 @@ export default class TypescriptStreamedReaderTestRunner extends ReadTestRunner {
     reader.append(await fs.readFile(filePath));
     let record;
     while ((record = reader.nextRecord())) {
+      if (record.type === "MessageIndex") {
+        continue;
+      }
       result.push(record);
     }
     if (!reader.done()) {

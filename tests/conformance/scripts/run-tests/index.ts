@@ -142,10 +142,9 @@ async function runWriterTest(
       // If the file produced was valid parsable MCAP, we can re-stringify it and display a JSON diff.
       try {
         const reader = new Mcap0StreamReader({ validateCrcs: true });
-        reader.append(Buffer.from(output, "hex"));
-        let record;
+        reader.append(output);
         const records: Mcap0Types.TypedMcapRecord[] = [];
-        while ((record = reader.nextRecord())) {
+        for (let record; (record = reader.nextRecord()); ) {
           records.push(record);
         }
 
