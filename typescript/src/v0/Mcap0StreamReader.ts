@@ -141,7 +141,6 @@ export default class Mcap0StreamReader implements McapStreamReader {
         this.buffer.consume(usedBytes);
       }
       switch (record.type) {
-        case "DataEnd":
         case "Unknown":
           break;
         case "Header":
@@ -156,6 +155,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
         case "Metadata":
         case "MetadataIndex":
         case "SummaryOffset":
+        case "DataEnd":
           yield record;
           break;
 

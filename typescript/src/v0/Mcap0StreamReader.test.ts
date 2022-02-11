@@ -90,6 +90,10 @@ describe("Mcap0StreamReader", () => {
       ]),
     );
     expect(reader.nextRecord()).toEqual({
+      type: "DataEnd",
+      dataSectionCrc: 0,
+    });
+    expect(reader.nextRecord()).toEqual({
       type: "Footer",
       summaryStart: 0n,
       summaryOffsetStart: 0n,
