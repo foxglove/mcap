@@ -6,6 +6,9 @@
 
 namespace mcap {
 
+/**
+ * @brief Status codes for MCAP readers and writers.
+ */
 enum class StatusCode {
   Success = 0,
   NotOpen,
@@ -22,6 +25,9 @@ enum class StatusCode {
   UnrecognizedCompression,
 };
 
+/**
+ * @brief Wraps a status code and string message carrying additional context.
+ */
 struct Status {
   StatusCode code;
   std::string message;
@@ -85,13 +91,13 @@ struct Status {
   }
 };
 
-namespace internal {
-
+/**
+ * @brief String formatting compatible with std::format(), used to construct
+ * Status messages.
+ */
 template <typename... T>
 [[nodiscard]] inline std::string StrFormat(std::string_view msg, T&&... args) {
   return fmt::format(msg, std::forward<T>(args)...);
 }
-
-}  // namespace internal
 
 }  // namespace mcap
