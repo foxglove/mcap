@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
   //     {"type", "MessageIndex"},
   //     {"fields", json::array({
   //                  {"channel_id", std::to_string(messageIndex.channelId)},
-  //                  {"records", messageIndex.records},
+  //                  {"records", ToJson(messageIndex.records)},
   //                })},
   //   }));
   // };
@@ -213,14 +213,14 @@ int main(int argc, char** argv) {
     }));
   };
 
-  // reader.onDataEnd = [&](const mcap::DataEnd& dataEnd) {
-  //   recordsJson.push_back(json::object({
-  //     {"type", "DataEnd"},
-  //     {"fields", json::array({
-  //                  {"data_section_crc", std::to_string(dataEnd.dataSectionCrc)},
-  //                })},
-  //   }));
-  // };
+  reader.onDataEnd = [&](const mcap::DataEnd& dataEnd) {
+    recordsJson.push_back(json::object({
+      {"type", "DataEnd"},
+      {"fields", json::array({
+                   {"data_section_crc", std::to_string(dataEnd.dataSectionCrc)},
+                 })},
+    }));
+  };
 
   while (reader.next()) {
     if (!reader.status().ok()) {
