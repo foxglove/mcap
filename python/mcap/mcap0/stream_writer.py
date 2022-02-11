@@ -55,10 +55,9 @@ class StreamWriter:
             self.__stream = WriteDataStream(output)
         self.__attachment_indexes: list[AttachmentIndex] = []
         self.__channels: Dict[int, Channel] = {}
-        self.__chunk_builder = ChunkBuilder()
+        self.__chunk_builder = ChunkBuilder() if use_chunking else None
         self.__chunk_size = chunk_size
         self.__index_types = index_types
-        self.__use_chunking = use_chunking
         self.__statistics = Statistics(
             attachment_count=0,
             channel_count=0,
@@ -87,9 +86,12 @@ class StreamWriter:
         attachment.write(self.__stream)
 
     def add_message(self, message: Message):
+        if self.__statistics.message_start_time == 0:
+            self.__statistics.message_start_time = message.log_time
+        self.__statistics.message_end_time = message.log_time
         self.__statistics.channel_message_counts[message.channel_id] += 1
         self.__statistics.message_count += 1
-        if self.__use_chunking:
+        if self.__chunk_builder:
             self.__chunk_builder.add_message(message)
         else:
             message.write(self.__stream)
@@ -98,7 +100,8 @@ class StreamWriter:
         metadata.write(self.__stream)
 
     def add_schema(self, schema: Schema):
-        if self.__use_chunking:
+        self.__statistics.schema_count += 1
+        if self.__chunk_builder:
             self.__chunk_builder.add_schema(schema)
         else:
             schema.write(self.__stream)
@@ -133,6 +136,7 @@ class StreamWriter:
             schema_id=1,
             metadata=metadata,
         )
+        self.__statistics.channel_count += 1
         if self.__chunk_builder:
             self.__chunk_builder.add_channel(channel)
         else:

@@ -1,13 +1,16 @@
+import { Mcap0StreamReader, Mcap0Types } from "@foxglove/mcap";
 import colors from "colors";
 import { program } from "commander";
 import * as Diff from "diff";
 import fs from "fs/promises";
 import stringify from "json-stringify-pretty-compact";
+import { chunk } from "lodash";
 import path from "path";
 import { splitMcapRecords } from "util/splitMcapRecords";
 import generateTestVariants from "variants/generateTestVariants";
 
 import runners from "./runners";
+import { stringifyRecords } from "./runners/stringifyRecords";
 import { ReadTestRunner, WriteTestRunner } from "./runners/TestRunner";
 
 type TestOptions = {
@@ -23,6 +26,12 @@ function normalizeJson(json: string): string {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   delete data.meta;
   return stringify(data);
+}
+
+function spaceHexString(s: string): string {
+  return chunk(s, 8)
+    .map((p) => p.join(""))
+    .join(" ");
 }
 
 async function runReaderTest(
@@ -115,12 +124,47 @@ async function runWriterTest(
       hadError = true;
       continue;
     }
-    const outputParts = splitMcapRecords(output).join("\n") + "\n";
-    const expectedParts = splitMcapRecords(expectedOutput).join("\n") + "\n";
+    const expectedParts = splitMcapRecords(expectedOutput).map(spaceHexString).join("\n");
+    const outputParts = splitMcapRecords(output).map(spaceHexString).join("\n");
     if (expectedParts !== outputParts) {
-      const diff = Diff.createPatch("", expectedParts, outputParts);
-      console.error(colors.red("fail       "), filePath);
-      console.error(diff);
+      console.error(colors.red("fail       "), path.basename(filePath));
+      try {
+        const expectedOutputJson = await fs.readFile(filePath, { encoding: "utf-8" });
+        const reader = new Mcap0StreamReader({ validateCrcs: true });
+        reader.append(output);
+        const records: Mcap0Types.TypedMcapRecord[] = [];
+        for (let record; (record = reader.nextRecord()); ) {
+          records.push(record);
+        }
+
+        const actualOutputJson = stringifyRecords(records, variant);
+        const outputNorm = normalizeJson(actualOutputJson);
+        const expectedNorm = normalizeJson(expectedOutputJson);
+        if (outputNorm !== expectedNorm) {
+          console.error(
+            Diff.createPatch(
+              path.basename(filePath),
+              expectedNorm,
+              outputNorm,
+              "expected",
+              "output",
+            ),
+          );
+        }
+      } catch (err) {
+        console.error("Invalid mcap:", err);
+      }
+      const diff = Diff.diffLines(expectedParts, outputParts);
+      diff.forEach((part) => {
+        if (part.added === true) {
+          console.error(colors.green(part.value.trimEnd()));
+        } else if (part.removed === true) {
+          console.error(colors.red(part.value.trimEnd()));
+        } else {
+          console.error(part.value.trim());
+        }
+      });
+      console.error();
       hadError = true;
       continue;
     }
@@ -164,7 +208,6 @@ async function main(options: TestOptions) {
         runner,
         options,
       );
-      console.log("RUN WRITEr", runner);
 
       hadError ||= newHadError;
       foundAnyTests ||= newFoundAnyTests;

@@ -26,7 +26,7 @@ class ChunkBuilder:
         return self.__message_indices.values()
 
     @property
-    def num_sessages(self):
+    def num_messages(self):
         return self.__total_message_count
 
     def add_channel(self, channel: Channel):

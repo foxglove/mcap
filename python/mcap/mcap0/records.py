@@ -99,7 +99,6 @@ class Channel(McapRecord):
         stream.write2(self.schema_id)
         stream.write_prefixed_string(self.topic)
         stream.write_prefixed_string(self.message_encoding)
-        stream.write2(self.schema_id)
         meta_length = 0
         for k, v in self.metadata.items():
             meta_length += 8
@@ -373,10 +372,13 @@ class Statistics(McapRecord):
     def write(self, stream: WriteDataStream):
         stream.start_record(Opcode.STATISTICS)
         stream.write8(self.message_count)
+        stream.write2(self.schema_count)
         stream.write4(self.channel_count)
         stream.write4(self.attachment_count)
         stream.write4(self.metadata_count)
         stream.write4(self.chunk_count)
+        stream.write8(self.message_start_time)
+        stream.write8(self.message_end_time)
         stream.write4(len(self.channel_message_counts) * 10)
         for id, count in self.channel_message_counts.items():
             stream.write2(id)

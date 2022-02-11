@@ -9,6 +9,7 @@ from mcap.mcap0.records import Attachment  # type: ignore
 from mcap.mcap0.records import AttachmentIndex  # type: ignore
 from mcap.mcap0.records import Channel  # type: ignore
 from mcap.mcap0.records import ChunkIndex  # type: ignore
+from mcap.mcap0.records import DataEnd  # type: ignore
 from mcap.mcap0.records import Footer  # type: ignore
 from mcap.mcap0.records import Header  # type: ignore
 from mcap.mcap0.records import McapRecord  # type: ignore
