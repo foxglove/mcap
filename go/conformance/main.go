@@ -264,7 +264,11 @@ func mcapToJSON(w io.Writer, filepath string) error {
 			}
 			records = append(records, Record{*summaryOffset})
 		case libmcap.TokenDataEnd:
-			continue
+			dataEnd, err := libmcap.ParseDataEnd(data)
+			if err != nil {
+				return err
+			}
+			records = append(records, Record{*dataEnd})
 		case libmcap.TokenError:
 			if err != nil {
 				return fmt.Errorf("error token: %w", err)
