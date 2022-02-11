@@ -30,6 +30,7 @@
         ["sequence", "10"]
       ]
     },
+    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
     {
       "type": "Schema",
       "fields": [
@@ -37,20 +38,6 @@
         ["encoding", "c"],
         ["id", "1"],
         ["name", "Example"]
-      ]
-    },
-    {
-      "type": "ChunkIndex",
-      "fields": [
-        ["chunk_length", "162"],
-        ["chunk_start_offset", "28"],
-        ["compressed_size", "115"],
-        ["compression", ""],
-        ["message_end_time", "2"],
-        ["message_index_length", "34"],
-        ["message_index_offsets", {"1": "192"}],
-        ["message_start_time", "2"],
-        ["uncompressed_size", "115"]
       ]
     },
     {

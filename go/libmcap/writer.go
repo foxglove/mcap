@@ -26,7 +26,7 @@ type Writer struct {
 	channels         map[uint16]*Channel
 	schemas          map[uint16]*Schema
 	w                *WriteSizer
-	buf8             []byte
+	buf              []byte
 	msg              []byte
 	chunk            []byte
 	chunked          bool
@@ -42,12 +42,10 @@ type Writer struct {
 }
 
 func (w *Writer) writeRecord(writer io.Writer, op OpCode, data []byte) (int, error) {
-	c, err := writer.Write([]byte{byte(op)})
-	if err != nil {
-		return c, err
-	}
-	putUint64(w.buf8, uint64(len(data)))
-	n, err := writer.Write(w.buf8)
+	c := 0
+	w.buf[0] = byte(op)
+	putUint64(w.buf[1:], uint64(len(data)))
+	n, err := writer.Write(w.buf[:9])
 	c += n
 	if err != nil {
 		return c, err
@@ -181,7 +179,7 @@ func (w *Writer) WriteMessage(m *Message) error {
 			}
 			w.MessageIndexes[m.ChannelID] = idx
 		}
-		idx.Records = append(idx.Records, MessageIndexEntry{m.LogTime, uint64(w.compressedWriter.Size())})
+		idx.Add(m.LogTime, uint64(w.compressedWriter.Size()))
 		_, err := w.writeRecord(w.compressedWriter, OpMessage, w.msg[:offset])
 		if err != nil {
 			return err
@@ -219,12 +217,12 @@ func (w *Writer) WriteMessage(m *Message) error {
 // immediately after each chunk. Exactly one Message Index record must exist in
 // the sequence for every channel on which a message occurs inside the chunk.
 func (w *Writer) WriteMessageIndex(idx *MessageIndex) error {
-	datalen := len(idx.Records) * (8 + 8)
+	datalen := len(idx.Entries()) * (8 + 8)
 	msglen := 2 + 4 + datalen
 	w.ensureSized(msglen)
 	offset := putUint16(w.msg, idx.ChannelID)
 	offset += putUint32(w.msg[offset:], uint32(datalen))
-	for _, v := range idx.Records {
+	for _, v := range idx.Entries() {
 		offset += putUint64(w.msg[offset:], v.Timestamp)
 		offset += putUint64(w.msg[offset:], v.Offset)
 	}
@@ -370,7 +368,7 @@ func (w *Writer) flushActiveChunk() error {
 	// then copy from the compressed data buffer.
 	recordlen := 1 + 8 + msglen
 	if len(w.chunk) < recordlen {
-		w.chunk = make([]byte, recordlen)
+		w.chunk = make([]byte, recordlen*2)
 	}
 	offset, err := putByte(w.chunk, byte(OpChunk))
 	if err != nil {
@@ -397,9 +395,7 @@ func (w *Writer) flushActiveChunk() error {
 	messageIndexStart := w.w.Size()
 	for _, chanID := range w.channelIDs {
 		if messageIndex, ok := w.MessageIndexes[chanID]; ok {
-			sort.Slice(messageIndex.Records, func(i, j int) bool {
-				return messageIndex.Records[i].Timestamp < messageIndex.Records[j].Timestamp
-			})
+			messageIndex.Insort()
 			messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
 			err = w.WriteMessageIndex(messageIndex)
 			if err != nil {
@@ -420,8 +416,8 @@ func (w *Writer) flushActiveChunk() error {
 		CompressedSize:      uint64(compressedlen),
 		UncompressedSize:    uint64(uncompressedlen),
 	})
-	for k := range w.MessageIndexes {
-		delete(w.MessageIndexes, k)
+	for _, idx := range w.MessageIndexes {
+		idx.Reset()
 	}
 	w.Statistics.ChunkCount++
 	w.currentChunkStartTime = math.MaxUint64
@@ -637,7 +633,7 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	}
 	return &Writer{
 		w:                     writer,
-		buf8:                  make([]byte, 8),
+		buf:                   make([]byte, 32),
 		channels:              make(map[uint16]*Channel),
 		schemas:               make(map[uint16]*Schema),
 		MessageIndexes:        make(map[uint16]*MessageIndex),

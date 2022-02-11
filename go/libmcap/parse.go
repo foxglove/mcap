@@ -447,14 +447,14 @@ func ParseDataEnd(buf []byte) (*DataEnd, error) {
 	}, nil
 }
 
-func readMessageIndexEntries(data []byte, offset int) (entries []MessageIndexEntry, newoffset int, err error) {
+func readMessageIndexEntries(data []byte, offset int) (entries []*MessageIndexEntry, newoffset int, err error) {
 	entriesByteLength, offset, err := getUint32(data, offset)
 	if err != nil {
 		return nil, offset, fmt.Errorf("failed to read message index entries byte length: %w", err)
 	}
 	var value, stamp uint64
 	var start = offset
-	entries = make([]MessageIndexEntry, 0, (len(data)-2)/(8+8))
+	entries = make([]*MessageIndexEntry, 0, (len(data)-2)/(8+8))
 	for uint32(offset) < uint32(start)+entriesByteLength {
 		stamp, offset, err = getUint64(data, offset)
 		if err != nil {
@@ -464,7 +464,7 @@ func readMessageIndexEntries(data []byte, offset int) (entries []MessageIndexEnt
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to read message index entry value: %w", err)
 		}
-		entries = append(entries, MessageIndexEntry{
+		entries = append(entries, &MessageIndexEntry{
 			Timestamp: stamp,
 			Offset:    value,
 		})
