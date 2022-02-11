@@ -201,9 +201,9 @@ McapWriter::~McapWriter() {
 }
 
 void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
+  options_ = options;
   opened_ = true;
   chunkSize_ = options.noChunking ? 0 : options.chunkSize;
-  writeSummary_ = !options.noSummary;
   compression_ = chunkSize_ > 0 ? options.compression : Compression::None;
   switch (compression_) {
     case Compression::None:
@@ -216,6 +216,7 @@ void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
       zstdChunk_ = std::make_unique<ZStdWriter>(options.compressionLevel, chunkSize_);
       break;
   }
+  getChunkWriter()->crcEnabled = !options.noCRC;
   output_ = &writer;
   writeMagic(writer);
   write(writer, Header{options.profile, options.library});
@@ -248,7 +249,7 @@ void McapWriter::close() {
   ByteOffset summaryOffsetStart = 0;
   uint32_t summaryCrc = 0;
 
-  if (writeSummary_) {
+  if (!options_.noSummary) {
     // Get the offset of the End Of File section
     summaryStart = fileOutput.size();
 
@@ -333,8 +334,8 @@ void McapWriter::terminate() {
   chunkIndex_.clear();
   statistics_ = {};
   currentMessageIndex_.clear();
-  currentChunkStart_ = std::numeric_limits<uint64_t>::max();
-  currentChunkEnd_ = std::numeric_limits<uint64_t>::min();
+  currentChunkStart_ = MaxTime;
+  currentChunkEnd_ = 0;
 
   opened_ = false;
 }
@@ -396,7 +397,7 @@ Status McapWriter::write(const Message& message) {
   uncompressedSize_ += write(output, message);
 
   // Update message statistics
-  if (writeSummary_) {
+  if (!options_.noSummary) {
     if (statistics_.messageCount == 0) {
       statistics_.messageStartTime = message.logTime;
       statistics_.messageEndTime = message.logTime;
@@ -410,7 +411,7 @@ Status McapWriter::write(const Message& message) {
 
   auto* chunkWriter = getChunkWriter();
   if (chunkWriter) {
-    if (writeSummary_) {
+    if (!options_.noSummary) {
       // Update the message index
       auto& messageIndex = currentMessageIndex_[message.channelId];
       messageIndex.channelId = message.channelId;
@@ -431,7 +432,7 @@ Status McapWriter::write(const Message& message) {
   return StatusCode::Success;
 }
 
-Status McapWriter::write(const Attachment& attachment) {
+Status McapWriter::write(Attachment& attachment) {
   if (!output_) {
     return StatusCode::NotOpen;
   }
@@ -443,13 +444,20 @@ Status McapWriter::write(const Attachment& attachment) {
     writeChunk(fileOutput, *chunkWriter);
   }
 
+  if (!options_.noCRC) {
+    // Calculate the CRC32 of the attachment
+    CryptoPP::CRC32 crc;
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(attachment.data), attachment.dataSize);
+    crc.Final(reinterpret_cast<CryptoPP::byte*>(&attachment.crc));
+  }
+
   const uint64_t fileOffset = fileOutput.size();
 
   // Write the attachment
   write(fileOutput, attachment);
 
   // Update statistics and attachment index
-  if (writeSummary_) {
+  if (!options_.noSummary) {
     ++statistics_.attachmentCount;
     attachmentIndex_.emplace_back(attachment, fileOffset);
   }
@@ -475,7 +483,7 @@ Status McapWriter::write(const Metadata& metadata) {
   write(fileOutput, metadata);
 
   // Update statistics and metadata index
-  if (writeSummary_) {
+  if (!options_.noSummary) {
     ++statistics_.metadataCount;
     metadataIndex_.emplace_back(metadata, fileOffset);
   }
@@ -518,14 +526,14 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
 
   const uint64_t compressedSize = chunkData.size();
   const std::byte* records = chunkData.data();
-  const uint32_t uncompressedCrc = 0;
+  const uint32_t uncompressedCrc = chunkData.crc();
 
   // Write the chunk
   const uint64_t chunkStartOffset = output.size();
   write(output, Chunk{currentChunkStart_, currentChunkEnd_, uncompressedSize_, uncompressedCrc,
                       compression, compressedSize, records});
 
-  if (writeSummary_) {
+  if (!options_.noSummary) {
     // Update statistics
     const uint64_t chunkLength = output.size() - chunkStartOffset;
     ++statistics_.chunkCount;
@@ -555,8 +563,8 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
 
     // Reset uncompressedSize and start/end times for the next chunk
     uncompressedSize_ = 0;
-    currentChunkStart_ = std::numeric_limits<uint64_t>::max();
-    currentChunkEnd_ = std::numeric_limits<uint64_t>::min();
+    currentChunkStart_ = MaxTime;
+    currentChunkEnd_ = 0;
   }
 
   // Reset the chunk writer
@@ -645,9 +653,6 @@ uint64_t McapWriter::write(IWritable& output, const Attachment& attachment) {
   const uint64_t recordSize = 4 + attachment.name.size() + 8 + 8 + 4 +
                               attachment.contentType.size() + 8 + attachment.dataSize + 4;
 
-  // TODO: Support calculating the CRC of the attachment data
-  const uint32_t crc = attachment.crc;
-
   write(output, OpCode::Attachment);
   write(output, recordSize);
   write(output, attachment.name);
@@ -656,7 +661,7 @@ uint64_t McapWriter::write(IWritable& output, const Attachment& attachment) {
   write(output, attachment.contentType);
   write(output, attachment.dataSize);
   write(output, attachment.data, attachment.dataSize);
-  write(output, crc);
+  write(output, attachment.crc);
 
   return 9 + recordSize;
 }
@@ -1049,32 +1054,6 @@ Status ZStdReader::status() const {
   return status_;
 }
 
-// BufferWriter //////////////////////////////////////////////////////////////
-
-void BufferWriter::write(const std::byte* data, uint64_t size) {
-  buffer_.insert(buffer_.end(), data, data + size);
-}
-
-void BufferWriter::end() {
-  // no-op
-}
-
-uint64_t BufferWriter::size() const {
-  return buffer_.size();
-}
-
-bool BufferWriter::empty() const {
-  return buffer_.empty();
-}
-
-void BufferWriter::clear() {
-  buffer_.clear();
-}
-
-const std::byte* BufferWriter::data() const {
-  return buffer_.data();
-}
-
 // StreamWriter ////////////////////////////////////////////////////////////////
 
 StreamWriter::StreamWriter(std::ostream& stream)
@@ -1092,6 +1071,54 @@ void StreamWriter::end() {
 
 uint64_t StreamWriter::size() const {
   return size_;
+}
+
+// IChunkWriter ////////////////////////////////////////////////////////////////
+
+void IChunkWriter::write(const std::byte* data, uint64_t size) {
+  handleWrite(data, size);
+  if (crcEnabled) {
+    crc_.Update(reinterpret_cast<const CryptoPP::byte*>(data), size);
+  }
+}
+
+void IChunkWriter::clear() {
+  handleClear();
+  crc_ = {};
+}
+
+uint32_t IChunkWriter::crc() const {
+  uint32_t crc32 = 0;
+  if (crcEnabled) {
+    crc_.Final(reinterpret_cast<CryptoPP::byte*>(&crc32));
+  }
+  return crc32;
+}
+
+// BufferWriter //////////////////////////////////////////////////////////////
+
+void BufferWriter::handleWrite(const std::byte* data, uint64_t size) {
+  buffer_.insert(buffer_.end(), data, data + size);
+}
+
+void BufferWriter::end() {
+  // no-op
+}
+
+uint64_t BufferWriter::size() const {
+  return buffer_.size();
+}
+
+bool BufferWriter::empty() const {
+  return buffer_.empty();
+}
+
+void BufferWriter::handleClear() {
+  buffer_.clear();
+}
+
+const std::byte* BufferWriter::data() const {
+  return buffer_.data();
 }
 
 // LZ4Writer ///////////////////////////////////////////////////////////////////
@@ -1130,7 +1157,7 @@ LZ4Writer::LZ4Writer(CompressionLevel compressionLevel, uint64_t chunkSize) {
   preEndBuffer_.reserve(chunkSize);
 }
 
-void LZ4Writer::write(const std::byte* data, uint64_t size) {
+void LZ4Writer::handleWrite(const std::byte* data, uint64_t size) {
   preEndBuffer_.insert(preEndBuffer_.end(), data, data + size);
 }
 
@@ -1152,7 +1179,7 @@ bool LZ4Writer::empty() const {
   return buffer_.empty() && preEndBuffer_.empty();
 }
 
-void LZ4Writer::clear() {
+void LZ4Writer::handleClear() {
   preEndBuffer_.clear();
   buffer_.clear();
 }
@@ -1195,7 +1222,7 @@ ZStdWriter::~ZStdWriter() {
   ZSTD_freeCCtx(zstdContext_);
 }
 
-void ZStdWriter::write(const std::byte* data, uint64_t size) {
+void ZStdWriter::handleWrite(const std::byte* data, uint64_t size) {
   preEndBuffer_.insert(preEndBuffer_.end(), data, data + size);
 }
 
@@ -1223,7 +1250,7 @@ bool ZStdWriter::empty() const {
   return buffer_.empty() && preEndBuffer_.empty();
 }
 
-void ZStdWriter::clear() {
+void ZStdWriter::handleClear() {
   preEndBuffer_.clear();
   buffer_.clear();
 }
