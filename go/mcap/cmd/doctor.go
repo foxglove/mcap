@@ -146,7 +146,9 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 			var isCustomSchemaEncoding = strings.HasPrefix(schemaEncoding, "x-")
 			if len(schemaEncoding) > 0 && schemaEncoding != string(SchemaEncodingProto) &&
 				schemaEncoding != string(SchemaEncodingRos1Msg) && !isCustomSchemaEncoding {
-				doctor.error("Schema.encoding field is not valid: %s. Only a well-known schemas are allowed. Other schemas must use x- prefix", schemaEncoding)
+				doctor.error(`
+					Schema.encoding field is not valid: %s. Only a well-known schemas are allowed.
+					Other schemas must use x- prefix`, schemaEncoding)
 			}
 
 			if schema.Encoding == "" && len(schema.Data) > 0 {
@@ -168,7 +170,8 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 			var isCustomMessageEncoding = strings.HasPrefix(msgEncoding, "x-")
 			if len(msgEncoding) > 0 && msgEncoding != string(MessageEncodingProto) &&
 				msgEncoding != string(MessageEncodingRos1) && !isCustomMessageEncoding {
-				doctor.error("Channel.messageEncoding field is not valid: %s. Only a well-known encodings are allowed. Other encodings must use x- prefix", msgEncoding)
+				doctor.error(`Channel.messageEncoding field is not valid: %s.
+					Only a well-known encodings are allowed. Other encodings must use x- prefix`, msgEncoding)
 			}
 
 			doctor.channels[channel.ID] = channel
@@ -201,11 +204,13 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 	}
 
 	if minLogTime != chunk.MessageStartTime {
-		doctor.error("Chunk.start_time %d does not match the latest message record time %d", chunk.MessageStartTime, minLogTime)
+		doctor.error("Chunk.start_time %d does not match the latest message record time %d",
+			chunk.MessageStartTime, minLogTime)
 	}
 
 	if maxLogTime != chunk.MessageEndTime {
-		doctor.error("Chunk.end_time %d does not match the latest message record time %d", chunk.MessageEndTime, maxLogTime)
+		doctor.error("Chunk.end_time %d does not match the latest message record time %d",
+			chunk.MessageEndTime, maxLogTime)
 	}
 }
 
@@ -244,7 +249,8 @@ func (doctor *mcapDoctor) Examine() {
 
 			var customProfile = strings.HasPrefix(header.Profile, "x-")
 			if len(header.Profile) > 0 && header.Profile != "ros1" && header.Profile != "ros2" && !customProfile {
-				doctor.error("Header.profile field is not valid: %s. Only a well-known profile is allowed. Other profiles must use x- prefix", header.Profile)
+				doctor.error(`Header.profile field is not valid: %s.
+					Only a well-known profile is allowed. Other profiles must use x- prefix`, header.Profile)
 			}
 		case libmcap.TokenFooter:
 			_, err := libmcap.ParseFooter(data)
@@ -261,7 +267,8 @@ func (doctor *mcapDoctor) Examine() {
 			var isCustomSchemaEncoding = strings.HasPrefix(schemaEncoding, "x-")
 			if len(schemaEncoding) > 0 && schemaEncoding != string(SchemaEncodingProto) &&
 				schemaEncoding != string(SchemaEncodingRos1Msg) && !isCustomSchemaEncoding {
-				doctor.error("Schema.encoding field is not valid: %s. Only a well-known schemas are allowed. Other schemas must use x- prefix", schemaEncoding)
+				doctor.error(`Schema.encoding field is not valid: %s.
+					Only a well-known schemas are allowed. Other schemas must use x- prefix`, schemaEncoding)
 			}
 
 			if schema.Encoding == "" && len(schema.Data) > 0 {
@@ -281,8 +288,10 @@ func (doctor *mcapDoctor) Examine() {
 
 			var msgEncoding = channel.MessageEncoding
 			var isCustomMessageEncoding = strings.HasPrefix(msgEncoding, "x-")
-			if len(msgEncoding) > 0 && msgEncoding != string(MessageEncodingProto) && msgEncoding != string(MessageEncodingRos1) && !isCustomMessageEncoding {
-				doctor.error("Channel.messageEncoding field is not valid: %s. Only a well-known encodings are allowed. Other encodings must use x- prefix", msgEncoding)
+			if len(msgEncoding) > 0 && msgEncoding != string(MessageEncodingProto) &&
+				msgEncoding != string(MessageEncodingRos1) && !isCustomMessageEncoding {
+				doctor.error(`Channel.messageEncoding field is not valid: %s.
+					Only a well-known encodings are allowed. Other encodings must use x- prefix`, msgEncoding)
 			}
 
 			doctor.channels[channel.ID] = channel
