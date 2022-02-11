@@ -1,6 +1,6 @@
 ## About
 
-These are preliminary python bindings for the mcap file format.
+These are preliminary python bindings for the MCAP file format.
 
 ## Testing
 
