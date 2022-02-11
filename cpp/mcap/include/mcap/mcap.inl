@@ -655,9 +655,9 @@ uint64_t McapWriter::write(IWritable& output, const Attachment& attachment) {
 
   write(output, OpCode::Attachment);
   write(output, recordSize);
-  write(output, attachment.name);
   write(output, attachment.logTime);
   write(output, attachment.createTime);
+  write(output, attachment.name);
   write(output, attachment.contentType);
   write(output, attachment.dataSize);
   write(output, attachment.data, attachment.dataSize);
@@ -1737,7 +1737,12 @@ Status McapReader::ParseChunkIndex(const Record& record, ChunkIndex* chunkIndex)
 }
 
 Status McapReader::ParseAttachment(const Record& record, Attachment* attachment) {
-  constexpr uint64_t MinSize = 4 + 8 + 8 + 4 + 8 + 4;
+  constexpr uint64_t MinSize = /* log_time */ 8 +
+                               /* create_time */ 8 +
+                               /* name */ 4 +
+                               /* content_type */ 4 +
+                               /* data_size */ 8 +
+                               /* crc */ 4;
 
   assert(record.opcode == OpCode::Attachment);
   if (record.dataSize < MinSize) {
@@ -1746,12 +1751,6 @@ Status McapReader::ParseAttachment(const Record& record, Attachment* attachment)
   }
 
   uint32_t offset = 0;
-  // name
-  if (auto status = internal::ParseString(record.data, record.dataSize, &attachment->name);
-      !status.ok()) {
-    return status;
-  }
-  offset += 4 + attachment->name.size();
   // log_time
   if (auto status =
         internal::ParseUint64(record.data + offset, record.dataSize - offset, &attachment->logTime);
@@ -1766,6 +1765,12 @@ Status McapReader::ParseAttachment(const Record& record, Attachment* attachment)
     return status;
   }
   offset += 8;
+  // name
+  if (auto status = internal::ParseString(record.data, record.dataSize, &attachment->name);
+      !status.ok()) {
+    return status;
+  }
+  offset += 4 + attachment->name.size();
   // content_type
   if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
                                           &attachment->contentType);
