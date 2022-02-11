@@ -81,8 +81,8 @@ Output binaries can be found in:
 
 ## Including in your project
 
-The C++ implementation of MCAP is maintained as a header-only library with three
-dependencies:
+The C++ implementation of MCAP is maintained as a header-only library with the
+following dependencies:
 
 - [cryptopp](https://cryptopp.com/) (tested with [cryptopp/8.5.0](https://conan.io/center/cryptopp))
 - [fmt](https://github.com/fmtlib/fmt) (tested with [fmt/8.1.1](https://conan.io/center/fmt))
