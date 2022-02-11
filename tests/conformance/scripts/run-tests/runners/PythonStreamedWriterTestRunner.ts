@@ -2,17 +2,17 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { TestVariant } from "variants/types";
 
-import { ITestRunner } from ".";
+import { WriteTestRunner } from "./TestRunner";
 
-export default class PythonStreamedWriterTestRunner implements ITestRunner {
-  readonly name = "py-streamed-writer";
-  readonly mode = "write";
+export default class PythonStreamedWriterTestRunner implements WriteTestRunner {
+  name = "py-streamed-writer";
 
-  async run(filePath: string): Promise<string> {
+  async runWriteTest(filePath: string): Promise<Uint8Array> {
     const { stdout } = await promisify(exec)(`python3 tests/run_writer_test.py ${filePath}`, {
       cwd: "../../python",
+      encoding: "binary",
     });
-    return stdout.trim();
+    return stdout as unknown as Uint8Array;
   }
 
   supportsVariant(_variant: TestVariant): boolean {

@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import { camelCase } from "lodash";
 import { TestFeatures, TestVariant } from "variants/types";
 
-import ITestRunner from "./ITestRunner";
+import { WriteTestRunner } from "./TestRunner";
 
 type JsonValue<T> = T extends number | bigint | string
   ? string
@@ -109,7 +109,7 @@ function parseJsonRecord(record: {
   return undefined;
 }
 
-export default class TypescriptWriterTestRunner implements ITestRunner {
+export default class TypescriptWriterTestRunner extends WriteTestRunner {
   readonly name = "ts-writer";
   readonly mode = "write";
 

@@ -8,7 +8,8 @@ import path from "path";
 import { stringifyRecords } from "scripts/run-tests/runners/stringifyRecords";
 import generateTestVariants from "variants/generateTestVariants";
 
-import runners, { ITestRunner } from "./runners";
+import runners from "./runners";
+import { ReadTestRunner, WriteTestRunner } from "./runners/TestRunner";
 
 type TestOptions = {
   dataDir: string;
@@ -44,7 +45,7 @@ function splitAnsiString(s: string, length: number, replace: string): string {
 }
 
 async function runReaderTest(
-  runner: ITestRunner,
+  runner: ReadTestRunner,
   options: TestOptions,
 ): Promise<{ foundAnyTests: boolean; hadError: boolean }> {
   let foundAnyTests = false;
@@ -66,7 +67,7 @@ async function runReaderTest(
 
     let output: string;
     try {
-      output = await runner.run(filePath, variant);
+      output = await runner.runReadTest(filePath, variant);
     } catch (error) {
       console.error(error);
       hadError = true;
@@ -99,7 +100,7 @@ async function runReaderTest(
 }
 
 async function runWriterTest(
-  runner: ITestRunner,
+  runner: WriteTestRunner,
   options: TestOptions,
 ): Promise<{ foundAnyTests: boolean; hadError: boolean }> {
   let foundAnyTests = false;
@@ -117,9 +118,9 @@ async function runWriterTest(
       continue;
     }
 
-    let output: string;
+    let output: Uint8Array;
     try {
-      output = await runner.run(filePath, variant);
+      output = await runner.runWriteTest(filePath, variant);
     } catch (error) {
       console.error(error);
       hadError = true;
@@ -134,8 +135,9 @@ async function runWriterTest(
       hadError = true;
       continue;
     }
+    const outputHex = bytesToHex(output);
     const expectedOutputHex = bytesToHex(expectedOutput as Uint8Array);
-    if (output !== expectedOutputHex) {
+    if (outputHex !== expectedOutputHex) {
       console.error(colors.red("fail       "), filePath);
       // If the file produced was valid parsable MCAP, we can re-stringify it and display a JSON diff.
       try {
@@ -159,7 +161,7 @@ async function runWriterTest(
 
       // Display a diff of the raw bytes.
       let colorDiff = "";
-      const charDiff = Diff.diffChars(expectedOutputHex, output);
+      const charDiff = Diff.diffChars(expectedOutputHex, outputHex);
       charDiff.forEach((part) => {
         const color =
           part.added === true ? colors.green : part.removed === true ? colors.red : colors.grey;
@@ -202,13 +204,21 @@ async function main(options: TestOptions) {
   let hadError = false;
   let foundAnyTests = false;
   for (const runner of enabledRunners) {
-    const testFunction = runner.mode === "read" ? runReaderTest : runWriterTest;
-    const { hadError: newHadError, foundAnyTests: newFoundAnyTests } = await testFunction(
-      runner,
-      options,
-    );
-    hadError ||= newHadError;
-    foundAnyTests ||= newFoundAnyTests;
+    if (runner instanceof ReadTestRunner) {
+      const { hadError: newHadError, foundAnyTests: newFoundAnyTests } = await runReaderTest(
+        runner,
+        options,
+      );
+      hadError ||= newHadError;
+      foundAnyTests ||= newFoundAnyTests;
+    } else if (runner instanceof WriteTestRunner) {
+      const { hadError: newHadError, foundAnyTests: newFoundAnyTests } = await runWriterTest(
+        runner,
+        options,
+      );
+      hadError ||= newHadError;
+      foundAnyTests ||= newFoundAnyTests;
+    }
   }
 
   if (!foundAnyTests) {

@@ -3,13 +3,12 @@ import { join } from "path";
 import { promisify } from "util";
 import { TestVariant } from "variants/types";
 
-import { ITestRunner } from ".";
+import { ReadTestRunner } from "./TestRunner";
 
-export default class GoStreamedTestRunner implements ITestRunner {
-  readonly name = "go-streamed-reader";
-  readonly mode = "read";
+export default class GoStreamedTestRunner extends ReadTestRunner {
+  name = "go-streamed-reader";
 
-  async run(filePath: string): Promise<string> {
+  async runReadTest(filePath: string): Promise<string> {
     const { stdout } = await promisify(exec)(`./check-conformance ${filePath}`, {
       cwd: join(__dirname, "../../../../../go/conformance"),
     });
