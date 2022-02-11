@@ -66,7 +66,7 @@
     {
       "type": "SummaryOffset",
       "fields": [
-        ["group_length", "77"],
+        ["group_length", "73"],
         ["group_opcode", "8"],
         ["group_start", "249"]
       ]
@@ -75,7 +75,7 @@
       "type": "Footer",
       "fields": [
         ["summary_crc", "0"],
-        ["summary_offset_start", "326"],
+        ["summary_offset_start", "322"],
         ["summary_start", "202"]
       ]
     }
