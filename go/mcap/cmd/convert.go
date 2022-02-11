@@ -26,7 +26,14 @@ var chunkSize int64
 var includeCRC bool
 var chunked bool
 
-func checkMagic(path string) (string, error) {
+type FileType string
+
+const (
+	FileTypeRos1 FileType = "ros1"
+	FileTypeDB3  FileType = "db3"
+)
+
+func checkMagic(path string) (FileType, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		die("failed to open input: %s", err)
@@ -39,7 +46,7 @@ func checkMagic(path string) (string, error) {
 		die("failed to read magic bytes: %s", err)
 	}
 	if bytes.Equal(magic, bagMagic) {
-		return "ros1", nil
+		return FileTypeRos1, nil
 	}
 
 	db3magic := make([]byte, len(db3Magic))
@@ -49,7 +56,7 @@ func checkMagic(path string) (string, error) {
 		die("failed to read magic bytes: %s", err)
 	}
 	if bytes.Equal(db3magic, db3Magic) {
-		return "db3", nil
+		return FileTypeDB3, nil
 	}
 	return "", fmt.Errorf("unrecognized file type")
 }
@@ -93,12 +100,12 @@ var convertCmd = &cobra.Command{
 		}
 
 		switch filetype {
-		case "ros1":
+		case FileTypeRos1:
 			err = ros.Bag2MCAP(w, f, opts)
 			if err != nil && !errors.Is(err, io.EOF) {
 				die("failed to convert file: %s", err)
 			}
-		case "db3":
+		case FileTypeDB3:
 			f.Close()
 			db, err := sql.Open("sqlite3", args[0])
 			if err != nil {
