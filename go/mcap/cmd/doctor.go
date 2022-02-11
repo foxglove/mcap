@@ -106,7 +106,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 
 	uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
 
-	lexer, err := libmcap.NewLexer(uncompressedBytesReader, &libmcap.LexOpts{
+	lexer, err := libmcap.NewLexer(uncompressedBytesReader, &libmcap.LexerOptions{
 		SkipMagic:   true,
 		ValidateCRC: true,
 		EmitChunks:  true,
@@ -215,7 +215,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 }
 
 func (doctor *mcapDoctor) Examine() {
-	lexer, err := libmcap.NewLexer(doctor.reader, &libmcap.LexOpts{
+	lexer, err := libmcap.NewLexer(doctor.reader, &libmcap.LexerOptions{
 		SkipMagic:   false,
 		ValidateCRC: true,
 		EmitChunks:  true,

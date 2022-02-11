@@ -211,7 +211,7 @@ func (it *indexedMessageIterator) loadChunk(index int) error {
 		return fmt.Errorf("unsupported compression format %s", chunk.Compression)
 	}
 	it.activeChunkIndex = index
-	it.activeChunkLexer, err = NewLexer(it.activeChunkReader, &LexOpts{
+	it.activeChunkLexer, err = NewLexer(it.activeChunkReader, &LexerOptions{
 		SkipMagic: true,
 	})
 	if err != nil {
