@@ -55,8 +55,8 @@ export type ChunkIndex = {
 };
 export type Attachment = {
   name: string;
-  createdAt: bigint;
   logTime: bigint;
+  createTime: bigint;
   contentType: string;
   data: Uint8Array;
 };
@@ -64,6 +64,7 @@ export type AttachmentIndex = {
   offset: bigint;
   length: bigint;
   logTime: bigint;
+  createTime: bigint;
   dataSize: bigint;
   name: string;
   contentType: string;

@@ -78,6 +78,7 @@ class StreamWriter:
                 offset=self.__stream.count,
                 length=0,
                 log_time=attachment.log_time,
+                create_time=attachment.create_time,
                 data_size=len(attachment.data),
                 name=attachment.name,
                 content_type=attachment.content_type,
