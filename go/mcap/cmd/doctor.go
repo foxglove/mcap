@@ -25,6 +25,19 @@ type mcapDoctor struct {
 	schemas  map[uint16]*libmcap.Schema
 }
 
+type MessageEncoding string
+type SchemaEncoding string
+
+const (
+	MessageEncodingProto MessageEncoding = "proto"
+	MessageEncodingRos1  MessageEncoding = "ros1"
+)
+
+const (
+	SchemaEncodingProto   SchemaEncoding = "proto"
+	SchemaEncodingRos1Msg SchemaEncoding = "ros1msg"
+)
+
 func (doctor *mcapDoctor) warn(format string, v ...interface{}) {
 	color.Yellow(format, v...)
 }
@@ -105,7 +118,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 	}
 
 	var minLogTime uint64 = math.MaxUint64
-	var maxLogTime uint64 = 0
+	var maxLogTime uint64
 
 	msg := make([]byte, 1024)
 	for {
@@ -132,11 +145,11 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 
 			var schemaEncoding = schema.Encoding
 			var isCustomSchemaEncoding = strings.HasPrefix(schemaEncoding, "x-")
-			if len(schemaEncoding) > 0 && schemaEncoding != "proto" && schemaEncoding != "ros1msg" && !isCustomSchemaEncoding {
+			if len(schemaEncoding) > 0 && schemaEncoding != string(SchemaEncodingProto) && schemaEncoding != string(SchemaEncodingRos1Msg) && !isCustomSchemaEncoding {
 				doctor.error("Schema.encoding field is not valid: %s. Only a well-known schemas are allowed. Other schemas must use x- prefix", schemaEncoding)
 			}
 
-			if len(schema.Encoding) == 0 && len(schema.Data) > 0 {
+			if schema.Encoding == "" && len(schema.Data) > 0 {
 				doctor.error("Schema.data field should not be set when Schema.encoding is empty")
 			}
 
@@ -153,7 +166,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 
 			var msgEncoding = channel.MessageEncoding
 			var isCustomMessageEncoding = strings.HasPrefix(msgEncoding, "x-")
-			if len(msgEncoding) > 0 && msgEncoding != "proto" && msgEncoding != "ros1" && !isCustomMessageEncoding {
+			if len(msgEncoding) > 0 && msgEncoding != string(MessageEncodingProto) && msgEncoding != string(MessageEncodingRos1) && !isCustomMessageEncoding {
 				doctor.error("Channel.messageEncoding field is not valid: %s. Only a well-known encodings are allowed. Other encodings must use x- prefix", msgEncoding)
 			}
 
@@ -224,7 +237,7 @@ func (doctor *mcapDoctor) Examine() {
 				doctor.error("Error parsing Header: %s", err)
 			}
 
-			if len(header.Library) == 0 {
+			if header.Library == "" {
 				doctor.warn("Header.library field should be non-empty. Its good to include a library field for reference.")
 			}
 
@@ -245,11 +258,11 @@ func (doctor *mcapDoctor) Examine() {
 
 			var schemaEncoding = schema.Encoding
 			var isCustomSchemaEncoding = strings.HasPrefix(schemaEncoding, "x-")
-			if len(schemaEncoding) > 0 && schemaEncoding != "proto" && schemaEncoding != "ros1msg" && !isCustomSchemaEncoding {
+			if len(schemaEncoding) > 0 && schemaEncoding != string(SchemaEncodingProto) && schemaEncoding != string(SchemaEncodingRos1Msg) && !isCustomSchemaEncoding {
 				doctor.error("Schema.encoding field is not valid: %s. Only a well-known schemas are allowed. Other schemas must use x- prefix", schemaEncoding)
 			}
 
-			if len(schema.Encoding) == 0 && len(schema.Data) > 0 {
+			if schema.Encoding == "" && len(schema.Data) > 0 {
 				doctor.error("Schema.data field should not be set when Schema.encoding is empty")
 			}
 
@@ -266,7 +279,7 @@ func (doctor *mcapDoctor) Examine() {
 
 			var msgEncoding = channel.MessageEncoding
 			var isCustomMessageEncoding = strings.HasPrefix(msgEncoding, "x-")
-			if len(msgEncoding) > 0 && msgEncoding != "proto" && msgEncoding != "ros1" && !isCustomMessageEncoding {
+			if len(msgEncoding) > 0 && msgEncoding != string(MessageEncodingProto) && msgEncoding != string(MessageEncodingRos1) && !isCustomMessageEncoding {
 				doctor.error("Channel.messageEncoding field is not valid: %s. Only a well-known encodings are allowed. Other encodings must use x- prefix", msgEncoding)
 			}
 
@@ -345,7 +358,7 @@ func (doctor *mcapDoctor) Examine() {
 	}
 }
 
-func NewMcapDoctor(reader io.Reader) *mcapDoctor {
+func newMcapDoctor(reader io.Reader) *mcapDoctor {
 	return &mcapDoctor{
 		reader:   reader,
 		channels: make(map[uint16]*libmcap.Channel),
@@ -366,7 +379,7 @@ func main(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	doctor := NewMcapDoctor(file)
+	doctor := newMcapDoctor(file)
 	doctor.Examine()
 }
 
