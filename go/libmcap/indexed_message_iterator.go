@@ -26,7 +26,8 @@ type indexedMessageIterator struct {
 	start  uint64
 	end    uint64
 
-	channels          map[uint16]*ChannelInfo
+	channels          map[uint16]*Channel
+	schemas           map[uint16]*Schema
 	statistics        *Statistics
 	chunksets         [][]*ChunkIndex
 	chunkIndexes      []*ChunkIndex
@@ -69,43 +70,47 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 		return fmt.Errorf("failed to seek to summary start")
 	}
 	for {
-		tk, err := it.lexer.Next()
+		tokenType, record, err := it.lexer.Next(nil)
 		if err != nil {
 			return fmt.Errorf("failed to get next token: %w", err)
 		}
-		data := tk.bytes()
-		switch tk.TokenType {
-		case TokenChannelInfo:
-			channelInfo, err := ParseChannelInfo(data)
+		switch tokenType {
+		case TokenSchema:
+			schema, err := ParseSchema(record)
+			if err != nil {
+				return fmt.Errorf("failed to parse schema: %w", err)
+			}
+			it.schemas[schema.ID] = schema
+		case TokenChannel:
+			channelInfo, err := ParseChannel(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse channel info: %w", err)
 			}
-			if len(it.topics) == 0 || it.topics[channelInfo.TopicName] {
-				it.channels[channelInfo.ChannelID] = channelInfo
+			if len(it.topics) == 0 || it.topics[channelInfo.Topic] {
+				it.channels[channelInfo.ID] = channelInfo
 			}
 		case TokenAttachmentIndex:
-			idx, err := ParseAttachmentIndex(data)
+			idx, err := ParseAttachmentIndex(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse attachment index: %w", err)
 			}
 			it.attachmentIndexes = append(it.attachmentIndexes, idx)
 		case TokenChunkIndex:
-			idx, err := ParseChunkIndex(data)
+			idx, err := ParseChunkIndex(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse attachment index: %w", err)
 			}
 			// if the chunk overlaps with the requested parameters, load it
-			for _, c := range it.channels {
-				if idx.MessageIndexOffsets[c.ChannelID] > 0 {
-					if (it.end == 0 && it.start == 0) || (idx.StartTime < it.end && idx.EndTime >= it.start) {
+			for _, channel := range it.channels {
+				if idx.MessageIndexOffsets[channel.ID] > 0 {
+					if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
 						it.chunkIndexes = append(it.chunkIndexes, idx)
 					}
 					break
 				}
 			}
-
 		case TokenStatistics:
-			stats, err := ParseStatistics(data)
+			stats, err := ParseStatistics(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse statistics: %w", err)
 			}
@@ -120,26 +125,26 @@ func sortOverlappingChunks(chunkIndexes []*ChunkIndex) [][]*ChunkIndex {
 	output := [][]*ChunkIndex{}
 	chunkset := []*ChunkIndex{}
 	sort.Slice(chunkIndexes, func(i, j int) bool {
-		return chunkIndexes[i].StartTime < chunkIndexes[j].StartTime
+		return chunkIndexes[i].MessageStartTime < chunkIndexes[j].MessageStartTime
 	})
 
 	var maxend, minstart uint64
 	for _, chunkIndex := range chunkIndexes {
 		if len(chunkset) == 0 {
 			chunkset = append(chunkset, chunkIndex)
-			maxend = chunkIndex.EndTime
-			minstart = chunkIndex.StartTime
+			maxend = chunkIndex.MessageEndTime
+			minstart = chunkIndex.MessageStartTime
 			continue
 		}
 
 		// if this chunk index overlaps with the chunkset in hand, add it
-		if chunkIndex.EndTime >= minstart && chunkIndex.StartTime < maxend {
+		if chunkIndex.MessageEndTime >= minstart && chunkIndex.MessageStartTime < maxend {
 			chunkset = append(chunkset, chunkIndex)
-			if minstart > chunkIndex.StartTime {
-				minstart = chunkIndex.StartTime
+			if minstart > chunkIndex.MessageStartTime {
+				minstart = chunkIndex.MessageStartTime
 			}
-			if maxend < chunkIndex.EndTime {
-				maxend = chunkIndex.EndTime
+			if maxend < chunkIndex.MessageEndTime {
+				maxend = chunkIndex.MessageEndTime
 			}
 			continue
 		}
@@ -148,8 +153,8 @@ func sortOverlappingChunks(chunkIndexes []*ChunkIndex) [][]*ChunkIndex {
 		// initialize a new one
 		output = append(output, chunkset)
 		chunkset = []*ChunkIndex{chunkIndex}
-		maxend = chunkIndex.EndTime
-		minstart = chunkIndex.StartTime
+		maxend = chunkIndex.MessageEndTime
+		minstart = chunkIndex.MessageStartTime
 	}
 
 	if len(chunkset) > 0 {
@@ -166,20 +171,19 @@ func (it *indexedMessageIterator) loadChunk(index int) error {
 	if err != nil {
 		return err
 	}
-	tok, err := it.lexer.Next()
+	tokenType, record, err := it.lexer.Next(nil)
 	if err != nil {
 		return err
 	}
 	var chunk *Chunk
-	switch tok.TokenType {
+	switch tokenType {
 	case TokenChunk:
-		chunk, err = ParseChunk(tok.bytes())
+		chunk, err = ParseChunk(record)
 		if err != nil {
 			return fmt.Errorf("failed to parse chunk: %w", err)
 		}
 	default:
-		_ = tok.bytes()
-		return fmt.Errorf("unexpected token %s in chunk section", tok)
+		return fmt.Errorf("unexpected token %s in chunk section", tokenType)
 	}
 	switch CompressionFormat(chunk.Compression) {
 	case CompressionNone:
@@ -206,7 +210,6 @@ func (it *indexedMessageIterator) loadChunk(index int) error {
 	default:
 		return fmt.Errorf("unsupported compression format %s", chunk.Compression)
 	}
-
 	it.activeChunkIndex = index
 	it.activeChunkLexer, err = NewLexer(it.activeChunkReader, &LexOpts{
 		SkipMagic: true,
@@ -231,15 +234,14 @@ func (it *indexedMessageIterator) loadNextChunkset() error {
 				return err
 			}
 			// now we're at the message index implicated by the chunk; parse one record
-			tk, err := it.lexer.Next()
+			tokenType, record, err := it.lexer.Next(nil)
 			if err != nil {
 				return err
 			}
-			data := tk.bytes()
-			if tk.TokenType != TokenMessageIndex {
-				return fmt.Errorf("unexpected token %s in message index section", tk)
+			if tokenType != TokenMessageIndex {
+				return fmt.Errorf("unexpected token %s in message index section", tokenType)
 			}
-			messageIndex, err := ParseMessageIndex(data)
+			messageIndex, err := ParseMessageIndex(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse message index at %d", offset)
 			}
@@ -277,26 +279,24 @@ func (it *indexedMessageIterator) seekChunk(offset int64) error {
 	return nil
 }
 
-func (it *indexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
+func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, error) {
 	if it.statistics == nil {
 		err := it.parseSummarySection()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		it.chunksets = sortOverlappingChunks(it.chunkIndexes)
 	}
 
 	if it.messageOffsetIdx >= len(it.messageOffsets) {
 		if it.activeChunksetIndex >= len(it.chunksets)-1 {
-			return nil, nil, io.EOF
+			return nil, nil, nil, io.EOF
 		}
 		err := it.loadNextChunkset()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
-
-	fmt.Println(it.messageOffsetIdx, len(it.messageOffsets))
 
 	messageOffset := it.messageOffsets[it.messageOffsetIdx]
 	it.messageOffsetIdx++
@@ -306,28 +306,29 @@ func (it *indexedMessageIterator) Next() (*ChannelInfo, *Message, error) {
 	if messageOffset.chunkIndex != it.activeChunkIndex {
 		err := it.loadChunk(messageOffset.chunkIndex)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 
 	// now the active chunk matches the one for this message
 	err := it.seekChunk(int64(messageOffset.chunkOffset))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	tok, err := it.activeChunkLexer.Next()
+	tokenType, record, err := it.activeChunkLexer.Next(p)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	switch tok.TokenType {
+	switch tokenType {
 	case TokenMessage:
-		msg, err := ParseMessage(tok.bytes())
+		message, err := ParseMessage(record)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		return it.channels[msg.ChannelID], msg, nil
+		channel := it.channels[message.ChannelID]
+		schema := it.schemas[channel.SchemaID]
+		return schema, channel, message, nil
 	default:
-		_ = tok.bytes()
-		return nil, nil, fmt.Errorf("unexpected token %s in message section", tok)
+		return nil, nil, nil, fmt.Errorf("unexpected token %s in message section", tokenType)
 	}
 }

@@ -33,15 +33,18 @@ func readPrefixedMap(data []byte, offset int) (result map[string]string, newoffs
 	var key, value string
 	var inset int
 	m := make(map[string]string)
-	maplen, offset := getUint32(data, offset)
+	maplen, offset, err := getUint32(data, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to read map length: %w", err)
+	}
 	for uint32(offset+inset) < uint32(offset)+maplen {
 		key, inset, err = readPrefixedString(data[offset:], inset)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, fmt.Errorf("failed to read map key: %w", err)
 		}
 		value, inset, err = readPrefixedString(data[offset:], inset)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, fmt.Errorf("failed to read map value: %w", err)
 		}
 		m[key] = value
 	}
@@ -52,11 +55,11 @@ type Reader struct {
 	l        *Lexer
 	r        io.Reader
 	rs       io.ReadSeeker
-	channels map[uint16]*ChannelInfo
+	channels map[uint16]*Channel
 }
 
 type MessageIterator interface {
-	Next() (*ChannelInfo, *Message, error)
+	Next([]byte) (*Schema, *Channel, *Message, error)
 }
 
 func (r *Reader) unindexedIterator(topics []string, start uint64, end uint64) *unindexedMessageIterator {
@@ -67,7 +70,8 @@ func (r *Reader) unindexedIterator(topics []string, start uint64, end uint64) *u
 	r.l.emitChunks = false
 	return &unindexedMessageIterator{
 		lexer:    r.l,
-		channels: make(map[uint16]*ChannelInfo),
+		channels: make(map[uint16]*Channel),
+		schemas:  make(map[uint16]*Schema),
 		topics:   topicMap,
 		start:    start,
 		end:      end,
@@ -83,7 +87,8 @@ func (r *Reader) indexedMessageIterator(topics []string, start uint64, end uint6
 	return &indexedMessageIterator{
 		lexer:               r.l,
 		rs:                  r.rs,
-		channels:            make(map[uint16]*ChannelInfo),
+		channels:            make(map[uint16]*Channel),
+		schemas:             make(map[uint16]*Schema),
 		topics:              topicMap,
 		start:               start,
 		end:                 end,
@@ -119,6 +124,7 @@ func (r *Reader) Info() (*Info, error) {
 		Statistics:   it.statistics,
 		Channels:     it.channels,
 		ChunkIndexes: it.chunkIndexes,
+		Schemas:      it.schemas,
 	}, nil
 }
 
@@ -137,6 +143,6 @@ func NewReader(r io.Reader) (*Reader, error) {
 		l:        lexer,
 		r:        r,
 		rs:       rs,
-		channels: make(map[uint16]*ChannelInfo),
+		channels: make(map[uint16]*Channel),
 	}, nil
 }

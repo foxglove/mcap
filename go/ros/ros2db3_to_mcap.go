@@ -135,13 +135,8 @@ func transformMessages(db *sql.DB, f func(*sql.Rows) error) error {
 	return nil
 }
 
-func DB3ToMCAP(w io.Writer, db *sql.DB, searchdirs []string) error {
-	writer, err := libmcap.NewWriter(w, &libmcap.WriterOptions{
-		Chunked:     true,
-		ChunkSize:   4 * 1024 * 1024,
-		Compression: libmcap.CompressionLZ4,
-		IncludeCRC:  true,
-	})
+func DB3ToMCAP(w io.Writer, db *sql.DB, opts *libmcap.WriterOptions, searchdirs []string) error {
+	writer, err := libmcap.NewWriter(w, opts)
 	if err != nil {
 		return err
 	}
@@ -167,18 +162,27 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, searchdirs []string) error {
 		return err
 	}
 
-	// for each topic, write a channel info to the output.
-	for _, t := range topics {
+	// for each topic, write a schema and channel info to the output.
+	for i, t := range topics {
+		schemaID := uint16(i + 1)
 		schema, ok := schemas[t.typ]
 		if !ok {
 			return fmt.Errorf("unrecognized schema for %s", t.typ)
 		}
-		err = writer.WriteChannelInfo(&libmcap.ChannelInfo{
-			ChannelID:       t.id,
-			TopicName:       t.name,
+		err = writer.WriteSchema(&libmcap.Schema{
+			ID:       schemaID,
+			Data:     schema,
+			Name:     t.typ,
+			Encoding: "msg",
+		})
+		if err != nil {
+			return fmt.Errorf("failed to write schema: %w", err)
+		}
+		err = writer.WriteChannel(&libmcap.Channel{
+			ID:              t.id,
+			Topic:           t.name,
 			MessageEncoding: t.serializationFormat,
-			SchemaName:      t.typ,
-			Schema:          schema,
+			SchemaID:        schemaID,
 			Metadata: map[string]string{
 				"offered_qos_profiles": t.offeredQOSProfiles,
 			},
@@ -203,7 +207,7 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, searchdirs []string) error {
 		err = writer.WriteMessage(&libmcap.Message{
 			ChannelID:   topicID,
 			Sequence:    seq[topicID],
-			RecordTime:  uint64(messageTimestamp),
+			LogTime:     uint64(messageTimestamp),
 			PublishTime: uint64(messageTimestamp),
 		})
 		if err != nil {

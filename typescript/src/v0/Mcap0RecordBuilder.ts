@@ -2,18 +2,19 @@ import { Statistics, SummaryOffset } from ".";
 import { BufferBuilder } from "./BufferBuilder";
 import { MCAP0_MAGIC, Opcode } from "./constants";
 import {
-  ChannelInfo,
-  Header,
-  Footer,
-  Message,
   Attachment,
   AttachmentIndex,
+  Channel,
   Chunk,
   ChunkIndex,
+  DataEnd,
+  Footer,
+  Header,
+  Message,
   MessageIndex,
   Metadata,
   MetadataIndex,
-  DataEnd,
+  Schema,
 } from "./types";
 
 type Options = {
@@ -84,18 +85,40 @@ export class Mcap0RecordBuilder {
     return 20n;
   }
 
-  writeChannelInfo(info: ChannelInfo): bigint {
-    this.bufferBuilder.uint8(Opcode.CHANNEL_INFO);
+  writeSchema(schema: Schema): bigint {
+    this.bufferBuilder.uint8(Opcode.SCHEMA);
+
+    const startPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .uint64(0n) // placeholder
+      .uint16(schema.id)
+      .string(schema.name)
+      .string(schema.encoding)
+      .uint32(schema.data.byteLength)
+      .bytes(schema.data);
+
+    if (this.options?.padRecords === true) {
+      this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
+    }
+    const endPosition = this.bufferBuilder.length;
+    this.bufferBuilder
+      .seek(startPosition)
+      .uint64(BigInt(endPosition - startPosition - 8))
+      .seek(endPosition);
+
+    return BigInt(endPosition - startPosition + 1);
+  }
+
+  writeChannel(info: Channel): bigint {
+    this.bufferBuilder.uint8(Opcode.CHANNEL);
 
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .uint64(0n) // placeholder
       .uint16(info.id)
+      .uint16(info.schemaId)
       .string(info.topic)
       .string(info.messageEncoding)
-      .string(info.schemaEncoding)
-      .string(info.schema)
-      .string(info.schemaName)
       .tupleArray(
         (key) => this.bufferBuilder.string(key),
         (value) => this.bufferBuilder.string(value),
@@ -120,9 +143,9 @@ export class Mcap0RecordBuilder {
       .uint64(0n) // placeholder
       .uint16(message.channelId)
       .uint32(message.sequence)
-      .uint64(message.publishTime)
       .uint64(message.logTime)
-      .bytes(message.messageData);
+      .uint64(message.publishTime)
+      .bytes(message.data);
     // message record cannot be padded
     const endPosition = this.bufferBuilder.length;
     this.bufferBuilder
@@ -188,11 +211,12 @@ export class Mcap0RecordBuilder {
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .uint64(0n) // placeholder
-      .uint64(chunk.startTime)
-      .uint64(chunk.endTime)
+      .uint64(chunk.messageStartTime)
+      .uint64(chunk.messageEndTime)
       .uint64(chunk.uncompressedSize)
       .uint32(chunk.uncompressedCrc)
       .string(chunk.compression)
+      .uint64(BigInt(chunk.records.byteLength))
       .bytes(chunk.records);
     // chunk record cannot be padded
     const endPosition = this.bufferBuilder.length;
@@ -210,8 +234,8 @@ export class Mcap0RecordBuilder {
     const startPosition = this.bufferBuilder.length;
     this.bufferBuilder
       .uint64(0n) // placeholder
-      .uint64(chunkIndex.startTime)
-      .uint64(chunkIndex.endTime)
+      .uint64(chunkIndex.messageStartTime)
+      .uint64(chunkIndex.messageEndTime)
       .uint64(chunkIndex.chunkStartOffset)
       .uint64(chunkIndex.chunkLength)
       .uint32(chunkIndex.messageIndexOffsets.size * 10);
@@ -343,13 +367,17 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder
       .uint64(0n) // placeholder size
       .uint64(statistics.messageCount)
+      .uint16(statistics.schemaCount)
       .uint32(statistics.channelCount)
       .uint32(statistics.attachmentCount)
+      .uint32(statistics.metadataCount)
       .uint32(statistics.chunkCount)
+      .uint64(statistics.messageStartTime)
+      .uint64(statistics.messageEndTime)
       .tupleArray(
         (key) => this.bufferBuilder.uint16(key),
         (value) => this.bufferBuilder.uint64(value),
-        statistics.channelMessageCounts.entries(),
+        statistics.channelMessageCounts,
       );
     if (this.options?.padRecords === true) {
       this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);

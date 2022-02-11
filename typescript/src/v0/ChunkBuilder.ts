@@ -1,13 +1,13 @@
 import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
-import { ChannelInfo, Message, MessageIndex } from "./types";
+import { Channel, Message, MessageIndex, Schema } from "./types";
 
 class ChunkBuilder {
   private recordWriter = new Mcap0RecordBuilder();
   private messageIndices = new Map<number, MessageIndex>();
   private totalMessageCount = 0;
 
-  startTime = 0n;
-  endTime = 0n;
+  messageStartTime = 0n;
+  messageEndTime = 0n;
 
   get numMessages(): number {
     return this.totalMessageCount;
@@ -21,21 +21,25 @@ class ChunkBuilder {
     return this.messageIndices.values();
   }
 
-  addChannelInfo(info: ChannelInfo): void {
+  addSchema(schema: Schema): void {
+    this.recordWriter.writeSchema(schema);
+  }
+
+  addChannel(info: Channel): void {
     if (!this.messageIndices.has(info.id)) {
       this.messageIndices.set(info.id, {
         channelId: info.id,
         records: [],
       });
     }
-    this.recordWriter.writeChannelInfo(info);
+    this.recordWriter.writeChannel(info);
   }
 
   addMessage(message: Message): void {
-    if (this.startTime === 0n) {
-      this.startTime = message.logTime;
+    if (this.messageStartTime === 0n) {
+      this.messageStartTime = message.logTime;
     }
-    this.endTime = message.logTime;
+    this.messageEndTime = message.logTime;
 
     let messageIndex = this.messageIndices.get(message.channelId);
     if (!messageIndex) {
@@ -53,8 +57,8 @@ class ChunkBuilder {
   }
 
   reset(): void {
-    this.startTime = 0n;
-    this.endTime = 0n;
+    this.messageStartTime = 0n;
+    this.messageEndTime = 0n;
     this.totalMessageCount = 0;
     this.messageIndices.clear();
   }

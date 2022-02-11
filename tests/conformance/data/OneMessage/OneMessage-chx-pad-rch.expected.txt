@@ -1,5 +1,0 @@
-Header library="" profile=""
-ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema=b schema_encoding=c schema_name=Example topic=example
-Message channel_id=1 log_time=2 message_data=<010203> publish_time=1 sequence=10
-ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema=b schema_encoding=c schema_name=Example topic=example
-Footer summary_crc=0 summary_offset_start=0 summary_start=147

@@ -18,75 +18,66 @@ var (
 )
 
 const (
-	TokenMessage TokenType = iota
-	TokenChannelInfo
+	TokenHeader TokenType = iota
 	TokenFooter
-	TokenHeader
-	TokenAttachment
-	TokenAttachmentIndex
-	TokenChunkIndex
-	TokenStatistics
+	TokenSchema
+	TokenChannel
+	TokenMessage
 	TokenChunk
 	TokenMessageIndex
+	TokenChunkIndex
+	TokenAttachment
+	TokenAttachmentIndex
+	TokenStatistics
 	TokenMetadata
 	TokenMetadataIndex
 	TokenSummaryOffset
+	TokenDataEnd
+	TokenError
 )
 
 type TokenType int
 
-type Token struct {
-	TokenType TokenType
-	ByteCount int64
-	Reader    io.Reader
-}
-
 func (t TokenType) String() string {
 	switch t {
-	case TokenMessage:
-		return "message"
-	case TokenChannelInfo:
-		return "channel info"
-	case TokenFooter:
-		return "footer"
 	case TokenHeader:
 		return "header"
+	case TokenFooter:
+		return "footer"
+	case TokenSchema:
+		return "schema"
+	case TokenChannel:
+		return "channel"
+	case TokenMessage:
+		return "message"
+	case TokenChunk:
+		return "chunk"
+	case TokenMessageIndex:
+		return "message index"
+	case TokenChunkIndex:
+		return "chunk index"
 	case TokenAttachment:
 		return "attachment"
 	case TokenAttachmentIndex:
 		return "attachment index"
-	case TokenChunk:
-		return "chunk"
-	case TokenChunkIndex:
-		return "chunk index"
 	case TokenStatistics:
 		return "statistics"
-	case TokenMessageIndex:
-		return "message index"
 	case TokenMetadata:
 		return "metadata"
-	case TokenMetadataIndex:
-		return "metadata index"
 	case TokenSummaryOffset:
 		return "summary offset"
+	case TokenDataEnd:
+		return "data end"
+	case TokenError:
+		return "error"
 	default:
 		return "unknown"
 	}
 }
 
-func (t Token) String() string {
-	return t.TokenType.String()
-}
-
-func (t Token) bytes() []byte {
-	data := make([]byte, t.ByteCount)
-	_, _ = io.ReadFull(t.Reader, data) // TODO
-	return data
-}
-
 type decoders struct {
-	lz4  *lz4.Reader
 	zstd *zstd.Decoder
+	lz4  *lz4.Reader
 	none *bytes.Reader
 }
 
@@ -121,15 +112,6 @@ func (l *Lexer) setNoneDecoder(buf []byte) {
 	l.reader = l.decoders.none
 }
 
-func (l *Lexer) setLZ4Decoder(r io.Reader) {
-	if l.decoders.lz4 == nil {
-		l.decoders.lz4 = lz4.NewReader(r)
-	} else {
-		l.decoders.lz4.Reset(r)
-	}
-	l.reader = l.decoders.lz4
-}
-
 func (l *Lexer) setZSTDDecoder(r io.Reader) error {
 	if l.decoders.zstd == nil {
 		decoder, err := zstd.NewReader(r)
@@ -147,7 +129,16 @@ func (l *Lexer) setZSTDDecoder(r io.Reader) error {
 	return nil
 }
 
-func loadChunk(l *Lexer, recordSize int64) error {
+func (l *Lexer) setLZ4Decoder(r io.Reader) {
+	if l.decoders.lz4 == nil {
+		l.decoders.lz4 = lz4.NewReader(r)
+	} else {
+		l.decoders.lz4.Reset(r)
+	}
+	l.reader = l.decoders.lz4
+}
+
+func loadChunk(l *Lexer) error {
 	if l.inChunk {
 		return ErrNestedChunk
 	}
@@ -161,30 +152,50 @@ func loadChunk(l *Lexer, recordSize int64) error {
 
 	// Skip the uncompressed size; the lexer will read messages out of the
 	// reader incrementally.
-	_, offset := getUint64(l.buf, 0)     // start
-	_, offset = getUint64(l.buf, offset) // end
-	_, offset = getUint64(l.buf, offset) // uncompressed size
-	uncompressedCRC, offset := getUint32(l.buf, offset)
-	compressionLen, offset := getUint32(l.buf, offset)
-
-	compression := make([]byte, compressionLen)
-	_, err = io.ReadFull(l.reader, compression)
+	_, offset, err := getUint64(l.buf, 0) // start
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read start: %w", err)
+	}
+	_, offset, err = getUint64(l.buf, offset) // end
+	if err != nil {
+		return fmt.Errorf("failed to read end: %w", err)
+	}
+	_, offset, err = getUint64(l.buf, offset) // uncompressed size
+	if err != nil {
+		return fmt.Errorf("failed to read uncompressed size: %w", err)
+	}
+	uncompressedCRC, offset, err := getUint32(l.buf, offset)
+	if err != nil {
+		return fmt.Errorf("failed to read uncompressed CRC: %w", err)
+	}
+	compressionLen, _, err := getUint32(l.buf, offset)
+	if err != nil {
+		return fmt.Errorf("failed to read compression length: %w", err)
+	}
+
+	// read compression and records length into buffer
+	_, err = io.ReadFull(l.reader, l.buf[:compressionLen+8])
+	if err != nil {
+		return fmt.Errorf("failed to read compression from chunk: %w", err)
+	}
+	compression := CompressionFormat(l.buf[:compressionLen])
+	recordsLength, _, err := getUint64(l.buf, int(compressionLen))
+	if err != nil {
+		return fmt.Errorf("failed to read records length: %w", err)
 	}
 
 	// remaining bytes in the record are the chunk data
-	lr := io.LimitReader(l.reader, recordSize-int64(offset+len(compression)))
-	switch CompressionFormat(compression) {
+	lr := io.LimitReader(l.reader, int64(recordsLength))
+	switch compression {
 	case CompressionNone:
 		l.reader = lr
-	case CompressionLZ4:
-		l.setLZ4Decoder(lr)
 	case CompressionZSTD:
 		err = l.setZSTDDecoder(lr)
 		if err != nil {
 			return err
 		}
+	case CompressionLZ4:
+		l.setLZ4Decoder(lr)
 	default:
 		return fmt.Errorf("unsupported compression: %s", string(compression))
 	}
@@ -209,7 +220,11 @@ func loadChunk(l *Lexer, recordSize int64) error {
 	return nil
 }
 
-func (l *Lexer) Next() (Token, error) {
+// Next returns the next token from the lexer as a byte array. The result will
+// be sliced out of the provided buffer `p`, if p has adequate space. If p does
+// not have adequate space, a new buffer with sufficient size is allocated for
+// the result.
+func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 	for {
 		_, err := io.ReadFull(l.reader, l.buf[:9])
 		if err != nil {
@@ -221,62 +236,64 @@ func (l *Lexer) Next() (Token, error) {
 				continue
 			}
 			if unexpectedEOF || eof {
-				return Token{}, io.EOF
+				return TokenError, nil, io.EOF
 			}
-			return Token{}, err
+			return TokenError, nil, err
 		}
 		opcode := OpCode(l.buf[0])
 		recordLen := int64(binary.LittleEndian.Uint64(l.buf[1:9]))
+
+		if opcode == OpChunk && !l.emitChunks {
+			err := loadChunk(l)
+			if err != nil {
+				return TokenError, nil, err
+			}
+			continue
+		}
+
+		if recordLen > int64(len(p)) {
+			p = make([]byte, recordLen)
+		}
+
+		record := p[:recordLen]
+		_, err = io.ReadFull(l.reader, record)
+		if err != nil {
+			return TokenError, nil, err
+		}
+
 		switch opcode {
 		case OpHeader:
-			return Token{TokenHeader, recordLen, l.reader}, nil
-		case OpChannelInfo:
-			return Token{TokenChannelInfo, recordLen, l.reader}, nil
+			return TokenHeader, record, nil
+		case OpSchema:
+			return TokenSchema, record, nil
+		case OpDataEnd:
+			return TokenDataEnd, record, nil
+		case OpChannel:
+			return TokenChannel, record, nil
 		case OpFooter:
-			return Token{TokenFooter, recordLen, l.reader}, nil
+			return TokenFooter, record, nil
 		case OpMessage:
-			return Token{TokenMessage, recordLen, l.reader}, nil
+			return TokenMessage, record, nil
 		case OpAttachment:
-			return Token{TokenAttachment, recordLen, l.reader}, nil
+			return TokenAttachment, record, nil
 		case OpAttachmentIndex:
-			return Token{TokenAttachmentIndex, recordLen, l.reader}, nil
+			return TokenAttachmentIndex, record, nil
 		case OpChunkIndex:
-			if !l.emitChunks {
-				_, err := io.CopyN(io.Discard, l.reader, recordLen)
-				if err != nil {
-					return Token{}, err
-				}
-				continue
-			}
-			return Token{TokenChunkIndex, recordLen, l.reader}, nil
+			return TokenChunkIndex, record, nil
 		case OpStatistics:
-			return Token{TokenStatistics, recordLen, l.reader}, nil
+			return TokenStatistics, record, nil
 		case OpMessageIndex:
-			if !l.emitChunks {
-				_, err := io.CopyN(io.Discard, l.reader, recordLen)
-				if err != nil {
-					return Token{}, err
-				}
-				continue
-			}
-			return Token{TokenMessageIndex, recordLen, l.reader}, nil
+			return TokenMessageIndex, record, nil
 		case OpChunk:
-			if !l.emitChunks {
-				err := loadChunk(l, recordLen)
-				if err != nil {
-					return Token{}, err
-				}
-				continue
-			}
-			return Token{TokenChunk, recordLen, l.reader}, nil
+			return TokenChunk, record, nil
 		case OpMetadata:
-			return Token{TokenMetadata, recordLen, l.reader}, nil
+			return TokenMetadata, record, nil
 		case OpMetadataIndex:
-			return Token{TokenMetadata, recordLen, l.reader}, nil
+			return TokenMetadataIndex, record, nil
 		case OpSummaryOffset:
-			return Token{TokenSummaryOffset, recordLen, l.reader}, nil
+			return TokenSummaryOffset, record, nil
 		case OpInvalidZero:
-			return Token{}, fmt.Errorf("invalid zero opcode")
+			return TokenError, nil, fmt.Errorf("invalid zero opcode")
 		default:
 			continue // skip unrecognized opcodes
 		}

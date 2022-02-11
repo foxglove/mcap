@@ -1,9 +1,0 @@
-Header library="" profile=""
-ChannelInfo id=1 message_encoding=a metadata={foo=bar} schema=b schema_encoding=c schema_name=Example topic=example
-Message channel_id=1 log_time=2 message_data=<010203> publish_time=1 sequence=10
-Statistics attachment_count=0 channel_count=1 channel_message_counts={1=1} chunk_count=0 message_count=1
-SummaryOffset group_length=0 group_opcode=12 group_start=193
-SummaryOffset group_length=46 group_opcode=10 group_start=147
-SummaryOffset group_length=0 group_opcode=9 group_start=193
-SummaryOffset group_length=0 group_opcode=7 group_start=193
-Footer summary_crc=0 summary_offset_start=193 summary_start=147

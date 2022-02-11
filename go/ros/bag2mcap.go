@@ -159,13 +159,8 @@ func processBag(
 	return nil
 }
 
-func Bag2MCAP(w io.Writer, r io.Reader) error {
-	writer, err := libmcap.NewWriter(w, &libmcap.WriterOptions{
-		Chunked:     true,
-		ChunkSize:   4 * 1024 * 1024,
-		Compression: libmcap.CompressionLZ4,
-		IncludeCRC:  true,
-	})
+func Bag2MCAP(w io.Writer, r io.Reader, opts *libmcap.WriterOptions) error {
+	writer, err := libmcap.NewWriter(w, opts)
 	if err != nil {
 		return err
 	}
@@ -179,6 +174,7 @@ func Bag2MCAP(w io.Writer, r io.Reader) error {
 		return err
 	}
 	seq := uint32(0)
+	schemas := make(map[string]uint16)
 	return processBag(r,
 		func(header, data []byte) error {
 			conn, err := extractHeaderValue(header, []byte("conn"))
@@ -202,17 +198,30 @@ func Bag2MCAP(w io.Writer, r io.Reader) error {
 			if err != nil {
 				return err
 			}
-			channelInfo := &libmcap.ChannelInfo{
-				ChannelID:       connID,
-				TopicName:       string(topic),
+			key := fmt.Sprintf("%s/%s", topic, md5sum)
+			if _, ok := schemas[key]; !ok {
+				schemaID := uint16(len(schemas) + 1)
+				err := writer.WriteSchema(&libmcap.Schema{
+					ID:       schemaID,
+					Encoding: "msg",
+					Name:     string(typ),
+					Data:     msgdef,
+				})
+				if err != nil {
+					return err
+				}
+				schemas[key] = schemaID
+			}
+			channelInfo := &libmcap.Channel{
+				ID:              connID,
+				Topic:           string(topic),
 				MessageEncoding: "ros1",
-				SchemaName:      string(typ),
-				Schema:          msgdef,
+				SchemaID:        schemas[key],
 				Metadata: map[string]string{
 					"md5sum": string(md5sum),
 				},
 			}
-			return writer.WriteChannelInfo(channelInfo)
+			return writer.WriteChannel(channelInfo)
 		},
 		func(header, data []byte) error {
 			conn, err := extractHeaderValue(header, []byte("conn"))
@@ -228,7 +237,7 @@ func Bag2MCAP(w io.Writer, r io.Reader) error {
 			err = writer.WriteMessage(&libmcap.Message{
 				ChannelID:   connID,
 				Sequence:    seq,
-				RecordTime:  nsecs,
+				LogTime:     nsecs,
 				PublishTime: nsecs,
 				Data:        data,
 			})

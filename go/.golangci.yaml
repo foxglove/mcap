@@ -30,7 +30,6 @@ linters:
     - goconst
     - goimports
     - unparam
-    - dupl
     - errorlint
     - lll
 

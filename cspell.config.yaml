@@ -6,11 +6,16 @@ ignorePaths:
   - go.mod
   - go.sum
   - testdata
+  - CMakeLists.txt
+  - Makefile
+  - build
   - "*.Dockerfile"
   - "*.mcap"
+  - "*.egg-info"
 
 words:
   - cbor
+  - conanfile
   - cmake
   - crc
   - crcs
@@ -20,6 +25,7 @@ words:
   - mcap
   - nsec
   - nsecs
+  - pipenv
   - proto
   - protobuf
   - rosbag
@@ -29,6 +35,7 @@ words:
   - unindexed
   - velodyne
   - zstd
+  - Zstandard
 
 overrides:
   - filename: "**/*.go"
@@ -50,7 +57,20 @@ overrides:
   - filename: "cpp/**"
     words:
       - cppstd
+      - nlohmann
 
   - filename: "**/{*.js,*.ts,*.tsx}"
     ignoreRegExpList:
       - "0x[0-9a-f]+n?"
+
+  - filename: "(Pipfile|README.md|pyproject.toml)"
+    words:
+      - pypi
+      - pyright
+      - pytest
+      - setuptools
+
+  - filename: "**/*.py"
+    words:
+      - rglob
+      - uncompress

@@ -3,12 +3,9 @@ package libmcap
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"hash"
 	"hash/crc32"
 	"io"
-	"math"
-	"sort"
 	"time"
 )
 
@@ -17,9 +14,9 @@ var (
 )
 
 const (
-	CompressionLZ4  CompressionFormat = "lz4"
 	CompressionZSTD CompressionFormat = "zstd"
-	CompressionNone CompressionFormat = "none"
+	CompressionLZ4  CompressionFormat = "lz4"
+	CompressionNone CompressionFormat = ""
 )
 
 type BufCloser struct {
@@ -101,21 +98,33 @@ func (w *WriteSizer) Reset() {
 	w.w.crc = crc32.NewIEEE()
 }
 
-func putByte(buf []byte, x byte) int {
+func putByte(buf []byte, x byte) (int, error) {
+	if len(buf) < 1 {
+		return 0, io.ErrShortBuffer
+	}
 	buf[0] = x
-	return 1
+	return 1, nil
 }
 
-func getUint16(buf []byte, offset int) (x uint16, newoffset int) {
-	return binary.LittleEndian.Uint16(buf[offset:]), offset + 2
+func getUint16(buf []byte, offset int) (x uint16, newoffset int, err error) {
+	if offset > len(buf)-2 {
+		return 0, 0, io.ErrShortBuffer
+	}
+	return binary.LittleEndian.Uint16(buf[offset:]), offset + 2, nil
 }
 
-func getUint32(buf []byte, offset int) (x uint32, newoffset int) {
-	return binary.LittleEndian.Uint32(buf[offset:]), offset + 4
+func getUint32(buf []byte, offset int) (x uint32, newoffset int, err error) {
+	if offset > len(buf)-4 {
+		return 0, 0, io.ErrShortBuffer
+	}
+	return binary.LittleEndian.Uint32(buf[offset:]), offset + 4, nil
 }
 
-func getUint64(buf []byte, offset int) (x uint64, newoffset int) {
-	return binary.LittleEndian.Uint64(buf[offset:]), offset + 8
+func getUint64(buf []byte, offset int) (x uint64, newoffset int, err error) {
+	if offset > len(buf)-8 {
+		return 0, 0, io.ErrShortBuffer
+	}
+	return binary.LittleEndian.Uint64(buf[offset:]), offset + 8, nil
 }
 
 func putUint16(buf []byte, i uint16) int {
@@ -147,21 +156,27 @@ func putPrefixedBytes(buf []byte, s []byte) int {
 
 type CompressionFormat string
 
+func (c CompressionFormat) String() string {
+	return string(c)
+}
+
 const (
 	OpInvalidZero     OpCode = 0x00
 	OpHeader          OpCode = 0x01
 	OpFooter          OpCode = 0x02
-	OpChannelInfo     OpCode = 0x03
-	OpMessage         OpCode = 0x04
-	OpChunk           OpCode = 0x05
-	OpMessageIndex    OpCode = 0x06
-	OpChunkIndex      OpCode = 0x07
-	OpAttachment      OpCode = 0x08
-	OpAttachmentIndex OpCode = 0x09
-	OpStatistics      OpCode = 0x0A
-	OpMetadata        OpCode = 0x0B
-	OpMetadataIndex   OpCode = 0x0C
-	OpSummaryOffset   OpCode = 0x0D
+	OpSchema          OpCode = 0x03
+	OpChannel         OpCode = 0x04
+	OpMessage         OpCode = 0x05
+	OpChunk           OpCode = 0x06
+	OpMessageIndex    OpCode = 0x07
+	OpChunkIndex      OpCode = 0x08
+	OpAttachment      OpCode = 0x09
+	OpAttachmentIndex OpCode = 0x0A
+	OpStatistics      OpCode = 0x0B
+	OpMetadata        OpCode = 0x0C
+	OpMetadataIndex   OpCode = 0x0D
+	OpSummaryOffset   OpCode = 0x0E
+	OpDataEnd         OpCode = 0x0F
 )
 
 type OpCode byte
@@ -174,25 +189,23 @@ type Header struct {
 type Message struct {
 	ChannelID   uint16
 	Sequence    uint32
-	RecordTime  uint64
+	LogTime     uint64
 	PublishTime uint64
 	Data        []byte
 }
 
-type ChannelInfo struct {
-	ChannelID       uint16
-	TopicName       string
+type Channel struct {
+	ID              uint16
+	SchemaID        uint16
+	Topic           string
 	MessageEncoding string
-	SchemaEncoding  string
-	Schema          []byte
-	SchemaName      string
 	Metadata        map[string]string
 }
 
 type Attachment struct {
 	Name        string
 	CreatedAt   uint64
-	RecordTime  uint64
+	LogTime     uint64
 	ContentType string
 	Data        []byte
 	CRC         uint32
@@ -226,10 +239,17 @@ type Summary struct {
 type AttachmentIndex struct {
 	Offset      uint64
 	Length      uint64
-	RecordTime  uint64
+	LogTime     uint64
 	DataSize    uint64
 	Name        string
 	ContentType string
+}
+
+type Schema struct {
+	ID       uint16
+	Name     string
+	Encoding string
+	Data     []byte
 }
 
 type Footer struct {
@@ -256,8 +276,8 @@ type MetadataIndex struct {
 }
 
 type ChunkIndex struct {
-	StartTime           uint64
-	EndTime             uint64
+	MessageStartTime    uint64
+	MessageEndTime      uint64
 	ChunkStartOffset    uint64
 	ChunkLength         uint64
 	MessageIndexOffsets map[uint16]uint64
@@ -269,85 +289,30 @@ type ChunkIndex struct {
 
 type Statistics struct {
 	MessageCount         uint64
+	SchemaCount          uint16
 	ChannelCount         uint32
 	AttachmentCount      uint32
+	MetadataCount        uint32
 	ChunkCount           uint32
+	MessageStartTime     uint64
+	MessageEndTime       uint64
 	ChannelMessageCounts map[uint16]uint64
 }
 
 type Info struct {
 	Statistics   *Statistics
-	Channels     map[uint16]*ChannelInfo
+	Channels     map[uint16]*Channel
+	Schemas      map[uint16]*Schema
 	ChunkIndexes []*ChunkIndex
-	Start        time.Time
-	End          time.Time
 }
 
 func (i *Info) ChannelCounts() map[string]uint64 {
 	counts := make(map[string]uint64)
 	for k, v := range i.Statistics.ChannelMessageCounts {
 		channel := i.Channels[k]
-		counts[channel.TopicName] = v
+		counts[channel.Topic] = v
 	}
 	return counts
-}
-
-func (i *Info) String() string {
-	buf := &bytes.Buffer{}
-	start := uint64(math.MaxUint64)
-	end := uint64(0)
-
-	compressionFormatStats := make(map[CompressionFormat]struct {
-		count            int
-		compressedSize   uint64
-		uncompressedSize uint64
-	})
-	for _, ci := range i.ChunkIndexes {
-		if ci.StartTime < start {
-			start = ci.StartTime
-		}
-		if ci.EndTime > end {
-			end = ci.EndTime
-		}
-		stats := compressionFormatStats[ci.Compression]
-		stats.count++
-		stats.compressedSize += ci.CompressedSize
-		stats.uncompressedSize += ci.UncompressedSize
-		compressionFormatStats[ci.Compression] = stats
-	}
-
-	starttime := time.Unix(int64(start/1e9), int64(start%1e9))
-	endtime := time.Unix(int64(end/1e9), int64(end%1e9))
-
-	fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
-	fmt.Fprintf(buf, "start: %s\n", starttime.Format(time.RFC3339Nano))
-	fmt.Fprintf(buf, "end: %s\n", endtime.Format(time.RFC3339Nano))
-	fmt.Fprintf(buf, "messages: %d\n", i.Statistics.MessageCount)
-	fmt.Fprintf(buf, "chunks:\n")
-	chunkCount := len(i.ChunkIndexes)
-	for k, v := range compressionFormatStats {
-		compressionRatio := 100 * (1 - float64(v.compressedSize)/float64(v.uncompressedSize))
-		fmt.Fprintf(buf, "\t%s: [%d/%d chunks] (%.2f%%) \n", k, v.count, chunkCount, compressionRatio)
-	}
-	fmt.Fprintf(buf, "channels:\n")
-
-	chanIDs := []uint16{}
-	for chanID := range i.Channels {
-		chanIDs = append(chanIDs, chanID)
-	}
-	sort.Slice(chanIDs, func(i, j int) bool {
-		return chanIDs[i] < chanIDs[j]
-	})
-	for _, chanID := range chanIDs {
-		channel := i.Channels[chanID]
-		fmt.Fprintf(buf, "\t(%d) %s: %d msgs\n",
-			channel.ChannelID,
-			channel.TopicName,
-			i.Statistics.ChannelMessageCounts[chanID],
-		)
-	}
-	fmt.Fprintf(buf, "attachments: %d", i.Statistics.AttachmentCount)
-	return buf.String()
 }
 
 type MessageIndexEntry struct {
@@ -361,10 +326,14 @@ type MessageIndex struct {
 }
 
 type Chunk struct {
-	StartTime        uint64
-	EndTime          uint64
+	MessageStartTime uint64
+	MessageEndTime   uint64
 	UncompressedSize uint64
 	UncompressedCRC  uint32
 	Compression      string
 	Records          []byte
+}
+
+type DataEnd struct {
+	DataSectionCRC uint32
 }

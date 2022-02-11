@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"os"
 	"strings"
@@ -15,15 +16,10 @@ import (
 )
 
 type mcapDoctor struct {
-	reader          io.Reader
-	opcodeAndLength []byte
+	reader io.Reader
 
-	channels map[uint16]*libmcap.ChannelInfo
-}
-
-type RawRecord struct {
-	OpCode libmcap.OpCode
-	Bytes  []byte
+	channels map[uint16]*libmcap.Channel
+	schemas  map[uint16]*libmcap.Schema
 }
 
 func (doctor *mcapDoctor) warn(format string, v ...interface{}) {
@@ -46,6 +42,7 @@ func (doctor *mcapDoctor) fatalf(format string, v ...interface{}) {
 	os.Exit(1)
 }
 
+/*
 func (doctor *mcapDoctor) consumeMagic() {
 	magicBytes := make([]byte, len(libmcap.Magic))
 
@@ -60,7 +57,9 @@ func (doctor *mcapDoctor) consumeMagic() {
 		doctor.fatal("Invalid MAGIC")
 	}
 }
+*/
 
+/*
 func (doctor *mcapDoctor) nextRecord() *RawRecord {
 	bytesRead, err := doctor.reader.Read(doctor.opcodeAndLength)
 	if err != nil {
@@ -87,62 +86,84 @@ func (doctor *mcapDoctor) nextRecord() *RawRecord {
 		Bytes:  recordBytes,
 	}
 }
+*/
 
 func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 	if chunk.Compression != "lz4" && chunk.Compression != "zstd" && chunk.Compression != "" {
 		doctor.error("Unsupported compression format: %s", chunk.Compression)
 	}
 
-	// create a new record iterator for this set of bytes
-	var records = chunk.Records
-	var offset uint64 = 0
+	byteReader := bytes.NewReader(chunk.Records)
+	lexer, err := libmcap.NewLexer(byteReader, &libmcap.LexOpts{
+		SkipMagic:   true,
+		ValidateCRC: true,
+		EmitChunks:  true,
+	})
+	if err != nil {
+		doctor.error("Failed to make lexer for chunk bytes", err)
+		return
+	}
 
-	var minRecordTime uint64 = math.MaxUint64
-	var maxRecordTime uint64 = 0
+	var minLogTime uint64 = math.MaxUint64
+	var maxLogTime uint64 = 0
 
+	msg := make([]byte, 1024)
 	for {
-		if offset == uint64(len(records)) {
-			break
+		tokenType, data, err := lexer.Next(msg)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			log.Fatal("Failed to read token:", err)
 		}
-		if offset+9 >= uint64(len(records)) {
-			doctor.error("Malformed chunk records")
-			break
-		}
-		opcode := libmcap.OpCode(records[offset])
-		offset += 1
-		recordLen := binary.LittleEndian.Uint64(records[offset : offset+8])
-		offset += 8
-
-		if offset+recordLen >= uint64(len(records)) {
-			doctor.error("Not enough bytes remaining in chunk records for record content")
-			break
+		if len(data) > len(msg) {
+			msg = data
 		}
 
-		recordBytes := records[offset : offset+recordLen]
-		offset += recordLen
-
-		switch opcode {
-		case libmcap.OpChannelInfo:
-			channelInfo, err := libmcap.ParseChannelInfo(recordBytes)
+		if len(data) > len(msg) {
+			msg = data
+		}
+		switch tokenType {
+		case libmcap.TokenSchema:
+			schema, err := libmcap.ParseSchema(data)
 			if err != nil {
-				doctor.error("Error parsing ChannelInfo: %s", err)
+				doctor.error("Failed to parse schema:", err)
 			}
 
-			var msgEncoding = channelInfo.MessageEncoding
-			var isCustomMessageEncoding = strings.HasPrefix(msgEncoding, "x-")
-			if len(msgEncoding) > 0 && msgEncoding != "proto" && msgEncoding != "ros1" && !isCustomMessageEncoding {
-				doctor.error("ChannelInfo.messageEncoding field is not valid: %s. Only a well-known encodings are allowed. Other encodings must use x- prefix", msgEncoding)
-			}
-
-			var schemaEncoding = channelInfo.SchemaEncoding
+			var schemaEncoding = schema.Encoding
 			var isCustomSchemaEncoding = strings.HasPrefix(schemaEncoding, "x-")
 			if len(schemaEncoding) > 0 && schemaEncoding != "proto" && schemaEncoding != "ros1msg" && !isCustomSchemaEncoding {
-				doctor.error("ChannelInfo.schemaEncoding field is not valid: %s. Only a well-known schemas are allowed. Other schemas must use x- prefix", msgEncoding)
+				doctor.error("Schema.encoding field is not valid: %s. Only a well-known schemas are allowed. Other schemas must use x- prefix", schemaEncoding)
 			}
 
-			doctor.channels[channelInfo.ChannelID] = channelInfo
-		case libmcap.OpMessage:
-			message, err := libmcap.ParseMessage(recordBytes)
+			if len(schema.Encoding) == 0 && len(schema.Data) > 0 {
+				doctor.error("Schema.data field should not be set when Schema.encoding is empty")
+			}
+
+			if schema.ID == 0 {
+				doctor.error("Schema.ID 0 is reserved. Do not make Schema records with ID 0.")
+			}
+
+			doctor.schemas[schema.ID] = schema
+		case libmcap.TokenChannel:
+			channel, err := libmcap.ParseChannel(data)
+			if err != nil {
+				doctor.error("Error parsing Channel: %s", err)
+			}
+
+			var msgEncoding = channel.MessageEncoding
+			var isCustomMessageEncoding = strings.HasPrefix(msgEncoding, "x-")
+			if len(msgEncoding) > 0 && msgEncoding != "proto" && msgEncoding != "ros1" && !isCustomMessageEncoding {
+				doctor.error("Channel.messageEncoding field is not valid: %s. Only a well-known encodings are allowed. Other encodings must use x- prefix", msgEncoding)
+			}
+
+			doctor.channels[channel.ID] = channel
+
+			if _, ok := doctor.schemas[channel.SchemaID]; !ok {
+				doctor.error("Encountered Channel (%d) with unknown Schema (%d)", channel.ID, channel.SchemaID)
+			}
+		case libmcap.TokenMessage:
+			message, err := libmcap.ParseMessage(data)
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
 			}
@@ -152,46 +173,53 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 				doctor.error("Got a Message record for channel: %d before a channel info.", message.ChannelID)
 			}
 
-			if message.RecordTime < minRecordTime {
-				minRecordTime = message.RecordTime
+			if message.LogTime < minLogTime {
+				minLogTime = message.LogTime
 			}
 
-			if message.RecordTime > maxRecordTime {
-				maxRecordTime = message.RecordTime
+			if message.LogTime > maxLogTime {
+				maxLogTime = message.LogTime
 			}
 
 		default:
-			doctor.error("Illegal record in chunk: %d", opcode)
+			doctor.error("Illegal record in chunk: %d", tokenType)
 		}
 	}
 
-	if minRecordTime != chunk.StartTime {
-		doctor.error("Chunk.start_time %d does not match the latest message record time %d", chunk.StartTime, minRecordTime)
+	if minLogTime != chunk.MessageStartTime {
+		doctor.error("Chunk.start_time %d does not match the latest message record time %d", chunk.MessageStartTime, minLogTime)
 	}
 
-	if maxRecordTime != chunk.EndTime {
-		doctor.error("Chunk.end_time %d does not match the latest message record time %d", chunk.EndTime, maxRecordTime)
+	if maxLogTime != chunk.MessageEndTime {
+		doctor.error("Chunk.end_time %d does not match the latest message record time %d", chunk.MessageEndTime, maxLogTime)
 	}
-
-	// error if chunk uncompressed size doesn't match
 }
 
 func (doctor *mcapDoctor) Examine() {
-	doctor.consumeMagic()
+	lexer, err := libmcap.NewLexer(doctor.reader, &libmcap.LexOpts{
+		SkipMagic:   false,
+		ValidateCRC: true,
+		EmitChunks:  true,
+	})
+	if err != nil {
+		doctor.fatal(err)
+	}
 
-	var previousOpcode *libmcap.OpCode = nil
+	msg := make([]byte, 1024)
 	for {
-		var rawRecord = doctor.nextRecord()
-
-		if previousOpcode == nil && rawRecord.OpCode != libmcap.OpHeader {
-			doctor.error("First record MUST be a header")
+		tokenType, data, err := lexer.Next(msg)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			log.Fatal("Failed to read token:", err)
 		}
-
-		// fixme - if there's another rawRecord and previousOpcode is footer we've got stuff after the footer
-
-		switch rawRecord.OpCode {
-		case libmcap.OpHeader:
-			header, err := libmcap.ParseHeader(rawRecord.Bytes)
+		if len(data) > len(msg) {
+			msg = data
+		}
+		switch tokenType {
+		case libmcap.TokenHeader:
+			header, err := libmcap.ParseHeader(data)
 			if err != nil {
 				doctor.error("Error parsing Header: %s", err)
 			}
@@ -204,28 +232,51 @@ func (doctor *mcapDoctor) Examine() {
 			if len(header.Profile) > 0 && header.Profile != "ros1" && header.Profile != "ros2" && !customProfile {
 				doctor.error("Header.profile field is not valid: %s. Only a well-known profile is allowed. Other profiles must use x- prefix", header.Profile)
 			}
-		case libmcap.OpChannelInfo:
-			channelInfo, err := libmcap.ParseChannelInfo(rawRecord.Bytes)
+		case libmcap.TokenFooter:
+			_, err := libmcap.ParseFooter(data)
 			if err != nil {
-				doctor.error("Error parsing ChannelInfo: %s", err)
+				doctor.error("Failed to parse footer:", err)
+			}
+		case libmcap.TokenSchema:
+			schema, err := libmcap.ParseSchema(data)
+			if err != nil {
+				doctor.error("Failed to parse schema:", err)
 			}
 
-			var msgEncoding = channelInfo.MessageEncoding
-			var isCustomMessageEncoding = strings.HasPrefix(msgEncoding, "x-")
-			if len(msgEncoding) > 0 && msgEncoding != "proto" && msgEncoding != "ros1" && !isCustomMessageEncoding {
-				doctor.error("ChannelInfo.messageEncoding field is not valid: %s. Only a well-known encodings are allowed. Other encodings must use x- prefix", msgEncoding)
-			}
-
-			var schemaEncoding = channelInfo.SchemaEncoding
+			var schemaEncoding = schema.Encoding
 			var isCustomSchemaEncoding = strings.HasPrefix(schemaEncoding, "x-")
 			if len(schemaEncoding) > 0 && schemaEncoding != "proto" && schemaEncoding != "ros1msg" && !isCustomSchemaEncoding {
-				doctor.error("ChannelInfo.schemaEncoding field is not valid: %s. Only a well-known schemas are allowed. Other schemas must use x- prefix", msgEncoding)
+				doctor.error("Schema.encoding field is not valid: %s. Only a well-known schemas are allowed. Other schemas must use x- prefix", schemaEncoding)
 			}
 
-			doctor.channels[channelInfo.ChannelID] = channelInfo
+			if len(schema.Encoding) == 0 && len(schema.Data) > 0 {
+				doctor.error("Schema.data field should not be set when Schema.encoding is empty")
+			}
 
-		case libmcap.OpMessage:
-			message, err := libmcap.ParseMessage(rawRecord.Bytes)
+			if schema.ID == 0 {
+				doctor.error("Schema.ID 0 is reserved. Do not make Schema records with ID 0.")
+			}
+
+			doctor.schemas[schema.ID] = schema
+		case libmcap.TokenChannel:
+			channel, err := libmcap.ParseChannel(data)
+			if err != nil {
+				doctor.error("Error parsing Channel: %s", err)
+			}
+
+			var msgEncoding = channel.MessageEncoding
+			var isCustomMessageEncoding = strings.HasPrefix(msgEncoding, "x-")
+			if len(msgEncoding) > 0 && msgEncoding != "proto" && msgEncoding != "ros1" && !isCustomMessageEncoding {
+				doctor.error("Channel.messageEncoding field is not valid: %s. Only a well-known encodings are allowed. Other encodings must use x- prefix", msgEncoding)
+			}
+
+			doctor.channels[channel.ID] = channel
+
+			if _, ok := doctor.schemas[channel.SchemaID]; !ok {
+				doctor.error("Encountered Channel (%d) with unknown Schema (%d)", channel.ID, channel.SchemaID)
+			}
+		case libmcap.TokenMessage:
+			message, err := libmcap.ParseMessage(data)
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
 			}
@@ -234,51 +285,131 @@ func (doctor *mcapDoctor) Examine() {
 			if channel == nil {
 				doctor.error("Got a Message record for channel: %d before a channel info.", message.ChannelID)
 			}
-
-		case libmcap.OpChunk:
-			chunk, err := libmcap.ParseChunk(rawRecord.Bytes)
+		case libmcap.TokenChunk:
+			chunk, err := libmcap.ParseChunk(data)
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
 			}
 
 			doctor.examineChunk(chunk)
-
-		case libmcap.OpMessageIndex:
-			if previousOpcode == nil || (*previousOpcode != libmcap.OpChunk && *previousOpcode != libmcap.OpMessageIndex) {
-				doctor.error("MessageIndex records can only follow Chunk records or other Message Index records")
+		case libmcap.TokenMessageIndex:
+			_, err := libmcap.ParseMessageIndex(data)
+			if err != nil {
+				doctor.error("Failed to parse message index:", err)
 			}
-			// validate message index points to valid locations
-
-		case libmcap.OpChunkIndex:
-			// error if values point to invalid locations
-
-		case libmcap.OpSummaryOffset:
-			// error if opcode is invalid
-			// error if values point to invalid locations
-
-		case libmcap.OpAttachment:
-
-		case libmcap.OpMetadata:
-
-		case libmcap.OpMetadataIndex:
-
-		case libmcap.OpFooter:
-			// error if values point to invalid locations
-
-		default:
-			doctor.error("Unknown record: %d", rawRecord.OpCode)
+		case libmcap.TokenChunkIndex:
+			_, err := libmcap.ParseChunkIndex(data)
+			if err != nil {
+				doctor.error("Failed to parse chunk index:", err)
+			}
+		case libmcap.TokenAttachment:
+			_, err := libmcap.ParseAttachment(data)
+			if err != nil {
+				doctor.error("Failed to parse attachment:", err)
+			}
+		case libmcap.TokenAttachmentIndex:
+			_, err := libmcap.ParseAttachmentIndex(data)
+			if err != nil {
+				doctor.error("Failed to parse attachment index:", err)
+			}
+		case libmcap.TokenStatistics:
+			_, err := libmcap.ParseStatistics(data)
+			if err != nil {
+				doctor.error("Failed to parse statistics:", err)
+			}
+		case libmcap.TokenMetadata:
+			_, err := libmcap.ParseMetadata(data)
+			if err != nil {
+				doctor.error("Failed to parse metadata:", err)
+			}
+		case libmcap.TokenMetadataIndex:
+			_, err := libmcap.ParseMetadataIndex(data)
+			if err != nil {
+				doctor.error("Failed to parse metadata index:", err)
+			}
+		case libmcap.TokenSummaryOffset:
+			_, err := libmcap.ParseSummaryOffset(data)
+			if err != nil {
+				doctor.error("Failed to parse summary offset:", err)
+			}
+		case libmcap.TokenDataEnd:
+			_, err := libmcap.ParseDataEnd(data)
+			if err != nil {
+				doctor.error("Failed to parse data end:", err)
+			}
+		case libmcap.TokenError:
+			// this is the value of the tokenType when there is an error
+			// from the lexer, which we caught at the top.
+			doctor.fatalf("Failed to parse:", err)
 		}
-
-		previousOpcode = &rawRecord.OpCode
 	}
 
-	doctor.consumeMagic()
+	/*
+		doctor.consumeMagic()
+
+		var previousOpcode *libmcap.OpCode = nil
+		for {
+			var rawRecord = doctor.nextRecord()
+
+			if previousOpcode == nil && rawRecord.OpCode != libmcap.OpHeader {
+				doctor.error("First record MUST be a header")
+			}
+
+			// fixme - if there's another rawRecord and previousOpcode is footer we've got stuff after the footer
+
+			switch rawRecord.OpCode {
+			case libmcap.OpHeader:
+
+			case libmcap.OpChannel:
+
+			case libmcap.OpMessage:
+
+			case libmcap.OpChunk:
+				chunk, err := libmcap.ParseChunk(rawRecord.Bytes)
+				if err != nil {
+					doctor.error("Error parsing Message: %s", err)
+				}
+
+				doctor.examineChunk(chunk)
+
+			case libmcap.OpMessageIndex:
+				if previousOpcode == nil || (*previousOpcode != libmcap.OpChunk && *previousOpcode != libmcap.OpMessageIndex) {
+					doctor.error("MessageIndex records can only follow Chunk records or other Message Index records")
+				}
+				// validate message index points to valid locations
+
+			case libmcap.OpChunkIndex:
+				// error if values point to invalid locations
+
+			case libmcap.OpSummaryOffset:
+				// error if opcode is invalid
+				// error if values point to invalid locations
+
+			case libmcap.OpAttachment:
+
+			case libmcap.OpMetadata:
+
+			case libmcap.OpMetadataIndex:
+
+			case libmcap.OpFooter:
+				// error if values point to invalid locations
+
+			default:
+				doctor.error("Unknown record: %d", rawRecord.OpCode)
+			}
+
+			previousOpcode = &rawRecord.OpCode
+		}
+
+		doctor.consumeMagic()
+	*/
 }
 
 func NewMcapDoctor(reader io.Reader) *mcapDoctor {
 	return &mcapDoctor{
-		reader:          reader,
-		opcodeAndLength: make([]byte, 9),
+		reader:   reader,
+		channels: make(map[uint16]*libmcap.Channel),
+		schemas:  make(map[uint16]*libmcap.Schema),
 	}
 }
 

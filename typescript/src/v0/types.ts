@@ -10,25 +10,29 @@ export type Footer = {
   summaryOffsetStart: bigint;
   summaryCrc: number;
 };
-export type ChannelInfo = {
+export type Schema = {
   id: number;
+  name: string;
+  encoding: string;
+  data: Uint8Array;
+};
+export type Channel = {
+  id: number;
+  schemaId: number;
   topic: string;
   messageEncoding: string;
-  schemaEncoding: string;
-  schema: string;
-  schemaName: string;
-  metadata: [key: string, value: string][];
+  metadata: Map<string, string>;
 };
 export type Message = {
   channelId: number;
   sequence: number;
-  publishTime: bigint;
   logTime: bigint;
-  messageData: Uint8Array;
+  publishTime: bigint;
+  data: Uint8Array;
 };
 export type Chunk = {
-  startTime: bigint;
-  endTime: bigint;
+  messageStartTime: bigint;
+  messageEndTime: bigint;
   uncompressedSize: bigint;
   uncompressedCrc: number;
   compression: string;
@@ -39,8 +43,8 @@ export type MessageIndex = {
   records: [logTime: bigint, offset: bigint][];
 };
 export type ChunkIndex = {
-  startTime: bigint;
-  endTime: bigint;
+  messageStartTime: bigint;
+  messageEndTime: bigint;
   chunkStartOffset: bigint;
   chunkLength: bigint;
   messageIndexOffsets: Map<number, bigint>;
@@ -66,14 +70,18 @@ export type AttachmentIndex = {
 };
 export type Statistics = {
   messageCount: bigint;
+  schemaCount: number;
   channelCount: number;
   attachmentCount: number;
+  metadataCount: number;
   chunkCount: number;
+  messageStartTime: bigint;
+  messageEndTime: bigint;
   channelMessageCounts: Map<number, bigint>;
 };
 export type Metadata = {
   name: string;
-  metadata: [key: string, value: string][];
+  metadata: Map<string, string>;
 };
 export type MetadataIndex = {
   offset: bigint;
@@ -96,7 +104,8 @@ export type UnknownRecord = {
 export type McapRecords = {
   Header: Header;
   Footer: Footer;
-  ChannelInfo: ChannelInfo;
+  Schema: Schema;
+  Channel: Channel;
   Message: Message;
   Chunk: Chunk;
   MessageIndex: MessageIndex;
@@ -129,3 +138,11 @@ export interface McapStreamReader {
 export type DecompressHandlers = {
   [compression: string]: (buffer: Uint8Array, decompressedSize: bigint) => Uint8Array;
 };
+
+/**
+ * IReadable describes a random-access reader interface.
+ */
+export interface IReadable {
+  size(): Promise<bigint>;
+  read(offset: bigint, size: bigint): Promise<Uint8Array>;
+}

@@ -1,4 +1,0 @@
-Header library="" profile=""
-Attachment content_type=application/octet-stream created_at=1 data=<010203> log_time=2 name=myFile
-AttachmentIndex content_type=application/octet-stream data_size=3 length=78 log_time=2 name=myFile offset=25
-Footer summary_crc=0 summary_offset_start=0 summary_start=116

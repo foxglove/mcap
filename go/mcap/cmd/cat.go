@@ -31,16 +31,17 @@ var catCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		it, err := reader.Messages(start, end, topics, true)
+		it, err := reader.Messages(start, end, topics, false)
 		if err != nil {
 			log.Fatal(err)
 		}
+		buf := make([]byte, 1024*1024)
 		for {
-			ci, msg, err := it.Next()
+			schema, channel, message, err := it.Next(buf)
 			if err != nil {
 				log.Fatal(err)
 			}
-			fmt.Printf("%d %s %v...\n", msg.RecordTime, ci.TopicName, msg.Data[:10])
+			fmt.Printf("%d %s [%s] %v...\n", message.LogTime, channel.Topic, schema.Name, message.Data[:10])
 		}
 	},
 }

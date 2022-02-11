@@ -1,15 +1,33 @@
 #pragma once
 
+#include <fmt/core.h>
+
 #include <string>
 
 namespace mcap {
 
+/**
+ * @brief Status codes for MCAP readers and writers.
+ */
 enum class StatusCode {
   Success = 0,
-  NotOpen = 1,
-  InvalidChannelId = 2,
+  NotOpen,
+  InvalidSchemaId,
+  InvalidChannelId,
+  FileTooSmall,
+  ReadFailed,
+  MagicMismatch,
+  InvalidFile,
+  InvalidRecord,
+  InvalidOpCode,
+  DecompressionFailed,
+  DecompressionSizeMismatch,
+  UnrecognizedCompression,
 };
 
+/**
+ * @brief Wraps a status code and string message carrying additional context.
+ */
 struct Status {
   StatusCode code;
   std::string message;
@@ -25,8 +43,38 @@ struct Status {
       case StatusCode::NotOpen:
         message = "not open";
         break;
+      case StatusCode::InvalidSchemaId:
+        message = "invalid schema id";
+        break;
       case StatusCode::InvalidChannelId:
         message = "invalid channel id";
+        break;
+      case StatusCode::FileTooSmall:
+        message = "file too small";
+        break;
+      case StatusCode::ReadFailed:
+        message = "read failed";
+        break;
+      case StatusCode::MagicMismatch:
+        message = "magic mismatch";
+        break;
+      case StatusCode::InvalidFile:
+        message = "invalid file";
+        break;
+      case StatusCode::InvalidRecord:
+        message = "invalid record";
+        break;
+      case StatusCode::InvalidOpCode:
+        message = "invalid opcode";
+        break;
+      case StatusCode::DecompressionFailed:
+        message = "decompression failed";
+        break;
+      case StatusCode::DecompressionSizeMismatch:
+        message = "decompression size mismatch";
+        break;
+      case StatusCode::UnrecognizedCompression:
+        message = "unrecognized compression";
         break;
       default:
         message = "unknown";
@@ -42,5 +90,14 @@ struct Status {
     return code == StatusCode::Success;
   }
 };
+
+/**
+ * @brief String formatting compatible with std::format(), used to construct
+ * Status messages.
+ */
+template <typename... T>
+[[nodiscard]] inline std::string StrFormat(std::string_view msg, T&&... args) {
+  return fmt::format(msg, std::forward<T>(args)...);
+}
 
 }  // namespace mcap

@@ -2,6 +2,7 @@ package libmcap
 
 import (
 	"bytes"
+	"encoding/binary"
 	"hash/crc32"
 	"io"
 	"testing"
@@ -10,6 +11,38 @@ import (
 	"github.com/pierrec/lz4/v4"
 	"github.com/stretchr/testify/assert"
 )
+
+func encodedUint16(x uint16) []byte {
+	buf := make([]byte, 2)
+	binary.LittleEndian.PutUint16(buf, x)
+	return buf
+}
+
+func encodedUint32(x uint32) []byte {
+	buf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(buf, x)
+	return buf
+}
+
+func encodedUint64(x uint64) []byte {
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, x)
+	return buf
+}
+
+func prefixedString(s string) []byte {
+	buf := make([]byte, len(s)+4)
+	binary.LittleEndian.PutUint32(buf, uint32(len(s)))
+	copy(buf[4:], s)
+	return buf
+}
+
+func prefixedBytes(s []byte) []byte {
+	buf := make([]byte, len(s)+4)
+	binary.LittleEndian.PutUint32(buf, uint32(len(s)))
+	copy(buf[4:], s)
+	return buf
+}
 
 func flatten(slices ...[]byte) []byte {
 	var flattened []byte
@@ -41,7 +74,7 @@ func header() []byte {
 
 func channelInfo() []byte {
 	buf := make([]byte, 9)
-	buf[0] = byte(OpChannelInfo)
+	buf[0] = byte(OpChannel)
 	return buf
 }
 
@@ -55,17 +88,17 @@ func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byt
 	data := flatten(records...)
 	buf := &bytes.Buffer{}
 	switch compression {
-	case CompressionLZ4:
-		w := lz4.NewWriter(buf)
-		_, err := io.Copy(w, bytes.NewReader(data))
-		assert.Nil(t, err)
-		w.Close()
 	case CompressionZSTD:
 		w, err := zstd.NewWriter(buf)
 		if err != nil {
 			t.Errorf("failed to create zstd writer: %s", err)
 		}
 		_, err = io.Copy(w, bytes.NewReader(data))
+		assert.Nil(t, err)
+		w.Close()
+	case CompressionLZ4:
+		w := lz4.NewWriter(buf)
+		_, err := io.Copy(w, bytes.NewReader(data))
 		assert.Nil(t, err)
 		w.Close()
 	case CompressionNone:
@@ -78,9 +111,10 @@ func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byt
 	compressionLen := len(compression)
 	compressedLen := buf.Len()
 	uncompressedLen := len(data)
-	msglen := uint64(8 + 8 + 8 + 4 + 4 + compressionLen + compressedLen)
+	msglen := uint64(8 + 8 + 8 + 4 + 4 + compressionLen + 8 + compressedLen)
 	record := make([]byte, msglen+9)
-	offset := putByte(record, byte(OpChunk))
+	offset, err := putByte(record, byte(OpChunk))
+	assert.Nil(t, err)
 	offset += putUint64(record[offset:], msglen)
 
 	offset += putUint64(record[offset:], 0)   // start
@@ -90,6 +124,7 @@ func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byt
 	_, _ = crc.Write(data)
 	offset += putUint32(record[offset:], crc.Sum32())
 	offset += putPrefixedString(record[offset:], string(compression))
+	offset += putUint64(record[offset:], uint64(buf.Len()))
 	_ = copy(record[offset:], buf.Bytes())
 	return record
 }

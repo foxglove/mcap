@@ -1,4 +1,4 @@
-FROM ubuntu:focal AS base
+FROM ubuntu:focal
 
 # https://askubuntu.com/questions/909277/avoiding-user-interaction-with-tzdata-when-installing-certbot-in-a-docker-contai
 ENV DEBIAN_FRONTEND=noninteractive
@@ -30,31 +30,9 @@ ENV CXX=clang++-13
 
 WORKDIR /src
 
-FROM base as build
 RUN pip --no-cache-dir install conan
 
 ENV CONAN_V2_MODE=1
 RUN conan config init
 
-FROM build as build_executables
-COPY ./bench /src/bench/
-COPY ./examples /src/examples/
-COPY ./mcap /src/mcap/
-COPY ./.clang-format /src/
-RUN conan editable add ./mcap mcap/0.0.1
-RUN conan install bench --install-folder bench/build/Release \
-  -s compiler.cppstd=17 -s build_type=Release --build missing
-RUN conan install examples --install-folder examples/build/Release \
-  -s compiler.cppstd=17 -s build_type=Release --build missing
-
-FROM build_executables AS bag2mcap
-COPY --from=build_executables /src /src
-COPY --from=build_executables /src/examples/build/ /src/examples/build/
-RUN conan build examples --build-folder examples/build/Release
-ENTRYPOINT ["examples/build/Release/bin/bag2mcap"]
-
-FROM build_executables AS bench
-COPY --from=build_executables /src /src
-COPY --from=build_executables /src/bench/build/ /src/bench/build/
-RUN conan build bench --build-folder bench/build/Release
-ENTRYPOINT ["bench/build/Release/bin/bench-tests"]
+CMD [ "./build.sh" ]
