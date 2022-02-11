@@ -259,9 +259,9 @@ struct ChunkIndex {
  * written in the Data section, outside of Chunks.
  */
 struct Attachment {
-  std::string name;
   Timestamp logTime;
   Timestamp createTime;
+  std::string name;
   std::string contentType;
   uint64_t dataSize;
   const std::byte* data = nullptr;

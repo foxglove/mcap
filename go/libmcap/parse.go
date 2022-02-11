@@ -240,17 +240,17 @@ func ParseChunkIndex(buf []byte) (*ChunkIndex, error) {
 }
 
 func ParseAttachment(buf []byte) (*Attachment, error) {
-	name, offset, err := readPrefixedString(buf, 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read attachment name: %w", err)
-	}
-	logTime, offset, err := getUint64(buf, offset)
+	logTime, offset, err := getUint64(buf, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read record time: %w", err)
 	}
 	createTime, offset, err := getUint64(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read create time: %w", err)
+	}
+	name, offset, err := readPrefixedString(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read attachment name: %w", err)
 	}
 	contentType, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
@@ -267,9 +267,9 @@ func ParseAttachment(buf []byte) (*Attachment, error) {
 		return nil, fmt.Errorf("failed to read CRC: %w", err)
 	}
 	return &Attachment{
-		Name:        name,
 		LogTime:     logTime,
 		CreateTime:  createTime,
+		Name:        name,
 		ContentType: contentType,
 		Data:        data,
 		CRC:         crc,

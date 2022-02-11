@@ -236,9 +236,9 @@ func (w *Writer) WriteMessageIndex(idx *MessageIndex) error {
 func (w *Writer) WriteAttachment(a *Attachment) error {
 	msglen := 4 + len(a.Name) + 8 + 8 + 4 + len(a.ContentType) + 8 + len(a.Data) + 4
 	w.ensureSized(msglen)
-	offset := putPrefixedString(w.msg, a.Name)
-	offset += putUint64(w.msg[offset:], a.LogTime)
+	offset := putUint64(w.msg, a.LogTime)
 	offset += putUint64(w.msg[offset:], a.CreateTime)
+	offset += putPrefixedString(w.msg[offset:], a.Name)
 	offset += putPrefixedString(w.msg[offset:], a.ContentType)
 	offset += putUint64(w.msg[offset:], uint64(len(a.Data)))
 	offset += copy(w.msg[offset:], a.Data)
