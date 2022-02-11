@@ -119,7 +119,7 @@ async function runWriterTest(
     }
 
     const expectedOutputPath = filePath.replace(/\.json$/, ".mcap");
-    const expectedOutput = await fs.readFile(expectedOutputPath);
+    const expectedOutput = await fs.readFile(expectedOutputPath).catch(() => undefined);
     if (expectedOutput == undefined) {
       console.error(`Error: missing expected output file ${expectedOutputPath}`);
       hadError = true;
@@ -166,7 +166,6 @@ async function runWriterTest(
         }
       });
       console.error();
-
       hadError = true;
       continue;
     }
