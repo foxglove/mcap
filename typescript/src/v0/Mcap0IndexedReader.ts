@@ -61,11 +61,11 @@ export default class Mcap0IndexedReader {
     this.footer = footer;
 
     for (const chunk of chunkIndexes) {
-      if (this.startTime == undefined || chunk.startTime < this.startTime) {
-        this.startTime = chunk.startTime;
+      if (this.startTime == undefined || chunk.messageStartTime < this.startTime) {
+        this.startTime = chunk.messageStartTime;
       }
-      if (this.endTime == undefined || chunk.endTime > this.endTime) {
-        this.endTime = chunk.endTime;
+      if (this.endTime == undefined || chunk.messageEndTime > this.endTime) {
+        this.endTime = chunk.messageEndTime;
       }
     }
   }
@@ -314,17 +314,17 @@ export default class Mcap0IndexedReader {
     }
 
     const relevantChunks = this.chunkIndexes.filter(
-      (chunk) => chunk.startTime <= endTime && chunk.endTime >= startTime,
+      (chunk) => chunk.messageStartTime <= endTime && chunk.messageEndTime >= startTime,
     );
 
     for (let i = 0; i + 1 < relevantChunks.length; i++) {
-      if (relevantChunks[i]!.endTime > relevantChunks[i + 1]!.startTime) {
+      if (relevantChunks[i]!.messageEndTime > relevantChunks[i + 1]!.messageStartTime) {
         throw new Error(
           `Overlapping chunks are not currently supported; chunk at offset ${
             relevantChunks[i]!.chunkStartOffset
-          } ends at ${relevantChunks[i]!.endTime} and chunk at offset ${
+          } ends at ${relevantChunks[i]!.messageEndTime} and chunk at offset ${
             relevantChunks[i + 1]!.chunkStartOffset
-          } starts at ${relevantChunks[i + 1]!.startTime}`,
+          } starts at ${relevantChunks[i + 1]!.messageStartTime}`,
         );
       }
     }

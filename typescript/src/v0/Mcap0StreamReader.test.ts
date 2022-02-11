@@ -323,9 +323,9 @@ describe("Mcap0StreamReader", () => {
 
         ...record(Opcode.CHANNEL, [
           ...uint16LE(1), // channel id
+          ...uint16LE(2), // schema id
           ...string("myTopic"), // topic
           ...string("utf12"), // message encoding
-          ...uint16LE(1), // schema id
           ...keyValues(string, string, [["foo", "bar"]]), // user data
         ]),
 
@@ -340,9 +340,9 @@ describe("Mcap0StreamReader", () => {
     expect(reader.nextRecord()).toEqual({
       type: "Channel",
       id: 1,
+      schemaId: 2,
       topic: "myTopic",
       messageEncoding: "utf12",
-      schemaId: 1,
       metadata: new Map([["foo", "bar"]]),
     } as TypedMcapRecords["Channel"]);
     expect(reader.nextRecord()).toEqual({
@@ -357,9 +357,9 @@ describe("Mcap0StreamReader", () => {
   it.each([true, false])("parses channel in chunk (compressed: %s)", (compressed) => {
     const channel = record(Opcode.CHANNEL, [
       ...uint16LE(1), // channel id
+      ...uint16LE(2), // schema id
       ...string("myTopic"), // topic
       ...string("utf12"), // message encoding
-      ...uint16LE(1),
       ...keyValues(string, string, [["foo", "bar"]]), // user data
     ]);
     const decompressHandlers = { xyz: () => channel };
@@ -391,9 +391,9 @@ describe("Mcap0StreamReader", () => {
     expect(reader.nextRecord()).toEqual({
       type: "Channel",
       id: 1,
+      schemaId: 2,
       topic: "myTopic",
       messageEncoding: "utf12",
-      schemaId: 1,
       metadata: new Map([["foo", "bar"]]),
     } as TypedMcapRecords["Channel"]);
     expect(reader.nextRecord()).toEqual({
@@ -413,9 +413,9 @@ describe("Mcap0StreamReader", () => {
           key: "topic",
           channel2: record(Opcode.CHANNEL, [
             ...uint16LE(42), // channel id
+            ...uint16LE(1), // schema id
             ...string("XXXXXXXX"), // topic
             ...string("utf12"), // message encoding
-            ...uint16LE(1), // schema id
             ...keyValues(string, string, [["foo", "bar"]]), // user data
           ]),
         },
@@ -423,9 +423,9 @@ describe("Mcap0StreamReader", () => {
           key: "encoding",
           channel2: record(Opcode.CHANNEL, [
             ...uint16LE(42), // channel id
+            ...uint16LE(1), // schema id
             ...string("myTopic"), // topic
             ...string("XXXXXXXX"), // message encoding
-            ...uint16LE(1), // schema id
             ...keyValues(string, string, [["foo", "bar"]]), // user data
           ]),
         },
@@ -433,18 +433,18 @@ describe("Mcap0StreamReader", () => {
           key: "schema_id",
           channel2: record(Opcode.CHANNEL, [
             ...uint16LE(42), // channel id
+            ...uint16LE(0), // schema id
             ...string("myTopic"), // topic
             ...string("utf12"), // message encoding
-            ...uint16LE(0), // schema id
             ...keyValues(string, string, [["foo", "bar"]]), // user data
           ]),
         },
       ])("differing in $key", ({ channel2 }) => {
         const channel = record(Opcode.CHANNEL, [
           ...uint16LE(42), // channel id
+          ...uint16LE(1), // schema id
           ...string("myTopic"), // topic
           ...string("utf12"), // message encoding
-          ...uint16LE(1), // schema id
           ...keyValues(string, string, [["foo", "bar"]]), // user data
         ]);
         const reader = new Mcap0StreamReader();
@@ -499,9 +499,9 @@ describe("Mcap0StreamReader", () => {
         expect(reader.nextRecord()).toEqual({
           type: "Channel",
           id: 42,
+          schemaId: 1,
           topic: "myTopic",
           messageEncoding: "utf12",
-          schemaId: 1,
           metadata: new Map([["foo", "bar"]]),
         } as TypedMcapRecords["Channel"]);
         expect(() => reader.nextRecord()).toThrow("differing channels for 42");

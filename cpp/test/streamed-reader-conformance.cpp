@@ -39,8 +39,8 @@ int main(int argc, char** argv) {
     recordsJson.push_back(json::object({
       {"type", "Header"},
       {"fields", json::array({
-                   json::array({"library", header.library}),
-                   json::array({"profile", header.profile}),
+                   {"library", header.library},
+                   {"profile", header.profile},
                  })},
     }));
   };
@@ -49,9 +49,9 @@ int main(int argc, char** argv) {
     recordsJson.push_back(json::object({
       {"type", "Footer"},
       {"fields", json::array({
-                   json::array({"summary_crc", std::to_string(footer.summaryCrc)}),
-                   json::array({"summary_offset_start", std::to_string(footer.summaryOffsetStart)}),
-                   json::array({"summary_start", std::to_string(footer.summaryStart)}),
+                   {"summary_crc", std::to_string(footer.summaryCrc)},
+                   {"summary_offset_start", std::to_string(footer.summaryOffsetStart)},
+                   {"summary_start", std::to_string(footer.summaryStart)},
                  })},
     }));
   };
@@ -61,10 +61,10 @@ int main(int argc, char** argv) {
     recordsJson.push_back(json::object({
       {"type", "Schema"},
       {"fields", json::array({
-                   json::array({"data", ToJson(schema.data.data(), schema.data.size())}),
-                   json::array({"encoding", schema.encoding}),
-                   json::array({"id", std::to_string(schema.id)}),
-                   json::array({"name", schema.name}),
+                   {"data", ToJson(schema.data.data(), schema.data.size())},
+                   {"encoding", schema.encoding},
+                   {"id", std::to_string(schema.id)},
+                   {"name", schema.name},
                  })},
     }));
   };
@@ -74,11 +74,11 @@ int main(int argc, char** argv) {
     recordsJson.push_back(json::object({
       {"type", "Channel"},
       {"fields", json::array({
-                   json::array({"id", std::to_string(channel.id)}),
-                   json::array({"message_encoding", channel.messageEncoding}),
-                   json::array({"metadata", channel.metadata}),
-                   json::array({"schema_id", std::to_string(channel.schemaId)}),
-                   json::array({"topic", channel.topic}),
+                   {"id", std::to_string(channel.id)},
+                   {"message_encoding", channel.messageEncoding},
+                   {"metadata", channel.metadata},
+                   {"schema_id", std::to_string(channel.schemaId)},
+                   {"topic", channel.topic},
                  })},
     }));
   };
@@ -87,11 +87,11 @@ int main(int argc, char** argv) {
     recordsJson.push_back(json::object({
       {"type", "Message"},
       {"fields", json::array({
-                   json::array({"channel_id", std::to_string(message.channelId)}),
-                   json::array({"data", ToJson(message.data, message.dataSize)}),
-                   json::array({"log_time", std::to_string(message.logTime)}),
-                   json::array({"publish_time", std::to_string(message.publishTime)}),
-                   json::array({"sequence", std::to_string(message.sequence)}),
+                   {"channel_id", std::to_string(message.channelId)},
+                   {"data", ToJson(message.data, message.dataSize)},
+                   {"log_time", std::to_string(message.logTime)},
+                   {"publish_time", std::to_string(message.publishTime)},
+                   {"sequence", std::to_string(message.sequence)},
                  })},
     }));
   };
@@ -100,12 +100,12 @@ int main(int argc, char** argv) {
   //   recordsJson.push_back(json::object({
   //     {"type", "Chunk"},
   //     {"fields", json::array({
-  //                  json::array({"compressed_size", std::to_string(chunk.compressedSize)}),
-  //                  json::array({"compression", chunk.compression}),
-  //                  json::array({"end_time", std::to_string(chunk.endTime)}),
-  //                  json::array({"start_time", std::to_string(chunk.startTime)}),
-  //                  json::array({"uncompressed_crc", std::to_string(chunk.uncompressedCrc)}),
-  //                  json::array({"uncompressed_size", std::to_string(chunk.uncompressedSize)}),
+  //                  {"compressed_size", std::to_string(chunk.compressedSize)},
+  //                  {"compression", chunk.compression},
+  //                  {"message_end_time", std::to_string(chunk.messageEndTime)},
+  //                  {"message_start_time", std::to_string(chunk.messageStartTime)},
+  //                  {"uncompressed_crc", std::to_string(chunk.uncompressedCrc)},
+  //                  {"uncompressed_size", std::to_string(chunk.uncompressedSize)},
   //                })},
   //   }));
   // };
@@ -114,8 +114,8 @@ int main(int argc, char** argv) {
   //   recordsJson.push_back(json::object({
   //     {"type", "MessageIndex"},
   //     {"fields", json::array({
-  //                  json::array({"channel_id", std::to_string(messageIndex.channelId)}),
-  //                  json::array({"records", messageIndex.records}),
+  //                  {"channel_id", std::to_string(messageIndex.channelId)},
+  //                  {"records", messageIndex.records},
   //                })},
   //   }));
   // };
@@ -123,18 +123,17 @@ int main(int argc, char** argv) {
   reader.onChunkIndex = [&](const mcap::ChunkIndex& chunkIndex) {
     recordsJson.push_back(json::object({
       {"type", "ChunkIndex"},
-      {"fields",
-       json::array({
-         json::array({"chunk_length", std::to_string(chunkIndex.chunkLength)}),
-         json::array({"chunk_start_offset", std::to_string(chunkIndex.chunkStartOffset)}),
-         json::array({"compressed_size", std::to_string(chunkIndex.compressedSize)}),
-         json::array({"compression", chunkIndex.compression}),
-         json::array({"end_time", std::to_string(chunkIndex.endTime)}),
-         json::array({"message_index_length", std::to_string(chunkIndex.messageIndexLength)}),
-         json::array({"message_index_offsets", ToJson(chunkIndex.messageIndexOffsets)}),
-         json::array({"start_time", std::to_string(chunkIndex.startTime)}),
-         json::array({"uncompressed_size", std::to_string(chunkIndex.uncompressedSize)}),
-       })},
+      {"fields", json::array({
+                   {"chunk_length", std::to_string(chunkIndex.chunkLength)},
+                   {"chunk_start_offset", std::to_string(chunkIndex.chunkStartOffset)},
+                   {"compressed_size", std::to_string(chunkIndex.compressedSize)},
+                   {"compression", chunkIndex.compression},
+                   {"message_end_time", std::to_string(chunkIndex.messageEndTime)},
+                   {"message_index_length", std::to_string(chunkIndex.messageIndexLength)},
+                   {"message_index_offsets", ToJson(chunkIndex.messageIndexOffsets)},
+                   {"message_start_time", std::to_string(chunkIndex.messageStartTime)},
+                   {"uncompressed_size", std::to_string(chunkIndex.uncompressedSize)},
+                 })},
     }));
   };
 
@@ -142,11 +141,11 @@ int main(int argc, char** argv) {
     recordsJson.push_back(json::object({
       {"type", "Attachment"},
       {"fields", json::array({
-                   json::array({"content_type", attachment.contentType}),
-                   json::array({"created_at", std::to_string(attachment.createdAt)}),
-                   json::array({"data", ToJson(attachment.data, attachment.dataSize)}),
-                   json::array({"log_time", std::to_string(attachment.logTime)}),
-                   json::array({"name", attachment.name}),
+                   {"content_type", attachment.contentType},
+                   {"created_at", std::to_string(attachment.createdAt)},
+                   {"data", ToJson(attachment.data, attachment.dataSize)},
+                   {"log_time", std::to_string(attachment.logTime)},
+                   {"name", attachment.name},
                  })},
     }));
   };
@@ -155,12 +154,12 @@ int main(int argc, char** argv) {
     recordsJson.push_back(json::object({
       {"type", "AttachmentIndex"},
       {"fields", json::array({
-                   json::array({"content_type", attachmentIndex.contentType}),
-                   json::array({"data_size", std::to_string(attachmentIndex.dataSize)}),
-                   json::array({"length", std::to_string(attachmentIndex.length)}),
-                   json::array({"log_time", std::to_string(attachmentIndex.logTime)}),
-                   json::array({"name", attachmentIndex.name}),
-                   json::array({"offset", std::to_string(attachmentIndex.offset)}),
+                   {"content_type", attachmentIndex.contentType},
+                   {"data_size", std::to_string(attachmentIndex.dataSize)},
+                   {"length", std::to_string(attachmentIndex.length)},
+                   {"log_time", std::to_string(attachmentIndex.logTime)},
+                   {"name", attachmentIndex.name},
+                   {"offset", std::to_string(attachmentIndex.offset)},
                  })},
     }));
   };
@@ -169,12 +168,15 @@ int main(int argc, char** argv) {
     recordsJson.push_back(json::object({
       {"type", "Statistics"},
       {"fields", json::array({
-                   json::array({"attachment_count", std::to_string(statistics.attachmentCount)}),
-                   json::array({"channel_count", std::to_string(statistics.channelCount)}),
-                   json::array({"channel_message_counts", ToJson(statistics.channelMessageCounts)}),
-                   json::array({"chunk_count", std::to_string(statistics.chunkCount)}),
-                   json::array({"message_count", std::to_string(statistics.messageCount)}),
-                   json::array({"metadata_count", std::to_string(statistics.metadataCount)}),
+                   {"attachment_count", std::to_string(statistics.attachmentCount)},
+                   {"channel_count", std::to_string(statistics.channelCount)},
+                   {"channel_message_counts", ToJson(statistics.channelMessageCounts)},
+                   {"chunk_count", std::to_string(statistics.chunkCount)},
+                   {"message_count", std::to_string(statistics.messageCount)},
+                   {"message_end_time", std::to_string(statistics.messageEndTime)},
+                   {"message_start_time", std::to_string(statistics.messageStartTime)},
+                   {"metadata_count", std::to_string(statistics.metadataCount)},
+                   {"schema_count", std::to_string(statistics.schemaCount)},
                  })},
     }));
   };
@@ -183,8 +185,8 @@ int main(int argc, char** argv) {
     recordsJson.push_back(json::object({
       {"type", "Metadata"},
       {"fields", json::array({
-                   json::array({"metadata", metadata.metadata}),
-                   json::array({"name", metadata.name}),
+                   {"metadata", metadata.metadata},
+                   {"name", metadata.name},
                  })},
     }));
   };
@@ -193,9 +195,9 @@ int main(int argc, char** argv) {
     recordsJson.push_back(json::object({
       {"type", "MetadataIndex"},
       {"fields", json::array({
-                   json::array({"length", std::to_string(metadataIndex.length)}),
-                   json::array({"name", metadataIndex.name}),
-                   json::array({"offset", std::to_string(metadataIndex.offset)}),
+                   {"length", std::to_string(metadataIndex.length)},
+                   {"name", metadataIndex.name},
+                   {"offset", std::to_string(metadataIndex.offset)},
                  })},
     }));
   };
@@ -203,12 +205,11 @@ int main(int argc, char** argv) {
   reader.onSummaryOffset = [&](const mcap::SummaryOffset& summaryOffset) {
     recordsJson.push_back(json::object({
       {"type", "SummaryOffset"},
-      {"fields",
-       json::array({
-         json::array({"group_length", std::to_string(summaryOffset.groupLength)}),
-         json::array({"group_opcode", std::to_string(uint8_t(summaryOffset.groupOpCode))}),
-         json::array({"group_start", std::to_string(summaryOffset.groupStart)}),
-       })},
+      {"fields", json::array({
+                   {"group_length", std::to_string(summaryOffset.groupLength)},
+                   {"group_opcode", std::to_string(uint8_t(summaryOffset.groupOpCode))},
+                   {"group_start", std::to_string(summaryOffset.groupStart)},
+                 })},
     }));
   };
 
@@ -216,7 +217,7 @@ int main(int argc, char** argv) {
   //   recordsJson.push_back(json::object({
   //     {"type", "DataEnd"},
   //     {"fields", json::array({
-  //                  json::array({"data_section_crc", std::to_string(dataEnd.dataSectionCrc)}),
+  //                  {"data_section_crc", std::to_string(dataEnd.dataSectionCrc)},
   //                })},
   //   }));
   // };

@@ -68,8 +68,8 @@ std::string ToString(const mcap::Schema& schema) {
 
 std::string ToString(const mcap::Channel& channel) {
   return mcap::StrFormat(
-    "[Channel] id={}, topic={}, message_encoding={}, schema_id={}, metadata={}", channel.id,
-    channel.topic, channel.messageEncoding, channel.schemaId, ToString(channel.metadata));
+    "[Channel] id={}, schema_id={}, topic={}, message_encoding={}, metadata={}", channel.id,
+    channel.schemaId, channel.topic, channel.messageEncoding, ToString(channel.metadata));
 }
 
 std::string ToString(const mcap::Message& message) {
@@ -80,8 +80,10 @@ std::string ToString(const mcap::Message& message) {
 
 std::string ToString(const mcap::Chunk& chunk) {
   return mcap::StrFormat(
-    "[Chunk] uncompressed_size={}, uncompressed_crc={}, compression={}, data=<{} bytes>",
-    chunk.uncompressedSize, chunk.uncompressedCrc, chunk.compression, chunk.compressedSize);
+    "[Chunk] message_start_time={}, message_end_time={}, uncompressed_size={}, "
+    "uncompressed_crc={}, compression={}, data=<{} bytes>",
+    chunk.messageStartTime, chunk.messageEndTime, chunk.uncompressedSize, chunk.uncompressedCrc,
+    chunk.compression, chunk.compressedSize);
 }
 
 std::string ToString(const mcap::MessageIndex& messageIndex) {
@@ -91,12 +93,13 @@ std::string ToString(const mcap::MessageIndex& messageIndex) {
 
 std::string ToString(const mcap::ChunkIndex& chunkIndex) {
   return mcap::StrFormat(
-    "[ChunkIndex] start_time={}, end_time={}, chunk_start_offset={}, chunk_length={}, "
+    "[ChunkIndex] message_start_time={}, message_end_time={}, chunk_start_offset={}, "
+    "chunk_length={}, "
     "message_index_offsets={}, message_index_length={}, compression={}, "
     "compressed_size={}, uncompressed_size={}",
-    chunkIndex.startTime, chunkIndex.endTime, chunkIndex.chunkStartOffset, chunkIndex.chunkLength,
-    ToString(chunkIndex.messageIndexOffsets), chunkIndex.messageIndexLength, chunkIndex.compression,
-    chunkIndex.compressedSize, chunkIndex.uncompressedSize);
+    chunkIndex.messageStartTime, chunkIndex.messageEndTime, chunkIndex.chunkStartOffset,
+    chunkIndex.chunkLength, ToString(chunkIndex.messageIndexOffsets), chunkIndex.messageIndexLength,
+    chunkIndex.compression, chunkIndex.compressedSize, chunkIndex.uncompressedSize);
 }
 
 std::string ToString(const mcap::Attachment& attachment) {
@@ -115,10 +118,13 @@ std::string ToString(const mcap::AttachmentIndex& attachmentIndex) {
 
 std::string ToString(const mcap::Statistics& statistics) {
   return mcap::StrFormat(
-    "[Statistics] message_count={}, channel_count={}, attachment_count={}, metadata_count={}, "
-    "chunk_count={}, channel_message_counts={}",
-    statistics.messageCount, statistics.channelCount, statistics.attachmentCount,
-    statistics.metadataCount, statistics.chunkCount, ToString(statistics.channelMessageCounts));
+    "[Statistics] message_count={}, schema_count={}, channel_count={}, attachment_count={}, "
+    "metadata_count={}, chunk_count={}, message_start_time={}, message_end_time={}, "
+    "channel_message_counts={}",
+    statistics.messageCount, statistics.schemaCount, statistics.channelCount,
+    statistics.attachmentCount, statistics.metadataCount, statistics.chunkCount,
+    statistics.messageStartTime, statistics.messageEndTime,
+    ToString(statistics.channelMessageCounts));
 }
 
 std::string ToString(const mcap::Metadata& metadata) {

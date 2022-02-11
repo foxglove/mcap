@@ -6,7 +6,9 @@ import { TestVariant } from "variants/types";
 import { ITestRunner } from ".";
 
 export default class CppStreamedTestRunner implements ITestRunner {
-  name = "cpp-streamed";
+  name = "cpp-streamed-reader";
+  mode = "read" as const;
+
   async run(filePath: string): Promise<string> {
     const { stdout } = await promisify(exec)(`./streamed-reader-conformance ${filePath}`, {
       cwd: join(__dirname, "../../../../../cpp/test/build/Debug/bin"),

@@ -3,5 +3,5 @@
 [libmcap]: ./libmcap
 [mcap]: ./mcap
 
-- [Library for parsing mcap files][libmcap]
+- [Library for parsing MCAP files][libmcap]
 - [Command line tool for format demonstration][mcap]

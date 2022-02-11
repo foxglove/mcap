@@ -140,9 +140,9 @@ describe("Mcap0IndexedReader", () => {
       ]),
       ...record(Opcode.CHANNEL, [
         ...uint16LE(42), // channel id
+        ...uint16LE(1), // schema id
         ...string("myTopic"), // topic
         ...string("utf12"), // encoding
-        ...uint16LE(1),
         ...keyValues(string, string, [["foo", "bar"]]), // user data
       ]),
       ...record(Opcode.FOOTER, [
@@ -229,28 +229,28 @@ describe("Mcap0IndexedReader", () => {
         ]);
         const channel = record(Opcode.CHANNEL, [
           ...uint16LE(42), // channel id
+          ...uint16LE(1), // schema id
           ...string("myTopic"), // topic
           ...string("utf12"), // message encoding
-          ...uint16LE(1), // schema id
           ...keyValues(string, string, [["foo", "bar"]]), // user data
         ]);
         const message1Data = record(Opcode.MESSAGE, [
           ...uint16LE(message1.channelId),
           ...uint32LE(message1.sequence),
-          ...uint64LE(message1.publishTime),
           ...uint64LE(message1.logTime),
+          ...uint64LE(message1.publishTime),
         ]);
         const message2Data = record(Opcode.MESSAGE, [
           ...uint16LE(message2.channelId),
           ...uint32LE(message2.sequence),
-          ...uint64LE(message2.publishTime),
           ...uint64LE(message2.logTime),
+          ...uint64LE(message2.publishTime),
         ]);
         const message3Data = record(Opcode.MESSAGE, [
           ...uint16LE(message3.channelId),
           ...uint32LE(message3.sequence),
-          ...uint64LE(message3.publishTime),
           ...uint64LE(message3.logTime),
+          ...uint64LE(message3.publishTime),
         ]);
         const chunkContents = [...schema, ...channel];
         const message1Offset = BigInt(chunkContents.length);

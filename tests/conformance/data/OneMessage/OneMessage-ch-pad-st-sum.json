@@ -38,7 +38,10 @@
         ["channel_message_counts", {"1": "1"}],
         ["chunk_count", "1"],
         ["message_count", "1"],
-        ["metadata_count", "0"]
+        ["message_end_time", "2"],
+        ["message_start_time", "2"],
+        ["metadata_count", "0"],
+        ["schema_count", "1"]
       ]
     },
     {
@@ -48,17 +51,17 @@
         ["chunk_start_offset", "28"],
         ["compressed_size", "115"],
         ["compression", ""],
-        ["end_time", "2"],
+        ["message_end_time", "2"],
         ["message_index_length", "0"],
         ["message_index_offsets", {}],
-        ["start_time", "2"],
+        ["message_start_time", "2"],
         ["uncompressed_size", "115"]
       ]
     },
     {
       "type": "SummaryOffset",
       "fields": [
-        ["group_length", "50"],
+        ["group_length", "68"],
         ["group_opcode", "11"],
         ["group_start", "208"]
       ]
@@ -68,14 +71,14 @@
       "fields": [
         ["group_length", "80"],
         ["group_opcode", "8"],
-        ["group_start", "258"]
+        ["group_start", "276"]
       ]
     },
     {
       "type": "Footer",
       "fields": [
         ["summary_crc", "0"],
-        ["summary_offset_start", "338"],
+        ["summary_offset_start", "356"],
         ["summary_start", "208"]
       ]
     }

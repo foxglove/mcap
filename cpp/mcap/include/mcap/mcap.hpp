@@ -146,8 +146,8 @@ struct Message {
 };
 
 struct Chunk {
-  Timestamp startTime;
-  Timestamp endTime;
+  Timestamp messageStartTime;
+  Timestamp messageEndTime;
   ByteOffset uncompressedSize;
   uint32_t uncompressedCrc;
   std::string compression;
@@ -161,8 +161,8 @@ struct MessageIndex {
 };
 
 struct ChunkIndex {
-  Timestamp startTime;
-  Timestamp endTime;
+  Timestamp messageStartTime;
+  Timestamp messageEndTime;
   ByteOffset chunkStartOffset;
   ByteOffset chunkLength;
   std::unordered_map<ChannelId, ByteOffset> messageIndexOffsets;
@@ -203,10 +203,13 @@ struct AttachmentIndex {
 
 struct Statistics {
   uint64_t messageCount;
+  uint16_t schemaCount;
   uint32_t channelCount;
   uint32_t attachmentCount;
   uint32_t metadataCount;
   uint32_t chunkCount;
+  Timestamp messageStartTime;
+  Timestamp messageEndTime;
   std::unordered_map<ChannelId, uint64_t> channelMessageCounts;
 };
 

@@ -18,21 +18,21 @@ export type Schema = {
 };
 export type Channel = {
   id: number;
+  schemaId: number;
   topic: string;
   messageEncoding: string;
-  schemaId: number;
   metadata: Map<string, string>;
 };
 export type Message = {
   channelId: number;
   sequence: number;
-  publishTime: bigint;
   logTime: bigint;
+  publishTime: bigint;
   data: Uint8Array;
 };
 export type Chunk = {
-  startTime: bigint;
-  endTime: bigint;
+  messageStartTime: bigint;
+  messageEndTime: bigint;
   uncompressedSize: bigint;
   uncompressedCrc: number;
   compression: string;
@@ -43,8 +43,8 @@ export type MessageIndex = {
   records: [logTime: bigint, offset: bigint][];
 };
 export type ChunkIndex = {
-  startTime: bigint;
-  endTime: bigint;
+  messageStartTime: bigint;
+  messageEndTime: bigint;
   chunkStartOffset: bigint;
   chunkLength: bigint;
   messageIndexOffsets: Map<number, bigint>;
@@ -70,10 +70,13 @@ export type AttachmentIndex = {
 };
 export type Statistics = {
   messageCount: bigint;
+  schemaCount: number;
   channelCount: number;
   attachmentCount: number;
   metadataCount: number;
   chunkCount: number;
+  messageStartTime: bigint;
+  messageEndTime: bigint;
   channelMessageCounts: Map<number, bigint>;
 };
 export type Metadata = {
