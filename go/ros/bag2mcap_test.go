@@ -15,7 +15,7 @@ func BenchmarkBag2MCAP(b *testing.B) {
 		IncludeCRC:  true,
 		Chunked:     true,
 		ChunkSize:   4 * 1024 * 1024,
-		Compression: "lz4",
+		Compression: "",
 	}
 	cases := []struct {
 		assertion string
@@ -25,10 +25,6 @@ func BenchmarkBag2MCAP(b *testing.B) {
 			"demo bag",
 			"../../testdata/bags/demo.bag",
 		},
-		// {
-		// 	"cal loop",
-		// 	"~/data/bags/cal_loop.bag",
-		// },
 	}
 	for _, c := range cases {
 		stats, err := os.Stat(c.inputfile)
@@ -36,7 +32,7 @@ func BenchmarkBag2MCAP(b *testing.B) {
 		input, err := os.ReadFile(c.inputfile)
 		assert.Nil(b, err)
 		reader := &bytes.Reader{}
-		writer := &bytes.Buffer{}
+		writer := bytes.NewBuffer(make([]byte, 4*1024*1024*1024))
 		b.ResetTimer()
 		b.Run(c.assertion, func(b *testing.B) {
 			for n := 0; n < b.N; n++ {

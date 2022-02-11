@@ -321,8 +321,43 @@ type MessageIndexEntry struct {
 }
 
 type MessageIndex struct {
-	ChannelID uint16
-	Records   []MessageIndexEntry
+	ChannelID    uint16
+	Records      []*MessageIndexEntry
+	currentIndex int
+}
+
+func (idx *MessageIndex) Insort() {
+	i := 1
+	for i < len(idx.Entries()) {
+		j := i
+		for j > 0 && idx.Records[j-1].Timestamp > idx.Records[j].Timestamp {
+			idx.Records[j-1], idx.Records[j] = idx.Records[j], idx.Records[j-1]
+			j--
+		}
+		i++
+	}
+}
+
+func (idx *MessageIndex) Reset() {
+	idx.currentIndex = 0
+}
+
+func (idx *MessageIndex) Entries() []*MessageIndexEntry {
+	return idx.Records[:idx.currentIndex]
+}
+
+func (idx *MessageIndex) Add(timestamp uint64, offset uint64) {
+	if idx.currentIndex >= len(idx.Records) {
+		records := make([]*MessageIndexEntry, (len(idx.Records)+20)*2)
+		copy(records, idx.Records)
+		idx.Records = records
+	}
+	if idx.Records[idx.currentIndex] == nil {
+		idx.Records[idx.currentIndex] = &MessageIndexEntry{timestamp, offset}
+	}
+	idx.Records[idx.currentIndex].Timestamp = timestamp
+	idx.Records[idx.currentIndex].Offset = offset
+	idx.currentIndex++
 }
 
 type Chunk struct {

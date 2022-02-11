@@ -1,15 +1,14 @@
-import { Mcap0IndexedReader } from "@foxglove/mcap";
+import { Mcap0IndexedReader, Mcap0Types } from "@foxglove/mcap";
 import fs from "fs/promises";
 import { TestFeatures, TestVariant } from "variants/types";
 
-import ITestRunner from "./ITestRunner";
+import { ReadTestRunner } from "./TestRunner";
 import { stringifyRecords } from "./stringifyRecords";
 
-export default class TypescriptIndexedTestRunner implements ITestRunner {
-  name = "ts-indexed";
-  mode = "read" as const;
+export default class TypescriptIndexedTestRunner extends ReadTestRunner {
+  name = "ts-indexed-reader";
 
-  async run(filePath: string, variant: TestVariant): Promise<string> {
+  async runReadTest(filePath: string, variant: TestVariant): Promise<string> {
     const handle = await fs.open(filePath, "r");
     try {
       return await this._run(handle, variant);
@@ -41,7 +40,7 @@ export default class TypescriptIndexedTestRunner implements ITestRunner {
   }
 
   private async _run(fileHandle: fs.FileHandle, variant: TestVariant): Promise<string> {
-    const testResult = [];
+    const testResult: Mcap0Types.TypedMcapRecord[] = [];
     let buffer = new ArrayBuffer(4096);
     const readable = {
       size: async () => BigInt((await fileHandle.stat()).size),
@@ -80,6 +79,8 @@ export default class TypescriptIndexedTestRunner implements ITestRunner {
     for await (const record of reader.readMessages()) {
       testResult.push(record);
     }
+
+    testResult.push({ type: "DataEnd", dataSectionCrc: 0 });
 
     // repeat schemas & channel infos
     for (const record of reader.schemasById.values()) {
