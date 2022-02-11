@@ -197,7 +197,7 @@ All messages in the chunk must reference channels recorded earlier in the file (
 | 8 | message_end_time | Timestamp | Latest message log_time in the chunk. Zero if the chunk has no messages. |
 | 8 | uncompressed_size | uint64 | Uncompressed size of the `records` field. |
 | 4 | uncompressed_crc | uint32 | CRC32 checksum of uncompressed `records` field. A value of zero indicates that CRC validation should not be performed. |
-| 4 + N | compression | String | compression algorithm. i.e. `zstd`, `lz4`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression formats]. |
+| 4 + N | compression | String | compression algorithm. i.e. `zstd`, `lz4`, `none`. The value `none` indicates no compression. Refer to [well-known compression formats][compression formats]. |
 | 8 + N | records | uint64 length-prefixed Bytes | Repeating sequences of `<record type><record content length><record content>`. Compressed with the algorithm in the `compression` field. |
 
 ### Message Index (op=0x07)
