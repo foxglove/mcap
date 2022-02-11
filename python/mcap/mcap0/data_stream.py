@@ -66,12 +66,15 @@ class WriteDataStream:
         self.__current_opcode = opcode
         self.__buffer = BytesIO()
 
-    def finish_record(self):
+    def finish_record(self, include_padding: bool = True) -> int:
+        start_count = self.__count
         data = self.__buffer.getvalue()
+        length = len(data)
         self.__stream.write(struct.pack("<B", self.__current_opcode))
-        self.__stream.write(struct.pack("<Q", len(data)))
+        self.__stream.write(struct.pack("<Q", length))
         self.__stream.write(data)
         self.__count += 9  # For opcode + length
+        return self.__count - start_count
 
     def write(self, data: bytes):
         self.__buffer.write(data)

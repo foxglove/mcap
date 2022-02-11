@@ -7,8 +7,8 @@ from .opcode import Opcode
 
 @dataclass
 class McapRecord:
-    def write(self, stream: WriteDataStream):
-        pass
+    def write(self, stream: WriteDataStream) -> None:
+        raise NotImplementedError()
 
 
 @dataclass
@@ -61,7 +61,7 @@ class AttachmentIndex(McapRecord):
     def write(self, stream: WriteDataStream):
         stream.start_record(Opcode.ATTACHMENT_INDEX)
         stream.write8(self.offset)
-        stream.write8(48 + len(self.name.encode()) + len(self.content_type.encode()))
+        stream.write8(self.length)
         stream.write8(self.log_time)
         stream.write8(self.create_time)
         stream.write8(self.data_size)
@@ -145,6 +145,17 @@ class Chunk(McapRecord):
     uncompressed_crc: int
     uncompressed_size: int
 
+    def write(self, stream: WriteDataStream):
+        stream.start_record(Opcode.CHUNK)
+        stream.write8(self.message_start_time)
+        stream.write8(self.message_end_time)
+        stream.write8(self.uncompressed_size)
+        stream.write4(self.uncompressed_crc)
+        stream.write_prefixed_string(self.compression)
+        stream.write8(len(self.data))
+        stream.write(self.data)
+        stream.finish_record(include_padding=False)
+
     @staticmethod
     def read(stream: ReadDataStream):
         message_start_time = stream.read8()
@@ -176,6 +187,22 @@ class ChunkIndex(McapRecord):
     message_index_offsets: Dict[int, int]
     message_start_time: int
     uncompressed_size: int
+
+    def write(self, stream: WriteDataStream):
+        stream.start_record(Opcode.CHUNK_INDEX)
+        stream.write8(self.message_start_time)
+        stream.write8(self.message_end_time)
+        stream.write8(self.chunk_start_offset)
+        stream.write8(self.chunk_length)
+        stream.write4(len(self.message_index_offsets) * 10)
+        for id, offset in self.message_index_offsets.items():
+            stream.write2(id)
+            stream.write8(offset)
+        stream.write8(self.message_index_length)
+        stream.write_prefixed_string(self.compression)
+        stream.write8(self.compressed_size)
+        stream.write8(self.uncompressed_size)
+        stream.finish_record()
 
     @staticmethod
     def read(stream: ReadDataStream):
@@ -233,7 +260,7 @@ class Footer(McapRecord):
         stream.write8(self.summary_start)
         stream.write8(self.summary_offset_start)
         stream.write4(self.summary_crc)
-        stream.finish_record()
+        stream.finish_record(include_padding=False)
 
     @staticmethod
     def read(stream: ReadDataStream):
@@ -280,7 +307,7 @@ class Message(McapRecord):
         stream.write8(self.log_time)
         stream.write8(self.publish_time)
         stream.write(self.data)
-        stream.finish_record()
+        stream.finish_record(include_padding=False)
 
     @staticmethod
     def read(stream: ReadDataStream, length: int):
@@ -302,6 +329,15 @@ class Message(McapRecord):
 class MessageIndex(McapRecord):
     channel_id: int
     records: List[Tuple[int, int]]
+
+    def write(self, stream: WriteDataStream):
+        stream.start_record(Opcode.MESSAGE_INDEX)
+        stream.write2(self.channel_id)
+        stream.write4(len(self.records) * 16)
+        for timestamp, offset in self.records:
+            stream.write8(timestamp)
+            stream.write8(offset)
+        stream.finish_record()
 
     @staticmethod
     def read(stream: ReadDataStream):
