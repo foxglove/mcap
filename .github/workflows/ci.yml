@@ -20,7 +20,7 @@ jobs:
 
       - run: yarn install --frozen-lockfile
       - run: echo '::add-matcher::.github/cspell-problem-matcher.json'
-      - run: yarn spellcheck
+      - run: yarn spellcheck --no-progress
 
   conformance:
     runs-on: ubuntu-latest

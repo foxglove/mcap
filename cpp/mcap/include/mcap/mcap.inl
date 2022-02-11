@@ -379,6 +379,9 @@ Status McapWriter::write(const Message& message) {
       // Write the Schema record
       uncompressedSize_ += write(output, schemas_[schemaIndex]);
       writtenSchemas_.insert(channel.schemaId);
+
+      // Update schema statistics
+      ++statistics_.schemaCount;
     }
 
     // Write the Channel record
@@ -396,6 +399,13 @@ Status McapWriter::write(const Message& message) {
 
   // Update message statistics
   if (indexing_) {
+    if (statistics_.messageCount == 0) {
+      statistics_.messageStartTime = message.logTime;
+      statistics_.messageEndTime = message.logTime;
+    } else {
+      statistics_.messageStartTime = std::min(statistics_.messageStartTime, message.logTime);
+      statistics_.messageEndTime = std::max(statistics_.messageEndTime, message.logTime);
+    }
     ++statistics_.messageCount;
     channelMessageCounts[message.channelId] += 1;
   }
@@ -536,8 +546,8 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
 
     // Fill in the newly created chunk index record. This will be written into
     // the summary section when close() is called
-    chunkIndexRecord.startTime = currentChunkStart_;
-    chunkIndexRecord.endTime = currentChunkEnd_;
+    chunkIndexRecord.messageStartTime = currentChunkStart_;
+    chunkIndexRecord.messageEndTime = currentChunkEnd_;
     chunkIndexRecord.chunkStartOffset = chunkStartOffset;
     chunkIndexRecord.chunkLength = chunkLength;
     chunkIndexRecord.messageIndexLength = messageIndexLength;
@@ -611,9 +621,9 @@ uint64_t McapWriter::write(IWritable& output, const Channel& channel) {
   write(output, OpCode::Channel);
   write(output, recordSize);
   write(output, channel.id);
+  write(output, channel.schemaId);
   write(output, channel.topic);
   write(output, channel.messageEncoding);
-  write(output, channel.schemaId);
   write(output, channel.metadata, metadataSize);
 
   return 9 + recordSize;
@@ -626,8 +636,8 @@ uint64_t McapWriter::write(IWritable& output, const Message& message) {
   write(output, recordSize);
   write(output, message.channelId);
   write(output, message.sequence);
-  write(output, message.publishTime);
   write(output, message.logTime);
+  write(output, message.publishTime);
   write(output, message.data, message.dataSize);
 
   return 9 + recordSize;
@@ -671,8 +681,8 @@ uint64_t McapWriter::write(IWritable& output, const Chunk& chunk) {
 
   write(output, OpCode::Chunk);
   write(output, recordSize);
-  write(output, chunk.startTime);
-  write(output, chunk.endTime);
+  write(output, chunk.messageStartTime);
+  write(output, chunk.messageEndTime);
   write(output, chunk.uncompressedSize);
   write(output, chunk.uncompressedCrc);
   write(output, chunk.compression);
@@ -713,8 +723,8 @@ uint64_t McapWriter::write(IWritable& output, const ChunkIndex& index) {
 
   write(output, OpCode::ChunkIndex);
   write(output, recordSize);
-  write(output, index.startTime);
-  write(output, index.endTime);
+  write(output, index.messageStartTime);
+  write(output, index.messageEndTime);
   write(output, index.chunkStartOffset);
   write(output, index.chunkLength);
 
@@ -769,19 +779,25 @@ uint64_t McapWriter::write(IWritable& output, const MetadataIndex& index) {
 uint64_t McapWriter::write(IWritable& output, const Statistics& stats) {
   const uint32_t channelMessageCountsSize = stats.channelMessageCounts.size() * 10;
   const uint64_t recordSize = /* message_count */ 8 +
+                              /* schema_count */ 2 +
                               /* channel_count */ 4 +
                               /* attachment_count */ 4 +
                               /* metadata_count */ 4 +
                               /* chunk_count */ 4 +
+                              /* message_start_time */ 8 +
+                              /* message_end_time */ 8 +
                               /* channel_message_counts */ 4 + channelMessageCountsSize;
 
   write(output, OpCode::Statistics);
   write(output, recordSize);
   write(output, stats.messageCount);
+  write(output, stats.schemaCount);
   write(output, stats.channelCount);
   write(output, stats.attachmentCount);
   write(output, stats.metadataCount);
   write(output, stats.chunkCount);
+  write(output, stats.messageStartTime);
+  write(output, stats.messageEndTime);
 
   write(output, channelMessageCountsSize);
   for (const auto& [channelId, messageCount] : stats.channelMessageCounts) {
@@ -1514,6 +1530,9 @@ Status McapReader::ParseChannel(const Record& record, Channel* channel) {
   // id
   channel->id = internal::ParseUint16(record.data);
   offset += 2;
+  // schema_id
+  channel->schemaId = internal::ParseUint16(record.data + offset);
+  offset += 2;
   // topic
   if (auto status =
         internal::ParseString(record.data + offset, record.dataSize - offset, &channel->topic);
@@ -1528,9 +1547,6 @@ Status McapReader::ParseChannel(const Record& record, Channel* channel) {
     return status;
   }
   offset += 4 + channel->messageEncoding.size();
-  // schema_id
-  channel->schemaId = internal::ParseUint16(record.data + offset);
-  offset += 2;
   // metadata
   if (auto status = internal::ParseKeyValueMap(record.data + offset, record.dataSize - offset,
                                                &channel->metadata);
@@ -1552,8 +1568,8 @@ Status McapReader::ParseMessage(const Record& record, Message* message) {
 
   message->channelId = internal::ParseUint16(record.data);
   message->sequence = internal::ParseUint32(record.data + 2);
-  message->publishTime = internal::ParseUint64(record.data + 2 + 4);
-  message->logTime = internal::ParseUint64(record.data + 2 + 4 + 8);
+  message->logTime = internal::ParseUint64(record.data + 2 + 4);
+  message->publishTime = internal::ParseUint64(record.data + 2 + 4 + 8);
   message->dataSize = record.dataSize - MessagePreambleSize;
   message->data = record.data + MessagePreambleSize;
   return StatusCode::Success;
@@ -1568,8 +1584,8 @@ Status McapReader::ParseChunk(const Record& record, Chunk* chunk) {
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  chunk->startTime = internal::ParseUint64(record.data);
-  chunk->endTime = internal::ParseUint64(record.data + 8);
+  chunk->messageStartTime = internal::ParseUint64(record.data);
+  chunk->messageEndTime = internal::ParseUint64(record.data + 8);
   chunk->uncompressedSize = internal::ParseUint64(record.data + 8 + 8);
   chunk->uncompressedCrc = internal::ParseUint32(record.data + 8 + 8 + 8);
 
@@ -1639,8 +1655,8 @@ Status McapReader::ParseChunkIndex(const Record& record, ChunkIndex* chunkIndex)
     return Status{StatusCode::InvalidRecord, msg};
   }
 
-  chunkIndex->startTime = internal::ParseUint64(record.data);
-  chunkIndex->endTime = internal::ParseUint64(record.data + 8);
+  chunkIndex->messageStartTime = internal::ParseUint64(record.data);
+  chunkIndex->messageEndTime = internal::ParseUint64(record.data + 8);
   chunkIndex->chunkStartOffset = internal::ParseUint64(record.data + 8 + 8);
   chunkIndex->chunkLength = internal::ParseUint64(record.data + 8 + 8 + 8);
   const uint32_t messageIndexOffsetsSize = internal::ParseUint32(record.data + 8 + 8 + 8 + 8);
@@ -1790,7 +1806,7 @@ Status McapReader::ParseAttachmentIndex(const Record& record, AttachmentIndex* a
 }
 
 Status McapReader::ParseStatistics(const Record& record, Statistics* statistics) {
-  constexpr uint64_t PreambleSize = 8 + 4 + 4 + 4 + 4 + 4;
+  constexpr uint64_t PreambleSize = 8 + 2 + 4 + 4 + 4 + 4 + 8 + 8 + 4;
 
   assert(record.opcode == OpCode::Statistics);
   if (record.dataSize < PreambleSize) {
@@ -1800,12 +1816,16 @@ Status McapReader::ParseStatistics(const Record& record, Statistics* statistics)
   }
 
   statistics->messageCount = internal::ParseUint64(record.data);
-  statistics->channelCount = internal::ParseUint32(record.data + 8);
-  statistics->attachmentCount = internal::ParseUint32(record.data + 8 + 4);
-  statistics->metadataCount = internal::ParseUint32(record.data + 8 + 4 + 4);
-  statistics->chunkCount = internal::ParseUint32(record.data + 8 + 4 + 4 + 4);
+  statistics->schemaCount = internal::ParseUint16(record.data + 8);
+  statistics->channelCount = internal::ParseUint32(record.data + 8 + 2);
+  statistics->attachmentCount = internal::ParseUint32(record.data + 8 + 2 + 4);
+  statistics->metadataCount = internal::ParseUint32(record.data + 8 + 2 + 4 + 4);
+  statistics->chunkCount = internal::ParseUint32(record.data + 8 + 2 + 4 + 4 + 4);
+  statistics->messageStartTime = internal::ParseUint64(record.data + 8 + 2 + 4 + 4 + 4 + 4);
+  statistics->messageEndTime = internal::ParseUint64(record.data + 8 + 2 + 4 + 4 + 4 + 4 + 8);
 
-  const uint32_t channelMessageCountsSize = internal::ParseUint32(record.data + 8 + 4 + 4 + 4 + 4);
+  const uint32_t channelMessageCountsSize =
+    internal::ParseUint32(record.data + 8 + 2 + 4 + 4 + 4 + 4 + 8 + 8);
   if (channelMessageCountsSize % 10 != 0 ||
       channelMessageCountsSize > record.dataSize - PreambleSize) {
     const auto msg = internal::StrFormat(

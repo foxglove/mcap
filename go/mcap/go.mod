@@ -6,6 +6,7 @@ require (
 	github.com/foxglove/mcap/go/libmcap v0.0.0-00010101000000-000000000000
 	github.com/foxglove/mcap/go/ros v0.0.0-00010101000000-000000000000
 	github.com/mattn/go-sqlite3 v1.14.11
+	github.com/olekukonko/tablewriter v0.0.5
 	github.com/spf13/cobra v1.3.0
 	github.com/spf13/viper v1.10.1
 )
@@ -17,6 +18,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/klauspost/compress v1.14.1 // indirect
 	github.com/magiconair/properties v1.8.5 // indirect
+	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mitchellh/mapstructure v1.4.3 // indirect
 	github.com/pelletier/go-toml v1.9.4 // indirect
 	github.com/pierrec/lz4/v4 v4.1.12 // indirect

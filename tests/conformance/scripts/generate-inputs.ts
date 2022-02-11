@@ -28,13 +28,17 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
 
   let messageCount = 0n;
   let channelCount = 0;
+  let schemaCount = 0;
   let attachmentCount = 0;
   let metadataCount = 0;
+  let messageStartTime: bigint | undefined;
+  let messageEndTime: bigint | undefined;
   const channelMessageCounts = new Map<number, bigint>();
 
   for (const record of records) {
     switch (record.type) {
       case "Schema":
+        schemaCount++;
         if (chunk) {
           chunk.addSchema(record);
         } else {
@@ -60,6 +64,12 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
           chunk.addMessage(record);
         } else {
           builder.writeMessage(record);
+        }
+        if (messageStartTime == undefined || record.logTime < messageStartTime) {
+          messageStartTime = record.logTime;
+        }
+        if (messageEndTime == undefined || record.logTime > messageEndTime) {
+          messageEndTime = record.logTime;
         }
         break;
 
@@ -94,8 +104,8 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
     const chunkStartOffset = BigInt(builder.length);
     const chunkLength = builder.writeChunk({
       compression: "",
-      startTime: chunk.startTime,
-      endTime: chunk.endTime,
+      messageStartTime: chunk.messageStartTime,
+      messageEndTime: chunk.messageEndTime,
       uncompressedCrc: 0,
       uncompressedSize: BigInt(chunk.buffer.byteLength),
       records: chunk.buffer,
@@ -110,8 +120,8 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
     }
     chunkIndexes.push({
       compression: "",
-      startTime: chunk.startTime,
-      endTime: chunk.endTime,
+      messageStartTime: chunk.messageStartTime,
+      messageEndTime: chunk.messageEndTime,
       uncompressedSize: BigInt(chunk.buffer.byteLength),
       compressedSize: BigInt(chunk.buffer.byteLength),
       chunkStartOffset,
@@ -150,9 +160,12 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
     builder.writeStatistics({
       messageCount,
       channelCount,
+      schemaCount,
       attachmentCount,
       metadataCount,
       chunkCount,
+      messageStartTime: messageStartTime ?? 0n,
+      messageEndTime: messageEndTime ?? 0n,
       channelMessageCounts,
     });
   }
