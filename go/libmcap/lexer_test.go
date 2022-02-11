@@ -121,7 +121,7 @@ func TestLexChunkedFile(t *testing.T) {
 						attachment(), attachment(),
 						footer(),
 					)
-					lexer, err := NewLexer(bytes.NewReader(file), &LexOpts{
+					lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
 						ValidateCRC: validateCRC,
 					})
 					assert.Nil(t, err)
@@ -180,7 +180,7 @@ func TestChunkCRCValidation(t *testing.T) {
 			attachment(), attachment(),
 			footer(),
 		)
-		lexer, err := NewLexer(bytes.NewReader(file), &LexOpts{
+		lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
 			ValidateCRC: true,
 		})
 		assert.Nil(t, err)
@@ -215,7 +215,7 @@ func TestChunkCRCValidation(t *testing.T) {
 			attachment(), attachment(),
 			footer(),
 		)
-		lexer, err := NewLexer(bytes.NewReader(file), &LexOpts{
+		lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
 			ValidateCRC: true,
 		})
 		assert.Nil(t, err)
@@ -255,7 +255,7 @@ func TestChunkEmission(t *testing.T) {
 						attachment(), attachment(),
 						footer(),
 					)
-					lexer, err := NewLexer(bytes.NewReader(file), &LexOpts{
+					lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
 						ValidateCRC: validateCRC,
 						EmitChunks:  true,
 					})
