@@ -656,8 +656,8 @@ uint64_t McapWriter::write(IWritable& output, const Attachment& attachment) {
   write(output, OpCode::Attachment);
   write(output, recordSize);
   write(output, attachment.name);
-  write(output, attachment.createdAt);
   write(output, attachment.logTime);
+  write(output, attachment.createTime);
   write(output, attachment.contentType);
   write(output, attachment.dataSize);
   write(output, attachment.data, attachment.dataSize);
@@ -749,6 +749,7 @@ uint64_t McapWriter::write(IWritable& output, const AttachmentIndex& index) {
   const uint64_t recordSize = /* offset */ 8 +
                               /* length */ 8 +
                               /* log_time */ 8 +
+                              /* create_time */ 8 +
                               /* data_size */ 8 +
                               /* name */ 4 + index.name.size() +
                               /* content_type */ 4 + index.contentType.size();
@@ -758,6 +759,7 @@ uint64_t McapWriter::write(IWritable& output, const AttachmentIndex& index) {
   write(output, index.offset);
   write(output, index.length);
   write(output, index.logTime);
+  write(output, index.createTime);
   write(output, index.dataSize);
   write(output, index.name);
   write(output, index.contentType);
@@ -1750,16 +1752,16 @@ Status McapReader::ParseAttachment(const Record& record, Attachment* attachment)
     return status;
   }
   offset += 4 + attachment->name.size();
-  // created_at
-  if (auto status = internal::ParseUint64(record.data + offset, record.dataSize - offset,
-                                          &attachment->createdAt);
+  // log_time
+  if (auto status =
+        internal::ParseUint64(record.data + offset, record.dataSize - offset, &attachment->logTime);
       !status.ok()) {
     return status;
   }
   offset += 8;
-  // log_time
-  if (auto status =
-        internal::ParseUint64(record.data + offset, record.dataSize - offset, &attachment->logTime);
+  // create_time
+  if (auto status = internal::ParseUint64(record.data + offset, record.dataSize - offset,
+                                          &attachment->createTime);
       !status.ok()) {
     return status;
   }
@@ -1797,7 +1799,7 @@ Status McapReader::ParseAttachment(const Record& record, Attachment* attachment)
 }
 
 Status McapReader::ParseAttachmentIndex(const Record& record, AttachmentIndex* attachmentIndex) {
-  constexpr uint64_t PreambleSize = 8 + 8 + 8 + 8 + 4;
+  constexpr uint64_t PreambleSize = 8 + 8 + 8 + 8 + 8 + 4;
 
   assert(record.opcode == OpCode::AttachmentIndex);
   if (record.dataSize < PreambleSize) {
@@ -1808,9 +1810,10 @@ Status McapReader::ParseAttachmentIndex(const Record& record, AttachmentIndex* a
   attachmentIndex->offset = internal::ParseUint64(record.data);
   attachmentIndex->length = internal::ParseUint64(record.data + 8);
   attachmentIndex->logTime = internal::ParseUint64(record.data + 8 + 8);
-  attachmentIndex->dataSize = internal::ParseUint64(record.data + 8 + 8 + 8);
+  attachmentIndex->createTime = internal::ParseUint64(record.data + 8 + 8 + 8);
+  attachmentIndex->dataSize = internal::ParseUint64(record.data + 8 + 8 + 8 + 8);
 
-  uint32_t offset = 8 + 8 + 8 + 8;
+  uint32_t offset = 8 + 8 + 8 + 8 + 8;
 
   // name
   if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,

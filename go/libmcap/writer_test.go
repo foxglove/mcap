@@ -246,6 +246,7 @@ func TestIndexStructures(t *testing.T) {
 	assert.Nil(t, w.WriteAttachment(&Attachment{
 		Name:        "file.jpg",
 		LogTime:     100,
+		CreateTime:  99,
 		ContentType: "image/jpeg",
 		Data:        []byte{0x01, 0x02, 0x03, 0x04},
 	}))
@@ -274,6 +275,7 @@ func TestIndexStructures(t *testing.T) {
 			Offset:      29,
 			Length:      67,
 			LogTime:     100,
+			CreateTime:  99,
 			DataSize:    4,
 			Name:        "file.jpg",
 			ContentType: "image/jpeg",

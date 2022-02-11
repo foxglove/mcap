@@ -161,8 +161,8 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder
       .uint64(0n) // placeholder
       .string(attachment.name)
-      .uint64(attachment.createdAt)
       .uint64(attachment.logTime)
+      .uint64(attachment.createTime)
       .string(attachment.contentType)
       .uint64(BigInt(attachment.data.byteLength))
       .bytes(attachment.data)
@@ -189,6 +189,7 @@ export class Mcap0RecordBuilder {
       .uint64(attachmentIndex.offset)
       .uint64(attachmentIndex.length)
       .uint64(attachmentIndex.logTime)
+      .uint64(attachmentIndex.createTime)
       .uint64(attachmentIndex.dataSize)
       .string(attachmentIndex.name)
       .string(attachmentIndex.contentType);

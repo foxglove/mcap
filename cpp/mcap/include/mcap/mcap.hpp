@@ -260,8 +260,8 @@ struct ChunkIndex {
  */
 struct Attachment {
   std::string name;
-  Timestamp createdAt;
   Timestamp logTime;
+  Timestamp createTime;
   std::string contentType;
   uint64_t dataSize;
   const std::byte* data = nullptr;
@@ -276,6 +276,7 @@ struct AttachmentIndex {
   ByteOffset offset;
   ByteOffset length;
   Timestamp logTime;
+  Timestamp createTime;
   uint64_t dataSize;
   std::string name;
   std::string contentType;
@@ -283,9 +284,15 @@ struct AttachmentIndex {
   AttachmentIndex() = default;
   AttachmentIndex(const Attachment& attachment, ByteOffset fileOffset)
       : offset(fileOffset)
-      , length(4 + attachment.name.size() + 8 + 8 + 4 + attachment.contentType.size() + 8 +
-               attachment.dataSize + 4)
+      , length(9 +
+               /* name */ 4 + attachment.name.size() +
+               /* log_time */ 8 +
+               /* create_time */ 8 +
+               /* content_type */ 4 + attachment.contentType.size() +
+               /* data */ 8 + attachment.dataSize +
+               /* crc */ 4)
       , logTime(attachment.logTime)
+      , createTime(attachment.createTime)
       , dataSize(attachment.dataSize)
       , name(attachment.name)
       , contentType(attachment.contentType) {}
