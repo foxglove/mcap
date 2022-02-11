@@ -104,16 +104,18 @@ std::string ToString(const mcap::ChunkIndex& chunkIndex) {
 
 std::string ToString(const mcap::Attachment& attachment) {
   return mcap::StrFormat(
-    "[Attachment] name={}, created_at={}, log_time={}, content_type={}, data=<{} bytes>, crc={}",
-    attachment.name, attachment.createdAt, attachment.logTime, attachment.contentType,
+    "[Attachment] name={}, log_time={}, create_time={}, content_type={}, data=<{} bytes>, crc={}",
+    attachment.name, attachment.logTime, attachment.createTime, attachment.contentType,
     attachment.dataSize, attachment.crc);
 }
 
 std::string ToString(const mcap::AttachmentIndex& attachmentIndex) {
   return mcap::StrFormat(
-    "[Attachment] offset={}, length={}, log_time={}, data_size={}, name={}, content_type={}",
+    "[AttachmentIndex] offset={}, length={}, log_time={}, create_time={}, data_size={}, name={}, "
+    "content_type={}",
     attachmentIndex.offset, attachmentIndex.length, attachmentIndex.logTime,
-    attachmentIndex.dataSize, attachmentIndex.name, attachmentIndex.contentType);
+    attachmentIndex.createTime, attachmentIndex.dataSize, attachmentIndex.name,
+    attachmentIndex.contentType);
 }
 
 std::string ToString(const mcap::Statistics& statistics) {

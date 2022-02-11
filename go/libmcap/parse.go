@@ -244,13 +244,13 @@ func ParseAttachment(buf []byte) (*Attachment, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read attachment name: %w", err)
 	}
-	createdAt, offset, err := getUint64(buf, offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read created at: %w", err)
-	}
 	logTime, offset, err := getUint64(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read record time: %w", err)
+	}
+	createTime, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read create time: %w", err)
 	}
 	contentType, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
@@ -268,8 +268,8 @@ func ParseAttachment(buf []byte) (*Attachment, error) {
 	}
 	return &Attachment{
 		Name:        name,
-		CreatedAt:   createdAt,
 		LogTime:     logTime,
+		CreateTime:  createTime,
 		ContentType: contentType,
 		Data:        data,
 		CRC:         crc,
@@ -289,6 +289,10 @@ func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read record time: %w", err)
 	}
+	createTime, offset, err := getUint64(buf, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read create time: %w", err)
+	}
 	dataSize, offset, err := getUint64(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read data size: %w", err)
@@ -305,6 +309,7 @@ func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
 		Offset:      attachmentOffset,
 		Length:      length,
 		LogTime:     logTime,
+		CreateTime:  createTime,
 		DataSize:    dataSize,
 		Name:        name,
 		ContentType: contentType,

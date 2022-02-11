@@ -335,6 +335,7 @@ export class Mcap0Writer {
       const offset = this.writable.position();
       this.attachmentIndices.push({
         logTime: attachment.logTime,
+        createTime: attachment.createTime,
         name: attachment.name,
         contentType: attachment.contentType,
         offset,
