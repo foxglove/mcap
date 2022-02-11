@@ -59,7 +59,6 @@ func (doctor *mcapDoctor) fatalf(format string, v ...interface{}) {
 }
 
 func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
-
 	compressionFormat := libmcap.CompressionFormat(chunk.Compression)
 	var uncompressedBytes []byte
 
@@ -145,7 +144,8 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 
 			var schemaEncoding = schema.Encoding
 			var isCustomSchemaEncoding = strings.HasPrefix(schemaEncoding, "x-")
-			if len(schemaEncoding) > 0 && schemaEncoding != string(SchemaEncodingProto) && schemaEncoding != string(SchemaEncodingRos1Msg) && !isCustomSchemaEncoding {
+			if len(schemaEncoding) > 0 && schemaEncoding != string(SchemaEncodingProto) &&
+				schemaEncoding != string(SchemaEncodingRos1Msg) && !isCustomSchemaEncoding {
 				doctor.error("Schema.encoding field is not valid: %s. Only a well-known schemas are allowed. Other schemas must use x- prefix", schemaEncoding)
 			}
 
@@ -166,7 +166,8 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 
 			var msgEncoding = channel.MessageEncoding
 			var isCustomMessageEncoding = strings.HasPrefix(msgEncoding, "x-")
-			if len(msgEncoding) > 0 && msgEncoding != string(MessageEncodingProto) && msgEncoding != string(MessageEncodingRos1) && !isCustomMessageEncoding {
+			if len(msgEncoding) > 0 && msgEncoding != string(MessageEncodingProto) &&
+				msgEncoding != string(MessageEncodingRos1) && !isCustomMessageEncoding {
 				doctor.error("Channel.messageEncoding field is not valid: %s. Only a well-known encodings are allowed. Other encodings must use x- prefix", msgEncoding)
 			}
 
@@ -258,7 +259,8 @@ func (doctor *mcapDoctor) Examine() {
 
 			var schemaEncoding = schema.Encoding
 			var isCustomSchemaEncoding = strings.HasPrefix(schemaEncoding, "x-")
-			if len(schemaEncoding) > 0 && schemaEncoding != string(SchemaEncodingProto) && schemaEncoding != string(SchemaEncodingRos1Msg) && !isCustomSchemaEncoding {
+			if len(schemaEncoding) > 0 && schemaEncoding != string(SchemaEncodingProto) &&
+				schemaEncoding != string(SchemaEncodingRos1Msg) && !isCustomSchemaEncoding {
 				doctor.error("Schema.encoding field is not valid: %s. Only a well-known schemas are allowed. Other schemas must use x- prefix", schemaEncoding)
 			}
 
