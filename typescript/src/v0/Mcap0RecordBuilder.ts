@@ -249,8 +249,7 @@ export class Mcap0RecordBuilder {
       .uint64(chunkIndex.messageIndexLength)
       .string(chunkIndex.compression)
       .uint64(chunkIndex.compressedSize)
-      .uint64(chunkIndex.uncompressedSize)
-      .uint32(0);
+      .uint64(chunkIndex.uncompressedSize);
     if (this.options?.padRecords === true) {
       this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
     }
