@@ -53,7 +53,7 @@
     {
       "type": "ChunkIndex",
       "fields": [
-        ["chunk_length", "162"],
+        ["chunk_length", "164"],
         ["chunk_start_offset", "28"],
         ["compressed_size", "115"],
         ["compression", ""],

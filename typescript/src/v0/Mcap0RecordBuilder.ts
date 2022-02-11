@@ -226,7 +226,7 @@ export class Mcap0RecordBuilder {
       .uint64(BigInt(endPosition - startPosition - 8))
       .seek(endPosition);
 
-    return BigInt(endPosition - startPosition - 1);
+    return BigInt(endPosition - startPosition + 1);
   }
 
   writeChunkIndex(chunkIndex: ChunkIndex): bigint {
