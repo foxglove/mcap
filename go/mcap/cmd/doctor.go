@@ -42,52 +42,6 @@ func (doctor *mcapDoctor) fatalf(format string, v ...interface{}) {
 	os.Exit(1)
 }
 
-/*
-func (doctor *mcapDoctor) consumeMagic() {
-	magicBytes := make([]byte, len(libmcap.Magic))
-
-	bytesRead, err := io.ReadFull(doctor.reader, magicBytes)
-	if err != nil {
-		doctor.fatal(err)
-	}
-	if bytesRead != len(libmcap.Magic) {
-		doctor.fatal("Initial MAGIC bytes missing")
-	}
-	if !bytes.Equal(magicBytes, libmcap.Magic) {
-		doctor.fatal("Invalid MAGIC")
-	}
-}
-*/
-
-/*
-func (doctor *mcapDoctor) nextRecord() *RawRecord {
-	bytesRead, err := doctor.reader.Read(doctor.opcodeAndLength)
-	if err != nil {
-		doctor.fatal(err)
-	}
-	if bytesRead != 9 {
-		doctor.fatal("No more bytes to read. Expecting Record Opcode byte and Record Length.")
-	}
-
-	opcode := libmcap.OpCode(doctor.opcodeAndLength[0])
-	recordLen := binary.LittleEndian.Uint64(doctor.opcodeAndLength[1:9])
-
-	recordBytes := make([]byte, recordLen)
-	bytesRead, err = doctor.reader.Read(recordBytes)
-	if err != nil {
-		doctor.fatal(err)
-	}
-	if uint64(bytesRead) != recordLen {
-		doctor.fatalf("Could not read record payload. Wanted %d bytes, got %d.")
-	}
-
-	return &RawRecord{
-		OpCode: opcode,
-		Bytes:  recordBytes,
-	}
-}
-*/
-
 func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 	if chunk.Compression != "lz4" && chunk.Compression != "zstd" && chunk.Compression != "" {
 		doctor.error("Unsupported compression format: %s", chunk.Compression)
@@ -348,66 +302,6 @@ func (doctor *mcapDoctor) Examine() {
 			doctor.fatalf("Failed to parse:", err)
 		}
 	}
-
-	/*
-		doctor.consumeMagic()
-
-		var previousOpcode *libmcap.OpCode = nil
-		for {
-			var rawRecord = doctor.nextRecord()
-
-			if previousOpcode == nil && rawRecord.OpCode != libmcap.OpHeader {
-				doctor.error("First record MUST be a header")
-			}
-
-			// fixme - if there's another rawRecord and previousOpcode is footer we've got stuff after the footer
-
-			switch rawRecord.OpCode {
-			case libmcap.OpHeader:
-
-			case libmcap.OpChannel:
-
-			case libmcap.OpMessage:
-
-			case libmcap.OpChunk:
-				chunk, err := libmcap.ParseChunk(rawRecord.Bytes)
-				if err != nil {
-					doctor.error("Error parsing Message: %s", err)
-				}
-
-				doctor.examineChunk(chunk)
-
-			case libmcap.OpMessageIndex:
-				if previousOpcode == nil || (*previousOpcode != libmcap.OpChunk && *previousOpcode != libmcap.OpMessageIndex) {
-					doctor.error("MessageIndex records can only follow Chunk records or other Message Index records")
-				}
-				// validate message index points to valid locations
-
-			case libmcap.OpChunkIndex:
-				// error if values point to invalid locations
-
-			case libmcap.OpSummaryOffset:
-				// error if opcode is invalid
-				// error if values point to invalid locations
-
-			case libmcap.OpAttachment:
-
-			case libmcap.OpMetadata:
-
-			case libmcap.OpMetadataIndex:
-
-			case libmcap.OpFooter:
-				// error if values point to invalid locations
-
-			default:
-				doctor.error("Unknown record: %d", rawRecord.OpCode)
-			}
-
-			previousOpcode = &rawRecord.OpCode
-		}
-
-		doctor.consumeMagic()
-	*/
 }
 
 func NewMcapDoctor(reader io.Reader) *mcapDoctor {
