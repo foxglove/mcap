@@ -224,7 +224,7 @@ A Chunk Index record exists for every Chunk in the file.
 | 8 | message_start_time | Timestamp | Earliest message log_time in the chunk. Zero if the chunk has no messages. |
 | 8 | message_end_time | Timestamp | Latest message log_time in the chunk. Zero if the chunk has no messages. |
 | 8 | chunk_start_offset | uint64 | Offset to the chunk record from the start of the file. |
-| 8 | chunk_length | uint64 | The byte length of the chunk record. |
+| 8 | chunk_length | uint64 | Byte length of the chunk record, including opcode and length prefix. |
 | 4 + N | message_index_offsets | Map<uint16, uint64> | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. An empty map indicates no message indexing is available. |
 | 8 | message_index_length | uint64 | Total length in bytes of the message index records after the chunk. |
 | 4 + N | compression | String | The compression used within the chunk. Refer to [well-known compression formats formats][compression formats]. This field should match the the value in the corresponding Chunk record. |
@@ -257,7 +257,7 @@ An Attachment Index record contains the location of an attachment in the file. A
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 8 | offset | uint64 | Byte offset from the start of the file to the attachment record. |
-| 8 | length | uint64 | Byte length of the record. |
+| 8 | length | uint64 | Byte length of the attachment record, including opcode and length prefix. |
 | 8 | log_time | Timestamp | Time at which the attachment was recorded. |
 | 8 | create_time | Timestamp | Time at which the attachment was created. If not available, must be set to zero. |
 | 8 | data_size | uint64 | Size of the attachment data. |
@@ -300,7 +300,7 @@ A metadata index record contains the location of a metadata record within the fi
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 8 | offset | uint64 | Byte offset from the start of the file to the metadata record. |
-| 8 | length | uint64 | Total byte length of the record. |
+| 8 | length | uint64 | Total byte length of the record, including opcode and length prefix. |
 | 4 + N | name | String | Name of the metadata record. |
 
 ### Summary Offset (op=0x0E)
