@@ -28,7 +28,7 @@ export class Mcap0IndexedWriter {
   private recordWriter = new Mcap0RecordBuilder();
   private channels = new Map<number, Channel>();
   private writtenChannelIds = new Set<number>();
-  private chunkBuilder: ChunkBuilder = new ChunkBuilder();
+  private chunkBuilder: ChunkBuilder = new ChunkBuilder({});
 
   // indices
   private chunkIndices: ChunkIndex[] = [];
