@@ -2,6 +2,8 @@
 
 ## Example writer
 
+<!-- cspell: disable -->
+
 ```cpp
 #include <mcap/mcap.hpp>
 
@@ -60,6 +62,8 @@ int main() {
   writer.close();
 }
 ```
+
+<!-- cspell: enable -->
 
 ## Building
 
