@@ -73,5 +73,6 @@ overrides:
 
   - filename: "**/*.py"
     words:
+      - klass
       - rglob
       - uncompress
