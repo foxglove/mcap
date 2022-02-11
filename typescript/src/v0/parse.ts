@@ -238,9 +238,9 @@ export function parseRecord({
       return { record, usedBytes: recordEndOffset - startOffset };
     }
     case Opcode.ATTACHMENT: {
-      const name = reader.string();
       const logTime = reader.uint64();
       const createTime = reader.uint64();
+      const name = reader.string();
       const contentType = reader.string();
       const dataLen = reader.uint64();
       if (BigInt(recordView.byteOffset + reader.offset) + dataLen > Number.MAX_SAFE_INTEGER) {
@@ -269,9 +269,9 @@ export function parseRecord({
 
       const record: TypedMcapRecord = {
         type: "Attachment",
-        name,
         logTime,
         createTime,
+        name,
         contentType,
         data,
       };

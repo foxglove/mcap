@@ -299,9 +299,9 @@ describe("Mcap0StreamReader", () => {
         ...record(
           Opcode.ATTACHMENT,
           crcSuffix([
-            ...string("myFile"), // name
             ...uint64LE(2n), // log time
             ...uint64LE(1n), // create time
+            ...string("myFile"), // name
             ...string("text/plain"), // content type
             ...uint64LE(3n), // data length
             10,
@@ -521,9 +521,9 @@ describe("Mcap0StreamReader", () => {
         ...record(
           Opcode.ATTACHMENT,
           crcSuffix([
-            ...string("myFile"), // name
             ...uint64LE(2n), // log time
             ...uint64LE(1n), // create time
+            ...string("myFile"), // name
             ...string("text/plain"), // content type
             ...uint64PrefixedBytes(new TextEncoder().encode("hello")), // data
           ]),
