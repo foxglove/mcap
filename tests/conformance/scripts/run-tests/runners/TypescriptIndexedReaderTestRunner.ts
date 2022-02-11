@@ -5,7 +5,7 @@ import { TestFeatures, TestVariant } from "variants/types";
 import { ReadTestRunner } from "./TestRunner";
 import { stringifyRecords } from "./stringifyRecords";
 
-export default class TypescriptIndexedTestRunner extends ReadTestRunner {
+export default class TypescriptIndexedReaderTestRunner extends ReadTestRunner {
   name = "ts-indexed-reader";
 
   async runReadTest(filePath: string, variant: TestVariant): Promise<string> {
