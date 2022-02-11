@@ -203,9 +203,9 @@ type Channel struct {
 }
 
 type Attachment struct {
-	Name        string
 	LogTime     uint64
 	CreateTime  uint64
+	Name        string
 	ContentType string
 	Data        []byte
 	CRC         uint32
