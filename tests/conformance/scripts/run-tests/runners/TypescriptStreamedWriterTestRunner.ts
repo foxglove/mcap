@@ -1,22 +1,19 @@
 import fs from "fs/promises";
 import { TestVariant } from "variants/types";
 
-import ITestRunner from "./ITestRunner";
+import { WriteTestRunner } from "./TestRunner";
 
-export default class TypescriptStreamedWriterTestRunner implements ITestRunner {
+export default class TypescriptStreamedWriterTestRunner extends WriteTestRunner {
   name = "ts-streamed-writer";
-  mode = "write" as const;
 
   supportsVariant(_variant: TestVariant): boolean {
     return true;
   }
 
-  async run(filePath: string, _variant: TestVariant): Promise<string> {
+  async runWriteTest(filePath: string, _variant: TestVariant): Promise<Uint8Array> {
     // Passthrough test for now.
     const mcapPath = filePath.replace(/\.[^.]+$/, ".mcap");
     const bytes = await fs.readFile(mcapPath);
-    return Array.from(bytes)
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+    return bytes as Uint8Array;
   }
 }
