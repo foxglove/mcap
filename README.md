@@ -1,11 +1,11 @@
-# Mcap file format ![](https://img.shields.io/badge/alpha-orange)
+# MCAP file format ![](https://img.shields.io/badge/alpha-orange)
 
-Mcap is a modular container format for recording pub/sub messages with arbitrary message serialization.
-It is primarily intended for use in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
+MCAP is a modular container format for recording pub/sub messages with arbitrary message serialization. It is primarily intended for use in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
 
 ## Documentation
 
 - [File format specification](./docs/specification)
+- [Motivation](./docs/motivation/evaluation-of-robotics-data-recording-file-formats.md)
 
 ## Developer quick start
 
@@ -18,7 +18,7 @@ yarn workspace @foxglove/mcap lint
 yarn workspace @foxglove/mcap test
 ```
 
-Read and validate an mcap file:
+Read and validate an MCAP file:
 
 ```
 yarn workspace @foxglove/mcap validate file.mcap
