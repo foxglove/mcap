@@ -31,6 +31,11 @@
       ]
     },
     {
+      "type": "MessageIndex",
+      "fields": [["channel_id", "1"], ["records", [["2", "81"]]]]
+    },
+    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
+    {
       "type": "Channel",
       "fields": [
         ["id", "1"],
@@ -52,20 +57,6 @@
         ["message_start_time", "2"],
         ["metadata_count", "0"],
         ["schema_count", "1"]
-      ]
-    },
-    {
-      "type": "ChunkIndex",
-      "fields": [
-        ["chunk_length", "162"],
-        ["chunk_start_offset", "25"],
-        ["compressed_size", "115"],
-        ["compression", ""],
-        ["message_end_time", "2"],
-        ["message_index_length", "31"],
-        ["message_index_offsets", {"1": "189"}],
-        ["message_start_time", "2"],
-        ["uncompressed_size", "115"]
       ]
     },
     {

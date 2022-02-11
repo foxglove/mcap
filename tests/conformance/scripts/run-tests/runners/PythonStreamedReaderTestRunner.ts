@@ -5,8 +5,8 @@ import { TestVariant } from "variants/types";
 import { ITestRunner } from ".";
 
 export default class PythonStreamedReaderTestRunner implements ITestRunner {
-  name = "py-streamed-reader";
-  mode = "read" as const;
+  readonly name = "py-streamed-reader";
+  readonly mode = "read";
 
   async run(filePath: string): Promise<string> {
     const { stdout } = await promisify(exec)(`python3 tests/run_reader_test.py ${filePath}`, {

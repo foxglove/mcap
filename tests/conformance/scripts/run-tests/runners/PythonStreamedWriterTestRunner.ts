@@ -5,8 +5,8 @@ import { TestVariant } from "variants/types";
 import { ITestRunner } from ".";
 
 export default class PythonStreamedWriterTestRunner implements ITestRunner {
-  name = "py-streamed-writer";
-  mode = "write" as const;
+  readonly name = "py-streamed-writer";
+  readonly mode = "write";
 
   async run(filePath: string): Promise<string> {
     const { stdout } = await promisify(exec)(`python3 tests/run_writer_test.py ${filePath}`, {

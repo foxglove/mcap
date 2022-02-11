@@ -6,8 +6,8 @@ import { TestVariant } from "variants/types";
 import { ITestRunner } from ".";
 
 export default class GoStreamedTestRunner implements ITestRunner {
-  name = "go-streamed-reader";
-  mode = "read" as const;
+  readonly name = "go-streamed-reader";
+  readonly mode = "read";
 
   async run(filePath: string): Promise<string> {
     const { stdout } = await promisify(exec)(`./check-conformance ${filePath}`, {

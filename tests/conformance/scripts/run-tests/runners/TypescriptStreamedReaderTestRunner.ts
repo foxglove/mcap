@@ -6,8 +6,8 @@ import ITestRunner from "./ITestRunner";
 import { stringifyRecords } from "./stringifyRecords";
 
 export default class TypescriptStreamedReaderTestRunner implements ITestRunner {
-  name = "ts-streamed-reader";
-  mode = "read" as const;
+  readonly name = "ts-streamed-reader";
+  readonly mode = "read";
 
   supportsVariant(_variant: TestVariant): boolean {
     return true;
@@ -19,9 +19,6 @@ export default class TypescriptStreamedReaderTestRunner implements ITestRunner {
     reader.append(await fs.readFile(filePath));
     let record;
     while ((record = reader.nextRecord())) {
-      if (record.type === "MessageIndex") {
-        continue;
-      }
       result.push(record);
     }
     if (!reader.done()) {

@@ -67,6 +67,8 @@ export default function* generateTestVariants(): Generator<TestVariant, void, vo
         continue;
       }
 
+      //FIXME: filter out message index without chunk
+
       const name = [input.baseName, ...Array.from(features).sort()].join("-");
 
       yield { ...input, name, features };

@@ -31,6 +31,11 @@
       ]
     },
     {
+      "type": "MessageIndex",
+      "fields": [["channel_id", "1"], ["records", [["2", "81"]]]]
+    },
+    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
+    {
       "type": "Channel",
       "fields": [
         ["id", "1"],
@@ -38,20 +43,6 @@
         ["metadata", {"foo": "bar"}],
         ["schema_id", "1"],
         ["topic", "example"]
-      ]
-    },
-    {
-      "type": "ChunkIndex",
-      "fields": [
-        ["chunk_length", "162"],
-        ["chunk_start_offset", "28"],
-        ["compressed_size", "115"],
-        ["compression", ""],
-        ["message_end_time", "2"],
-        ["message_index_length", "34"],
-        ["message_index_offsets", {"1": "192"}],
-        ["message_start_time", "2"],
-        ["uncompressed_size", "115"]
       ]
     },
     {
@@ -63,18 +54,10 @@
       ]
     },
     {
-      "type": "SummaryOffset",
-      "fields": [
-        ["group_length", "90"],
-        ["group_opcode", "8"],
-        ["group_start", "292"]
-      ]
-    },
-    {
       "type": "Footer",
       "fields": [
         ["summary_crc", "0"],
-        ["summary_offset_start", "382"],
+        ["summary_offset_start", "292"],
         ["summary_start", "242"]
       ]
     }

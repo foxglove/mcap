@@ -5,9 +5,9 @@ import { TestFeatures, TestVariant } from "variants/types";
 import ITestRunner from "./ITestRunner";
 import { stringifyRecords } from "./stringifyRecords";
 
-export default class TypescriptIndexedTestRunner implements ITestRunner {
-  name = "ts-indexed";
-  mode = "read" as const;
+export default class TypescriptIndexedReaderTestRunner implements ITestRunner {
+  readonly name = "ts-indexed";
+  readonly mode = "read";
 
   async run(filePath: string, variant: TestVariant): Promise<string> {
     const handle = await fs.open(filePath, "r");

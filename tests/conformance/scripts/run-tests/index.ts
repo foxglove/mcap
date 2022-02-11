@@ -1,9 +1,11 @@
+import { Mcap0StreamReader, Mcap0Types } from "@foxglove/mcap";
 import colors from "colors";
 import { program } from "commander";
 import * as Diff from "diff";
 import fs from "fs/promises";
 import stringify from "json-stringify-pretty-compact";
 import path from "path";
+import { stringifyRecords } from "scripts/run-tests/runners/stringifyRecords";
 import generateTestVariants from "variants/generateTestVariants";
 
 import runners, { ITestRunner } from "./runners";
@@ -20,7 +22,7 @@ function normalizeJson(json: string): string {
   const data = JSON.parse(json);
   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   delete data.meta;
-  return stringify(data);
+  return stringify(data) + "\n";
 }
 
 function bytesToHex(bytes: Uint8Array): string {
@@ -123,8 +125,10 @@ async function runWriterTest(
       hadError = true;
       continue;
     }
+
     const expectedOutputPath = filePath.replace(/\.json$/, ".mcap");
-    const expectedOutput = await fs.readFile(expectedOutputPath).catch(() => undefined);
+    const expectedOutputJson = await fs.readFile(filePath, { encoding: "utf-8" });
+    const expectedOutput = await fs.readFile(expectedOutputPath);
     if (expectedOutput == undefined) {
       console.error(`Error: missing expected output file ${expectedOutputPath}`);
       hadError = true;
@@ -133,6 +137,27 @@ async function runWriterTest(
     const expectedOutputHex = bytesToHex(expectedOutput as Uint8Array);
     if (output !== expectedOutputHex) {
       console.error(colors.red("fail       "), filePath);
+      // If the file produced was valid parsable MCAP, we can re-stringify it and display a JSON diff.
+      try {
+        const reader = new Mcap0StreamReader({ validateCrcs: true });
+        reader.append(Buffer.from(output, "hex"));
+        let record;
+        const records: Mcap0Types.TypedMcapRecord[] = [];
+        while ((record = reader.nextRecord())) {
+          records.push(record);
+        }
+
+        const actualOutputJson = stringifyRecords(records, variant);
+        const outputNorm = normalizeJson(actualOutputJson);
+        const expectedNorm = normalizeJson(expectedOutputJson);
+        if (outputNorm !== expectedNorm) {
+          console.error(Diff.createPatch(filePath, expectedNorm, outputNorm));
+        }
+      } catch (err) {
+        console.error("invalid mcap:", err);
+      }
+
+      // Display a diff of the raw bytes.
       let colorDiff = "";
       const charDiff = Diff.diffChars(expectedOutputHex, output);
       charDiff.forEach((part) => {
@@ -141,7 +166,9 @@ async function runWriterTest(
         colorDiff += color(part.value);
       });
       console.error(splitAnsiString(splitAnsiString(colorDiff, 8, " "), 81, "\n"));
+
       console.error();
+
       hadError = true;
       continue;
     }

@@ -30,6 +30,7 @@
         ["sequence", "10"]
       ]
     },
+    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
     {
       "type": "Schema",
       "fields": [
@@ -37,20 +38,6 @@
         ["encoding", "c"],
         ["id", "1"],
         ["name", "Example"]
-      ]
-    },
-    {
-      "type": "ChunkIndex",
-      "fields": [
-        ["chunk_length", "162"],
-        ["chunk_start_offset", "28"],
-        ["compressed_size", "115"],
-        ["compression", ""],
-        ["message_end_time", "2"],
-        ["message_index_length", "0"],
-        ["message_index_offsets", {}],
-        ["message_start_time", "2"],
-        ["uncompressed_size", "115"]
       ]
     },
     {
@@ -62,18 +49,10 @@
       ]
     },
     {
-      "type": "SummaryOffset",
-      "fields": [
-        ["group_length", "80"],
-        ["group_opcode", "8"],
-        ["group_start", "245"]
-      ]
-    },
-    {
       "type": "Footer",
       "fields": [
         ["summary_crc", "0"],
-        ["summary_offset_start", "325"],
+        ["summary_offset_start", "245"],
         ["summary_start", "208"]
       ]
     }
