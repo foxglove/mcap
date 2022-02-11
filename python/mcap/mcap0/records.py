@@ -13,17 +13,17 @@ class McapRecord:
 
 @dataclass
 class Attachment(McapRecord):
-    name: str
     create_time: int
     log_time: int
+    name: str
     content_type: str
     data: bytes
 
     def write(self, stream: WriteDataStream):
         stream.start_record(Opcode.ATTACHMENT)
-        stream.write_prefixed_string(self.name)
         stream.write8(self.log_time)
         stream.write8(self.create_time)
+        stream.write_prefixed_string(self.name)
         stream.write_prefixed_string(self.content_type)
         stream.write8(len(self.data))
         stream.write(self.data)
@@ -32,17 +32,17 @@ class Attachment(McapRecord):
 
     @staticmethod
     def read(stream: ReadDataStream):
-        name = stream.read_prefixed_string()
         log_time = stream.read8()
         create_time = stream.read8()
+        name = stream.read_prefixed_string()
         content_type = stream.read_prefixed_string()
         data_length = stream.read8()
         data = stream.read(data_length)
         _crc = stream.read4()
         return Attachment(
-            name=name,
             create_time=create_time,
             log_time=log_time,
+            name=name,
             content_type=content_type,
             data=data,
         )
