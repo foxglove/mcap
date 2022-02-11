@@ -55,20 +55,6 @@
       ]
     },
     {
-      "type": "ChunkIndex",
-      "fields": [
-        ["chunk_length", "162"],
-        ["chunk_start_offset", "25"],
-        ["compressed_size", "115"],
-        ["compression", ""],
-        ["message_end_time", "2"],
-        ["message_index_length", "31"],
-        ["message_index_offsets", {"1": "189"}],
-        ["message_start_time", "2"],
-        ["uncompressed_size", "115"]
-      ]
-    },
-    {
       "type": "Footer",
       "fields": [
         ["summary_crc", "0"],

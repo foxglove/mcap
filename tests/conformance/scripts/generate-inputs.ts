@@ -19,7 +19,9 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
   builder.writeMagic();
   builder.writeHeader({ profile: "", library: "" });
 
-  const chunk = features.has(TestFeatures.UseChunks) ? new Mcap0ChunkBuilder() : undefined;
+  const chunk = features.has(TestFeatures.UseChunks)
+    ? new Mcap0ChunkBuilder({ useMessageIndex: features.has(TestFeatures.UseMessageIndex) })
+    : undefined;
   const chunkCount = chunk ? 1 : 0;
 
   const metadataIndexes: MetadataIndex[] = [];
@@ -112,23 +114,23 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
     });
     const messageIndexOffsets = new Map<number, bigint>();
     let messageIndexLength = 0n;
-    if (features.has(TestFeatures.UseMessageIndex)) {
-      for (const index of chunk.indices) {
-        messageIndexOffsets.set(index.channelId, BigInt(builder.length));
-        messageIndexLength += builder.writeMessageIndex(index);
-      }
+    for (const index of chunk.indices) {
+      messageIndexOffsets.set(index.channelId, BigInt(builder.length));
+      messageIndexLength += builder.writeMessageIndex(index);
     }
-    chunkIndexes.push({
-      compression: "",
-      messageStartTime: chunk.messageStartTime,
-      messageEndTime: chunk.messageEndTime,
-      uncompressedSize: BigInt(chunk.buffer.byteLength),
-      compressedSize: BigInt(chunk.buffer.byteLength),
-      chunkStartOffset,
-      chunkLength,
-      messageIndexLength,
-      messageIndexOffsets,
-    });
+    if (features.has(TestFeatures.UseChunkIndex)) {
+      chunkIndexes.push({
+        compression: "",
+        messageStartTime: chunk.messageStartTime,
+        messageEndTime: chunk.messageEndTime,
+        uncompressedSize: BigInt(chunk.buffer.byteLength),
+        compressedSize: BigInt(chunk.buffer.byteLength),
+        chunkStartOffset,
+        chunkLength,
+        messageIndexLength,
+        messageIndexOffsets,
+      });
+    }
   }
 
   builder.writeDataEnd({ dataSectionCrc: 0 });

@@ -55,20 +55,6 @@
       ]
     },
     {
-      "type": "ChunkIndex",
-      "fields": [
-        ["chunk_length", "162"],
-        ["chunk_start_offset", "28"],
-        ["compressed_size", "115"],
-        ["compression", ""],
-        ["message_end_time", "2"],
-        ["message_index_length", "0"],
-        ["message_index_offsets", {}],
-        ["message_start_time", "2"],
-        ["uncompressed_size", "115"]
-      ]
-    },
-    {
       "type": "SummaryOffset",
       "fields": [
         ["group_length", "37"],
@@ -85,18 +71,10 @@
       ]
     },
     {
-      "type": "SummaryOffset",
-      "fields": [
-        ["group_length", "80"],
-        ["group_opcode", "8"],
-        ["group_start", "313"]
-      ]
-    },
-    {
       "type": "Footer",
       "fields": [
         ["summary_crc", "0"],
-        ["summary_offset_start", "393"],
+        ["summary_offset_start", "313"],
         ["summary_start", "208"]
       ]
     }
