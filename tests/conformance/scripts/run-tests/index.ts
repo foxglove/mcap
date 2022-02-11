@@ -4,6 +4,7 @@ import * as Diff from "diff";
 import fs from "fs/promises";
 import stringify from "json-stringify-pretty-compact";
 import path from "path";
+import { splitMcapRecords } from "util/splitMcapRecords";
 import generateTestVariants from "variants/generateTestVariants";
 
 import runners from "./runners";
@@ -22,24 +23,6 @@ function normalizeJson(json: string): string {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   delete data.meta;
   return stringify(data);
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function splitAnsiString(s: string, length: number, replace: string): string {
-  const regex = RegExp(String.raw`(?:(?:\033\[[0-9;]*m)*.?){1,${length}}`, "g");
-  const chunks = s.match(regex);
-  const arr: string[] = [];
-  (chunks ?? []).forEach((a) => {
-    if (!/^(?:\033\[[0-9;]*m)*$/.test(a)) {
-      arr.push(a);
-    }
-  });
-  return arr.join(replace);
 }
 
 async function runReaderTest(
@@ -132,19 +115,12 @@ async function runWriterTest(
       hadError = true;
       continue;
     }
-    const outputHex = bytesToHex(output);
-    const expectedOutputHex = bytesToHex(expectedOutput as Uint8Array);
-    if (outputHex !== expectedOutputHex) {
+    const outputParts = splitMcapRecords(output).join("\n") + "\n";
+    const expectedParts = splitMcapRecords(expectedOutput).join("\n") + "\n";
+    if (expectedParts !== outputParts) {
+      const diff = Diff.createPatch("", expectedParts, outputParts);
       console.error(colors.red("fail       "), filePath);
-      let colorDiff = "";
-      const charDiff = Diff.diffChars(expectedOutputHex, outputHex);
-      charDiff.forEach((part) => {
-        const color =
-          part.added === true ? colors.green : part.removed === true ? colors.red : colors.grey;
-        colorDiff += color(part.value);
-      });
-      console.error(splitAnsiString(splitAnsiString(colorDiff, 8, " "), 90, "\n"));
-      console.error();
+      console.error(diff);
       hadError = true;
       continue;
     }
