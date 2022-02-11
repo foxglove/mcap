@@ -34,6 +34,7 @@ words:
   - unindexed
   - velodyne
   - zstd
+  - Zstandard
 
 overrides:
   - filename: "**/*.go"
