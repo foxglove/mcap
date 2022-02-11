@@ -67,10 +67,11 @@ class WriteDataStream:
         self.__buffer = BytesIO()
 
     def finish_record(self):
-        data = self.__buffer.read()
+        data = self.__buffer.getvalue()
         self.__stream.write(struct.pack("<B", self.__current_opcode))
         self.__stream.write(struct.pack("<Q", len(data)))
         self.__stream.write(data)
+        self.__count += 9  # For opcode + length
 
     def write(self, data: bytes):
         self.__buffer.write(data)
@@ -80,6 +81,11 @@ class WriteDataStream:
         bytes = struct.pack("<8B", 137, 77, 67, 65, 80, 48, 13, 10)
         self.__stream.write(bytes)
         self.__count += len(bytes)
+
+    def write_prefixed_string(self, value: str):
+        bytes = value.encode()
+        self.write4(len(bytes))
+        self.write(bytes)
 
     def write1(self, value: int):
         self.write(struct.pack("<B", value))
@@ -92,8 +98,3 @@ class WriteDataStream:
 
     def write8(self, value: int):
         self.write(struct.pack("<Q", value))
-
-    def write_prefixed_string(self, value: str):
-        bytes = value.encode()
-        self.__stream.write(struct.pack("<I", len(bytes)))
-        self.__stream.write(bytes)
