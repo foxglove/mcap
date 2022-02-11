@@ -141,6 +141,7 @@ export default class TypescriptWriterTestRunner implements ITestRunner {
     };
     const writer = new Mcap0Writer({
       writable,
+      startChannelId: 1,
       useStatistics: variant.features.has(TestFeatures.UseStatistics),
       useSummaryOffsets: variant.features.has(TestFeatures.UseSummaryOffset),
       useChunks: variant.features.has(TestFeatures.UseChunks),

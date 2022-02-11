@@ -28,6 +28,7 @@ type Mcap0WriterOptions = {
   useMetadataIndex?: boolean;
   useMessageIndex?: boolean;
   useChunkIndex?: boolean;
+  startChannelId?: number;
 };
 
 /**
@@ -38,8 +39,8 @@ type Mcap0WriterOptions = {
  * MCAP file.
  */
 export class Mcap0Writer {
-  private static MIN_CHANNEL_ID = 1; //FIXME- only for conformance tests
-  private static MIN_SCHEMA_ID = 1;
+  private nextChannelId = 0;
+  private nextSchemaId = 1;
   private writable: IWritable;
   private recordWriter = new Mcap0RecordBuilder();
   private schemas = new Map<number, Schema>();
@@ -58,18 +59,21 @@ export class Mcap0Writer {
   private attachmentIndices: AttachmentIndex[] | undefined;
   private metadataIndices: MetadataIndex[] | undefined;
 
-  constructor({
-    writable,
-    useStatistics = true,
-    useSummaryOffsets = true,
-    useChunks = true,
-    repeatSchemas = true,
-    repeatChannels = true,
-    useAttachmentIndex = true,
-    useMetadataIndex = true,
-    useMessageIndex = true,
-    useChunkIndex = true,
-  }: Mcap0WriterOptions) {
+  constructor(options: Mcap0WriterOptions) {
+    const {
+      writable,
+      useStatistics = true,
+      useSummaryOffsets = true,
+      useChunks = true,
+      repeatSchemas = true,
+      repeatChannels = true,
+      useAttachmentIndex = true,
+      useMetadataIndex = true,
+      useMessageIndex = true,
+      useChunkIndex = true,
+      startChannelId = 0,
+    } = options;
+
     this.writable = writable;
     this.useSummaryOffsets = useSummaryOffsets;
     if (useStatistics) {
@@ -99,6 +103,7 @@ export class Mcap0Writer {
     if (useChunkIndex) {
       this.chunkIndices = [];
     }
+    this.nextChannelId = startChannelId;
   }
 
   async start(header: Header): Promise<void> {
@@ -132,8 +137,6 @@ export class Mcap0Writer {
         groupLength: schemaLength,
       });
     }
-
-    //FIXME: better position calculation + fewer write calls?
 
     if (this.repeatChannels) {
       await this.writable.write(this.recordWriter.buffer);
@@ -240,7 +243,7 @@ export class Mcap0Writer {
    * Add a schema and return a generated schema id. The schema id is used when adding channels.
    */
   async registerSchema(info: Omit<Schema, "id">): Promise<number> {
-    const id = Mcap0Writer.MIN_SCHEMA_ID + this.schemas.size;
+    const id = this.nextSchemaId++;
     this.schemas.set(id, { ...info, id });
     if (this.statistics) {
       ++this.statistics.schemaCount;
@@ -252,7 +255,7 @@ export class Mcap0Writer {
    * Add a channel and return a generated channel id. The channel id is used when adding messages.
    */
   async registerChannel(info: Omit<Channel, "id">): Promise<number> {
-    const id = Mcap0Writer.MIN_CHANNEL_ID + this.channels.size;
+    const id = this.nextChannelId++;
     this.channels.set(id, { ...info, id });
     if (this.statistics) {
       ++this.statistics.channelCount;
