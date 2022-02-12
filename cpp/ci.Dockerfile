@@ -34,7 +34,7 @@ USER runner
 ENV CC=clang-13
 ENV CXX=clang++-13
 
-WORKDIR /home/runner/src
+WORKDIR /home/runner/work/mcap/mcap/cpp
 
 ENV CONAN_V2_MODE=1
 
