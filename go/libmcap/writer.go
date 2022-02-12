@@ -13,18 +13,23 @@ import (
 	"github.com/pierrec/lz4/v4"
 )
 
+// ErrUnknownSchema is returned when a schema ID is not known to the writer.
 var ErrUnknownSchema = errors.New("unknown schema")
 
+// Writer is a writer for the MCAP format.
 type Writer struct {
-	Statistics        *Statistics
-	MessageIndexes    map[uint16]*MessageIndex
-	ChunkIndexes      []*ChunkIndex
+	// Statistics collected over the course of the recording.
+	Statistics *Statistics
+	// ChunkIndexes created over the course of the recording.
+	ChunkIndexes []*ChunkIndex
+	// AttachmentIndexes created over the course of the recording.
 	AttachmentIndexes []*AttachmentIndex
 
 	channelIDs       []uint16
 	schemaIDs        []uint16
 	channels         map[uint16]*Channel
 	schemas          map[uint16]*Schema
+	messageIndexes   map[uint16]*MessageIndex
 	w                *WriteSizer
 	buf              []byte
 	msg              []byte
@@ -39,23 +44,6 @@ type Writer struct {
 
 	currentChunkStartTime uint64
 	currentChunkEndTime   uint64
-}
-
-func (w *Writer) writeRecord(writer io.Writer, op OpCode, data []byte) (int, error) {
-	c := 0
-	w.buf[0] = byte(op)
-	putUint64(w.buf[1:], uint64(len(data)))
-	n, err := writer.Write(w.buf[:9])
-	c += n
-	if err != nil {
-		return c, err
-	}
-	n, err = writer.Write(data)
-	c += n
-	if err != nil {
-		return c, err
-	}
-	return c, nil
 }
 
 // WriteHeader writes a header record to the output.
@@ -171,13 +159,13 @@ func (w *Writer) WriteMessage(m *Message) error {
 		// TODO preallocate or maybe fancy structure. These could be conserved
 		// across chunks too, which might work ok assuming similar numbers of
 		// messages/chan/chunk.
-		idx, ok := w.MessageIndexes[m.ChannelID]
+		idx, ok := w.messageIndexes[m.ChannelID]
 		if !ok {
 			idx = &MessageIndex{
 				ChannelID: m.ChannelID,
 				Records:   nil,
 			}
-			w.MessageIndexes[m.ChannelID] = idx
+			w.messageIndexes[m.ChannelID] = idx
 		}
 		idx.Add(m.LogTime, uint64(w.compressedWriter.Size()))
 		_, err := w.writeRecord(w.compressedWriter, OpMessage, w.msg[:offset])
@@ -396,7 +384,7 @@ func (w *Writer) flushActiveChunk() error {
 	messageIndexOffsets := make(map[uint16]uint64)
 	messageIndexStart := w.w.Size()
 	for _, chanID := range w.channelIDs {
-		if messageIndex, ok := w.MessageIndexes[chanID]; ok {
+		if messageIndex, ok := w.messageIndexes[chanID]; ok {
 			messageIndex.Insort()
 			messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
 			err = w.WriteMessageIndex(messageIndex)
@@ -418,7 +406,7 @@ func (w *Writer) flushActiveChunk() error {
 		CompressedSize:      uint64(compressedlen),
 		UncompressedSize:    uint64(uncompressedlen),
 	})
-	for _, idx := range w.MessageIndexes {
+	for _, idx := range w.messageIndexes {
 		idx.Reset()
 	}
 	w.Statistics.ChunkCount++
@@ -474,6 +462,7 @@ func (w *Writer) ensureSized(n int) {
 	}
 }
 
+// Close the writer by closing the active chunk and writing the summary section.
 func (w *Writer) Close() error {
 	if w.chunked {
 		err := w.flushActiveChunk()
@@ -582,8 +571,6 @@ func (w *Writer) Close() error {
 			return fmt.Errorf("failed to write statistics summary offset: %w", err)
 		}
 	}
-
-	// footer
 	err = w.WriteFooter(&Footer{
 		SummaryStart:       channelInfoOffset,
 		SummaryOffsetStart: summaryOffsetStart,
@@ -592,7 +579,6 @@ func (w *Writer) Close() error {
 	if err != nil {
 		return fmt.Errorf("failed to write footer record: %w", err)
 	}
-	// magic
 	_, err = w.w.Write(Magic)
 	if err != nil {
 		return fmt.Errorf("failed to write closing magic: %w", err)
@@ -600,13 +586,37 @@ func (w *Writer) Close() error {
 	return nil
 }
 
+func (w *Writer) writeRecord(writer io.Writer, op OpCode, data []byte) (int, error) {
+	c := 0
+	w.buf[0] = byte(op)
+	putUint64(w.buf[1:], uint64(len(data)))
+	n, err := writer.Write(w.buf[:9])
+	c += n
+	if err != nil {
+		return c, err
+	}
+	n, err = writer.Write(data)
+	c += n
+	if err != nil {
+		return c, err
+	}
+	return c, nil
+}
+
+// WriterOptions are options for the MCAP Writer.
 type WriterOptions struct {
-	IncludeCRC  bool
-	Chunked     bool
-	ChunkSize   int64
+	// IncludeCRC specifies whether to compute CRC checksums in the output.
+	IncludeCRC bool
+	// Chunked specifies whether the file should be chunk-compressed.
+	Chunked bool
+	// ChunkSize specifies a target chunk size for compressed chunks. This size
+	// may be exceeded, for instance in the case of oversized messages.
+	ChunkSize int64
+	// Compression indicates the compression format to use for chunk compression.
 	Compression CompressionFormat
 }
 
+// NewWriter returns a new MCAP writer.
 func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	writer := NewWriteSizer(w)
 	if _, err := writer.Write(Magic); err != nil {
@@ -625,7 +635,7 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 		case CompressionLZ4:
 			compressedWriter = NewCountingCRCWriter(lz4.NewWriter(&compressed), opts.IncludeCRC)
 		case CompressionNone:
-			compressedWriter = NewCountingCRCWriter(BufCloser{&compressed}, opts.IncludeCRC)
+			compressedWriter = NewCountingCRCWriter(bufCloser{&compressed}, opts.IncludeCRC)
 		default:
 			return nil, fmt.Errorf("unsupported compression")
 		}
@@ -638,7 +648,7 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 		buf:                   make([]byte, 32),
 		channels:              make(map[uint16]*Channel),
 		schemas:               make(map[uint16]*Schema),
-		MessageIndexes:        make(map[uint16]*MessageIndex),
+		messageIndexes:        make(map[uint16]*MessageIndex),
 		uncompressed:          &bytes.Buffer{},
 		compressed:            &compressed,
 		chunksize:             opts.ChunkSize,
