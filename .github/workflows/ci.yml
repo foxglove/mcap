@@ -46,7 +46,7 @@ jobs:
         with:
           path: /home/runner/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('/home/runner/.conan/data') }}
-      - run: cd cpp && make
+      - run: cd cpp && make ci
       - run: yarn install --frozen-lockfile
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner cpp-
@@ -115,7 +115,7 @@ jobs:
           path: /home/runner/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('/home/runner/.conan/data') }}
       - run: make format-check
-      - run: make
+      - run: make ci
       - run: make test
 
   typescript:

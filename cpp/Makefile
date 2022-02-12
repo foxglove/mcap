@@ -33,3 +33,8 @@ bench:
 .PHONY: test
 test:
 	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp ./test/build/Debug/bin/unit-tests
+
+.PHONY: ci
+ci:
+	docker build -t mcap_cpp -f ci.Dockerfile .
+	docker run --rm --name mcap_cpp -v $(HOME):$(HOME) mcap_cpp
