@@ -1,4 +1,4 @@
-package libmcap
+package mcap
 
 import (
 	"hash/crc32"

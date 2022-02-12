@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/foxglove/mcap/go/libmcap"
+	"github.com/foxglove/mcap/go/mcap"
 	"github.com/spf13/cobra"
 )
 
@@ -27,7 +27,7 @@ var catCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		reader, err := libmcap.NewReader(f)
+		reader, err := mcap.NewReader(f)
 		if err != nil {
 			log.Fatal(err)
 		}
