@@ -310,7 +310,11 @@ void McapWriter::close() {
       }
       if (!options_.noRepeatedChannels && !channels_.empty()) {
         write(fileOutput,
-              SummaryOffset{OpCode::Channel, channelStart, chunkIndexStart - statisticsStart});
+              SummaryOffset{OpCode::Channel, channelStart, statisticsStart - channelStart});
+      }
+      if (!options_.noStatistics) {
+        write(fileOutput, SummaryOffset{OpCode::Statistics, statisticsStart,
+                                        chunkIndexStart - statisticsStart});
       }
       if (!options_.noChunkIndex && !chunkIndex_.empty()) {
         write(fileOutput, SummaryOffset{OpCode::ChunkIndex, chunkIndexStart,
@@ -324,6 +328,9 @@ void McapWriter::close() {
         write(fileOutput, SummaryOffset{OpCode::MetadataIndex, metadataIndexStart,
                                         summaryOffsetStart - metadataIndexStart});
       }
+    } else if (summaryStart == fileOutput.size()) {
+      // No summary records were written
+      summaryStart = 0;
     }
   }
 
@@ -428,18 +435,16 @@ Status McapWriter::write(const Message& message) {
 
   auto* chunkWriter = getChunkWriter();
   if (chunkWriter) {
-    if (!options_.noSummary) {
-      if (!options_.noMessageIndex) {
-        // Update the message index
-        auto& messageIndex = currentMessageIndex_[message.channelId];
-        messageIndex.channelId = message.channelId;
-        messageIndex.records.emplace_back(message.logTime, messageOffset);
-      }
-
-      // Update the chunk index start/end times
-      currentChunkStart_ = std::min(currentChunkStart_, message.logTime);
-      currentChunkEnd_ = std::max(currentChunkEnd_, message.logTime);
+    if (!options_.noMessageIndex) {
+      // Update the message index
+      auto& messageIndex = currentMessageIndex_[message.channelId];
+      messageIndex.channelId = message.channelId;
+      messageIndex.records.emplace_back(message.logTime, messageOffset);
     }
+
+    // Update the chunk index start/end times
+    currentChunkStart_ = std::min(currentChunkStart_, message.logTime);
+    currentChunkEnd_ = std::max(currentChunkEnd_, message.logTime);
 
     // Check if the current chunk is ready to close
     if (uncompressedSize_ >= chunkSize_) {
@@ -570,43 +575,48 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
   write(output, Chunk{currentChunkStart_, currentChunkEnd_, uncompressedSize_, uncompressedCrc,
                       compression, compressedSize, records});
 
-  if (!options_.noSummary) {
-    // Update statistics
-    const uint64_t chunkLength = output.size() - chunkStartOffset;
-    ++statistics_.chunkCount;
+  const uint64_t chunkLength = output.size() - chunkStartOffset;
 
-    if (!options_.noChunkIndex) {
-      // Create a chunk index record
-      auto& chunkIndexRecord = chunkIndex_.emplace_back();
+  if (!options_.noChunkIndex) {
+    // Create a chunk index record
+    auto& chunkIndexRecord = chunkIndex_.emplace_back();
 
-      const uint64_t messageIndexOffset = output.size();
-      if (!options_.noMessageIndex) {
-        // Write the message index records
-        for (const auto& [channelId, messageIndex] : currentMessageIndex_) {
-          chunkIndexRecord.messageIndexOffsets.emplace(channelId, output.size());
-          write(output, messageIndex);
-        }
-        currentMessageIndex_.clear();
+    const uint64_t messageIndexOffset = output.size();
+    if (!options_.noMessageIndex) {
+      // Write the message index records
+      for (const auto& [channelId, messageIndex] : currentMessageIndex_) {
+        chunkIndexRecord.messageIndexOffsets.emplace(channelId, output.size());
+        write(output, messageIndex);
       }
-      const uint64_t messageIndexLength = output.size() - messageIndexOffset;
-
-      // Fill in the newly created chunk index record. This will be written into
-      // the summary section when close() is called
-      chunkIndexRecord.messageStartTime = currentChunkStart_;
-      chunkIndexRecord.messageEndTime = currentChunkEnd_;
-      chunkIndexRecord.chunkStartOffset = chunkStartOffset;
-      chunkIndexRecord.chunkLength = chunkLength;
-      chunkIndexRecord.messageIndexLength = messageIndexLength;
-      chunkIndexRecord.compression = compression;
-      chunkIndexRecord.compressedSize = compressedSize;
-      chunkIndexRecord.uncompressedSize = uncompressedSize_;
+      currentMessageIndex_.clear();
     }
+    const uint64_t messageIndexLength = output.size() - messageIndexOffset;
 
-    // Reset uncompressedSize and start/end times for the next chunk
-    uncompressedSize_ = 0;
-    currentChunkStart_ = MaxTime;
-    currentChunkEnd_ = 0;
+    // Fill in the newly created chunk index record. This will be written into
+    // the summary section when close() is called
+    chunkIndexRecord.messageStartTime = currentChunkStart_;
+    chunkIndexRecord.messageEndTime = currentChunkEnd_;
+    chunkIndexRecord.chunkStartOffset = chunkStartOffset;
+    chunkIndexRecord.chunkLength = chunkLength;
+    chunkIndexRecord.messageIndexLength = messageIndexLength;
+    chunkIndexRecord.compression = compression;
+    chunkIndexRecord.compressedSize = compressedSize;
+    chunkIndexRecord.uncompressedSize = uncompressedSize_;
+  } else if (!options_.noMessageIndex) {
+    // Write the message index records
+    for (const auto& [channelId, messageIndex] : currentMessageIndex_) {
+      write(output, messageIndex);
+    }
+    currentMessageIndex_.clear();
   }
+
+  // Reset uncompressedSize and start/end times for the next chunk
+  uncompressedSize_ = 0;
+  currentChunkStart_ = MaxTime;
+  currentChunkEnd_ = 0;
+
+  // Update statistics
+  ++statistics_.chunkCount;
 
   // Reset the chunk writer
   chunkData.clear();
