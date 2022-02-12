@@ -42,6 +42,10 @@ jobs:
       - uses: actions/checkout@v2
         with:
           lfs: true
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 16.x
+          cache: yarn
       - uses: actions/cache@v2
         with:
           path: /home/runner/.conan/data
@@ -57,6 +61,10 @@ jobs:
       - uses: actions/checkout@v2
         with:
           lfs: true
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 16.x
+          cache: yarn
       - uses: actions/setup-go@v2
         with:
           go-version: 1.17.x
@@ -71,6 +79,10 @@ jobs:
       - uses: actions/checkout@v2
         with:
           lfs: true
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 16.x
+          cache: yarn
       - uses: actions/setup-python@v2
       - run: cd python && pip install .
       - run: yarn install --frozen-lockfile
@@ -116,7 +128,7 @@ jobs:
           key: ${{ runner.os }}-${{ hashFiles('/home/runner/.conan/data') }}
       - run: make format-check
       - run: make ci
-      - run: make test
+      - run: make test-host
 
   typescript:
     runs-on: ubuntu-latest
