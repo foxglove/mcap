@@ -27,6 +27,9 @@ func collectMessageSchemas(directories []string, types []string) (map[string][]b
 	interfaceDirs := make(map[string]string)
 	for _, dir := range directories {
 		err := filepath.Walk(dir, func(filepath string, info os.FileInfo, err error) error {
+			if err != nil {
+				return fmt.Errorf("failed to list provided directory %s: %w", dir, err)
+			}
 			if info.IsDir() && info.Name() == "rosidl_interfaces" { // cspell:disable-line
 				interfaceDirs[dir] = filepath
 			}
