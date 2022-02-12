@@ -8,7 +8,7 @@ import (
 	"io"
 	"log"
 
-	"github.com/foxglove/mcap/go/libmcap"
+	"github.com/foxglove/mcap/go/mcap"
 	"github.com/pierrec/lz4/v4"
 )
 
@@ -219,14 +219,14 @@ func processBag(
 	return nil
 }
 
-func Bag2MCAP(w io.Writer, r io.Reader, opts *libmcap.WriterOptions) error {
-	writer, err := libmcap.NewWriter(w, opts)
+func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
+	writer, err := mcap.NewWriter(w, opts)
 	if err != nil {
 		return err
 	}
 	defer writer.Close()
 
-	err = writer.WriteHeader(&libmcap.Header{
+	err = writer.WriteHeader(&mcap.Header{
 		Profile: "ros1",
 		Library: "golang-mcap-v0",
 	})
@@ -263,7 +263,7 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *libmcap.WriterOptions) error {
 				schemaID := uint16(len(schemas) + 1)
 				msgdefCopy := make([]byte, len(msgdef))
 				copy(msgdefCopy, msgdef)
-				err := writer.WriteSchema(&libmcap.Schema{
+				err := writer.WriteSchema(&mcap.Schema{
 					ID:       schemaID,
 					Encoding: "ros1msg",
 					Name:     string(typ),
@@ -274,7 +274,7 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *libmcap.WriterOptions) error {
 				}
 				schemas[key] = schemaID
 			}
-			channelInfo := &libmcap.Channel{
+			channelInfo := &mcap.Channel{
 				ID:              connID,
 				Topic:           string(topic),
 				MessageEncoding: "ros1",
@@ -296,7 +296,7 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *libmcap.WriterOptions) error {
 				return err
 			}
 			nsecs := rosTimeToNanoseconds(time)
-			err = writer.WriteMessage(&libmcap.Message{
+			err = writer.WriteMessage(&mcap.Message{
 				ChannelID:   connID,
 				Sequence:    seq,
 				LogTime:     nsecs,

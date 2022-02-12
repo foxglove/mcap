@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/foxglove/mcap/go/libmcap"
+	"github.com/foxglove/mcap/go/mcap"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
@@ -18,7 +18,7 @@ var (
 	LongAgo = time.Now().Add(-20 * 365 * 24 * time.Hour)
 )
 
-func printInfo(w io.Writer, info *libmcap.Info) error {
+func printInfo(w io.Writer, info *mcap.Info) error {
 	buf := &bytes.Buffer{}
 
 	fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
@@ -37,7 +37,7 @@ func printInfo(w io.Writer, info *libmcap.Info) error {
 	}
 
 	if len(info.ChunkIndexes) > 0 {
-		compressionFormatStats := make(map[libmcap.CompressionFormat]struct {
+		compressionFormatStats := make(map[mcap.CompressionFormat]struct {
 			count            int
 			compressedSize   uint64
 			uncompressedSize uint64
@@ -111,7 +111,7 @@ var infoCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		reader, err := libmcap.NewReader(r)
+		reader, err := mcap.NewReader(r)
 		if err != nil {
 			log.Fatal(err)
 		}

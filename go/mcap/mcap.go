@@ -1,4 +1,4 @@
-package libmcap
+package mcap
 
 // Magic is the magic number for an MCAP file.
 var Magic = []byte{0x89, 'M', 'C', 'A', 'P', 0x30, '\r', '\n'}

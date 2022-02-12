@@ -1,7 +1,7 @@
 ## MCAP go libraries
 
-[libmcap]: ./libmcap
 [mcap]: ./mcap
+[mcap cli]: ./cli/mcap
 
-- [Library for parsing MCAP files][libmcap]
-- [Command line tool for format demonstration][mcap]
+- [Library for parsing MCAP files][mcap]
+- [Command line tool for format demonstration][mcap cli]
