@@ -5,7 +5,7 @@ import { TestVariant } from "variants/types";
 
 import { ReadTestRunner } from "./TestRunner";
 
-export default class CppStreamedTestRunner extends ReadTestRunner {
+export default class CppStreamedReaderTestRunner extends ReadTestRunner {
   name = "cpp-streamed-reader";
 
   async runReadTest(filePath: string): Promise<string> {

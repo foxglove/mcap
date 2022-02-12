@@ -216,7 +216,10 @@ void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
       zstdChunk_ = std::make_unique<ZStdWriter>(options.compressionLevel, chunkSize_);
       break;
   }
-  getChunkWriter()->crcEnabled = !options.noCRC;
+  auto* chunkWriter = getChunkWriter();
+  if (chunkWriter) {
+    chunkWriter->crcEnabled = !options.noCRC;
+  }
   output_ = &writer;
   writeMagic(writer);
   write(writer, Header{options.profile, options.library});
@@ -253,60 +256,74 @@ void McapWriter::close() {
     // Get the offset of the End Of File section
     summaryStart = fileOutput.size();
 
-    // Write all schema records
     ByteOffset schemaStart = fileOutput.size();
-    for (const auto& schema : schemas_) {
-      write(fileOutput, schema);
+    if (!options_.noRepeatedSchemas) {
+      // Write all schema records
+      for (const auto& schema : schemas_) {
+        write(fileOutput, schema);
+      }
     }
 
-    // Write all channel records
     ByteOffset channelStart = fileOutput.size();
-    for (const auto& channel : channels_) {
-      write(fileOutput, channel);
+    if (!options_.noRepeatedChannels) {
+      // Write all channel records
+      for (const auto& channel : channels_) {
+        write(fileOutput, channel);
+      }
     }
 
-    // Write chunk index records
-    ByteOffset chunkIndexStart = fileOutput.size();
-    for (const auto& chunkIndexRecord : chunkIndex_) {
-      write(fileOutput, chunkIndexRecord);
-    }
-
-    // Write attachment index records
-    ByteOffset attachmentIndexStart = fileOutput.size();
-    for (const auto& attachmentIndexRecord : attachmentIndex_) {
-      write(fileOutput, attachmentIndexRecord);
-    }
-
-    // Write metadata index records
-    ByteOffset metadataIndexStart = fileOutput.size();
-    for (const auto& metadataIndexRecord : metadataIndex_) {
-      write(fileOutput, metadataIndexRecord);
-    }
-
-    // Write the statistics record
     ByteOffset statisticsStart = fileOutput.size();
-    write(fileOutput, statistics_);
+    if (!options_.noStatistics) {
+      // Write the statistics record
+      write(fileOutput, statistics_);
+    }
 
-    // Write summary offset records
-    summaryOffsetStart = fileOutput.size();
-    if (!schemas_.empty()) {
-      write(fileOutput, SummaryOffset{OpCode::Schema, schemaStart, channelStart - schemaStart});
+    ByteOffset chunkIndexStart = fileOutput.size();
+    if (!options_.noChunkIndex) {
+      // Write chunk index records
+      for (const auto& chunkIndexRecord : chunkIndex_) {
+        write(fileOutput, chunkIndexRecord);
+      }
     }
-    if (!channels_.empty()) {
-      write(fileOutput,
-            SummaryOffset{OpCode::Channel, channelStart, chunkIndexStart - channelStart});
+
+    ByteOffset attachmentIndexStart = fileOutput.size();
+    if (!options_.noAttachmentIndex) {
+      // Write attachment index records
+      for (const auto& attachmentIndexRecord : attachmentIndex_) {
+        write(fileOutput, attachmentIndexRecord);
+      }
     }
-    if (!chunkIndex_.empty()) {
-      write(fileOutput, SummaryOffset{OpCode::ChunkIndex, chunkIndexStart,
-                                      attachmentIndexStart - chunkIndexStart});
+
+    ByteOffset metadataIndexStart = fileOutput.size();
+    if (!options_.noMetadataIndex) {
+      // Write metadata index records
+      for (const auto& metadataIndexRecord : metadataIndex_) {
+        write(fileOutput, metadataIndexRecord);
+      }
     }
-    if (!attachmentIndex_.empty()) {
-      write(fileOutput, SummaryOffset{OpCode::AttachmentIndex, attachmentIndexStart,
-                                      metadataIndexStart - attachmentIndexStart});
-    }
-    if (!metadataIndex_.empty()) {
-      write(fileOutput, SummaryOffset{OpCode::MetadataIndex, metadataIndexStart,
-                                      statisticsStart - metadataIndexStart});
+
+    if (!options_.noSummaryOffsets) {
+      // Write summary offset records
+      summaryOffsetStart = fileOutput.size();
+      if (!options_.noRepeatedSchemas && !schemas_.empty()) {
+        write(fileOutput, SummaryOffset{OpCode::Schema, schemaStart, channelStart - schemaStart});
+      }
+      if (!options_.noRepeatedChannels && !channels_.empty()) {
+        write(fileOutput,
+              SummaryOffset{OpCode::Channel, channelStart, chunkIndexStart - statisticsStart});
+      }
+      if (!options_.noChunkIndex && !chunkIndex_.empty()) {
+        write(fileOutput, SummaryOffset{OpCode::ChunkIndex, chunkIndexStart,
+                                        attachmentIndexStart - chunkIndexStart});
+      }
+      if (!options_.noAttachmentIndex && !attachmentIndex_.empty()) {
+        write(fileOutput, SummaryOffset{OpCode::AttachmentIndex, attachmentIndexStart,
+                                        metadataIndexStart - attachmentIndexStart});
+      }
+      if (!options_.noMetadataIndex && !metadataIndex_.empty()) {
+        write(fileOutput, SummaryOffset{OpCode::MetadataIndex, metadataIndexStart,
+                                        summaryOffsetStart - metadataIndexStart});
+      }
     }
   }
 
@@ -412,10 +429,12 @@ Status McapWriter::write(const Message& message) {
   auto* chunkWriter = getChunkWriter();
   if (chunkWriter) {
     if (!options_.noSummary) {
-      // Update the message index
-      auto& messageIndex = currentMessageIndex_[message.channelId];
-      messageIndex.channelId = message.channelId;
-      messageIndex.records.emplace_back(message.logTime, messageOffset);
+      if (!options_.noMessageIndex) {
+        // Update the message index
+        auto& messageIndex = currentMessageIndex_[message.channelId];
+        messageIndex.channelId = message.channelId;
+        messageIndex.records.emplace_back(message.logTime, messageOffset);
+      }
 
       // Update the chunk index start/end times
       currentChunkStart_ = std::min(currentChunkStart_, message.logTime);
@@ -446,7 +465,17 @@ Status McapWriter::write(Attachment& attachment) {
 
   if (!options_.noCRC) {
     // Calculate the CRC32 of the attachment
+    uint32_t sizePrefix = 0;
     CryptoPP::CRC32 crc;
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&attachment.logTime), 8);
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&attachment.createTime), 8);
+    sizePrefix = uint32_t(attachment.name.size());
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&sizePrefix), 4);
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(attachment.name.data()), sizePrefix);
+    sizePrefix = uint32_t(attachment.contentType.size());
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&sizePrefix), 4);
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(attachment.contentType.data()), sizePrefix);
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&attachment.dataSize), 8);
     crc.Update(reinterpret_cast<const CryptoPP::byte*>(attachment.data), attachment.dataSize);
     crc.Final(reinterpret_cast<CryptoPP::byte*>(&attachment.crc));
   }
@@ -459,7 +488,9 @@ Status McapWriter::write(Attachment& attachment) {
   // Update statistics and attachment index
   if (!options_.noSummary) {
     ++statistics_.attachmentCount;
-    attachmentIndex_.emplace_back(attachment, fileOffset);
+    if (!options_.noAttachmentIndex) {
+      attachmentIndex_.emplace_back(attachment, fileOffset);
+    }
   }
 
   return StatusCode::Success;
@@ -485,7 +516,9 @@ Status McapWriter::write(const Metadata& metadata) {
   // Update statistics and metadata index
   if (!options_.noSummary) {
     ++statistics_.metadataCount;
-    metadataIndex_.emplace_back(metadata, fileOffset);
+    if (!options_.noMetadataIndex) {
+      metadataIndex_.emplace_back(metadata, fileOffset);
+    }
   }
 
   return StatusCode::Success;
@@ -508,6 +541,10 @@ IWritable& McapWriter::getOutput() {
 }
 
 IChunkWriter* McapWriter::getChunkWriter() {
+  if (chunkSize_ == 0) {
+    return nullptr;
+  }
+
   switch (compression_) {
     case Compression::None:
       return uncompressedChunk_.get();
@@ -538,28 +575,32 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
     const uint64_t chunkLength = output.size() - chunkStartOffset;
     ++statistics_.chunkCount;
 
-    // Create a chunk index record
-    auto& chunkIndexRecord = chunkIndex_.emplace_back();
+    if (!options_.noChunkIndex) {
+      // Create a chunk index record
+      auto& chunkIndexRecord = chunkIndex_.emplace_back();
 
-    // Write the message index records
-    const uint64_t messageIndexOffset = output.size();
-    for (const auto& [channelId, messageIndex] : currentMessageIndex_) {
-      chunkIndexRecord.messageIndexOffsets.emplace(channelId, output.size());
-      write(output, messageIndex);
+      const uint64_t messageIndexOffset = output.size();
+      if (!options_.noMessageIndex) {
+        // Write the message index records
+        for (const auto& [channelId, messageIndex] : currentMessageIndex_) {
+          chunkIndexRecord.messageIndexOffsets.emplace(channelId, output.size());
+          write(output, messageIndex);
+        }
+        currentMessageIndex_.clear();
+      }
+      const uint64_t messageIndexLength = output.size() - messageIndexOffset;
+
+      // Fill in the newly created chunk index record. This will be written into
+      // the summary section when close() is called
+      chunkIndexRecord.messageStartTime = currentChunkStart_;
+      chunkIndexRecord.messageEndTime = currentChunkEnd_;
+      chunkIndexRecord.chunkStartOffset = chunkStartOffset;
+      chunkIndexRecord.chunkLength = chunkLength;
+      chunkIndexRecord.messageIndexLength = messageIndexLength;
+      chunkIndexRecord.compression = compression;
+      chunkIndexRecord.compressedSize = compressedSize;
+      chunkIndexRecord.uncompressedSize = uncompressedSize_;
     }
-    currentMessageIndex_.clear();
-    const uint64_t messageIndexLength = output.size() - messageIndexOffset;
-
-    // Fill in the newly created chunk index record. This will be written into
-    // the summary section when close() is called
-    chunkIndexRecord.messageStartTime = currentChunkStart_;
-    chunkIndexRecord.messageEndTime = currentChunkEnd_;
-    chunkIndexRecord.chunkStartOffset = chunkStartOffset;
-    chunkIndexRecord.chunkLength = chunkLength;
-    chunkIndexRecord.messageIndexLength = messageIndexLength;
-    chunkIndexRecord.compression = compression;
-    chunkIndexRecord.compressedSize = compressedSize;
-    chunkIndexRecord.uncompressedSize = uncompressedSize_;
 
     // Reset uncompressedSize and start/end times for the next chunk
     uncompressedSize_ = 0;
