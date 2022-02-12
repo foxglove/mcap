@@ -28,7 +28,7 @@ static void BM_McapWriterBufferWriterUnchunkedUnindexed(benchmark::State& state)
   writer.open(out, options);
 
   // Register a Schema record
-  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
   writer.addSchema(stdMsgsString);
 
   // Register a Channel record
@@ -72,7 +72,7 @@ static void BM_McapWriterBufferWriterUnchunked(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Schema record
-  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
   writer.addSchema(stdMsgsString);
 
   // Register a Channel record
@@ -116,7 +116,7 @@ static void BM_McapWriterBufferWriterChunked(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Schema record
-  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
   writer.addSchema(stdMsgsString);
 
   // Register a Channel record
@@ -161,7 +161,7 @@ static void BM_McapWriterBufferWriterChunkedNoCRC(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Schema record
-  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
   writer.addSchema(stdMsgsString);
 
   // Register a Channel record
@@ -206,7 +206,7 @@ static void BM_McapWriterBufferWriterChunkedUnindexed(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Schema record
-  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
   writer.addSchema(stdMsgsString);
 
   // Register a Channel record
@@ -252,7 +252,7 @@ static void BM_McapWriterBufferWriterLZ4(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Schema record
-  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
   writer.addSchema(stdMsgsString);
 
   // Register a Channel record
@@ -298,7 +298,7 @@ static void BM_McapWriterBufferWriterZStd(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Schema record
-  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
   writer.addSchema(stdMsgsString);
 
   // Register a Channel record
@@ -345,7 +345,7 @@ static void BM_McapWriterBufferWriterZStdNoCRC(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Schema record
-  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
   writer.addSchema(stdMsgsString);
 
   // Register a Channel record
@@ -389,7 +389,7 @@ static void BM_McapWriterStreamWriterUnchunked(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Schema record
-  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
   writer.addSchema(stdMsgsString);
 
   // Register a Channel record
@@ -434,7 +434,7 @@ static void BM_McapWriterStreamWriterChunked(benchmark::State& state) {
   writer.open(out, options);
 
   // Register a Schema record
-  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
   writer.addSchema(stdMsgsString);
 
   // Register a Channel record

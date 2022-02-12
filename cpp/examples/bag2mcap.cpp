@@ -22,7 +22,7 @@ int main() {
   std::ofstream out("output.mcap", std::ios::binary);
   writer.open(out, options);
 
-  mcap::Schema stdMsgsString("std_msgs/String", "ros1", StringSchema);
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
   writer.addSchema(stdMsgsString);
 
   mcap::Channel topic("/chatter", "ros1", stdMsgsString.id);
