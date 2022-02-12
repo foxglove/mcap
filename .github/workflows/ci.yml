@@ -106,6 +106,7 @@ jobs:
         working-directory: cpp
     steps:
       - uses: actions/checkout@v2
+      - uses: turtlebrowser/conan-cache@v1.3
       - run: make format-check
       - run: make
       - run: make test
