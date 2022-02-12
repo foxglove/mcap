@@ -5,6 +5,7 @@ import (
 	"io"
 )
 
+// ParseHeader parses a header record.
 func ParseHeader(buf []byte) (*Header, error) {
 	profile, offset, err := readPrefixedString(buf, 0)
 	if err != nil {
@@ -20,6 +21,7 @@ func ParseHeader(buf []byte) (*Header, error) {
 	}, nil
 }
 
+// ParseFooter parses a footer record.
 func ParseFooter(buf []byte) (*Footer, error) {
 	summaryStart, offset, err := getUint64(buf, 0)
 	if err != nil {
@@ -40,6 +42,7 @@ func ParseFooter(buf []byte) (*Footer, error) {
 	}, nil
 }
 
+// ParseSchema parses a schema record.
 func ParseSchema(buf []byte) (*Schema, error) {
 	schemaID, offset, err := getUint16(buf, 0)
 	if err != nil {
@@ -65,6 +68,7 @@ func ParseSchema(buf []byte) (*Schema, error) {
 	}, nil
 }
 
+// ParseChannel parses a channel record.
 func ParseChannel(buf []byte) (*Channel, error) {
 	channelID, offset, err := getUint16(buf, 0)
 	if err != nil {
@@ -95,6 +99,7 @@ func ParseChannel(buf []byte) (*Channel, error) {
 	}, nil
 }
 
+// ParseMessage parses a message record.
 func ParseMessage(buf []byte) (*Message, error) {
 	channelID, offset, err := getUint16(buf, 0)
 	if err != nil {
@@ -122,6 +127,7 @@ func ParseMessage(buf []byte) (*Message, error) {
 	}, nil
 }
 
+// ParseChunk parses a chunk record.
 func ParseChunk(buf []byte) (*Chunk, error) {
 	messageStartTime, offset, err := getUint64(buf, 0)
 	if err != nil {
@@ -158,14 +164,32 @@ func ParseChunk(buf []byte) (*Chunk, error) {
 	}, nil
 }
 
+// ParseMessageIndex parses a message index record.
 func ParseMessageIndex(buf []byte) (*MessageIndex, error) {
 	channelID, offset, err := getUint16(buf, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read channel ID: %w", err)
 	}
-	records, _, err := readMessageIndexEntries(buf, offset)
+	entriesByteLength, offset, err := getUint32(buf, offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read message index entries: %w", err)
+		return nil, fmt.Errorf("failed to read message index entries byte length: %w", err)
+	}
+	var value, stamp uint64
+	var start = offset
+	records := make([]*MessageIndexEntry, 0, (len(buf)-2)/(8+8))
+	for uint32(offset) < uint32(start)+entriesByteLength {
+		stamp, offset, err = getUint64(buf, offset)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read message index entry stamp: %w", err)
+		}
+		value, offset, err = getUint64(buf, offset)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read message index entry value: %w", err)
+		}
+		records = append(records, &MessageIndexEntry{
+			Timestamp: stamp,
+			Offset:    value,
+		})
 	}
 	return &MessageIndex{
 		ChannelID: channelID,
@@ -173,6 +197,7 @@ func ParseMessageIndex(buf []byte) (*MessageIndex, error) {
 	}, nil
 }
 
+// ParseChunkIndex parses a chunk index record.
 func ParseChunkIndex(buf []byte) (*ChunkIndex, error) {
 	messageStartTime, offset, err := getUint64(buf, 0)
 	if err != nil {
@@ -239,6 +264,7 @@ func ParseChunkIndex(buf []byte) (*ChunkIndex, error) {
 	}, nil
 }
 
+// ParseAttachment parses an attachment record.
 func ParseAttachment(buf []byte) (*Attachment, error) {
 	logTime, offset, err := getUint64(buf, 0)
 	if err != nil {
@@ -276,6 +302,7 @@ func ParseAttachment(buf []byte) (*Attachment, error) {
 	}, nil
 }
 
+// ParseAttachmentIndex parses an attachment index record.
 func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
 	attachmentOffset, offset, err := getUint64(buf, 0)
 	if err != nil {
@@ -315,6 +342,8 @@ func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
 		ContentType: contentType,
 	}, nil
 }
+
+// ParseStatistics parses a statistics record.
 func ParseStatistics(buf []byte) (*Statistics, error) {
 	if minLength := 8 + 2 + 4 + 4 + 4 + 4 + 4 + 8 + 8; len(buf) < minLength {
 		return nil, fmt.Errorf("short statistics record %d < %d: %w", len(buf), minLength, io.ErrShortBuffer)
@@ -386,6 +415,7 @@ func ParseStatistics(buf []byte) (*Statistics, error) {
 	}, nil
 }
 
+// ParseMetadata parses a metadata record.
 func ParseMetadata(buf []byte) (*Metadata, error) {
 	name, offset, err := readPrefixedString(buf, 0)
 	if err != nil {
@@ -401,6 +431,7 @@ func ParseMetadata(buf []byte) (*Metadata, error) {
 	}, nil
 }
 
+// ParseMetadataIndex parses a metadata index record.
 func ParseMetadataIndex(buf []byte) (*MetadataIndex, error) {
 	recordOffset, offset, err := getUint64(buf, 0)
 	if err != nil {
@@ -421,6 +452,7 @@ func ParseMetadataIndex(buf []byte) (*MetadataIndex, error) {
 	}, nil
 }
 
+// ParseSummaryOffset parses a summary offset record.
 func ParseSummaryOffset(buf []byte) (*SummaryOffset, error) {
 	if len(buf) < 17 {
 		return nil, io.ErrShortBuffer
@@ -442,6 +474,7 @@ func ParseSummaryOffset(buf []byte) (*SummaryOffset, error) {
 	}, nil
 }
 
+// ParseDataEnd parses a data end record.
 func ParseDataEnd(buf []byte) (*DataEnd, error) {
 	crc, _, err := getUint32(buf, 0)
 	if err != nil {
@@ -450,29 +483,4 @@ func ParseDataEnd(buf []byte) (*DataEnd, error) {
 	return &DataEnd{
 		DataSectionCRC: crc,
 	}, nil
-}
-
-func readMessageIndexEntries(data []byte, offset int) (entries []*MessageIndexEntry, newoffset int, err error) {
-	entriesByteLength, offset, err := getUint32(data, offset)
-	if err != nil {
-		return nil, offset, fmt.Errorf("failed to read message index entries byte length: %w", err)
-	}
-	var value, stamp uint64
-	var start = offset
-	entries = make([]*MessageIndexEntry, 0, (len(data)-2)/(8+8))
-	for uint32(offset) < uint32(start)+entriesByteLength {
-		stamp, offset, err = getUint64(data, offset)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to read message index entry stamp: %w", err)
-		}
-		value, offset, err = getUint64(data, offset)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to read message index entry value: %w", err)
-		}
-		entries = append(entries, &MessageIndexEntry{
-			Timestamp: stamp,
-			Offset:    value,
-		})
-	}
-	return entries, offset, nil
 }
