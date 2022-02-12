@@ -22,7 +22,7 @@ jobs:
       - run: echo '::add-matcher::.github/cspell-problem-matcher.json'
       - run: yarn spellcheck --no-progress
 
-  conformance:
+  conformance-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -32,18 +32,60 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-      - uses: actions/setup-go@v2
-        with:
-          go-version: 1.17.x
-      - uses: actions/setup-python@v2
-      - run: cd python && pip install .
-      - run: cd cpp && make
-      - run: cd go && make build-conformance-check
       - run: yarn install --frozen-lockfile
       - run: yarn workspace @foxglove/mcap-conformance lint:ci
       - run: yarn workspace @foxglove/mcap-conformance typecheck
+
+  conformance-cpp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          lfs: true
+      - run: cd cpp && make
+      - run: yarn install --frozen-lockfile
       - run: yarn test:conformance:generate-inputs --verify
-      - run: yarn test:conformance
+      - run: yarn test:conformance --runner cpp-
+
+  conformance-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          lfs: true
+      - uses: actions/setup-go@v2
+        with:
+          go-version: 1.17.x
+      - run: cd go && make build-conformance-check
+      - run: yarn install --frozen-lockfile
+      - run: yarn test:conformance:generate-inputs --verify
+      - run: yarn test:conformance --runner go-
+
+  conformance-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          lfs: true
+      - uses: actions/setup-python@v2
+      - run: cd python && pip install .
+      - run: yarn install --frozen-lockfile
+      - run: yarn test:conformance:generate-inputs --verify
+      - run: yarn test:conformance --runner py-
+
+  conformance-typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          lfs: true
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 16.x
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn test:conformance:generate-inputs --verify
+      - run: yarn test:conformance --runner ts-
 
   docs:
     runs-on: ubuntu-latest
