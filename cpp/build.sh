@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+conan config init
+
 conan editable add ./mcap mcap/0.0.1
 conan install bench --install-folder bench/build/Release \
   -s compiler.cppstd=17 -s build_type=Release --build missing
