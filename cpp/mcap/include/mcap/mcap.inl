@@ -508,6 +508,10 @@ IWritable& McapWriter::getOutput() {
 }
 
 IChunkWriter* McapWriter::getChunkWriter() {
+  if (chunkSize_ == 0) {
+    return nullptr;
+  }
+
   switch (compression_) {
     case Compression::None:
       return uncompressedChunk_.get();
