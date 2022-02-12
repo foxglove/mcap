@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/foxglove/mcap/go/libmcap"
+	"github.com/foxglove/mcap/go/mcap"
 )
 
 // collectMessageSchemas collects message schemas from the provided list of
@@ -138,13 +138,13 @@ func transformMessages(db *sql.DB, f func(*sql.Rows) error) error {
 	return nil
 }
 
-func DB3ToMCAP(w io.Writer, db *sql.DB, opts *libmcap.WriterOptions, searchdirs []string) error {
-	writer, err := libmcap.NewWriter(w, opts)
+func DB3ToMCAP(w io.Writer, db *sql.DB, opts *mcap.WriterOptions, searchdirs []string) error {
+	writer, err := mcap.NewWriter(w, opts)
 	if err != nil {
 		return err
 	}
 	defer writer.Close()
-	err = writer.WriteHeader(&libmcap.Header{
+	err = writer.WriteHeader(&mcap.Header{
 		Profile: "ros2",
 		Library: "golang-db3-mcap",
 	})
@@ -172,7 +172,7 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, opts *libmcap.WriterOptions, searchdirs 
 		if !ok {
 			return fmt.Errorf("unrecognized schema for %s", t.typ)
 		}
-		err = writer.WriteSchema(&libmcap.Schema{
+		err = writer.WriteSchema(&mcap.Schema{
 			ID:       schemaID,
 			Data:     schema,
 			Name:     t.typ,
@@ -181,7 +181,7 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, opts *libmcap.WriterOptions, searchdirs 
 		if err != nil {
 			return fmt.Errorf("failed to write schema: %w", err)
 		}
-		err = writer.WriteChannel(&libmcap.Channel{
+		err = writer.WriteChannel(&mcap.Channel{
 			ID:              t.id,
 			Topic:           t.name,
 			MessageEncoding: t.serializationFormat,
@@ -207,7 +207,7 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, opts *libmcap.WriterOptions, searchdirs 
 		if err != nil {
 			return err
 		}
-		err = writer.WriteMessage(&libmcap.Message{
+		err = writer.WriteMessage(&mcap.Message{
 			ChannelID:   topicID,
 			Sequence:    seq[topicID],
 			LogTime:     uint64(messageTimestamp),
