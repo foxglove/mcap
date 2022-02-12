@@ -9,7 +9,8 @@ ifeq ($(GOOS),linux)
 endif
 
 build:
-	go build $(FLAGS) .
+	mkdir -p bin
+	go build -o bin/mcap $(FLAGS) .
 
 lint:
 	golangci-lint run ./...

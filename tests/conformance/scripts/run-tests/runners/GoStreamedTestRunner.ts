@@ -9,7 +9,7 @@ export default class GoStreamedTestRunner extends ReadTestRunner {
   name = "go-streamed-reader";
 
   async runReadTest(filePath: string): Promise<string> {
-    const { stdout } = await promisify(exec)(`./check-conformance ${filePath}`, {
+    const { stdout } = await promisify(exec)(`./bin/check-conformance ${filePath}`, {
       cwd: join(__dirname, "../../../../../go/conformance"),
     });
     return stdout.trim();
