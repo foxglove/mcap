@@ -20,6 +20,8 @@ constexpr std::string_view AddExtraDataToRecords = "pad";
 mcap::McapWriterOptions ReadOptions(const json& featuresJson) {
   // ["ch", "mx", "st", "rsh", "rch", "chx", "sum", "pad"]
   mcap::McapWriterOptions options{""};
+  options.compression = mcap::Compression::None;
+  options.noCRC = true;
   options.noChunking = true;
   options.noMessageIndex = true;
   options.noSummary = true;
@@ -56,9 +58,13 @@ mcap::McapWriterOptions ReadOptions(const json& featuresJson) {
     } else if (feature == UseChunkIndex) {
       options.noChunking = false;
       options.noSummary = false;
+      options.noChunkIndex = false;
     } else if (feature == UseSummaryOffset) {
       options.noSummary = false;
       options.noSummaryOffsets = false;
+    } else if (feature == AddExtraDataToRecords) {
+      std::cerr << "AddExtraDataToRecords not supported\n";
+      std::abort();
     } else {
       std::cerr << "Unknown feature: " << feature << "\n";
       std::abort();
