@@ -46,3 +46,8 @@ test-host:
 ci:
 	docker build -t mcap_cpp -f ci.Dockerfile .
 	docker run --rm --name mcap_cpp -v $(HOME):$(HOME) mcap_cpp
+
+.PHONY: ci-format-check
+format-check:
+	docker build -t mcap_cpp -f ci.Dockerfile .
+	docker run --rm --name mcap_cpp -v $(HOME):$(HOME) mcap_cpp python3 scripts/format.py .
