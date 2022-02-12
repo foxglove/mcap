@@ -48,8 +48,8 @@ jobs:
           cache: yarn
       - uses: actions/cache@v2
         with:
-          path: /home/runner/.conan/data
-          key: ${{ runner.os }}-${{ hashFiles('/home/runner/.conan/data') }}
+          path: ~/.conan/data
+          key: ${{ runner.os }}-${{ hashFiles('~/.conan/data') }}
       - run: cd cpp && make ci
       - run: yarn install --frozen-lockfile
       - run: yarn test:conformance:generate-inputs --verify
@@ -124,8 +124,8 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions/cache@v2
         with:
-          path: /home/runner/.conan/data
-          key: ${{ runner.os }}-${{ hashFiles('/home/runner/.conan/data') }}
+          path: ~/.conan/data
+          key: ${{ runner.os }}-${{ hashFiles('~/.conan/data') }}
       - run: make format-check
       - run: make ci
       - run: make test-host
