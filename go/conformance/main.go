@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/foxglove/mcap/go/libmcap"
+	"github.com/foxglove/mcap/go/mcap"
 )
 
 var (
@@ -95,7 +95,7 @@ func (x Field) MarshalJSON() ([]byte, error) {
 				v = string(bytes)
 			case "MessageIndexEntry":
 				results := [][]string{}
-				entries := x.Value.([]libmcap.MessageIndexEntry)
+				entries := x.Value.([]mcap.MessageIndexEntry)
 				for _, entry := range entries {
 					results = append(results, []string{
 						fmt.Sprintf("\"%d\"", entry.Timestamp),
@@ -164,7 +164,7 @@ func mcapToJSON(w io.Writer, filepath string) error {
 		return err
 	}
 	defer f.Close()
-	lexer, err := libmcap.NewLexer(f)
+	lexer, err := mcap.NewLexer(f)
 	if err != nil {
 		return err
 	}
@@ -178,98 +178,98 @@ func mcapToJSON(w io.Writer, filepath string) error {
 			return err
 		}
 		switch tokenType {
-		case libmcap.TokenHeader:
-			header, err := libmcap.ParseHeader(data)
+		case mcap.TokenHeader:
+			header, err := mcap.ParseHeader(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*header})
-		case libmcap.TokenFooter:
-			footer, err := libmcap.ParseFooter(data)
+		case mcap.TokenFooter:
+			footer, err := mcap.ParseFooter(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*footer})
-		case libmcap.TokenSchema:
-			schema, err := libmcap.ParseSchema(data)
+		case mcap.TokenSchema:
+			schema, err := mcap.ParseSchema(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*schema})
-		case libmcap.TokenChannel:
-			channelInfo, err := libmcap.ParseChannel(data)
+		case mcap.TokenChannel:
+			channelInfo, err := mcap.ParseChannel(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*channelInfo})
-		case libmcap.TokenMessage:
-			message, err := libmcap.ParseMessage(data)
+		case mcap.TokenMessage:
+			message, err := mcap.ParseMessage(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*message})
-		case libmcap.TokenChunk:
-			chunk, err := libmcap.ParseChunk(data)
+		case mcap.TokenChunk:
+			chunk, err := mcap.ParseChunk(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*chunk})
-		case libmcap.TokenMessageIndex:
-			_, err := libmcap.ParseMessageIndex(data)
+		case mcap.TokenMessageIndex:
+			_, err := mcap.ParseMessageIndex(data)
 			if err != nil {
 				return err
 			}
 			// TODO: these should be omitted, but aren't present in JSON
 			// records = append(records, Record{*messageIndex})
-		case libmcap.TokenChunkIndex:
-			chunkIndex, err := libmcap.ParseChunkIndex(data)
+		case mcap.TokenChunkIndex:
+			chunkIndex, err := mcap.ParseChunkIndex(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*chunkIndex})
-		case libmcap.TokenAttachment:
-			attachment, err := libmcap.ParseAttachment(data)
+		case mcap.TokenAttachment:
+			attachment, err := mcap.ParseAttachment(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*attachment})
-		case libmcap.TokenAttachmentIndex:
-			attachmentIndex, err := libmcap.ParseAttachmentIndex(data)
+		case mcap.TokenAttachmentIndex:
+			attachmentIndex, err := mcap.ParseAttachmentIndex(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*attachmentIndex})
-		case libmcap.TokenStatistics:
-			statistics, err := libmcap.ParseStatistics(data)
+		case mcap.TokenStatistics:
+			statistics, err := mcap.ParseStatistics(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*statistics})
-		case libmcap.TokenMetadata:
-			metadata, err := libmcap.ParseMetadata(data)
+		case mcap.TokenMetadata:
+			metadata, err := mcap.ParseMetadata(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*metadata})
-		case libmcap.TokenMetadataIndex:
-			metadataIndex, err := libmcap.ParseMetadataIndex(data)
+		case mcap.TokenMetadataIndex:
+			metadataIndex, err := mcap.ParseMetadataIndex(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*metadataIndex})
-		case libmcap.TokenSummaryOffset:
-			summaryOffset, err := libmcap.ParseSummaryOffset(data)
+		case mcap.TokenSummaryOffset:
+			summaryOffset, err := mcap.ParseSummaryOffset(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*summaryOffset})
-		case libmcap.TokenDataEnd:
-			dataEnd, err := libmcap.ParseDataEnd(data)
+		case mcap.TokenDataEnd:
+			dataEnd, err := mcap.ParseDataEnd(data)
 			if err != nil {
 				return err
 			}
 			records = append(records, Record{*dataEnd})
-		case libmcap.TokenError:
+		case mcap.TokenError:
 			if err != nil {
 				return fmt.Errorf("error token: %w", err)
 			}

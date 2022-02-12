@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/foxglove/mcap/go/libmcap"
+	"github.com/foxglove/mcap/go/mcap"
 	"github.com/foxglove/mcap/go/ros"
 	_ "github.com/mattn/go-sqlite3" // sqlite3 driver
 	"github.com/spf13/cobra"
@@ -82,17 +82,17 @@ var convertCmd = &cobra.Command{
 		}
 		defer w.Close()
 
-		var compressionFormat libmcap.CompressionFormat
+		var compressionFormat mcap.CompressionFormat
 		switch compression {
 		case "lz4":
-			compressionFormat = libmcap.CompressionLZ4
+			compressionFormat = mcap.CompressionLZ4
 		case "zstd":
-			compressionFormat = libmcap.CompressionZSTD
+			compressionFormat = mcap.CompressionZSTD
 		case "none":
-			compressionFormat = libmcap.CompressionNone
+			compressionFormat = mcap.CompressionNone
 		}
 
-		opts := &libmcap.WriterOptions{
+		opts := &mcap.WriterOptions{
 			IncludeCRC:  includeCRC,
 			Chunked:     chunked,
 			ChunkSize:   chunkSize,

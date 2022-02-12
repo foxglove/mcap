@@ -3,7 +3,7 @@ module github.com/foxglove/mcap/go/conformance
 go 1.17
 
 require (
-	github.com/foxglove/mcap/go/libmcap v0.0.0-00010101000000-000000000000
+	github.com/foxglove/mcap/go/mcap v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.7.0
 )
 
@@ -15,4 +15,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 )
 
-replace github.com/foxglove/mcap/go/libmcap => ../libmcap
+replace github.com/foxglove/mcap/go/mcap => ../mcap

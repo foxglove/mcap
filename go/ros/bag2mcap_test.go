@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/foxglove/mcap/go/libmcap"
+	"github.com/foxglove/mcap/go/mcap"
 	"github.com/stretchr/testify/assert"
 )
 
 func BenchmarkBag2MCAP(b *testing.B) {
-	opts := &libmcap.WriterOptions{
+	opts := &mcap.WriterOptions{
 		IncludeCRC:  true,
 		Chunked:     true,
 		ChunkSize:   4 * 1024 * 1024,
