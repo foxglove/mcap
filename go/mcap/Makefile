@@ -1,4 +1,4 @@
-# stripe binaries
+# strip binaries
 FLAGS := -tags sqlite_omit_load_extension -ldflags '-s -w'
 
 # platform-specific settings
