@@ -1,5 +1,4 @@
 import { exec } from "child_process";
-import { intersection } from "lodash";
 import { join } from "path";
 import { promisify } from "util";
 import { TestFeatures, TestVariant } from "variants/types";
@@ -18,16 +17,6 @@ export default class CppStreamedWriterTestRunner extends WriteTestRunner {
   }
 
   supportsVariant(variant: TestVariant): boolean {
-    const unsupported = [
-      TestFeatures.AddExtraDataToRecords,
-      TestFeatures.UseChunkIndex,
-      TestFeatures.UseChunks,
-      TestFeatures.UseMessageIndex,
-      TestFeatures.UseMetadataIndex,
-      TestFeatures.UseRepeatedChannelInfos,
-      TestFeatures.UseRepeatedSchemas,
-      TestFeatures.UseSummaryOffset,
-    ];
-    return intersection(Array.from(variant.features), unsupported).length === 0;
+    return !variant.features.has(TestFeatures.AddExtraDataToRecords);
   }
 }
