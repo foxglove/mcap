@@ -1,4 +1,5 @@
-import CppStreamedTestRunner from "./CppStreamedTestRunner";
+import CppStreamedReaderTestRunner from "./CppStreamedReaderTestRunner";
+import CppStreamedWriterTestRunner from "./CppStreamedWriterTestRunner";
 import GoStreamedTestRunner from "./GoStreamedTestRunner";
 import PythonStreamedReaderTestRunner from "./PythonStreamedReaderTestRunner";
 import PythonStreamedWriterTestRunner from "./PythonStreamedWriterTestRunner";
@@ -8,7 +9,8 @@ import TypescriptStreamedReaderTestRunner from "./TypescriptStreamedReaderTestRu
 import TypescriptWriterTestRunner from "./TypescriptWriterTestRunner";
 
 const runners: readonly (ReadTestRunner | WriteTestRunner)[] = [
-  new CppStreamedTestRunner(),
+  new CppStreamedReaderTestRunner(),
+  new CppStreamedWriterTestRunner(),
   new GoStreamedTestRunner(),
   new PythonStreamedReaderTestRunner(),
   new PythonStreamedWriterTestRunner(),
