@@ -261,11 +261,13 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *libmcap.WriterOptions) error {
 			key := fmt.Sprintf("%s/%s", topic, md5sum)
 			if _, ok := schemas[key]; !ok {
 				schemaID := uint16(len(schemas) + 1)
+				msgdefCopy := make([]byte, len(msgdef))
+				copy(msgdefCopy, msgdef)
 				err := writer.WriteSchema(&libmcap.Schema{
 					ID:       schemaID,
-					Encoding: "msg",
+					Encoding: "ros1msg",
 					Name:     string(typ),
-					Data:     msgdef,
+					Data:     msgdefCopy,
 				})
 				if err != nil {
 					return err

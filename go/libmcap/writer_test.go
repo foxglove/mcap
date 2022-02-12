@@ -81,7 +81,7 @@ func TestOutputDeterminism(t *testing.T) {
 		assert.Nil(t, w.WriteSchema(&Schema{
 			ID:       1,
 			Name:     "foo",
-			Encoding: "ros1",
+			Encoding: "ros1msg",
 			Data:     []byte{},
 		}))
 		for i := 0; i < 3; i++ {

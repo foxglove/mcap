@@ -34,7 +34,7 @@ int main() {
   }
 
   // Register a Schema
-  mcap::Schema stdMsgsString("std_msgs/String", "ros1", "string data");
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", "string data");
   writer.addSchema(stdMsgsString);
 
   // Register a Channel
