@@ -26,7 +26,7 @@
 
 namespace mcap {
 
-#define LIBRARY_VERSION "0.0.1"
+#define MCAP_LIBRARY_VERSION "0.0.1"
 
 using SchemaId = uint16_t;
 using ChannelId = uint16_t;
@@ -37,7 +37,7 @@ using ByteArray = std::vector<std::byte>;
 using ProblemCallback = std::function<void(const Status&)>;
 
 constexpr char SpecVersion = '0';
-constexpr char LibraryVersion[] = LIBRARY_VERSION;
+constexpr char LibraryVersion[] = MCAP_LIBRARY_VERSION;
 constexpr uint8_t Magic[] = {137, 77, 67, 65, 80, SpecVersion, 13, 10};  // "\x89MCAP0\r\n"
 constexpr uint64_t DefaultChunkSize = 1024 * 768;
 constexpr ByteOffset EndOffset = std::numeric_limits<ByteOffset>::max();
@@ -399,12 +399,18 @@ struct McapWriterOptions {
    * @brief Disable CRC calculations for Chunks, Attachments, and the Data and
    * Summary sections.
    */
-  bool noCRC;
+  bool noCRC = false;
   /**
    * @brief Do not write Chunks to the file, instead writing Schema, Channel,
    * and Message records directly into the Data section.
    */
-  bool noChunking;
+  bool noChunking = false;
+  /**
+   * @brief Do not write Message Index records to the file. If `noSummary=true`
+   * and `noChunkIndex=false`, Chunk Index records will still be written to the
+   * Summary section, providing a coarse message index.
+   */
+  bool noMessageIndex = false;
   /**
    * @brief Do not write Summary or Summary Offset sections to the file, placing
    * the Footer record immediately after DataEnd. This can provide some speed
@@ -412,7 +418,7 @@ struct McapWriterOptions {
    * requiring a conversion process later if fast summarization or indexed
    * access is desired.
    */
-  bool noSummary;
+  bool noSummary = false;
   /**
    * @brief Target uncompressed Chunk payload size in bytes. Once a Chunk's
    * uncompressed data meets or exceeds this size, the Chunk will be compressed
@@ -420,18 +426,18 @@ struct McapWriterOptions {
    * may be written, such as the last Chunk in the Data section. This option is
    * ignored if `noChunking=true`.
    */
-  uint64_t chunkSize;
+  uint64_t chunkSize = DefaultChunkSize;
   /**
    * @brief Compression algorithm to use when writing Chunks. This option is
    * ignored if `noChunking=true`.
    */
-  Compression compression;
+  Compression compression = Compression::Zstd;
   /**
    * @brief Compression level to use when writing Chunks. Slower generally
    * produces smaller files, at the expense of more CPU time. These levels map
    * to different internal settings for each compression algorithm.
    */
-  CompressionLevel compressionLevel;
+  CompressionLevel compressionLevel = CompressionLevel::Default;
   /**
    * @brief The recording profile. See
    * <https://github.com/foxglove/mcap/tree/main/docs/specification/profiles>
@@ -442,16 +448,21 @@ struct McapWriterOptions {
    * @brief A freeform string written by recording libraries. For this library,
    * the default is "libmcap {Major}.{Minor}.{Patch}".
    */
-  std::string library;
+  std::string library = "libmcap " MCAP_LIBRARY_VERSION;
+
+  // The following options are less commonly used, providing more fine-grained
+  // control of index records and the Summary section
+
+  bool noRepeatedSchemas = false;
+  bool noRepeatedChannels = false;
+  bool noAttachmentIndex = false;
+  bool noMetadataIndex = false;
+  bool noChunkIndex = false;
+  bool noStatistics = false;
+  bool noSummaryOffsets = false;
 
   McapWriterOptions(const std::string_view profile)
-      : noChunking(false)
-      , noSummary(false)
-      , chunkSize(DefaultChunkSize)
-      , compression(Compression::None)
-      , compressionLevel(CompressionLevel::Default)
-      , profile(profile)
-      , library("libmcap " LIBRARY_VERSION) {}
+      : profile(profile) {}
 };
 
 /**
