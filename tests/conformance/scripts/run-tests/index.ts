@@ -184,10 +184,14 @@ async function main(options: TestOptions) {
   }
 
   const enabledRunners =
-    options.runner == undefined ? runners : runners.filter((r) => r.name === options.runner);
+    options.runner == undefined ? runners : runners.filter((r) => r.name.includes(options.runner!));
   if (enabledRunners.length === 0) {
     if (options.runner) {
-      throw new Error(`No runner named ${options.runner}`);
+      throw new Error(
+        `No runner named ${options.runner}. Allowed choices are ${runners
+          .map((r) => r.name)
+          .join(", ")}`,
+      );
     } else {
       throw new Error("No runners available");
     }
@@ -227,11 +231,7 @@ async function main(options: TestOptions) {
 
 program
   .requiredOption("--data-dir <dataDir>", "directory to read test data and output results")
-  .addOption(
-    program
-      .createOption("--runner <runner>", "test runner to use")
-      .choices(runners.map((r) => r.name)),
-  )
+  .addOption(program.createOption("--runner <runner>", "test runner to use"))
   .option("--update", "update expected output files", false)
   .option(
     "--test-regex <pattern>",
