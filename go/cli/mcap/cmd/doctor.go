@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/foxglove/mcap/go/libmcap"
+	"github.com/foxglove/mcap/go/mcap"
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
 	"github.com/spf13/cobra"
@@ -21,8 +21,8 @@ import (
 type mcapDoctor struct {
 	reader io.Reader
 
-	channels map[uint16]*libmcap.Channel
-	schemas  map[uint16]*libmcap.Schema
+	channels map[uint16]*mcap.Channel
+	schemas  map[uint16]*mcap.Schema
 }
 
 type MessageEncoding string
@@ -58,14 +58,14 @@ func (doctor *mcapDoctor) fatalf(format string, v ...interface{}) {
 	os.Exit(1)
 }
 
-func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
-	compressionFormat := libmcap.CompressionFormat(chunk.Compression)
+func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
+	compressionFormat := mcap.CompressionFormat(chunk.Compression)
 	var uncompressedBytes []byte
 
 	switch compressionFormat {
-	case libmcap.CompressionNone:
+	case mcap.CompressionNone:
 		uncompressedBytes = chunk.Records
-	case libmcap.CompressionZSTD:
+	case mcap.CompressionZSTD:
 		compressedDataReader := bytes.NewReader(chunk.Records)
 		chunkDataReader, err := zstd.NewReader(compressedDataReader)
 		if err != nil {
@@ -77,7 +77,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 			doctor.error("Could not decompress: %s", err)
 			return
 		}
-	case libmcap.CompressionLZ4:
+	case mcap.CompressionLZ4:
 		var err error
 		compressedDataReader := bytes.NewReader(chunk.Records)
 		chunkDataReader := lz4.NewReader(compressedDataReader)
@@ -106,7 +106,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 
 	uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
 
-	lexer, err := libmcap.NewLexer(uncompressedBytesReader, &libmcap.LexerOptions{
+	lexer, err := mcap.NewLexer(uncompressedBytesReader, &mcap.LexerOptions{
 		SkipMagic:   true,
 		ValidateCRC: true,
 		EmitChunks:  true,
@@ -136,8 +136,8 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 			msg = data
 		}
 		switch tokenType {
-		case libmcap.TokenSchema:
-			schema, err := libmcap.ParseSchema(data)
+		case mcap.TokenSchema:
+			schema, err := mcap.ParseSchema(data)
 			if err != nil {
 				doctor.error("Failed to parse schema:", err)
 			}
@@ -160,8 +160,8 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 			}
 
 			doctor.schemas[schema.ID] = schema
-		case libmcap.TokenChannel:
-			channel, err := libmcap.ParseChannel(data)
+		case mcap.TokenChannel:
+			channel, err := mcap.ParseChannel(data)
 			if err != nil {
 				doctor.error("Error parsing Channel: %s", err)
 			}
@@ -179,8 +179,8 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 			if _, ok := doctor.schemas[channel.SchemaID]; !ok {
 				doctor.error("Encountered Channel (%d) with unknown Schema (%d)", channel.ID, channel.SchemaID)
 			}
-		case libmcap.TokenMessage:
-			message, err := libmcap.ParseMessage(data)
+		case mcap.TokenMessage:
+			message, err := mcap.ParseMessage(data)
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
 			}
@@ -215,7 +215,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *libmcap.Chunk) {
 }
 
 func (doctor *mcapDoctor) Examine() {
-	lexer, err := libmcap.NewLexer(doctor.reader, &libmcap.LexerOptions{
+	lexer, err := mcap.NewLexer(doctor.reader, &mcap.LexerOptions{
 		SkipMagic:   false,
 		ValidateCRC: true,
 		EmitChunks:  true,
@@ -237,8 +237,8 @@ func (doctor *mcapDoctor) Examine() {
 			msg = data
 		}
 		switch tokenType {
-		case libmcap.TokenHeader:
-			header, err := libmcap.ParseHeader(data)
+		case mcap.TokenHeader:
+			header, err := mcap.ParseHeader(data)
 			if err != nil {
 				doctor.error("Error parsing Header: %s", err)
 			}
@@ -252,13 +252,13 @@ func (doctor *mcapDoctor) Examine() {
 				doctor.error(`Header.profile field is not valid: %s.
 					Only a well-known profile is allowed. Other profiles must use x- prefix`, header.Profile)
 			}
-		case libmcap.TokenFooter:
-			_, err := libmcap.ParseFooter(data)
+		case mcap.TokenFooter:
+			_, err := mcap.ParseFooter(data)
 			if err != nil {
 				doctor.error("Failed to parse footer:", err)
 			}
-		case libmcap.TokenSchema:
-			schema, err := libmcap.ParseSchema(data)
+		case mcap.TokenSchema:
+			schema, err := mcap.ParseSchema(data)
 			if err != nil {
 				doctor.error("Failed to parse schema:", err)
 			}
@@ -280,8 +280,8 @@ func (doctor *mcapDoctor) Examine() {
 			}
 
 			doctor.schemas[schema.ID] = schema
-		case libmcap.TokenChannel:
-			channel, err := libmcap.ParseChannel(data)
+		case mcap.TokenChannel:
+			channel, err := mcap.ParseChannel(data)
 			if err != nil {
 				doctor.error("Error parsing Channel: %s", err)
 			}
@@ -299,8 +299,8 @@ func (doctor *mcapDoctor) Examine() {
 			if _, ok := doctor.schemas[channel.SchemaID]; !ok {
 				doctor.error("Encountered Channel (%d) with unknown Schema (%d)", channel.ID, channel.SchemaID)
 			}
-		case libmcap.TokenMessage:
-			message, err := libmcap.ParseMessage(data)
+		case mcap.TokenMessage:
+			message, err := mcap.ParseMessage(data)
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
 			}
@@ -309,59 +309,59 @@ func (doctor *mcapDoctor) Examine() {
 			if channel == nil {
 				doctor.error("Got a Message record for channel: %d before a channel info.", message.ChannelID)
 			}
-		case libmcap.TokenChunk:
-			chunk, err := libmcap.ParseChunk(data)
+		case mcap.TokenChunk:
+			chunk, err := mcap.ParseChunk(data)
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
 			}
 
 			doctor.examineChunk(chunk)
-		case libmcap.TokenMessageIndex:
-			_, err := libmcap.ParseMessageIndex(data)
+		case mcap.TokenMessageIndex:
+			_, err := mcap.ParseMessageIndex(data)
 			if err != nil {
 				doctor.error("Failed to parse message index:", err)
 			}
-		case libmcap.TokenChunkIndex:
-			_, err := libmcap.ParseChunkIndex(data)
+		case mcap.TokenChunkIndex:
+			_, err := mcap.ParseChunkIndex(data)
 			if err != nil {
 				doctor.error("Failed to parse chunk index:", err)
 			}
-		case libmcap.TokenAttachment:
-			_, err := libmcap.ParseAttachment(data)
+		case mcap.TokenAttachment:
+			_, err := mcap.ParseAttachment(data)
 			if err != nil {
 				doctor.error("Failed to parse attachment:", err)
 			}
-		case libmcap.TokenAttachmentIndex:
-			_, err := libmcap.ParseAttachmentIndex(data)
+		case mcap.TokenAttachmentIndex:
+			_, err := mcap.ParseAttachmentIndex(data)
 			if err != nil {
 				doctor.error("Failed to parse attachment index:", err)
 			}
-		case libmcap.TokenStatistics:
-			_, err := libmcap.ParseStatistics(data)
+		case mcap.TokenStatistics:
+			_, err := mcap.ParseStatistics(data)
 			if err != nil {
 				doctor.error("Failed to parse statistics:", err)
 			}
-		case libmcap.TokenMetadata:
-			_, err := libmcap.ParseMetadata(data)
+		case mcap.TokenMetadata:
+			_, err := mcap.ParseMetadata(data)
 			if err != nil {
 				doctor.error("Failed to parse metadata:", err)
 			}
-		case libmcap.TokenMetadataIndex:
-			_, err := libmcap.ParseMetadataIndex(data)
+		case mcap.TokenMetadataIndex:
+			_, err := mcap.ParseMetadataIndex(data)
 			if err != nil {
 				doctor.error("Failed to parse metadata index:", err)
 			}
-		case libmcap.TokenSummaryOffset:
-			_, err := libmcap.ParseSummaryOffset(data)
+		case mcap.TokenSummaryOffset:
+			_, err := mcap.ParseSummaryOffset(data)
 			if err != nil {
 				doctor.error("Failed to parse summary offset:", err)
 			}
-		case libmcap.TokenDataEnd:
-			_, err := libmcap.ParseDataEnd(data)
+		case mcap.TokenDataEnd:
+			_, err := mcap.ParseDataEnd(data)
 			if err != nil {
 				doctor.error("Failed to parse data end:", err)
 			}
-		case libmcap.TokenError:
+		case mcap.TokenError:
 			// this is the value of the tokenType when there is an error
 			// from the lexer, which we caught at the top.
 			doctor.fatalf("Failed to parse:", err)
@@ -372,8 +372,8 @@ func (doctor *mcapDoctor) Examine() {
 func newMcapDoctor(reader io.Reader) *mcapDoctor {
 	return &mcapDoctor{
 		reader:   reader,
-		channels: make(map[uint16]*libmcap.Channel),
-		schemas:  make(map[uint16]*libmcap.Schema),
+		channels: make(map[uint16]*mcap.Channel),
+		schemas:  make(map[uint16]*mcap.Schema),
 	}
 }
 
