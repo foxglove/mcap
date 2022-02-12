@@ -446,7 +446,17 @@ Status McapWriter::write(Attachment& attachment) {
 
   if (!options_.noCRC) {
     // Calculate the CRC32 of the attachment
+    uint32_t sizePrefix = 0;
     CryptoPP::CRC32 crc;
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&attachment.logTime), 8);
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&attachment.createTime), 8);
+    sizePrefix = uint32_t(attachment.name.size());
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&sizePrefix), 4);
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(attachment.name.data()), sizePrefix);
+    sizePrefix = uint32_t(attachment.contentType.size());
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&sizePrefix), 4);
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(attachment.contentType.data()), sizePrefix);
+    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&attachment.dataSize), 8);
     crc.Update(reinterpret_cast<const CryptoPP::byte*>(attachment.data), attachment.dataSize);
     crc.Final(reinterpret_cast<CryptoPP::byte*>(&attachment.crc));
   }
