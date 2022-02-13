@@ -892,6 +892,7 @@ public:
 
 private:
   friend LinearMessageView;
+  friend LinearMessageView::Iterator;
 
   IReadable* input_ = nullptr;
   McapReaderOptions options_{};
@@ -1105,23 +1106,24 @@ private:
  * data source.
  */
 struct TypedRecordReader {
-  std::function<void(const Header&)> onHeader;
-  std::function<void(const Footer&)> onFooter;
-  std::function<void(const SchemaPtr)> onSchema;
-  std::function<void(const ChannelPtr)> onChannel;
-  std::function<void(const Message&)> onMessage;
-  std::function<void(const Chunk&)> onChunk;
-  std::function<void(const MessageIndex&)> onMessageIndex;
-  std::function<void(const ChunkIndex&)> onChunkIndex;
-  std::function<void(const Attachment&)> onAttachment;
-  std::function<void(const AttachmentIndex&)> onAttachmentIndex;
-  std::function<void(const Statistics&)> onStatistics;
-  std::function<void(const Metadata&)> onMetadata;
-  std::function<void(const MetadataIndex&)> onMetadataIndex;
-  std::function<void(const SummaryOffset&)> onSummaryOffset;
-  std::function<void(const DataEnd&)> onDataEnd;
-  std::function<void(const Record&)> onUnknownRecord;
-  std::function<void(void)> onChunkEnd;
+  std::function<void(const Header&, ByteOffset offset, ByteOffset length)> onHeader;
+  std::function<void(const Footer&, ByteOffset offset, ByteOffset length)> onFooter;
+  std::function<void(const SchemaPtr, ByteOffset offset, ByteOffset length)> onSchema;
+  std::function<void(const ChannelPtr, ByteOffset offset, ByteOffset length)> onChannel;
+  std::function<void(const Message&, ByteOffset offset, ByteOffset length)> onMessage;
+  std::function<void(const Chunk&, ByteOffset offset, ByteOffset length)> onChunk;
+  std::function<void(const MessageIndex&, ByteOffset offset, ByteOffset length)> onMessageIndex;
+  std::function<void(const ChunkIndex&, ByteOffset offset, ByteOffset length)> onChunkIndex;
+  std::function<void(const Attachment&, ByteOffset offset, ByteOffset length)> onAttachment;
+  std::function<void(const AttachmentIndex&, ByteOffset offset, ByteOffset length)>
+    onAttachmentIndex;
+  std::function<void(const Statistics&, ByteOffset offset, ByteOffset length)> onStatistics;
+  std::function<void(const Metadata&, ByteOffset offset, ByteOffset length)> onMetadata;
+  std::function<void(const MetadataIndex&, ByteOffset offset, ByteOffset length)> onMetadataIndex;
+  std::function<void(const SummaryOffset&, ByteOffset offset, ByteOffset length)> onSummaryOffset;
+  std::function<void(const DataEnd&, ByteOffset offset, ByteOffset length)> onDataEnd;
+  std::function<void(const Record&, ByteOffset offset, ByteOffset length)> onUnknownRecord;
+  std::function<void(ByteOffset offset)> onChunkEnd;
 
   TypedRecordReader(IReadable& dataSource, ByteOffset startOffset,
                     ByteOffset endOffset = EndOffset);

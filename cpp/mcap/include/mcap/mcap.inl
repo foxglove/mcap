@@ -2431,6 +2431,10 @@ LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataSta
 
     curMessage_.emplace(message, maybeChannel, maybeSchema);
   };
+  recordReader_->onAttachment = [this](const Attachment& attachment, ByteOffset offset,
+                                       ByteOffset length) {
+    //
+  };
 
   ++(*this);
 }
