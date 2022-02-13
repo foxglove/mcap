@@ -112,9 +112,10 @@ var convertCmd = &cobra.Command{
 				die("failed to open sqlite3: %s", err)
 			}
 			dirs := strings.FieldsFunc(directories, func(c rune) bool { return c == ',' })
-			prefix := os.Getenv("AMENT_PREFIX_PATH")
+			prefixPath := os.Getenv("AMENT_PREFIX_PATH")
 			if prefix != "" {
-				dirs = append(dirs, prefix)
+				pathElements := strings.FieldsFunc(prefixPath, func(c rune) bool { return c == ':' })
+				dirs = append(dirs, pathElements...)
 			}
 			err = ros.DB3ToMCAP(w, db, opts, dirs)
 			if err != nil {
