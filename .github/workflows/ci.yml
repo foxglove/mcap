@@ -164,6 +164,23 @@ jobs:
       - run: pipenv run pyright mcap tests
       - run: pipenv run python -m build
 
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.TESTPYPI_API_TOKEN }}
+          packages_dir: python/dist
+          repository_url: https://test.pypi.org/legacy/
+          skip_existing: true
+
+      - name: Publish to PyPI
+        if: ${{ startsWith(github.ref, 'refs/tags/releases/python/v') }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages_dir: python/dist
+
   go:
     runs-on: ubuntu-latest
     defaults:

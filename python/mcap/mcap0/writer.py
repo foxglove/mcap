@@ -27,8 +27,8 @@ from .records import (
 
 class CompressionType(Enum):
     NONE = auto()
-    ZSTD = auto()
     LZ4 = auto()
+    ZSTD = auto()
 
 
 class IndexType(Flag):
@@ -41,10 +41,12 @@ class IndexType(Flag):
 
 
 class Writer:
+    """Writes MCAP data."""
+
     def __init__(
         self,
         output: Union[str, BytesIO, BufferedWriter],
-        chunk_size: int = 1024 * 768,
+        chunk_size: int = 1024 * 1024,
         compression: CompressionType = CompressionType.NONE,
         index_types: IndexType = IndexType.ALL,
         repeat_channels: bool = True,
@@ -53,6 +55,17 @@ class Writer:
         use_statistics: bool = True,
         use_summary_offsets: bool = True,
     ):
+        """
+        output: The stream to which data should be written.
+        chunk_size: The maximum size of individual data chunks in a chunked file.
+        compression: Compression to apply to chunk data, if any.
+        index_types: Indexes to write to the file. See IndexType for possibilities.
+        repeat_channels: Repeat channel information at the end of the file.
+        repeat_schemas: Repeat schemas at the end of the file.
+        use_chunking: Group data in chunks.
+        use_statistics: Write statistics record.
+        use_summary_offsets: Write summary offset records.
+        """
         if isinstance(output, str):
             self.__stream = WriteDataStream(open(output, "wb"))
         elif isinstance(output, RawIOBase):
@@ -84,9 +97,26 @@ class Writer:
         self.__use_statistics = use_statistics
         self.__use_summary_offsets = use_summary_offsets
 
-    def add_attachment(self, attachment: Attachment):
+    def add_attachment(
+        self, create_time: int, log_time: int, name: str, content_type: str, data: bytes
+    ):
+        """Adds an attachment to the file.
+
+        log_time: Time at which the attachment was recorded.
+        create_time: Time at which the attachment was created. If not available, must be set to zero.
+        name: Name of the attachment, e.g "scene1.jpg".
+        content_type: MIME Type (e.g "text/plain").
+        data: Attachment data.
+        """
         offset = self.__stream.count
         self.__statistics.attachment_count += 1
+        attachment = Attachment(
+            create_time=create_time,
+            log_time=log_time,
+            name=name,
+            content_type=content_type,
+            data=data,
+        )
         attachment.write(self.__stream)
         if self.__index_types & IndexType.ATTACHMENT:
             index = AttachmentIndex(
@@ -100,7 +130,31 @@ class Writer:
             )
             self.__attachment_indexes.append(index)
 
-    def add_message(self, message: Message):
+    def add_message(
+        self,
+        channel_id: int,
+        log_time: int,
+        data: bytes,
+        publish_time: int,
+        sequence: int = 0,
+    ):
+        """
+        Adds a new message to the file. If chunking is enabled the message will be added
+        to the current chunk.
+
+        channel_id: The id of the channel to which the message should be added.
+        sequence: Optional message counter assigned by publisher.
+        log_time: Time at which the message was recorded.
+        publish_time: Time at which the message was published. If not available, must be set to the log time.
+        data: Message data, to be decoded according to the schema of the channel.
+        """
+        message = Message(
+            channel_id=channel_id,
+            log_time=log_time,
+            data=data,
+            publish_time=publish_time,
+            sequence=sequence,
+        )
         if self.__statistics.message_start_time == 0:
             self.__statistics.message_start_time = message.log_time
         self.__statistics.message_end_time = message.log_time
@@ -112,10 +166,21 @@ class Writer:
         else:
             message.write(self.__stream)
 
-    def add_metadata(self, metadata: Metadata):
+    def add_metadata(self, name: str, data: Dict[str, str]):
+        """
+        Adds key-value metadata to the file.
+
+        name: A name to associate with the metadata.
+        data: Key-value metadata.
+        """
+        metadata = Metadata(name=name, data=data)
         metadata.write(self.__stream)
 
     def finish(self):
+        """
+        Writes any final indexes, summaries etc to the file. Note that it does
+        not close the underlying output stream.
+        """
         self.__finalize_chunk()
 
         DataEnd(0).write(self.__stream)
@@ -124,7 +189,7 @@ class Writer:
 
         if self.__repeat_schemas:
             group_start = self.__stream.count
-            for _id, schema in self.__schemas.items():
+            for schema in self.__schemas.values():
                 schema.write(self.__stream)
             self.__summary_offsets.append(
                 SummaryOffset(
@@ -136,7 +201,7 @@ class Writer:
 
         if self.__repeat_channels:
             group_start = self.__stream.count
-            for _id, channel in self.__channels.items():
+            for channel in self.__channels.values():
                 channel.write(self.__stream)
             self.__summary_offsets.append(
                 SummaryOffset(
@@ -179,14 +244,24 @@ class Writer:
         self,
         topic: str,
         message_encoding: str,
-        metadata: Dict[str, str],
+        schema_id: int,
+        metadata: Dict[str, str] = {},
     ) -> int:
+        """
+        Registers a new message channel. Returns the numeric id of the new channel.
+
+        schema_id: The schema for messages on this channel. A schema_id of 0 indicates there is no schema for this channel.
+        topic: The channel topic.
+        message_encoding: Encoding for messages on this channel. The value should be one of the well-known message encodings
+            Custom values should use the 'x-` prefix.
+        metadata: Metadata about this channel.
+        """
         channel_id = len(self.__channels) + 1
         channel = Channel(
             id=channel_id,
             topic=topic,
             message_encoding=message_encoding,
-            schema_id=1,
+            schema_id=schema_id,
             metadata=metadata,
         )
         self.__channels[channel_id] = channel
@@ -199,6 +274,14 @@ class Writer:
         return channel_id
 
     def register_schema(self, name: str, encoding: str, data: bytes):
+        """
+        Registers a new message schema. Returns the new integer schema id.
+
+        name: An identifier for the schema.
+        encoding: Format for the schema. The value should be one of the well-known schema encodings
+            Custom values should use the `x-` prefix. An empty string indicates no schema is available.
+        data: Schema data. Must conform to the schema encoding. If `encoding` is an empty string, `data` should be 0 length.
+        """
         schema_id = len(self.__schemas) + 1
         schema = Schema(id=schema_id, data=data, encoding=encoding, name=name)
         self.__schemas[schema_id] = schema
@@ -211,6 +294,12 @@ class Writer:
         return schema_id
 
     def start(self, profile: str, library: str):
+        """
+        Starts writing to the output stream.
+
+        profile: The profile is used for indicating requirements for fields throughout the file (encoding, user_data, etc).
+        library: Free-form string for writer to specify its name, version, or other information for use in debugging.
+        """
         self.__stream.write_magic()
         Header(profile, library).write(self.__stream)
 
@@ -301,3 +390,6 @@ class Writer:
                     group_length=self.__stream.count - summary_start,
                 )
             )
+
+
+__all__ = ["CompressionType", "IndexType", "Writer"]
