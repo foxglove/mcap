@@ -49,7 +49,7 @@ An MCAP file must begin and end with the following [magic bytes](https://en.wiki
 
     0x89, M, C, A, P, 0x30, \r, \n
 
-> Note: The version byte (ASCII zero 0x30) following "MCAP" will be updated to 1 (0x31) upon ratification of this specification. Until then, backward compatibility is not guaranteed.
+The byte following "MCAP" is the major version byte. `0x30` is the ASCII character `0`. Any changes to this specification document (i.e. adding fields to records, introducing new records) will be binary backward-compatible within the major version.
 
 ### Header
 
