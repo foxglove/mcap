@@ -3,6 +3,8 @@ from enum import Enum, Flag, auto
 from io import BufferedWriter, BytesIO, RawIOBase
 from typing import Dict, List, OrderedDict, Union
 
+import zstd
+
 from .chunk_builder import ChunkBuilder
 from .data_stream import WriteDataStream
 from .opcode import Opcode
@@ -43,9 +45,8 @@ class Writer:
         self,
         output: Union[str, BytesIO, BufferedWriter],
         chunk_size: int = 1024 * 768,
-        compression: CompressionType = CompressionType.ZSTD,
+        compression: CompressionType = CompressionType.NONE,
         index_types: IndexType = IndexType.ALL,
-        metadata: Dict[str, str] = {},
         repeat_channels: bool = True,
         repeat_schemas: bool = True,
         use_chunking: bool = True,
@@ -63,6 +64,7 @@ class Writer:
         self.__chunk_builder = ChunkBuilder() if use_chunking else None
         self.__chunk_indices: List[ChunkIndex] = []
         self.__chunk_size = chunk_size
+        self.__compression = compression
         self.__index_types = index_types
         self.__repeat_channels = repeat_channels
         self.__repeat_schemas = repeat_schemas
@@ -106,6 +108,7 @@ class Writer:
         self.__statistics.message_count += 1
         if self.__chunk_builder:
             self.__chunk_builder.add_message(message)
+            self.__maybe_finalize_chunk()
         else:
             message.write(self.__stream)
 
@@ -190,6 +193,7 @@ class Writer:
         self.__statistics.channel_count += 1
         if self.__chunk_builder:
             self.__chunk_builder.add_channel(channel)
+            self.__maybe_finalize_chunk()
         else:
             channel.write(self.__stream)
         return channel_id
@@ -201,6 +205,7 @@ class Writer:
         self.__statistics.schema_count += 1
         if self.__chunk_builder:
             self.__chunk_builder.add_schema(schema)
+            self.__maybe_finalize_chunk()
         else:
             schema.write(self.__stream)
         return schema_id
@@ -219,9 +224,18 @@ class Writer:
         self.__statistics.chunk_count += 1
 
         chunk_data = self.__chunk_builder.data()
+        if self.__compression == CompressionType.LZ4:
+            compression = "lz4"
+            compressed_data: bytes = lz4.frame.compress(self.__chunk_builder.data())  # type: ignore
+        elif self.__compression == CompressionType.ZSTD:
+            compression = "zstd"
+            compressed_data: bytes = zstd.ZSTD_compress(self.__chunk_builder.data())  # type: ignore
+        else:
+            compression = ""
+            compressed_data = self.__chunk_builder.data()
         chunk = Chunk(
-            compression="",
-            data=chunk_data,
+            compression=compression,
+            data=compressed_data,
             message_start_time=self.__chunk_builder.message_start_time,
             message_end_time=self.__chunk_builder.message_end_time,
             uncompressed_crc=0,
@@ -255,6 +269,13 @@ class Writer:
 
         self.__chunk_indices.append(chunk_index)
         self.__chunk_builder.reset()
+
+    def __maybe_finalize_chunk(self):
+        if (
+            self.__chunk_builder
+            and len(self.__chunk_builder.data()) > self.__chunk_size
+        ):
+            self.__finalize_chunk()
 
     def __write_indexes(self):
         if self.__index_types & IndexType.CHUNK:
