@@ -2,6 +2,7 @@ test:
 	make -C mcap test
 	make -C ros test
 	make -C conformance test
+	make -C cli/mcap test
 
 lint:
 	make -C mcap lint
