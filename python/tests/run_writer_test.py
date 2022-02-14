@@ -2,26 +2,13 @@ import json
 import sys
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set, Type
 
-# Need to ignore warnings here because we reference these dynamically by name.
-from mcap.mcap0.records import Attachment  # type: ignore
-from mcap.mcap0.records import AttachmentIndex  # type: ignore
-from mcap.mcap0.records import Channel  # type: ignore
-from mcap.mcap0.records import ChunkIndex  # type: ignore
-from mcap.mcap0.records import DataEnd  # type: ignore
-from mcap.mcap0.records import Footer  # type: ignore
-from mcap.mcap0.records import Header  # type: ignore
-from mcap.mcap0.records import McapRecord  # type: ignore
-from mcap.mcap0.records import Message  # type: ignore
-from mcap.mcap0.records import MessageIndex  # type: ignore
-from mcap.mcap0.records import Schema  # type: ignore
-from mcap.mcap0.records import Statistics  # type: ignore
-from mcap.mcap0.records import SummaryOffset  # type: ignore
-from mcap.mcap0.stream_writer import IndexType, StreamWriter
+from mcap.mcap0.records import Attachment, Channel, Header, McapRecord, Message, Schema
+from mcap.mcap0.writer import IndexType, Writer
 
 
-def deserialize_value(klass: McapRecord, field: str, value: Any) -> Any:
+def deserialize_value(klass: Type[McapRecord], field: str, value: Any) -> Any:
     field_type = klass.__dataclass_fields__[field].type
     if field_type == str:
         return value
@@ -35,7 +22,7 @@ def deserialize_value(klass: McapRecord, field: str, value: Any) -> Any:
 
 
 def deserialize_record(key: str, fields: List[Dict[str, Any]]) -> McapRecord:
-    klass = getattr(sys.modules[__name__], key)
+    klass = [c for c in McapRecord.__subclasses__() if c.__name__ == key][0]
     data = {k: deserialize_value(klass, k, v) for k, v in fields}
     return klass(**data)
 
@@ -44,17 +31,25 @@ def index_type_from_features(features: List[str]) -> IndexType:
     type = IndexType.NONE
     if "ax" in features:
         type |= IndexType.ATTACHMENT
+    if "chx" in features:
+        type |= IndexType.CHUNK
+    if "mx" in features:
+        type |= IndexType.MESSAGE
     return type
 
 
 def write_file(features: List[str], expected_records: List[Dict[str, Any]]) -> bytes:
+    seen_channels: Set[str] = set()
+    seen_schemas: Set[str] = set()
     output = BytesIO()
-    writer = StreamWriter(
-        output,
-        profile="",
+    writer = Writer(
+        output=output,
         index_types=index_type_from_features(features),
+        repeat_channels="rch" in features,
+        repeat_schemas="rsh" in features,
         use_chunking="ch" in features,
         use_statistics="st" in features,
+        use_summary_offsets="sum" in features,
     )
     for line in expected_records:
         type, fields = line["type"], line["fields"]
@@ -64,15 +59,21 @@ def write_file(features: List[str], expected_records: List[Dict[str, Any]]) -> b
         if isinstance(record, Attachment):
             writer.add_attachment(record)
         if isinstance(record, Channel):
-            writer.register_channel(
-                topic=record.topic,
-                message_encoding=record.message_encoding,
-                metadata=record.metadata,
-            )
+            if not record.topic in seen_channels:
+                writer.register_channel(
+                    topic=record.topic,
+                    message_encoding=record.message_encoding,
+                    metadata=record.metadata,
+                )
+            seen_channels.add(record.topic)
         if isinstance(record, Message):
             writer.add_message(record)
         if isinstance(record, Schema):
-            writer.add_schema(record)
+            if not record.name in seen_schemas:
+                writer.register_schema(
+                    name=record.name, encoding=record.encoding, data=record.data
+                )
+            seen_schemas.add(record.name)
     writer.finish()
     return output.getvalue()
 
