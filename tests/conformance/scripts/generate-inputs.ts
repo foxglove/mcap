@@ -82,7 +82,7 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
         if (features.has(TestFeatures.UseAttachmentIndex)) {
           attachmentIndexes.push({
             name: record.name,
-            length,
+            length: length - (features.has(TestFeatures.AddExtraDataToRecords) ? 3n : 0n),
             offset,
             dataSize: BigInt(record.data.byteLength),
             contentType: record.contentType,
