@@ -113,7 +113,7 @@ var convertCmd = &cobra.Command{
 			}
 			dirs := strings.FieldsFunc(directories, func(c rune) bool { return c == ',' })
 			prefixPath := os.Getenv("AMENT_PREFIX_PATH")
-			if prefix != "" {
+			if prefixPath != "" {
 				pathElements := strings.FieldsFunc(prefixPath, func(c rune) bool { return c == ':' })
 				dirs = append(dirs, pathElements...)
 			}
