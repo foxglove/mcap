@@ -21,6 +21,7 @@
 #include <vector>
 
 #define ZSTD_STATIC_LINKING_ONLY
+#include "intervaltree.hpp"
 #include <zstd.h>
 #include <zstd_errors.h>
 
@@ -141,17 +142,11 @@ struct Schema {
   ByteArray data;
 
   Schema() = default;
+  Schema(const std::string_view name, const std::string_view encoding, const std::string_view data);
+  Schema(const std::string_view name, const std::string_view encoding, const ByteArray& data);
 
-  Schema(const std::string_view name, const std::string_view encoding, const std::string_view data)
-      : name(name)
-      , encoding(encoding)
-      , data{reinterpret_cast<const std::byte*>(data.data()),
-             reinterpret_cast<const std::byte*>(data.data() + data.size())} {}
-
-  Schema(const std::string_view name, const std::string_view encoding, const ByteArray& data)
-      : name(name)
-      , encoding(encoding)
-      , data{data} {}
+  ByteOffset valueSize() const;
+  ByteOffset recordSize() const;
 };
 
 /**
@@ -169,17 +164,12 @@ struct Channel {
   KeyValueMap metadata;
 
   Channel() = default;
-
   Channel(const std::string_view topic, const std::string_view messageEncoding, SchemaId schemaId,
-          const KeyValueMap& metadata = {})
-      : topic(topic)
-      , messageEncoding(messageEncoding)
-      , schemaId(schemaId)
-      , metadata(metadata) {}
-};
+          const KeyValueMap& metadata = {});
 
-using SchemaPtr = std::shared_ptr<Schema>;
-using ChannelPtr = std::shared_ptr<Channel>;
+  ByteOffset valueSize() const;
+  ByteOffset recordSize() const;
+};
 
 /**
  * @brief A single Message published to a Channel.
@@ -211,6 +201,9 @@ struct Message {
    * iterator is advanced.
    */
   const std::byte* data = nullptr;
+
+  ByteOffset valueSize() const;
+  ByteOffset recordSize() const;
 };
 
 /**
@@ -225,11 +218,15 @@ struct Chunk {
   std::string compression;
   ByteOffset compressedSize;
   const std::byte* records = nullptr;
+
+  ByteOffset valueSize() const;
+  ByteOffset recordSize() const;
 };
 
 /**
- * @brief A list of timestamps to byte offsets for a single Channel. This record
- * appears after each Chunk, one per Channel that appeared in that Chunk.
+ * @brief A list of timestamps to byte offsets inside an uncompressed Chunk for
+ * a single Channel. This record appears after each Chunk, one per Channel that
+ * appeared in that Chunk.
  */
 struct MessageIndex {
   ChannelId channelId;
@@ -251,6 +248,9 @@ struct ChunkIndex {
   std::string compression;
   ByteOffset compressedSize;
   ByteOffset uncompressedSize;
+
+  ChunkIndex() = default;
+  ChunkIndex(const Chunk& chunk, ByteOffset fileOffset);
 };
 
 /**
@@ -266,6 +266,9 @@ struct Attachment {
   uint64_t dataSize;
   const std::byte* data = nullptr;
   uint32_t crc;
+
+  ByteOffset valueSize() const;
+  ByteOffset recordSize() const;
 };
 
 /**
@@ -282,20 +285,7 @@ struct AttachmentIndex {
   std::string contentType;
 
   AttachmentIndex() = default;
-  AttachmentIndex(const Attachment& attachment, ByteOffset fileOffset)
-      : offset(fileOffset)
-      , length(9 +
-               /* name */ 4 + attachment.name.size() +
-               /* log_time */ 8 +
-               /* create_time */ 8 +
-               /* content_type */ 4 + attachment.contentType.size() +
-               /* data */ 8 + attachment.dataSize +
-               /* crc */ 4)
-      , logTime(attachment.logTime)
-      , createTime(attachment.createTime)
-      , dataSize(attachment.dataSize)
-      , name(attachment.name)
-      , contentType(attachment.contentType) {}
+  AttachmentIndex(const Attachment& attachment, ByteOffset fileOffset);
 };
 
 /**
@@ -321,6 +311,9 @@ struct Statistics {
 struct Metadata {
   std::string name;
   KeyValueMap metadata;
+
+  ByteOffset valueSize() const;
+  ByteOffset recordSize() const;
 };
 
 /**
@@ -355,6 +348,11 @@ struct SummaryOffset {
 struct DataEnd {
   uint32_t dataSectionCrc;
 };
+
+using SchemaPtr = std::shared_ptr<Schema>;
+using ChannelPtr = std::shared_ptr<Channel>;
+using AttachmentCallback = std::function<void(const Attachment&)>;
+using MetadataCallback = std::function<void(const Metadata&)>;
 
 /**
  * @brief Returned when iterating over Messages in a file, MessageView contains
@@ -802,6 +800,14 @@ public:
   Status readSummary();
 
   /**
+   * @brief Returns true if the Summary section has been parsed and is available
+   * or if a complete scan through the Data section has been performed. Seeking
+   * and random access to Attachments and Metadata are unavailable until this
+   * method returns true.
+   */
+  bool indexReady() const;
+
+  /**
    * @brief Returns an iterable view with `begin()` and `end()` methods for
    * iterating Messages in the MCAP file. If a non-zero `startTime` is provided,
    * this will first parse the Summary section (by calling `readSummary()`) if
@@ -819,9 +825,9 @@ public:
    * this will first parse the Summary section (by calling `readSummary()`) if
    * allowed by the configuration options and it has not been parsed yet.
    *
-   * @param onProblem A callback that will be called when a parsing error
-   *   occurs. Problems can either be recoverable, indicating some data could
-   *   not be read, or non-recoverable, stopping the iteration.
+   * @param onProblem Called when a parsing error occurs. Problems can either be
+   *   recoverable, indicating some data could not be read, or non-recoverable,
+   *   stopping the iteration.
    * @param startTime Optional start time in nanoseconds. Messages before this
    *   time will not be returned.
    * @param endTime Optional end time in nanoseconds. Messages equal to or after
@@ -829,6 +835,35 @@ public:
    */
   LinearMessageView readMessages(const ProblemCallback& onProblem, Timestamp startTime = 0,
                                  Timestamp endTime = MaxTime);
+
+  /**
+   * @brief Search for Attachments matching the given criteria.
+   *
+   * @param onAttachment Called when a matching Attachment is found
+   * @param onProblem Called when a parsing error occurs. Problems can either be
+   *   recoverable, indicating some data could not be read, or non-recoverable,
+   *   stopping the iteration.
+   * @param name Optional name of the Attachment(s) to search for
+   * @param startTime Optional start time in nanoseconds. Attachments before
+   *   this time will not be returned.
+   * @param endTime Optional end time in nanoseconds. Attachments equal to or
+   *   after this time will not be returned.
+   */
+  void readAttachments(const AttachmentCallback& onAttachment, const ProblemCallback& onProblem,
+                       const std::optional<std::string_view> name = std::nullopt,
+                       Timestamp startTime = 0, Timestamp endTime = MaxTime);
+
+  /**
+   * @brief Search for Metadata matching the given criteria.
+   *
+   * @param onMetadata Called when matching Metadata is found
+   * @param onProblem Called when a parsing error occurs. Problems can either be
+   *   recoverable, indicating some data could not be read, or non-recoverable,
+   *   stopping the iteration.
+   * @param name Optional name of the Metadata record(s) to search for
+   */
+  void readMetadata(const MetadataCallback& onMetadata, const ProblemCallback& onProblem,
+                    const std::optional<std::string_view> name = std::nullopt);
 
   /**
    * @brief Returns a pointer to the IReadable data source backing this reader.
@@ -899,19 +934,31 @@ private:
   std::optional<Header> header_;
   std::optional<Footer> footer_;
   std::optional<Statistics> statistics_;
+
+  // Chunk indexing
   std::vector<ChunkIndex> chunkIndexes_;
+  std::unordered_map<ByteOffset, ChunkIndex&> chunkIndexByOffset_;
+  IntervalTree<Timestamp, ChunkIndex&> chunkIndexByInterval_;
+
+  // Attachment indexing
   std::vector<AttachmentIndex> attachmentIndexes_;
+  std::unordered_map<ByteOffset, AttachmentIndex&> attachmentIndexByOffset_;
+  std::unordered_multimap<std::string, AttachmentIndex&> attachmentIndexByName_;
+  std::multimap<Timestamp, AttachmentIndex&> attachmentIndexByTime_;
+
+  // Metadata indexing
+  std::vector<MetadataIndex> metadataIndexes_;
+  std::unordered_map<ByteOffset, MetadataIndex&> metadataIndexByOffset_;
+  std::unordered_multimap<std::string, MetadataIndex&> metadataIndexByName_;
+
   std::unordered_map<SchemaId, SchemaPtr> schemas_;
   std::unordered_map<ChannelId, ChannelPtr> channels_;
-  // Used for uncompressed messages
-  std::unordered_map<ChannelId, std::map<Timestamp, ByteOffset>> messageIndex_;
-  // Used for messages inside compressed chunks
-  std::unordered_map<ChannelId, std::map<Timestamp, ByteOffset>> messageChunkIndex_;
   ByteOffset dataStart_ = 0;
   ByteOffset dataEnd_ = EndOffset;
   Timestamp startTime_ = 0;
   Timestamp endTime_ = 0;
   bool parsedSummary_ = false;
+  bool chunkIndexDirty_ = false;
 };
 
 /**
@@ -1105,23 +1152,24 @@ private:
  * data source.
  */
 struct TypedRecordReader {
-  std::function<void(const Header&)> onHeader;
-  std::function<void(const Footer&)> onFooter;
-  std::function<void(const SchemaPtr)> onSchema;
-  std::function<void(const ChannelPtr)> onChannel;
-  std::function<void(const Message&)> onMessage;
-  std::function<void(const Chunk&)> onChunk;
-  std::function<void(const MessageIndex&)> onMessageIndex;
-  std::function<void(const ChunkIndex&)> onChunkIndex;
-  std::function<void(const Attachment&)> onAttachment;
-  std::function<void(const AttachmentIndex&)> onAttachmentIndex;
-  std::function<void(const Statistics&)> onStatistics;
-  std::function<void(const Metadata&)> onMetadata;
-  std::function<void(const MetadataIndex&)> onMetadataIndex;
-  std::function<void(const SummaryOffset&)> onSummaryOffset;
-  std::function<void(const DataEnd&)> onDataEnd;
-  std::function<void(const Record&)> onUnknownRecord;
-  std::function<void(void)> onChunkEnd;
+  std::function<void(const Header&, ByteOffset offset, ByteOffset length)> onHeader;
+  std::function<void(const Footer&, ByteOffset offset, ByteOffset length)> onFooter;
+  std::function<void(const SchemaPtr, ByteOffset offset, ByteOffset length)> onSchema;
+  std::function<void(const ChannelPtr, ByteOffset offset, ByteOffset length)> onChannel;
+  std::function<void(const Message&, ByteOffset offset, ByteOffset length)> onMessage;
+  std::function<void(const Chunk&, ByteOffset offset, ByteOffset length)> onChunk;
+  std::function<void(const MessageIndex&, ByteOffset offset, ByteOffset length)> onMessageIndex;
+  std::function<void(const ChunkIndex&, ByteOffset offset, ByteOffset length)> onChunkIndex;
+  std::function<void(const Attachment&, ByteOffset offset, ByteOffset length)> onAttachment;
+  std::function<void(const AttachmentIndex&, ByteOffset offset, ByteOffset length)>
+    onAttachmentIndex;
+  std::function<void(const Statistics&, ByteOffset offset, ByteOffset length)> onStatistics;
+  std::function<void(const Metadata&, ByteOffset offset, ByteOffset length)> onMetadata;
+  std::function<void(const MetadataIndex&, ByteOffset offset, ByteOffset length)> onMetadataIndex;
+  std::function<void(const SummaryOffset&, ByteOffset offset, ByteOffset length)> onSummaryOffset;
+  std::function<void(const DataEnd&, ByteOffset offset, ByteOffset length)> onDataEnd;
+  std::function<void(const Record&, ByteOffset offset, ByteOffset length)> onUnknownRecord;
+  std::function<void(ByteOffset offset)> onChunkEnd;
 
   TypedRecordReader(IReadable& dataSource, ByteOffset startOffset,
                     ByteOffset endOffset = EndOffset);

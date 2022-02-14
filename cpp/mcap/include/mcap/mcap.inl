@@ -189,9 +189,122 @@ std::string MagicToHex(const std::byte* data) {
 
 }  // namespace internal
 
+// Record struct methods ///////////////////////////////////////////////////////
+
+Schema::Schema(const std::string_view name, const std::string_view encoding,
+               const std::string_view data)
+    : name(name)
+    , encoding(encoding)
+    , data{reinterpret_cast<const std::byte*>(data.data()),
+           reinterpret_cast<const std::byte*>(data.data() + data.size())} {}
+
+Schema::Schema(const std::string_view name, const std::string_view encoding, const ByteArray& data)
+    : name(name)
+    , encoding(encoding)
+    , data{data} {}
+
+ByteOffset Schema::valueSize() const {
+  return /* id */ 2 +
+         /* name */ 4 + name.size() +
+         /* encoding */ 4 + encoding.size() +
+         /* data */ 4 + data.size();
+}
+
+ByteOffset Schema::recordSize() const {
+  return 9 + valueSize();
+}
+
+Channel::Channel(const std::string_view topic, const std::string_view messageEncoding,
+                 SchemaId schemaId, const KeyValueMap& metadata)
+    : topic(topic)
+    , messageEncoding(messageEncoding)
+    , schemaId(schemaId)
+    , metadata(metadata) {}
+
+ByteOffset Channel::valueSize() const {
+  const uint32_t metadataSize = internal::KeyValueMapSize(metadata);
+  return /* id */ 2 +
+         /* topic */ 4 + topic.size() +
+         /* message_encoding */ 4 + messageEncoding.size() +
+         /* schema_id */ 2 +
+         /* metadata */ 4 + metadataSize;
+}
+
+ByteOffset Channel::recordSize() const {
+  return 9 + valueSize();
+}
+
+ByteOffset Message::valueSize() const {
+  return /* channel_id */ 2 +
+         /* sequence */ 4 +
+         /* log_time */ 8 +
+         /* public_time */ 8 +
+         /* data */ dataSize;
+}
+
+ByteOffset Message::recordSize() const {
+  return 9 + valueSize();
+}
+
+ByteOffset Chunk::valueSize() const {
+  return /* message_start_time */ 8 +
+         /* message_end_time */ 8 +
+         /* uncompressed_size */ 8 +
+         /* uncompressed_crc */ 4 +
+         /* compression */ 4 + compression.size() +
+         /* compressed_size */ 8 +
+         /* records */ compressedSize;
+}
+
+ByteOffset Chunk::recordSize() const {
+  return 9 + valueSize();
+}
+
+ChunkIndex::ChunkIndex(const Chunk& chunk, ByteOffset fileOffset)
+    : messageStartTime(chunk.messageStartTime)
+    , messageEndTime(chunk.messageEndTime)
+    , chunkStartOffset(fileOffset)
+    , chunkLength(chunk.recordSize())
+    , messageIndexOffsets{}
+    , messageIndexLength(0)
+    , compression(chunk.compression)
+    , compressedSize(chunk.compressedSize)
+    , uncompressedSize(chunk.uncompressedSize) {}
+
+ByteOffset Attachment::valueSize() const {
+  return /* log_time */ 8 +
+         /* create_time */ 8 +
+         /* name */ 4 + name.size() +
+         /* content_type */ 4 + contentType.size() +
+         /* data */ 8 + dataSize +
+         /* crc */ 4;
+}
+
+ByteOffset Attachment::recordSize() const {
+  return 9 + valueSize();
+}
+
+AttachmentIndex::AttachmentIndex(const Attachment& attachment, ByteOffset fileOffset)
+    : offset(fileOffset)
+    , length(attachment.recordSize())
+    , logTime(attachment.logTime)
+    , createTime(attachment.createTime)
+    , dataSize(attachment.dataSize)
+    , name(attachment.name)
+    , contentType(attachment.contentType) {}
+
+ByteOffset Metadata::valueSize() const {
+  return /* name */ 4 + name.size() +
+         /* metadata */ 4 + internal::KeyValueMapSize(metadata);
+}
+
+ByteOffset Metadata::recordSize() const {
+  return 9 + valueSize();
+}
+
 MetadataIndex::MetadataIndex(const Metadata& metadata, ByteOffset fileOffset)
     : offset(fileOffset)
-    , length(9 + 4 + metadata.name.size() + 4 + internal::KeyValueMapSize(metadata.metadata))
+    , length(metadata.recordSize())
     , name(metadata.name) {}
 
 // McapWriter //////////////////////////////////////////////////////////////////
@@ -223,8 +336,6 @@ void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
   output_ = &writer;
   writeMagic(writer);
   write(writer, Header{options.profile, options.library});
-
-  // FIXME: Write options.metadata
 }
 
 void McapWriter::open(std::ostream& stream, const McapWriterOptions& options) {
@@ -652,52 +763,49 @@ uint64_t McapWriter::write(IWritable& output, const Footer& footer) {
 }
 
 uint64_t McapWriter::write(IWritable& output, const Schema& schema) {
-  const uint64_t recordSize = /* id */ 2 +
-                              /* name */ 4 + schema.name.size() +
-                              /* encoding */ 4 + schema.encoding.size() +
-                              /* data */ 4 + schema.data.size();
+  const ByteOffset valueSize = schema.valueSize();
 
   write(output, OpCode::Schema);
-  write(output, recordSize);
+  write(output, valueSize);
   write(output, schema.id);
   write(output, schema.name);
   write(output, schema.encoding);
   write(output, schema.data);
 
-  return 9 + recordSize;
+  return 9 + valueSize;
 }
 
 uint64_t McapWriter::write(IWritable& output, const Channel& channel) {
   const uint32_t metadataSize = internal::KeyValueMapSize(channel.metadata);
-  const uint64_t recordSize = /* id */ 2 +
-                              /* topic */ 4 + channel.topic.size() +
-                              /* message_encoding */ 4 + channel.messageEncoding.size() +
-                              /* schema_id */ 2 +
-                              /* metadata */ 4 + metadataSize;
+  const uint64_t valueSize = /* id */ 2 +
+                             /* topic */ 4 + channel.topic.size() +
+                             /* message_encoding */ 4 + channel.messageEncoding.size() +
+                             /* schema_id */ 2 +
+                             /* metadata */ 4 + metadataSize;
 
   write(output, OpCode::Channel);
-  write(output, recordSize);
+  write(output, valueSize);
   write(output, channel.id);
   write(output, channel.schemaId);
   write(output, channel.topic);
   write(output, channel.messageEncoding);
   write(output, channel.metadata, metadataSize);
 
-  return 9 + recordSize;
+  return 9 + valueSize;
 }
 
 uint64_t McapWriter::write(IWritable& output, const Message& message) {
-  const uint64_t recordSize = 2 + 4 + 8 + 8 + message.dataSize;
+  const uint64_t valueSize = message.valueSize();
 
   write(output, OpCode::Message);
-  write(output, recordSize);
+  write(output, valueSize);
   write(output, message.channelId);
   write(output, message.sequence);
   write(output, message.logTime);
   write(output, message.publishTime);
   write(output, message.data, message.dataSize);
 
-  return 9 + recordSize;
+  return 9 + valueSize;
 }
 
 uint64_t McapWriter::write(IWritable& output, const Attachment& attachment) {
@@ -1381,17 +1489,26 @@ void McapReader::close() {
   header_ = std::nullopt;
   footer_ = std::nullopt;
   statistics_ = std::nullopt;
+
   chunkIndexes_.clear();
+  chunkIndexByOffset_.clear();
+  chunkIndexByInterval_ = {};
   attachmentIndexes_.clear();
+  attachmentIndexByOffset_.clear();
+  attachmentIndexByName_.clear();
+  attachmentIndexByTime_.clear();
+  metadataIndexes_.clear();
+  metadataIndexByOffset_.clear();
+  metadataIndexByName_.clear();
+
   schemas_.clear();
   channels_.clear();
-  messageIndex_.clear();
-  messageChunkIndex_.clear();
   dataStart_ = 0;
   dataEnd_ = EndOffset;
   startTime_ = 0;
   endTime_ = 0;
   parsedSummary_ = false;
+  chunkIndexDirty_ = false;
 }
 
 Status McapReader::readSummary() {
@@ -2145,17 +2262,23 @@ TypedRecordReader::TypedRecordReader(IReadable& dataSource, ByteOffset startOffs
     , parsingChunk_(false) {
   chunkReader_.onSchema = [&](const SchemaPtr schema) {
     if (onSchema) {
-      onSchema(schema);
+      const ByteOffset length = schema->recordSize();
+      const ByteOffset offset = reader_.offset - length;
+      onSchema(schema, offset, length);
     }
   };
   chunkReader_.onChannel = [&](const ChannelPtr channel) {
     if (onChannel) {
-      onChannel(channel);
+      const ByteOffset length = channel->recordSize();
+      const ByteOffset offset = reader_.offset - length;
+      onChannel(channel, offset, length);
     }
   };
   chunkReader_.onMessage = [&](const Message& message) {
     if (onMessage) {
-      onMessage(message);
+      const ByteOffset length = message.recordSize();
+      const ByteOffset offset = reader_.offset - length;
+      onMessage(message, offset, length);
     }
   };
 }
@@ -2167,7 +2290,7 @@ bool TypedRecordReader::next() {
     if (!chunkInProgress) {
       parsingChunk_ = false;
       if (onChunkEnd) {
-        onChunkEnd();
+        onChunkEnd(reader_.offset);
       }
     }
     return true;
@@ -2179,13 +2302,15 @@ bool TypedRecordReader::next() {
     return false;
   }
   const Record& record = maybeRecord.value();
+  const ByteOffset length = record.recordSize();
+  const ByteOffset offset = reader_.offset - length;
 
   switch (record.opcode) {
     case OpCode::Header: {
       if (onHeader) {
         Header header;
         if (status_ = McapReader::ParseHeader(record, &header); status_.ok()) {
-          onHeader(header);
+          onHeader(header, offset, length);
         }
       }
       break;
@@ -2194,7 +2319,7 @@ bool TypedRecordReader::next() {
       if (onFooter) {
         Footer footer;
         if (status_ = McapReader::ParseFooter(record, &footer); status_.ok()) {
-          onFooter(footer);
+          onFooter(footer, offset, length);
         }
       }
       reader_.offset = EndOffset;
@@ -2204,7 +2329,7 @@ bool TypedRecordReader::next() {
       if (onSchema) {
         SchemaPtr schemaPtr = std::make_shared<Schema>();
         if (status_ = McapReader::ParseSchema(record, schemaPtr.get()); status_.ok()) {
-          onSchema(schemaPtr);
+          onSchema(schemaPtr, offset, length);
         }
       }
       break;
@@ -2213,7 +2338,7 @@ bool TypedRecordReader::next() {
       if (onChannel) {
         ChannelPtr channelPtr = std::make_shared<Channel>();
         if (status_ = McapReader::ParseChannel(record, channelPtr.get()); status_.ok()) {
-          onChannel(channelPtr);
+          onChannel(channelPtr, offset, length);
         }
       }
       break;
@@ -2222,7 +2347,7 @@ bool TypedRecordReader::next() {
       if (onMessage) {
         Message message;
         if (status_ = McapReader::ParseMessage(record, &message); status_.ok()) {
-          onMessage(message);
+          onMessage(message, offset, length);
         }
       }
       break;
@@ -2235,7 +2360,7 @@ bool TypedRecordReader::next() {
           return true;
         }
         if (onChunk) {
-          onChunk(chunk);
+          onChunk(chunk, offset, length);
         }
         if (onMessage || onSchema || onChannel) {
           const auto maybeCompression = McapReader::ParseCompression(chunk.compression);
@@ -2257,7 +2382,7 @@ bool TypedRecordReader::next() {
       if (onMessageIndex) {
         MessageIndex messageIndex;
         if (status_ = McapReader::ParseMessageIndex(record, &messageIndex); status_.ok()) {
-          onMessageIndex(messageIndex);
+          onMessageIndex(messageIndex, offset, length);
         }
       }
       break;
@@ -2266,7 +2391,7 @@ bool TypedRecordReader::next() {
       if (onChunkIndex) {
         ChunkIndex chunkIndex;
         if (status_ = McapReader::ParseChunkIndex(record, &chunkIndex); status_.ok()) {
-          onChunkIndex(chunkIndex);
+          onChunkIndex(chunkIndex, offset, length);
         }
       }
       break;
@@ -2275,7 +2400,7 @@ bool TypedRecordReader::next() {
       if (onAttachment) {
         Attachment attachment;
         if (status_ = McapReader::ParseAttachment(record, &attachment); status_.ok()) {
-          onAttachment(attachment);
+          onAttachment(attachment, offset, length);
         }
       }
       break;
@@ -2284,7 +2409,7 @@ bool TypedRecordReader::next() {
       if (onAttachmentIndex) {
         AttachmentIndex attachmentIndex;
         if (status_ = McapReader::ParseAttachmentIndex(record, &attachmentIndex); status_.ok()) {
-          onAttachmentIndex(attachmentIndex);
+          onAttachmentIndex(attachmentIndex, offset, length);
         }
       }
       break;
@@ -2293,7 +2418,7 @@ bool TypedRecordReader::next() {
       if (onStatistics) {
         Statistics statistics;
         if (status_ = McapReader::ParseStatistics(record, &statistics); status_.ok()) {
-          onStatistics(statistics);
+          onStatistics(statistics, offset, length);
         }
       }
       break;
@@ -2302,7 +2427,7 @@ bool TypedRecordReader::next() {
       if (onMetadata) {
         Metadata metadata;
         if (status_ = McapReader::ParseMetadata(record, &metadata); status_.ok()) {
-          onMetadata(metadata);
+          onMetadata(metadata, offset, length);
         }
       }
       break;
@@ -2311,7 +2436,7 @@ bool TypedRecordReader::next() {
       if (onMetadataIndex) {
         MetadataIndex metadataIndex;
         if (status_ = McapReader::ParseMetadataIndex(record, &metadataIndex); status_.ok()) {
-          onMetadataIndex(metadataIndex);
+          onMetadataIndex(metadataIndex, offset, length);
         }
       }
       break;
@@ -2320,7 +2445,7 @@ bool TypedRecordReader::next() {
       if (onSummaryOffset) {
         SummaryOffset summaryOffset;
         if (status_ = McapReader::ParseSummaryOffset(record, &summaryOffset); status_.ok()) {
-          onSummaryOffset(summaryOffset);
+          onSummaryOffset(summaryOffset, offset, length);
         }
       }
       break;
@@ -2329,14 +2454,14 @@ bool TypedRecordReader::next() {
       if (onDataEnd) {
         DataEnd dataEnd;
         if (status_ = McapReader::ParseDataEnd(record, &dataEnd); status_.ok()) {
-          onDataEnd(dataEnd);
+          onDataEnd(dataEnd, offset, length);
         }
       }
       break;
     }
     default:
       if (onUnknownRecord) {
-        onUnknownRecord(record);
+        onUnknownRecord(record, offset, length);
       }
       break;
   }
@@ -2401,13 +2526,14 @@ LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataSta
     , startTime_(startTime)
     , endTime_(endTime)
     , onProblem_(onProblem) {
-  recordReader_->onSchema = [this](const SchemaPtr schema) {
+  recordReader_->onSchema = [this](const SchemaPtr schema, ByteOffset offset, ByteOffset length) {
     mcapReader_.schemas_.insert_or_assign(schema->id, schema);
   };
-  recordReader_->onChannel = [this](const ChannelPtr channel) {
+  recordReader_->onChannel = [this](const ChannelPtr channel, ByteOffset offset,
+                                    ByteOffset length) {
     mcapReader_.channels_.insert_or_assign(channel->id, channel);
   };
-  recordReader_->onMessage = [this](const Message& message) {
+  recordReader_->onMessage = [this](const Message& message, ByteOffset offset, ByteOffset length) {
     auto maybeChannel = mcapReader_.channel(message.channelId);
     if (!maybeChannel) {
       onProblem_(
@@ -2430,6 +2556,109 @@ LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataSta
     }
 
     curMessage_.emplace(message, maybeChannel, maybeSchema);
+  };
+  recordReader_->onChunk = [this](const Chunk& chunk, ByteOffset offset, ByteOffset length) {
+    // Check if this chunk is already indexed
+    auto result = mcapReader_.chunkIndexByOffset_.find(offset);
+    if (result != mcapReader_.chunkIndexByOffset_.end()) {
+      // Create a new chunk index
+      auto& index = mcapReader_.chunkIndexes_.emplace_back(chunk, offset);
+      mcapReader_.chunkIndexByOffset_.emplace(offset, index);
+      mcapReader_.chunkIndexDirty_ = true;
+    } else {
+      // Update the existing chunk index
+      auto& index = result->second;
+      if (index.messageStartTime != chunk.messageStartTime ||
+          index.messageEndTime != chunk.messageEndTime) {
+        index.messageStartTime = chunk.messageStartTime;
+        index.messageEndTime = chunk.messageEndTime;
+        mcapReader_.chunkIndexDirty_ = true;
+      }
+      index.chunkStartOffset = offset;
+      index.chunkLength = length;
+      index.compression = chunk.compression;
+      index.compressedSize = chunk.compressedSize;
+      index.uncompressedSize = chunk.uncompressedSize;
+    }
+  };
+  recordReader_->onChunkIndex = [this](const ChunkIndex& index, ByteOffset offset,
+                                       ByteOffset length) {
+    // Check if this Chunk Index is already stored. If not, store it. Otherwise,
+    // do nothing since we assume an existing entry is either this same Chunk
+    // Index or was created from the Chunk record itself
+    auto result = mcapReader_.chunkIndexByOffset_.find(index.chunkStartOffset);
+    if (result == mcapReader_.chunkIndexByOffset_.end()) {
+      // Store this Chunk Index
+      auto& storedIndex = mcapReader_.chunkIndexes_.emplace_back(index);
+      mcapReader_.chunkIndexByOffset_.emplace(index.chunkStartOffset, storedIndex);
+      mcapReader_.chunkIndexDirty_ = true;
+    }
+  };
+  recordReader_->onAttachment = [this](const Attachment& attachment, ByteOffset offset,
+                                       ByteOffset length) {
+    // Check if this attachment is already indexed
+    auto result = mcapReader_.attachmentIndexByOffset_.find(offset);
+    if (result == mcapReader_.attachmentIndexByOffset_.end()) {
+      // Create a new attachment index
+      auto& index = mcapReader_.attachmentIndexes_.emplace_back(attachment, offset);
+      mcapReader_.attachmentIndexByOffset_.emplace(offset, index);
+      mcapReader_.attachmentIndexByName_.emplace(attachment.name, index);
+      mcapReader_.attachmentIndexByTime_.emplace(attachment.logTime, index);
+    } else {
+      // Update the existing attachment index
+      auto& index = result->second;
+      index.offset = offset;
+      index.length = length;
+      index.logTime = attachment.logTime;
+      index.createTime = attachment.createTime;
+      index.dataSize = attachment.dataSize;
+      index.name = attachment.name;
+      index.contentType = attachment.contentType;
+    }
+  };
+  recordReader_->onAttachmentIndex = [this](const AttachmentIndex& index, ByteOffset offset,
+                                            ByteOffset length) {
+    // Check if this attachment index is already stored. If not, store it.
+    // Otherwise, do nothing since we assume an existing entry is either this
+    // same Attachment Index or was created from the Attachment record itself
+    auto result = mcapReader_.attachmentIndexByOffset_.find(index.offset);
+    if (result == mcapReader_.attachmentIndexByOffset_.end()) {
+      // Store this attachment index
+      auto& storedIndex = mcapReader_.attachmentIndexes_.emplace_back(index);
+      mcapReader_.attachmentIndexByOffset_.emplace(index.offset, storedIndex);
+      mcapReader_.attachmentIndexByName_.emplace(index.name, storedIndex);
+      mcapReader_.attachmentIndexByTime_.emplace(index.logTime, storedIndex);
+    }
+  };
+  recordReader_->onMetadata = [this](const Metadata& metadata, ByteOffset offset,
+                                     ByteOffset length) {
+    // Check if this metadata is already indexed
+    auto result = mcapReader_.metadataIndexByOffset_.find(offset);
+    if (result == mcapReader_.metadataIndexByOffset_.end()) {
+      // Create a new metadata index
+      auto& index = mcapReader_.metadataIndexes_.emplace_back(metadata, offset);
+      mcapReader_.metadataIndexByOffset_.emplace(offset, index);
+      mcapReader_.metadataIndexByName_.emplace(metadata.name, index);
+    } else {
+      // Update the existing metadata index
+      auto& index = result->second;
+      index.offset = offset;
+      index.length = length;
+      index.name = metadata.name;
+    }
+  };
+  recordReader_->onMetadataIndex = [this](const MetadataIndex& index, ByteOffset offset,
+                                          ByteOffset length) {
+    // Check if this metadata index is already stored. If not, store it.
+    // Otherwise, do nothing since we assume an existing entry is either this
+    // same Metadata Index or was created from the Metadata record itself
+    auto result = mcapReader_.metadataIndexByOffset_.find(index.offset);
+    if (result == mcapReader_.metadataIndexByOffset_.end()) {
+      // Store this metadata index
+      auto& storedIndex = mcapReader_.metadataIndexes_.emplace_back(index);
+      mcapReader_.metadataIndexByOffset_.emplace(index.offset, storedIndex);
+      mcapReader_.metadataIndexByName_.emplace(index.name, storedIndex);
+    }
   };
 
   ++(*this);

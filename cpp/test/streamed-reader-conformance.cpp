@@ -5,6 +5,7 @@
 #include <iostream>
 
 using json = nlohmann::ordered_json;
+using mcap::ByteOffset;
 
 json ToJson(const std::byte* data, uint64_t size) {
   json output = json::array();
@@ -35,7 +36,7 @@ int main(int argc, char** argv) {
   mcap::FileStreamReader dataSource{input};
   mcap::TypedRecordReader reader{dataSource, 8};
 
-  reader.onHeader = [&](const mcap::Header& header) {
+  reader.onHeader = [&](const mcap::Header& header, ByteOffset offset, ByteOffset length) {
     recordsJson.push_back(json::object({
       {"type", "Header"},
       {"fields", json::array({
@@ -45,7 +46,7 @@ int main(int argc, char** argv) {
     }));
   };
 
-  reader.onFooter = [&](const mcap::Footer& footer) {
+  reader.onFooter = [&](const mcap::Footer& footer, ByteOffset offset, ByteOffset length) {
     recordsJson.push_back(json::object({
       {"type", "Footer"},
       {"fields", json::array({
@@ -56,7 +57,7 @@ int main(int argc, char** argv) {
     }));
   };
 
-  reader.onSchema = [&](const mcap::SchemaPtr schemaPtr) {
+  reader.onSchema = [&](const mcap::SchemaPtr schemaPtr, ByteOffset offset, ByteOffset length) {
     const auto& schema = *schemaPtr;
     recordsJson.push_back(json::object({
       {"type", "Schema"},
@@ -69,7 +70,7 @@ int main(int argc, char** argv) {
     }));
   };
 
-  reader.onChannel = [&](const mcap::ChannelPtr channelPtr) {
+  reader.onChannel = [&](const mcap::ChannelPtr channelPtr, ByteOffset offset, ByteOffset length) {
     const auto& channel = *channelPtr;
     recordsJson.push_back(json::object({
       {"type", "Channel"},
@@ -83,7 +84,7 @@ int main(int argc, char** argv) {
     }));
   };
 
-  reader.onMessage = [&](const mcap::Message& message) {
+  reader.onMessage = [&](const mcap::Message& message, ByteOffset offset, ByteOffset length) {
     recordsJson.push_back(json::object({
       {"type", "Message"},
       {"fields", json::array({
@@ -96,7 +97,7 @@ int main(int argc, char** argv) {
     }));
   };
 
-  // reader.onChunk = [&](const mcap::Chunk& chunk) {
+  // reader.onChunk = [&](const mcap::Chunk& chunk, ByteOffset offset, ByteOffset length) {
   //   recordsJson.push_back(json::object({
   //     {"type", "Chunk"},
   //     {"fields", json::array({
@@ -110,7 +111,8 @@ int main(int argc, char** argv) {
   //   }));
   // };
 
-  // reader.onMessageIndex = [&](const mcap::MessageIndex& messageIndex) {
+  // reader.onMessageIndex = [&](const mcap::MessageIndex& messageIndex, ByteOffset offset,
+  //                             ByteOffset length) {
   //   recordsJson.push_back(json::object({
   //     {"type", "MessageIndex"},
   //     {"fields", json::array({
@@ -120,7 +122,8 @@ int main(int argc, char** argv) {
   //   }));
   // };
 
-  reader.onChunkIndex = [&](const mcap::ChunkIndex& chunkIndex) {
+  reader.onChunkIndex = [&](const mcap::ChunkIndex& chunkIndex, ByteOffset offset,
+                            ByteOffset length) {
     recordsJson.push_back(json::object({
       {"type", "ChunkIndex"},
       {"fields", json::array({
@@ -137,7 +140,8 @@ int main(int argc, char** argv) {
     }));
   };
 
-  reader.onAttachment = [&](const mcap::Attachment& attachment) {
+  reader.onAttachment = [&](const mcap::Attachment& attachment, ByteOffset offset,
+                            ByteOffset length) {
     recordsJson.push_back(json::object({
       {"type", "Attachment"},
       {"fields", json::array({
@@ -150,7 +154,8 @@ int main(int argc, char** argv) {
     }));
   };
 
-  reader.onAttachmentIndex = [&](const mcap::AttachmentIndex& attachmentIndex) {
+  reader.onAttachmentIndex = [&](const mcap::AttachmentIndex& attachmentIndex, ByteOffset offset,
+                                 ByteOffset length) {
     recordsJson.push_back(json::object({
       {"type", "AttachmentIndex"},
       {"fields", json::array({
@@ -165,7 +170,8 @@ int main(int argc, char** argv) {
     }));
   };
 
-  reader.onStatistics = [&](const mcap::Statistics& statistics) {
+  reader.onStatistics = [&](const mcap::Statistics& statistics, ByteOffset offset,
+                            ByteOffset length) {
     recordsJson.push_back(json::object({
       {"type", "Statistics"},
       {"fields", json::array({
@@ -182,7 +188,7 @@ int main(int argc, char** argv) {
     }));
   };
 
-  reader.onMetadata = [&](const mcap::Metadata& metadata) {
+  reader.onMetadata = [&](const mcap::Metadata& metadata, ByteOffset offset, ByteOffset length) {
     recordsJson.push_back(json::object({
       {"type", "Metadata"},
       {"fields", json::array({
@@ -192,7 +198,8 @@ int main(int argc, char** argv) {
     }));
   };
 
-  reader.onMetadataIndex = [&](const mcap::MetadataIndex& metadataIndex) {
+  reader.onMetadataIndex = [&](const mcap::MetadataIndex& metadataIndex, ByteOffset offset,
+                               ByteOffset length) {
     recordsJson.push_back(json::object({
       {"type", "MetadataIndex"},
       {"fields", json::array({
@@ -203,7 +210,8 @@ int main(int argc, char** argv) {
     }));
   };
 
-  reader.onSummaryOffset = [&](const mcap::SummaryOffset& summaryOffset) {
+  reader.onSummaryOffset = [&](const mcap::SummaryOffset& summaryOffset, ByteOffset offset,
+                               ByteOffset length) {
     recordsJson.push_back(json::object({
       {"type", "SummaryOffset"},
       {"fields", json::array({
@@ -214,7 +222,7 @@ int main(int argc, char** argv) {
     }));
   };
 
-  reader.onDataEnd = [&](const mcap::DataEnd& dataEnd) {
+  reader.onDataEnd = [&](const mcap::DataEnd& dataEnd, ByteOffset offset, ByteOffset length) {
     recordsJson.push_back(json::object({
       {"type", "DataEnd"},
       {"fields", json::array({

@@ -187,56 +187,57 @@ void Dump(mcap::IReadable& dataSource) {
   mcap::TypedRecordReader reader{dataSource, 8};
   bool inChunk = false;
 
-  reader.onHeader = [](const mcap::Header& record) {
+  reader.onHeader = [](const mcap::Header& record, uint64_t offset, uint64_t length) {
     std::cout << ToString(record) << "\n";
   };
-  reader.onFooter = [](const mcap::Footer& record) {
+  reader.onFooter = [](const mcap::Footer& record, uint64_t offset, uint64_t length) {
     std::cout << ToString(record) << "\n";
   };
-  reader.onSchema = [&](const mcap::SchemaPtr recordPtr) {
+  reader.onSchema = [&](const mcap::SchemaPtr recordPtr, uint64_t offset, uint64_t length) {
     std::cout << (inChunk ? "  " : "") << ToString(*recordPtr) << "\n";
   };
-  reader.onChannel = [&](const mcap::ChannelPtr recordPtr) {
+  reader.onChannel = [&](const mcap::ChannelPtr recordPtr, uint64_t offset, uint64_t length) {
     std::cout << (inChunk ? "  " : "") << ToString(*recordPtr) << "\n";
   };
-  reader.onMessage = [&](const mcap::Message& record) {
+  reader.onMessage = [&](const mcap::Message& record, uint64_t offset, uint64_t length) {
     std::cout << (inChunk ? "  " : "") << ToString(record) << "\n";
   };
-  reader.onChunk = [&](const mcap::Chunk& record) {
+  reader.onChunk = [&](const mcap::Chunk& record, uint64_t offset, uint64_t length) {
     std::cout << ToString(record) << "\n";
     inChunk = true;
   };
-  reader.onMessageIndex = [](const mcap::MessageIndex& record) {
+  reader.onMessageIndex = [](const mcap::MessageIndex& record, uint64_t offset, uint64_t length) {
     std::cout << ToString(record) << "\n";
   };
-  reader.onChunkIndex = [](const mcap::ChunkIndex& record) {
+  reader.onChunkIndex = [](const mcap::ChunkIndex& record, uint64_t offset, uint64_t length) {
     std::cout << ToString(record) << "\n";
   };
-  reader.onAttachment = [](const mcap::Attachment& record) {
+  reader.onAttachment = [](const mcap::Attachment& record, uint64_t offset, uint64_t length) {
     std::cout << ToString(record) << "\n";
   };
-  reader.onAttachmentIndex = [](const mcap::AttachmentIndex& record) {
+  reader.onAttachmentIndex = [](const mcap::AttachmentIndex& record, uint64_t offset,
+                                uint64_t length) {
     std::cout << ToString(record) << "\n";
   };
-  reader.onStatistics = [](const mcap::Statistics& record) {
+  reader.onStatistics = [](const mcap::Statistics& record, uint64_t offset, uint64_t length) {
     std::cout << ToString(record) << "\n";
   };
-  reader.onMetadata = [](const mcap::Metadata& record) {
+  reader.onMetadata = [](const mcap::Metadata& record, uint64_t offset, uint64_t length) {
     std::cout << ToString(record) << "\n";
   };
-  reader.onMetadataIndex = [](const mcap::MetadataIndex& record) {
+  reader.onMetadataIndex = [](const mcap::MetadataIndex& record, uint64_t offset, uint64_t length) {
     std::cout << ToString(record) << "\n";
   };
-  reader.onSummaryOffset = [](const mcap::SummaryOffset& record) {
+  reader.onSummaryOffset = [](const mcap::SummaryOffset& record, uint64_t offset, uint64_t length) {
     std::cout << ToString(record) << "\n";
   };
-  reader.onDataEnd = [](const mcap::DataEnd& record) {
+  reader.onDataEnd = [](const mcap::DataEnd& record, uint64_t offset, uint64_t length) {
     std::cout << ToString(record) << "\n";
   };
-  reader.onUnknownRecord = [](const mcap::Record& record) {
+  reader.onUnknownRecord = [](const mcap::Record& record, uint64_t offset, uint64_t length) {
     std::cout << ToString(record) << "\n";
   };
-  reader.onChunkEnd = [&]() {
+  reader.onChunkEnd = [&](uint64_t offset) {
     inChunk = false;
   };
 
