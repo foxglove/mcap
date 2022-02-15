@@ -156,8 +156,8 @@ jobs:
           node-version: 16.x
           cache: yarn
       - run: yarn install --frozen-lockfile
-      - run: yarn workspace @foxglove/mcap-examples lint:ci
-      - run: yarn workspace @foxglove/mcap-examples typecheck
+      - run: yarn workspace @foxglove/mcap-example-validate lint:ci
+      - run: yarn workspace @foxglove/mcap-example-validate typecheck
 
   python:
     runs-on: ubuntu-latest

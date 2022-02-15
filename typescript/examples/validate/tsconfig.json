@@ -3,11 +3,11 @@
   "include": ["./**/*"],
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "..",
+    "rootDir": "../..",
     "outDir": "./dist/esm",
     "lib": ["es2020", "dom"],
     "paths": {
-      "@foxglove/mcap": ["../mcap/src"]
+      "@foxglove/mcap": ["../../mcap/src"]
     },
 
     // required for tsconfig-paths https://github.com/dividab/tsconfig-paths/issues/143

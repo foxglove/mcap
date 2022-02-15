@@ -2,7 +2,8 @@
   "private": true,
   "workspaces": {
     "packages": [
-      "typescript/*",
+      "typescript/mcap",
+      "typescript/examples/*",
       "tests/conformance"
     ]
   },
