@@ -14,7 +14,7 @@ import (
 
 func TestLexerConformance(t *testing.T) {
 	inputs := []string{}
-	err := filepath.Walk("../../tests/conformance/data", func(path string, info fs.FileInfo, err error) error {
+	err := filepath.Walk("../../../tests/conformance/data", func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}

@@ -1,6 +1,11 @@
 build:
 	mkdir -p bin
-	go build -o bin/check-conformance .
+	make -C test-streamed-write-conformance build
+	make -C test-streamed-read-conformance build
 
 test:
-	go test ./...
+	make -C test-streamed-write-conformance test
+	make -C test-streamed-read-conformance test
+
+clean:
+	rm -rf bin

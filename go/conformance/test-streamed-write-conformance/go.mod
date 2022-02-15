@@ -1,4 +1,4 @@
-module github.com/foxglove/mcap/go/conformance
+module github.com/foxglove/mcap/go/conformance/test-streamed-write-performance
 
 go 1.17
 
@@ -15,4 +15,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 )
 
-replace github.com/foxglove/mcap/go/mcap => ../mcap
+replace github.com/foxglove/mcap/go/mcap => ../../mcap
