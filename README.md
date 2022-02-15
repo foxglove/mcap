@@ -21,7 +21,7 @@ yarn workspace @foxglove/mcap test
 Read and validate an MCAP file:
 
 ```
-yarn workspace @foxglove/mcap validate file.mcap
+yarn workspace @foxglove/mcap-example-validate validate file.mcap
 ```
 
 ## License
