@@ -17,6 +17,7 @@ import { performance } from "perf_hooks";
 import protobufjs from "protobufjs";
 import { FileDescriptorSet } from "protobufjs/ext/descriptor";
 import decompressLZ4 from "wasm-lz4";
+import { ZstdCodec, ZstdModule, ZstdStreaming } from "zstd-codec";
 
 type Channel = Mcap0Types.Channel;
 type DecompressHandlers = Mcap0Types.DecompressHandlers;
@@ -84,8 +85,35 @@ async function validate(
   { deserialize, dump, stream }: { deserialize: boolean; dump: boolean; stream: boolean },
 ) {
   await decompressLZ4.isLoaded;
+  const zstd = await new Promise<ZstdModule>((resolve) => ZstdCodec.run(resolve));
+  let zstdStreaming: ZstdStreaming | undefined;
+
   const decompressHandlers: DecompressHandlers = {
     lz4: (buffer, decompressedSize) => decompressLZ4(buffer, Number(decompressedSize)),
+
+    zstd: (buffer, decompressedSize) => {
+      if (!zstdStreaming) {
+        zstdStreaming = new zstd.Streaming();
+      }
+      // We use streaming decompression because the zstd-codec package has a limited (and
+      // non-growable) amount of WASM memory, and does not currently support passing the
+      // decompressedSize into the simple one-shot decode() function.
+      // https://github.com/yoshihitoh/zstd-codec/issues/223
+      const result = zstdStreaming.decompressChunks(
+        (function* () {
+          const chunkSize = 4 * 1024 * 1024;
+          const endOffset = buffer.byteOffset + buffer.byteLength;
+          for (let offset = buffer.byteOffset; offset < endOffset; offset += chunkSize) {
+            yield new Uint8Array(buffer.buffer, offset, Math.min(chunkSize, endOffset - offset));
+          }
+        })(),
+        Number(decompressedSize),
+      );
+      if (!result) {
+        throw new Error("Decompression failed");
+      }
+      return result;
+    },
   };
 
   const recordCounts = new Map<TypedMcapRecord["type"], number>();
