@@ -5,11 +5,11 @@ import { TestVariant } from "variants/types";
 
 import { ReadTestRunner } from "./TestRunner";
 
-export default class GoStreamedTestRunner extends ReadTestRunner {
+export default class GoStreamedReaderTestRunner extends ReadTestRunner {
   name = "go-streamed-reader";
 
   async runReadTest(filePath: string): Promise<string> {
-    const { stdout } = await promisify(exec)(`./bin/check-conformance ${filePath}`, {
+    const { stdout } = await promisify(exec)(`./bin/test-streamed-read-conformance ${filePath}`, {
       cwd: join(__dirname, "../../../../../go/conformance"),
     });
     return stdout.trim();

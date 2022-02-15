@@ -57,17 +57,30 @@ def write_file(features: List[str], expected_records: List[Dict[str, Any]]) -> b
         if isinstance(record, Header):
             writer.start(record.profile, record.library)
         if isinstance(record, Attachment):
-            writer.add_attachment(record)
+            writer.add_attachment(
+                create_time=record.create_time,
+                log_time=record.log_time,
+                name=record.name,
+                content_type=record.content_type,
+                data=record.data,
+            )
         if isinstance(record, Channel):
             if not record.topic in seen_channels:
                 writer.register_channel(
+                    schema_id=record.schema_id,
                     topic=record.topic,
                     message_encoding=record.message_encoding,
                     metadata=record.metadata,
                 )
             seen_channels.add(record.topic)
         if isinstance(record, Message):
-            writer.add_message(record)
+            writer.add_message(
+                channel_id=record.channel_id,
+                log_time=record.log_time,
+                data=record.data,
+                publish_time=record.publish_time,
+                sequence=record.sequence,
+            )
         if isinstance(record, Schema):
             if not record.name in seen_schemas:
                 writer.register_schema(
