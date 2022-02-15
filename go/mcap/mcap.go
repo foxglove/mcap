@@ -41,6 +41,45 @@ const (
 
 type OpCode byte
 
+func (c OpCode) String() string {
+	switch c {
+	case OpReserved:
+		return "reserved"
+	case OpHeader:
+		return "header"
+	case OpFooter:
+		return "footer"
+	case OpSchema:
+		return "schema"
+	case OpChannel:
+		return "channel"
+	case OpMessage:
+		return "message"
+	case OpChunk:
+		return "chunk"
+	case OpMessageIndex:
+		return "message index"
+	case OpChunkIndex:
+		return "chunk index"
+	case OpAttachment:
+		return "attachment"
+	case OpAttachmentIndex:
+		return "attachment index"
+	case OpStatistics:
+		return "statistics"
+	case OpMetadata:
+		return "metadata"
+	case OpMetadataIndex:
+		return "metadata index"
+	case OpSummaryOffset:
+		return "summary offset"
+	case OpDataEnd:
+		return "data end"
+	default:
+		return "unrecognized opcode"
+	}
+}
+
 // Header is the first record in an MCAP file.
 type Header struct {
 	Profile string

@@ -9,8 +9,11 @@ lint:
 	make -C ros lint
 	make -C mcap lint
 
-build-conformance-check:
+build-conformance-binaries:
 	make -C conformance build
+
+clean:
+	make -C conformance clean
 
 bench:
 	make -C mcap bench
