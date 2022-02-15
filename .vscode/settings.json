@@ -20,6 +20,10 @@
   "python.formatting.provider": "black",
   "python.analysis.typeCheckingMode": "strict",
 
+  "gopls": {
+    "build.experimentalWorkspaceModule": true
+  },
+
   // https://github.com/microsoft/vscode-cpptools/issues/722
   "C_Cpp.autoAddFileAssociations": false,
   "C_Cpp.default.cppStandard": "c++17"
