@@ -6,6 +6,140 @@ import { MCAP0_MAGIC, Opcode } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
 import { DecompressHandlers, IReadable, TypedMcapRecords } from "./types";
 
+type ChunkCursorParams = {
+  chunkIndex: TypedMcapRecords["ChunkIndex"];
+  relevantChannels: Set<number> | undefined;
+  startTime: bigint | undefined;
+  endTime: bigint | undefined;
+};
+
+class ChunkCursor {
+  chunkIndex: TypedMcapRecords["ChunkIndex"];
+  relevantChannels?: Set<number>;
+  startTime: bigint | undefined;
+  endTime: bigint | undefined;
+
+  messageIndexCursors?: Heap<{
+    channelId: number;
+
+    /** index of next message within `records` array */
+    index: number;
+
+    records: TypedMcapRecords["MessageIndex"]["records"];
+  }>;
+
+  constructor(params: ChunkCursorParams) {
+    this.chunkIndex = params.chunkIndex;
+    this.relevantChannels = params.relevantChannels;
+    this.startTime = params.startTime;
+    this.endTime = params.endTime;
+  }
+
+  compare(other: ChunkCursor): number {
+    if (this.chunkIndex.messageEndTime < other.chunkIndex.messageStartTime) {
+      return -1;
+    }
+    if (this.chunkIndex.messageEndTime > other.chunkIndex.messageStartTime) {
+      return 1;
+    }
+    //FIXME
+    return Number(this.chunkIndex.chunkStartOffset - other.chunkIndex.chunkStartOffset);
+  }
+
+  hasMore(): boolean {
+    if (!this.messageIndexCursors) {
+      throw new Error("loadMessageIndexCursors() must be called before hasMore()");
+    }
+    return this.messageIndexCursors.size() > 0;
+  }
+
+  /** FIXME document */
+  async loadMessageIndexCursors(readable: IReadable): Promise<boolean> {
+    let messageIndexStartOffset: bigint | undefined;
+    let relevantMessageIndexStartOffset: bigint | undefined;
+    for (const [channelId, offset] of this.chunkIndex.messageIndexOffsets) {
+      if (messageIndexStartOffset == undefined || offset < messageIndexStartOffset) {
+        messageIndexStartOffset = offset;
+      }
+      if (!this.relevantChannels || this.relevantChannels.has(channelId)) {
+        if (
+          relevantMessageIndexStartOffset == undefined ||
+          offset < relevantMessageIndexStartOffset
+        ) {
+          relevantMessageIndexStartOffset = offset;
+        }
+      }
+    }
+    if (messageIndexStartOffset == undefined || relevantMessageIndexStartOffset == undefined) {
+      return false;
+    }
+
+    // Future optimization: read only message indexes for given channelIds, not all message indexes for the chunk
+    const messageIndexEndOffset = messageIndexStartOffset + this.chunkIndex.messageIndexLength;
+    const messageIndexes = await readable.read(
+      relevantMessageIndexStartOffset,
+      messageIndexEndOffset - relevantMessageIndexStartOffset,
+    );
+    const messageIndexesView = new DataView(
+      messageIndexes.buffer,
+      messageIndexes.byteOffset,
+      messageIndexes.byteLength,
+    );
+
+    this.messageIndexCursors = new Heap((a, b) => {
+      const logTimeA = a.records[a.index]?.[0];
+      const logTimeB = b.records[b.index]?.[0];
+      if (logTimeA == undefined) {
+        return 1;
+      } else if (logTimeB == undefined) {
+        return -1;
+      }
+      return Number(logTimeA - logTimeB);
+    });
+
+    let offset = 0;
+
+    for (
+      let result;
+      (result = parseRecord({
+        view: messageIndexesView,
+        startOffset: offset,
+        validateCrcs: true,
+      })),
+        result.record;
+      offset += result.usedBytes
+    ) {
+      if (result.record.type !== "MessageIndex") {
+        continue;
+      }
+      if (
+        result.record.records.length > 0 &&
+        (this.relevantChannels == undefined || this.relevantChannels.has(result.record.channelId))
+      ) {
+        for (let i = 0; i + 1 < result.record.records.length; i++) {
+          if (result.record.records[i]![0] > result.record.records[i + 1]![0]) {
+            throw new Error(
+              `Message index entries for channel ${result.record.channelId} in chunk at offset ${this.chunkIndex.chunkStartOffset} must be sorted by log time`,
+            );
+          }
+        }
+        this.messageIndexCursors.push({
+          index: 0,
+          channelId: result.record.channelId,
+          records: result.record.records,
+        });
+      }
+    }
+    if (offset !== messageIndexesView.byteLength) {
+      throw new Error(
+        `${messageIndexesView.byteLength - offset} bytes remaining in message index section`,
+      );
+    }
+
+    return true;
+  }
+}
+
 export default class Mcap0IndexedReader {
   readonly chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
   readonly attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
@@ -314,20 +448,76 @@ export default class Mcap0IndexedReader {
     }
 
     const relevantChunks = this.chunkIndexes.filter(
-      (chunk) => chunk.messageStartTime <= endTime && chunk.messageEndTime >= startTime,
+      (chunk) =>
+        chunk.messageStartTime <= endTime &&
+        chunk.messageEndTime >= startTime &&
+        chunk.messageIndexOffsets,
     );
 
-    for (let i = 0; i + 1 < relevantChunks.length; i++) {
-      if (relevantChunks[i]!.messageEndTime > relevantChunks[i + 1]!.messageStartTime) {
-        throw new Error(
-          `Overlapping chunks are not currently supported; chunk at offset ${
-            relevantChunks[i]!.chunkStartOffset
-          } ends at ${relevantChunks[i]!.messageEndTime} and chunk at offset ${
-            relevantChunks[i + 1]!.chunkStartOffset
-          } starts at ${relevantChunks[i + 1]!.messageStartTime}`,
-        );
+    const chunkCursors = new Heap<ChunkCursor>((a, b) => a.compare(b));
+    for (const chunkIndex of this.chunkIndexes) {
+      if (chunkIndex.messageStartTime <= endTime && chunkIndex.messageEndTime >= startTime) {
+        chunkCursors.push(new ChunkCursor({ chunkIndex, relevantChannels, startTime, endTime }));
       }
     }
+
+    for (let cursor; (cursor = chunkCursors.peek()); ) {
+      if (cursor.messageIndexCursors == undefined) {
+        // Once we need reach a chunk that has not been loaded yet, load its message indexes and re-organize the heap.
+        if (await cursor.loadMessageIndexCursors(this.readable)) {
+          chunkCursors.replace(cursor);
+        } else {
+          chunkCursors.pop();
+        }
+        continue;
+      }
+
+      const [logTime, offset] = cursor.records[cursor.index]!;
+      if (logTime >= startTime && logTime <= endTime) {
+        if (BigInt(recordsView.byteOffset) + offset >= Number.MAX_SAFE_INTEGER) {
+          throw new Error(
+            `Message offset too large (log time ${logTime}, offset ${offset}) in channel ${cursor.channelId} in chunk at offset ${chunkIndex.chunkStartOffset}`,
+          );
+        }
+        const result = parseRecord({
+          view: recordsView,
+          startOffset: Number(offset),
+          validateCrcs: true,
+        });
+        if (!result.record) {
+          throw new Error(
+            `Unable to parse record at offset ${offset} in chunk at offset ${chunkIndex.chunkStartOffset}`,
+          );
+        }
+        if (result.record.type !== "Message") {
+          throw new Error(
+            `Unexpected record type ${result.record.type} in message index (time ${logTime}, offset ${offset} in chunk at offset ${chunkIndex.chunkStartOffset})`,
+          );
+        }
+        if (result.record.logTime !== logTime) {
+          throw new Error(
+            `Message log time ${result.record.logTime} did not match message index entry (${logTime} at offset ${offset} in chunk at offset ${chunkIndex.chunkStartOffset})`,
+          );
+        }
+        yield result.record;
+      }
+
+      const messageIndex = cursor.pop();
+
+      if (cursor.hasMore()) {
+        chunkCursors.replace(cursor);
+      } else {
+        chunkCursors.pop();
+      }
+
+      if (cursor.index + 1 < cursor.records.length && logTime <= endTime) {
+        cursor.index++;
+        messageIndexCursors.replace(cursor);
+      } else {
+        messageIndexCursors.pop();
+      }
+    }
+
     for (const chunkIndex of relevantChunks) {
       yield* this.readChunk({ chunkIndex, channelIds: relevantChannels, startTime, endTime });
     }
