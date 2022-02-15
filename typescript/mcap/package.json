@@ -24,8 +24,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
-    "test": "jest",
-    "validate": "ts-node --files --project tsconfig.cjs.json scripts/validate.ts"
+    "test": "jest"
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "0.17.1",
