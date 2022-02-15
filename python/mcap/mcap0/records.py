@@ -354,7 +354,20 @@ class MessageIndex(McapRecord):
 
 @dataclass
 class Metadata(McapRecord):
-    pass
+    name: str
+    data: Dict[str, str]
+
+    def write(self, stream: WriteDataStream) -> None:
+        stream.start_record(Opcode.METADATA)
+        for k, v in self.data.items():
+            stream.write_prefixed_string(k)
+            stream.write_prefixed_string(v)
+        stream.finish_record()
+
+    @staticmethod
+    def read(stream: ReadDataStream):
+        name = stream.read_prefixed_string()
+        return Metadata(name=name, data={})
 
 
 @dataclass

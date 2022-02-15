@@ -66,7 +66,15 @@ def read_magic(stream: ReadDataStream) -> bool:
 
 
 class StreamReader:
+    """
+    Reads MCAP data sequentially from an input stream.
+    """
+
+    @property
     def records(self) -> Iterator[McapRecord]:
+        """
+        Returns records encountered in the MCAP in order.
+        """
         if not self.__magic:
             self.__magic = read_magic(self.__stream)
 
@@ -89,6 +97,9 @@ class StreamReader:
                 read_magic(self.__stream)
 
     def __init__(self, input: Union[str, RawIOBase, BufferedReader]):
+        """
+        input: The input stream from which to read records.
+        """
         if isinstance(input, BufferedReader):
             self.__stream = ReadDataStream(input)
         elif isinstance(input, str):
@@ -130,3 +141,6 @@ class StreamReader:
 
         # Skip unknown record types
         self.__stream.read(length - 9)
+
+
+__all__ = ["StreamReader"]
