@@ -2,7 +2,7 @@
   "private": true,
   "workspaces": {
     "packages": [
-      "typescript",
+      "typescript/*",
       "tests/conformance"
     ]
   },
