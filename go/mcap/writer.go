@@ -153,9 +153,6 @@ func (w *Writer) WriteMessage(m *Message) error {
 	w.Statistics.ChannelMessageCounts[m.ChannelID]++
 	w.Statistics.MessageCount++
 	if w.opts.Chunked {
-		// TODO preallocate or maybe fancy structure. These could be conserved
-		// across chunks too, which might work ok assuming similar numbers of
-		// messages/chan/chunk.
 		idx, ok := w.messageIndexes[m.ChannelID]
 		if !ok {
 			idx = &MessageIndex{
