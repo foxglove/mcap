@@ -293,8 +293,7 @@ async function validate(
             ++msgCount;
             processRecord(record);
             if (lastMessage && record.logTime < lastMessage.logTime) {
-              console.error({ message: record, lastMessage });
-              //TODO: why isn't this being caught by indexed reader validation of message indexes?
+              log({ message: record, lastMessage });
               throw new Error(
                 `Encountered out-of-order messages @ ${msgCount}: ${record.logTime} < ${lastMessage.logTime}`,
               );
