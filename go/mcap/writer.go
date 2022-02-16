@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"math"
 	"sort"
@@ -230,9 +231,7 @@ func (w *Writer) WriteAttachment(a *Attachment) error {
 	offset += putPrefixedString(w.msg[offset:], a.ContentType)
 	offset += putUint64(w.msg[offset:], uint64(len(a.Data)))
 	offset += copy(w.msg[offset:], a.Data)
-	// TODO: this should be computed, but is not currently to match conformance tests. cspell:disable-line
-	// crc := crc32.ChecksumIEEE(w.msg[:offset]) nolint:gocritic cspell:disable-line
-	crc := uint32(0)
+	crc := crc32.ChecksumIEEE(w.msg[:offset])
 	offset += putUint32(w.msg[offset:], crc)
 	attachmentOffset := w.w.Size()
 	c, err := w.writeRecord(w.w, OpAttachment, w.msg[:offset])
