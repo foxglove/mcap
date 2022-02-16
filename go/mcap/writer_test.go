@@ -182,6 +182,7 @@ func TestChunkedReadWrite(t *testing.T) {
 			assert.Equal(t, uint32(0), w.Statistics.AttachmentCount)
 			assert.Equal(t, uint32(1), w.Statistics.ChannelCount)
 			assert.Equal(t, uint32(1), w.Statistics.ChunkCount)
+			assert.Equal(t, int(w.Offset()), buf.Len())
 			lexer, err := NewLexer(buf)
 			assert.Nil(t, err)
 			for i, expected := range []TokenType{
