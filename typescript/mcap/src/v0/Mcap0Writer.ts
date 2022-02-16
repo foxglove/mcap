@@ -252,9 +252,11 @@ export class Mcap0Writer {
       summaryCrc: 0,
     };
     if (summaryLength !== 0n) {
-      const tempBuffer = new DataView(new ArrayBuffer(2 * 8));
-      tempBuffer.setBigUint64(0, footer.summaryStart, true);
-      tempBuffer.setBigUint64(0, footer.summaryOffsetStart, true);
+      const tempBuffer = new DataView(new ArrayBuffer(1 + 8 + 8 + 8));
+      tempBuffer.setUint8(0, Opcode.FOOTER);
+      tempBuffer.setBigUint64(1, 8n + 8n + 4n, true);
+      tempBuffer.setBigUint64(1 + 8, footer.summaryStart, true);
+      tempBuffer.setBigUint64(1 + 8 + 8, footer.summaryOffsetStart, true);
       summaryCrc = crc32Update(summaryCrc, tempBuffer);
       footer.summaryCrc = crc32Final(summaryCrc);
     }

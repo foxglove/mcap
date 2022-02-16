@@ -187,28 +187,33 @@ export default class Mcap0IndexedReader {
       throw new Error("File is not indexed");
     }
 
+    // Copy the footer prefix before reading the summary because calling readable.read() may reuse the buffer.
+    const footerPrefix = new Uint8Array(
+      /* Opcode.FOOTER */ 1 +
+        /* record content length */ 8 +
+        /* summary start */ 8 +
+        /* summary offset start */ 8,
+    );
+    footerPrefix.set(
+      new Uint8Array(
+        footerAndMagicView.buffer,
+        footerAndMagicView.byteOffset,
+        footerPrefix.byteLength,
+      ),
+    );
+
     // Future optimization: avoid holding whole summary blob in memory at once
     const allSummaryData = await readable.read(
       footer.summaryStart,
       footerOffset - footer.summaryStart,
     );
     if (footer.summaryCrc !== 0) {
-      let indexCrc = crc32Init();
-      indexCrc = crc32Update(indexCrc, allSummaryData);
-      indexCrc = crc32Update(
-        indexCrc,
-        new DataView(
-          footerAndMagicView.buffer,
-          footerAndMagicView.byteOffset,
-          /* Opcode.FOOTER */ 1 +
-            /* record content length */ 8 +
-            /* summary start */ 8 +
-            /* summary offset start */ 8,
-        ),
-      );
-      indexCrc = crc32Final(indexCrc);
-      if (indexCrc !== footer.summaryCrc) {
-        throw new Error(`Incorrect index CRC ${indexCrc} (expected ${footer.summaryCrc})`);
+      let summaryCrc = crc32Init();
+      summaryCrc = crc32Update(summaryCrc, allSummaryData);
+      summaryCrc = crc32Update(summaryCrc, footerPrefix);
+      summaryCrc = crc32Final(summaryCrc);
+      if (summaryCrc !== footer.summaryCrc) {
+        throw new Error(`Incorrect summary CRC ${summaryCrc} (expected ${footer.summaryCrc})`);
       }
     }
 
