@@ -30,7 +30,7 @@
         ["sequence", "10"]
       ]
     },
-    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
+    {"type": "DataEnd", "fields": [["data_section_crc", "340798603"]]},
     {
       "type": "Schema",
       "fields": [
@@ -51,7 +51,7 @@
     {
       "type": "Footer",
       "fields": [
-        ["summary_crc", "0"],
+        ["summary_crc", "1787554423"],
         ["summary_offset_start", "202"],
         ["summary_start", "165"]
       ]

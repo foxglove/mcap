@@ -11,7 +11,7 @@
         ["name", "myFile"]
       ]
     },
-    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
+    {"type": "DataEnd", "fields": [["data_section_crc", "1702036232"]]},
     {
       "type": "AttachmentIndex",
       "fields": [
@@ -35,7 +35,7 @@
     {
       "type": "Footer",
       "fields": [
-        ["summary_crc", "0"],
+        ["summary_crc", "2246481584"],
         ["summary_offset_start", "215"],
         ["summary_start", "125"]
       ]

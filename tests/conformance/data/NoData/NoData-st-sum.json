@@ -1,7 +1,7 @@
 {
   "records": [
     {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
-    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
+    {"type": "DataEnd", "fields": [["data_section_crc", "3959079795"]]},
     {
       "type": "Statistics",
       "fields": [
@@ -27,7 +27,7 @@
     {
       "type": "Footer",
       "fields": [
-        ["summary_crc", "0"],
+        ["summary_crc", "766034280"],
         ["summary_offset_start", "93"],
         ["summary_start", "38"]
       ]

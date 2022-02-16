@@ -11,7 +11,7 @@
         ["name", "myFile"]
       ]
     },
-    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
+    {"type": "DataEnd", "fields": [["data_section_crc", "1702036232"]]},
     {
       "type": "Statistics",
       "fields": [
@@ -37,7 +37,7 @@
     {
       "type": "Footer",
       "fields": [
-        ["summary_crc", "0"],
+        ["summary_crc", "3165068087"],
         ["summary_offset_start", "183"],
         ["summary_start", "125"]
       ]
