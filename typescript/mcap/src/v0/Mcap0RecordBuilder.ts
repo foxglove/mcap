@@ -1,3 +1,5 @@
+import { crc32 } from "@foxglove/crc";
+
 import { Statistics, SummaryOffset } from ".";
 import { BufferBuilder } from "./BufferBuilder";
 import { MCAP0_MAGIC, Opcode } from "./constants";
@@ -158,15 +160,23 @@ export class Mcap0RecordBuilder {
     this.bufferBuilder.uint8(Opcode.ATTACHMENT);
 
     const startPosition = this.bufferBuilder.length;
+    this.bufferBuilder.uint64(0n); // placeholder
+    const crcStartPosition = this.bufferBuilder.length;
     this.bufferBuilder
-      .uint64(0n) // placeholder
       .uint64(attachment.logTime)
       .uint64(attachment.createTime)
       .string(attachment.name)
       .string(attachment.contentType)
       .uint64(BigInt(attachment.data.byteLength))
-      .bytes(attachment.data)
-      .uint32(0 /*crc*/);
+      .bytes(attachment.data);
+    this.bufferBuilder.uint32(
+      crc32(
+        this.bufferBuilder.bufferView(
+          crcStartPosition,
+          this.bufferBuilder.length - crcStartPosition,
+        ),
+      ),
+    );
     if (this.options?.padRecords === true) {
       this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
     }

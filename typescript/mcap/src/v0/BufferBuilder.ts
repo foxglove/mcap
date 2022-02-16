@@ -27,8 +27,14 @@ export class BufferBuilder {
     return this.offset;
   }
 
+  /** Returns a copy of the written data. */
   get buffer(): Readonly<Uint8Array> {
     return this.fullBuffer.slice(0, this.offset);
+  }
+
+  /** Returns a temporary view into the underlying buffer (not a copy). */
+  bufferView(byteOffset: number, byteLength: number): Uint8Array {
+    return new Uint8Array(this.fullBuffer.buffer, byteOffset, byteLength);
   }
 
   int8(value: number): BufferBuilder {
