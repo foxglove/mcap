@@ -118,7 +118,7 @@ describe("Mcap0IndexedReader", () => {
     );
     const readable = makeReadable(new Uint8Array(data));
     await expect(Mcap0IndexedReader.Initialize({ readable })).rejects.toThrow(
-      "Incorrect index CRC 491514153 (expected 163128923)",
+      "Incorrect summary CRC 491514153 (expected 163128923)",
     );
   });
 
