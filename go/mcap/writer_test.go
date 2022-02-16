@@ -255,10 +255,9 @@ func TestChunkBoundaryIndexing(t *testing.T) {
 	}))
 	assert.Nil(t, w.Close())
 	t.Run("chunk indexes correct", func(t *testing.T) {
-		assert.Equal(t, 3, len(w.ChunkIndexes))
+		assert.Equal(t, 2, len(w.ChunkIndexes))
 		assert.Equal(t, 100, int(w.ChunkIndexes[0].MessageStartTime)) // first message
 		assert.Equal(t, 1, int(w.ChunkIndexes[1].MessageStartTime))   // second message
-		assert.Equal(t, 0, int(w.ChunkIndexes[2].MessageStartTime))   // empty chunk
 	})
 }
 

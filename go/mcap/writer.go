@@ -349,6 +349,11 @@ func (w *Writer) WriteDataEnd(e *DataEnd) error {
 }
 
 func (w *Writer) flushActiveChunk() error {
+
+	if w.compressedWriter.Size() == 0 {
+		return nil
+	}
+
 	err := w.compressedWriter.Close()
 	if err != nil {
 		return err
