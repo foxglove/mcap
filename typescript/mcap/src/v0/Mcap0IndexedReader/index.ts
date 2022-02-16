@@ -320,6 +320,9 @@ export default class Mcap0IndexedReader {
       }
     }
 
+    // Holds the decompressed chunk data for "active" chunks. Items are added below when a chunk
+    // cursor becomes active (i.e. when we first need to access messages from the chunk) and removed
+    // when the cursor is removed from the heap.
     const chunkViewCache = new Map<bigint, DataView>();
     const loadChunkData = async (chunkIndex: TypedMcapRecords["ChunkIndex"]): Promise<DataView> => {
       const chunkData = await this.readable.read(

@@ -287,18 +287,8 @@ async function validate(
           for (const record of reader.channelsById.values()) {
             processRecord(record);
           }
-          let lastMessage: Mcap0Types.Message | undefined;
-          let msgCount = 0;
-          for await (const record of reader.readMessages({ topics: ["/map", "/imu"] })) {
-            ++msgCount;
+          for await (const record of reader.readMessages()) {
             processRecord(record);
-            if (lastMessage && record.logTime < lastMessage.logTime) {
-              log({ message: record, lastMessage });
-              throw new Error(
-                `Encountered out-of-order messages @ ${msgCount}: ${record.logTime} < ${lastMessage.logTime}`,
-              );
-            }
-            lastMessage = record;
           }
           break;
         } catch (error) {
