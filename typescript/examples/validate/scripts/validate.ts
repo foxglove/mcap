@@ -247,7 +247,6 @@ async function validate(
   switch (mcapVersion) {
     case "pre0":
       throw new Error("MCAP pre-v0 files are not supported");
-      break;
 
     case "0":
       if (!stream) {
