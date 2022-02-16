@@ -127,7 +127,7 @@ async function runWriterTest(
     }
     const expectedParts = splitMcapRecords(expectedOutput).map(spaceHexString).join("\n");
     const outputParts = splitMcapRecords(output).map(spaceHexString).join("\n");
-    if (expectedParts !== outputParts) {
+    if (!expectedOutput.equals(output)) {
       console.error(colors.red("fail       "), path.basename(filePath));
       try {
         const expectedOutputJson = await fs.readFile(filePath, { encoding: "utf-8" });
