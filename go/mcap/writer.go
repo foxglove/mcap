@@ -53,6 +53,12 @@ func (w *Writer) WriteHeader(header *Header) error {
 	return err
 }
 
+// Offset returns the current offset of the writer, or the size of the written
+// file if called after Close().
+func (w *Writer) Offset() uint64 {
+	return w.w.Size()
+}
+
 // WriteFooter writes a footer record to the output. A Footer record contains
 // end-of-file information. It must be the last record in the file. Readers
 // using the index to read the file will begin with by reading the footer and
