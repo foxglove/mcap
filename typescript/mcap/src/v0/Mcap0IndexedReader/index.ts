@@ -1,213 +1,10 @@
 import { crc32, crc32Final, crc32Init, crc32Update } from "@foxglove/crc";
 import Heap from "heap-js";
-import { sortedIndexBy } from "lodash";
 
-import { MCAP0_MAGIC } from "./constants";
-import { parseMagic, parseRecord } from "./parse";
-import { DecompressHandlers, IReadable, TypedMcapRecords } from "./types";
-
-type ChunkCursorParams = {
-  chunkIndex: TypedMcapRecords["ChunkIndex"];
-  relevantChannels: Set<number> | undefined;
-  startTime: bigint | undefined;
-  endTime: bigint | undefined;
-};
-
-class ChunkCursor {
-  chunkIndex: TypedMcapRecords["ChunkIndex"];
-  relevantChannels?: Set<number>;
-  startTime: bigint | undefined;
-  endTime: bigint | undefined;
-
-  messageIndexCursors?: Heap<{
-    channelId: number;
-
-    /** index of next message within `records` array */
-    index: number;
-
-    records: TypedMcapRecords["MessageIndex"]["records"];
-  }>;
-
-  constructor(params: ChunkCursorParams) {
-    this.chunkIndex = params.chunkIndex;
-    this.relevantChannels = params.relevantChannels;
-    this.startTime = params.startTime;
-    this.endTime = params.endTime;
-  }
-
-  compare(other: ChunkCursor): number {
-    // If chunks don't overlap, sort earlier chunk first
-    if (this.chunkIndex.messageEndTime < other.chunkIndex.messageStartTime) {
-      return -1;
-    }
-    if (this.chunkIndex.messageStartTime > other.chunkIndex.messageEndTime) {
-      return 1;
-    }
-
-    // If a cursor has not loaded message indexes, sort it first so it can get loaded and re-sorted
-    if (!this.messageIndexCursors) {
-      return -1;
-    }
-    if (!other.messageIndexCursors) {
-      return 1;
-    }
-
-    // Earlier messages come first
-    const cursorA = this.messageIndexCursors.peek();
-    if (!cursorA) {
-      throw new Error(
-        `Unexpected empty cursor for chunk at offset ${this.chunkIndex.chunkStartOffset}`,
-      );
-    }
-    const cursorB = other.messageIndexCursors.peek();
-    if (!cursorB) {
-      throw new Error(
-        `Unexpected empty cursor for chunk at offset ${other.chunkIndex.chunkStartOffset}`,
-      );
-    }
-    const logTimeA = cursorA.records[cursorA.index]![0];
-    const logTimeB = cursorB.records[cursorB.index]![0];
-    if (logTimeA !== logTimeB) {
-      return Number(logTimeA - logTimeB);
-    }
-
-    // Break ties by chunk offset in the file
-    return Number(this.chunkIndex.chunkStartOffset - other.chunkIndex.chunkStartOffset);
-  }
-
-  hasMore(): boolean {
-    if (!this.messageIndexCursors) {
-      throw new Error("loadMessageIndexCursors() must be called before hasMore()");
-    }
-    return this.messageIndexCursors.size() > 0;
-  }
-
-  popMessage(): [logTime: bigint, offset: bigint] {
-    if (!this.messageIndexCursors) {
-      throw new Error("loadMessageIndexCursors() must be called before popMessage()");
-    }
-    const cursor = this.messageIndexCursors.peek();
-    if (!cursor) {
-      throw new Error(
-        `Unexpected popMessage() call when no more messages are available, in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
-      );
-    }
-    const record = cursor.records[cursor.index]!;
-    const [logTime] = record;
-    if (this.startTime != undefined && logTime < this.startTime) {
-      throw new Error(
-        `Encountered message with logTime (${logTime}) prior to startTime (${this.startTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
-      );
-    }
-    if (
-      cursor.index + 1 < cursor.records.length &&
-      (this.endTime == undefined || cursor.records[cursor.index + 1]![0] <= this.endTime)
-    ) {
-      cursor.index++;
-      this.messageIndexCursors.replace(cursor);
-    } else {
-      this.messageIndexCursors.pop();
-    }
-    return record;
-  }
-
-  /** FIXME document */
-  async loadMessageIndexCursors(readable: IReadable): Promise<void> {
-    this.messageIndexCursors = new Heap((a, b) => {
-      const logTimeA = a.records[a.index]?.[0];
-      const logTimeB = b.records[b.index]?.[0];
-      if (logTimeA == undefined) {
-        return 1;
-      } else if (logTimeB == undefined) {
-        return -1;
-      }
-      return Number(logTimeA - logTimeB);
-    });
-
-    let messageIndexStartOffset: bigint | undefined;
-    let relevantMessageIndexStartOffset: bigint | undefined;
-    for (const [channelId, offset] of this.chunkIndex.messageIndexOffsets) {
-      if (messageIndexStartOffset == undefined || offset < messageIndexStartOffset) {
-        messageIndexStartOffset = offset;
-      }
-      if (!this.relevantChannels || this.relevantChannels.has(channelId)) {
-        if (
-          relevantMessageIndexStartOffset == undefined ||
-          offset < relevantMessageIndexStartOffset
-        ) {
-          relevantMessageIndexStartOffset = offset;
-        }
-      }
-    }
-    if (messageIndexStartOffset == undefined || relevantMessageIndexStartOffset == undefined) {
-      return;
-    }
-
-    // Future optimization: read only message indexes for given channelIds, not all message indexes for the chunk
-    const messageIndexEndOffset = messageIndexStartOffset + this.chunkIndex.messageIndexLength;
-    const messageIndexes = await readable.read(
-      relevantMessageIndexStartOffset,
-      messageIndexEndOffset - relevantMessageIndexStartOffset,
-    );
-    const messageIndexesView = new DataView(
-      messageIndexes.buffer,
-      messageIndexes.byteOffset,
-      messageIndexes.byteLength,
-    );
-
-    let offset = 0;
-    for (
-      let result;
-      (result = parseRecord({ view: messageIndexesView, startOffset: offset, validateCrcs: true })),
-        result.record;
-      offset += result.usedBytes
-    ) {
-      if (result.record.type !== "MessageIndex") {
-        continue;
-      }
-      if (
-        result.record.records.length === 0 ||
-        (this.relevantChannels && !this.relevantChannels.has(result.record.channelId))
-      ) {
-        continue;
-      }
-
-      result.record.records.sort(([logTimeA], [logTimeB]) => Number(logTimeA - logTimeB));
-
-      for (let i = 0; i < result.record.records.length; i++) {
-        const [logTime] = result.record.records[i]!;
-        if (logTime < this.chunkIndex.messageStartTime) {
-          throw new Error(
-            `Encountered message index entry in channel ${result.record.channelId} with logTime (${logTime}) earlier than chunk messageStartTime (${this.chunkIndex.messageStartTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
-          );
-        }
-        if (logTime > this.chunkIndex.messageEndTime) {
-          throw new Error(
-            `Encountered message index entry in channel ${result.record.channelId} with logTime (${logTime}) later than chunk messageEndTime (${this.chunkIndex.messageEndTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
-          );
-        }
-      }
-      const startIndex =
-        this.startTime == undefined
-          ? 0
-          : sortedIndexBy(result.record.records, [this.startTime], ([logTime]) => logTime);
-      if (startIndex >= result.record.records.length) {
-        continue;
-      }
-      this.messageIndexCursors.push({
-        index: startIndex,
-        channelId: result.record.channelId,
-        records: result.record.records,
-      });
-    }
-
-    if (offset !== messageIndexesView.byteLength) {
-      throw new Error(
-        `${messageIndexesView.byteLength - offset} bytes remaining in message index section`,
-      );
-    }
-  }
-}
+import { MCAP0_MAGIC } from "../constants";
+import { parseMagic, parseRecord } from "../parse";
+import { DecompressHandlers, IReadable, TypedMcapRecords } from "../types";
+import { ChunkCursor } from "./ChunkCursor";
 
 export default class Mcap0IndexedReader {
   readonly chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
@@ -562,10 +359,10 @@ export default class Mcap0IndexedReader {
     };
 
     for (let cursor; (cursor = chunkCursors.peek()); ) {
-      if (cursor.messageIndexCursors == undefined) {
-        // If we encounter a chunk whose indexes have not been loaded yet, load them and re-organize the heap.
-        await cursor.loadMessageIndexCursors(this.readable);
-        if (cursor.hasMore()) {
+      if (!cursor.hasMessageIndexes()) {
+        // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
+        await cursor.loadMessageIndexes(this.readable);
+        if (cursor.hasMoreMessages()) {
           chunkCursors.replace(cursor);
         } else {
           chunkCursors.pop();
@@ -573,7 +370,6 @@ export default class Mcap0IndexedReader {
         continue;
       }
 
-      // FIXME: expensive to do get() in loop?
       let chunkView = chunkViewCache.get(cursor.chunkIndex.chunkStartOffset);
       if (!chunkView) {
         chunkView = await loadChunkData(cursor.chunkIndex);
@@ -608,10 +404,11 @@ export default class Mcap0IndexedReader {
       }
       yield result.record;
 
-      if (cursor.hasMore()) {
+      if (cursor.hasMoreMessages()) {
         chunkCursors.replace(cursor);
       } else {
         chunkCursors.pop();
+        chunkViewCache.delete(cursor.chunkIndex.chunkStartOffset);
       }
     }
   }

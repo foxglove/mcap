@@ -1,9 +1,9 @@
 import { crc32 } from "@foxglove/crc";
 
-import { ChunkBuilder } from "./ChunkBuilder";
-import Mcap0IndexedReader from "./Mcap0IndexedReader";
-import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
-import { MCAP0_MAGIC, Opcode } from "./constants";
+import Mcap0IndexedReader from ".";
+import { ChunkBuilder } from "../ChunkBuilder";
+import { Mcap0RecordBuilder } from "../Mcap0RecordBuilder";
+import { MCAP0_MAGIC, Opcode } from "../constants";
 import {
   record,
   uint64LE,
@@ -13,8 +13,8 @@ import {
   collect,
   uint16LE,
   uint32PrefixedBytes,
-} from "./testUtils";
-import { TypedMcapRecord, TypedMcapRecords } from "./types";
+} from "../testUtils";
+import { TypedMcapRecord, TypedMcapRecords } from "../types";
 
 function makeReadable(data: Uint8Array) {
   let readCalls = 0;
