@@ -182,6 +182,7 @@ func TestChunkedReadWrite(t *testing.T) {
 			assert.Equal(t, uint32(0), w.Statistics.AttachmentCount)
 			assert.Equal(t, uint32(1), w.Statistics.ChannelCount)
 			assert.Equal(t, uint32(1), w.Statistics.ChunkCount)
+			assert.Equal(t, int(w.Offset()), buf.Len())
 			lexer, err := NewLexer(buf)
 			assert.Nil(t, err)
 			for i, expected := range []TokenType{
@@ -208,6 +209,57 @@ func TestChunkedReadWrite(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestChunkBoundaryIndexing(t *testing.T) {
+	buf := &bytes.Buffer{}
+	// Set a small chunk size so that every message will land in its own chunk.
+	// Each chunk in the index should reflect the time of the corresponding
+	// message.
+	w, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   20,
+		Compression: CompressionZSTD,
+	})
+	assert.Nil(t, err)
+	err = w.WriteHeader(&Header{
+		Profile: "ros1",
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, w.WriteSchema(&Schema{
+		ID:       1,
+		Name:     "schema",
+		Data:     []byte{},
+		Encoding: "msg",
+	}))
+	err = w.WriteChannel(&Channel{
+		ID:              1,
+		SchemaID:        1,
+		Topic:           "/test",
+		MessageEncoding: "ros1",
+		Metadata:        make(map[string]string),
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, w.WriteMessage(&Message{
+		ChannelID:   1,
+		Sequence:    uint32(1),
+		LogTime:     uint64(100),
+		PublishTime: uint64(2),
+		Data:        []byte("Hello, world!"),
+	}))
+	assert.Nil(t, w.WriteMessage(&Message{
+		ChannelID:   1,
+		Sequence:    uint32(1),
+		LogTime:     uint64(1),
+		PublishTime: uint64(2),
+		Data:        []byte("Hello, world!"),
+	}))
+	assert.Nil(t, w.Close())
+	t.Run("chunk indexes correct", func(t *testing.T) {
+		assert.Equal(t, 2, len(w.ChunkIndexes))
+		assert.Equal(t, 100, int(w.ChunkIndexes[0].MessageStartTime)) // first message
+		assert.Equal(t, 1, int(w.ChunkIndexes[1].MessageStartTime))   // second message
+	})
 }
 
 func TestIndexStructures(t *testing.T) {

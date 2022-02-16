@@ -53,6 +53,12 @@ func (w *Writer) WriteHeader(header *Header) error {
 	return err
 }
 
+// Offset returns the current offset of the writer, or the size of the written
+// file if called after Close().
+func (w *Writer) Offset() uint64 {
+	return w.w.Size()
+}
+
 // WriteFooter writes a footer record to the output. A Footer record contains
 // end-of-file information. It must be the last record in the file. Readers
 // using the index to read the file will begin with by reading the footer and
@@ -153,9 +159,6 @@ func (w *Writer) WriteMessage(m *Message) error {
 	w.Statistics.ChannelMessageCounts[m.ChannelID]++
 	w.Statistics.MessageCount++
 	if w.opts.Chunked {
-		// TODO preallocate or maybe fancy structure. These could be conserved
-		// across chunks too, which might work ok assuming similar numbers of
-		// messages/chan/chunk.
 		idx, ok := w.messageIndexes[m.ChannelID]
 		if !ok {
 			idx = &MessageIndex{
@@ -169,17 +172,17 @@ func (w *Writer) WriteMessage(m *Message) error {
 		if err != nil {
 			return err
 		}
-		if w.compressedWriter.Size() > w.opts.ChunkSize {
-			err := w.flushActiveChunk()
-			if err != nil {
-				return err
-			}
-		}
 		if m.LogTime > w.currentChunkEndTime {
 			w.currentChunkEndTime = m.LogTime
 		}
 		if m.LogTime < w.currentChunkStartTime {
 			w.currentChunkStartTime = m.LogTime
+		}
+		if w.compressedWriter.Size() > w.opts.ChunkSize {
+			err := w.flushActiveChunk()
+			if err != nil {
+				return err
+			}
 		}
 	} else {
 		_, err := w.writeRecord(w.w, OpMessage, w.msg[:offset])
@@ -349,6 +352,10 @@ func (w *Writer) WriteDataEnd(e *DataEnd) error {
 }
 
 func (w *Writer) flushActiveChunk() error {
+	if w.compressedWriter.Size() == 0 {
+		return nil
+	}
+
 	err := w.compressedWriter.Close()
 	if err != nil {
 		return err
@@ -407,8 +414,12 @@ func (w *Writer) flushActiveChunk() error {
 
 	messageIndexEnd := w.w.Size()
 	messageIndexLength := messageIndexEnd - chunkEndOffset
+	var chunkStart uint64
+	if w.currentChunkStartTime != math.MaxUint64 {
+		chunkStart = w.currentChunkStartTime
+	}
 	w.ChunkIndexes = append(w.ChunkIndexes, &ChunkIndex{
-		MessageStartTime:    w.currentChunkStartTime,
+		MessageStartTime:    chunkStart,
 		MessageEndTime:      w.currentChunkEndTime,
 		ChunkStartOffset:    chunkStartOffset,
 		ChunkLength:         chunkEndOffset - chunkStartOffset,
