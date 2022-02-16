@@ -71,14 +71,6 @@ class ChunkBuilder {
     this.recordWriter.writeMessage(message);
   }
 
-  finish(): void {
-    if (this.messageIndices) {
-      for (const index of this.messageIndices.values()) {
-        index.records.sort(([logTimeA], [logTimeB]) => Number(logTimeA - logTimeB));
-      }
-    }
-  }
-
   reset(): void {
     this.messageStartTime = 0n;
     this.messageEndTime = 0n;

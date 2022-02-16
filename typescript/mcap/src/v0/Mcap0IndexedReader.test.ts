@@ -447,24 +447,20 @@ describe("Mcap0IndexedReader", () => {
     const chunk1 = new ChunkBuilder({ useMessageIndex: true });
     chunk1.addChannel(channel1);
     chunk1.addMessage(message6);
-    chunk1.finish();
 
     const chunk2 = new ChunkBuilder({ useMessageIndex: true });
     chunk2.addChannel(channel1);
     chunk2.addMessage(message2);
     chunk2.addMessage(message5);
-    chunk2.finish();
 
     const chunk3 = new ChunkBuilder({ useMessageIndex: true });
     chunk3.addChannel(channel1);
     chunk3.addMessage(message4);
     chunk3.addMessage(message3);
-    chunk3.finish();
 
     const chunk4 = new ChunkBuilder({ useMessageIndex: true });
     chunk4.addChannel(channel1);
     chunk4.addMessage(message1);
-    chunk4.finish();
 
     const builder = new Mcap0RecordBuilder();
     builder.writeMagic();

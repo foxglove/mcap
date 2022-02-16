@@ -104,7 +104,6 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
     }
   }
   if (chunk) {
-    chunk.finish();
     const chunkStartOffset = BigInt(builder.length);
     const chunkLength = builder.writeChunk({
       compression: "",

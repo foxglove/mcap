@@ -166,43 +166,41 @@ class ChunkCursor {
         continue;
       }
       if (
-        result.record.records.length > 0 &&
-        (this.relevantChannels == undefined || this.relevantChannels.has(result.record.channelId))
+        result.record.records.length === 0 ||
+        (this.relevantChannels && !this.relevantChannels.has(result.record.channelId))
       ) {
-        for (let i = 0; i < result.record.records.length; i++) {
-          const [logTime] = result.record.records[i]!;
-          if (logTime < this.chunkIndex.messageStartTime) {
-            throw new Error(
-              `Encountered message index entry in channel ${result.record.channelId} with logTime (${logTime}) earlier than chunk messageStartTime (${this.chunkIndex.messageStartTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
-            );
-          }
-          if (logTime > this.chunkIndex.messageEndTime) {
-            throw new Error(
-              `Encountered message index entry in channel ${result.record.channelId} with logTime (${logTime}) later than chunk messageEndTime (${this.chunkIndex.messageEndTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
-            );
-          }
-          if (i + 1 < result.record.records.length && logTime > result.record.records[i + 1]![0]) {
-            throw new Error(
-              `Message index entries for channel ${result.record.channelId} in chunk at offset ${
-                this.chunkIndex.chunkStartOffset
-              } must be sorted by log time (${logTime} > ${result.record.records[i + 1]![0]})`,
-            );
-          }
-        }
-        const startIndex =
-          this.startTime == undefined
-            ? 0
-            : sortedIndexBy(result.record.records, [this.startTime], ([logTime]) => logTime);
-        if (startIndex >= result.record.records.length) {
-          continue;
-        }
-        this.messageIndexCursors.push({
-          index: startIndex,
-          channelId: result.record.channelId,
-          records: result.record.records,
-        });
+        continue;
       }
+
+      result.record.records.sort(([logTimeA], [logTimeB]) => Number(logTimeA - logTimeB));
+
+      for (let i = 0; i < result.record.records.length; i++) {
+        const [logTime] = result.record.records[i]!;
+        if (logTime < this.chunkIndex.messageStartTime) {
+          throw new Error(
+            `Encountered message index entry in channel ${result.record.channelId} with logTime (${logTime}) earlier than chunk messageStartTime (${this.chunkIndex.messageStartTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
+          );
+        }
+        if (logTime > this.chunkIndex.messageEndTime) {
+          throw new Error(
+            `Encountered message index entry in channel ${result.record.channelId} with logTime (${logTime}) later than chunk messageEndTime (${this.chunkIndex.messageEndTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
+          );
+        }
+      }
+      const startIndex =
+        this.startTime == undefined
+          ? 0
+          : sortedIndexBy(result.record.records, [this.startTime], ([logTime]) => logTime);
+      if (startIndex >= result.record.records.length) {
+        continue;
+      }
+      this.messageIndexCursors.push({
+        index: startIndex,
+        channelId: result.record.channelId,
+        records: result.record.records,
+      });
     }
+
     if (offset !== messageIndexesView.byteLength) {
       throw new Error(
         `${messageIndexesView.byteLength - offset} bytes remaining in message index section`,

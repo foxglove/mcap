@@ -372,7 +372,6 @@ export class Mcap0Writer {
       ++this.statistics.chunkCount;
     }
 
-    this.chunkBuilder.finish();
     const chunkData = this.chunkBuilder.buffer;
     const chunkRecord: Chunk = {
       messageStartTime: this.chunkBuilder.messageStartTime,
