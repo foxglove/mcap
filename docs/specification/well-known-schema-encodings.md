@@ -1,6 +1,6 @@
 ## Well-known schema encodings
 
-### `proto`
+### `protobuf`
 
 - schema: A binary [FileDescriptorSet](https://github.com/protocolbuffers/protobuf/blob/master/src/google/protobuf/descriptor.proto) as produced by `protoc --descriptor_set_out`.
 - schema_name: Fully qualified name to the message within the descriptor set. For example, in a proto file containing `package foo.bar; message Baz {}` the fully qualified message name is `foo.bar.Baz`.
