@@ -48,10 +48,12 @@ class ChunkBuilder {
   }
 
   addMessage(message: Message): void {
-    if (this.messageStartTime === 0n) {
+    if (this.messageStartTime === 0n || message.logTime < this.messageStartTime) {
       this.messageStartTime = message.logTime;
     }
-    this.messageEndTime = message.logTime;
+    if (this.messageEndTime === 0n || message.logTime > this.messageEndTime) {
+      this.messageEndTime = message.logTime;
+    }
 
     if (this.messageIndices) {
       let messageIndex = this.messageIndices.get(message.channelId);
@@ -67,6 +69,14 @@ class ChunkBuilder {
 
     this.totalMessageCount += 1;
     this.recordWriter.writeMessage(message);
+  }
+
+  finish(): void {
+    if (this.messageIndices) {
+      for (const index of this.messageIndices.values()) {
+        index.records.sort(([logTimeA], [logTimeB]) => Number(logTimeA - logTimeB));
+      }
+    }
   }
 
   reset(): void {

@@ -247,7 +247,6 @@ async function validate(
   switch (mcapVersion) {
     case "pre0":
       throw new Error("MCAP pre-v0 files are not supported");
-      break;
 
     case "0":
       if (!stream) {
@@ -288,8 +287,19 @@ async function validate(
           for (const record of reader.channelsById.values()) {
             processRecord(record);
           }
-          for await (const record of reader.readMessages()) {
+          let lastMessage: Mcap0Types.Message | undefined;
+          let msgCount = 0;
+          for await (const record of reader.readMessages({ topics: ["/map", "/imu"] })) {
+            ++msgCount;
             processRecord(record);
+            if (lastMessage && record.logTime < lastMessage.logTime) {
+              console.error({ message: record, lastMessage });
+              //TODO: why isn't this being caught by indexed reader validation of message indexes?
+              throw new Error(
+                `Encountered out-of-order messages @ ${msgCount}: ${record.logTime} < ${lastMessage.logTime}`,
+              );
+            }
+            lastMessage = record;
           }
           break;
         } catch (error) {

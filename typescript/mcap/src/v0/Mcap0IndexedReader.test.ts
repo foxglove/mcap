@@ -1,6 +1,8 @@
 import { crc32 } from "@foxglove/crc";
 
+import { ChunkBuilder } from "./ChunkBuilder";
 import Mcap0IndexedReader from "./Mcap0IndexedReader";
+import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
 import { MCAP0_MAGIC, Opcode } from "./constants";
 import {
   record,
@@ -12,7 +14,7 @@ import {
   uint16LE,
   uint32PrefixedBytes,
 } from "./testUtils";
-import { TypedMcapRecords } from "./types";
+import { TypedMcapRecord, TypedMcapRecords } from "./types";
 
 function makeReadable(data: Uint8Array) {
   let readCalls = 0;
@@ -279,6 +281,7 @@ describe("Mcap0IndexedReader", () => {
             ...chunkContents,
           ]),
         );
+        const chunkLength = BigInt(data.length) - chunkOffset;
         const messageIndexOffset = BigInt(data.length);
         data.push(
           ...record(Opcode.MESSAGE_INDEX, [
@@ -298,7 +301,7 @@ describe("Mcap0IndexedReader", () => {
             ...uint64LE(message1.logTime), // start time
             ...uint64LE(message3.logTime), // end time
             ...uint64LE(chunkOffset), // offset
-            ...uint64LE(0n), // chunk length
+            ...uint64LE(chunkLength), // chunk length
             ...keyValues(uint16LE, uint64LE, [[42, messageIndexOffset]]), // message index offsets
             ...uint64LE(messageIndexLength), // message index length
             ...string(""), // compression
@@ -319,53 +322,6 @@ describe("Mcap0IndexedReader", () => {
         );
         expect(readable.readCalls).toBe(6);
       },
-    );
-  });
-
-  it("does not yet support overlapping chunks", async () => {
-    const data = [
-      ...MCAP0_MAGIC,
-      ...record(Opcode.HEADER, [
-        ...string(""), // profile
-        ...string(""), // library
-      ]),
-    ];
-    const summaryStart = BigInt(data.length);
-    data.push(
-      ...record(Opcode.CHUNK_INDEX, [
-        ...uint64LE(0n), // start time
-        ...uint64LE(2n), // end time
-        ...uint64LE(0n), // offset
-        ...uint64LE(0n), // chunk length
-        ...keyValues(uint16LE, uint64LE, []), // message index offsets
-        ...uint64LE(0n), // message index length
-        ...string(""), // compression
-        ...uint64LE(BigInt(0n)), // compressed size
-        ...uint64LE(BigInt(0n)), // uncompressed size
-      ]),
-      ...record(Opcode.CHUNK_INDEX, [
-        ...uint64LE(1n), // start time
-        ...uint64LE(3n), // end time
-        ...uint64LE(0n), // offset
-        ...uint64LE(0n), // chunk length
-        ...keyValues(uint16LE, uint64LE, []), // message index offsets
-        ...uint64LE(0n), // message index length
-        ...string(""), // compression
-        ...uint64LE(BigInt(0n)), // compressed size
-        ...uint64LE(BigInt(0n)), // uncompressed size
-      ]),
-      ...record(Opcode.FOOTER, [
-        ...uint64LE(BigInt(summaryStart)), // summary offset
-        ...uint64LE(0n), // summary start offset
-        ...uint32LE(crc32(new Uint8Array(0))), // summary crc
-      ]),
-      ...MCAP0_MAGIC,
-    );
-    const reader = await Mcap0IndexedReader.Initialize({
-      readable: makeReadable(new Uint8Array(data)),
-    });
-    await expect(collect(reader.readMessages())).rejects.toThrow(
-      "Overlapping chunks are not currently supported",
     );
   });
 
@@ -415,6 +371,7 @@ describe("Mcap0IndexedReader", () => {
           ...uint64LE(0n), // chunk data size
         ]),
       );
+      const chunkLength = BigInt(data.length) - chunkOffset;
       const messageIndexOffset = BigInt(data.length);
       data.push(
         ...record(Opcode.MESSAGE_INDEX, [
@@ -429,7 +386,7 @@ describe("Mcap0IndexedReader", () => {
           ...uint64LE(0n), // start time
           ...uint64LE(100n), // end time
           ...uint64LE(chunkOffset), // offset
-          ...uint64LE(0n), // chunk length
+          ...uint64LE(chunkLength), // chunk length
           ...keyValues(uint16LE, uint64LE, [[42, messageIndexOffset]]), // message index offsets
           ...uint64LE(messageIndexLength), // message index length
           ...string(""), // compression
@@ -455,9 +412,125 @@ describe("Mcap0IndexedReader", () => {
         // Still fails because messages are not actually present in the chunk
         // eslint-disable-next-line jest/no-conditional-expect
         await expect(collect(reader.readMessages())).rejects.toThrow(
-          "Unable to parse record at offset",
+          "Message offset beyond chunk bounds",
         );
       }
     },
   );
+
+  it("sorts and merges out-of-order and overlapping chunks", async () => {
+    const channel1: TypedMcapRecord = {
+      type: "Channel",
+      id: 1,
+      schemaId: 0,
+      topic: "a",
+      messageEncoding: "utf12",
+      metadata: new Map(),
+    };
+    const makeMessage = (idx: number): TypedMcapRecords["Message"] => {
+      return {
+        type: "Message",
+        channelId: channel1.id,
+        sequence: idx,
+        logTime: BigInt(idx),
+        publishTime: 0n,
+        data: new Uint8Array(),
+      };
+    };
+    const message1 = makeMessage(1);
+    const message2 = makeMessage(2);
+    const message3 = makeMessage(3);
+    const message4 = makeMessage(4);
+    const message5 = makeMessage(5);
+    const message6 = makeMessage(6);
+
+    const chunk1 = new ChunkBuilder({ useMessageIndex: true });
+    chunk1.addChannel(channel1);
+    chunk1.addMessage(message6);
+    chunk1.finish();
+
+    const chunk2 = new ChunkBuilder({ useMessageIndex: true });
+    chunk2.addChannel(channel1);
+    chunk2.addMessage(message2);
+    chunk2.addMessage(message5);
+    chunk2.finish();
+
+    const chunk3 = new ChunkBuilder({ useMessageIndex: true });
+    chunk3.addChannel(channel1);
+    chunk3.addMessage(message4);
+    chunk3.addMessage(message3);
+    chunk3.finish();
+
+    const chunk4 = new ChunkBuilder({ useMessageIndex: true });
+    chunk4.addChannel(channel1);
+    chunk4.addMessage(message1);
+    chunk4.finish();
+
+    const builder = new Mcap0RecordBuilder();
+    builder.writeMagic();
+    builder.writeHeader({ profile: "", library: "" });
+
+    const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
+    function writeChunk(chunk: ChunkBuilder) {
+      const chunkStartOffset = BigInt(builder.length);
+      const chunkLength = builder.writeChunk({
+        messageStartTime: chunk.messageStartTime,
+        messageEndTime: chunk.messageEndTime,
+        uncompressedSize: BigInt(chunk.buffer.length),
+        uncompressedCrc: 0,
+        compression: "",
+        records: chunk.buffer,
+      });
+
+      const messageIndexStart = BigInt(builder.length);
+      let messageIndexLength = 0n;
+      const chunkMessageIndexOffsets = new Map<number, bigint>();
+      for (const messageIndex of chunk.indices) {
+        chunkMessageIndexOffsets.set(
+          messageIndex.channelId,
+          messageIndexStart + messageIndexLength,
+        );
+        messageIndexLength += builder.writeMessageIndex(messageIndex);
+      }
+
+      chunkIndexes.push({
+        type: "ChunkIndex",
+        messageStartTime: chunk.messageStartTime,
+        messageEndTime: chunk.messageEndTime,
+        chunkStartOffset,
+        chunkLength,
+        messageIndexOffsets: chunkMessageIndexOffsets,
+        messageIndexLength,
+        compression: "",
+        compressedSize: BigInt(chunk.buffer.byteLength),
+        uncompressedSize: BigInt(chunk.buffer.byteLength),
+      });
+    }
+
+    writeChunk(chunk1);
+    writeChunk(chunk2);
+    writeChunk(chunk3);
+    writeChunk(chunk4);
+
+    builder.writeDataEnd({ dataSectionCrc: 0 });
+
+    const summaryStart = BigInt(builder.length);
+
+    for (const index of chunkIndexes) {
+      builder.writeChunkIndex(index);
+    }
+
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeMagic();
+
+    const reader = await Mcap0IndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
+    await expect(collect(reader.readMessages())).resolves.toEqual([
+      message1,
+      message2,
+      message3,
+      message4,
+      message5,
+      message6,
+    ]);
+  });
 });
