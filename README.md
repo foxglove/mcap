@@ -9,20 +9,12 @@ MCAP is a modular container format for recording pub/sub messages with arbitrary
 
 ## Developer quick start
 
-### TypeScript
+MCAP libraries are provided in the following languages. For guidance on each language, see its corresponding README:
 
-Run lint/tests:
-
-```
-yarn workspace @foxglove/mcap lint
-yarn workspace @foxglove/mcap test
-```
-
-Read and validate an MCAP file:
-
-```
-yarn workspace @foxglove/mcap validate file.mcap
-```
+- [C++](./cpp)
+- [Go](./go)
+- [Python](./python)
+- [TypeScript](./typescript)
 
 ## License
 

@@ -147,6 +147,18 @@ jobs:
       - run: yarn workspace @foxglove/mcap typecheck
       - run: yarn workspace @foxglove/mcap test
 
+  typescript-examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 16.x
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn workspace @foxglove/mcap-example-validate lint:ci
+      - run: yarn workspace @foxglove/mcap-example-validate typecheck
+
   python:
     runs-on: ubuntu-latest
     defaults:
