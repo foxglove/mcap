@@ -19,7 +19,7 @@ type ChunkCursorParams = {
  * pointing into the message index for each channel of interest.
  */
 export class ChunkCursor {
-  chunkIndex: TypedMcapRecords["ChunkIndex"];
+  readonly chunkIndex: TypedMcapRecords["ChunkIndex"];
 
   private relevantChannels?: Set<number>;
   private startTime: bigint | undefined;
