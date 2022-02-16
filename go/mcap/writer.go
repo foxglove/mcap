@@ -169,17 +169,17 @@ func (w *Writer) WriteMessage(m *Message) error {
 		if err != nil {
 			return err
 		}
-		if w.compressedWriter.Size() > w.opts.ChunkSize {
-			err := w.flushActiveChunk()
-			if err != nil {
-				return err
-			}
-		}
 		if m.LogTime > w.currentChunkEndTime {
 			w.currentChunkEndTime = m.LogTime
 		}
 		if m.LogTime < w.currentChunkStartTime {
 			w.currentChunkStartTime = m.LogTime
+		}
+		if w.compressedWriter.Size() > w.opts.ChunkSize {
+			err := w.flushActiveChunk()
+			if err != nil {
+				return err
+			}
 		}
 	} else {
 		_, err := w.writeRecord(w.w, OpMessage, w.msg[:offset])
@@ -349,6 +349,10 @@ func (w *Writer) WriteDataEnd(e *DataEnd) error {
 }
 
 func (w *Writer) flushActiveChunk() error {
+	if w.compressedWriter.Size() == 0 {
+		return nil
+	}
+
 	err := w.compressedWriter.Close()
 	if err != nil {
 		return err
@@ -407,8 +411,12 @@ func (w *Writer) flushActiveChunk() error {
 
 	messageIndexEnd := w.w.Size()
 	messageIndexLength := messageIndexEnd - chunkEndOffset
+	var chunkStart uint64
+	if w.currentChunkStartTime != math.MaxUint64 {
+		chunkStart = w.currentChunkStartTime
+	}
 	w.ChunkIndexes = append(w.ChunkIndexes, &ChunkIndex{
-		MessageStartTime:    w.currentChunkStartTime,
+		MessageStartTime:    chunkStart,
 		MessageEndTime:      w.currentChunkEndTime,
 		ChunkStartOffset:    chunkStartOffset,
 		ChunkLength:         chunkEndOffset - chunkStartOffset,
