@@ -176,7 +176,7 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, opts *mcap.WriterOptions, searchdirs []s
 			ID:       schemaID,
 			Data:     schema,
 			Name:     t.typ,
-			Encoding: "msg",
+			Encoding: "ros2msg",
 		})
 		if err != nil {
 			return fmt.Errorf("failed to write schema: %w", err)
