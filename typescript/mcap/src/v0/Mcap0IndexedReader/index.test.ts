@@ -16,8 +16,13 @@ import {
 } from "../testUtils";
 import { TypedMcapRecord, TypedMcapRecords } from "../types";
 
+/**
+ * Create an IReadable from a buffer. Simulates small buffer reuse to help test that readers aren't
+ * holding onto buffers without copying them.
+ */
 function makeReadable(data: Uint8Array) {
   let readCalls = 0;
+  const reusableBuffer = new Uint8Array(data.byteLength);
   return {
     get readCalls() {
       return readCalls;
@@ -33,7 +38,11 @@ function makeReadable(data: Uint8Array) {
           `Read out of range: offset ${offset}, size ${size} (data.length: ${data.length})`,
         );
       }
-      return data.slice(Number(offset), Number(offset + size));
+      reusableBuffer.set(
+        new Uint8Array(data.buffer, data.byteOffset + Number(offset), Number(size)),
+      );
+      reusableBuffer.fill(0xff, Number(size));
+      return new Uint8Array(reusableBuffer.buffer, 0, Number(size));
     },
   };
 }
@@ -120,7 +129,7 @@ describe("Mcap0IndexedReader", () => {
     );
     const readable = makeReadable(new Uint8Array(data));
     await expect(Mcap0IndexedReader.Initialize({ readable })).rejects.toThrow(
-      "Incorrect index CRC 491514153 (expected 163128923)",
+      "Incorrect summary CRC 491514153 (expected 163128923)",
     );
   });
 
