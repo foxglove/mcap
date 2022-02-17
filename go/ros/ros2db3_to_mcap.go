@@ -53,7 +53,10 @@ func collectMessageSchemas(directories []string, types []string) (map[string][]b
 			packageFile := path.Join(dirPath, packageName)
 			packageData, err := os.ReadFile(packageFile)
 			if errors.Is(err, os.ErrNotExist) {
-				break
+				continue
+			}
+			if err != nil {
+				return nil, fmt.Errorf("failed to read package file at %s: %w", packageFile, err)
 			}
 			packagePaths := strings.Split(string(packageData), "\n")
 			for _, packagePath := range packagePaths {
