@@ -212,6 +212,7 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, opts *mcap.WriterOptions, searchdirs []s
 			Sequence:    seq[topicID],
 			LogTime:     uint64(messageTimestamp),
 			PublishTime: uint64(messageTimestamp),
+			Data:        messageData,
 		})
 		if err != nil {
 			return err

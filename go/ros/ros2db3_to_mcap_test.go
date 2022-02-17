@@ -3,6 +3,9 @@ package ros
 import (
 	"bytes"
 	"database/sql"
+	"errors"
+	"io"
+	"math"
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
@@ -34,4 +37,21 @@ func TestDB3MCAPConversion(t *testing.T) {
 	assert.Equal(t, uint64(7), info.Statistics.MessageCount)
 	assert.Equal(t, 1, len(info.Channels))
 	assert.Equal(t, "/chatter", info.Channels[1].Topic)
+	messageCount := 0
+	it, err := reader.Messages(0, math.MaxInt64, []string{"/chatter"}, true)
+	assert.Nil(t, err)
+	for {
+		schema, channel, message, err := it.Next(nil)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			t.Errorf("failed to pull message from serialized file: %s", err)
+		}
+		assert.NotEmpty(t, message.Data)
+		assert.Equal(t, channel.Topic, "/chatter")
+		assert.Equal(t, schema.Name, "std_msgs/msg/String")
+		messageCount++
+	}
+	assert.Equal(t, 7, messageCount)
 }
