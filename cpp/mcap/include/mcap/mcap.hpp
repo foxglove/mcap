@@ -595,7 +595,10 @@ private:
 /**
  * @brief An abstract interface for writing MCAP data.
  */
-struct IWritable {
+class IWritable {
+public:
+  bool crcEnabled = false;
+
   virtual inline ~IWritable() = default;
 
   /**
@@ -605,7 +608,7 @@ struct IWritable {
    * @param data A pointer to the data to write.
    * @param size Size of the data in bytes.
    */
-  virtual void write(const std::byte* data, uint64_t size) = 0;
+  void write(const std::byte* data, uint64_t size);
   /**
    * @brief Called when the writer is finished writing data to the output MCAP
    * file.
@@ -616,6 +619,20 @@ struct IWritable {
    * the sum of all `size` parameters passed to `write()`.
    */
   virtual uint64_t size() const = 0;
+  /**
+   * @brief Returns the CRC32 of the uncompressed data.
+   */
+  uint32_t crc();
+  /**
+   * @brief Resets the CRC32 calculation.
+   */
+  void resetCrc();
+
+protected:
+  virtual void handleWrite(const std::byte* data, uint64_t size) = 0;
+
+private:
+  CryptoPP::CRC32 crc_;
 };
 
 /**
@@ -626,7 +643,7 @@ class StreamWriter final : public IWritable {
 public:
   StreamWriter(std::ostream& stream);
 
-  void write(const std::byte* data, uint64_t size) override;
+  void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
   uint64_t size() const override;
 
@@ -642,18 +659,8 @@ private:
  */
 class IChunkWriter : public IWritable {
 public:
-  bool crcEnabled = false;
-
   virtual inline ~IChunkWriter() = default;
 
-  /**
-   * @brief Called whenever the writer needs to write data to the current output
-   * Chunk.
-   *
-   * @param data A pointer to the data to write.
-   * @param size Size of the data in bytes.
-   */
-  void write(const std::byte* data, uint64_t size);
   /**
    * @brief Called when the writer wants to close the current output Chunk.
    * After this call, `data()` and `size()` should return the data and size of
@@ -680,17 +687,9 @@ public:
    * after `end()`.
    */
   virtual const std::byte* data() const = 0;
-  /**
-   * @brief Returns the CRC32 of the uncompressed data.
-   */
-  uint32_t crc() const;
 
 protected:
-  virtual void handleWrite(const std::byte* data, uint64_t size) = 0;
   virtual void handleClear() = 0;
-
-private:
-  mutable CryptoPP::CRC32 crc_;
 };
 
 /**
@@ -1002,7 +1001,7 @@ public:
   static void writeMagic(IWritable& output);
 
   static uint64_t write(IWritable& output, const Header& header);
-  static uint64_t write(IWritable& output, const Footer& footer);
+  static uint64_t write(IWritable& output, const Footer& footer, bool crcEnabled);
   static uint64_t write(IWritable& output, const Schema& schema);
   static uint64_t write(IWritable& output, const Channel& channel);
   static uint64_t write(IWritable& output, const Message& message);
