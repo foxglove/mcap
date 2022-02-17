@@ -48,42 +48,33 @@ class ReadDataStream:
         return str(self.read(length), "utf-8")
 
 
-class WriteDataStream:
-    def __init__(self, output: BufferedIOBase):
-        self.__stream = output
-        self.__count = 0
+class RecordBuilder:
+    def __init__(self):
         self.__buffer = BytesIO()
-        self.__current_opcode = 0
-
-    def __del__(self):
-        self.__stream.close()
 
     @property
     def count(self) -> int:
-        return self.__count
+        return self.__buffer.tell()
 
     def start_record(self, opcode: Opcode):
-        self.__current_opcode = opcode
-        self.__buffer = BytesIO()
+        self.__record_start_offset = self.__buffer.tell()
+        self.__buffer.write(struct.pack("<BQ", opcode, 0))  # placeholder size
 
-    def finish_record(self, include_padding: bool = True) -> int:
-        start_count = self.__count
-        data = self.__buffer.getvalue()
-        length = len(data)
-        self.__stream.write(struct.pack("<B", self.__current_opcode))
-        self.__stream.write(struct.pack("<Q", length))
-        self.__stream.write(data)
-        self.__count += 9  # For opcode + length
-        return self.__count - start_count
+    def finish_record(self):
+        pos = self.__buffer.tell()
+        length = pos - self.__record_start_offset - 9
+        self.__buffer.seek(self.__record_start_offset + 1)
+        self.__buffer.write(struct.pack("<Q", length))
+        self.__buffer.seek(pos)
+
+    def end(self):
+        buf = self.__buffer.getvalue()
+        self.__buffer.close()
+        self.__buffer = BytesIO()
+        return buf
 
     def write(self, data: bytes):
         self.__buffer.write(data)
-        self.__count += len(data)
-
-    def write_magic(self):
-        bytes = struct.pack("<8B", 137, 77, 67, 65, 80, 48, 13, 10)
-        self.__stream.write(bytes)
-        self.__count += len(bytes)
 
     def write_prefixed_string(self, value: str):
         bytes = value.encode()

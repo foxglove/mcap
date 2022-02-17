@@ -5,7 +5,7 @@ import { TestFeatures, TestVariant } from "variants/types";
 import { WriteTestRunner } from "./TestRunner";
 
 export default class PythonWriterTestRunner extends WriteTestRunner {
-  name = "py-writer";
+  readonly name = "py-writer";
 
   async runWriteTest(filePath: string): Promise<Uint8Array> {
     const { stdout, stderr } = await promisify(exec)(
