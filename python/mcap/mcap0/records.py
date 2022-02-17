@@ -30,7 +30,7 @@ class Attachment(McapRecord):
         builder.write_prefixed_string(self.content_type)
         builder.write8(len(self.data))
         builder.write(self.data)
-        builder.write4(0)  # crc32
+        builder.write4(0)  # crc
         builder.finish_record()
         data = memoryview(builder.end())
         stream.write(data[:-4])
