@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
@@ -54,4 +55,21 @@ func TestDB3MCAPConversion(t *testing.T) {
 		messageCount++
 	}
 	assert.Equal(t, 7, messageCount)
+}
+
+func TestSchemaComposition(t *testing.T) {
+	t.Run("schema dependencies are resolved", func(t *testing.T) {
+		schemas, err := getSchemas("msg", []string{"./testdata/galactic"}, []string{"package_a/msg/TypeA"})
+		assert.Nil(t, err)
+
+		schema := schemas["package_a/msg/TypeA"]
+		expectedSchema := `
+string data
+package_b/TypeB FancyType
+================================================================================
+MSG: package_b/TypeB
+int32 foo
+`
+		assert.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
+	})
 }
