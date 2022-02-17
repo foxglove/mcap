@@ -21,7 +21,6 @@ mcap::McapWriterOptions ReadOptions(const json& featuresJson) {
   // ["ch", "mx", "st", "rsh", "rch", "chx", "sum", "pad"]
   mcap::McapWriterOptions options{""};
   options.compression = mcap::Compression::None;
-  options.noCRC = true;
   options.noChunking = true;
   options.noMessageIndex = true;
   options.noSummary = true;
@@ -188,7 +187,7 @@ mcap::Attachment ReadAttachment(const json& attachmentJson, mcap::ByteArray& buf
 
 class StdoutWriter final : public mcap::IWritable {
 public:
-  void write(const std::byte* data, uint64_t size) override {
+  void handleWrite(const std::byte* data, uint64_t size) override {
     std::cout.write(reinterpret_cast<const char*>(data), size);
     size_ += size;
   }

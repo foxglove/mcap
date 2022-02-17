@@ -11,11 +11,14 @@ export function splitMcapRecords(data: Uint8Array): string[] {
       offset += 8;
     } else {
       const length = view.getBigUint64(offset + 1, true);
-      const bytes = data.slice(offset, offset + Number(length));
+      const bytes = data.slice(offset, offset + 9 + Number(length));
       const hex = bytesToHex(bytes);
       offset += Number(length) + 9;
       result.push(hex);
     }
+  }
+  if (offset > data.length) {
+    result.push("read beyond bounds");
   }
   return result;
 }

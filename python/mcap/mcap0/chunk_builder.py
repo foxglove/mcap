@@ -1,7 +1,7 @@
 from io import BytesIO
 from typing import Dict
 
-from .data_stream import WriteDataStream
+from .data_stream import RecordBuilder
 from .records import Channel, Message, MessageIndex, Schema
 
 
@@ -10,12 +10,15 @@ class ChunkBuilder:
         self.message_end_time = 0
         self.message_indices: Dict[int, MessageIndex] = {}
         self.message_start_time = 0
-        self.__buffer = BytesIO()
-        self.record_writer = WriteDataStream(self.__buffer)
+        self.record_writer = RecordBuilder()
         self.num_messages = 0
 
-    def data(self):
-        return self.__buffer.getvalue()
+    @property
+    def count(self):
+        return self.record_writer.count
+
+    def end(self):
+        return self.record_writer.end()
 
     def add_channel(self, channel: Channel):
         channel.write(self.record_writer)
@@ -44,5 +47,5 @@ class ChunkBuilder:
         self.message_indices.clear()
         self.message_start_time = 0
         self.buffer = BytesIO()
-        self.record_writer = WriteDataStream(self.buffer)
+        self.record_writer.end()
         self.num_messages = 0

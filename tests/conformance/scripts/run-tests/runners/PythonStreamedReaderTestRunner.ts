@@ -5,7 +5,8 @@ import { TestVariant } from "variants/types";
 import { ReadTestRunner } from "./TestRunner";
 
 export default class PythonStreamedReaderTestRunner extends ReadTestRunner {
-  name = "py-streamed-reader";
+  readonly name = "py-streamed-reader";
+  readonly readsDataEnd = true;
 
   async runReadTest(filePath: string): Promise<string> {
     const { stdout } = await promisify(exec)(`python3 tests/run_reader_test.py ${filePath}`, {

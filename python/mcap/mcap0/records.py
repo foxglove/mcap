@@ -1,13 +1,15 @@
 from dataclasses import dataclass, field
+import struct
 from typing import Dict, List, Tuple
+import zlib
 
-from .data_stream import ReadDataStream, WriteDataStream
+from .data_stream import ReadDataStream, RecordBuilder
 from .opcode import Opcode
 
 
 @dataclass
 class McapRecord:
-    def write(self, stream: WriteDataStream) -> None:
+    def write(self, stream: RecordBuilder) -> None:
         raise NotImplementedError()
 
 
@@ -19,16 +21,20 @@ class Attachment(McapRecord):
     content_type: str
     data: bytes
 
-    def write(self, stream: WriteDataStream):
-        stream.start_record(Opcode.ATTACHMENT)
-        stream.write8(self.log_time)
-        stream.write8(self.create_time)
-        stream.write_prefixed_string(self.name)
-        stream.write_prefixed_string(self.content_type)
-        stream.write8(len(self.data))
-        stream.write(self.data)
-        stream.write4(0)  # TODO: crc
-        stream.finish_record()
+    def write(self, stream: RecordBuilder):
+        builder = RecordBuilder()
+        builder.start_record(Opcode.ATTACHMENT)
+        builder.write8(self.log_time)
+        builder.write8(self.create_time)
+        builder.write_prefixed_string(self.name)
+        builder.write_prefixed_string(self.content_type)
+        builder.write8(len(self.data))
+        builder.write(self.data)
+        builder.write4(0)  # crc
+        builder.finish_record()
+        data = memoryview(builder.end())
+        stream.write(data[:-4])
+        stream.write4(zlib.crc32(data[9:-4]))
 
     @staticmethod
     def read(stream: ReadDataStream):
@@ -58,7 +64,7 @@ class AttachmentIndex(McapRecord):
     name: str
     content_type: str
 
-    def write(self, stream: WriteDataStream):
+    def write(self, stream: RecordBuilder):
         stream.start_record(Opcode.ATTACHMENT_INDEX)
         stream.write8(self.offset)
         stream.write8(self.length)
@@ -97,7 +103,7 @@ class Channel(McapRecord):
     metadata: Dict[str, str]
     schema_id: int
 
-    def write(self, stream: WriteDataStream):
+    def write(self, stream: RecordBuilder):
         stream.start_record(Opcode.CHANNEL)
         stream.write2(self.id)
         stream.write2(self.schema_id)
@@ -145,7 +151,7 @@ class Chunk(McapRecord):
     uncompressed_crc: int
     uncompressed_size: int
 
-    def write(self, stream: WriteDataStream):
+    def write(self, stream: RecordBuilder):
         stream.start_record(Opcode.CHUNK)
         stream.write8(self.message_start_time)
         stream.write8(self.message_end_time)
@@ -154,7 +160,7 @@ class Chunk(McapRecord):
         stream.write_prefixed_string(self.compression)
         stream.write8(len(self.data))
         stream.write(self.data)
-        stream.finish_record(include_padding=False)
+        stream.finish_record()
 
     @staticmethod
     def read(stream: ReadDataStream):
@@ -188,7 +194,7 @@ class ChunkIndex(McapRecord):
     message_start_time: int
     uncompressed_size: int
 
-    def write(self, stream: WriteDataStream):
+    def write(self, stream: RecordBuilder):
         stream.start_record(Opcode.CHUNK_INDEX)
         stream.write8(self.message_start_time)
         stream.write8(self.message_end_time)
@@ -238,7 +244,7 @@ class ChunkIndex(McapRecord):
 class DataEnd(McapRecord):
     data_section_crc: int
 
-    def write(self, stream: WriteDataStream):
+    def write(self, stream: RecordBuilder):
         stream.start_record(Opcode.DATA_END)
         stream.write4(self.data_section_crc)
         stream.finish_record()
@@ -255,12 +261,12 @@ class Footer(McapRecord):
     summary_offset_start: int
     summary_crc: int
 
-    def write(self, stream: WriteDataStream):
+    def write(self, stream: RecordBuilder):
         stream.start_record(Opcode.FOOTER)
         stream.write8(self.summary_start)
         stream.write8(self.summary_offset_start)
         stream.write4(self.summary_crc)
-        stream.finish_record(include_padding=False)
+        stream.finish_record()
 
     @staticmethod
     def read(stream: ReadDataStream):
@@ -279,7 +285,7 @@ class Header(McapRecord):
     profile: str
     library: str
 
-    def write(self, stream: WriteDataStream):
+    def write(self, stream: RecordBuilder):
         stream.start_record(Opcode.HEADER)
         stream.write_prefixed_string(self.profile)
         stream.write_prefixed_string(self.library)
@@ -300,14 +306,14 @@ class Message(McapRecord):
     publish_time: int
     sequence: int
 
-    def write(self, stream: WriteDataStream):
+    def write(self, stream: RecordBuilder):
         stream.start_record(Opcode.MESSAGE)
         stream.write2(self.channel_id)
         stream.write4(self.sequence)
         stream.write8(self.log_time)
         stream.write8(self.publish_time)
         stream.write(self.data)
-        stream.finish_record(include_padding=False)
+        stream.finish_record()
 
     @staticmethod
     def read(stream: ReadDataStream, length: int):
@@ -330,7 +336,7 @@ class MessageIndex(McapRecord):
     channel_id: int
     records: List[Tuple[int, int]]
 
-    def write(self, stream: WriteDataStream):
+    def write(self, stream: RecordBuilder):
         stream.start_record(Opcode.MESSAGE_INDEX)
         stream.write2(self.channel_id)
         stream.write4(len(self.records) * 16)
@@ -357,7 +363,7 @@ class Metadata(McapRecord):
     name: str
     data: Dict[str, str]
 
-    def write(self, stream: WriteDataStream) -> None:
+    def write(self, stream: RecordBuilder) -> None:
         stream.start_record(Opcode.METADATA)
         for k, v in self.data.items():
             stream.write_prefixed_string(k)
@@ -391,7 +397,7 @@ class Schema(McapRecord):
     encoding: str
     name: str
 
-    def write(self, stream: WriteDataStream):
+    def write(self, stream: RecordBuilder):
         stream.start_record(Opcode.SCHEMA)
         stream.write2(self.id)
         stream.write_prefixed_string(self.name)
@@ -422,7 +428,7 @@ class Statistics(McapRecord):
     metadata_count: int
     schema_count: int
 
-    def write(self, stream: WriteDataStream):
+    def write(self, stream: RecordBuilder):
         stream.start_record(Opcode.STATISTICS)
         stream.write8(self.message_count)
         stream.write2(self.schema_count)
@@ -474,7 +480,7 @@ class SummaryOffset(McapRecord):
     group_start: int
     group_length: int
 
-    def write(self, stream: WriteDataStream):
+    def write(self, stream: RecordBuilder):
         stream.start_record(Opcode.SUMMARY_OFFSET)
         stream.write1(self.group_opcode)
         stream.write8(self.group_start)

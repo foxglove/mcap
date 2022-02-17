@@ -1,3 +1,5 @@
+import { crc32Init, crc32Update, crc32Final, crc32 } from "@foxglove/crc";
+
 import { IWritable } from "../common/IWritable";
 import { ChunkBuilder } from "./ChunkBuilder";
 import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
@@ -7,6 +9,7 @@ import {
   Channel,
   Message,
   Header,
+  Footer,
   Attachment,
   Chunk,
   ChunkIndex,
@@ -48,6 +51,7 @@ export class Mcap0Writer {
   private writtenSchemaIds = new Set<number>();
   private writtenChannelIds = new Set<number>();
   private chunkBuilder: ChunkBuilder | undefined;
+  private dataSectionCrc = crc32Init();
 
   private statistics: Statistics | undefined;
   private useSummaryOffsets: boolean;
@@ -110,6 +114,7 @@ export class Mcap0Writer {
     this.recordWriter.writeMagic();
     this.recordWriter.writeHeader(header);
 
+    this.dataSectionCrc = crc32Update(this.dataSectionCrc, this.recordWriter.buffer);
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
   }
@@ -117,6 +122,12 @@ export class Mcap0Writer {
   async end(): Promise<void> {
     await this.finalizeChunk();
 
+    this.dataSectionCrc = crc32Update(this.dataSectionCrc, this.recordWriter.buffer);
+    await this.writable.write(this.recordWriter.buffer);
+    this.recordWriter.reset();
+
+    // Re-enable when tests are updated to include data section CRC
+    // this.recordWriter.writeDataEnd({ dataSectionCrc: crc32Final(this.dataSectionCrc) });
     this.recordWriter.writeDataEnd({ dataSectionCrc: 0 });
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
@@ -124,6 +135,7 @@ export class Mcap0Writer {
     const summaryOffsets: SummaryOffset[] = [];
 
     const summaryStart = this.writable.position();
+    let summaryCrc = crc32Init();
 
     if (this.repeatSchemas) {
       const schemaStart = this.writable.position();
@@ -139,6 +151,7 @@ export class Mcap0Writer {
     }
 
     if (this.repeatChannels) {
+      summaryCrc = crc32Update(summaryCrc, this.recordWriter.buffer);
       await this.writable.write(this.recordWriter.buffer);
       this.recordWriter.reset();
       const channelStart = this.writable.position();
@@ -154,6 +167,7 @@ export class Mcap0Writer {
     }
 
     if (this.statistics) {
+      summaryCrc = crc32Update(summaryCrc, this.recordWriter.buffer);
       await this.writable.write(this.recordWriter.buffer);
       this.recordWriter.reset();
       const statisticsStart = this.writable.position();
@@ -165,10 +179,12 @@ export class Mcap0Writer {
       });
     }
 
+    summaryCrc = crc32Update(summaryCrc, this.recordWriter.buffer);
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
 
     if (this.chunkIndices) {
+      summaryCrc = crc32Update(summaryCrc, this.recordWriter.buffer);
       await this.writable.write(this.recordWriter.buffer);
       this.recordWriter.reset();
       const chunkIndexStart = this.writable.position();
@@ -184,6 +200,7 @@ export class Mcap0Writer {
     }
 
     if (this.attachmentIndices) {
+      summaryCrc = crc32Update(summaryCrc, this.recordWriter.buffer);
       await this.writable.write(this.recordWriter.buffer);
       this.recordWriter.reset();
       const attachmentIndexStart = this.writable.position();
@@ -199,6 +216,7 @@ export class Mcap0Writer {
     }
 
     if (this.metadataIndices) {
+      summaryCrc = crc32Update(summaryCrc, this.recordWriter.buffer);
       await this.writable.write(this.recordWriter.buffer);
       this.recordWriter.reset();
       const metadataIndexStart = this.writable.position();
@@ -213,6 +231,7 @@ export class Mcap0Writer {
       });
     }
 
+    summaryCrc = crc32Update(summaryCrc, this.recordWriter.buffer);
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
 
@@ -227,11 +246,24 @@ export class Mcap0Writer {
       }
     }
 
-    this.recordWriter.writeFooter({
+    summaryCrc = crc32Update(summaryCrc, this.recordWriter.buffer);
+
+    const footer: Footer = {
       summaryStart: summaryLength === 0n ? 0n : summaryStart,
       summaryOffsetStart: this.useSummaryOffsets ? summaryOffsetStart : 0n,
       summaryCrc: 0,
-    });
+    };
+    if (summaryLength !== 0n) {
+      const tempBuffer = new DataView(new ArrayBuffer(1 + 8 + 8 + 8));
+      tempBuffer.setUint8(0, Opcode.FOOTER);
+      tempBuffer.setBigUint64(1, 8n + 8n + 4n, true);
+      tempBuffer.setBigUint64(1 + 8, footer.summaryStart, true);
+      tempBuffer.setBigUint64(1 + 8 + 8, footer.summaryOffsetStart, true);
+      summaryCrc = crc32Update(summaryCrc, tempBuffer);
+      footer.summaryCrc = crc32Final(summaryCrc);
+    }
+
+    this.recordWriter.writeFooter(footer);
 
     this.recordWriter.writeMagic();
 
@@ -344,6 +376,7 @@ export class Mcap0Writer {
       });
     }
 
+    this.dataSectionCrc = crc32Update(this.dataSectionCrc, this.recordWriter.buffer);
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
   }
@@ -360,6 +393,7 @@ export class Mcap0Writer {
       });
     }
 
+    this.dataSectionCrc = crc32Update(this.dataSectionCrc, this.recordWriter.buffer);
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
   }
@@ -377,7 +411,7 @@ export class Mcap0Writer {
       messageStartTime: this.chunkBuilder.messageStartTime,
       messageEndTime: this.chunkBuilder.messageEndTime,
       uncompressedSize: BigInt(chunkData.length),
-      uncompressedCrc: 0,
+      uncompressedCrc: crc32(chunkData),
       compression: "",
       records: chunkData,
     };
@@ -388,6 +422,7 @@ export class Mcap0Writer {
 
     const messageIndexOffsets = this.chunkIndices ? new Map<number, bigint>() : undefined;
 
+    this.dataSectionCrc = crc32Update(this.dataSectionCrc, this.recordWriter.buffer);
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
 
@@ -413,6 +448,7 @@ export class Mcap0Writer {
     }
     this.chunkBuilder.reset();
 
+    this.dataSectionCrc = crc32Update(this.dataSectionCrc, this.recordWriter.buffer);
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
   }
