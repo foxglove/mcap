@@ -26,6 +26,7 @@ const (
 
 func parseOptions(features []string) (*mcap.WriterOptions, error) {
 	options := mcap.WriterOptions{
+		IncludeCRC:               true,
 		Chunked:                  false,
 		SkipMessageIndexing:      true,
 		SkipStatistics:           true,

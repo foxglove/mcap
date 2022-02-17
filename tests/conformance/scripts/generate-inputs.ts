@@ -135,7 +135,9 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
     }
   }
 
-  builder.writeDataEnd({ dataSectionCrc: crc32(builder.buffer) });
+  builder.writeDataEnd({ dataSectionCrc: 0 });
+  // Re-enable this when other writers support dataSectionCrc
+  // builder.writeDataEnd({ dataSectionCrc: crc32(builder.buffer) });
 
   const summaryStart = BigInt(builder.length);
 

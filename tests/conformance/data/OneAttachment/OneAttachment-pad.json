@@ -11,7 +11,7 @@
         ["name", "myFile"]
       ]
     },
-    {"type": "DataEnd", "fields": [["data_section_crc", "1702036232"]]},
+    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
     {
       "type": "Footer",
       "fields": [

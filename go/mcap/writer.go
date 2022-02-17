@@ -588,6 +588,7 @@ func (w *Writer) Close() error {
 	}
 
 	// summary section
+	w.w.Reset() // reset CRC to begin computing summaryCrc
 	summarySectionStart := w.w.Size()
 	summaryOffsets, err := w.writeSummarySection()
 	if err != nil {
@@ -606,10 +607,21 @@ func (w *Writer) Close() error {
 			}
 		}
 	}
+	var summaryCrc uint32
+	if summarySectionStart != 0 && w.opts.IncludeCRC {
+		// add partial footer record to end of summary section CRC
+		footerPrefix := make([]byte, 1+8+8+8)
+		putByte(footerPrefix, byte(OpFooter))
+		putUint64(footerPrefix[1:], 8+8+4)
+		putUint64(footerPrefix[1+8:], summarySectionStart)
+		putUint64(footerPrefix[1+8+8:], summaryOffsetStart)
+		w.w.w.crc.Write(footerPrefix)
+		summaryCrc = w.w.Checksum()
+	}
 	err = w.WriteFooter(&Footer{
 		SummaryStart:       summarySectionStart,
 		SummaryOffsetStart: summaryOffsetStart,
-		SummaryCRC:         0,
+		SummaryCRC:         summaryCrc,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to write footer record: %w", err)
