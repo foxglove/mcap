@@ -611,7 +611,7 @@ func (w *Writer) Close() error {
 	if summarySectionStart != 0 && w.opts.IncludeCRC {
 		// add partial footer record to end of summary section CRC
 		footerPrefix := make([]byte, 1+8+8+8)
-		putByte(footerPrefix, byte(OpFooter))
+		footerPrefix[0] = byte(OpFooter)
 		putUint64(footerPrefix[1:], 8+8+4)
 		putUint64(footerPrefix[1+8:], summarySectionStart)
 		putUint64(footerPrefix[1+8+8:], summaryOffsetStart)
