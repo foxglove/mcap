@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -48,7 +47,7 @@ func getSchema(encoding string, rosType string, directories []string) ([]byte, e
 			dir, "share", "ament_index",
 			"resource_index", "rosidl_interfaces", rosPkg, // cspell:disable-line
 		)
-		schemaIndex, err := ioutil.ReadFile(schemaIndexPath)
+		schemaIndex, err := os.ReadFile(schemaIndexPath)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
@@ -59,7 +58,7 @@ func getSchema(encoding string, rosType string, directories []string) ([]byte, e
 		for _, line := range lines {
 			if line == fmt.Sprintf("msg/%s.%s", baseType, encoding) {
 				schemaPath := path.Join(dir, "share", rosPkg, "msg", baseType+"."+encoding)
-				schema, err := ioutil.ReadFile(schemaPath)
+				schema, err := os.ReadFile(schemaPath)
 				if err != nil {
 					return nil, fmt.Errorf("failed to read schema: %w", err)
 				}
@@ -94,9 +93,7 @@ func getSchemas(encoding string, directories []string, types []string) (map[stri
 				if err != nil {
 					return nil, fmt.Errorf("failed to write separator: %w", err)
 				}
-				_, err = messageDefinition.Write(
-					[]byte(fmt.Sprintf("MSG: %s\n", strings.Replace(subdefinition.rosType, "/msg/", "/", 1))),
-				)
+				_, err = fmt.Fprintf(messageDefinition, "MSG: %s\n", strings.Replace(subdefinition.rosType, "/msg/", "/", 1))
 				if err != nil {
 					return nil, fmt.Errorf("failed to write MSG header to message definition: %w", err)
 				}
