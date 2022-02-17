@@ -247,10 +247,13 @@ void McapWriter::close() {
   // Write the Data End record
   uint32_t dataSectionCrc = 0;
   write(fileOutput, DataEnd{dataSectionCrc});
+  if (!options_.noCRC) {
+    output_->crcEnabled = true;
+    output_->resetCrc();
+  }
 
   ByteOffset summaryStart = 0;
   ByteOffset summaryOffsetStart = 0;
-  uint32_t summaryCrc = 0;
 
   if (!options_.noSummary) {
     // Get the offset of the End Of File section
@@ -334,10 +337,8 @@ void McapWriter::close() {
     }
   }
 
-  // TODO: Calculate the summary CRC
-
   // Write the footer and trailing magic
-  write(fileOutput, Footer{summaryStart, summaryOffsetStart, summaryCrc});
+  write(fileOutput, Footer{summaryStart, summaryOffsetStart}, !options_.noCRC);
   writeMagic(fileOutput);
 
   // Flush output
@@ -637,7 +638,7 @@ uint64_t McapWriter::write(IWritable& output, const Header& header) {
   return 9 + recordSize;
 }
 
-uint64_t McapWriter::write(IWritable& output, const Footer& footer) {
+uint64_t McapWriter::write(IWritable& output, const Footer& footer, const bool crcEnabled) {
   const uint64_t recordSize = /* summary_start */ 8 +
                               /* summary_offset_start */ 8 +
                               /* summary_crc */ 4;
@@ -646,7 +647,11 @@ uint64_t McapWriter::write(IWritable& output, const Footer& footer) {
   write(output, recordSize);
   write(output, footer.summaryStart);
   write(output, footer.summaryOffsetStart);
-  write(output, footer.summaryCrc);
+  uint32_t summaryCrc = 0;
+  if (footer.summaryStart != 0 && crcEnabled) {
+    summaryCrc = output.crc();
+  }
+  write(output, summaryCrc);
 
   return 9 + recordSize;
 }
@@ -1107,13 +1112,34 @@ Status ZStdReader::status() const {
   return status_;
 }
 
+// IWritable ///////////////////////////////////////////////////////////////////
+
+void IWritable::write(const std::byte* data, uint64_t size) {
+  handleWrite(data, size);
+  if (crcEnabled) {
+    crc_.Update(reinterpret_cast<const CryptoPP::byte*>(data), size);
+  }
+}
+
+uint32_t IWritable::crc() {
+  uint32_t crc32 = 0;
+  if (crcEnabled) {
+    crc_.Final(reinterpret_cast<CryptoPP::byte*>(&crc32));
+  }
+  return crc32;
+}
+
+void IWritable::resetCrc() {
+  crc_ = {};
+}
+
 // StreamWriter ////////////////////////////////////////////////////////////////
 
 StreamWriter::StreamWriter(std::ostream& stream)
     : stream_(stream)
     , size_(0) {}
 
-void StreamWriter::write(const std::byte* data, uint64_t size) {
+void StreamWriter::handleWrite(const std::byte* data, uint64_t size) {
   stream_.write(reinterpret_cast<const char*>(data), std::streamsize(size));
   size_ += size;
 }
@@ -1128,24 +1154,9 @@ uint64_t StreamWriter::size() const {
 
 // IChunkWriter ////////////////////////////////////////////////////////////////
 
-void IChunkWriter::write(const std::byte* data, uint64_t size) {
-  handleWrite(data, size);
-  if (crcEnabled) {
-    crc_.Update(reinterpret_cast<const CryptoPP::byte*>(data), size);
-  }
-}
-
 void IChunkWriter::clear() {
   handleClear();
-  crc_ = {};
-}
-
-uint32_t IChunkWriter::crc() const {
-  uint32_t crc32 = 0;
-  if (crcEnabled) {
-    crc_.Final(reinterpret_cast<CryptoPP::byte*>(&crc32));
-  }
-  return crc32;
+  resetCrc();
 }
 
 // BufferWriter //////////////////////////////////////////////////////////////

@@ -1,3 +1,4 @@
+import { crc32, crc32Init, crc32Update, crc32Final } from "@foxglove/crc";
 import { Mcap0Types, Mcap0Constants, Mcap0RecordBuilder, Mcap0ChunkBuilder } from "@foxglove/mcap";
 import { program } from "commander";
 import fs from "fs/promises";
@@ -109,7 +110,7 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
       compression: "",
       messageStartTime: chunk.messageStartTime,
       messageEndTime: chunk.messageEndTime,
-      uncompressedCrc: 0,
+      uncompressedCrc: crc32(chunk.buffer),
       uncompressedSize: BigInt(chunk.buffer.byteLength),
       records: chunk.buffer,
     });
@@ -135,6 +136,8 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
   }
 
   builder.writeDataEnd({ dataSectionCrc: 0 });
+  // Re-enable this when other writers support dataSectionCrc
+  // builder.writeDataEnd({ dataSectionCrc: crc32(builder.buffer) });
 
   const summaryStart = BigInt(builder.length);
 
@@ -245,10 +248,29 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
     }
   }
 
+  let summaryCrc = 0;
+  if (hasSummary) {
+    summaryCrc = crc32Init();
+    const buffer = builder.buffer;
+    const summaryData = new Uint8Array(
+      buffer.buffer,
+      buffer.byteOffset + Number(summaryStart),
+      buffer.byteLength - Number(summaryStart),
+    );
+    summaryCrc = crc32Update(summaryCrc, summaryData);
+    const tempBuffer = new DataView(new ArrayBuffer(1 + 8 + 8 + 8));
+    tempBuffer.setUint8(0, Mcap0Constants.Opcode.FOOTER);
+    tempBuffer.setBigUint64(1, 8n + 8n + 4n, true);
+    tempBuffer.setBigUint64(1 + 8, summaryStart, true);
+    tempBuffer.setBigUint64(1 + 8 + 8, summaryOffsetStart, true);
+    summaryCrc = crc32Update(summaryCrc, tempBuffer);
+    summaryCrc = crc32Final(summaryCrc);
+  }
+
   builder.writeFooter({
-    summaryOffsetStart,
     summaryStart: hasSummary ? summaryStart : 0n,
-    summaryCrc: 0,
+    summaryOffsetStart,
+    summaryCrc,
   });
   builder.writeMagic();
   return builder.buffer;

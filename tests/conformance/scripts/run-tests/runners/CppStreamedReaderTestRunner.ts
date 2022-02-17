@@ -6,7 +6,8 @@ import { TestVariant } from "variants/types";
 import { ReadTestRunner } from "./TestRunner";
 
 export default class CppStreamedReaderTestRunner extends ReadTestRunner {
-  name = "cpp-streamed-reader";
+  readonly name = "cpp-streamed-reader";
+  readonly readsDataEnd = true;
 
   async runReadTest(filePath: string): Promise<string> {
     const { stdout } = await promisify(exec)(`./streamed-reader-conformance ${filePath}`, {

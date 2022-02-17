@@ -6,7 +6,8 @@ import { ReadTestRunner } from "./TestRunner";
 import { stringifyRecords } from "./stringifyRecords";
 
 export default class TypescriptIndexedReaderTestRunner extends ReadTestRunner {
-  name = "ts-indexed-reader";
+  readonly name = "ts-indexed-reader";
+  readonly readsDataEnd = false;
 
   async runReadTest(filePath: string, variant: TestVariant): Promise<string> {
     const handle = await fs.open(filePath, "r");

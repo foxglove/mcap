@@ -1,12 +1,13 @@
+import struct
+import zlib
+import zstd
 from collections import defaultdict
 from enum import Enum, Flag, auto
 from io import BufferedWriter, BytesIO, RawIOBase
 from typing import Dict, List, OrderedDict, Union
 
-import zstd
-
 from .chunk_builder import ChunkBuilder
-from .data_stream import WriteDataStream
+from .data_stream import RecordBuilder
 from .opcode import Opcode
 from .records import (
     Attachment,
@@ -23,6 +24,8 @@ from .records import (
     Statistics,
     SummaryOffset,
 )
+
+MCAP0_MAGIC = struct.pack("<8B", 137, 77, 67, 65, 80, 48, 13, 10)
 
 
 class CompressionType(Enum):
@@ -67,11 +70,12 @@ class Writer:
         use_summary_offsets: Write summary offset records.
         """
         if isinstance(output, str):
-            self.__stream = WriteDataStream(open(output, "wb"))
+            self.__stream = open(output, "wb")
         elif isinstance(output, RawIOBase):
-            self.__stream = WriteDataStream(BufferedWriter(output))
+            self.__stream = BufferedWriter(output)
         else:
-            self.__stream = WriteDataStream(output)
+            self.__stream = output
+        self.__record_builder = RecordBuilder()
         self.__attachment_indexes: list[AttachmentIndex] = []
         self.__channels: OrderedDict[int, Channel] = OrderedDict()
         self.__chunk_builder = ChunkBuilder() if use_chunking else None
@@ -108,7 +112,8 @@ class Writer:
         content_type: MIME Type (e.g "text/plain").
         data: Attachment data.
         """
-        offset = self.__stream.count
+        self.__flush()
+        offset = self.__stream.tell()
         self.__statistics.attachment_count += 1
         attachment = Attachment(
             create_time=create_time,
@@ -117,11 +122,11 @@ class Writer:
             content_type=content_type,
             data=data,
         )
-        attachment.write(self.__stream)
+        attachment.write(self.__record_builder)
         if self.__index_types & IndexType.ATTACHMENT:
             index = AttachmentIndex(
                 offset=offset,
-                length=self.__stream.count - offset,
+                length=self.__record_builder.count,
                 create_time=attachment.create_time,
                 log_time=attachment.log_time,
                 data_size=len(attachment.data),
@@ -129,6 +134,7 @@ class Writer:
                 content_type=attachment.content_type,
             )
             self.__attachment_indexes.append(index)
+        self.__flush()
 
     def add_message(
         self,
@@ -164,7 +170,8 @@ class Writer:
             self.__chunk_builder.add_message(message)
             self.__maybe_finalize_chunk()
         else:
-            message.write(self.__stream)
+            message.write(self.__record_builder)
+            self.__flush()
 
     def add_metadata(self, name: str, data: Dict[str, str]):
         """
@@ -174,7 +181,8 @@ class Writer:
         data: Key-value metadata.
         """
         metadata = Metadata(name=name, data=data)
-        metadata.write(self.__stream)
+        metadata.write(self.__record_builder)
+        self.__flush()
 
     def finish(self):
         """
@@ -183,62 +191,105 @@ class Writer:
         """
         self.__finalize_chunk()
 
-        DataEnd(0).write(self.__stream)
+        DataEnd(0).write(self.__record_builder)
+        self.__flush()
 
-        summary_start = self.__stream.count
+        summary_start = self.__stream.tell()
+        summary_builder = RecordBuilder()
 
         if self.__repeat_schemas:
-            group_start = self.__stream.count
+            group_start = summary_builder.count
             for schema in self.__schemas.values():
-                schema.write(self.__stream)
+                schema.write(summary_builder)
             self.__summary_offsets.append(
                 SummaryOffset(
                     group_opcode=Opcode.SCHEMA,
-                    group_start=group_start,
-                    group_length=self.__stream.count - summary_start,
+                    group_start=summary_start + group_start,
+                    group_length=summary_builder.count - group_start,
                 )
             )
 
         if self.__repeat_channels:
-            group_start = self.__stream.count
+            group_start = summary_builder.count
             for channel in self.__channels.values():
-                channel.write(self.__stream)
+                channel.write(summary_builder)
             self.__summary_offsets.append(
                 SummaryOffset(
                     group_opcode=Opcode.CHANNEL,
-                    group_start=group_start,
-                    group_length=self.__stream.count - group_start,
+                    group_start=summary_start + group_start,
+                    group_length=summary_builder.count - group_start,
                 )
             )
 
         if self.__use_statistics:
-            statistics_start = self.__stream.count
-            self.__statistics.write(self.__stream)
-            statistics_end = self.__stream.count
+            group_start = summary_builder.count
+            self.__statistics.write(summary_builder)
             self.__summary_offsets.append(
                 SummaryOffset(
                     group_opcode=Opcode.STATISTICS,
-                    group_start=statistics_start,
-                    group_length=statistics_end - statistics_start,
+                    group_start=summary_start + group_start,
+                    group_length=summary_builder.count - group_start,
                 )
             )
 
-        self.__write_indexes()
+        if self.__index_types & IndexType.CHUNK:
+            group_start = summary_builder.count
+            for index in self.__chunk_indices:
+                index.write(summary_builder)
+            self.__summary_offsets.append(
+                SummaryOffset(
+                    group_opcode=Opcode.CHUNK_INDEX,
+                    group_start=summary_start + group_start,
+                    group_length=summary_builder.count - group_start,
+                )
+            )
 
-        summary_offset_start = self.__stream.count if self.__use_summary_offsets else 0
+        if self.__index_types & IndexType.ATTACHMENT:
+            group_start = summary_builder.count
+            for index in self.__attachment_indexes:
+                index.write(summary_builder)
+            self.__summary_offsets.append(
+                SummaryOffset(
+                    group_opcode=Opcode.ATTACHMENT_INDEX,
+                    group_start=summary_start + group_start,
+                    group_length=summary_builder.count - group_start,
+                )
+            )
+
+        summary_offset_start = (
+            summary_start + summary_builder.count if self.__use_summary_offsets else 0
+        )
         if self.__use_summary_offsets:
             for offset in self.__summary_offsets:
-                offset.write(self.__stream)
+                offset.write(summary_builder)
 
-        summary_length = self.__stream.count - summary_start
+        summary_data = summary_builder.end()
+        summary_length = len(summary_data)
+
+        summary_crc = 0
+        if summary_length != 0:
+            summary_crc = zlib.crc32(summary_data)
+            summary_crc = zlib.crc32(
+                struct.pack(
+                    "<BQQQ",  # cspell:disable-line
+                    Opcode.FOOTER,
+                    8 + 8 + 4,
+                    summary_start,
+                    summary_offset_start,
+                ),
+                summary_crc,
+            )
+
+        self.__stream.write(summary_data)
 
         Footer(
             summary_start=0 if summary_length == 0 else summary_start,
             summary_offset_start=summary_offset_start,
-            summary_crc=0,
-        ).write(self.__stream)
+            summary_crc=summary_crc,
+        ).write(self.__record_builder)
 
-        self.__stream.write_magic()
+        self.__flush()
+        self.__stream.write(MCAP0_MAGIC)
 
     def register_channel(
         self,
@@ -270,7 +321,7 @@ class Writer:
             self.__chunk_builder.add_channel(channel)
             self.__maybe_finalize_chunk()
         else:
-            channel.write(self.__stream)
+            channel.write(self.__record_builder)
         return channel_id
 
     def register_schema(self, name: str, encoding: str, data: bytes):
@@ -290,7 +341,7 @@ class Writer:
             self.__chunk_builder.add_schema(schema)
             self.__maybe_finalize_chunk()
         else:
-            schema.write(self.__stream)
+            schema.write(self.__record_builder)
         return schema_id
 
     def start(self, profile: str, library: str):
@@ -300,8 +351,12 @@ class Writer:
         profile: The profile is used for indicating requirements for fields throughout the file (encoding, user_data, etc).
         library: Free-form string for writer to specify its name, version, or other information for use in debugging.
         """
-        self.__stream.write_magic()
-        Header(profile, library).write(self.__stream)
+        self.__stream.write(MCAP0_MAGIC)
+        Header(profile, library).write(self.__record_builder)
+        self.__flush()
+
+    def __flush(self):
+        self.__stream.write(self.__record_builder.end())
 
     def __finalize_chunk(self):
         if not self.__chunk_builder:
@@ -312,28 +367,29 @@ class Writer:
 
         self.__statistics.chunk_count += 1
 
-        chunk_data = self.__chunk_builder.data()
+        chunk_data = self.__chunk_builder.end()
         if self.__compression == CompressionType.LZ4:
             compression = "lz4"
-            compressed_data: bytes = lz4.frame.compress(self.__chunk_builder.data())  # type: ignore
+            compressed_data: bytes = lz4.frame.compress(chunk_data)  # type: ignore
         elif self.__compression == CompressionType.ZSTD:
             compression = "zstd"
-            compressed_data: bytes = zstd.ZSTD_compress(self.__chunk_builder.data())  # type: ignore
+            compressed_data: bytes = zstd.ZSTD_compress(chunk_data)  # type: ignore
         else:
             compression = ""
-            compressed_data = self.__chunk_builder.data()
+            compressed_data = chunk_data
         chunk = Chunk(
             compression=compression,
             data=compressed_data,
             message_start_time=self.__chunk_builder.message_start_time,
             message_end_time=self.__chunk_builder.message_end_time,
-            uncompressed_crc=0,
+            uncompressed_crc=zlib.crc32(chunk_data),
             uncompressed_size=len(chunk_data),
         )
 
-        chunk_start_offset = self.__stream.count
-        chunk.write(self.__stream)
-        chunk_size = self.__stream.count - chunk_start_offset
+        self.__flush()
+        chunk_start_offset = self.__stream.tell()
+        chunk.write(self.__record_builder)
+        chunk_size = self.__record_builder.count
 
         chunk_index = ChunkIndex(
             message_start_time=chunk.message_start_time,
@@ -347,49 +403,26 @@ class Writer:
             uncompressed_size=chunk.uncompressed_size,
         )
 
-        start_position = self.__stream.count
+        self.__flush()
+        message_index_start_offset = self.__stream.tell()
 
         if self.__index_types & IndexType.MESSAGE:
             for id, index in self.__chunk_builder.message_indices.items():
-                chunk_index.message_index_offsets[id] = self.__stream.count
-                index.write(self.__stream)
+                chunk_index.message_index_offsets[id] = (
+                    message_index_start_offset + self.__record_builder.count
+                )
+                index.write(self.__record_builder)
 
-        chunk_index.message_index_length = self.__stream.count - start_position
+        chunk_index.message_index_length = self.__record_builder.count
+
+        self.__flush()
 
         self.__chunk_indices.append(chunk_index)
         self.__chunk_builder.reset()
 
     def __maybe_finalize_chunk(self):
-        if (
-            self.__chunk_builder
-            and len(self.__chunk_builder.data()) > self.__chunk_size
-        ):
+        if self.__chunk_builder and self.__chunk_builder.count > self.__chunk_size:
             self.__finalize_chunk()
-
-    def __write_indexes(self):
-        if self.__index_types & IndexType.CHUNK:
-            summary_start = self.__stream.count
-            for index in self.__chunk_indices:
-                index.write(self.__stream)
-            self.__summary_offsets.append(
-                SummaryOffset(
-                    group_opcode=Opcode.CHUNK_INDEX,
-                    group_start=summary_start,
-                    group_length=self.__stream.count - summary_start,
-                )
-            )
-
-        if self.__index_types & IndexType.ATTACHMENT:
-            summary_start = self.__stream.count
-            for index in self.__attachment_indexes:
-                index.write(self.__stream)
-            self.__summary_offsets.append(
-                SummaryOffset(
-                    group_opcode=Opcode.ATTACHMENT_INDEX,
-                    group_start=summary_start,
-                    group_length=self.__stream.count - summary_start,
-                )
-            )
 
 
 __all__ = ["CompressionType", "IndexType", "Writer"]

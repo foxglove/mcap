@@ -29,6 +29,6 @@ func (w *WriteSizer) Checksum() uint32 {
 	return w.w.Checksum()
 }
 
-func (w *WriteSizer) Reset() {
+func (w *WriteSizer) ResetCRC() {
 	w.w.crc = crc32.NewIEEE()
 }

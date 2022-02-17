@@ -6,7 +6,8 @@ import { ReadTestRunner } from "./TestRunner";
 import { stringifyRecords } from "./stringifyRecords";
 
 export default class TypescriptStreamedReaderTestRunner extends ReadTestRunner {
-  name = "ts-streamed-reader";
+  readonly name = "ts-streamed-reader";
+  readonly readsDataEnd = true;
 
   supportsVariant(_variant: TestVariant): boolean {
     return true;
