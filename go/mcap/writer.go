@@ -60,17 +60,30 @@ func (w *Writer) Offset() uint64 {
 	return w.w.Size()
 }
 
-// WriteFooter writes a footer record to the output. A Footer record contains
-// end-of-file information. It must be the last record in the file. Readers
-// using the index to read the file will begin with by reading the footer and
-// trailing magic.
+// WriteFooter writes a footer record to the output. A Footer record contains end-of-file
+// information. It must be the last record in the file. Readers using the index to read the file
+// will begin with by reading the footer and trailing magic.
+//
+// If opts.IncludeCRC is enabled, the CRC is expected to have been reset after the DataEnd record
+// was written.
 func (w *Writer) WriteFooter(f *Footer) error {
 	msglen := 8 + 8 + 4
-	w.ensureSized(msglen)
-	offset := putUint64(w.msg, f.SummaryStart)
+	w.ensureSized(1 + 8 + msglen)
+	w.msg[0] = byte(OpFooter)
+	offset := 1
+	offset += putUint64(w.msg[offset:], uint64(msglen))
+	offset += putUint64(w.msg[offset:], f.SummaryStart)
 	offset += putUint64(w.msg[offset:], f.SummaryOffsetStart)
-	offset += putUint32(w.msg[offset:], f.SummaryCRC)
-	_, err := w.writeRecord(w.w, OpFooter, w.msg[:offset])
+	_, err := w.w.Write(w.msg[:offset])
+	if err != nil {
+		return err
+	}
+	var summaryCrc uint32
+	if f.SummaryStart != 0 && w.opts.IncludeCRC {
+		summaryCrc = w.w.Checksum()
+	}
+	offset += putUint32(w.msg[offset:], summaryCrc)
+	_, err = w.w.Write(w.msg[offset-4 : offset])
 	return err
 }
 
@@ -588,7 +601,7 @@ func (w *Writer) Close() error {
 	}
 
 	// summary section
-	w.w.Reset() // reset CRC to begin computing summaryCrc
+	w.w.ResetCRC() // reset CRC to begin computing summaryCrc
 	summarySectionStart := w.w.Size()
 	summaryOffsets, err := w.writeSummarySection()
 	if err != nil {
@@ -607,21 +620,10 @@ func (w *Writer) Close() error {
 			}
 		}
 	}
-	var summaryCrc uint32
-	if summarySectionStart != 0 && w.opts.IncludeCRC {
-		// add partial footer record to end of summary section CRC
-		footerPrefix := make([]byte, 1+8+8+8)
-		footerPrefix[0] = byte(OpFooter)
-		putUint64(footerPrefix[1:], 8+8+4)
-		putUint64(footerPrefix[1+8:], summarySectionStart)
-		putUint64(footerPrefix[1+8+8:], summaryOffsetStart)
-		w.w.w.crc.Write(footerPrefix)
-		summaryCrc = w.w.Checksum()
-	}
 	err = w.WriteFooter(&Footer{
 		SummaryStart:       summarySectionStart,
 		SummaryOffsetStart: summaryOffsetStart,
-		SummaryCRC:         summaryCrc,
+		// SummaryCrc is calculated in WriteFooter
 	})
 	if err != nil {
 		return fmt.Errorf("failed to write footer record: %w", err)
