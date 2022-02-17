@@ -1,86 +1,179 @@
 package ros
 
 import (
+	"bytes"
 	"database/sql"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/foxglove/mcap/go/mcap"
 )
 
-// collectMessageSchemas collects message schemas from the provided list of
-// directories, for type names matching those in the list of types.
-func collectMessageSchemas(directories []string, types []string) (map[string][]byte, error) {
-	if len(directories) == 0 {
-		return nil, fmt.Errorf("no directories provided")
-	}
-	targets := make(map[string]bool)
-	for _, t := range types {
-		targets[t] = true
-	}
-	schemas := make(map[string][]byte)
-	interfaceDirs := make(map[string]string)
-	for _, dir := range directories {
-		err := filepath.Walk(dir, func(filepath string, info os.FileInfo, err error) error {
-			if err != nil {
-				return fmt.Errorf("failed to list provided directory %s: %w", dir, err)
-			}
-			if info.IsDir() && info.Name() == "rosidl_interfaces" { // cspell:disable-line
-				interfaceDirs[dir] = filepath
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
+var (
+	messageDefinitionSeparator = []byte(
+		"================================================================================\n",
+	)
+)
 
-	// look up each requested type in the interface directories
-	for _, t := range types {
-		parts := strings.Split(t, "/")
-		if len(parts) != 3 {
-			return nil, fmt.Errorf("invalid type name %s", t)
-		}
-		packageName := parts[0]
-		resourceType := parts[1]
-		typeName := parts[2]
-		for parentPath, dirPath := range interfaceDirs {
-			packageFile := path.Join(dirPath, packageName)
-			packageData, err := os.ReadFile(packageFile)
+var rosPrimitives = map[string]bool{
+	"bool":     true,
+	"int8":     true,
+	"uint8":    true,
+	"int16":    true,
+	"uint16":   true,
+	"int32":    true,
+	"uint32":   true,
+	"int64":    true,
+	"uint64":   true,
+	"float32":  true,
+	"float64":  true,
+	"string":   true,
+	"time":     true,
+	"duration": true,
+	"char":     true,
+	"byte":     true,
+}
+
+func getSchema(encoding string, rosType string, directories []string) ([]byte, error) {
+	parts := strings.FieldsFunc(rosType, func(c rune) bool { return c == '/' })
+	baseType := parts[2]
+	rosPkg := parts[0]
+	for _, dir := range directories {
+		schemaIndexPath := path.Join(
+			dir, "share", "ament_index",
+			"resource_index", "rosidl_interfaces", rosPkg, // cspell:disable-line
+		)
+		schemaIndex, err := ioutil.ReadFile(schemaIndexPath)
+		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
-			if err != nil {
-				return nil, fmt.Errorf("failed to read package file at %s: %w", packageFile, err)
+			return nil, fmt.Errorf("failed to read schema index: %w", err)
+		}
+		lines := strings.Split(string(schemaIndex), "\n")
+		for _, line := range lines {
+			if line == fmt.Sprintf("msg/%s.%s", baseType, encoding) {
+				schemaPath := path.Join(dir, "share", rosPkg, "msg", baseType+"."+encoding)
+				schema, err := ioutil.ReadFile(schemaPath)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read schema: %w", err)
+				}
+				return schema, nil
 			}
-			packagePaths := strings.Split(string(packageData), "\n")
-			for _, packagePath := range packagePaths {
-				targetPath := path.Join(resourceType, typeName+"."+resourceType)
-				if packagePath == targetPath {
-					schemaPath := path.Join(parentPath, "share", packageName, targetPath)
-					schema, err := os.ReadFile(schemaPath)
-					if err != nil {
-						return nil, err
-					}
-					schemas[t] = schema
+		}
+	}
+	return nil, fmt.Errorf("schema not found")
+}
+
+func getSchemas(encoding string, directories []string, types []string) (map[string][]byte, error) {
+	messageDefinitions := make(map[string][]byte)
+	for _, rosType := range types {
+		rosPackage := strings.Split(rosType, "/")[0]
+		messageDefinition := &bytes.Buffer{}
+		schema, err := getSchema(encoding, rosType, directories)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find schema for %s: %w", rosType, err)
+		}
+		subdefinitions := []struct {
+			parentPackage string
+			rosType       string
+			schema        []byte
+		}{
+			{parentPackage: rosPackage, rosType: rosType, schema: schema},
+		}
+		first := true
+		for len(subdefinitions) > 0 {
+			subdefinition := subdefinitions[0]
+			if !first {
+				_, err := messageDefinition.Write(messageDefinitionSeparator)
+				if err != nil {
+					return nil, fmt.Errorf("failed to write separator: %w", err)
+				}
+				_, err = messageDefinition.Write(
+					[]byte(fmt.Sprintf("MSG: %s\n", strings.Replace(subdefinition.rosType, "/msg/", "/", 1))),
+				)
+				if err != nil {
+					return nil, fmt.Errorf("failed to write MSG header to message definition: %w", err)
 				}
 			}
-		}
-	}
+			_, err = messageDefinition.Write(subdefinition.schema)
+			if err != nil {
+				return nil, fmt.Errorf("failed to write subdefinition: %w", err)
+			}
+			first = false
+			subdefinitions = subdefinitions[1:]
 
-	// ensure all requested schemas were found, or we won't be able to create a valid file
-	for _, t := range types {
-		if _, ok := schemas[t]; !ok {
-			return nil, fmt.Errorf("no schema found for type %s", t)
-		}
-	}
+			lines := strings.FieldsFunc(string(subdefinition.schema), func(c rune) bool { return c == '\n' })
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
 
-	return schemas, nil
+				// skip empty lines
+				if line == "" {
+					continue
+				}
+
+				// skip comments
+				if strings.HasPrefix(line, "#") {
+					continue
+				}
+
+				// must be a field
+				parts := strings.FieldsFunc(line, func(c rune) bool { return c == ' ' })
+				if len(parts) < 1 {
+					return nil, fmt.Errorf("malformed field: %s. Message definition: %s", line, string(subdefinition.schema))
+				}
+				fieldType := parts[0]
+
+				// it may be an array, but we just care about the base type
+				baseType := fieldType
+				arrayParts := strings.FieldsFunc(fieldType, func(c rune) bool { return c == '[' })
+				if len(arrayParts) > 1 {
+					baseType = arrayParts[0]
+				}
+
+				// if it's a primitive, no action required
+				if rosPrimitives[baseType] {
+					continue
+				}
+
+				parentPackage := subdefinition.parentPackage
+				if parts := strings.Split(subdefinition.rosType, "/"); len(parts) > 1 {
+					parentPackage = parts[0]
+				}
+
+				// if it's not a primitive, we need to look it up
+				qualifiedType := fieldToQualifiedROSType(baseType, parentPackage)
+				fieldSchema, err := getSchema(encoding, qualifiedType, directories)
+				if err != nil {
+					return nil, fmt.Errorf("failed to find schema for %s: %w", baseType, err)
+				}
+				subdefinitions = append(subdefinitions, struct {
+					parentPackage string
+					rosType       string
+					schema        []byte
+				}{
+					parentPackage: parentPackage,
+					rosType:       qualifiedType,
+					schema:        fieldSchema,
+				})
+			}
+		}
+		messageDefinitions[rosType] = messageDefinition.Bytes()
+	}
+	return messageDefinitions, nil
+}
+
+func fieldToQualifiedROSType(fieldType, rosPackage string) string {
+	parts := strings.FieldsFunc(fieldType, func(c rune) bool { return c == '/' })
+	if len(parts) == 1 {
+		return path.Join(rosPackage, "msg", fieldType)
+	}
+	return path.Join(parts[0], "msg", parts[1])
 }
 
 type topicsRecord struct {
@@ -163,7 +256,7 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, opts *mcap.WriterOptions, searchdirs []s
 	for i := range topics {
 		types[i] = topics[i].typ
 	}
-	schemas, err := collectMessageSchemas(searchdirs, types)
+	schemas, err := getSchemas("msg", searchdirs, types)
 	if err != nil {
 		return err
 	}
