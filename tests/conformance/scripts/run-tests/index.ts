@@ -9,6 +9,7 @@ import path from "path";
 
 import { splitMcapRecords } from "../../util/splitMcapRecords";
 import generateTestVariants from "../../variants/generateTestVariants";
+import { TestFeatures } from "../../variants/types";
 import runners from "./runners";
 import { ReadTestRunner, WriteTestRunner } from "./runners/TestRunner";
 import { stringifyRecords } from "./runners/stringifyRecords";
@@ -20,11 +21,20 @@ type TestOptions = {
   testRegex?: RegExp;
 };
 
-function normalizeJson(json: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-  const data = JSON.parse(json);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+type TestJson = {
+  records: { type: string }[];
+  meta?: { variant: { features: TestFeatures[] } };
+};
+
+/**
+ * @param ignoreDataEnd Used to exempt indexed readers from outputting a dataSectionCrc.
+ */
+function normalizeJson(json: string, { ignoreDataEnd }: { ignoreDataEnd: boolean }): string {
+  const data = JSON.parse(json) as TestJson;
   delete data.meta;
+  if (ignoreDataEnd) {
+    data.records = data.records.filter((record) => record.type !== "DataEnd");
+  }
   return stringify(data) + "\n";
 }
 
@@ -75,8 +85,8 @@ async function runReaderTest(
         hadError = true;
         continue;
       }
-      const outputNorm = normalizeJson(output);
-      const expectedNorm = normalizeJson(expectedOutput);
+      const outputNorm = normalizeJson(output, { ignoreDataEnd: !runner.readsDataEnd });
+      const expectedNorm = normalizeJson(expectedOutput, { ignoreDataEnd: !runner.readsDataEnd });
       if (outputNorm !== expectedNorm) {
         console.error(`Error: output did not match expected for ${filePath}:`);
         console.error(Diff.createPatch(expectedOutputPath, expectedNorm, outputNorm));
@@ -139,8 +149,8 @@ async function runWriterTest(
         }
 
         const actualOutputJson = stringifyRecords(records, variant);
-        const outputNorm = normalizeJson(actualOutputJson);
-        const expectedNorm = normalizeJson(expectedOutputJson);
+        const outputNorm = normalizeJson(actualOutputJson, { ignoreDataEnd: false });
+        const expectedNorm = normalizeJson(expectedOutputJson, { ignoreDataEnd: false });
         if (outputNorm !== expectedNorm) {
           console.error(
             Diff.createPatch(
