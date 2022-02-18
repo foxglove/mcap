@@ -672,19 +672,37 @@ IChunkWriter* McapWriter::getChunkWriter() {
 }
 
 void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
-  const auto& compression = internal::CompressionString(compression_);
+  // Both LZ4 and ZSTD recommend ~1KB as the minimum size for compressed data
+  constexpr uint64_t MIN_COMPRESSION_SIZE = 1024;
+  // Throw away any compression results that save less than 2% of the original size
+  constexpr double MIN_COMPRESSION_RATIO = 1.02;
 
-  // Flush any in-progress compression stream
-  chunkData.end();
+  Compression compression = Compression::None;
+  const uint64_t uncompressedSize = uncompressedSize_;
+  uint64_t compressedSize = uncompressedSize;
+  const std::byte* compressedData = chunkData.data();
 
-  const uint64_t compressedSize = chunkData.size();
-  const std::byte* records = chunkData.data();
+  if (options_.forceCompression || uncompressedSize >= MIN_COMPRESSION_SIZE) {
+    // Flush any in-progress compression stream
+    chunkData.end();
+
+    // Only use the compressed data if it is materially smaller than the
+    // uncompressed data
+    const double compressionRatio = double(uncompressedSize) / double(chunkData.compressedSize());
+    if (options_.forceCompression || compressionRatio >= MIN_COMPRESSION_RATIO) {
+      compression = compression_;
+      compressedSize = chunkData.compressedSize();
+      compressedData = chunkData.compressedData();
+    }
+  }
+
+  const std::string& compressionStr = internal::CompressionString(compression);
   const uint32_t uncompressedCrc = chunkData.crc();
 
   // Write the chunk
   const uint64_t chunkStartOffset = output.size();
-  write(output, Chunk{currentChunkStart_, currentChunkEnd_, uncompressedSize_, uncompressedCrc,
-                      compression, compressedSize, records});
+  write(output, Chunk{currentChunkStart_, currentChunkEnd_, uncompressedSize, uncompressedCrc,
+                      compressionStr, compressedSize, compressedData});
 
   const uint64_t chunkLength = output.size() - chunkStartOffset;
 
@@ -710,9 +728,9 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
     chunkIndexRecord.chunkStartOffset = chunkStartOffset;
     chunkIndexRecord.chunkLength = chunkLength;
     chunkIndexRecord.messageIndexLength = messageIndexLength;
-    chunkIndexRecord.compression = compression;
+    chunkIndexRecord.compression = compressionStr;
     chunkIndexRecord.compressedSize = compressedSize;
-    chunkIndexRecord.uncompressedSize = uncompressedSize_;
+    chunkIndexRecord.uncompressedSize = uncompressedSize;
   } else if (!options_.noMessageIndex) {
     // Write the message index records
     for (const auto& [channelId, messageIndex] : currentMessageIndex_) {
@@ -1270,6 +1288,10 @@ uint64_t BufferWriter::size() const {
   return buffer_.size();
 }
 
+uint64_t BufferWriter::compressedSize() const {
+  return buffer_.size();
+}
+
 bool BufferWriter::empty() const {
   return buffer_.empty();
 }
@@ -1279,6 +1301,10 @@ void BufferWriter::handleClear() {
 }
 
 const std::byte* BufferWriter::data() const {
+  return buffer_.data();
+}
+
+const std::byte* BufferWriter::compressedData() const {
   return buffer_.data();
 }
 
@@ -1315,38 +1341,45 @@ int LZ4AccelerationLevel(CompressionLevel level) {
 
 LZ4Writer::LZ4Writer(CompressionLevel compressionLevel, uint64_t chunkSize) {
   acceleration_ = internal::LZ4AccelerationLevel(compressionLevel);
-  preEndBuffer_.reserve(chunkSize);
+  uncompressedBuffer_.reserve(chunkSize);
 }
 
 void LZ4Writer::handleWrite(const std::byte* data, uint64_t size) {
-  preEndBuffer_.insert(preEndBuffer_.end(), data, data + size);
+  uncompressedBuffer_.insert(uncompressedBuffer_.end(), data, data + size);
 }
 
 void LZ4Writer::end() {
-  const auto dstCapacity = LZ4_compressBound(preEndBuffer_.size());
-  buffer_.resize(dstCapacity);
-  const int dstSize = LZ4_compress_fast(reinterpret_cast<const char*>(preEndBuffer_.data()),
-                                        reinterpret_cast<char*>(buffer_.data()),
-                                        preEndBuffer_.size(), dstCapacity, acceleration_);
-  buffer_.resize(dstSize);
-  preEndBuffer_.clear();
+  const auto dstCapacity = LZ4_compressBound(uncompressedBuffer_.size());
+  compressedBuffer_.resize(dstCapacity);
+  const int dstSize = LZ4_compress_fast(reinterpret_cast<const char*>(uncompressedBuffer_.data()),
+                                        reinterpret_cast<char*>(compressedBuffer_.data()),
+                                        uncompressedBuffer_.size(), dstCapacity, acceleration_);
+  compressedBuffer_.resize(dstSize);
 }
 
 uint64_t LZ4Writer::size() const {
-  return buffer_.size();
+  return uncompressedBuffer_.size();
+}
+
+uint64_t LZ4Writer::compressedSize() const {
+  return compressedBuffer_.size();
 }
 
 bool LZ4Writer::empty() const {
-  return buffer_.empty() && preEndBuffer_.empty();
+  return compressedBuffer_.empty() && uncompressedBuffer_.empty();
 }
 
 void LZ4Writer::handleClear() {
-  preEndBuffer_.clear();
-  buffer_.clear();
+  uncompressedBuffer_.clear();
+  compressedBuffer_.clear();
 }
 
 const std::byte* LZ4Writer::data() const {
-  return buffer_.data();
+  return uncompressedBuffer_.data();
+}
+
+const std::byte* LZ4Writer::compressedData() const {
+  return compressedBuffer_.data();
 }
 
 // ZStdWriter //////////////////////////////////////////////////////////////////
@@ -1376,7 +1409,7 @@ ZStdWriter::ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize) {
   zstdContext_ = ZSTD_createCCtx();
   ZSTD_CCtx_setParameter(zstdContext_, ZSTD_c_compressionLevel,
                          internal::ZStdCompressionLevel(compressionLevel));
-  preEndBuffer_.reserve(chunkSize);
+  uncompressedBuffer_.reserve(chunkSize);
 }
 
 ZStdWriter::~ZStdWriter() {
@@ -1384,14 +1417,14 @@ ZStdWriter::~ZStdWriter() {
 }
 
 void ZStdWriter::handleWrite(const std::byte* data, uint64_t size) {
-  preEndBuffer_.insert(preEndBuffer_.end(), data, data + size);
+  uncompressedBuffer_.insert(uncompressedBuffer_.end(), data, data + size);
 }
 
 void ZStdWriter::end() {
-  const auto dstCapacity = ZSTD_compressBound(preEndBuffer_.size());
-  buffer_.resize(dstCapacity);
-  const int dstSize = ZSTD_compress2(zstdContext_, buffer_.data(), dstCapacity,
-                                     preEndBuffer_.data(), preEndBuffer_.size());
+  const auto dstCapacity = ZSTD_compressBound(uncompressedBuffer_.size());
+  compressedBuffer_.resize(dstCapacity);
+  const int dstSize = ZSTD_compress2(zstdContext_, compressedBuffer_.data(), dstCapacity,
+                                     uncompressedBuffer_.data(), uncompressedBuffer_.size());
   if (ZSTD_isError(dstSize)) {
     const auto errCode = ZSTD_getErrorCode(dstSize);
     std::cerr << "ZSTD_compress2 failed: " << ZSTD_getErrorName(dstSize) << " ("
@@ -1399,25 +1432,32 @@ void ZStdWriter::end() {
     std::abort();
   }
   ZSTD_CCtx_reset(zstdContext_, ZSTD_reset_session_only);
-  buffer_.resize(dstSize);
-  preEndBuffer_.clear();
+  compressedBuffer_.resize(dstSize);
 }
 
 uint64_t ZStdWriter::size() const {
-  return buffer_.size();
+  return uncompressedBuffer_.size();
+}
+
+uint64_t ZStdWriter::compressedSize() const {
+  return compressedBuffer_.size();
 }
 
 bool ZStdWriter::empty() const {
-  return buffer_.empty() && preEndBuffer_.empty();
+  return compressedBuffer_.empty() && uncompressedBuffer_.empty();
 }
 
 void ZStdWriter::handleClear() {
-  preEndBuffer_.clear();
-  buffer_.clear();
+  uncompressedBuffer_.clear();
+  compressedBuffer_.clear();
 }
 
 const std::byte* ZStdWriter::data() const {
-  return buffer_.data();
+  return uncompressedBuffer_.data();
+}
+
+const std::byte* ZStdWriter::compressedData() const {
+  return compressedBuffer_.data();
 }
 
 // McapReader //////////////////////////////////////////////////////////////////
