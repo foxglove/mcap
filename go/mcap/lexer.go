@@ -129,7 +129,7 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			return TokenError, nil, err
 		}
 		opcode := OpCode(l.buf[0])
-		recordLen := int64(binary.LittleEndian.Uint64(l.buf[1:9]))
+		recordLen := binary.LittleEndian.Uint64(l.buf[1:9])
 
 		if opcode == OpChunk && !l.emitChunks {
 			err := loadChunk(l)
@@ -139,8 +139,11 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			continue
 		}
 
-		if recordLen > int64(len(p)) {
-			p = make([]byte, recordLen)
+		if recordLen > uint64(len(p)) {
+			p, err = makeSafe(recordLen)
+			if err != nil {
+				return TokenError, nil, fmt.Errorf("failed to allocate %d bytes for token: %w", recordLen, err)
+			}
 		}
 
 		record := p[:recordLen]
@@ -150,6 +153,8 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 		}
 
 		switch opcode {
+		case OpMessage:
+			return TokenMessage, record, nil
 		case OpHeader:
 			return TokenHeader, record, nil
 		case OpSchema:
@@ -160,8 +165,6 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			return TokenChannel, record, nil
 		case OpFooter:
 			return TokenFooter, record, nil
-		case OpMessage:
-			return TokenMessage, record, nil
 		case OpAttachment:
 			return TokenAttachment, record, nil
 		case OpAttachmentIndex:
