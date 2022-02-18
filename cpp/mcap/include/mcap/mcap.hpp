@@ -1,4 +1,4 @@
 #pragma once
 
-#include "mcapreader.hpp"
-#include "mcapwriter.hpp"
+#include "reader.hpp"
+#include "writer.hpp"

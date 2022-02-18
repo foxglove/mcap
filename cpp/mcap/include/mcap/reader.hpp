@@ -462,4 +462,4 @@ private:
 
 }  // namespace mcap
 
-#include "mcapreader.inl"
+#include "reader.inl"

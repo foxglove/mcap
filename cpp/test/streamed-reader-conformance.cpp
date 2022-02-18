@@ -1,4 +1,4 @@
-#include <mcap/mcapreader.hpp>
+#include <mcap/reader.hpp>
 
 #include <nlohmann/json.hpp>
 

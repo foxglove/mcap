@@ -408,4 +408,4 @@ private:
 
 }  // namespace mcap
 
-#include "mcapwriter.inl"
+#include "writer.inl"

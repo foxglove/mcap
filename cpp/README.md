@@ -5,7 +5,7 @@
 <!-- cspell: disable -->
 
 ```cpp
-#include <mcap/mcapwriter.hpp>
+#include <mcap/writer.hpp>
 
 #include <chrono>
 #include <cstring>
