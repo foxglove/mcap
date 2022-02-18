@@ -439,6 +439,12 @@ struct McapWriterOptions {
    */
   CompressionLevel compressionLevel = CompressionLevel::Default;
   /**
+   * @brief By default, Chunks that do not benefit from compression will be
+   * written uncompressed. This option can be used to force compression on all
+   * Chunks. This option is ignored if `noChunking=true`.
+   */
+  bool forceCompression = false;
+  /**
    * @brief The recording profile. See
    * <https://github.com/foxglove/mcap/tree/main/docs/specification/profiles>
    * for more information on well-known profiles.
@@ -668,10 +674,14 @@ public:
    */
   virtual void end() = 0;
   /**
+   * @brief Returns the size in bytes of the uncompressed data.
+   */
+  virtual uint64_t size() const = 0;
+  /**
    * @brief Returns the size in bytes of the compressed data. This will only be
    * called after `end()`.
    */
-  virtual uint64_t size() const = 0;
+  virtual uint64_t compressedSize() const = 0;
   /**
    * @brief Returns true if `write()` has never been called since initialization
    * or the last call to `clear()`.
@@ -683,10 +693,18 @@ public:
    */
   void clear();
   /**
+   * @brief Returns a pointer to the uncompressed data.
+   */
+  virtual const std::byte* data() const = 0;
+  /**
    * @brief Returns a pointer to the compressed data. This will only be called
    * after `end()`.
    */
-  virtual const std::byte* data() const = 0;
+  virtual const std::byte* compressedData() const = 0;
+  /**
+   * @brief Returns the CRC32 of the uncompressed data.
+   */
+  uint32_t crc() const;
 
 protected:
   virtual void handleClear() = 0;
@@ -701,9 +719,11 @@ public:
   void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
   uint64_t size() const override;
+  uint64_t compressedSize() const override;
   bool empty() const override;
   void handleClear() override;
   const std::byte* data() const override;
+  const std::byte* compressedData() const override;
 
 private:
   std::vector<std::byte> buffer_;
@@ -720,13 +740,15 @@ public:
   void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
   uint64_t size() const override;
+  uint64_t compressedSize() const override;
   bool empty() const override;
   void handleClear() override;
   const std::byte* data() const override;
+  const std::byte* compressedData() const override;
 
 private:
-  std::vector<std::byte> preEndBuffer_;
-  std::vector<std::byte> buffer_;
+  std::vector<std::byte> uncompressedBuffer_;
+  std::vector<std::byte> compressedBuffer_;
   int acceleration_ = 1;
 };
 
@@ -742,13 +764,15 @@ public:
   void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
   uint64_t size() const override;
+  uint64_t compressedSize() const override;
   bool empty() const override;
   void handleClear() override;
   const std::byte* data() const override;
+  const std::byte* compressedData() const override;
 
 private:
-  std::vector<std::byte> preEndBuffer_;
-  std::vector<std::byte> buffer_;
+  std::vector<std::byte> uncompressedBuffer_;
+  std::vector<std::byte> compressedBuffer_;
   ZSTD_CCtx* zstdContext_ = nullptr;
 };
 
