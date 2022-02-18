@@ -4,7 +4,9 @@
 
 #include "types.hpp"
 #include <memory>
+#include <string>
 #include <unordered_set>
+#include <vector>
 
 typedef struct ZSTD_CCtx_s ZSTD_CCtx;
 
