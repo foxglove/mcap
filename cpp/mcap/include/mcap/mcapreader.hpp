@@ -462,6 +462,4 @@ private:
 
 }  // namespace mcap
 
-#ifdef MCAP_IMPLEMENTATION
 #include "mcapreader.inl"
-#endif

@@ -408,6 +408,4 @@ private:
 
 }  // namespace mcap
 
-#ifdef MCAP_IMPLEMENTATION
 #include "mcapwriter.inl"
-#endif

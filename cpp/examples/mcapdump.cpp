@@ -1,4 +1,3 @@
-#define MCAP_IMPLEMENTATION
 #include <mcap/mcapreader.hpp>
 
 #include <fstream>

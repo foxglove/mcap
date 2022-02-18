@@ -1,10 +1,10 @@
-#define MCAP_IMPLEMENTATION
 #include <mcap/mcapwriter.hpp>
 
 #include <array>
 #include <chrono>
 #include <cstring>
 #include <fstream>
+#include <iostream>
 
 constexpr char StringSchema[] = "string data";
 

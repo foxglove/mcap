@@ -39,7 +39,7 @@ inline constexpr std::string_view OpCodeString(OpCode opcode) {
   }
 }
 
-MetadataIndex::MetadataIndex(const Metadata& metadata, ByteOffset fileOffset)
+inline MetadataIndex::MetadataIndex(const Metadata& metadata, ByteOffset fileOffset)
     : offset(fileOffset)
     , length(9 + 4 + metadata.name.size() + 4 + internal::KeyValueMapSize(metadata.metadata))
     , name(metadata.name) {}

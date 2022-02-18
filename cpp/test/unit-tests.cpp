@@ -1,4 +1,3 @@
-#define MCAP_IMPLEMENTATION
 #include <mcap/mcap.hpp>
 
 #define CATCH_CONFIG_MAIN
