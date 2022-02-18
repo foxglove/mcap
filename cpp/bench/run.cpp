@@ -1,4 +1,4 @@
-#include <mcap/mcap.hpp>
+#include <mcap/writer.hpp>
 
 #include <benchmark/benchmark.h>
 

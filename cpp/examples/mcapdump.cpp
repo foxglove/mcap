@@ -1,4 +1,4 @@
-#include <mcap/mcap.hpp>
+#include <mcap/reader.hpp>
 
 #include <fstream>
 #include <iostream>
