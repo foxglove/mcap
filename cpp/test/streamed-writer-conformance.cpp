@@ -1,7 +1,8 @@
-#include <mcap/mcap.hpp>
+#include <mcap/writer.hpp>
 
 #include <nlohmann/json.hpp>
 
+#include <fstream>
 #include <iostream>
 
 using json = nlohmann::json;
