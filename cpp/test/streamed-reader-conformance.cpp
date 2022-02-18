@@ -1,4 +1,5 @@
-#include <mcap/mcap.hpp>
+#define MCAP_IMPLEMENTATION
+#include <mcap/mcapreader.hpp>
 
 #include <nlohmann/json.hpp>
 

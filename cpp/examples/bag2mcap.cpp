@@ -1,4 +1,5 @@
-#include <mcap/mcap.hpp>
+#define MCAP_IMPLEMENTATION
+#include <mcap/mcapwriter.hpp>
 
 #include <array>
 #include <chrono>

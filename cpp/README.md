@@ -5,7 +5,9 @@
 <!-- cspell: disable -->
 
 ```cpp
-#include <mcap/mcap.hpp>
+// Define MCAP_IMPLEMENTATION in exactly one .cpp file
+#define MCAP_IMPLEMENTATION
+#include <mcap/mcapwriter.hpp>
 
 #include <chrono>
 #include <cstring>
