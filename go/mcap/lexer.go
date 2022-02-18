@@ -102,10 +102,11 @@ type Lexer struct {
 	reader     io.Reader
 	emitChunks bool
 
-	decoders    decoders
-	inChunk     bool
-	buf         []byte
-	validateCRC bool
+	decoders          decoders
+	inChunk           bool
+	buf               []byte
+	uncompressedChunk []byte
+	validateCRC       bool
 }
 
 // Next returns the next token from the lexer as a byte array. The result will
@@ -142,7 +143,7 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 		if recordLen > uint64(len(p)) {
 			p, err = makeSafe(recordLen)
 			if err != nil {
-				return TokenError, nil, fmt.Errorf("failed to allocate %d bytes for token: %w", recordLen, err)
+				return TokenError, nil, fmt.Errorf("failed to allocate %d bytes for %s token: %w", recordLen, opcode, err)
 			}
 		}
 
@@ -259,7 +260,7 @@ func loadChunk(l *Lexer) error {
 	if err != nil {
 		return fmt.Errorf("failed to read end: %w", err)
 	}
-	_, offset, err = getUint64(l.buf, offset) // uncompressed size
+	uncompressedSize, offset, err := getUint64(l.buf, offset)
 	if err != nil {
 		return fmt.Errorf("failed to read uncompressed size: %w", err)
 	}
@@ -305,15 +306,37 @@ func loadChunk(l *Lexer) error {
 	// decompression for the chunk's data, which may be beneficial to streaming
 	// readers.
 	if l.validateCRC {
-		uncompressed, err := io.ReadAll(l.reader)
-		if err != nil {
-			return err
+		if uint64(len(l.uncompressedChunk)) < uncompressedSize {
+			l.uncompressedChunk, err = makeSafe(uncompressedSize * 2)
+			if err != nil {
+				return fmt.Errorf("failed to allocate chunk buffer: %w", err)
+			}
 		}
-		crc := crc32.ChecksumIEEE(uncompressed)
+
+		_, err := io.ReadFull(l.reader, l.uncompressedChunk[:uncompressedSize])
+		if err != nil {
+			return fmt.Errorf("failed to decompress chunk: %w", err)
+		}
+
+		// LZ4 chunks may have some crc data at the end that is not required to
+		// fill a buffer, meaning the ReadFull call above does not consume it.
+		// Therefore we have to do an empty read. If we get any data out of
+		// this, it's an error.
+		if compression == CompressionLZ4 {
+			extraBytes, err := io.ReadAll(l.reader)
+			if err != nil {
+				return fmt.Errorf("failed to reaGd extra bytes: %w", err)
+			}
+			if len(extraBytes) > 0 {
+				return fmt.Errorf("encountered unexpected bytes after chunk: %q", extraBytes)
+			}
+		}
+
+		crc := crc32.ChecksumIEEE(l.uncompressedChunk[:uncompressedSize])
 		if crc != uncompressedCRC {
 			return fmt.Errorf("invalid CRC: %x != %x", crc, uncompressedCRC)
 		}
-		l.setNoneDecoder(uncompressed)
+		l.setNoneDecoder(l.uncompressedChunk[:uncompressedSize])
 	}
 	l.inChunk = true
 	return nil
