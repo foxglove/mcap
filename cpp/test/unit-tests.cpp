@@ -1,9 +1,10 @@
 #define MCAP_IMPLEMENTATION
 #include <mcap/mcap.hpp>
 
-#include <array>
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
+
+#include <array>
 
 std::string_view StringView(const std::byte* data, size_t size) {
   return std::string_view{reinterpret_cast<const char*>(data), size};
