@@ -701,10 +701,6 @@ public:
    * after `end()`.
    */
   virtual const std::byte* compressedData() const = 0;
-  /**
-   * @brief Returns the CRC32 of the uncompressed data.
-   */
-  uint32_t crc() const;
 
 protected:
   virtual void handleClear() = 0;
