@@ -138,7 +138,7 @@ A Footer record contains end-of-file information. It must be the last record in 
 | --- | --- | --- | --- |
 | 8 | summary_start | uint64 | Byte offset of the start of file to the first record in the summary section. If there are no records in the summary section this should be 0. |
 | 8 | summary_offset_start | uint64 | Byte offset from the start of the first record in the summary offset section. If there are no Summary Offset records this value should be 0. |
-| 4 | summary_crc | uint32 | A CRC32 of all bytes from the start of the Summary section up through the end of the previous field in the footer record. A value of 0 indicates the CRC32 is not available. If there are no records in the summary section this should be 0. |
+| 4 | summary_crc | uint32 | A CRC32 of all bytes from the start of the Summary section up through the end of the previous field in the footer record. (If there are no records in the summary section, this range begins at the start of the footer record.) A value of 0 indicates the CRC32 is not available. |
 
 ### Schema (op=0x03)
 
