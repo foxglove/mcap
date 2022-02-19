@@ -5,17 +5,18 @@
 A basic command line tool to demonstrate the MCAP file format. See `mcap -h`
 for details:
 
-    A small utility for demonstration of the MCAP file format
+    A small utility for demonstration of the mcap file format
 
     Usage:
       mcap [command]
 
     Available Commands:
-      cat         Cat the messages in an MCAP file to stdout
+      cat         Cat the messages in an mcap file to stdout
       completion  Generate the autocompletion script for the specified shell
-      convert     Convert a bag file to an MCAP file
+      convert     Convert a bag file to an mcap file
+      doctor      Check an mcap file structure
       help        Help about any command
-      info        Report statistics about an MCAP file
+      info        Report statistics about an mcap file
 
     Flags:
           --config string   config file (default is $HOME/.mcap.yaml)
@@ -36,21 +37,21 @@ Convert a bag file to MCAP:
 
 Report summary statistics on an MCAP file:
 
-    [~/work/mcap/go/mcap] (task/mcap-client) $ mcap info demo.mcap
+    [~/work/mcap/go/cli/mcap] (main) $ mcap info demo.mcap
+    messages: 1606
     duration: 7.780758504s
     start: 2017-03-21T19:26:20.103843113-07:00
     end: 2017-03-21T19:26:27.884601617-07:00
-    messages: 1606
     chunks:
-    	lz4: [27/27 chunks] (44.32%)
-    channels
-    	(0) /diagnostics: 52 msgs
-    	(1) /image_color/compressed: 234 msgs
-    	(2) /tf: 774 msgs
-    	(3) /radar/points: 156 msgs
-    	(4) /radar/range: 156 msgs
-    	(5) /radar/tracks: 156 msgs
-    	(6) /velodyne_points: 78 msgs
+            zstd: [14/14 chunks] (50.79%)
+    channels:
+            (0) /diagnostics              52 msgs   : diagnostic_msgs/DiagnosticArray [ros1msg]
+            (1) /image_color/compressed  234 msgs   : sensor_msgs/CompressedImage [ros1msg]
+            (2) /tf                      774 msgs   : tf2_msgs/TFMessage [ros1msg]
+            (3) /radar/points            156 msgs   : sensor_msgs/PointCloud2 [ros1msg]
+            (4) /radar/range             156 msgs   : sensor_msgs/Range [ros1msg]
+            (5) /radar/tracks            156 msgs   : radar_driver/RadarTracks [ros1msg]
+            (6) /velodyne_points          78 msgs   : sensor_msgs/PointCloud2 [ros1msg]
     attachments: 0
 
 Echo messages to stdout using the end of file index:
