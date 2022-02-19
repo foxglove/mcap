@@ -1,7 +1,14 @@
 package mcap
 
+import (
+	"errors"
+	"math"
+)
+
 // Magic is the magic number for an MCAP file.
 var Magic = []byte{0x89, 'M', 'C', 'A', 'P', 0x30, '\r', '\n'}
+
+var ErrLengthOutOfRange = errors.New("length out of int32 range")
 
 const (
 	// CompressionZSTD represents zstd compression.
@@ -292,4 +299,11 @@ func (i *Info) ChannelCounts() map[string]uint64 {
 type MessageIndexEntry struct {
 	Timestamp uint64
 	Offset    uint64
+}
+
+func makeSafe(n uint64) ([]byte, error) {
+	if n < math.MaxInt32 {
+		return make([]byte, n), nil
+	}
+	return nil, ErrLengthOutOfRange
 }

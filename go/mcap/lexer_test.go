@@ -303,29 +303,33 @@ func BenchmarkLexer(b *testing.B) {
 		input, err := os.ReadFile(c.inputfile)
 		assert.Nil(b, err)
 		reader := &bytes.Reader{}
-		b.ResetTimer()
 		msg := make([]byte, 3*1024*1024)
-		b.Run(c.assertion, func(b *testing.B) {
-			for n := 0; n < b.N; n++ {
-				t0 := time.Now()
-				var tokens, bytecount int64
-				reader.Reset(input)
-				lexer, err := NewLexer(reader)
-				assert.Nil(b, err)
-				for {
-					_, record, err := lexer.Next(msg)
-					if errors.Is(err, io.EOF) {
-						break
+		for _, validateCRC := range []bool{true, false} {
+			b.ResetTimer()
+			b.Run(fmt.Sprintf("%s - crc validation %v", c.assertion, validateCRC), func(b *testing.B) {
+				for n := 0; n < b.N; n++ {
+					t0 := time.Now()
+					var tokens, bytecount int64
+					reader.Reset(input)
+					lexer, err := NewLexer(reader, &LexerOptions{
+						ValidateCRC: validateCRC,
+					})
+					assert.Nil(b, err)
+					for {
+						_, record, err := lexer.Next(msg)
+						if errors.Is(err, io.EOF) {
+							break
+						}
+						tokens++
+						bytecount += int64(len(record))
 					}
-					tokens++
-					bytecount += int64(len(record))
+					elapsed := time.Since(t0)
+					mbRead := bytecount / (1024 * 1024)
+					b.ReportMetric(float64(mbRead)/elapsed.Seconds(), "MB/sec")
+					b.ReportMetric(float64(tokens)/elapsed.Seconds(), "tokens/sec")
+					b.ReportMetric(float64(elapsed.Nanoseconds())/float64(tokens), "ns/token")
 				}
-				elapsed := time.Since(t0)
-				mbRead := bytecount / (1024 * 1024)
-				b.ReportMetric(float64(mbRead)/elapsed.Seconds(), "MB/sec")
-				b.ReportMetric(float64(tokens)/elapsed.Seconds(), "tokens/sec")
-				b.ReportMetric(float64(elapsed.Nanoseconds())/float64(tokens), "ns/token")
-			}
-		})
+			})
+		}
 	}
 }
