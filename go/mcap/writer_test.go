@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/md5"
 	"fmt"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -485,22 +484,6 @@ func TestMakePrefixedMap(t *testing.T) {
 	})
 }
 
-func randString(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = byte(rand.Intn(256))
-	}
-	return string(b)
-}
-
-func randBytes(n int) []byte {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = byte(rand.Intn(256))
-	}
-	return b
-}
-
 func BenchmarkWriterAllocs(b *testing.B) {
 	cases := []struct {
 		assertion    string
@@ -520,6 +503,12 @@ func BenchmarkWriterAllocs(b *testing.B) {
 			2e6,
 			100,
 		},
+		{
+			"many channels",
+			4 * 1024 * 1024,
+			2e6,
+			55000,
+		},
 	}
 
 	stringData := "hello, world!"
@@ -534,12 +523,11 @@ func BenchmarkWriterAllocs(b *testing.B) {
 					ChunkSize: int64(c.chunkSize),
 					Chunked:   true,
 				})
-				defer writer.Close()
 				assert.Nil(b, err)
-				writer.WriteHeader(&Header{
+				assert.Nil(b, writer.WriteHeader(&Header{
 					Profile: "ros1",
 					Library: "foo",
-				})
+				}))
 				for i := 0; i < c.channelCount; i++ {
 					assert.Nil(b, writer.WriteSchema(&Schema{
 						ID:       uint16(i),
@@ -568,9 +556,10 @@ func BenchmarkWriterAllocs(b *testing.B) {
 						Data:        messageData,
 					}))
 					messageCount++
-					channelID += 1
+					channelID++
 					channelID %= c.channelCount
 				}
+				writer.Close()
 				elapsed := time.Since(t0)
 				b.ReportMetric(float64(c.messageCount)/elapsed.Seconds(), "messages/sec")
 			}
