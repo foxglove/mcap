@@ -154,7 +154,7 @@ type Chunk struct {
 // for every channel on which a message occurs inside the chunk.
 type MessageIndex struct {
 	ChannelID    uint16
-	Records      []*MessageIndexEntry
+	Records      []MessageIndexEntry
 	currentIndex int
 }
 
@@ -179,19 +179,16 @@ func (idx *MessageIndex) Reset() {
 }
 
 // Entries lists the entries in the message index.
-func (idx *MessageIndex) Entries() []*MessageIndexEntry {
+func (idx *MessageIndex) Entries() []MessageIndexEntry {
 	return idx.Records[:idx.currentIndex]
 }
 
 // Add an entry to the message index.
 func (idx *MessageIndex) Add(timestamp uint64, offset uint64) {
 	if idx.currentIndex >= len(idx.Records) {
-		records := make([]*MessageIndexEntry, (len(idx.Records)+20)*2)
+		records := make([]MessageIndexEntry, (len(idx.Records)+20)*2)
 		copy(records, idx.Records)
 		idx.Records = records
-	}
-	if idx.Records[idx.currentIndex] == nil {
-		idx.Records[idx.currentIndex] = &MessageIndexEntry{timestamp, offset}
 	}
 	idx.Records[idx.currentIndex].Timestamp = timestamp
 	idx.Records[idx.currentIndex].Offset = offset
