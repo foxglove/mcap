@@ -700,7 +700,7 @@ inline uint64_t McapWriter::write(IWritable& output, const Footer& footer, const
   write(output, footer.summaryStart);
   write(output, footer.summaryOffsetStart);
   uint32_t summaryCrc = 0;
-  if (footer.summaryStart != 0 && crcEnabled) {
+  if (crcEnabled) {
     summaryCrc = output.crc();
   }
   write(output, summaryCrc);
