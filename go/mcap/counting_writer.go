@@ -18,7 +18,7 @@ func (c *CountingCRCWriter) Reset(w io.Writer) {
 }
 
 func (c *CountingCRCWriter) ResetCRC() {
-	c.crc = crc32.NewIEEE()
+	c.crc.Reset()
 }
 
 func (c *CountingCRCWriter) ResetSize() {
