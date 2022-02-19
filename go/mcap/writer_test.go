@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"crypto/md5"
 	"fmt"
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -481,4 +483,91 @@ func TestMakePrefixedMap(t *testing.T) {
 			[]byte("bar"),
 		), bytes)
 	})
+}
+
+func randString(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = byte(rand.Intn(256))
+	}
+	return string(b)
+}
+
+func randBytes(n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = byte(rand.Intn(256))
+	}
+	return b
+}
+
+func BenchmarkWriterAllocs(b *testing.B) {
+	cases := []struct {
+		assertion    string
+		chunkSize    int
+		messageCount int
+		channelCount int
+	}{
+		{
+			"big chunks many messages",
+			8 * 1024 * 1024,
+			2e6,
+			100,
+		},
+	}
+
+	stringData := "hello, world!"
+	messageData := []byte("hello, world")
+	buf := bytes.NewBuffer(make([]byte, 4*1024*1024*1024))
+	for _, c := range cases {
+		b.ResetTimer()
+		b.Run(c.assertion, func(b *testing.B) {
+			for n := 0; n < b.N; n++ {
+				t0 := time.Now()
+				writer, err := NewWriter(buf, &WriterOptions{
+					ChunkSize: int64(c.chunkSize),
+					Chunked:   true,
+				})
+				defer writer.Close()
+				assert.Nil(b, err)
+				writer.WriteHeader(&Header{
+					Profile: "ros1",
+					Library: "foo",
+				})
+				for i := 0; i < c.channelCount; i++ {
+					assert.Nil(b, writer.WriteSchema(&Schema{
+						ID:       uint16(i),
+						Name:     stringData,
+						Encoding: "ros1msg",
+						Data:     messageData,
+					}))
+					assert.Nil(b, writer.WriteChannel(&Channel{
+						ID:              uint16(i),
+						SchemaID:        uint16(i),
+						Topic:           stringData,
+						MessageEncoding: "msg",
+						Metadata: map[string]string{
+							"": "",
+						},
+					}))
+				}
+				channelID := 0
+				messageCount := 0
+				for messageCount < c.messageCount {
+					assert.Nil(b, writer.WriteMessage(&Message{
+						ChannelID:   uint16(channelID),
+						Sequence:    0,
+						LogTime:     uint64(messageCount),
+						PublishTime: uint64(messageCount),
+						Data:        messageData,
+					}))
+					messageCount++
+					channelID += 1
+					channelID %= c.channelCount
+				}
+				elapsed := time.Since(t0)
+				b.ReportMetric(float64(c.messageCount)/elapsed.Seconds(), "messages/sec")
+			}
+		})
+	}
 }
