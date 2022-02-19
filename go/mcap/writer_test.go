@@ -514,6 +514,12 @@ func BenchmarkWriterAllocs(b *testing.B) {
 			2e6,
 			100,
 		},
+		{
+			"small chunks many messages",
+			8 * 1024,
+			2e6,
+			100,
+		},
 	}
 
 	stringData := "hello, world!"
