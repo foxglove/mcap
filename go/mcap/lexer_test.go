@@ -2,6 +2,7 @@ package mcap
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -53,6 +54,47 @@ func TestRejectsUnsupportedCompression(t *testing.T) {
 	assert.Nil(t, err)
 	_, _, err = lexer.Next(nil)
 	assert.Equal(t, "unsupported compression: unknown", err.Error())
+}
+
+func TestRejectsTooLargeRecords(t *testing.T) {
+	bigHeader := header()
+	binary.LittleEndian.PutUint64(bigHeader[1:], 1000)
+	file := file(bigHeader)
+	lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
+		MaxRecordSize: 999,
+	})
+	assert.Nil(t, err)
+	_, _, err = lexer.Next(nil)
+	assert.ErrorIs(t, err, ErrRecordTooLarge)
+}
+
+func TestRejectsTooLargeChunks(t *testing.T) {
+	bigChunk := chunk(t, CompressionZSTD, channelInfo(), message(), message())
+	binary.LittleEndian.PutUint64(bigChunk[1+8+8+8:], 1000)
+	file := file(header(), bigChunk, footer())
+	lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
+		MaxDecompressedChunkSize: 999,
+		ValidateCRC:              true,
+	})
+	assert.Nil(t, err)
+	_, _, err = lexer.Next(nil)
+	assert.Nil(t, err)
+	_, _, err = lexer.Next(nil)
+	assert.ErrorIs(t, err, ErrChunkTooLarge)
+}
+
+func TestLargeChunksOKIfNotCheckingCRC(t *testing.T) {
+	bigChunk := chunk(t, CompressionZSTD, channelInfo(), message(), message())
+	binary.LittleEndian.PutUint64(bigChunk[1+8+8+8:], 1000)
+	file := file(header(), bigChunk, footer())
+	lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
+		MaxDecompressedChunkSize: 999,
+	})
+	assert.Nil(t, err)
+	_, _, err = lexer.Next(nil)
+	assert.Nil(t, err)
+	_, _, err = lexer.Next(nil)
+	assert.Nil(t, err)
 }
 
 func TestRejectsNestedChunks(t *testing.T) {
