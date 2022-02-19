@@ -176,7 +176,7 @@ func ParseMessageIndex(buf []byte) (*MessageIndex, error) {
 	}
 	var value, stamp uint64
 	var start = offset
-	records := make([]*MessageIndexEntry, 0, (len(buf)-2)/(8+8))
+	records := make([]MessageIndexEntry, 0, (len(buf)-2)/(8+8))
 	for uint32(offset) < uint32(start)+entriesByteLength {
 		stamp, offset, err = getUint64(buf, offset)
 		if err != nil {
@@ -186,7 +186,7 @@ func ParseMessageIndex(buf []byte) (*MessageIndex, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to read message index entry value: %w", err)
 		}
-		records = append(records, &MessageIndexEntry{
+		records = append(records, MessageIndexEntry{
 			Timestamp: stamp,
 			Offset:    value,
 		})
