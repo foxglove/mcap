@@ -14,6 +14,8 @@ import (
 
 // ErrNestedChunk indicates the lexer has detected a nested chunk.
 var ErrNestedChunk = errors.New("detected nested chunk")
+var ErrChunkTooLarge = errors.New("chunk exceeds configured maximum size")
+var ErrRecordTooLarge = errors.New("record exceeds configured maximum size")
 
 // ErrBadMagic indicates the lexer has detected invalid magic bytes.
 var ErrBadMagic = errors.New("not an mcap file")
@@ -102,11 +104,13 @@ type Lexer struct {
 	reader     io.Reader
 	emitChunks bool
 
-	decoders          decoders
-	inChunk           bool
-	buf               []byte
-	uncompressedChunk []byte
-	validateCRC       bool
+	decoders                 decoders
+	inChunk                  bool
+	buf                      []byte
+	uncompressedChunk        []byte
+	validateCRC              bool
+	maxRecordSize            int
+	maxDecompressedChunkSize int
 }
 
 // Next returns the next token from the lexer as a byte array. The result will
@@ -131,7 +135,9 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 		}
 		opcode := OpCode(l.buf[0])
 		recordLen := binary.LittleEndian.Uint64(l.buf[1:9])
-
+		if l.maxRecordSize > 0 && recordLen > uint64(l.maxRecordSize) {
+			return TokenError, nil, ErrRecordTooLarge
+		}
 		if opcode == OpChunk && !l.emitChunks {
 			err := loadChunk(l)
 			if err != nil {
@@ -306,6 +312,9 @@ func loadChunk(l *Lexer) error {
 	// decompression for the chunk's data, which may be beneficial to streaming
 	// readers.
 	if l.validateCRC {
+		if l.maxDecompressedChunkSize > 0 && uncompressedSize > uint64(l.maxDecompressedChunkSize) {
+			return ErrChunkTooLarge
+		}
 		if uint64(len(l.uncompressedChunk)) < uncompressedSize {
 			l.uncompressedChunk, err = makeSafe(uncompressedSize * 2)
 			if err != nil {
@@ -351,17 +360,25 @@ type LexerOptions struct {
 	// EmitChunks instructs the lexer to emit chunk records without de-chunking.
 	// It is incompatible with ValidateCRC.
 	EmitChunks bool
+	// MaxDecompressedChunkSize defines the maximum size chunk the lexer will
+	// decompress. Chunks larger than this will result in an error.
+	MaxDecompressedChunkSize int
+	// MaxRecordSize defines the maximum size record the lexer will read.
+	// Records larger than this will result in an error.
+	MaxRecordSize int
 }
 
 // NewLexer returns a new lexer for the given reader.
 func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
+	var maxRecordSize, maxDecompressedChunkSize int
 	var validateCRC, emitChunks, skipMagic bool
 	if len(opts) > 0 {
 		validateCRC = opts[0].ValidateCRC
 		emitChunks = opts[0].EmitChunks
 		skipMagic = opts[0].SkipMagic
+		maxRecordSize = opts[0].MaxRecordSize
+		maxDecompressedChunkSize = opts[0].MaxDecompressedChunkSize
 	}
-
 	if !skipMagic {
 		err := validateMagic(r)
 		if err != nil {
@@ -369,10 +386,12 @@ func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 		}
 	}
 	return &Lexer{
-		basereader:  r,
-		reader:      r,
-		buf:         make([]byte, 32),
-		validateCRC: validateCRC,
-		emitChunks:  emitChunks,
+		basereader:               r,
+		reader:                   r,
+		buf:                      make([]byte, 32),
+		validateCRC:              validateCRC,
+		emitChunks:               emitChunks,
+		maxRecordSize:            maxRecordSize,
+		maxDecompressedChunkSize: maxDecompressedChunkSize,
 	}, nil
 }
