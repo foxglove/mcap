@@ -85,7 +85,14 @@ following dependencies:
 - [zstd](https://facebook.github.io/zstd/) (tested with [zstd/1.5.2](https://conan.io/center/zstd))
 
 To simplify installation of dependencies, the [Conan](https://conan.io/) package
-manager can be used with the included [conanfile.py](https://github.com/foxglove/mcap/blob/main/cpp/mcap/conanfile.py).
+manager can be used with the included
+[conanfile.py](https://github.com/foxglove/mcap/blob/main/cpp/mcap/conanfile.py).
+Alternatively, you can link against system libraries. On Ubuntu/Debian systems,
+use the following command to install the dependencies:
+
+```bash
+sudo apt install libcrypto++-dev libfmt-dev liblz4-dev libzstd-dev
+```
 
 ## Usage
 
