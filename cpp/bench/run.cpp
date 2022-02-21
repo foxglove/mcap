@@ -10,6 +10,11 @@
 constexpr char StringSchema[] = "string data";
 constexpr size_t WriteIterations = 10000;
 
+static std::string TempFilename() {
+  std::filesystem::path temp{std::filesystem::temp_directory_path() /= "benchmark.mcap"};
+  return temp.string();
+}
+
 static void BM_McapWriterBufferWriterUnchunkedUnindexed(benchmark::State& state) {
   // Create a message payload
   std::array<std::byte, 4 + 13> payload;
@@ -385,7 +390,8 @@ static void BM_McapWriterStreamWriterUnchunked(benchmark::State& state) {
   options.noChunking = true;
 
   // Open an output file stream and write the file header
-  std::ofstream out("benchmark.mcap", std::ios::binary);
+  const std::string filename = TempFilename();
+  std::ofstream out(filename, std::ios::binary);
   writer.open(out, options);
 
   // Register a Schema record
@@ -414,7 +420,7 @@ static void BM_McapWriterStreamWriterUnchunked(benchmark::State& state) {
 
   // Finish writing the file and delete it
   writer.close();
-  std::remove("benchmark.mcap");
+  std::remove(filename.c_str());
 }
 
 static void BM_McapWriterStreamWriterChunked(benchmark::State& state) {
@@ -430,7 +436,8 @@ static void BM_McapWriterStreamWriterChunked(benchmark::State& state) {
   options.chunkSize = uint64_t(state.range(0));
 
   // Open an output file stream and write the file header
-  std::ofstream out("benchmark.mcap", std::ios::binary);
+  const std::string filename = TempFilename();
+  std::ofstream out(filename, std::ios::binary);
   writer.open(out, options);
 
   // Register a Schema record
@@ -459,7 +466,52 @@ static void BM_McapWriterStreamWriterChunked(benchmark::State& state) {
 
   // Finish writing the file and delete it
   writer.close();
-  std::remove("benchmark.mcap");
+  std::remove(filename.c_str());
+}
+
+static void BM_McapWriterFileWriterChunked(benchmark::State& state) {
+  // Create a message payload
+  std::array<std::byte, 4 + 13> payload;
+  const uint32_t length = 13;
+  std::memcpy(payload.data(), &length, 4);
+  std::memcpy(payload.data() + 4, "Hello, world!", 13);
+
+  // Create a chunked writer using the ros1 profile
+  mcap::McapWriter writer;
+  auto options = mcap::McapWriterOptions("ros1");
+  options.chunkSize = uint64_t(state.range(0));
+
+  // Open an output file stream and write the file header
+  const std::string filename = TempFilename();
+  writer.open(filename, options);
+
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
+  writer.addSchema(stdMsgsString);
+
+  // Register a Channel record
+  mcap::Channel topic("/chatter", "ros1", stdMsgsString.id);
+  writer.addChannel(topic);
+
+  // Create a message
+  mcap::Message msg;
+  msg.channelId = topic.id;
+  msg.sequence = 0;
+  msg.publishTime = 0;
+  msg.logTime = msg.publishTime;
+  msg.data = payload.data();
+  msg.dataSize = payload.size();
+
+  while (state.KeepRunning()) {
+    for (size_t i = 0; i < WriteIterations; i++) {
+      writer.write(msg);
+      benchmark::ClobberMemory();
+    }
+  }
+
+  // Finish writing the file and delete it
+  writer.close();
+  std::remove(filename.c_str());
 }
 
 int main(int argc, char* argv[]) {
@@ -524,6 +576,15 @@ int main(int argc, char* argv[]) {
   benchmark::RegisterBenchmark("BM_McapWriterStreamWriterUnchunked",
                                BM_McapWriterStreamWriterUnchunked);
   benchmark::RegisterBenchmark("BM_McapWriterStreamWriterChunked", BM_McapWriterStreamWriterChunked)
+    ->Arg(1)
+    ->Arg(10)
+    ->Arg(100)
+    ->Arg(1000)
+    ->Arg(10000)
+    ->Arg(100000)
+    ->Arg(1000000)
+    ->Arg(10000000);
+  benchmark::RegisterBenchmark("BM_McapWriterFileWriterChunked", BM_McapWriterFileWriterChunked)
     ->Arg(1)
     ->Arg(10)
     ->Arg(100)

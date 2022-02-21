@@ -26,6 +26,61 @@ inline void IWritable::resetCrc() {
   crc_ = {};
 }
 
+// FileWriter //////////////////////////////////////////////////////////////////
+
+inline FileWriter::~FileWriter() {
+  end();
+}
+
+Status FileWriter::open(std::string_view filename, size_t bufferCapacity) {
+  end();
+  file_ = fopen(filename.data(), "wb");
+  if (!file_) {
+    const auto msg = StrFormat("failed to open file \"{}\" for writing", filename);
+    return Status(StatusCode::OpenFailed, msg);
+  }
+  bufferCapacity_ = bufferCapacity;
+  buffer_.reserve(bufferCapacity);
+  return StatusCode::Success;
+}
+
+void FileWriter::handleWrite(const std::byte* data, uint64_t size) {
+  assert(file_);
+
+  // If this will overflow the buffer, flush it
+  if (buffer_.size() > 0 && buffer_.size() + size > bufferCapacity_) {
+    const size_t written = fwrite(buffer_.data(), 1, buffer_.size(), file_);
+    assert(written == buffer_.size());
+    buffer_.clear();
+  }
+  // Append to the buffer if it will fit, otherwise directly write
+  if (buffer_.size() + size <= bufferCapacity_) {
+    buffer_.insert(buffer_.end(), data, data + size);
+  } else {
+    const size_t written = fwrite(data, 1, size, file_);
+    assert(written == size);
+  }
+
+  size_ += size;
+}
+
+void FileWriter::end() {
+  if (file_) {
+    if (buffer_.size() > 0) {
+      fwrite(buffer_.data(), 1, buffer_.size(), file_);
+    }
+
+    fclose(file_);
+    file_ = nullptr;
+  }
+  buffer_.clear();
+  size_ = 0;
+}
+
+uint64_t FileWriter::size() const {
+  return size_;
+}
+
 // StreamWriter ////////////////////////////////////////////////////////////////
 
 inline StreamWriter::StreamWriter(std::ostream& stream)
@@ -258,8 +313,17 @@ inline void McapWriter::open(IWritable& writer, const McapWriterOptions& options
   output_ = &writer;
   writeMagic(writer);
   write(writer, Header{options.profile, options.library});
+}
 
-  // FIXME: Write options.metadata
+inline Status McapWriter::open(const std::string_view filename, const McapWriterOptions& options) {
+  fileOutput_ = std::make_unique<FileWriter>();
+  const auto status = fileOutput_->open(filename);
+  if (!status.ok()) {
+    fileOutput_.reset();
+    return status;
+  }
+  open(*fileOutput_, options);
+  return StatusCode::Success;
 }
 
 inline void McapWriter::open(std::ostream& stream, const McapWriterOptions& options) {
@@ -384,6 +448,7 @@ inline void McapWriter::close() {
 
 inline void McapWriter::terminate() {
   output_ = nullptr;
+  fileOutput_.reset();
   streamOutput_.reset();
   uncompressedChunk_.reset();
   zstdChunk_.reset();
