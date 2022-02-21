@@ -9,7 +9,6 @@
 
 #include <chrono>
 #include <cstring>
-#include <fstream>
 #include <iostream>
 
 // Returns the system time in nanoseconds. std::chrono is used here, but any
@@ -21,15 +20,11 @@ mcap::Timestamp now() {
 }
 
 int main() {
-  // Open an output file stream. Other output interfaces can be used as well,
-  // including providing your own mcap::IWritable implementation
-  std::ofstream out("output.mcap", std::ios::binary);
-
   // Initialize an MCAP writer with the "ros1" profile and write the file header
   mcap::McapWriter writer;
-  auto status = writer.open(out, mcap::McapWriterOptions("ros1"));
+  auto status = writer.open("output.mcap", mcap::McapWriterOptions("ros1"));
   if (!status.ok()) {
-    std::cerr << "Writing failed: " << status.message << "\n";
+    std::cerr << "Failed to open MCAP file for writing: " << status.message << "\n";
     return 1;
   }
 
