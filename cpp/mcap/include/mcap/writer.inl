@@ -1,3 +1,4 @@
+#include <cassert>
 #include <iostream>
 #include <lz4.h>
 #include <zstd.h>

@@ -90,9 +90,13 @@ manager can be used with the included
 Alternatively, you can link against system libraries. On Ubuntu/Debian systems,
 use the following command to install the dependencies:
 
+<!-- cspell: disable -->
+
 ```bash
 sudo apt install libcrypto++-dev libfmt-dev liblz4-dev libzstd-dev
 ```
+
+<!-- cspell: enable -->
 
 ## Usage
 
