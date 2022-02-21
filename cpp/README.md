@@ -9,7 +9,6 @@
 
 #include <chrono>
 #include <cstring>
-#include <fstream>
 #include <iostream>
 
 // Returns the system time in nanoseconds. std::chrono is used here, but any
@@ -21,15 +20,11 @@ mcap::Timestamp now() {
 }
 
 int main() {
-  // Open an output file stream. Other output interfaces can be used as well,
-  // including providing your own mcap::IWritable implementation
-  std::ofstream out("output.mcap", std::ios::binary);
-
   // Initialize an MCAP writer with the "ros1" profile and write the file header
   mcap::McapWriter writer;
-  auto status = writer.open(out, mcap::McapWriterOptions("ros1"));
+  auto status = writer.open("output.mcap", mcap::McapWriterOptions("ros1"));
   if (!status.ok()) {
-    std::cerr << "Writing failed: " << status.message << "\n";
+    std::cerr << "Failed to open MCAP file for writing: " << status.message << "\n";
     return 1;
   }
 
@@ -90,7 +85,18 @@ following dependencies:
 - [zstd](https://facebook.github.io/zstd/) (tested with [zstd/1.5.2](https://conan.io/center/zstd))
 
 To simplify installation of dependencies, the [Conan](https://conan.io/) package
-manager can be used with the included [conanfile.py](https://github.com/foxglove/mcap/blob/main/cpp/mcap/conanfile.py).
+manager can be used with the included
+[conanfile.py](https://github.com/foxglove/mcap/blob/main/cpp/mcap/conanfile.py).
+Alternatively, you can link against system libraries. On Ubuntu/Debian systems,
+use the following command to install the dependencies:
+
+<!-- cspell: disable -->
+
+```bash
+sudo apt install libcrypto++-dev libfmt-dev liblz4-dev libzstd-dev
+```
+
+<!-- cspell: enable -->
 
 ## Usage
 

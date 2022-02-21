@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 conan config init
 
 conan editable add ./mcap mcap/0.0.1

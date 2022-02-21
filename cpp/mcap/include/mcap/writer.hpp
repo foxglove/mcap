@@ -135,6 +135,23 @@ private:
   CryptoPP::CRC32 crc_;
 };
 
+class FileWriter final : public IWritable {
+public:
+  ~FileWriter() override;
+
+  Status open(std::string_view filename, size_t bufferCapacity = 1024);
+
+  void handleWrite(const std::byte* data, uint64_t size) override;
+  void end() override;
+  uint64_t size() const override;
+
+private:
+  std::vector<std::byte> buffer_;
+  size_t bufferCapacity_;
+  FILE* file_ = nullptr;
+  uint64_t size_ = 0;
+};
+
 /**
  * @brief Implements the IWritable interface used by McapWriter by wrapping a
  * std::ostream stream.
@@ -276,6 +293,15 @@ public:
   /**
    * @brief Open a new MCAP file for writing and write the header.
    *
+   * @param filename Filename of the MCAP file to write.
+   * @param options Options for MCAP writing. `profile` is required.
+   * @return A non-success status if the file could not be opened for writing.
+   */
+  Status open(std::string_view filename, const McapWriterOptions& options);
+
+  /**
+   * @brief Open a new MCAP file for writing and write the header.
+   *
    * @param writer An implementation of the IWritable interface. Output bytes
    *   will be written to this object.
    * @param options Options for MCAP writing. `profile` is required.
@@ -383,6 +409,7 @@ private:
   McapWriterOptions options_{""};
   uint64_t chunkSize_ = DefaultChunkSize;
   IWritable* output_ = nullptr;
+  std::unique_ptr<FileWriter> fileOutput_;
   std::unique_ptr<StreamWriter> streamOutput_;
   std::unique_ptr<BufferWriter> uncompressedChunk_;
   std::unique_ptr<LZ4Writer> lz4Chunk_;

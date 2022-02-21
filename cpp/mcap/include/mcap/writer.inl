@@ -1,7 +1,6 @@
+#include <cassert>
 #include <iostream>
 #include <lz4.h>
-
-#define ZSTD_STATIC_LINKING_ONLY
 #include <zstd.h>
 #include <zstd_errors.h>
 
@@ -12,20 +11,75 @@ namespace mcap {
 inline void IWritable::write(const std::byte* data, uint64_t size) {
   handleWrite(data, size);
   if (crcEnabled) {
-    crc_.Update(reinterpret_cast<const CryptoPP::byte*>(data), size);
+    crc_.Update(reinterpret_cast<const uint8_t*>(data), size);
   }
 }
 
 inline uint32_t IWritable::crc() {
   uint32_t crc32 = 0;
   if (crcEnabled) {
-    crc_.Final(reinterpret_cast<CryptoPP::byte*>(&crc32));
+    crc_.Final(reinterpret_cast<uint8_t*>(&crc32));
   }
   return crc32;
 }
 
 inline void IWritable::resetCrc() {
   crc_ = {};
+}
+
+// FileWriter //////////////////////////////////////////////////////////////////
+
+inline FileWriter::~FileWriter() {
+  end();
+}
+
+Status FileWriter::open(std::string_view filename, size_t bufferCapacity) {
+  end();
+  file_ = fopen(filename.data(), "wb");
+  if (!file_) {
+    const auto msg = StrFormat("failed to open file \"{}\" for writing", filename);
+    return Status(StatusCode::OpenFailed, msg);
+  }
+  bufferCapacity_ = bufferCapacity;
+  buffer_.reserve(bufferCapacity);
+  return StatusCode::Success;
+}
+
+void FileWriter::handleWrite(const std::byte* data, uint64_t size) {
+  assert(file_);
+
+  // If this will overflow the buffer, flush it
+  if (buffer_.size() > 0 && buffer_.size() + size > bufferCapacity_) {
+    const size_t written = fwrite(buffer_.data(), 1, buffer_.size(), file_);
+    assert(written == buffer_.size());
+    buffer_.clear();
+  }
+  // Append to the buffer if it will fit, otherwise directly write
+  if (buffer_.size() + size <= bufferCapacity_) {
+    buffer_.insert(buffer_.end(), data, data + size);
+  } else {
+    const size_t written = fwrite(data, 1, size, file_);
+    assert(written == size);
+  }
+
+  size_ += size;
+}
+
+void FileWriter::end() {
+  if (file_) {
+    if (buffer_.size() > 0) {
+      fwrite(buffer_.data(), 1, buffer_.size(), file_);
+    }
+
+    fclose(file_);
+    file_ = nullptr;
+  }
+  buffer_.clear();
+  size_ = 0;
+}
+
+uint64_t FileWriter::size() const {
+  return size_;
 }
 
 // StreamWriter ////////////////////////////////////////////////////////////////
@@ -101,6 +155,7 @@ inline int LZ4AccelerationLevel(CompressionLevel level) {
     case CompressionLevel::Default:
     case CompressionLevel::Slow:
     case CompressionLevel::Slowest:
+    default:
       return 1;
   }
 }
@@ -161,6 +216,7 @@ inline int ZStdCompressionLevel(CompressionLevel level) {
     case CompressionLevel::Fast:
       return -3;
     case CompressionLevel::Default:
+    default:
       return 1;
     case CompressionLevel::Slow:
       return 5;
@@ -241,6 +297,7 @@ inline void McapWriter::open(IWritable& writer, const McapWriterOptions& options
   compression_ = chunkSize_ > 0 ? options.compression : Compression::None;
   switch (compression_) {
     case Compression::None:
+    default:
       uncompressedChunk_ = std::make_unique<BufferWriter>();
       break;
     case Compression::Lz4:
@@ -257,8 +314,17 @@ inline void McapWriter::open(IWritable& writer, const McapWriterOptions& options
   output_ = &writer;
   writeMagic(writer);
   write(writer, Header{options.profile, options.library});
+}
 
-  // FIXME: Write options.metadata
+inline Status McapWriter::open(const std::string_view filename, const McapWriterOptions& options) {
+  fileOutput_ = std::make_unique<FileWriter>();
+  const auto status = fileOutput_->open(filename);
+  if (!status.ok()) {
+    fileOutput_.reset();
+    return status;
+  }
+  open(*fileOutput_, options);
+  return StatusCode::Success;
 }
 
 inline void McapWriter::open(std::ostream& stream, const McapWriterOptions& options) {
@@ -383,6 +449,7 @@ inline void McapWriter::close() {
 
 inline void McapWriter::terminate() {
   output_ = nullptr;
+  fileOutput_.reset();
   streamOutput_.reset();
   uncompressedChunk_.reset();
   zstdChunk_.reset();
@@ -507,17 +574,17 @@ inline Status McapWriter::write(Attachment& attachment) {
     // Calculate the CRC32 of the attachment
     uint32_t sizePrefix = 0;
     CryptoPP::CRC32 crc;
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&attachment.logTime), 8);
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&attachment.createTime), 8);
+    crc.Update(reinterpret_cast<const uint8_t*>(&attachment.logTime), 8);
+    crc.Update(reinterpret_cast<const uint8_t*>(&attachment.createTime), 8);
     sizePrefix = uint32_t(attachment.name.size());
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&sizePrefix), 4);
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(attachment.name.data()), sizePrefix);
+    crc.Update(reinterpret_cast<const uint8_t*>(&sizePrefix), 4);
+    crc.Update(reinterpret_cast<const uint8_t*>(attachment.name.data()), sizePrefix);
     sizePrefix = uint32_t(attachment.contentType.size());
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&sizePrefix), 4);
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(attachment.contentType.data()), sizePrefix);
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&attachment.dataSize), 8);
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(attachment.data), attachment.dataSize);
-    crc.Final(reinterpret_cast<CryptoPP::byte*>(&attachment.crc));
+    crc.Update(reinterpret_cast<const uint8_t*>(&sizePrefix), 4);
+    crc.Update(reinterpret_cast<const uint8_t*>(attachment.contentType.data()), sizePrefix);
+    crc.Update(reinterpret_cast<const uint8_t*>(&attachment.dataSize), 8);
+    crc.Update(reinterpret_cast<const uint8_t*>(attachment.data), attachment.dataSize);
+    crc.Final(reinterpret_cast<uint8_t*>(&attachment.crc));
   }
 
   const uint64_t fileOffset = fileOutput.size();
@@ -571,12 +638,13 @@ inline IWritable& McapWriter::getOutput() {
     return *output_;
   }
   switch (compression_) {
+    default:
     case Compression::None:
       return *uncompressedChunk_;
-    case Compression::Lz4:
-      return *lz4Chunk_;
     case Compression::Zstd:
       return *zstdChunk_;
+    case Compression::Lz4:
+      return *lz4Chunk_;
   }
 }
 
@@ -587,6 +655,7 @@ inline IChunkWriter* McapWriter::getChunkWriter() {
 
   switch (compression_) {
     case Compression::None:
+    default:
       return uncompressedChunk_.get();
     case Compression::Lz4:
       return lz4Chunk_.get();
