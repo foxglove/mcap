@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 
 constexpr char StringSchema[] = "string data";
