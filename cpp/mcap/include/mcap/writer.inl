@@ -1,7 +1,5 @@
 #include <iostream>
 #include <lz4.h>
-
-#define ZSTD_STATIC_LINKING_ONLY
 #include <zstd.h>
 #include <zstd_errors.h>
 
@@ -12,14 +10,14 @@ namespace mcap {
 inline void IWritable::write(const std::byte* data, uint64_t size) {
   handleWrite(data, size);
   if (crcEnabled) {
-    crc_.Update(reinterpret_cast<const CryptoPP::byte*>(data), size);
+    crc_.Update(reinterpret_cast<const uint8_t*>(data), size);
   }
 }
 
 inline uint32_t IWritable::crc() {
   uint32_t crc32 = 0;
   if (crcEnabled) {
-    crc_.Final(reinterpret_cast<CryptoPP::byte*>(&crc32));
+    crc_.Final(reinterpret_cast<uint8_t*>(&crc32));
   }
   return crc32;
 }
@@ -101,6 +99,7 @@ inline int LZ4AccelerationLevel(CompressionLevel level) {
     case CompressionLevel::Default:
     case CompressionLevel::Slow:
     case CompressionLevel::Slowest:
+    default:
       return 1;
   }
 }
@@ -161,6 +160,7 @@ inline int ZStdCompressionLevel(CompressionLevel level) {
     case CompressionLevel::Fast:
       return -3;
     case CompressionLevel::Default:
+    default:
       return 1;
     case CompressionLevel::Slow:
       return 5;
@@ -241,6 +241,7 @@ inline void McapWriter::open(IWritable& writer, const McapWriterOptions& options
   compression_ = chunkSize_ > 0 ? options.compression : Compression::None;
   switch (compression_) {
     case Compression::None:
+    default:
       uncompressedChunk_ = std::make_unique<BufferWriter>();
       break;
     case Compression::Lz4:
@@ -507,17 +508,17 @@ inline Status McapWriter::write(Attachment& attachment) {
     // Calculate the CRC32 of the attachment
     uint32_t sizePrefix = 0;
     CryptoPP::CRC32 crc;
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&attachment.logTime), 8);
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&attachment.createTime), 8);
+    crc.Update(reinterpret_cast<const uint8_t*>(&attachment.logTime), 8);
+    crc.Update(reinterpret_cast<const uint8_t*>(&attachment.createTime), 8);
     sizePrefix = uint32_t(attachment.name.size());
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&sizePrefix), 4);
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(attachment.name.data()), sizePrefix);
+    crc.Update(reinterpret_cast<const uint8_t*>(&sizePrefix), 4);
+    crc.Update(reinterpret_cast<const uint8_t*>(attachment.name.data()), sizePrefix);
     sizePrefix = uint32_t(attachment.contentType.size());
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&sizePrefix), 4);
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(attachment.contentType.data()), sizePrefix);
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(&attachment.dataSize), 8);
-    crc.Update(reinterpret_cast<const CryptoPP::byte*>(attachment.data), attachment.dataSize);
-    crc.Final(reinterpret_cast<CryptoPP::byte*>(&attachment.crc));
+    crc.Update(reinterpret_cast<const uint8_t*>(&sizePrefix), 4);
+    crc.Update(reinterpret_cast<const uint8_t*>(attachment.contentType.data()), sizePrefix);
+    crc.Update(reinterpret_cast<const uint8_t*>(&attachment.dataSize), 8);
+    crc.Update(reinterpret_cast<const uint8_t*>(attachment.data), attachment.dataSize);
+    crc.Final(reinterpret_cast<uint8_t*>(&attachment.crc));
   }
 
   const uint64_t fileOffset = fileOutput.size();
@@ -571,12 +572,13 @@ inline IWritable& McapWriter::getOutput() {
     return *output_;
   }
   switch (compression_) {
+    default:
     case Compression::None:
       return *uncompressedChunk_;
-    case Compression::Lz4:
-      return *lz4Chunk_;
     case Compression::Zstd:
       return *zstdChunk_;
+    case Compression::Lz4:
+      return *lz4Chunk_;
   }
 }
 
@@ -587,6 +589,7 @@ inline IChunkWriter* McapWriter::getChunkWriter() {
 
   switch (compression_) {
     case Compression::None:
+    default:
       return uncompressedChunk_.get();
     case Compression::Lz4:
       return lz4Chunk_.get();

@@ -1,8 +1,6 @@
 #include "internal.hpp"
 #include <cassert>
 #include <lz4.h>
-
-#define ZSTD_STATIC_LINKING_ONLY
 #include <zstd.h>
 #include <zstd_errors.h>
 
