@@ -111,6 +111,12 @@ struct Footer {
   ByteOffset summaryStart;
   ByteOffset summaryOffsetStart;
   uint32_t summaryCrc;
+
+  Footer() = default;
+  Footer(ByteOffset summaryStart, ByteOffset summaryOffsetStart)
+      : summaryStart(summaryStart)
+      , summaryOffsetStart(summaryOffsetStart)
+      , summaryCrc(0) {}
 };
 
 /**
