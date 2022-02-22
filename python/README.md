@@ -4,7 +4,7 @@ This library provides classes for reading and writing the MCAP file format.
 
 ## Reader Example
 
-```
+```python
 from mcap.mcap0.stream_reader import StreamReader
 
 stream = open("example.mcap", "rb")
@@ -15,7 +15,7 @@ for record in reader.records:
 
 ## Writer Example
 
-```
+```python
 from time import time_ns
 from mcap.mcap0.writer import Writer
 
