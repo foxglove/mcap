@@ -9,6 +9,8 @@ ignorePaths:
   - CMakeLists.txt
   - Makefile
   - build
+  - cpp/build
+  - cpp/vendor
   - "*.Dockerfile"
   - "*.mcap"
   - "*.egg-info"

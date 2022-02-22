@@ -17,16 +17,19 @@ else()
   add_compile_options(-Wall -Wextra -pedantic -Werror)
 endif()
 
+option(BUILD_SHARED OFF)
+option(BUILD_STATIC ON)
+option(BUILD_TESTING OFF)
 set(BUILD_SHARED OFF)
 set(BUILD_STATIC ON)
 set(BUILD_TESTING OFF)
 add_subdirectory(vendor/cryptopp-8.6.0)
 
-set(BUILD_SHARED_LIBS OFF)
+option(BUILD_SHARED_LIBS OFF)
 add_subdirectory(vendor/fmt-8.1.1)
 
-set(LZ4_BUILD_CLI OFF)
-set(LZ4_BUILD_LEGACY_LZ4C OFF)
+option(LZ4_BUILD_CLI OFF)
+option(LZ4_BUILD_LEGACY_LZ4C OFF)
 add_subdirectory(vendor/lz4-1.9.3/build/cmake)
 
 set(ZSTD_BUILD_STATIC ON)
