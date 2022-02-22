@@ -5,7 +5,7 @@ import subprocess
 import sys
 from typing import List
 
-IGNORE_DIRS = ["build"]
+IGNORE_DIRS = ["build", "vendor"]
 EXTENSIONS = [".cpp", ".hpp"]
 
 
@@ -58,8 +58,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Run clang-format and display changed files."
     )
-    parser.add_argument(
-        "dirs", help="List of directories to search", nargs="+")
+    parser.add_argument("dirs", help="List of directories to search", nargs="+")
     parser.add_argument("--fix", action="store_true")
     args = parser.parse_args()
     sys.exit(main(**vars(args)))

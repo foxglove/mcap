@@ -1,20 +1,11 @@
 default: build
 
-.PHONY: build
+.PHONE: build
 build:
-	docker build -t mcap_cpp -f dev.Dockerfile .
-	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp
-
-.PHONE: build-host
-build-host:
 	./build.sh
 
 clean:
-	docker rm -f mcap_cpp
-	docker rmi -f mcap_cpp
-	rm -rf bench/build
-	rm -rf examples/build
-	rm -rf test/build
+	rm -rf build
 
 .PHONY: format-check
 format-check:
@@ -28,19 +19,11 @@ format-fix:
 
 .PHONY: bench
 bench:
-	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp ./bench/build/Release/bin/bench-tests
-
-.PHONY: bench-host
-bench-host:
-	./bench/build/Release/bin/bench-tests
+	./build/bench/bench-tests
 
 .PHONY: test
 test:
-	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp ./test/build/Debug/bin/unit-tests
-
-.PHONY: test-host
-test-host:
-	./test/build/Debug/bin/unit-tests
+	./build/test/unit-tests
 
 .PHONY: ci
 ci:
