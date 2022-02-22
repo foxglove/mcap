@@ -8,6 +8,8 @@ RUN apt-get update && \
   ca-certificates \
   curl \
   cmake \
+  git \
+  git-lfs \
   gnupg \
   make \
   perl \
