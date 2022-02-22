@@ -1,6 +1,6 @@
 default: build
 
-.PHONE: build
+.PHONY: build
 build:
 	./build.sh
 
