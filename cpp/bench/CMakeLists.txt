@@ -1,8 +1,15 @@
-cmake_minimum_required(VERSION 3.1)
-project(McapBenchmarks CXX)
+cmake_minimum_required(VERSION 3.11)
+project(McapTests CXX)
 
-include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-conan_basic_setup()
+Include(FetchContent)
+
+set(BENCHMARK_ENABLE_TESTING OFF)
+
+FetchContent_Declare(
+  googlebenchmark
+  GIT_REPOSITORY https://github.com/google/benchmark.git
+  GIT_TAG v1.6.1)
+FetchContent_MakeAvailable(googlebenchmark)
 
 add_executable(bench-tests run.cpp)
-target_link_libraries(bench-tests ${CONAN_LIBS})
+target_link_libraries(bench-tests PRIVATE mcap benchmark::benchmark)

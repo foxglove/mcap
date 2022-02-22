@@ -31,7 +31,6 @@ add_subdirectory(vendor/zstd-1.5.2/build/cmake)
 
 add_subdirectory(mcap)
 
+add_subdirectory(bench)
 add_subdirectory(examples)
-
-# add_executable(bench-tests run.cpp)
-# target_link_libraries(bench-tests ${CONAN_LIBS})
+add_subdirectory(test)
