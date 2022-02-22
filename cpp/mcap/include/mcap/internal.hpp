@@ -41,6 +41,8 @@ inline const std::string CompressionString(Compression compression) {
       return "lz4";
     case Compression::Zstd:
       return "zstd";
+    default:
+      return StrFormat("unknown ({})", uint32_t(compression));
   }
 }
 

@@ -9,7 +9,7 @@ std::string ToString(const mcap::KeyValueMap& map) {
   std::stringstream ss;
   ss << "{";
   for (const auto& [key, value] : map) {
-    if (ss.tellg() > 1) {
+    if (ss.tellp() > 1) {
       ss << ", ";
     }
     ss << "\"" << key << "\": \"" << value << "\"";
@@ -26,10 +26,10 @@ std::string ToString(const std::unordered_map<uint16_t, uint64_t>& map) {
   std::stringstream ss;
   ss << "{";
   for (const auto& [key, value] : map) {
-    if (ss.tellg() > 1) {
+    if (ss.tellp() > 1) {
       ss << ", ";
     }
-    ss << key << ": " << value;
+    ss << "\"" << key << "\": " << value;
   }
   ss << "}";
   return ss.str();
@@ -281,12 +281,9 @@ int main(int argc, char* argv[]) {
   std::ifstream input(inputFile, std::ios::binary);
   mcap::FileStreamReader dataSource{input};
 
-  std::cout << "Raw records:\n";
-  DumpRaw(dataSource);
-  std::cout << "\nParsed records:\n";
+  // DumpRaw(dataSource);
   Dump(dataSource);
-  std::cout << "\nMessage iterator:\n";
-  DumpMessages(dataSource);
+  // DumpMessages(dataSource);
 
   return 0;
 }

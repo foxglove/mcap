@@ -73,7 +73,7 @@ enum struct OpCode : uint8_t {
 /**
  * @brief Get the string representation of an OpCode.
  */
-constexpr std::string_view OpCodeString(OpCode opcode);
+const std::string_view OpCodeString(OpCode opcode);
 
 /**
  * @brief A generic Type-Length-Value record using a uint8 type and uint64
@@ -364,5 +364,3 @@ struct MessageView {
 };
 
 }  // namespace mcap
-
-#include "types.inl"

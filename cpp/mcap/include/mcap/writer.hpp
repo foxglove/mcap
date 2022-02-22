@@ -1,8 +1,7 @@
 #pragma once
 
-#include <cryptopp/crc.h>
-
 #include "types.hpp"
+#include <crc.h>
 #include <memory>
 #include <string>
 #include <unordered_set>
@@ -434,5 +433,3 @@ private:
 };
 
 }  // namespace mcap
-
-#include "writer.inl"
