@@ -79,7 +79,7 @@ func (w *Writer) WriteFooter(f *Footer) error {
 		return err
 	}
 	var summaryCrc uint32
-	if f.SummaryStart != 0 && w.opts.IncludeCRC {
+	if w.opts.IncludeCRC {
 		summaryCrc = w.w.Checksum()
 	}
 	offset += putUint32(w.msg[offset:], summaryCrc)
