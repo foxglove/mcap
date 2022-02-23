@@ -84,7 +84,7 @@ func message() []byte {
 	return buf
 }
 
-func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byte {
+func chunk(t *testing.T, compression CompressionFormat, includeCRC bool, records ...[]byte) []byte {
 	data := flatten(records...)
 	buf := &bytes.Buffer{}
 	switch compression {
@@ -120,9 +120,15 @@ func chunk(t *testing.T, compression CompressionFormat, records ...[]byte) []byt
 	offset += putUint64(record[offset:], 0)   // start
 	offset += putUint64(record[offset:], 1e9) // end
 	offset += putUint64(record[offset:], uint64(uncompressedLen))
-	crc := crc32.NewIEEE()
-	_, _ = crc.Write(data)
-	offset += putUint32(record[offset:], crc.Sum32())
+	var crc uint32
+	if includeCRC {
+		sum := crc32.NewIEEE()
+		_, _ = sum.Write(data)
+		crc = sum.Sum32()
+	} else {
+		crc = 0
+	}
+	offset += putUint32(record[offset:], crc)
 	offset += putPrefixedString(record[offset:], string(compression))
 	offset += putUint64(record[offset:], uint64(buf.Len()))
 	_ = copy(record[offset:], buf.Bytes())
