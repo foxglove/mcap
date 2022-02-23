@@ -48,7 +48,8 @@ func TestLexUnchunkedFile(t *testing.T) {
 
 func TestRejectsUnsupportedCompression(t *testing.T) {
 	file := file(
-		chunk(t, CompressionFormat("unknown"), chunk(t, CompressionZSTD, channelInfo(), message(), message())),
+		chunk(t, CompressionFormat("unknown"), true,
+			chunk(t, CompressionZSTD, true, channelInfo(), message(), message())),
 	)
 	lexer, err := NewLexer(bytes.NewReader(file))
 	assert.Nil(t, err)
@@ -69,7 +70,7 @@ func TestRejectsTooLargeRecords(t *testing.T) {
 }
 
 func TestRejectsTooLargeChunks(t *testing.T) {
-	bigChunk := chunk(t, CompressionZSTD, channelInfo(), message(), message())
+	bigChunk := chunk(t, CompressionZSTD, true, channelInfo(), message(), message())
 	binary.LittleEndian.PutUint64(bigChunk[1+8+8+8:], 1000)
 	file := file(header(), bigChunk, footer())
 	lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
@@ -84,7 +85,7 @@ func TestRejectsTooLargeChunks(t *testing.T) {
 }
 
 func TestLargeChunksOKIfNotCheckingCRC(t *testing.T) {
-	bigChunk := chunk(t, CompressionZSTD, channelInfo(), message(), message())
+	bigChunk := chunk(t, CompressionZSTD, true, channelInfo(), message(), message())
 	binary.LittleEndian.PutUint64(bigChunk[1+8+8+8:], 1000)
 	file := file(header(), bigChunk, footer())
 	lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
@@ -100,7 +101,7 @@ func TestLargeChunksOKIfNotCheckingCRC(t *testing.T) {
 func TestRejectsNestedChunks(t *testing.T) {
 	file := file(
 		header(),
-		chunk(t, CompressionZSTD, chunk(t, CompressionZSTD, channelInfo(), message(), message())),
+		chunk(t, CompressionZSTD, true, chunk(t, CompressionZSTD, true, channelInfo(), message(), message())),
 		footer(),
 	)
 	lexer, err := NewLexer(bytes.NewReader(file))
@@ -158,8 +159,8 @@ func TestLexChunkedFile(t *testing.T) {
 				t.Run(fmt.Sprintf("chunked %s", compression), func(t *testing.T) {
 					file := file(
 						header(),
-						chunk(t, compression, channelInfo(), message(), message()),
-						chunk(t, compression, channelInfo(), message(), message()),
+						chunk(t, compression, true, channelInfo(), message(), message()),
+						chunk(t, compression, true, channelInfo(), message(), message()),
 						attachment(), attachment(),
 						footer(),
 					)
@@ -217,8 +218,38 @@ func TestChunkCRCValidation(t *testing.T) {
 	t.Run("validates valid file", func(t *testing.T) {
 		file := file(
 			header(),
-			chunk(t, CompressionZSTD, channelInfo(), message(), message()),
-			chunk(t, CompressionZSTD, channelInfo(), message(), message()),
+			chunk(t, CompressionZSTD, true, channelInfo(), message(), message()),
+			chunk(t, CompressionZSTD, true, channelInfo(), message(), message()),
+			attachment(), attachment(),
+			footer(),
+		)
+		lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
+			ValidateCRC: true,
+		})
+		assert.Nil(t, err)
+		expected := []TokenType{
+			TokenHeader,
+			TokenChannel,
+			TokenMessage,
+			TokenMessage,
+			TokenChannel,
+			TokenMessage,
+			TokenMessage,
+			TokenAttachment,
+			TokenAttachment,
+			TokenFooter,
+		}
+		for i, expectedTokenType := range expected {
+			tokenType, _, err := lexer.Next(nil)
+			assert.Nil(t, err)
+			assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+		}
+	})
+	t.Run("validates file with zero'd CRCs", func(t *testing.T) {
+		file := file(
+			header(),
+			chunk(t, CompressionZSTD, false, channelInfo(), message(), message()),
+			chunk(t, CompressionZSTD, false, channelInfo(), message(), message()),
 			attachment(), attachment(),
 			footer(),
 		)
@@ -245,14 +276,14 @@ func TestChunkCRCValidation(t *testing.T) {
 		}
 	})
 	t.Run("validation fails on corrupted file", func(t *testing.T) {
-		badchunk := chunk(t, CompressionZSTD, channelInfo(), message(), message())
+		badchunk := chunk(t, CompressionZSTD, true, channelInfo(), message(), message())
 
 		// chunk must be corrupted at a deep enough offset to hit the compressed data section
 		assert.NotEqual(t, badchunk[35], 0x00)
 		badchunk[35] = 0x00
 		file := file(
 			header(),
-			chunk(t, CompressionZSTD, channelInfo(), message(), message()),
+			chunk(t, CompressionZSTD, true, channelInfo(), message(), message()),
 			badchunk,
 			attachment(), attachment(),
 			footer(),
@@ -292,8 +323,8 @@ func TestChunkEmission(t *testing.T) {
 				t.Run(fmt.Sprintf("chunked %s", compression), func(t *testing.T) {
 					file := file(
 						header(),
-						chunk(t, compression, channelInfo(), message(), message()),
-						chunk(t, compression, channelInfo(), message(), message()),
+						chunk(t, compression, true, channelInfo(), message(), message()),
+						chunk(t, compression, true, channelInfo(), message(), message()),
 						attachment(), attachment(),
 						footer(),
 					)

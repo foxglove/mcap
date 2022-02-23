@@ -342,7 +342,7 @@ func loadChunk(l *Lexer) error {
 		}
 
 		crc := crc32.ChecksumIEEE(l.uncompressedChunk[:uncompressedSize])
-		if crc != uncompressedCRC {
+		if uncompressedCRC > 0 && crc != uncompressedCRC {
 			return fmt.Errorf("invalid CRC: %x != %x", crc, uncompressedCRC)
 		}
 		l.setNoneDecoder(l.uncompressedChunk[:uncompressedSize])
