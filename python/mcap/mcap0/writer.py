@@ -266,19 +266,17 @@ class Writer:
         summary_data = summary_builder.end()
         summary_length = len(summary_data)
 
-        summary_crc = 0
-        if summary_length != 0:
-            summary_crc = zlib.crc32(summary_data)
-            summary_crc = zlib.crc32(
-                struct.pack(
-                    "<BQQQ",  # cspell:disable-line
-                    Opcode.FOOTER,
-                    8 + 8 + 4,
-                    summary_start,
-                    summary_offset_start,
-                ),
-                summary_crc,
-            )
+        summary_crc = zlib.crc32(summary_data)
+        summary_crc = zlib.crc32(
+            struct.pack(
+                "<BQQQ",  # cspell:disable-line
+                Opcode.FOOTER,
+                8 + 8 + 4,
+                0 if summary_length == 0 else summary_start,
+                summary_offset_start,
+            ),
+            summary_crc,
+        )
 
         self.__stream.write(summary_data)
 

@@ -248,24 +248,21 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
     }
   }
 
-  let summaryCrc = 0;
-  if (hasSummary) {
-    summaryCrc = crc32Init();
-    const buffer = builder.buffer;
-    const summaryData = new Uint8Array(
-      buffer.buffer,
-      buffer.byteOffset + Number(summaryStart),
-      buffer.byteLength - Number(summaryStart),
-    );
-    summaryCrc = crc32Update(summaryCrc, summaryData);
-    const tempBuffer = new DataView(new ArrayBuffer(1 + 8 + 8 + 8));
-    tempBuffer.setUint8(0, Mcap0Constants.Opcode.FOOTER);
-    tempBuffer.setBigUint64(1, 8n + 8n + 4n, true);
-    tempBuffer.setBigUint64(1 + 8, summaryStart, true);
-    tempBuffer.setBigUint64(1 + 8 + 8, summaryOffsetStart, true);
-    summaryCrc = crc32Update(summaryCrc, tempBuffer);
-    summaryCrc = crc32Final(summaryCrc);
-  }
+  let summaryCrc = crc32Init();
+  const buffer = builder.buffer;
+  const summaryData = new Uint8Array(
+    buffer.buffer,
+    buffer.byteOffset + Number(summaryStart),
+    buffer.byteLength - Number(summaryStart),
+  );
+  summaryCrc = crc32Update(summaryCrc, summaryData);
+  const tempBuffer = new DataView(new ArrayBuffer(1 + 8 + 8 + 8));
+  tempBuffer.setUint8(0, Mcap0Constants.Opcode.FOOTER);
+  tempBuffer.setBigUint64(1, 8n + 8n + 4n, true);
+  tempBuffer.setBigUint64(1 + 8, hasSummary ? summaryStart : 0n, true);
+  tempBuffer.setBigUint64(1 + 8 + 8, summaryOffsetStart, true);
+  summaryCrc = crc32Update(summaryCrc, tempBuffer);
+  summaryCrc = crc32Final(summaryCrc);
 
   builder.writeFooter({
     summaryStart: hasSummary ? summaryStart : 0n,
