@@ -51,6 +51,7 @@ void FileWriter::handleWrite(const std::byte* data, uint64_t size) {
   // If this will overflow the buffer, flush it
   if (buffer_.size() > 0 && buffer_.size() + size > bufferCapacity_) {
     const size_t written = fwrite(buffer_.data(), 1, buffer_.size(), file_);
+    (void)written;
     assert(written == buffer_.size());
     buffer_.clear();
   }
@@ -59,6 +60,7 @@ void FileWriter::handleWrite(const std::byte* data, uint64_t size) {
     buffer_.insert(buffer_.end(), data, data + size);
   } else {
     const size_t written = fwrite(data, 1, size, file_);
+    (void)written;
     assert(written == size);
   }
 

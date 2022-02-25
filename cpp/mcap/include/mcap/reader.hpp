@@ -422,7 +422,7 @@ struct LinearMessageView {
 
     static const Iterator& end() {
       static McapReader emptyReader;
-      static auto onProblem = [](const Status& problem) {};
+      static auto onProblem = [](const Status&) {};
       static LinearMessageView::Iterator emptyIterator{emptyReader, onProblem};
       return emptyIterator;
     }

@@ -9,6 +9,7 @@ namespace mcap {
 // BufferReader ////////////////////////////////////////////////////////////////
 
 inline void BufferReader::reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) {
+  (void)uncompressedSize;
   assert(size == uncompressedSize);
   data_ = data;
   size_ = size;
@@ -86,7 +87,7 @@ inline void LZ4Reader::reset(const std::byte* data, uint64_t size, uint64_t unco
   const auto status = LZ4_decompress_safe(reinterpret_cast<const char*>(compressedData_),
                                           reinterpret_cast<char*>(uncompressedData_.data()),
                                           compressedSize_, uncompressedSize_);
-  if (status != uncompressedSize_) {
+  if (uint64_t(status) != uncompressedSize_) {
     if (status < 0) {
       const auto msg =
         StrFormat("lz4 decompression of {} bytes into {} output bytes failed with error {}",
@@ -274,7 +275,7 @@ inline Status McapReader::readSummary() {
 }
 
 inline LinearMessageView McapReader::readMessages(Timestamp startTime, Timestamp endTime) {
-  const auto onProblem = [](const Status& problem) {};
+  const auto onProblem = [](const Status&) {};
   return readMessages(onProblem, startTime, endTime);
 }
 
@@ -878,9 +879,9 @@ inline std::optional<Compression> McapReader::ParseCompression(const std::string
 
 inline RecordReader::RecordReader(IReadable& dataSource, ByteOffset startOffset,
                                   ByteOffset endOffset)
-    : dataSource_(&dataSource)
-    , offset(startOffset)
+    : offset(startOffset)
     , endOffset(endOffset)
+    , dataSource_(&dataSource)
     , status_(StatusCode::Success)
     , curRecord_{} {}
 
