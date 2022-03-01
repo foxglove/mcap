@@ -32,6 +32,7 @@ type Mcap0WriterOptions = {
   useMessageIndex?: boolean;
   useChunkIndex?: boolean;
   startChannelId?: number;
+  chunkSize?: number;
 };
 
 /**
@@ -51,6 +52,7 @@ export class Mcap0Writer {
   private writtenSchemaIds = new Set<number>();
   private writtenChannelIds = new Set<number>();
   private chunkBuilder: ChunkBuilder | undefined;
+  private chunkSize: number;
   private dataSectionCrc = crc32Init();
 
   private statistics: Statistics | undefined;
@@ -76,6 +78,7 @@ export class Mcap0Writer {
       useMessageIndex = true,
       useChunkIndex = true,
       startChannelId = 0,
+      chunkSize = 1024 * 1024,
     } = options;
 
     this.writable = writable;
@@ -108,6 +111,7 @@ export class Mcap0Writer {
       this.chunkIndices = [];
     }
     this.nextChannelId = startChannelId;
+    this.chunkSize = chunkSize;
   }
 
   async start(header: Header): Promise<void> {
@@ -350,7 +354,7 @@ export class Mcap0Writer {
       this.recordWriter.writeMessage(message);
     }
 
-    if (this.chunkBuilder && this.chunkBuilder.numMessages > 10) {
+    if (this.chunkBuilder && this.chunkBuilder.byteLength > this.chunkSize) {
       await this.finalizeChunk();
     }
   }
