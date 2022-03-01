@@ -321,7 +321,7 @@ export class Mcap0Writer {
         );
       }
 
-      if (!this.writtenSchemaIds.has(channel.schemaId)) {
+      if (channel.schemaId !== 0 && !this.writtenSchemaIds.has(channel.schemaId)) {
         const schema = this.schemas.get(channel.schemaId);
         if (!schema) {
           throw new Error(

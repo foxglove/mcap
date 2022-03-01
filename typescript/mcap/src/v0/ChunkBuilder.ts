@@ -48,10 +48,10 @@ class ChunkBuilder {
   }
 
   addMessage(message: Message): void {
-    if (this.messageStartTime === 0n || message.logTime < this.messageStartTime) {
+    if (this.totalMessageCount === 0 || message.logTime < this.messageStartTime) {
       this.messageStartTime = message.logTime;
     }
-    if (this.messageEndTime === 0n || message.logTime > this.messageEndTime) {
+    if (this.totalMessageCount === 0 || message.logTime > this.messageEndTime) {
       this.messageEndTime = message.logTime;
     }
 
