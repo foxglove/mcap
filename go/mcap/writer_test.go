@@ -384,6 +384,26 @@ func TestStatistics(t *testing.T) {
 	assert.Equal(t, 1, len(w.AttachmentIndexes))
 }
 
+func TestChunkedFileNoMessageMakesNoIndex(t *testing.T) {
+	buf := &bytes.Buffer{}
+	w, err := NewWriter(buf, &WriterOptions{
+		IncludeCRC: true,
+		Chunked:    true,
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, w.WriteHeader(&Header{
+		Profile: "ros1",
+	}))
+	assert.Nil(t, w.WriteSchema(&Schema{
+		ID:       1,
+		Name:     "foo",
+		Encoding: "ros1msg",
+		Data:     []byte{},
+	}))
+	assert.Nil(t, w.Close())
+	assert.Equal(t, 0, len(w.ChunkIndexes))
+}
+
 func TestUnchunkedReadWrite(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w, err := NewWriter(buf, &WriterOptions{})
