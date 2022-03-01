@@ -26,6 +26,10 @@ class ChunkBuilder {
     return this.recordWriter.buffer;
   }
 
+  get byteLength(): number {
+    return this.recordWriter.length;
+  }
+
   get indices(): Iterable<MessageIndex> {
     if (this.messageIndices) {
       return this.messageIndices.values();
