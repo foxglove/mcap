@@ -18,3 +18,9 @@ Run benchmarks:
 ```
 yarn workspace @foxglove/mcap-benchmarks bench
 ```
+
+Run benchmarks with Chrome debugger attached to use profiling tools:
+
+```
+yarn workspace @foxglove/mcap-benchmarks bench:debug
+```
