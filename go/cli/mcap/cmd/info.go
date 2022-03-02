@@ -48,7 +48,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			stats.uncompressedSize += ci.UncompressedSize
 			compressionFormatStats[ci.Compression] = stats
 		}
-		fmt.Fprintf(buf, "chunks:\n")
+		fmt.Fprintf(buf, "compression:\n")
 		chunkCount := len(info.ChunkIndexes)
 		for k, v := range compressionFormatStats {
 			compressionRatio := 100 * (1 - float64(v.compressedSize)/float64(v.uncompressedSize))

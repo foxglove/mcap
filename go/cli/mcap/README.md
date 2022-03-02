@@ -27,6 +27,8 @@ for details:
 
 ### Examples:
 
+#### Bag to mcap conversion
+
 Convert a bag file to MCAP:
 
 <!-- cspell: disable -->
@@ -34,6 +36,8 @@ Convert a bag file to MCAP:
     [~/work/mcap/go/mcap] (task/mcap-client) $ mcap convert ../../testdata/bags/demo.bag demo.mcap
 
 <!-- cspell: enable -->
+
+#### File summarization
 
 Report summary statistics on an MCAP file:
 
@@ -53,6 +57,8 @@ Report summary statistics on an MCAP file:
             (5) /radar/tracks            156 msgs   : radar_driver/RadarTracks [ros1msg]
             (6) /velodyne_points          78 msgs   : sensor_msgs/PointCloud2 [ros1msg]
     attachments: 0
+
+#### Indexed reading
 
 Echo messages to stdout using the end of file index:
 
@@ -81,8 +87,7 @@ system
 
 #### Remote file support
 
-The `cat`, `info`, and `doctor` commands support reading from remote files
-stored in GCS:
+All commands except `convert` support reading from remote files stored in GCS:
 
     $ mcap info gs://foxglove-wyatt-dev-inbox/demo.mcap
     messages: 1606
@@ -102,6 +107,29 @@ stored in GCS:
     attachments: 0
 
 Remote reads will use the index at the end of the file to minimize latency and data transfer.
+
+#### File Diagnostics
+
+##### List chunks in a file
+
+The `mcap list` command can be used with chunks or attachments:
+
+    $ mcap list chunks ~/data/mcap/demo.mcap
+    offset    length   start                end                  compression  compressed size  uncompressed size  compression ratio
+    43        4529455  1490149580103843113  1490149580608392239  zstd         4529402          9400437            0.481829
+    4531299   4751426  1490149580618484655  1490149581212757989  zstd         4751373          9621973            0.493804
+    9284910   4726518  1490149581222848447  1490149581811286531  zstd         4726465          9617327            0.491453
+    14013453  4734289  1490149581821378989  1490149582418243031  zstd         4734236          9624850            0.491876
+    18749879  4742989  1490149582428402906  1490149583010292990  zstd         4742936          9646234            0.491688
+    23494877  4712785  1490149583020377156  1490149583617657323  zstd         4712732          9619341            0.489923
+    28209799  4662983  1490149583627720990  1490149584217852199  zstd         4662930          9533042            0.489133
+    32874919  4643191  1490149584227924615  1490149584813214116  zstd         4643138          9499481            0.488778
+    37520119  4726655  1490149584823300282  1490149585411567366  zstd         4726602          9591399            0.492796
+    42248895  4748884  1490149585421596866  1490149586021460449  zstd         4748831          9621776            0.493550
+    46999820  4746828  1490149586031607908  1490149586617282658  zstd         4746775          9632302            0.492798
+    51748769  4759213  1490149586627453408  1490149587217501700  zstd         4759160          9634744            0.493958
+    56510103  4750731  1490149587227624742  1490149587814043200  zstd         4750678          9622778            0.493691
+    61262859  217330   1490149587824113700  1490149587884601617  zstd         217277           217255             1.000101
 
 ### Building
 

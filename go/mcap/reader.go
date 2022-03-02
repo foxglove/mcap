@@ -121,10 +121,11 @@ func (r *Reader) Info() (*Info, error) {
 		return nil, err
 	}
 	return &Info{
-		Statistics:   it.statistics,
-		Channels:     it.channels,
-		ChunkIndexes: it.chunkIndexes,
-		Schemas:      it.schemas,
+		Statistics:        it.statistics,
+		Channels:          it.channels,
+		ChunkIndexes:      it.chunkIndexes,
+		AttachmentIndexes: it.attachmentIndexes,
+		Schemas:           it.schemas,
 	}, nil
 }
 
