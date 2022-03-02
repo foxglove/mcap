@@ -38,9 +38,8 @@ type Writer struct {
 	compressed       *bytes.Buffer
 	compressedWriter *CountingCRCWriter
 
-	currentChunkStartTime   uint64
-	currentChunkEndTime     uint64
-	currentChunkHasMessages bool
+	currentChunkStartTime uint64
+	currentChunkEndTime   uint64
 
 	opts *WriterOptions
 }
@@ -193,7 +192,6 @@ func (w *Writer) WriteMessage(m *Message) error {
 		if m.LogTime < w.currentChunkStartTime {
 			w.currentChunkStartTime = m.LogTime
 		}
-		w.currentChunkHasMessages = true
 		if w.compressedWriter.Size() > w.opts.ChunkSize {
 			err := w.flushActiveChunk()
 			if err != nil {
@@ -432,20 +430,17 @@ func (w *Writer) flushActiveChunk() error {
 	if w.currentChunkStartTime != math.MaxUint64 {
 		chunkStart = w.currentChunkStartTime
 	}
-	if w.currentChunkHasMessages {
-		w.ChunkIndexes = append(w.ChunkIndexes, &ChunkIndex{
-			MessageStartTime:    chunkStart,
-			MessageEndTime:      w.currentChunkEndTime,
-			ChunkStartOffset:    chunkStartOffset,
-			ChunkLength:         chunkEndOffset - chunkStartOffset,
-			MessageIndexOffsets: messageIndexOffsets,
-			MessageIndexLength:  messageIndexLength,
-			Compression:         w.opts.Compression,
-			CompressedSize:      uint64(compressedlen),
-			UncompressedSize:    uint64(uncompressedlen),
-		})
-	}
-	w.currentChunkHasMessages = false
+	w.ChunkIndexes = append(w.ChunkIndexes, &ChunkIndex{
+		MessageStartTime:    chunkStart,
+		MessageEndTime:      w.currentChunkEndTime,
+		ChunkStartOffset:    chunkStartOffset,
+		ChunkLength:         chunkEndOffset - chunkStartOffset,
+		MessageIndexOffsets: messageIndexOffsets,
+		MessageIndexLength:  messageIndexLength,
+		Compression:         w.opts.Compression,
+		CompressedSize:      uint64(compressedlen),
+		UncompressedSize:    uint64(uncompressedlen),
+	})
 	for _, idx := range w.messageIndexes {
 		idx.Reset()
 	}
