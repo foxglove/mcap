@@ -20,7 +20,7 @@ import {
   Statistics,
 } from "./types";
 
-type Mcap0WriterOptions = {
+export type Mcap0WriterOptions = {
   writable: IWritable;
   useStatistics?: boolean;
   useSummaryOffsets?: boolean;

@@ -80,6 +80,7 @@ class ChunkBuilder {
     this.messageEndTime = 0n;
     this.totalMessageCount = 0;
     this.messageIndices?.clear();
+    this.recordWriter.reset();
   }
 }
 
