@@ -3,6 +3,7 @@
   "workspaces": {
     "packages": [
       "typescript/mcap",
+      "typescript/benchmarks",
       "typescript/examples/*",
       "tests/conformance"
     ]

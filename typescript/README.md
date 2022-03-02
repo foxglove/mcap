@@ -12,3 +12,9 @@ Read and validate an MCAP file:
 ```
 yarn workspace @foxglove/mcap-example-validate validate file.mcap
 ```
+
+Run benchmarks:
+
+```
+yarn workspace @foxglove/mcap-benchmarks bench
+```
