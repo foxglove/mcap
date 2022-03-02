@@ -146,7 +146,7 @@ describe("Mcap0Writer", () => {
       records.push(rec);
     }
 
-    expect(records).toEqual([
+    expect(records).toEqual<TypedMcapRecord[]>([
       {
         type: "Header",
         library: "",
@@ -272,6 +272,8 @@ describe("Mcap0Writer", () => {
     const tempBuffer = new TempBuffer();
     const writer = new Mcap0Writer({
       writable: tempBuffer,
+      useStatistics: false,
+      useSummaryOffsets: false,
       compressChunk: (data) => ({
         compression: "reverse double",
         compressedData: reverseDouble(data),
@@ -354,18 +356,6 @@ describe("Mcap0Writer", () => {
         topic: "test",
       },
       {
-        type: "Statistics",
-        attachmentCount: 0,
-        channelCount: 1,
-        channelMessageCounts: new Map([[0, 1n]]),
-        chunkCount: 1,
-        messageCount: 1n,
-        messageEndTime: 0n,
-        messageStartTime: 0n,
-        metadataCount: 0,
-        schemaCount: 0,
-      },
-      {
         type: "ChunkIndex",
         chunkLength: expect.any(BigInt) as bigint,
         chunkStartOffset: 25n,
@@ -376,24 +366,6 @@ describe("Mcap0Writer", () => {
         messageIndexOffsets: new Map([[0, expect.any(BigInt) as bigint]]),
         messageStartTime: 0n,
         uncompressedSize: BigInt(expectedChunkData.byteLength),
-      },
-      {
-        type: "SummaryOffset",
-        groupLength: expect.any(BigInt) as bigint,
-        groupOpcode: Opcode.CHANNEL,
-        groupStart: expect.any(BigInt) as bigint,
-      },
-      {
-        type: "SummaryOffset",
-        groupLength: expect.any(BigInt) as bigint,
-        groupOpcode: Opcode.STATISTICS,
-        groupStart: expect.any(BigInt) as bigint,
-      },
-      {
-        type: "SummaryOffset",
-        groupLength: expect.any(BigInt) as bigint,
-        groupOpcode: Opcode.CHUNK_INDEX,
-        groupStart: expect.any(BigInt) as bigint,
       },
       {
         type: "Footer",
