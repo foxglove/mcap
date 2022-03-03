@@ -288,7 +288,7 @@ func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, e
 		it.chunksets = sortOverlappingChunks(it.chunkIndexes)
 	}
 
-	if it.messageOffsetIdx >= len(it.messageOffsets) {
+	for it.messageOffsetIdx >= len(it.messageOffsets) {
 		if it.activeChunksetIndex >= len(it.chunksets)-1 {
 			return nil, nil, nil, io.EOF
 		}

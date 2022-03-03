@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
@@ -20,9 +22,7 @@ var (
 
 func printInfo(w io.Writer, info *mcap.Info) error {
 	buf := &bytes.Buffer{}
-
 	fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
-
 	start := info.Statistics.MessageStartTime
 	end := info.Statistics.MessageEndTime
 	starttime := time.Unix(int64(start/1e9), int64(start%1e9))
@@ -35,7 +35,6 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		fmt.Fprintf(buf, "start: %.3f\n", float64(starttime.UnixNano())/1e9)
 		fmt.Fprintf(buf, "end: %.3f\n", float64(endtime.UnixNano())/1e9)
 	}
-
 	if len(info.ChunkIndexes) > 0 {
 		compressionFormatStats := make(map[mcap.CompressionFormat]struct {
 			count            int
@@ -56,9 +55,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			fmt.Fprintf(buf, "\t%s: [%d/%d chunks] (%.2f%%) \n", k, v.count, chunkCount, compressionRatio)
 		}
 	}
-
 	fmt.Fprintf(buf, "channels:\n")
-
 	chanIDs := []uint16{}
 	for chanID := range info.Channels {
 		chanIDs = append(chanIDs, chanID)
@@ -67,7 +64,6 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		return chanIDs[i] < chanIDs[j]
 	})
 	rows := [][]string{}
-
 	maxCountWidth := 0
 	for _, v := range info.Statistics.ChannelMessageCounts {
 		count := fmt.Sprintf("%d", v)
@@ -75,7 +71,6 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			maxCountWidth = len(count)
 		}
 	}
-
 	for _, chanID := range chanIDs {
 		channel := info.Channels[chanID]
 		schema := info.Schemas[channel.SchemaID]
@@ -104,24 +99,29 @@ var infoCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Report statistics about an mcap file",
 	Run: func(cmd *cobra.Command, args []string) {
+		ctx := context.Background()
 		if len(args) != 1 {
 			log.Fatal("Unexpected number of args")
 		}
-		r, err := os.Open(args[0])
+		// check if it's a remote file
+		filename := args[0]
+		err := utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
+			reader, err := mcap.NewReader(rs)
+			if err != nil {
+				return fmt.Errorf("failed to get reader: %w", err)
+			}
+			info, err := reader.Info()
+			if err != nil {
+				return fmt.Errorf("failed to get info: %w", err)
+			}
+			err = printInfo(os.Stdout, info)
+			if err != nil {
+				return fmt.Errorf("failed to print info: %w", err)
+			}
+			return nil
+		})
 		if err != nil {
-			log.Fatal(err)
-		}
-		reader, err := mcap.NewReader(r)
-		if err != nil {
-			log.Fatal(err)
-		}
-		info, err := reader.Info()
-		if err != nil {
-			log.Fatal(err)
-		}
-		err = printInfo(os.Stdout, info)
-		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("Failed to read file %s: %v", filename, err)
 		}
 	},
 }
