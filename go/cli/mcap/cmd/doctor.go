@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
@@ -378,20 +380,24 @@ func newMcapDoctor(reader io.Reader) *mcapDoctor {
 }
 
 func main(cmd *cobra.Command, args []string) {
+	ctx := context.Background()
 	if len(args) != 1 {
 		fmt.Println("An mcap file argument is required.")
 		os.Exit(1)
 	}
-
-	fmt.Printf("Examining %s\n", args[0])
-	file, err := os.Open(args[0])
+	filename := args[0]
+	err := utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
+		doctor := newMcapDoctor(rs)
+		if remote {
+			doctor.warn("Will read full remote file")
+		}
+		fmt.Printf("Examining %s\n", args[0])
+		doctor.Examine()
+		return nil
+	})
 	if err != nil {
-		fmt.Print(err)
-		os.Exit(1)
+		log.Fatalf("Doctor command failed: %s", err)
 	}
-
-	doctor := newMcapDoctor(file)
-	doctor.Examine()
 }
 
 var doctorCommand = &cobra.Command{
