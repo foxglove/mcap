@@ -25,7 +25,7 @@ for details:
 
     Use "mcap [command] --help" for more information about a command.
 
-Examples:
+### Examples:
 
 Convert a bag file to MCAP:
 
@@ -78,6 +78,30 @@ by copying the relevant directory (e.g /opt/ros/galactic) from the original
 system
 
     [~/work/mcap/go/mcap] (task/mcap-client) $ mcap convert multiple_files_1.db3 demo.mcap --directories ./galactic
+
+#### Remote file support
+
+The `cat`, `info`, and `doctor` commands support reading from remote files
+stored in GCS:
+
+    $ mcap info gs://foxglove-wyatt-dev-inbox/demo.mcap
+    messages: 1606
+    duration: 7.780758504s
+    start: 2017-03-21T19:26:20.103843113-07:00
+    end: 2017-03-21T19:26:27.884601617-07:00
+    chunks:
+            zstd: [14/14 chunks] (50.79%)
+    channels:
+            (0) /diagnostics              52 msgs   : diagnostic_msgs/DiagnosticArray [ros1msg]
+            (1) /image_color/compressed  234 msgs   : sensor_msgs/CompressedImage [ros1msg]
+            (2) /tf                      774 msgs   : tf2_msgs/TFMessage [ros1msg]
+            (3) /radar/points            156 msgs   : sensor_msgs/PointCloud2 [ros1msg]
+            (4) /radar/range             156 msgs   : sensor_msgs/Range [ros1msg]
+            (5) /radar/tracks            156 msgs   : radar_driver/RadarTracks [ros1msg]
+            (6) /velodyne_points          78 msgs   : sensor_msgs/PointCloud2 [ros1msg]
+    attachments: 0
+
+Remote reads will use the index at the end of the file to minimize latency and data transfer.
 
 ### Building
 
