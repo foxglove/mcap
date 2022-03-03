@@ -83,7 +83,7 @@ system, the command requires a search directory for packages. This can be found
 by copying the relevant directory (e.g /opt/ros/galactic) from the original
 system
 
-    [~/work/mcap/go/mcap] (task/mcap-client) $ mcap convert multiple_files_1.db3 demo.mcap --directories ./galactic
+    [~/work/mcap/go/mcap] (task/mcap-client) $ mcap convert multiple_files_1.db3 demo.mcap --ament-prefix-path ./galactic
 
 #### Remote file support
 
