@@ -20,7 +20,7 @@ var (
 	db3Magic = []byte{0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x33, 0x00}
 )
 
-var directories string
+var amentPrefixPath string
 var compression string
 var chunkSize int64
 var includeCRC bool
@@ -111,12 +111,13 @@ var convertCmd = &cobra.Command{
 			if err != nil {
 				die("failed to open sqlite3: %s", err)
 			}
-			dirs := strings.FieldsFunc(directories, func(c rune) bool { return c == ',' })
+
+			amentPath := amentPrefixPath
 			prefixPath := os.Getenv("AMENT_PREFIX_PATH")
 			if prefixPath != "" {
-				pathElements := strings.FieldsFunc(prefixPath, func(c rune) bool { return c == ':' })
-				dirs = append(dirs, pathElements...)
+				amentPath += ":" + prefixPath
 			}
+			dirs := strings.FieldsFunc(amentPath, func(c rune) bool { return c == ':' })
 			err = ros.DB3ToMCAP(w, db, opts, dirs)
 			if err != nil {
 				die("failed to convert file: %s", err)
@@ -130,11 +131,11 @@ var convertCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(convertCmd)
 	convertCmd.PersistentFlags().StringVarP(
-		&directories,
-		"directories",
+		&amentPrefixPath,
+		"ament-prefix-path",
 		"",
 		"",
-		"(ros2) comma-separated list of directories to search for message definitions, e.g /opt/ros/galactic",
+		"(ros2 only) colon-separated list of directories to search for message definitions (e.g /opt/ros/galactic:/opt/ros/noetic)",
 	)
 	convertCmd.PersistentFlags().StringVarP(
 		&compression,
