@@ -255,4 +255,4 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: ./go/cli/mcap/bin/${{env.BINARY_NAME}}
-          draft: true
+          draft: false
