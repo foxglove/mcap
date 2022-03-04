@@ -226,6 +226,7 @@ func (doctor *mcapDoctor) Examine() {
 		doctor.fatal(err)
 	}
 
+	var lastMessageTime uint64
 	msg := make([]byte, 1024)
 	for {
 		tokenType, data, err := lexer.Next(msg)
@@ -303,11 +304,15 @@ func (doctor *mcapDoctor) Examine() {
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
 			}
-
 			channel := doctor.channels[message.ChannelID]
 			if channel == nil {
 				doctor.error("Got a Message record for channel: %d before a channel info.", message.ChannelID)
 			}
+			if message.LogTime < lastMessageTime {
+				doctor.error("Message.log_time %d on %s is less than the previous message record time %d",
+					message.LogTime, channel.Topic, lastMessageTime)
+			}
+			lastMessageTime = message.LogTime
 		case mcap.TokenChunk:
 			chunk, err := mcap.ParseChunk(data)
 			if err != nil {
