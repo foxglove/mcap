@@ -17,26 +17,41 @@ for record in reader.records:
 
 ```python
 from time import time_ns
+import json
 from mcap.mcap0.writer import Writer
 
 stream = open("example.mcap", "wb")
 writer = Writer(stream)
-writer.start("ros1", "example")
+
+# The library argument help identify what tool wrote the file.
+writer.start(profile="x-custom", library="my-writer-v1")
+
 schema_id = writer.register_schema(
-    "example", "text/plain", data="example schema".encode()
+    name="sample",
+    encoding="jsonschema",
+    data=json.dumps({
+        "type": "object",
+        "properties": {
+            "sample": {
+                "type": "string",
+            }
+        }
+    }).encode()
 )
+
 channel_id = writer.register_channel(
     schema_id=schema_id,
-    topic="example_topic",
-    message_encoding="text/plain",
-    metadata={"first": "a"},
+    topic="sample_topic",
+    message_encoding="json",
 )
+
 writer.add_message(
     channel_id=channel_id,
     log_time=time_ns(),
-    data="example message".encode(),
+    data=json.dumps({"sample": "test"}).encode('utf-8'),
     publish_time=time_ns(),
 )
+
 writer.finish()
 stream.close()
 ```
