@@ -101,7 +101,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
       this.channelsById.set(result.value.id, result.value);
       if (existing && !isEqual(existing, result.value)) {
         throw new Error(
-          `Channel record for id ${result.value.id} (topic: ${result.value.topic}) differs from previous for the same id.`,
+          `Channel record for id ${result.value.id} (topic: ${result.value.topic}) differs from previous channel record of the same id.`,
         );
       }
     } else if (result.value?.type === "Message") {
