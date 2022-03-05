@@ -228,7 +228,7 @@ describe("Mcap0StreamReader", () => {
       ]),
     );
     expect(() => reader.nextRecord()).toThrow(
-      "Encountered message on channel 42 without prior channel",
+      "Encountered message on channel 42 without prior channel record",
     );
   });
 
@@ -508,7 +508,9 @@ describe("Mcap0StreamReader", () => {
           messageEncoding: "utf12",
           metadata: new Map([["foo", "bar"]]),
         } as TypedMcapRecords["Channel"]);
-        expect(() => reader.nextRecord()).toThrow("differing channels for 42");
+        expect(() => reader.nextRecord()).toThrow(
+          /Channel record for id 42 \(topic: (myTopic|XXXXXXXX)\) differs from previous channel record of the same id./,
+        );
       });
     },
   );
