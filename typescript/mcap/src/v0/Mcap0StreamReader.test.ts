@@ -509,7 +509,7 @@ describe("Mcap0StreamReader", () => {
           metadata: new Map([["foo", "bar"]]),
         } as TypedMcapRecords["Channel"]);
         expect(() => reader.nextRecord()).toThrow(
-          /Channel record for id 42 \(topic: (myTopic|XXXXXXXX)\) differs from previous for the same id./,
+          /Channel record for id 42 \(topic: (myTopic|XXXXXXXX)\) differs from previous channel record of the same id./,
         );
       });
     },
