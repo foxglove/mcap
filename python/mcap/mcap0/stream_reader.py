@@ -1,8 +1,14 @@
 import struct
 from io import BufferedReader, BytesIO, RawIOBase
-from typing import Iterator, List, Optional, Tuple, Union
-from zstd import ZSTD_uncompress  # type: ignore
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+
 import lz4.frame  # type: ignore
+from zstd import ZSTD_uncompress  # type: ignore
+
+try:
+    from genpy import dynamic  # type: ignore
+except ImportError:
+    dynamic = None
 
 from .data_stream import ReadDataStream
 from .exceptions import McapError
@@ -73,7 +79,7 @@ class StreamReader:
     @property
     def records(self) -> Iterator[McapRecord]:
         """
-        Returns records encountered in the MCAP in order.
+        Returns raw records encountered in the MCAP in order.
         """
         if not self.__magic:
             self.__magic = read_magic(self.__stream)
@@ -95,6 +101,37 @@ class StreamReader:
             if isinstance(record, Footer):
                 self.__footer = record
                 read_magic(self.__stream)
+
+    @property
+    def decoded_records(self) -> Iterator[Any]:  # type: ignore
+        """
+        Tries to decode records encountered in the MCAP in order. May throw an error
+        if unable to decode the data.
+        """
+        channels: Dict[int, Channel] = {}
+        schemas: Dict[int, Schema] = {}
+        msg_types: Dict[str, Any] = {}
+        for record in self.records:
+            if isinstance(record, Schema):
+                schemas[record.id] = record
+                if record.encoding != "ros1":
+                    raise McapError(
+                        f"Can't decode schema with encoding {record.encoding}"
+                    )
+                if dynamic is None:
+                    raise McapError("ros1 libraries not found")
+                if not record.name in msg_types:
+                    msg_type = dynamic.generate_dynamic(  # type: ignore
+                        record.name, record.data.decode()
+                    )
+                    msg_types[record.name] = msg_type[record.name]
+            if isinstance(record, Channel):
+                channels[record.id] = record
+            if isinstance(record, Message):
+                channel = channels[record.channel_id]
+                schema = schemas[channel.schema_id]
+                message = msg_types[schema.name]().deserialize(record.data)
+                yield message
 
     def __init__(self, input: Union[str, RawIOBase, BufferedReader]):
         """

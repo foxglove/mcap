@@ -75,6 +75,7 @@ overrides:
 
   - filename: "**/*.py"
     words:
+      - genpy
       - klass
       - rglob
       - uncompress

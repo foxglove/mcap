@@ -3,6 +3,11 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 name = "pypi"
 
+[[source]]
+url = "https://rospypi.github.io/simple"
+verify_ssl = true
+name = "ros"
+
 [packages]
 lz4 = "*"
 zstd = "*"
@@ -14,6 +19,8 @@ build = "*"
 pipenv = "*"
 pytest = "*"
 pyright = "*"
+rosbag = {version="*", index="ros"}
+std_msgs = {version="*", index="ros"}
 
 [requires]
 python_version = "3"
