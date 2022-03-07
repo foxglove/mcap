@@ -53,6 +53,6 @@ def test_raw_read():
 def test_decode_read():
     with generate_sample_data() as t:
         reader = StreamReader(cast(RawIOBase, t))
-        records = [r for r in reader.decoded_records]
-        assert len(records) == 10
-        assert records[0].data == "string message 1"
+        messages = [r for r in reader.decoded_messages]
+        assert len(messages) == 10
+        assert messages[0].data == "string message 1"

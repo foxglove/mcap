@@ -103,9 +103,9 @@ class StreamReader:
                 read_magic(self.__stream)
 
     @property
-    def decoded_records(self) -> Iterator[Any]:  # type: ignore
+    def decoded_messages(self) -> Iterator[Any]:  # type: ignore
         """
-        Tries to decode records encountered in the MCAP in order. May throw an error
+        Tries to decode messages encountered in the MCAP in order. May throw an error
         if unable to decode the data.
         """
         channels: Dict[int, Channel] = {}
