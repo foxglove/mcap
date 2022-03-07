@@ -50,7 +50,7 @@ class Writer:
         self,
         output: Union[str, BytesIO, BufferedWriter],
         chunk_size: int = 1024 * 1024,
-        compression: CompressionType = CompressionType.NONE,
+        compression: CompressionType = CompressionType.ZSTD,
         index_types: IndexType = IndexType.ALL,
         repeat_channels: bool = True,
         repeat_schemas: bool = True,
