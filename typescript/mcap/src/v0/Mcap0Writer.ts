@@ -33,6 +33,7 @@ export type Mcap0WriterOptions = {
   useChunkIndex?: boolean;
   startChannelId?: number;
   chunkSize?: number;
+  compressChunk?: (chunkData: Uint8Array) => { compression: string; compressedData: Uint8Array };
 };
 
 /**
@@ -52,6 +53,9 @@ export class Mcap0Writer {
   private writtenSchemaIds = new Set<number>();
   private writtenChannelIds = new Set<number>();
   private chunkBuilder: ChunkBuilder | undefined;
+  private compressChunk:
+    | ((chunkData: Uint8Array) => { compression: string; compressedData: Uint8Array })
+    | undefined;
   private chunkSize: number;
   private dataSectionCrc = crc32Init();
 
@@ -79,6 +83,7 @@ export class Mcap0Writer {
       useChunkIndex = true,
       startChannelId = 0,
       chunkSize = 1024 * 1024,
+      compressChunk,
     } = options;
 
     this.writable = writable;
@@ -112,6 +117,7 @@ export class Mcap0Writer {
     }
     this.nextChannelId = startChannelId;
     this.chunkSize = chunkSize;
+    this.compressChunk = compressChunk;
   }
 
   async start(header: Header): Promise<void> {
@@ -409,13 +415,21 @@ export class Mcap0Writer {
     }
 
     const chunkData = this.chunkBuilder.buffer;
+    const uncompressedSize = BigInt(chunkData.length);
+    const uncompressedCrc = crc32(chunkData);
+    let compression = "";
+    let compressedData = chunkData;
+    if (this.compressChunk) {
+      ({ compression, compressedData } = this.compressChunk(chunkData));
+    }
+
     const chunkRecord: Chunk = {
       messageStartTime: this.chunkBuilder.messageStartTime,
       messageEndTime: this.chunkBuilder.messageEndTime,
-      uncompressedSize: BigInt(chunkData.length),
-      uncompressedCrc: crc32(chunkData),
-      compression: "",
-      records: chunkData,
+      uncompressedSize,
+      uncompressedCrc,
+      compression,
+      records: compressedData,
     };
 
     const chunkStartOffset = this.writable.position();

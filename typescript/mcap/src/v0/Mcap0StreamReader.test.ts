@@ -214,9 +214,9 @@ describe("Mcap0StreamReader", () => {
 
         ...record(Opcode.MESSAGE, [
           ...uint16LE(42), // channel id
-          ...uint64LE(0n), // sequence
-          ...uint64LE(0n), // publish time
+          ...uint32LE(0), // sequence
           ...uint64LE(0n), // log time
+          ...uint64LE(0n), // publish time
         ]),
 
         ...record(Opcode.FOOTER, [
@@ -235,9 +235,9 @@ describe("Mcap0StreamReader", () => {
   it("rejects message in chunk with no prior channel", () => {
     const message = record(Opcode.MESSAGE, [
       ...uint16LE(42), // channel id
-      ...uint64LE(0n), // sequence
-      ...uint64LE(0n), // publish time
+      ...uint32LE(0), // sequence
       ...uint64LE(0n), // log time
+      ...uint64LE(0n), // publish time
     ]);
     const reader = new Mcap0StreamReader();
     reader.append(

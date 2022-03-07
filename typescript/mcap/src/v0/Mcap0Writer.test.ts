@@ -1,7 +1,11 @@
+import { crc32 } from "@foxglove/crc";
+
 import Mcap0IndexedReader from "./Mcap0IndexedReader";
 import Mcap0StreamReader from "./Mcap0StreamReader";
 import { Mcap0Writer } from "./Mcap0Writer";
-import { collect } from "./testUtils";
+import { Opcode } from "./constants";
+import { parseMagic, parseRecord } from "./parse";
+import { collect, keyValues, record, string, uint16LE, uint32LE, uint64LE } from "./testUtils";
 import { TypedMcapRecord } from "./types";
 
 class TempBuffer {
@@ -138,11 +142,11 @@ describe("Mcap0Writer", () => {
     const reader = new Mcap0StreamReader();
     reader.append(tempBuffer.get());
     const records: TypedMcapRecord[] = [];
-    for (let record; (record = reader.nextRecord()); ) {
-      records.push(record);
+    for (let rec; (rec = reader.nextRecord()); ) {
+      records.push(rec);
     }
 
-    expect(records).toEqual([
+    expect(records).toEqual<TypedMcapRecord[]>([
       {
         type: "Header",
         library: "",
@@ -233,19 +237,19 @@ describe("Mcap0Writer", () => {
       {
         type: "SummaryOffset",
         groupLength: 33n,
-        groupOpcode: 4,
+        groupOpcode: Opcode.CHANNEL,
         groupStart: 293n,
       },
       {
         type: "SummaryOffset",
         groupLength: 65n,
-        groupOpcode: 11,
+        groupOpcode: Opcode.STATISTICS,
         groupStart: 326n,
       },
       {
         type: "SummaryOffset",
         groupLength: 166n,
-        groupOpcode: 8,
+        groupOpcode: Opcode.CHUNK_INDEX,
         groupStart: 391n,
       },
       {
@@ -253,6 +257,121 @@ describe("Mcap0Writer", () => {
         summaryCrc: 3779440972,
         summaryOffsetStart: 557n,
         summaryStart: 293n,
+      },
+    ]);
+  });
+
+  it("supports chunk compression", async () => {
+    function reverse(data: Uint8Array): Uint8Array {
+      return Uint8Array.from(data, (_, i) => data[data.byteLength - 1 - i]!);
+    }
+    function reverseDouble(data: Uint8Array): Uint8Array {
+      return new Uint8Array([...reverse(data), ...reverse(data)]);
+    }
+
+    const tempBuffer = new TempBuffer();
+    const writer = new Mcap0Writer({
+      writable: tempBuffer,
+      useStatistics: false,
+      useSummaryOffsets: false,
+      compressChunk: (data) => ({
+        compression: "reverse double",
+        compressedData: reverseDouble(data),
+      }),
+    });
+
+    await writer.start({ library: "", profile: "" });
+    const channelId = await writer.registerChannel({
+      topic: "test",
+      schemaId: 0,
+      messageEncoding: "json",
+      metadata: new Map(),
+    });
+    await writer.addMessage({
+      channelId,
+      data: new Uint8Array(),
+      sequence: 0,
+      logTime: 0n,
+      publishTime: 0n,
+    });
+    await writer.end();
+
+    const array = tempBuffer.get();
+    const view = new DataView(array.buffer, array.byteOffset, array.byteLength);
+    const records: TypedMcapRecord[] = [];
+    for (
+      let offset = parseMagic(view, 0).usedBytes, result;
+      (result = parseRecord({ view, startOffset: offset, validateCrcs: true })), result.record;
+      offset += result.usedBytes
+    ) {
+      records.push(result.record);
+    }
+
+    const expectedChunkData = new Uint8Array([
+      ...record(Opcode.CHANNEL, [
+        ...uint16LE(channelId), // channel id
+        ...uint16LE(0), // schema id
+        ...string("test"), // topic
+        ...string("json"), // message encoding
+        ...keyValues(string, string, []), // metadata
+      ]),
+      ...record(Opcode.MESSAGE, [
+        ...uint16LE(channelId), // channel id
+        ...uint32LE(0), // sequence
+        ...uint64LE(0n), // log time
+        ...uint64LE(0n), // publish time
+      ]),
+    ]);
+
+    expect(records).toEqual<TypedMcapRecord[]>([
+      {
+        type: "Header",
+        library: "",
+        profile: "",
+      },
+      {
+        type: "Chunk",
+        compression: "reverse double",
+        messageStartTime: 0n,
+        messageEndTime: 0n,
+        uncompressedCrc: crc32(expectedChunkData),
+        uncompressedSize: BigInt(expectedChunkData.byteLength),
+        records: reverseDouble(expectedChunkData),
+      },
+      {
+        type: "MessageIndex",
+        channelId: 0,
+        records: [[0n, 33n]],
+      },
+      {
+        type: "DataEnd",
+        dataSectionCrc: 0,
+      },
+      {
+        type: "Channel",
+        id: 0,
+        messageEncoding: "json",
+        metadata: new Map(),
+        schemaId: 0,
+        topic: "test",
+      },
+      {
+        type: "ChunkIndex",
+        chunkLength: expect.any(BigInt) as bigint,
+        chunkStartOffset: 25n,
+        compressedSize: BigInt(2 * expectedChunkData.byteLength),
+        compression: "reverse double",
+        messageEndTime: 0n,
+        messageIndexLength: 31n,
+        messageIndexOffsets: new Map([[0, expect.any(BigInt) as bigint]]),
+        messageStartTime: 0n,
+        uncompressedSize: BigInt(expectedChunkData.byteLength),
+      },
+      {
+        type: "Footer",
+        summaryCrc: expect.any(Number) as number,
+        summaryOffsetStart: expect.any(BigInt) as bigint,
+        summaryStart: expect.any(BigInt) as bigint,
       },
     ]);
   });
