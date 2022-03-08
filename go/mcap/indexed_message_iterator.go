@@ -26,6 +26,8 @@ type indexedMessageIterator struct {
 	start  uint64
 	end    uint64
 
+	chunk []byte
+
 	channels          map[uint16]*Channel
 	schemas           map[uint16]*Schema
 	statistics        *Statistics
@@ -171,20 +173,22 @@ func (it *indexedMessageIterator) loadChunk(index int) error {
 	if err != nil {
 		return err
 	}
-	tokenType, record, err := it.lexer.Next(nil)
+
+	tokenType, record, err := it.lexer.Next(it.chunk)
 	if err != nil {
 		return err
 	}
-	var chunk *Chunk
-	switch tokenType {
-	case TokenChunk:
-		chunk, err = ParseChunk(record)
-		if err != nil {
-			return fmt.Errorf("failed to parse chunk: %w", err)
-		}
-	default:
+	if tokenType != TokenChunk {
 		return fmt.Errorf("unexpected token %s in chunk section", tokenType)
 	}
+	if len(record) > len(it.chunk) {
+		it.chunk = record
+	}
+	chunk, err := ParseChunk(record)
+	if err != nil {
+		return fmt.Errorf("failed to parse chunk: %w", err)
+	}
+
 	switch CompressionFormat(chunk.Compression) {
 	case CompressionNone:
 		it.activeChunkReader = bytes.NewReader(chunk.Records)
@@ -198,6 +202,7 @@ func (it *indexedMessageIterator) loadChunk(index int) error {
 		if err != nil {
 			return err
 		}
+		reader.Close()
 		it.activeChunkReader = bytes.NewReader(buf)
 	case CompressionLZ4:
 		buf := make([]byte, chunk.UncompressedSize)
