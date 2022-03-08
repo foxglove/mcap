@@ -1,6 +1,10 @@
+#include <cryptopp/crc.h>
+
 #include <cassert>
 #include <iostream>
 #include <lz4.h>
+
+#define ZSTD_STATIC_LINKING_ONLY
 #include <zstd.h>
 #include <zstd_errors.h>
 
@@ -8,28 +12,30 @@ namespace mcap {
 
 // IWritable ///////////////////////////////////////////////////////////////////
 
-inline void IWritable::write(const std::byte* data, uint64_t size) {
-  handleWrite(data, size);
+void IWritable::write(const std::byte* data, uint64_t size) {
   if (crcEnabled) {
-    crc_.Update(reinterpret_cast<const uint8_t*>(data), size);
+    assert(crc_);
+    crc_->Update(reinterpret_cast<const uint8_t*>(data), size);
   }
+  handleWrite(data, size);
 }
 
-inline uint32_t IWritable::crc() {
+uint32_t IWritable::crc() {
   uint32_t crc32 = 0;
   if (crcEnabled) {
-    crc_.Final(reinterpret_cast<uint8_t*>(&crc32));
+    assert(crc_);
+    crc_->Final(reinterpret_cast<uint8_t*>(&crc32));
   }
   return crc32;
 }
 
-inline void IWritable::resetCrc() {
-  crc_ = {};
+void IWritable::resetCrc() {
+  crc_ = std::make_unique<CryptoPP::CRC32>();
 }
 
 // FileWriter //////////////////////////////////////////////////////////////////
 
-inline FileWriter::~FileWriter() {
+FileWriter::~FileWriter() {
   end();
 }
 
@@ -37,7 +43,7 @@ Status FileWriter::open(std::string_view filename, size_t bufferCapacity) {
   end();
   file_ = fopen(filename.data(), "wb");
   if (!file_) {
-    const auto msg = StrFormat("failed to open file \"{}\" for writing", filename);
+    const auto msg = internal::StrFormat("failed to open file \"{}\" for writing", filename);
     return Status(StatusCode::OpenFailed, msg);
   }
   bufferCapacity_ = bufferCapacity;
@@ -86,61 +92,61 @@ uint64_t FileWriter::size() const {
 
 // StreamWriter ////////////////////////////////////////////////////////////////
 
-inline StreamWriter::StreamWriter(std::ostream& stream)
+StreamWriter::StreamWriter(std::ostream& stream)
     : stream_(stream)
     , size_(0) {}
 
-inline void StreamWriter::handleWrite(const std::byte* data, uint64_t size) {
+void StreamWriter::handleWrite(const std::byte* data, uint64_t size) {
   stream_.write(reinterpret_cast<const char*>(data), std::streamsize(size));
   size_ += size;
 }
 
-inline void StreamWriter::end() {
+void StreamWriter::end() {
   stream_.flush();
 }
 
-inline uint64_t StreamWriter::size() const {
+uint64_t StreamWriter::size() const {
   return size_;
 }
 
 // IChunkWriter ////////////////////////////////////////////////////////////////
 
-inline void IChunkWriter::clear() {
+void IChunkWriter::clear() {
   handleClear();
   resetCrc();
 }
 
 // BufferWriter //////////////////////////////////////////////////////////////
 
-inline void BufferWriter::handleWrite(const std::byte* data, uint64_t size) {
+void BufferWriter::handleWrite(const std::byte* data, uint64_t size) {
   buffer_.insert(buffer_.end(), data, data + size);
 }
 
-inline void BufferWriter::end() {
+void BufferWriter::end() {
   // no-op
 }
 
-inline uint64_t BufferWriter::size() const {
+uint64_t BufferWriter::size() const {
   return buffer_.size();
 }
 
-inline uint64_t BufferWriter::compressedSize() const {
+uint64_t BufferWriter::compressedSize() const {
   return buffer_.size();
 }
 
-inline bool BufferWriter::empty() const {
+bool BufferWriter::empty() const {
   return buffer_.empty();
 }
 
-inline void BufferWriter::handleClear() {
+void BufferWriter::handleClear() {
   buffer_.clear();
 }
 
-inline const std::byte* BufferWriter::data() const {
+const std::byte* BufferWriter::data() const {
   return buffer_.data();
 }
 
-inline const std::byte* BufferWriter::compressedData() const {
+const std::byte* BufferWriter::compressedData() const {
   return buffer_.data();
 }
 
@@ -148,7 +154,7 @@ inline const std::byte* BufferWriter::compressedData() const {
 
 namespace internal {
 
-inline int LZ4AccelerationLevel(CompressionLevel level) {
+int LZ4AccelerationLevel(CompressionLevel level) {
   switch (level) {
     case CompressionLevel::Fastest:
       return 65537;
@@ -164,16 +170,16 @@ inline int LZ4AccelerationLevel(CompressionLevel level) {
 
 }  // namespace internal
 
-inline LZ4Writer::LZ4Writer(CompressionLevel compressionLevel, uint64_t chunkSize) {
+LZ4Writer::LZ4Writer(CompressionLevel compressionLevel, uint64_t chunkSize) {
   acceleration_ = internal::LZ4AccelerationLevel(compressionLevel);
   uncompressedBuffer_.reserve(chunkSize);
 }
 
-inline void LZ4Writer::handleWrite(const std::byte* data, uint64_t size) {
+void LZ4Writer::handleWrite(const std::byte* data, uint64_t size) {
   uncompressedBuffer_.insert(uncompressedBuffer_.end(), data, data + size);
 }
 
-inline void LZ4Writer::end() {
+void LZ4Writer::end() {
   const auto dstCapacity = LZ4_compressBound(uncompressedBuffer_.size());
   compressedBuffer_.resize(dstCapacity);
   const int dstSize = LZ4_compress_fast(reinterpret_cast<const char*>(uncompressedBuffer_.data()),
@@ -182,28 +188,28 @@ inline void LZ4Writer::end() {
   compressedBuffer_.resize(dstSize);
 }
 
-inline uint64_t LZ4Writer::size() const {
+uint64_t LZ4Writer::size() const {
   return uncompressedBuffer_.size();
 }
 
-inline uint64_t LZ4Writer::compressedSize() const {
+uint64_t LZ4Writer::compressedSize() const {
   return compressedBuffer_.size();
 }
 
-inline bool LZ4Writer::empty() const {
+bool LZ4Writer::empty() const {
   return compressedBuffer_.empty() && uncompressedBuffer_.empty();
 }
 
-inline void LZ4Writer::handleClear() {
+void LZ4Writer::handleClear() {
   uncompressedBuffer_.clear();
   compressedBuffer_.clear();
 }
 
-inline const std::byte* LZ4Writer::data() const {
+const std::byte* LZ4Writer::data() const {
   return uncompressedBuffer_.data();
 }
 
-inline const std::byte* LZ4Writer::compressedData() const {
+const std::byte* LZ4Writer::compressedData() const {
   return compressedBuffer_.data();
 }
 
@@ -211,7 +217,7 @@ inline const std::byte* LZ4Writer::compressedData() const {
 
 namespace internal {
 
-inline int ZStdCompressionLevel(CompressionLevel level) {
+int ZStdCompressionLevel(CompressionLevel level) {
   switch (level) {
     case CompressionLevel::Fastest:
       return -5;
@@ -231,22 +237,22 @@ inline int ZStdCompressionLevel(CompressionLevel level) {
 
 // ZStdWriter //////////////////////////////////////////////////////////////////
 
-inline ZStdWriter::ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize) {
+ZStdWriter::ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize) {
   zstdContext_ = ZSTD_createCCtx();
   ZSTD_CCtx_setParameter(zstdContext_, ZSTD_c_compressionLevel,
                          internal::ZStdCompressionLevel(compressionLevel));
   uncompressedBuffer_.reserve(chunkSize);
 }
 
-inline ZStdWriter::~ZStdWriter() {
+ZStdWriter::~ZStdWriter() {
   ZSTD_freeCCtx(zstdContext_);
 }
 
-inline void ZStdWriter::handleWrite(const std::byte* data, uint64_t size) {
+void ZStdWriter::handleWrite(const std::byte* data, uint64_t size) {
   uncompressedBuffer_.insert(uncompressedBuffer_.end(), data, data + size);
 }
 
-inline void ZStdWriter::end() {
+void ZStdWriter::end() {
   const auto dstCapacity = ZSTD_compressBound(uncompressedBuffer_.size());
   compressedBuffer_.resize(dstCapacity);
   const int dstSize = ZSTD_compress2(zstdContext_, compressedBuffer_.data(), dstCapacity,
@@ -261,38 +267,38 @@ inline void ZStdWriter::end() {
   compressedBuffer_.resize(dstSize);
 }
 
-inline uint64_t ZStdWriter::size() const {
+uint64_t ZStdWriter::size() const {
   return uncompressedBuffer_.size();
 }
 
-inline uint64_t ZStdWriter::compressedSize() const {
+uint64_t ZStdWriter::compressedSize() const {
   return compressedBuffer_.size();
 }
 
-inline bool ZStdWriter::empty() const {
+bool ZStdWriter::empty() const {
   return compressedBuffer_.empty() && uncompressedBuffer_.empty();
 }
 
-inline void ZStdWriter::handleClear() {
+void ZStdWriter::handleClear() {
   uncompressedBuffer_.clear();
   compressedBuffer_.clear();
 }
 
-inline const std::byte* ZStdWriter::data() const {
+const std::byte* ZStdWriter::data() const {
   return uncompressedBuffer_.data();
 }
 
-inline const std::byte* ZStdWriter::compressedData() const {
+const std::byte* ZStdWriter::compressedData() const {
   return compressedBuffer_.data();
 }
 
 // McapWriter //////////////////////////////////////////////////////////////////
 
-inline McapWriter::~McapWriter() {
+McapWriter::~McapWriter() {
   close();
 }
 
-inline void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
+void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
   options_ = options;
   opened_ = true;
   chunkSize_ = options.noChunking ? 0 : options.chunkSize;
@@ -312,13 +318,16 @@ inline void McapWriter::open(IWritable& writer, const McapWriterOptions& options
   auto* chunkWriter = getChunkWriter();
   if (chunkWriter) {
     chunkWriter->crcEnabled = !options.noCRC;
+    if (chunkWriter->crcEnabled) {
+      chunkWriter->resetCrc();
+    }
   }
   output_ = &writer;
   writeMagic(writer);
   write(writer, Header{options.profile, options.library});
 }
 
-inline Status McapWriter::open(const std::string_view filename, const McapWriterOptions& options) {
+Status McapWriter::open(const std::string_view filename, const McapWriterOptions& options) {
   fileOutput_ = std::make_unique<FileWriter>();
   const auto status = fileOutput_->open(filename);
   if (!status.ok()) {
@@ -329,12 +338,12 @@ inline Status McapWriter::open(const std::string_view filename, const McapWriter
   return StatusCode::Success;
 }
 
-inline void McapWriter::open(std::ostream& stream, const McapWriterOptions& options) {
+void McapWriter::open(std::ostream& stream, const McapWriterOptions& options) {
   streamOutput_ = std::make_unique<StreamWriter>(stream);
   open(*streamOutput_, options);
 }
 
-inline void McapWriter::close() {
+void McapWriter::close() {
   if (!opened_ || !output_) {
     return;
   }
@@ -449,7 +458,7 @@ inline void McapWriter::close() {
   terminate();
 }
 
-inline void McapWriter::terminate() {
+void McapWriter::terminate() {
   output_ = nullptr;
   fileOutput_.reset();
   streamOutput_.reset();
@@ -468,17 +477,17 @@ inline void McapWriter::terminate() {
   opened_ = false;
 }
 
-inline void McapWriter::addSchema(Schema& schema) {
+void McapWriter::addSchema(Schema& schema) {
   schema.id = uint16_t(schemas_.size() + 1);
   schemas_.push_back(schema);
 }
 
-inline void McapWriter::addChannel(Channel& channel) {
+void McapWriter::addChannel(Channel& channel) {
   channel.id = uint16_t(channels_.size() + 1);
   channels_.push_back(channel);
 }
 
-inline Status McapWriter::write(const Message& message) {
+Status McapWriter::write(const Message& message) {
   if (!output_) {
     return StatusCode::NotOpen;
   }
@@ -489,7 +498,7 @@ inline Status McapWriter::write(const Message& message) {
   if (channelMessageCounts.find(message.channelId) == channelMessageCounts.end()) {
     const size_t channelIndex = message.channelId - 1;
     if (channelIndex >= channels_.size()) {
-      const auto msg = StrFormat("invalid channel id {}", message.channelId);
+      const auto msg = internal::StrFormat("invalid channel id {}", message.channelId);
       return Status{StatusCode::InvalidChannelId, msg};
     }
 
@@ -499,7 +508,7 @@ inline Status McapWriter::write(const Message& message) {
     if (writtenSchemas_.find(channel.schemaId) == writtenSchemas_.end()) {
       const size_t schemaIndex = channel.schemaId - 1;
       if (schemaIndex >= schemas_.size()) {
-        const auto msg = StrFormat("invalid schema id {}", channel.schemaId);
+        const auto msg = internal::StrFormat("invalid schema id {}", channel.schemaId);
         return Status{StatusCode::InvalidSchemaId, msg};
       }
 
@@ -560,7 +569,7 @@ inline Status McapWriter::write(const Message& message) {
   return StatusCode::Success;
 }
 
-inline Status McapWriter::write(Attachment& attachment) {
+Status McapWriter::write(Attachment& attachment) {
   if (!output_) {
     return StatusCode::NotOpen;
   }
@@ -605,7 +614,7 @@ inline Status McapWriter::write(Attachment& attachment) {
   return StatusCode::Success;
 }
 
-inline Status McapWriter::write(const Metadata& metadata) {
+Status McapWriter::write(const Metadata& metadata) {
   if (!output_) {
     return StatusCode::NotOpen;
   }
@@ -635,7 +644,7 @@ inline Status McapWriter::write(const Metadata& metadata) {
 
 // Private methods /////////////////////////////////////////////////////////////
 
-inline IWritable& McapWriter::getOutput() {
+IWritable& McapWriter::getOutput() {
   if (chunkSize_ == 0) {
     return *output_;
   }
@@ -650,7 +659,7 @@ inline IWritable& McapWriter::getOutput() {
   }
 }
 
-inline IChunkWriter* McapWriter::getChunkWriter() {
+IChunkWriter* McapWriter::getChunkWriter() {
   if (chunkSize_ == 0) {
     return nullptr;
   }
@@ -666,7 +675,7 @@ inline IChunkWriter* McapWriter::getChunkWriter() {
   }
 }
 
-inline void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
+void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
   // Both LZ4 and ZSTD recommend ~1KB as the minimum size for compressed data
   constexpr uint64_t MIN_COMPRESSION_SIZE = 1024;
   // Throw away any compression results that save less than 2% of the original size
@@ -746,11 +755,11 @@ inline void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
   chunkData.clear();
 }
 
-inline void McapWriter::writeMagic(IWritable& output) {
+void McapWriter::writeMagic(IWritable& output) {
   write(output, reinterpret_cast<const std::byte*>(Magic), sizeof(Magic));
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const Header& header) {
+uint64_t McapWriter::write(IWritable& output, const Header& header) {
   const uint64_t recordSize = 4 + header.profile.size() + 4 + header.library.size();
 
   write(output, OpCode::Header);
@@ -761,7 +770,7 @@ inline uint64_t McapWriter::write(IWritable& output, const Header& header) {
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const Footer& footer, const bool crcEnabled) {
+uint64_t McapWriter::write(IWritable& output, const Footer& footer, const bool crcEnabled) {
   const uint64_t recordSize = /* summary_start */ 8 +
                               /* summary_offset_start */ 8 +
                               /* summary_crc */ 4;
@@ -779,7 +788,7 @@ inline uint64_t McapWriter::write(IWritable& output, const Footer& footer, const
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const Schema& schema) {
+uint64_t McapWriter::write(IWritable& output, const Schema& schema) {
   const uint64_t recordSize = /* id */ 2 +
                               /* name */ 4 + schema.name.size() +
                               /* encoding */ 4 + schema.encoding.size() +
@@ -795,7 +804,7 @@ inline uint64_t McapWriter::write(IWritable& output, const Schema& schema) {
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const Channel& channel) {
+uint64_t McapWriter::write(IWritable& output, const Channel& channel) {
   const uint32_t metadataSize = internal::KeyValueMapSize(channel.metadata);
   const uint64_t recordSize = /* id */ 2 +
                               /* topic */ 4 + channel.topic.size() +
@@ -814,7 +823,7 @@ inline uint64_t McapWriter::write(IWritable& output, const Channel& channel) {
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const Message& message) {
+uint64_t McapWriter::write(IWritable& output, const Message& message) {
   const uint64_t recordSize = 2 + 4 + 8 + 8 + message.dataSize;
 
   write(output, OpCode::Message);
@@ -828,7 +837,7 @@ inline uint64_t McapWriter::write(IWritable& output, const Message& message) {
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const Attachment& attachment) {
+uint64_t McapWriter::write(IWritable& output, const Attachment& attachment) {
   const uint64_t recordSize = 4 + attachment.name.size() + 8 + 8 + 4 +
                               attachment.contentType.size() + 8 + attachment.dataSize + 4;
 
@@ -845,7 +854,7 @@ inline uint64_t McapWriter::write(IWritable& output, const Attachment& attachmen
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const Metadata& metadata) {
+uint64_t McapWriter::write(IWritable& output, const Metadata& metadata) {
   const uint32_t metadataSize = internal::KeyValueMapSize(metadata.metadata);
   const uint64_t recordSize = 4 + metadata.name.size() + 4 + metadataSize;
 
@@ -857,7 +866,7 @@ inline uint64_t McapWriter::write(IWritable& output, const Metadata& metadata) {
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const Chunk& chunk) {
+uint64_t McapWriter::write(IWritable& output, const Chunk& chunk) {
   const uint64_t recordSize =
     8 + 8 + 8 + 4 + 4 + chunk.compression.size() + 8 + chunk.compressedSize;
 
@@ -874,7 +883,7 @@ inline uint64_t McapWriter::write(IWritable& output, const Chunk& chunk) {
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const MessageIndex& index) {
+uint64_t McapWriter::write(IWritable& output, const MessageIndex& index) {
   const uint32_t recordsSize = index.records.size() * 16;
   const uint64_t recordSize = 2 + 4 + recordsSize;
 
@@ -891,7 +900,7 @@ inline uint64_t McapWriter::write(IWritable& output, const MessageIndex& index) 
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const ChunkIndex& index) {
+uint64_t McapWriter::write(IWritable& output, const ChunkIndex& index) {
   const uint32_t messageIndexOffsetsSize = index.messageIndexOffsets.size() * 10;
   const uint64_t recordSize = /* start_time */ 8 +
                               /* end_time */ 8 +
@@ -924,7 +933,7 @@ inline uint64_t McapWriter::write(IWritable& output, const ChunkIndex& index) {
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const AttachmentIndex& index) {
+uint64_t McapWriter::write(IWritable& output, const AttachmentIndex& index) {
   const uint64_t recordSize = /* offset */ 8 +
                               /* length */ 8 +
                               /* log_time */ 8 +
@@ -946,7 +955,7 @@ inline uint64_t McapWriter::write(IWritable& output, const AttachmentIndex& inde
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const MetadataIndex& index) {
+uint64_t McapWriter::write(IWritable& output, const MetadataIndex& index) {
   const uint64_t recordSize = /* offset */ 8 +
                               /* length */ 8 +
                               /* name */ 4 + index.name.size();
@@ -960,7 +969,7 @@ inline uint64_t McapWriter::write(IWritable& output, const MetadataIndex& index)
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const Statistics& stats) {
+uint64_t McapWriter::write(IWritable& output, const Statistics& stats) {
   const uint32_t channelMessageCountsSize = stats.channelMessageCounts.size() * 10;
   const uint64_t recordSize = /* message_count */ 8 +
                               /* schema_count */ 2 +
@@ -992,7 +1001,7 @@ inline uint64_t McapWriter::write(IWritable& output, const Statistics& stats) {
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const SummaryOffset& summaryOffset) {
+uint64_t McapWriter::write(IWritable& output, const SummaryOffset& summaryOffset) {
   const uint64_t recordSize = /* group_opcode */ 1 +
                               /* group_start */ 8 +
                               /* group_length */ 8;
@@ -1006,7 +1015,7 @@ inline uint64_t McapWriter::write(IWritable& output, const SummaryOffset& summar
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const DataEnd& dataEnd) {
+uint64_t McapWriter::write(IWritable& output, const DataEnd& dataEnd) {
   const uint64_t recordSize = /* data_section_crc */ 4;
 
   write(output, OpCode::DataEnd);
@@ -1016,7 +1025,7 @@ inline uint64_t McapWriter::write(IWritable& output, const DataEnd& dataEnd) {
   return 9 + recordSize;
 }
 
-inline uint64_t McapWriter::write(IWritable& output, const Record& record) {
+uint64_t McapWriter::write(IWritable& output, const Record& record) {
   write(output, OpCode(record.opcode));
   write(output, record.dataSize);
   write(output, record.data, record.dataSize);
@@ -1024,37 +1033,37 @@ inline uint64_t McapWriter::write(IWritable& output, const Record& record) {
   return 9 + record.dataSize;
 }
 
-inline void McapWriter::write(IWritable& output, const std::string_view str) {
+void McapWriter::write(IWritable& output, const std::string_view str) {
   write(output, uint32_t(str.size()));
   output.write(reinterpret_cast<const std::byte*>(str.data()), str.size());
 }
 
-inline void McapWriter::write(IWritable& output, const ByteArray bytes) {
+void McapWriter::write(IWritable& output, const ByteArray bytes) {
   write(output, uint32_t(bytes.size()));
   output.write(bytes.data(), bytes.size());
 }
 
-inline void McapWriter::write(IWritable& output, OpCode value) {
+void McapWriter::write(IWritable& output, OpCode value) {
   output.write(reinterpret_cast<const std::byte*>(&value), sizeof(value));
 }
 
-inline void McapWriter::write(IWritable& output, uint16_t value) {
+void McapWriter::write(IWritable& output, uint16_t value) {
   output.write(reinterpret_cast<const std::byte*>(&value), sizeof(value));
 }
 
-inline void McapWriter::write(IWritable& output, uint32_t value) {
+void McapWriter::write(IWritable& output, uint32_t value) {
   output.write(reinterpret_cast<const std::byte*>(&value), sizeof(value));
 }
 
-inline void McapWriter::write(IWritable& output, uint64_t value) {
+void McapWriter::write(IWritable& output, uint64_t value) {
   output.write(reinterpret_cast<const std::byte*>(&value), sizeof(value));
 }
 
-inline void McapWriter::write(IWritable& output, const std::byte* data, uint64_t size) {
+void McapWriter::write(IWritable& output, const std::byte* data, uint64_t size) {
   output.write(reinterpret_cast<const std::byte*>(data), size);
 }
 
-inline void McapWriter::write(IWritable& output, const KeyValueMap& map, uint32_t size) {
+void McapWriter::write(IWritable& output, const KeyValueMap& map, uint32_t size) {
   // Create a vector of key-value pairs so we can lexicographically sort by key
   std::vector<std::pair<std::string, std::string>> pairs;
   pairs.reserve(map.size());

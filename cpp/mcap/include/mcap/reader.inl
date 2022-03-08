@@ -1,6 +1,8 @@
 #include "internal.hpp"
 #include <cassert>
 #include <lz4.h>
+
+#define ZSTD_STATIC_LINKING_ONLY
 #include <zstd.h>
 #include <zstd_errors.h>
 
@@ -8,14 +10,14 @@ namespace mcap {
 
 // BufferReader ////////////////////////////////////////////////////////////////
 
-inline void BufferReader::reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) {
+void BufferReader::reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) {
   (void)uncompressedSize;
   assert(size == uncompressedSize);
   data_ = data;
   size_ = size;
 }
 
-inline uint64_t BufferReader::read(std::byte** output, uint64_t offset, uint64_t size) {
+uint64_t BufferReader::read(std::byte** output, uint64_t offset, uint64_t size) {
   if (!data_ || offset >= size_) {
     return 0;
   }
@@ -25,17 +27,17 @@ inline uint64_t BufferReader::read(std::byte** output, uint64_t offset, uint64_t
   return std::min(size, available);
 }
 
-inline uint64_t BufferReader::size() const {
+uint64_t BufferReader::size() const {
   return size_;
 }
 
-inline Status BufferReader::status() const {
+Status BufferReader::status() const {
   return StatusCode::Success;
 }
 
 // FileStreamReader ////////////////////////////////////////////////////////////
 
-inline FileStreamReader::FileStreamReader(std::ifstream& stream)
+FileStreamReader::FileStreamReader(std::ifstream& stream)
     : stream_(stream) {
   assert(stream.is_open());
 
@@ -47,11 +49,11 @@ inline FileStreamReader::FileStreamReader(std::ifstream& stream)
   position_ = 0;
 }
 
-inline uint64_t FileStreamReader::size() const {
+uint64_t FileStreamReader::size() const {
   return size_;
 }
 
-inline uint64_t FileStreamReader::read(std::byte** output, uint64_t offset, uint64_t size) {
+uint64_t FileStreamReader::read(std::byte** output, uint64_t offset, uint64_t size) {
   if (offset >= size_) {
     return 0;
   }
@@ -75,7 +77,7 @@ inline uint64_t FileStreamReader::read(std::byte** output, uint64_t offset, uint
 
 // LZ4Reader ///////////////////////////////////////////////////////////////////
 
-inline void LZ4Reader::reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) {
+void LZ4Reader::reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) {
   status_ = StatusCode::Success;
   compressedData_ = data;
   compressedSize_ = size;
@@ -89,14 +91,14 @@ inline void LZ4Reader::reset(const std::byte* data, uint64_t size, uint64_t unco
                                           compressedSize_, uncompressedSize_);
   if (uint64_t(status) != uncompressedSize_) {
     if (status < 0) {
-      const auto msg =
-        StrFormat("lz4 decompression of {} bytes into {} output bytes failed with error {}",
-                  compressedSize_, uncompressedSize_, status);
+      const auto msg = internal::StrFormat(
+        "lz4 decompression of {} bytes into {} output bytes failed with error {}", compressedSize_,
+        uncompressedSize_, status);
       status_ = Status{StatusCode::DecompressionFailed, msg};
     } else {
-      const auto msg =
-        StrFormat("lz4 decompression of {} bytes into {} output bytes only produced {} bytes",
-                  compressedSize_, uncompressedSize_, status);
+      const auto msg = internal::StrFormat(
+        "lz4 decompression of {} bytes into {} output bytes only produced {} bytes",
+        compressedSize_, uncompressedSize_, status);
       status_ = StatusCode::DecompressionSizeMismatch;
     }
 
@@ -105,7 +107,7 @@ inline void LZ4Reader::reset(const std::byte* data, uint64_t size, uint64_t unco
   }
 }
 
-inline uint64_t LZ4Reader::read(std::byte** output, uint64_t offset, uint64_t size) {
+uint64_t LZ4Reader::read(std::byte** output, uint64_t offset, uint64_t size) {
   if (offset >= uncompressedSize_) {
     return 0;
   }
@@ -115,17 +117,17 @@ inline uint64_t LZ4Reader::read(std::byte** output, uint64_t offset, uint64_t si
   return std::min(size, available);
 }
 
-inline uint64_t LZ4Reader::size() const {
+uint64_t LZ4Reader::size() const {
   return uncompressedSize_;
 }
 
-inline Status LZ4Reader::status() const {
+Status LZ4Reader::status() const {
   return status_;
 }
 
 // ZStdReader //////////////////////////////////////////////////////////////////
 
-inline void ZStdReader::reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) {
+void ZStdReader::reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) {
   status_ = StatusCode::Success;
   compressedData_ = data;
   compressedSize_ = size;
@@ -138,14 +140,14 @@ inline void ZStdReader::reset(const std::byte* data, uint64_t size, uint64_t unc
     ZSTD_decompress(uncompressedData_.data(), uncompressedSize_, compressedData_, compressedSize_);
   if (status != uncompressedSize_) {
     if (ZSTD_isError(status)) {
-      const auto msg =
-        StrFormat("zstd decompression of {} bytes into {} output bytes failed with error {}",
-                  compressedSize_, uncompressedSize_, ZSTD_getErrorName(status));
+      const auto msg = internal::StrFormat(
+        "zstd decompression of {} bytes into {} output bytes failed with error {}", compressedSize_,
+        uncompressedSize_, ZSTD_getErrorName(status));
       status_ = Status{StatusCode::DecompressionFailed, msg};
     } else {
-      const auto msg =
-        StrFormat("zstd decompression of {} bytes into {} output bytes only produced {} bytes",
-                  compressedSize_, uncompressedSize_, status);
+      const auto msg = internal::StrFormat(
+        "zstd decompression of {} bytes into {} output bytes only produced {} bytes",
+        compressedSize_, uncompressedSize_, status);
       status_ = StatusCode::DecompressionSizeMismatch;
     }
 
@@ -154,7 +156,7 @@ inline void ZStdReader::reset(const std::byte* data, uint64_t size, uint64_t unc
   }
 }
 
-inline uint64_t ZStdReader::read(std::byte** output, uint64_t offset, uint64_t size) {
+uint64_t ZStdReader::read(std::byte** output, uint64_t offset, uint64_t size) {
   if (offset >= uncompressedSize_) {
     return 0;
   }
@@ -164,21 +166,21 @@ inline uint64_t ZStdReader::read(std::byte** output, uint64_t offset, uint64_t s
   return std::min(size, available);
 }
 
-inline uint64_t ZStdReader::size() const {
+uint64_t ZStdReader::size() const {
   return uncompressedSize_;
 }
 
-inline Status ZStdReader::status() const {
+Status ZStdReader::status() const {
   return status_;
 }
 
 // McapReader //////////////////////////////////////////////////////////////////
 
-inline McapReader::~McapReader() {
+McapReader::~McapReader() {
   close();
 }
 
-inline Status McapReader::open(IReadable& reader, const McapReaderOptions& options) {
+Status McapReader::open(IReadable& reader, const McapReaderOptions& options) {
   close();
   options_ = options;
 
@@ -200,7 +202,7 @@ inline Status McapReader::open(IReadable& reader, const McapReaderOptions& optio
   // Check the header magic bytes
   if (std::memcmp(data, Magic, sizeof(Magic)) != 0) {
     const auto msg =
-      StrFormat(internal::ErrorMsgInvalidMagic, "Header", internal::MagicToHex(data));
+      internal::StrFormat(internal::ErrorMsgInvalidMagic, "Header", internal::MagicToHex(data));
     return Status{StatusCode::MagicMismatch, msg};
   }
 
@@ -210,7 +212,8 @@ inline Status McapReader::open(IReadable& reader, const McapReaderOptions& optio
     return status;
   }
   if (record.opcode != OpCode::Header) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidOpcode, "Header", uint8_t(record.opcode));
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidOpcode, "Header", uint8_t(record.opcode));
     return Status{StatusCode::InvalidFile, msg};
   }
   Header header;
@@ -230,12 +233,12 @@ inline Status McapReader::open(IReadable& reader, const McapReaderOptions& optio
   return StatusCode::Success;
 }
 
-inline Status McapReader::open(std::ifstream& stream, const McapReaderOptions& options) {
+Status McapReader::open(std::ifstream& stream, const McapReaderOptions& options) {
   fileStreamInput_ = std::make_unique<FileStreamReader>(stream);
   return open(*fileStreamInput_, options);
 }
 
-inline void McapReader::close() {
+void McapReader::close() {
   input_ = nullptr;
   fileStreamInput_.reset();
   header_ = std::nullopt;
@@ -254,7 +257,7 @@ inline void McapReader::close() {
   parsedSummary_ = false;
 }
 
-inline Status McapReader::readSummary() {
+Status McapReader::readSummary() {
   if (!input_) {
     return StatusCode::NotOpen;
   }
@@ -274,13 +277,13 @@ inline Status McapReader::readSummary() {
   return StatusCode::Success;
 }
 
-inline LinearMessageView McapReader::readMessages(Timestamp startTime, Timestamp endTime) {
+LinearMessageView McapReader::readMessages(Timestamp startTime, Timestamp endTime) {
   const auto onProblem = [](const Status&) {};
   return readMessages(onProblem, startTime, endTime);
 }
 
-inline LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem,
-                                                  Timestamp startTime, Timestamp endTime) {
+LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem, Timestamp startTime,
+                                           Timestamp endTime) {
   // Check that open() has been successfully called
   if (!dataSource() || dataStart_ == 0) {
     onProblem(StatusCode::NotOpen);
@@ -290,34 +293,34 @@ inline LinearMessageView McapReader::readMessages(const ProblemCallback& onProbl
   return LinearMessageView{*this, dataStart_, dataEnd_, startTime, endTime, onProblem};
 }
 
-inline IReadable* McapReader::dataSource() {
+IReadable* McapReader::dataSource() {
   return input_;
 }
 
-inline const std::optional<Header>& McapReader::header() const {
+const std::optional<Header>& McapReader::header() const {
   return header_;
 }
 
-inline const std::optional<Footer>& McapReader::footer() const {
+const std::optional<Footer>& McapReader::footer() const {
   return footer_;
 }
 
-inline ChannelPtr McapReader::channel(ChannelId channelId) const {
+ChannelPtr McapReader::channel(ChannelId channelId) const {
   const auto& maybeChannel = channels_.find(channelId);
   return (maybeChannel == channels_.end()) ? nullptr : maybeChannel->second;
 }
 
-inline SchemaPtr McapReader::schema(SchemaId schemaId) const {
+SchemaPtr McapReader::schema(SchemaId schemaId) const {
   const auto& maybeSchema = schemas_.find(schemaId);
   return (maybeSchema == schemas_.end()) ? nullptr : maybeSchema->second;
 }
 
-inline Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record* record) {
+Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record* record) {
   // Check that we can read at least 9 bytes (opcode + length)
   auto maxSize = reader.size() - offset;
   if (maxSize < 9) {
     const auto msg =
-      StrFormat("cannot read record at offset {}, {} bytes remaining", offset, maxSize);
+      internal::StrFormat("cannot read record at offset {}, {} bytes remaining", offset, maxSize);
     return Status{StatusCode::InvalidFile, msg};
   }
 
@@ -335,14 +338,14 @@ inline Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record*
   // Read payload
   maxSize -= 9;
   if (maxSize < record->dataSize) {
-    const auto msg =
-      StrFormat("record type 0x{:02x} at offset {} has length {} but only {} bytes remaining",
-                uint8_t(record->opcode), offset, record->dataSize, maxSize);
+    const auto msg = internal::StrFormat(
+      "record type 0x{:02x} at offset {} has length {} but only {} bytes remaining",
+      uint8_t(record->opcode), offset, record->dataSize, maxSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
   bytesRead = reader.read(&record->data, offset + 9, record->dataSize);
   if (bytesRead != record->dataSize) {
-    const auto msg = StrFormat(
+    const auto msg = internal::StrFormat(
       "attempted to read {} bytes for record type 0x{:02x} at offset {} but only read {} bytes",
       record->dataSize, uint8_t(record->opcode), offset, bytesRead);
     return Status{StatusCode::ReadFailed, msg};
@@ -351,7 +354,7 @@ inline Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record*
   return StatusCode::Success;
 }
 
-inline Status McapReader::ReadFooter(IReadable& reader, uint64_t offset, Footer* footer) {
+Status McapReader::ReadFooter(IReadable& reader, uint64_t offset, Footer* footer) {
   std::byte* data;
   uint64_t bytesRead = reader.read(&data, offset, internal::FooterLength);
   if (bytesRead != internal::FooterLength) {
@@ -360,13 +363,14 @@ inline Status McapReader::ReadFooter(IReadable& reader, uint64_t offset, Footer*
 
   // Check the footer magic bytes
   if (std::memcmp(data + internal::FooterLength - sizeof(Magic), Magic, sizeof(Magic)) != 0) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidMagic, "Footer",
-                               internal::MagicToHex(data + internal::FooterLength - sizeof(Magic)));
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidMagic, "Footer",
+                          internal::MagicToHex(data + internal::FooterLength - sizeof(Magic)));
     return Status{StatusCode::MagicMismatch, msg};
   }
 
   if (OpCode(data[0]) != OpCode::Footer) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidOpcode, "Footer", data[0]);
+    const auto msg = internal::StrFormat(internal::ErrorMsgInvalidOpcode, "Footer", data[0]);
     return Status{StatusCode::InvalidFile, msg};
   }
 
@@ -374,7 +378,7 @@ inline Status McapReader::ReadFooter(IReadable& reader, uint64_t offset, Footer*
   // fixed length
   const uint64_t length = internal::ParseUint64(data + 1);
   if (length != 8 + 8 + 4) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "Footer", length);
+    const auto msg = internal::StrFormat(internal::ErrorMsgInvalidLength, "Footer", length);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -384,12 +388,13 @@ inline Status McapReader::ReadFooter(IReadable& reader, uint64_t offset, Footer*
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseHeader(const Record& record, Header* header) {
+Status McapReader::ParseHeader(const Record& record, Header* header) {
   constexpr uint64_t MinSize = 4 + 4;
 
   assert(record.opcode == OpCode::Header);
   if (record.dataSize < MinSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "Header", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "Header", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -404,12 +409,13 @@ inline Status McapReader::ParseHeader(const Record& record, Header* header) {
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseFooter(const Record& record, Footer* footer) {
+Status McapReader::ParseFooter(const Record& record, Footer* footer) {
   constexpr uint64_t FooterSize = 8 + 8 + 4;
 
   assert(record.opcode == OpCode::Footer);
   if (record.dataSize != FooterSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "Footer", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "Footer", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -420,12 +426,13 @@ inline Status McapReader::ParseFooter(const Record& record, Footer* footer) {
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseSchema(const Record& record, Schema* schema) {
+Status McapReader::ParseSchema(const Record& record, Schema* schema) {
   constexpr uint64_t MinSize = 2 + 4 + 4 + 4;
 
   assert(record.opcode == OpCode::Schema);
   if (record.dataSize < MinSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "Schema", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "Schema", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -458,12 +465,13 @@ inline Status McapReader::ParseSchema(const Record& record, Schema* schema) {
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseChannel(const Record& record, Channel* channel) {
+Status McapReader::ParseChannel(const Record& record, Channel* channel) {
   constexpr uint64_t MinSize = 2 + 4 + 4 + 2 + 4;
 
   assert(record.opcode == OpCode::Channel);
   if (record.dataSize < MinSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "Channel", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "Channel", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -498,12 +506,13 @@ inline Status McapReader::ParseChannel(const Record& record, Channel* channel) {
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseMessage(const Record& record, Message* message) {
+Status McapReader::ParseMessage(const Record& record, Message* message) {
   constexpr uint64_t MessagePreambleSize = 2 + 4 + 8 + 8;
 
   assert(record.opcode == OpCode::Message);
   if (record.dataSize < MessagePreambleSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "Message", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "Message", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -516,12 +525,12 @@ inline Status McapReader::ParseMessage(const Record& record, Message* message) {
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseChunk(const Record& record, Chunk* chunk) {
+Status McapReader::ParseChunk(const Record& record, Chunk* chunk) {
   constexpr uint64_t ChunkPreambleSize = 8 + 8 + 8 + 4 + 4;
 
   assert(record.opcode == OpCode::Chunk);
   if (record.dataSize < ChunkPreambleSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "Chunk", record.dataSize);
+    const auto msg = internal::StrFormat(internal::ErrorMsgInvalidLength, "Chunk", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -548,7 +557,7 @@ inline Status McapReader::ParseChunk(const Record& record, Chunk* chunk) {
   offset += 8;
   if (chunk->compressedSize > record.dataSize - offset) {
     const auto msg =
-      StrFormat(internal::ErrorMsgInvalidLength, "Chunk.records", chunk->compressedSize);
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "Chunk.records", chunk->compressedSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
   // records
@@ -557,12 +566,13 @@ inline Status McapReader::ParseChunk(const Record& record, Chunk* chunk) {
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseMessageIndex(const Record& record, MessageIndex* messageIndex) {
+Status McapReader::ParseMessageIndex(const Record& record, MessageIndex* messageIndex) {
   constexpr uint64_t PreambleSize = 2 + 4;
 
   assert(record.opcode == OpCode::MessageIndex);
   if (record.dataSize < PreambleSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "MessageIndex", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "MessageIndex", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -571,7 +581,7 @@ inline Status McapReader::ParseMessageIndex(const Record& record, MessageIndex* 
 
   if (recordsSize % 16 != 0 || recordsSize > record.dataSize - PreambleSize) {
     const auto msg =
-      StrFormat(internal::ErrorMsgInvalidLength, "MessageIndex.records", recordsSize);
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "MessageIndex.records", recordsSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -585,12 +595,13 @@ inline Status McapReader::ParseMessageIndex(const Record& record, MessageIndex* 
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseChunkIndex(const Record& record, ChunkIndex* chunkIndex) {
+Status McapReader::ParseChunkIndex(const Record& record, ChunkIndex* chunkIndex) {
   constexpr uint64_t PreambleSize = 8 + 8 + 8 + 8 + 4;
 
   assert(record.opcode == OpCode::ChunkIndex);
   if (record.dataSize < PreambleSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "ChunkIndex", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "ChunkIndex", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -602,8 +613,8 @@ inline Status McapReader::ParseChunkIndex(const Record& record, ChunkIndex* chun
 
   if (messageIndexOffsetsSize % 10 != 0 ||
       messageIndexOffsetsSize > record.dataSize - PreambleSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "ChunkIndex.message_index_offsets",
-                               messageIndexOffsetsSize);
+    const auto msg = internal::StrFormat(
+      internal::ErrorMsgInvalidLength, "ChunkIndex.message_index_offsets", messageIndexOffsetsSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -647,7 +658,7 @@ inline Status McapReader::ParseChunkIndex(const Record& record, ChunkIndex* chun
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseAttachment(const Record& record, Attachment* attachment) {
+Status McapReader::ParseAttachment(const Record& record, Attachment* attachment) {
   constexpr uint64_t MinSize = /* log_time */ 8 +
                                /* create_time */ 8 +
                                /* name */ 4 +
@@ -657,7 +668,8 @@ inline Status McapReader::ParseAttachment(const Record& record, Attachment* atta
 
   assert(record.opcode == OpCode::Attachment);
   if (record.dataSize < MinSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "Attachment", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "Attachment", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -700,7 +712,7 @@ inline Status McapReader::ParseAttachment(const Record& record, Attachment* atta
   // data
   if (attachment->dataSize > record.dataSize - offset) {
     const auto msg =
-      StrFormat(internal::ErrorMsgInvalidLength, "Attachment.data", attachment->dataSize);
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "Attachment.data", attachment->dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
   attachment->data = record.data + offset;
@@ -715,13 +727,13 @@ inline Status McapReader::ParseAttachment(const Record& record, Attachment* atta
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseAttachmentIndex(const Record& record,
-                                               AttachmentIndex* attachmentIndex) {
+Status McapReader::ParseAttachmentIndex(const Record& record, AttachmentIndex* attachmentIndex) {
   constexpr uint64_t PreambleSize = 8 + 8 + 8 + 8 + 8 + 4;
 
   assert(record.opcode == OpCode::AttachmentIndex);
   if (record.dataSize < PreambleSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "AttachmentIndex", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "AttachmentIndex", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -750,12 +762,13 @@ inline Status McapReader::ParseAttachmentIndex(const Record& record,
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseStatistics(const Record& record, Statistics* statistics) {
+Status McapReader::ParseStatistics(const Record& record, Statistics* statistics) {
   constexpr uint64_t PreambleSize = 8 + 2 + 4 + 4 + 4 + 4 + 8 + 8 + 4;
 
   assert(record.opcode == OpCode::Statistics);
   if (record.dataSize < PreambleSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "Statistics", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "Statistics", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -772,8 +785,8 @@ inline Status McapReader::ParseStatistics(const Record& record, Statistics* stat
     internal::ParseUint32(record.data + 8 + 2 + 4 + 4 + 4 + 4 + 8 + 8);
   if (channelMessageCountsSize % 10 != 0 ||
       channelMessageCountsSize > record.dataSize - PreambleSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "Statistics.channelMessageCounts",
-                               channelMessageCountsSize);
+    const auto msg = internal::StrFormat(
+      internal::ErrorMsgInvalidLength, "Statistics.channelMessageCounts", channelMessageCountsSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -788,12 +801,13 @@ inline Status McapReader::ParseStatistics(const Record& record, Statistics* stat
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseMetadata(const Record& record, Metadata* metadata) {
+Status McapReader::ParseMetadata(const Record& record, Metadata* metadata) {
   constexpr uint64_t MinSize = 4 + 4;
 
   assert(record.opcode == OpCode::Metadata);
   if (record.dataSize < MinSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "Metadata", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "Metadata", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -813,12 +827,13 @@ inline Status McapReader::ParseMetadata(const Record& record, Metadata* metadata
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseMetadataIndex(const Record& record, MetadataIndex* metadataIndex) {
+Status McapReader::ParseMetadataIndex(const Record& record, MetadataIndex* metadataIndex) {
   constexpr uint64_t PreambleSize = 8 + 8 + 4;
 
   assert(record.opcode == OpCode::MetadataIndex);
   if (record.dataSize < PreambleSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "MetadataIndex", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "MetadataIndex", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -834,12 +849,13 @@ inline Status McapReader::ParseMetadataIndex(const Record& record, MetadataIndex
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseSummaryOffset(const Record& record, SummaryOffset* summaryOffset) {
+Status McapReader::ParseSummaryOffset(const Record& record, SummaryOffset* summaryOffset) {
   constexpr uint64_t MinSize = 1 + 8 + 8;
 
   assert(record.opcode == OpCode::SummaryOffset);
   if (record.dataSize < MinSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "SummaryOffset", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "SummaryOffset", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -850,12 +866,13 @@ inline Status McapReader::ParseSummaryOffset(const Record& record, SummaryOffset
   return StatusCode::Success;
 }
 
-inline Status McapReader::ParseDataEnd(const Record& record, DataEnd* dataEnd) {
+Status McapReader::ParseDataEnd(const Record& record, DataEnd* dataEnd) {
   constexpr uint64_t MinSize = 4;
 
   assert(record.opcode == OpCode::DataEnd);
   if (record.dataSize < MinSize) {
-    const auto msg = StrFormat(internal::ErrorMsgInvalidLength, "DataEnd", record.dataSize);
+    const auto msg =
+      internal::StrFormat(internal::ErrorMsgInvalidLength, "DataEnd", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -863,7 +880,7 @@ inline Status McapReader::ParseDataEnd(const Record& record, DataEnd* dataEnd) {
   return StatusCode::Success;
 }
 
-inline std::optional<Compression> McapReader::ParseCompression(const std::string_view compression) {
+std::optional<Compression> McapReader::ParseCompression(const std::string_view compression) {
   if (compression == "") {
     return Compression::None;
   } else if (compression == "lz4") {
@@ -877,16 +894,14 @@ inline std::optional<Compression> McapReader::ParseCompression(const std::string
 
 // RecordReader ////////////////////////////////////////////////////////////////
 
-inline RecordReader::RecordReader(IReadable& dataSource, ByteOffset startOffset,
-                                  ByteOffset endOffset)
+RecordReader::RecordReader(IReadable& dataSource, ByteOffset startOffset, ByteOffset endOffset)
     : offset(startOffset)
     , endOffset(endOffset)
     , dataSource_(&dataSource)
     , status_(StatusCode::Success)
     , curRecord_{} {}
 
-inline void RecordReader::reset(IReadable& dataSource, ByteOffset startOffset,
-                                ByteOffset endOffset) {
+void RecordReader::reset(IReadable& dataSource, ByteOffset startOffset, ByteOffset endOffset) {
   dataSource_ = &dataSource;
   this->offset = startOffset;
   this->endOffset = endOffset;
@@ -894,7 +909,7 @@ inline void RecordReader::reset(IReadable& dataSource, ByteOffset startOffset,
   curRecord_ = {};
 }
 
-inline std::optional<Record> RecordReader::next() {
+std::optional<Record> RecordReader::next() {
   if (!dataSource_ || offset >= endOffset) {
     return std::nullopt;
   }
@@ -907,17 +922,17 @@ inline std::optional<Record> RecordReader::next() {
   return curRecord_;
 }
 
-inline const Status& RecordReader::status() {
+const Status& RecordReader::status() {
   return status_;
 }
 
 // TypedChunkReader ////////////////////////////////////////////////////////////
 
-inline TypedChunkReader::TypedChunkReader()
+TypedChunkReader::TypedChunkReader()
     : reader_{uncompressedReader_, 0, 0}
     , status_{StatusCode::Success} {}
 
-inline void TypedChunkReader::reset(const Chunk& chunk, Compression compression) {
+void TypedChunkReader::reset(const Chunk& chunk, Compression compression) {
   ICompressedReader* decompressor =
     (compression == Compression::None)  ? static_cast<ICompressedReader*>(&uncompressedReader_)
     : (compression == Compression::Lz4) ? static_cast<ICompressedReader*>(&lz4Reader_)
@@ -927,7 +942,7 @@ inline void TypedChunkReader::reset(const Chunk& chunk, Compression compression)
   status_ = decompressor->status();
 }
 
-inline bool TypedChunkReader::next() {
+bool TypedChunkReader::next() {
   const auto maybeRecord = reader_.next();
   status_ = reader_.status();
   if (!maybeRecord.has_value()) {
@@ -978,7 +993,8 @@ inline bool TypedChunkReader::next() {
     case OpCode::SummaryOffset:
     case OpCode::DataEnd: {
       // These opcodes should not appear inside chunks
-      const auto msg = StrFormat("record type {} cannot appear in Chunk", uint8_t(record.opcode));
+      const auto msg =
+        internal::StrFormat("record type {} cannot appear in Chunk", uint8_t(record.opcode));
       status_ = Status{StatusCode::InvalidOpCode, msg};
       break;
     }
@@ -991,18 +1007,18 @@ inline bool TypedChunkReader::next() {
   return true;
 }
 
-inline ByteOffset TypedChunkReader::offset() const {
+ByteOffset TypedChunkReader::offset() const {
   return reader_.offset;
 }
 
-inline const Status& TypedChunkReader::status() const {
+const Status& TypedChunkReader::status() const {
   return status_;
 }
 
 // TypedRecordReader ///////////////////////////////////////////////////////////
 
-inline TypedRecordReader::TypedRecordReader(IReadable& dataSource, ByteOffset startOffset,
-                                            ByteOffset endOffset)
+TypedRecordReader::TypedRecordReader(IReadable& dataSource, ByteOffset startOffset,
+                                     ByteOffset endOffset)
     : reader_(dataSource, startOffset, std::min(endOffset, dataSource.size()))
     , status_(StatusCode::Success)
     , parsingChunk_(false) {
@@ -1023,7 +1039,7 @@ inline TypedRecordReader::TypedRecordReader(IReadable& dataSource, ByteOffset st
   };
 }
 
-inline bool TypedRecordReader::next() {
+bool TypedRecordReader::next() {
   if (parsingChunk_) {
     const bool chunkInProgress = chunkReader_.next();
     status_ = chunkReader_.status();
@@ -1103,7 +1119,8 @@ inline bool TypedRecordReader::next() {
         if (onMessage || onSchema || onChannel) {
           const auto maybeCompression = McapReader::ParseCompression(chunk.compression);
           if (!maybeCompression.has_value()) {
-            const auto msg = StrFormat("unrecognized compression \"{}\"", chunk.compression);
+            const auto msg =
+              internal::StrFormat("unrecognized compression \"{}\"", chunk.compression);
             status_ = Status{StatusCode::UnrecognizedCompression, msg};
             return true;
           }
@@ -1207,18 +1224,17 @@ inline bool TypedRecordReader::next() {
   return true;
 }
 
-inline ByteOffset TypedRecordReader::offset() const {
+ByteOffset TypedRecordReader::offset() const {
   return reader_.offset + (parsingChunk_ ? chunkReader_.offset() : 0);
 }
 
-inline const Status& TypedRecordReader::status() const {
+const Status& TypedRecordReader::status() const {
   return status_;
 }
 
 // LinearMessageView ///////////////////////////////////////////////////////////
 
-inline LinearMessageView::LinearMessageView(McapReader& mcapReader,
-                                            const ProblemCallback& onProblem)
+LinearMessageView::LinearMessageView(McapReader& mcapReader, const ProblemCallback& onProblem)
     : mcapReader_(mcapReader)
     , dataStart_(0)
     , dataEnd_(0)
@@ -1226,9 +1242,9 @@ inline LinearMessageView::LinearMessageView(McapReader& mcapReader,
     , endTime_(0)
     , onProblem_(onProblem) {}
 
-inline LinearMessageView::LinearMessageView(McapReader& mcapReader, ByteOffset dataStart,
-                                            ByteOffset dataEnd, Timestamp startTime,
-                                            Timestamp endTime, const ProblemCallback& onProblem)
+LinearMessageView::LinearMessageView(McapReader& mcapReader, ByteOffset dataStart,
+                                     ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
+                                     const ProblemCallback& onProblem)
     : mcapReader_(mcapReader)
     , dataStart_(dataStart)
     , dataEnd_(dataEnd)
@@ -1236,7 +1252,7 @@ inline LinearMessageView::LinearMessageView(McapReader& mcapReader, ByteOffset d
     , endTime_(endTime)
     , onProblem_(onProblem) {}
 
-inline LinearMessageView::Iterator LinearMessageView::begin() {
+LinearMessageView::Iterator LinearMessageView::begin() {
   if (dataStart_ == dataEnd_ || !mcapReader_.dataSource()) {
     return end();
   }
@@ -1244,23 +1260,22 @@ inline LinearMessageView::Iterator LinearMessageView::begin() {
                                      startTime_,  endTime_,   onProblem_};
 }
 
-inline LinearMessageView::Iterator LinearMessageView::end() {
+LinearMessageView::Iterator LinearMessageView::end() {
   return LinearMessageView::Iterator::end();
 }
 
 // LinearMessageView::Iterator /////////////////////////////////////////////////
 
-inline LinearMessageView::Iterator::Iterator(McapReader& mcapReader,
-                                             const ProblemCallback& onProblem)
+LinearMessageView::Iterator::Iterator(McapReader& mcapReader, const ProblemCallback& onProblem)
     : mcapReader_(mcapReader)
     , recordReader_(std::nullopt)
     , startTime_(0)
     , endTime_(0)
     , onProblem_(onProblem) {}
 
-inline LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataStart,
-                                             ByteOffset dataEnd, Timestamp startTime,
-                                             Timestamp endTime, const ProblemCallback& onProblem)
+LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataStart,
+                                      ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
+                                      const ProblemCallback& onProblem)
     : mcapReader_(mcapReader)
     , recordReader_(std::in_place, *mcapReader.dataSource(), dataStart, dataEnd)
     , startTime_(startTime)
@@ -1275,10 +1290,10 @@ inline LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset 
   recordReader_->onMessage = [this](const Message& message) {
     auto maybeChannel = mcapReader_.channel(message.channelId);
     if (!maybeChannel) {
-      onProblem_(
-        Status{StatusCode::InvalidChannelId,
-               StrFormat("message at log_time {} (seq {}) references missing channel id {}",
-                         message.logTime, message.sequence, message.channelId)});
+      onProblem_(Status{
+        StatusCode::InvalidChannelId,
+        internal::StrFormat("message at log_time {} (seq {}) references missing channel id {}",
+                            message.logTime, message.sequence, message.channelId)});
       return;
     }
 
@@ -1288,8 +1303,8 @@ inline LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset 
       maybeSchema = mcapReader_.schema(channel.schemaId);
       if (!maybeSchema) {
         onProblem_(Status{StatusCode::InvalidSchemaId,
-                          StrFormat("channel {} ({}) references missing schema id {}", channel.id,
-                                    channel.topic, channel.schemaId)});
+                          internal::StrFormat("channel {} ({}) references missing schema id {}",
+                                              channel.id, channel.topic, channel.schemaId)});
         return;
       }
     }
@@ -1300,15 +1315,15 @@ inline LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset 
   ++(*this);
 }
 
-inline LinearMessageView::Iterator::reference LinearMessageView::Iterator::operator*() const {
+LinearMessageView::Iterator::reference LinearMessageView::Iterator::operator*() const {
   return *curMessage_;
 }
 
-inline LinearMessageView::Iterator::pointer LinearMessageView::Iterator::operator->() const {
+LinearMessageView::Iterator::pointer LinearMessageView::Iterator::operator->() const {
   return &*curMessage_;
 }
 
-inline LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
+LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
   curMessage_ = std::nullopt;
 
   if (!recordReader_.has_value()) {
@@ -1338,13 +1353,13 @@ inline LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
   return *this;
 }
 
-inline LinearMessageView::Iterator LinearMessageView::Iterator::operator++(int) {
+LinearMessageView::Iterator LinearMessageView::Iterator::operator++(int) {
   LinearMessageView::Iterator tmp = *this;
   ++(*this);
   return tmp;
 }
 
-inline bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
+bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
   const bool aEnd = !a.recordReader_.has_value();
   const bool bEnd = !b.recordReader_.has_value();
   if (aEnd && bEnd) {
@@ -1355,7 +1370,7 @@ inline bool operator==(const LinearMessageView::Iterator& a, const LinearMessage
   return a.recordReader_->offset() == b.recordReader_->offset();
 }
 
-inline bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
+bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
   return !(a == b);
 }
 

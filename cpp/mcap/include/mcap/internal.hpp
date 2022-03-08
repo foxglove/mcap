@@ -1,5 +1,7 @@
 #pragma once
 
+#include <fmt/core.h>
+
 #include "types.hpp"
 
 // Do not compile on systems with non-8-bit bytes
@@ -24,6 +26,15 @@ constexpr uint64_t FooterLength = /* opcode */ 1 +
                                   /* summary offset start */ 8 +
                                   /* summary crc */ 4 +
                                   /* magic bytes */ sizeof(Magic);
+
+/**
+ * @brief String formatting compatible with std::format(), used to construct
+ * Status messages.
+ */
+template <typename... T>
+[[nodiscard]] inline std::string StrFormat(std::string_view msg, T&&... args) {
+  return fmt::format(msg, std::forward<T>(args)...);
+}
 
 inline uint32_t KeyValueMapSize(const KeyValueMap& map) {
   uint32_t size = 0;

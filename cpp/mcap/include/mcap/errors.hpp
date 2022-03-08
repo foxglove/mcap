@@ -1,7 +1,5 @@
 #pragma once
 
-#include <fmt/core.h>
-
 #include <string>
 
 namespace mcap {
@@ -94,14 +92,5 @@ struct Status {
     return code == StatusCode::Success;
   }
 };
-
-/**
- * @brief String formatting compatible with std::format(), used to construct
- * Status messages.
- */
-template <typename... T>
-[[nodiscard]] inline std::string StrFormat(std::string_view msg, T&&... args) {
-  return fmt::format(msg, std::forward<T>(args)...);
-}
 
 }  // namespace mcap
