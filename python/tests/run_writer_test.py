@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Set, Type
 
 from mcap.mcap0.records import Attachment, Channel, Header, McapRecord, Message, Schema
-from mcap.mcap0.writer import IndexType, Writer
+from mcap.mcap0.writer import CompressionType, IndexType, Writer
 
 
 def deserialize_value(klass: Type[McapRecord], field: str, value: Any) -> Any:
@@ -45,6 +45,7 @@ def write_file(features: List[str], expected_records: List[Dict[str, Any]]) -> b
     writer = Writer(
         output=output,
         index_types=index_type_from_features(features),
+        compression=CompressionType.NONE,
         repeat_channels="rch" in features,
         repeat_schemas="rsh" in features,
         use_chunking="ch" in features,

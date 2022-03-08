@@ -1,10 +1,12 @@
 import struct
 import zlib
-import zstd
 from collections import defaultdict
 from enum import Enum, Flag, auto
-from io import BufferedWriter, BytesIO, RawIOBase
-from typing import Dict, List, OrderedDict, Union
+from io import BufferedWriter, RawIOBase
+from typing import IO, Any, Dict, List, OrderedDict, Union
+
+import lz4.frame  # type: ignore
+import zstd
 
 from .chunk_builder import ChunkBuilder
 from .data_stream import RecordBuilder
@@ -48,9 +50,9 @@ class Writer:
 
     def __init__(
         self,
-        output: Union[str, BytesIO, BufferedWriter],
+        output: Union[str, IO[Any], BufferedWriter],
         chunk_size: int = 1024 * 1024,
-        compression: CompressionType = CompressionType.NONE,
+        compression: CompressionType = CompressionType.ZSTD,
         index_types: IndexType = IndexType.ALL,
         repeat_channels: bool = True,
         repeat_schemas: bool = True,
