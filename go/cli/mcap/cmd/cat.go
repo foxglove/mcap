@@ -21,7 +21,7 @@ var (
 	end    int64
 )
 
-func printMessages(ctx context.Context, it mcap.MessageIterator) error {
+func printMessages(ctx context.Context, w io.Writer, it mcap.MessageIterator) error {
 	buf := make([]byte, 1024*1024)
 	for {
 		schema, channel, message, err := it.Next(buf)
@@ -31,7 +31,7 @@ func printMessages(ctx context.Context, it mcap.MessageIterator) error {
 			}
 			log.Fatalf("Failed to read next message: %s", err)
 		}
-		fmt.Printf("%d %s [%s] %v...\n", message.LogTime, channel.Topic, schema.Name, message.Data[:10])
+		fmt.Fprintf(w, "%d %s [%s] %v...\n", message.LogTime, channel.Topic, schema.Name, message.Data[:10])
 	}
 	return nil
 }
@@ -57,7 +57,7 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("Failed to read messages: %s", err)
 			}
-			err = printMessages(ctx, it)
+			err = printMessages(ctx, os.Stdout, it)
 			if err != nil {
 				log.Fatalf("Failed to print messages: %s", err)
 			}
@@ -79,7 +79,7 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to read messages: %w", err)
 			}
-			err = printMessages(ctx, it)
+			err = printMessages(ctx, os.Stdout, it)
 			if err != nil {
 				return fmt.Errorf("failed to print messages: %w", err)
 			}
