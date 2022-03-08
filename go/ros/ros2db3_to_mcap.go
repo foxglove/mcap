@@ -40,6 +40,9 @@ var rosPrimitives = map[string]bool{
 
 func getSchema(encoding string, rosType string, directories []string) ([]byte, error) {
 	parts := strings.FieldsFunc(rosType, func(c rune) bool { return c == '/' })
+	if len(parts) < 3 {
+		return nil, fmt.Errorf("expected type %s to match <package>/msg/<type>", rosType)
+	}
 	baseType := parts[2]
 	rosPkg := parts[0]
 	for _, dir := range directories {
