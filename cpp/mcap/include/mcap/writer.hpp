@@ -1,14 +1,18 @@
 #pragma once
 
-#include <cryptopp/crc.h>
-
 #include "types.hpp"
 #include <memory>
 #include <string>
 #include <unordered_set>
 #include <vector>
 
-typedef struct ZSTD_CCtx_s ZSTD_CCtx;
+// Forward declaration
+struct ZSTD_CCtx_s;
+
+// Forward declaration
+namespace CryptoPP {
+class CRC32;
+}  // namespace CryptoPP
 
 namespace mcap {
 
@@ -99,7 +103,7 @@ class IWritable {
 public:
   bool crcEnabled = false;
 
-  virtual inline ~IWritable() = default;
+  virtual ~IWritable() = default;
 
   /**
    * @brief Called whenever the writer needs to write data to the output MCAP
@@ -132,7 +136,7 @@ protected:
   virtual void handleWrite(const std::byte* data, uint64_t size) = 0;
 
 private:
-  CryptoPP::CRC32 crc_;
+  std::unique_ptr<CryptoPP::CRC32> crc_;
 };
 
 class FileWriter final : public IWritable {
@@ -176,7 +180,7 @@ private:
  */
 class IChunkWriter : public IWritable {
 public:
-  virtual inline ~IChunkWriter() = default;
+  virtual ~IChunkWriter() = default;
 
   /**
    * @brief Called when the writer wants to close the current output Chunk.
@@ -280,7 +284,7 @@ public:
 private:
   std::vector<std::byte> uncompressedBuffer_;
   std::vector<std::byte> compressedBuffer_;
-  ZSTD_CCtx* zstdContext_ = nullptr;
+  ZSTD_CCtx_s* zstdContext_ = nullptr;
 };
 
 /**
@@ -435,4 +439,6 @@ private:
 
 }  // namespace mcap
 
+#ifdef MCAP_IMPLEMENTATION
 #include "writer.inl"
+#endif

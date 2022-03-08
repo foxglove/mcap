@@ -1,9 +1,17 @@
+#define MCAP_IMPLEMENTATION
 #include <mcap/reader.hpp>
+
+#include <fmt/core.h>
 
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
+
+template <typename... T>
+[[nodiscard]] inline std::string StrFormat(std::string_view msg, T&&... args) {
+  return fmt::format(msg, std::forward<T>(args)...);
+}
 
 std::string ToString(const mcap::KeyValueMap& map) {
   std::stringstream ss;
@@ -20,7 +28,7 @@ std::string ToString(const mcap::KeyValueMap& map) {
 
 std::string ToString(const std::unordered_map<uint16_t, uint64_t>& map) {
   if (map.size() > 8) {
-    return mcap::StrFormat("<{} entries>", map.size());
+    return StrFormat("<{} entries>", map.size());
   }
 
   std::stringstream ss;
@@ -37,7 +45,7 @@ std::string ToString(const std::unordered_map<uint16_t, uint64_t>& map) {
 
 std::string ToString(const std::vector<std::pair<mcap::Timestamp, mcap::ByteOffset>>& pairs) {
   if (pairs.size() > 8) {
-    return mcap::StrFormat("<{} entries>", pairs.size());
+    return StrFormat("<{} entries>", pairs.size());
   }
 
   std::stringstream ss;
@@ -53,33 +61,33 @@ std::string ToString(const std::vector<std::pair<mcap::Timestamp, mcap::ByteOffs
 }
 
 std::string ToString(const mcap::Header& header) {
-  return mcap::StrFormat("[Header] profile={}, library={}", header.profile, header.library);
+  return StrFormat("[Header] profile={}, library={}", header.profile, header.library);
 }
 
 std::string ToString(const mcap::Footer& footer) {
-  return mcap::StrFormat("[Footer] summary_start={}, summary_offset_start={}, summary_crc={}",
-                         footer.summaryStart, footer.summaryOffsetStart, footer.summaryCrc);
+  return StrFormat("[Footer] summary_start={}, summary_offset_start={}, summary_crc={}",
+                   footer.summaryStart, footer.summaryOffsetStart, footer.summaryCrc);
 }
 
 std::string ToString(const mcap::Schema& schema) {
-  return mcap::StrFormat("[Schema] id={}, name={}, encoding={}, data=<{} bytes>", schema.id,
-                         schema.name, schema.encoding, schema.data.size());
+  return StrFormat("[Schema] id={}, name={}, encoding={}, data=<{} bytes>", schema.id, schema.name,
+                   schema.encoding, schema.data.size());
 }
 
 std::string ToString(const mcap::Channel& channel) {
-  return mcap::StrFormat(
-    "[Channel] id={}, schema_id={}, topic={}, message_encoding={}, metadata={}", channel.id,
-    channel.schemaId, channel.topic, channel.messageEncoding, ToString(channel.metadata));
+  return StrFormat("[Channel] id={}, schema_id={}, topic={}, message_encoding={}, metadata={}",
+                   channel.id, channel.schemaId, channel.topic, channel.messageEncoding,
+                   ToString(channel.metadata));
 }
 
 std::string ToString(const mcap::Message& message) {
-  return mcap::StrFormat(
+  return StrFormat(
     "[Message] channel_id={}, sequence={}, publish_time={}, log_time={}, data=<{} bytes>",
     message.channelId, message.sequence, message.publishTime, message.logTime, message.dataSize);
 }
 
 std::string ToString(const mcap::Chunk& chunk) {
-  return mcap::StrFormat(
+  return StrFormat(
     "[Chunk] message_start_time={}, message_end_time={}, uncompressed_size={}, "
     "uncompressed_crc={}, compression={}, data=<{} bytes>",
     chunk.messageStartTime, chunk.messageEndTime, chunk.uncompressedSize, chunk.uncompressedCrc,
@@ -87,12 +95,12 @@ std::string ToString(const mcap::Chunk& chunk) {
 }
 
 std::string ToString(const mcap::MessageIndex& messageIndex) {
-  return mcap::StrFormat("[MessageIndex] channel_id={}, records={}", messageIndex.channelId,
-                         ToString(messageIndex.records));
+  return StrFormat("[MessageIndex] channel_id={}, records={}", messageIndex.channelId,
+                   ToString(messageIndex.records));
 }
 
 std::string ToString(const mcap::ChunkIndex& chunkIndex) {
-  return mcap::StrFormat(
+  return StrFormat(
     "[ChunkIndex] message_start_time={}, message_end_time={}, chunk_start_offset={}, "
     "chunk_length={}, "
     "message_index_offsets={}, message_index_length={}, compression={}, "
@@ -103,14 +111,14 @@ std::string ToString(const mcap::ChunkIndex& chunkIndex) {
 }
 
 std::string ToString(const mcap::Attachment& attachment) {
-  return mcap::StrFormat(
+  return StrFormat(
     "[Attachment] log_time={}, create_time={}, name={}, content_type={}, data=<{} bytes>, crc={}",
     attachment.logTime, attachment.createTime, attachment.name, attachment.contentType,
     attachment.dataSize, attachment.crc);
 }
 
 std::string ToString(const mcap::AttachmentIndex& attachmentIndex) {
-  return mcap::StrFormat(
+  return StrFormat(
     "[AttachmentIndex] offset={}, length={}, log_time={}, create_time={}, data_size={}, name={}, "
     "content_type={}",
     attachmentIndex.offset, attachmentIndex.length, attachmentIndex.logTime,
@@ -119,7 +127,7 @@ std::string ToString(const mcap::AttachmentIndex& attachmentIndex) {
 }
 
 std::string ToString(const mcap::Statistics& statistics) {
-  return mcap::StrFormat(
+  return StrFormat(
     "[Statistics] message_count={}, schema_count={}, channel_count={}, attachment_count={}, "
     "metadata_count={}, chunk_count={}, message_start_time={}, message_end_time={}, "
     "channel_message_counts={}",
@@ -130,34 +138,33 @@ std::string ToString(const mcap::Statistics& statistics) {
 }
 
 std::string ToString(const mcap::Metadata& metadata) {
-  return mcap::StrFormat("[Metadata] name={}, metadata={}", metadata.name,
-                         ToString(metadata.metadata));
+  return StrFormat("[Metadata] name={}, metadata={}", metadata.name, ToString(metadata.metadata));
 }
 
 std::string ToString(const mcap::MetadataIndex& metadataIndex) {
-  return mcap::StrFormat("[MetadataIndex] offset={}, length={}, name={}", metadataIndex.offset,
-                         metadataIndex.length, metadataIndex.name);
+  return StrFormat("[MetadataIndex] offset={}, length={}, name={}", metadataIndex.offset,
+                   metadataIndex.length, metadataIndex.name);
 }
 
 std::string ToString(const mcap::SummaryOffset& summaryOffset) {
-  return mcap::StrFormat(
-    "[SummaryOffset] group_opcode={} (0x{:02x}), group_start={}, group_length={}",
-    mcap::OpCodeString(summaryOffset.groupOpCode), uint8_t(summaryOffset.groupOpCode),
-    summaryOffset.groupStart, summaryOffset.groupLength);
+  return StrFormat("[SummaryOffset] group_opcode={} (0x{:02x}), group_start={}, group_length={}",
+                   mcap::OpCodeString(summaryOffset.groupOpCode),
+                   uint8_t(summaryOffset.groupOpCode), summaryOffset.groupStart,
+                   summaryOffset.groupLength);
 }
 
 std::string ToString(const mcap::DataEnd& dataEnd) {
-  return mcap::StrFormat("[DataEnd] data_section_crc={}", dataEnd.dataSectionCrc);
+  return StrFormat("[DataEnd] data_section_crc={}", dataEnd.dataSectionCrc);
 }
 
 std::string ToString(const mcap::Record& record) {
-  return mcap::StrFormat("[Unknown] opcode=0x{:02x}, data=<{} bytes>", uint8_t(record.opcode),
-                         record.dataSize);
+  return StrFormat("[Unknown] opcode=0x{:02x}, data=<{} bytes>", uint8_t(record.opcode),
+                   record.dataSize);
 }
 
 std::string ToStringRaw(const mcap::Record& record) {
-  return mcap::StrFormat("[{}] opcode=0x{:02x}, data=<{} bytes>", mcap::OpCodeString(record.opcode),
-                         uint8_t(record.opcode), record.dataSize);
+  return StrFormat("[{}] opcode=0x{:02x}, data=<{} bytes>", mcap::OpCodeString(record.opcode),
+                   uint8_t(record.opcode), record.dataSize);
 }
 
 void DumpRaw(mcap::IReadable& dataSource) {
