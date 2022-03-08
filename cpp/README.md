@@ -5,6 +5,7 @@
 <!-- cspell: disable -->
 
 ```cpp
+#define MCAP_IMPLEMENTATION  // Define this in exactly one .cpp file
 #include <mcap/writer.hpp>
 
 #include <chrono>
@@ -87,16 +88,9 @@ following dependencies:
 To simplify installation of dependencies, the [Conan](https://conan.io/) package
 manager can be used with the included
 [conanfile.py](https://github.com/foxglove/mcap/blob/main/cpp/mcap/conanfile.py).
-Alternatively, you can link against system libraries. On Ubuntu/Debian systems,
-use the following command to install the dependencies:
-
-<!-- cspell: disable -->
-
-```bash
-sudo apt install libcrypto++-dev libfmt-dev liblz4-dev libzstd-dev
-```
-
-<!-- cspell: enable -->
+If you use an alternative approach, such as CMake's FetchContent or directly
+vendoring the dependencies, make sure you use versions equal or greater than the
+versions listed above.
 
 ## Usage
 

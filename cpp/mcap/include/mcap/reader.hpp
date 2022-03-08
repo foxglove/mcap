@@ -33,7 +33,7 @@ struct McapReaderOptions {
  * @brief An abstract interface for reading MCAP data.
  */
 struct IReadable {
-  virtual inline ~IReadable() = default;
+  virtual ~IReadable() = default;
 
   /**
    * @brief Returns the size of the file in bytes.
@@ -82,7 +82,7 @@ private:
  */
 class ICompressedReader : public IReadable {
 public:
-  virtual inline ~ICompressedReader() = default;
+  virtual ~ICompressedReader() = default;
 
   /**
    * @brief Reset the reader state, clearing any internal buffers and state, and
@@ -462,4 +462,6 @@ private:
 
 }  // namespace mcap
 
+#ifdef MCAP_IMPLEMENTATION
 #include "reader.inl"
+#endif

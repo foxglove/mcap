@@ -365,4 +365,6 @@ struct MessageView {
 
 }  // namespace mcap
 
+#ifdef MCAP_IMPLEMENTATION
 #include "types.inl"
+#endif
