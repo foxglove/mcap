@@ -159,6 +159,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
             );
           }
           header = record;
+          yield record;
           break;
         case "Schema":
         case "Channel":
