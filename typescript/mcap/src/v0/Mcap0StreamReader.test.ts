@@ -42,6 +42,39 @@ describe("Mcap0StreamReader", () => {
     expect(() => reader.nextRecord()).toThrow("Expected MCAP magic");
   });
 
+  it("includes library in error messages", () => {
+    const reader = new Mcap0StreamReader();
+    reader.append(
+      new Uint8Array([
+        ...MCAP0_MAGIC,
+        ...record(Opcode.HEADER, [...string("prof"), ...string("lib")]),
+        ...record(Opcode.FOOTER, [
+          ...uint64LE(0x0123456789abcdefn), // summary start
+          ...uint64LE(0x0123456789abcdefn), // summary offset start
+          ...uint32LE(0x01234567), // summary crc
+        ]),
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+      ]),
+    );
+    expect(() => reader.nextRecord()).toThrow(/Expected MCAP magic.+\[library=lib\]/);
+  });
+
+  it("includes 'no header' in error messages if there is no header", () => {
+    const reader = new Mcap0StreamReader();
+    reader.append(
+      new Uint8Array([
+        ...MCAP0_MAGIC,
+        ...record(Opcode.FOOTER, [
+          ...uint64LE(0x0123456789abcdefn), // summary start
+          ...uint64LE(0x0123456789abcdefn), // summary offset start
+          ...uint32LE(0x01234567), // summary crc
+        ]),
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+      ]),
+    );
+    expect(() => reader.nextRecord()).toThrow(/Expected MCAP magic.+\[no header\]/);
+  });
+
   it("parses empty file", () => {
     const reader = new Mcap0StreamReader();
     reader.append(

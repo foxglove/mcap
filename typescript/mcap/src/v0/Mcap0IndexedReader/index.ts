@@ -70,6 +70,10 @@ export default class Mcap0IndexedReader {
     }
   }
 
+  private errorWithLibrary(message: string): Error {
+    return new Error(`${message} [library=${this.header.library}]`);
+  }
+
   static async Initialize({
     readable,
     decompressHandlers,
@@ -127,6 +131,10 @@ export default class Mcap0IndexedReader {
       header = headerResult.record;
     }
 
+    function errorWithLibrary(message: string): Error {
+      return new Error(`${message} [library=${header.library}]`);
+    }
+
     let footerOffset: bigint;
     let footerAndMagicView: DataView;
     {
@@ -146,7 +154,7 @@ export default class Mcap0IndexedReader {
           MCAP0_MAGIC.length,
       );
       if (size < headerLengthLowerBound + footerAndMagicReadLength) {
-        throw new Error(`File size (${size}) is too small to be valid MCAP`);
+        throw errorWithLibrary(`File size (${size}) is too small to be valid MCAP`);
       }
       footerOffset = size - footerAndMagicReadLength;
       const footerBuffer = await readable.read(footerOffset, footerAndMagicReadLength);
@@ -158,7 +166,11 @@ export default class Mcap0IndexedReader {
       );
     }
 
-    void parseMagic(footerAndMagicView, footerAndMagicView.byteLength - MCAP0_MAGIC.length);
+    try {
+      void parseMagic(footerAndMagicView, footerAndMagicView.byteLength - MCAP0_MAGIC.length);
+    } catch (error) {
+      throw errorWithLibrary((error as Error).message);
+    }
 
     let footer: TypedMcapRecords["Footer"];
     {
@@ -168,14 +180,14 @@ export default class Mcap0IndexedReader {
         validateCrcs: true,
       });
       if (footerResult.record?.type !== "Footer") {
-        throw new Error(
+        throw errorWithLibrary(
           `Unable to read footer from end of file (offset ${footerOffset}); found ${
             footerResult.record?.type ?? "nothing"
           }`,
         );
       }
       if (footerResult.usedBytes !== footerAndMagicView.byteLength - MCAP0_MAGIC.length) {
-        throw new Error(
+        throw errorWithLibrary(
           `${
             footerAndMagicView.byteLength - MCAP0_MAGIC.length - footerResult.usedBytes
           } bytes remaining after parsing footer`,
@@ -184,7 +196,7 @@ export default class Mcap0IndexedReader {
       footer = footerResult.record;
     }
     if (footer.summaryStart === 0n) {
-      throw new Error("File is not indexed");
+      throw errorWithLibrary("File is not indexed");
     }
 
     // Copy the footer prefix before reading the summary because calling readable.read() may reuse the buffer.
@@ -213,7 +225,9 @@ export default class Mcap0IndexedReader {
       summaryCrc = crc32Update(summaryCrc, footerPrefix);
       summaryCrc = crc32Final(summaryCrc);
       if (summaryCrc !== footer.summaryCrc) {
-        throw new Error(`Incorrect summary CRC ${summaryCrc} (expected ${footer.summaryCrc})`);
+        throw errorWithLibrary(
+          `Incorrect summary CRC ${summaryCrc} (expected ${footer.summaryCrc})`,
+        );
       }
     }
 
@@ -256,7 +270,7 @@ export default class Mcap0IndexedReader {
           break;
         case "Statistics":
           if (statistics) {
-            throw new Error("Duplicate Statistics record");
+            throw errorWithLibrary("Duplicate Statistics record");
           }
           statistics = result.record;
           break;
@@ -271,13 +285,13 @@ export default class Mcap0IndexedReader {
         case "Attachment":
         case "Metadata":
         case "DataEnd":
-          throw new Error(`${result.record.type} record not allowed in index section`);
+          throw errorWithLibrary(`${result.record.type} record not allowed in index section`);
         case "Unknown":
           break;
       }
     }
     if (offset !== indexView.byteLength) {
-      throw new Error(`${indexView.byteLength - offset} bytes remaining in index section`);
+      throw errorWithLibrary(`${indexView.byteLength - offset} bytes remaining in index section`);
     }
 
     return new Mcap0IndexedReader({
@@ -340,7 +354,7 @@ export default class Mcap0IndexedReader {
         validateCrcs: true,
       });
       if (chunkResult.record?.type !== "Chunk") {
-        throw new Error(
+        throw this.errorWithLibrary(
           `Chunk start offset ${
             chunkIndex.chunkStartOffset
           } does not point to chunk record (found ${String(chunkResult.record?.type)})`,
@@ -352,14 +366,16 @@ export default class Mcap0IndexedReader {
       if (chunk.compression !== "" && buffer.byteLength > 0) {
         const decompress = this.decompressHandlers?.[chunk.compression];
         if (!decompress) {
-          throw new Error(`Unsupported compression ${chunk.compression}`);
+          throw this.errorWithLibrary(`Unsupported compression ${chunk.compression}`);
         }
         buffer = decompress(buffer, chunk.uncompressedSize);
       }
       if (chunk.uncompressedCrc !== 0) {
         const chunkCrc = crc32(buffer);
         if (chunkCrc !== chunk.uncompressedCrc) {
-          throw new Error(`Incorrect chunk CRC ${chunkCrc} (expected ${chunk.uncompressedCrc})`);
+          throw this.errorWithLibrary(
+            `Incorrect chunk CRC ${chunkCrc} (expected ${chunk.uncompressedCrc})`,
+          );
         }
       }
 
@@ -386,7 +402,7 @@ export default class Mcap0IndexedReader {
 
       const [logTime, offset] = cursor.popMessage();
       if (offset >= BigInt(chunkView.byteLength)) {
-        throw new Error(
+        throw this.errorWithLibrary(
           `Message offset beyond chunk bounds (log time ${logTime}, offset ${offset}, chunk data length ${chunkView.byteLength}) in chunk at offset ${cursor.chunkIndex.chunkStartOffset}`,
         );
       }
@@ -396,17 +412,17 @@ export default class Mcap0IndexedReader {
         validateCrcs: true,
       });
       if (!result.record) {
-        throw new Error(
+        throw this.errorWithLibrary(
           `Unable to parse record at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset}`,
         );
       }
       if (result.record.type !== "Message") {
-        throw new Error(
+        throw this.errorWithLibrary(
           `Unexpected record type ${result.record.type} in message index (time ${logTime}, offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
         );
       }
       if (result.record.logTime !== logTime) {
-        throw new Error(
+        throw this.errorWithLibrary(
           `Message log time ${result.record.logTime} did not match message index entry (${logTime} at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
         );
       }
