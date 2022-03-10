@@ -56,6 +56,7 @@ describe("Mcap0StreamReader", () => {
         ...[0, 0, 0, 0, 0, 0, 0, 0],
       ]),
     );
+    expect(reader.nextRecord()).toEqual({ type: "Header", profile: "prof", library: "lib" });
     expect(() => reader.nextRecord()).toThrow(/Expected MCAP magic.+\[library=lib\]/);
   });
 
