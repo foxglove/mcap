@@ -25,6 +25,7 @@ func printChunks(w io.Writer, chunkIndexes []*mcap.ChunkIndex) {
 		"compressed size",
 		"uncompressed size",
 		"compression ratio",
+		"message index length",
 	})
 	for _, ci := range chunkIndexes {
 		ratio := float64(ci.CompressedSize) / float64(ci.UncompressedSize)
@@ -37,6 +38,7 @@ func printChunks(w io.Writer, chunkIndexes []*mcap.ChunkIndex) {
 			fmt.Sprintf("%d", ci.CompressedSize),
 			fmt.Sprintf("%d", ci.UncompressedSize),
 			fmt.Sprintf("%f", ratio),
+			fmt.Sprintf("%d", ci.MessageIndexLength),
 		}
 		rows = append(rows, row)
 	}
