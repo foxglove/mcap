@@ -47,6 +47,7 @@ inline uint32_t KeyValueMapSize(const KeyValueMap& map) {
 inline const std::string CompressionString(Compression compression) {
   switch (compression) {
     case Compression::None:
+    default:
       return std::string{};
     case Compression::Lz4:
       return "lz4";
@@ -89,7 +90,7 @@ inline Status ParseUint64(const std::byte* data, uint64_t maxSize, uint64_t* out
 }
 
 inline Status ParseStringView(const std::byte* data, uint64_t maxSize, std::string_view* output) {
-  uint32_t size;
+  uint32_t size = 0;
   if (auto status = ParseUint32(data, maxSize, &size); !status.ok()) {
     const auto msg = StrFormat("cannot read string size: {}", status.message);
     return Status{StatusCode::InvalidRecord, msg};
@@ -103,7 +104,7 @@ inline Status ParseStringView(const std::byte* data, uint64_t maxSize, std::stri
 }
 
 inline Status ParseString(const std::byte* data, uint64_t maxSize, std::string* output) {
-  uint32_t size;
+  uint32_t size = 0;
   if (auto status = ParseUint32(data, maxSize, &size); !status.ok()) {
     return status;
   }
@@ -116,7 +117,7 @@ inline Status ParseString(const std::byte* data, uint64_t maxSize, std::string* 
 }
 
 inline Status ParseByteArray(const std::byte* data, uint64_t maxSize, ByteArray* output) {
-  uint32_t size;
+  uint32_t size = 0;
   if (auto status = ParseUint32(data, maxSize, &size); !status.ok()) {
     return status;
   }
@@ -131,7 +132,7 @@ inline Status ParseByteArray(const std::byte* data, uint64_t maxSize, ByteArray*
 }
 
 inline Status ParseKeyValueMap(const std::byte* data, uint64_t maxSize, KeyValueMap* output) {
-  uint32_t sizeInBytes;
+  uint32_t sizeInBytes = 0;
   if (auto status = ParseUint32(data, maxSize, &sizeInBytes); !status.ok()) {
     return status;
   }
