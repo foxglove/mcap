@@ -9,11 +9,6 @@
 // Forward declaration
 struct ZSTD_CCtx_s;
 
-// Forward declaration
-namespace CryptoPP {
-class CRC32;
-}  // namespace CryptoPP
-
 namespace mcap {
 
 /**
@@ -103,6 +98,7 @@ class IWritable {
 public:
   bool crcEnabled = false;
 
+  IWritable() noexcept;
   virtual ~IWritable() = default;
 
   /**
@@ -136,7 +132,7 @@ protected:
   virtual void handleWrite(const std::byte* data, uint64_t size) = 0;
 
 private:
-  std::unique_ptr<CryptoPP::CRC32> crc_;
+  uint32_t crc_;
 };
 
 class FileWriter final : public IWritable {

@@ -3,11 +3,13 @@
 
 #include <benchmark/benchmark.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <random>
 
 constexpr char StringSchema[] = "string data";
 constexpr size_t WriteIterations = 10000;
@@ -15,6 +17,21 @@ constexpr size_t WriteIterations = 10000;
 static std::string TempFilename() {
   std::filesystem::path temp{std::filesystem::temp_directory_path() /= "benchmark.mcap"};
   return temp.string();
+}
+
+static void BM_CRC32(benchmark::State& state) {
+  size_t size = state.range(0);
+  auto data = std::make_unique<uint8_t[]>(size);
+
+  std::generate(data.get(), data.get() + size, std::mt19937{std::random_device{}()});
+
+  for (auto _ : state) {
+    uint32_t crc = mcap::internal::CRC32_INIT;
+    crc = mcap::internal::crc32Update(crc, reinterpret_cast<const std::byte*>(data.get()), size);
+    benchmark::DoNotOptimize(mcap::internal::crc32Final(crc));
+  }
+
+  state.SetBytesProcessed(int64_t(state.iterations()) * int64_t(size));
 }
 
 static void BM_McapWriterBufferWriterUnchunkedUnindexed(benchmark::State& state) {
@@ -517,6 +534,7 @@ static void BM_McapWriterFileWriterChunked(benchmark::State& state) {
 }
 
 int main(int argc, char* argv[]) {
+  benchmark::RegisterBenchmark("BM_CRC32", BM_CRC32)->RangeMultiplier(10)->Range(1, 10000000);
   benchmark::RegisterBenchmark("BM_McapWriterBufferWriterUnchunkedUnindexed",
                                BM_McapWriterBufferWriterUnchunkedUnindexed);
   benchmark::RegisterBenchmark("BM_McapWriterBufferWriterUnchunked",
