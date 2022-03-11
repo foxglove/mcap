@@ -127,6 +127,12 @@ export default class Mcap0StreamReader implements McapStreamReader {
       this.buffer.consume(usedBytes);
     }
 
+    let header: TypedMcapRecords["Header"] | undefined;
+
+    function errorWithLibrary(message: string): Error {
+      return new Error(`${message} ${header ? `[library=${header.library}]` : "[no header]"}`);
+    }
+
     for (;;) {
       let record;
       {
@@ -147,6 +153,14 @@ export default class Mcap0StreamReader implements McapStreamReader {
         case "Unknown":
           break;
         case "Header":
+          if (header) {
+            throw new Error(
+              `Duplicate Header record: library=${header.library} profile=${header.profile} vs. library=${record.library} profile=${record.profile}`,
+            );
+          }
+          header = record;
+          yield record;
+          break;
         case "Schema":
         case "Channel":
         case "Message":
@@ -170,14 +184,14 @@ export default class Mcap0StreamReader implements McapStreamReader {
           if (record.compression !== "" && buffer.byteLength > 0) {
             const decompress = this.decompressHandlers[record.compression];
             if (!decompress) {
-              throw new Error(`Unsupported compression ${record.compression}`);
+              throw errorWithLibrary(`Unsupported compression ${record.compression}`);
             }
             buffer = decompress(buffer, record.uncompressedSize);
           }
           if (this.validateCrcs && record.uncompressedCrc !== 0) {
             const chunkCrc = crc32(buffer);
             if (chunkCrc !== record.uncompressedCrc) {
-              throw new Error(
+              throw errorWithLibrary(
                 `Incorrect chunk CRC ${chunkCrc} (expected ${record.uncompressedCrc})`,
               );
             }
@@ -209,7 +223,9 @@ export default class Mcap0StreamReader implements McapStreamReader {
               case "MetadataIndex":
               case "SummaryOffset":
               case "DataEnd":
-                throw new Error(`${chunkResult.record.type} record not allowed inside a chunk`);
+                throw errorWithLibrary(
+                  `${chunkResult.record.type} record not allowed inside a chunk`,
+                );
               case "Schema":
               case "Channel":
               case "Message":
@@ -218,20 +234,22 @@ export default class Mcap0StreamReader implements McapStreamReader {
             }
           }
           if (chunkOffset !== buffer.byteLength) {
-            throw new Error(`${buffer.byteLength - chunkOffset} bytes remaining in chunk`);
+            throw errorWithLibrary(`${buffer.byteLength - chunkOffset} bytes remaining in chunk`);
           }
           break;
         }
         case "Footer":
-          {
+          try {
             let magic, usedBytes;
             while ((({ magic, usedBytes } = parseMagic(this.buffer.view, 0)), !magic)) {
               yield;
             }
             this.buffer.consume(usedBytes);
+          } catch (error) {
+            throw errorWithLibrary((error as Error).message);
           }
           if (this.buffer.bytesRemaining() !== 0) {
-            throw new Error(
+            throw errorWithLibrary(
               `${this.buffer.bytesRemaining()} bytes remaining after MCAP footer and trailing magic`,
             );
           }

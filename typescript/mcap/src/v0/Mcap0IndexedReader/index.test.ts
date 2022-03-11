@@ -102,6 +102,27 @@ describe("Mcap0IndexedReader", () => {
     );
   });
 
+  it("includes library in error messages", async () => {
+    const readable = makeReadable(
+      new Uint8Array([
+        ...MCAP0_MAGIC,
+        ...record(Opcode.HEADER, [
+          ...string(""), // profile
+          ...string("lib"), // library
+        ]),
+        ...record(Opcode.FOOTER, [
+          ...uint64LE(0n), // summary offset
+          ...uint64LE(0n), // summary start offset
+          ...uint32LE(0), // summary crc
+        ]),
+        ...MCAP0_MAGIC,
+      ]),
+    );
+    await expect(Mcap0IndexedReader.Initialize({ readable })).rejects.toThrow(
+      "File is not indexed [library=lib]",
+    );
+  });
+
   it("rejects invalid index crc", async () => {
     const data = [
       ...MCAP0_MAGIC,
