@@ -5,9 +5,32 @@
 #include <catch2/catch.hpp>
 
 #include <array>
+#include <numeric>
 
 std::string_view StringView(const std::byte* data, size_t size) {
   return std::string_view{reinterpret_cast<const char*>(data), size};
+}
+
+TEST_CASE("internal::crc32", "[writer]") {
+  const auto crc32 = [](const uint8_t* data, size_t len) {
+    return mcap::internal::crc32Final(mcap::internal::crc32Update(
+      mcap::internal::CRC32_INIT, reinterpret_cast<const std::byte*>(data), len));
+  };
+
+  std::array<uint8_t, 32> data;
+  std::iota(data.begin(), data.end(), 1);
+
+  REQUIRE(crc32(data.data(), 0) == 0);
+  REQUIRE(crc32(data.data(), 1) == 2768625435);
+
+  for (size_t split = 0; split <= data.size(); split++) {
+    CAPTURE(split);
+    uint32_t crc = mcap::internal::CRC32_INIT;
+    crc = mcap::internal::crc32Update(crc, reinterpret_cast<const std::byte*>(data.data()), split);
+    crc = mcap::internal::crc32Update(crc, reinterpret_cast<const std::byte*>(data.data() + split),
+                                      data.size() - split);
+    REQUIRE(mcap::internal::crc32Final(crc) == 2280057893);
+  }
 }
 
 TEST_CASE("internal::Parse*()", "[reader]") {
