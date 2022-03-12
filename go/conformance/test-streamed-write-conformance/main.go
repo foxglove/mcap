@@ -291,7 +291,25 @@ func parseAttachment(fields []InputField) (*mcap.Attachment, error) {
 	}
 	return &attachment, nil
 }
-
+func parseMetadata(fields []InputField) (*mcap.Metadata, error) {
+	metadata := mcap.Metadata{}
+	for _, field := range fields {
+		switch field.Name {
+		case "name":
+			metadata.Name = field.Value.(string)
+		case "metadata":
+			metadataJson := field.Value.(map[string]interface{})
+			m := make(map[string]string)
+			for k, v := range metadataJson {
+				m[k] = v.(string)
+			}
+			metadata.Metadata = m
+		default:
+			return nil, UnknownField(field.Name)
+		}
+	}
+	return &metadata, nil
+}
 func parseDataEnd(fields []InputField) (*mcap.DataEnd, error) {
 	dataEnd := mcap.DataEnd{}
 	for _, field := range fields {
@@ -375,6 +393,15 @@ func jsonToMCAP(w io.Writer, filepath string) error {
 				return err
 			}
 			err = writer.WriteAttachment(attachment)
+			if err != nil {
+				return err
+			}
+		case "Metadata":
+			metadata, err := parseMetadata(record.Fields)
+			if err != nil {
+				return err
+			}
+			err = writer.WriteMetadata(metadata)
 			if err != nil {
 				return err
 			}

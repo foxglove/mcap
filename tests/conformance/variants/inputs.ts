@@ -43,6 +43,10 @@ const inputs: TestInput[] = [
       },
     ],
   },
+  {
+    baseName: "OneMetadata",
+    records: [{ type: "Metadata", name: "myMetadata", metadata: new Map([["foo", "bar"]]) }],
+  },
 ];
 
 export default inputs;
