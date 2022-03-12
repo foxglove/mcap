@@ -19,6 +19,7 @@ from .records import (
     McapRecord,
     Message,
     MessageIndex,
+    Metadata,
     MetadataIndex,
     Schema,
     Statistics,
@@ -130,6 +131,8 @@ class StreamReader:
             return Message.read(self.__stream, length)
         if opcode == Opcode.MESSAGE_INDEX:
             return MessageIndex.read(self.__stream)
+        if opcode == Opcode.METADATA:
+            return Metadata.read(self.__stream)
         if opcode == Opcode.METADATA_INDEX:
             return MetadataIndex.read(self.__stream)
         if opcode == Opcode.SCHEMA:
