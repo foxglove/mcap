@@ -428,7 +428,15 @@ public struct AttachmentIndex: Record {
   public var name: String
   public var contentType: String
 
-  public init(offset: UInt64, length: UInt64, logTime: Timestamp, createTime: Timestamp, dataSize: UInt64, name: String, contentType: String) {
+  public init(
+    offset: UInt64,
+    length: UInt64,
+    logTime: Timestamp,
+    createTime: Timestamp,
+    dataSize: UInt64,
+    name: String,
+    contentType: String
+  ) {
     self.offset = offset
     self.length = length
     self.logTime = logTime
@@ -466,7 +474,17 @@ public struct Statistics: Record {
   public var messageEndTime: Timestamp = 0
   public var channelMessageCounts: [ChannelID: UInt64] = [:]
 
-  public init(messageCount: UInt64 = 0, schemaCount: UInt16 = 0, channelCount: UInt32 = 0, attachmentCount: UInt32 = 0, metadataCount: UInt32 = 0, chunkCount: UInt32 = 0, messageStartTime: Timestamp = 0, messageEndTime: Timestamp = 0, channelMessageCounts: [ChannelID : UInt64] = [:]) {
+  public init(
+    messageCount: UInt64 = 0,
+    schemaCount: UInt16 = 0,
+    channelCount: UInt32 = 0,
+    attachmentCount: UInt32 = 0,
+    metadataCount: UInt32 = 0,
+    chunkCount: UInt32 = 0,
+    messageStartTime: Timestamp = 0,
+    messageEndTime: Timestamp = 0,
+    channelMessageCounts: [ChannelID: UInt64] = [:]
+  ) {
     self.messageCount = messageCount
     self.schemaCount = schemaCount
     self.channelCount = channelCount
@@ -503,7 +521,7 @@ public struct Metadata: Record {
   public var name: String
   public var metadata: [String: String]
 
-  public init(name: String, metadata: [String : String]) {
+  public init(name: String, metadata: [String: String]) {
     self.name = name
     self.metadata = metadata
   }

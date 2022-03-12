@@ -238,7 +238,9 @@ public final class MCAP0Writer {
     )
     var footerData = Data()
     footer.serialize(to: &footerData)
-    runningCRC.update(footerData[..<(footerData.endIndex - 4)])
+    runningCRC.update(
+      footerData[..<(footerData.endIndex - MemoryLayout.size(ofValue: footer.summaryCRC))]
+    )
     footer.summaryCRC = runningCRC.final
     footer.serialize(to: &buffer)
     buffer.append(MCAP0_MAGIC)
