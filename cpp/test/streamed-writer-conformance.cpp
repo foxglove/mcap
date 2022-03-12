@@ -187,6 +187,17 @@ mcap::Attachment ReadAttachment(const json& attachmentJson, mcap::ByteArray& buf
   return attachment;
 }
 
+mcap::Metadata ReadMetadata(const json& metadataJson) {
+  // {
+  //   "type": "Metadata",
+  //   "fields": [["metadata", {"foo": "bar"}], ["name", "myMetadata"]]
+  // },
+  mcap::Metadata metadata;
+  metadata.metadata = metadataJson["fields"][0][1];
+  metadata.name = metadataJson["fields"][1][1];
+  return metadata;
+}
+
 class StdoutWriter final : public mcap::IWritable {
 public:
   void handleWrite(const std::byte* data, uint64_t size) override {
@@ -244,6 +255,9 @@ int main(int argc, char** argv) {
       mcap::ByteArray buffer;
       auto attachment = ReadAttachment(record, buffer);
       mcapWriter.write(attachment);
+    } else if (recordType == "Metadata") {
+      auto metadata = ReadMetadata(record);
+      mcapWriter.write(metadata);
     } else if (recordType == "DataEnd") {
       mcapWriter.close();
       return 0;

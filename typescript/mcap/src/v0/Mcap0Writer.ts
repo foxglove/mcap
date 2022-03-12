@@ -193,19 +193,19 @@ export class Mcap0Writer {
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
 
-    if (this.chunkIndices) {
+    if (this.metadataIndices) {
       summaryCrc = crc32Update(summaryCrc, this.recordWriter.buffer);
       await this.writable.write(this.recordWriter.buffer);
       this.recordWriter.reset();
-      const chunkIndexStart = this.writable.position();
-      let chunkIndexLength = 0n;
-      for (const chunkIndex of this.chunkIndices) {
-        chunkIndexLength += this.recordWriter.writeChunkIndex(chunkIndex);
+      const metadataIndexStart = this.writable.position();
+      let metadataIndexLength = 0n;
+      for (const metadataIndex of this.metadataIndices) {
+        metadataIndexLength += this.recordWriter.writeMetadataIndex(metadataIndex);
       }
       summaryOffsets.push({
-        groupOpcode: Opcode.CHUNK_INDEX,
-        groupStart: chunkIndexStart,
-        groupLength: chunkIndexLength,
+        groupOpcode: Opcode.METADATA_INDEX,
+        groupStart: metadataIndexStart,
+        groupLength: metadataIndexLength,
       });
     }
 
@@ -225,19 +225,19 @@ export class Mcap0Writer {
       });
     }
 
-    if (this.metadataIndices) {
+    if (this.chunkIndices) {
       summaryCrc = crc32Update(summaryCrc, this.recordWriter.buffer);
       await this.writable.write(this.recordWriter.buffer);
       this.recordWriter.reset();
-      const metadataIndexStart = this.writable.position();
-      let metadataIndexLength = 0n;
-      for (const metadataIndex of this.metadataIndices) {
-        metadataIndexLength += this.recordWriter.writeMetadataIndex(metadataIndex);
+      const chunkIndexStart = this.writable.position();
+      let chunkIndexLength = 0n;
+      for (const chunkIndex of this.chunkIndices) {
+        chunkIndexLength += this.recordWriter.writeChunkIndex(chunkIndex);
       }
       summaryOffsets.push({
-        groupOpcode: Opcode.METADATA_INDEX,
-        groupStart: metadataIndexStart,
-        groupLength: metadataIndexLength,
+        groupOpcode: Opcode.CHUNK_INDEX,
+        groupStart: chunkIndexStart,
+        groupLength: chunkIndexLength,
       });
     }
 
@@ -391,6 +391,9 @@ export class Mcap0Writer {
 
   async addMetadata(metadata: Metadata): Promise<void> {
     const recordSize = this.recordWriter.writeMetadata(metadata);
+    if (this.statistics) {
+      ++this.statistics.metadataCount;
+    }
 
     if (this.metadataIndices) {
       const offset = this.writable.position();
