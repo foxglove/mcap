@@ -22,6 +22,7 @@ from .records import (
     Header,
     Message,
     Metadata,
+    MetadataIndex,
     Schema,
     Statistics,
     SummaryOffset,
@@ -41,8 +42,8 @@ class IndexType(Flag):
     ATTACHMENT = auto()
     CHUNK = auto()
     MESSAGE = auto()
-    METDATA = auto()
-    ALL = ATTACHMENT | CHUNK | MESSAGE | METDATA
+    METADATA = auto()
+    ALL = ATTACHMENT | CHUNK | MESSAGE | METADATA
 
 
 class Writer:
@@ -79,6 +80,7 @@ class Writer:
             self.__stream = output
         self.__record_builder = RecordBuilder()
         self.__attachment_indexes: list[AttachmentIndex] = []
+        self.__metadata_indexes: list[MetadataIndex] = []
         self.__channels: OrderedDict[int, Channel] = OrderedDict()
         self.__chunk_builder = ChunkBuilder() if use_chunking else None
         self.__chunk_indices: List[ChunkIndex] = []
@@ -182,8 +184,16 @@ class Writer:
         name: A name to associate with the metadata.
         data: Key-value metadata.
         """
-        metadata = Metadata(name=name, data=data)
+        self.__flush()
+        offset = self.__stream.tell()
+        self.__statistics.metadata_count += 1
+        metadata = Metadata(name=name, metadata=data)
         metadata.write(self.__record_builder)
+        if self.__index_types & IndexType.METADATA:
+            index = MetadataIndex(
+                offset=offset, length=self.__record_builder.count, name=name
+            )
+            self.__metadata_indexes.append(index)
         self.__flush()
 
     def finish(self):
@@ -253,6 +263,18 @@ class Writer:
             self.__summary_offsets.append(
                 SummaryOffset(
                     group_opcode=Opcode.ATTACHMENT_INDEX,
+                    group_start=summary_start + group_start,
+                    group_length=summary_builder.count - group_start,
+                )
+            )
+
+        if self.__index_types & IndexType.METADATA:
+            group_start = summary_builder.count
+            for index in self.__metadata_indexes:
+                index.write(summary_builder)
+            self.__summary_offsets.append(
+                SummaryOffset(
+                    group_opcode=Opcode.METADATA_INDEX,
                     group_start=summary_start + group_start,
                     group_length=summary_builder.count - group_start,
                 )

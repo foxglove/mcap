@@ -218,18 +218,18 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
         groupLength: repeatedChannelInfosLength,
       });
     }
-    if (metadataIndexLength !== 0n) {
-      builder.writeSummaryOffset({
-        groupOpcode: Mcap0Constants.Opcode.METADATA_INDEX,
-        groupStart: metadataIndexStart,
-        groupLength: metadataIndexLength,
-      });
-    }
     if (statisticsLength !== 0n) {
       builder.writeSummaryOffset({
         groupOpcode: Mcap0Constants.Opcode.STATISTICS,
         groupStart: statisticsStart,
         groupLength: statisticsLength,
+      });
+    }
+    if (metadataIndexLength !== 0n) {
+      builder.writeSummaryOffset({
+        groupOpcode: Mcap0Constants.Opcode.METADATA_INDEX,
+        groupStart: metadataIndexStart,
+        groupLength: metadataIndexLength,
       });
     }
     if (attachmentIndexLength !== 0n) {

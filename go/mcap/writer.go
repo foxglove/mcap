@@ -24,6 +24,8 @@ type Writer struct {
 	ChunkIndexes []*ChunkIndex
 	// AttachmentIndexes created over the course of the recording.
 	AttachmentIndexes []*AttachmentIndex
+	// MetadataIndexes created over the course of the recording.
+	MetadataIndexes []*MetadataIndex
 
 	channelIDs       []uint16
 	schemaIDs        []uint16
@@ -320,7 +322,17 @@ func (w *Writer) WriteMetadata(m *Metadata) error {
 	w.ensureSized(msglen)
 	offset := putPrefixedString(w.msg, m.Name)
 	offset += copy(w.msg[offset:], data)
-	_, err := w.writeRecord(w.w, OpMetadata, w.msg[:offset])
+	metadataOffset := w.w.Size()
+	c, err := w.writeRecord(w.w, OpMetadata, w.msg[:offset])
+	if err != nil {
+		return err
+	}
+	w.MetadataIndexes = append(w.MetadataIndexes, &MetadataIndex{
+		Offset: metadataOffset,
+		Length: uint64(c),
+		Name:   m.Name,
+	})
+	w.Statistics.MetadataCount++
 	return err
 }
 
@@ -576,6 +588,22 @@ func (w *Writer) writeSummarySection() ([]*SummaryOffset, error) {
 				GroupOpcode: OpAttachmentIndex,
 				GroupStart:  attachmentIndexOffset,
 				GroupLength: w.w.Size() - attachmentIndexOffset,
+			})
+		}
+	}
+	if !w.opts.SkipMetadataIndex {
+		if len(w.MetadataIndexes) > 0 {
+			metadataIndexOffset := w.w.Size()
+			for _, metadataIndex := range w.MetadataIndexes {
+				err := w.WriteMetadataIndex(metadataIndex)
+				if err != nil {
+					return offsets, fmt.Errorf("failed to write metadata index: %w", err)
+				}
+			}
+			offsets = append(offsets, &SummaryOffset{
+				GroupOpcode: OpMetadataIndex,
+				GroupStart:  metadataIndexOffset,
+				GroupLength: w.w.Size() - metadataIndexOffset,
 			})
 		}
 	}

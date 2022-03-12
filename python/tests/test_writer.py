@@ -47,10 +47,10 @@ def generate_sample_data(compression: CompressionType):
 def test_raw_read():
     with generate_sample_data(CompressionType.LZ4) as t:
         data = t.read()
-        assert len(data) == 759
+        assert len(data) == 785
 
 
 def test_decode_read():
     with generate_sample_data(CompressionType.ZSTD) as t:
         data = t.read()
-        assert len(data) == 721
+        assert len(data) == 747
