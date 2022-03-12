@@ -428,6 +428,16 @@ public struct AttachmentIndex: Record {
   public var name: String
   public var contentType: String
 
+  public init(offset: UInt64, length: UInt64, logTime: Timestamp, createTime: Timestamp, dataSize: UInt64, name: String, contentType: String) {
+    self.offset = offset
+    self.length = length
+    self.logTime = logTime
+    self.createTime = createTime
+    self.dataSize = dataSize
+    self.name = name
+    self.contentType = contentType
+  }
+
   public func serializeFields(to data: inout Data) {
     data.reserveCapacity(
       MemoryLayout<UInt64>.size + MemoryLayout<UInt64>.size + MemoryLayout<Timestamp>.size
@@ -456,6 +466,18 @@ public struct Statistics: Record {
   public var messageEndTime: Timestamp = 0
   public var channelMessageCounts: [ChannelID: UInt64] = [:]
 
+  public init(messageCount: UInt64 = 0, schemaCount: UInt16 = 0, channelCount: UInt32 = 0, attachmentCount: UInt32 = 0, metadataCount: UInt32 = 0, chunkCount: UInt32 = 0, messageStartTime: Timestamp = 0, messageEndTime: Timestamp = 0, channelMessageCounts: [ChannelID : UInt64] = [:]) {
+    self.messageCount = messageCount
+    self.schemaCount = schemaCount
+    self.channelCount = channelCount
+    self.attachmentCount = attachmentCount
+    self.metadataCount = metadataCount
+    self.chunkCount = chunkCount
+    self.messageStartTime = messageStartTime
+    self.messageEndTime = messageEndTime
+    self.channelMessageCounts = channelMessageCounts
+  }
+
   public func serializeFields(to data: inout Data) {
     data.reserveCapacity(
       MemoryLayout.size(ofValue: messageCount) + MemoryLayout.size(ofValue: schemaCount)
@@ -481,6 +503,11 @@ public struct Metadata: Record {
   public var name: String
   public var metadata: [String: String]
 
+  public init(name: String, metadata: [String : String]) {
+    self.name = name
+    self.metadata = metadata
+  }
+
   public func serializeFields(to data: inout Data) {
     data.reserveCapacity(
       prefixedStringLength(name) + MemoryLayout<UInt32>.size + prefixedMapLength(metadata)
@@ -495,6 +522,12 @@ public struct MetadataIndex: Record {
   public var offset: UInt64
   public var length: UInt64
   public var name: String
+
+  public init(offset: UInt64, length: UInt64, name: String) {
+    self.offset = offset
+    self.length = length
+    self.name = name
+  }
 
   public func serializeFields(to data: inout Data) {
     data.reserveCapacity(
@@ -513,6 +546,12 @@ public struct SummaryOffset: Record {
   public var groupStart: UInt64
   public var groupLength: UInt64
 
+  public init(groupOpcode: UInt8, groupStart: UInt64, groupLength: UInt64) {
+    self.groupOpcode = groupOpcode
+    self.groupStart = groupStart
+    self.groupLength = groupLength
+  }
+
   public func serializeFields(to data: inout Data) {
     data.reserveCapacity(
       MemoryLayout.size(ofValue: groupOpcode) + MemoryLayout.size(ofValue: groupStart)
@@ -527,6 +566,10 @@ public struct SummaryOffset: Record {
 public struct DataEnd: Record {
   public static let opcode = Opcode.dataEnd
   public var dataSectionCRC: UInt32
+
+  public init(dataSectionCRC: UInt32) {
+    self.dataSectionCRC = dataSectionCRC
+  }
 
   public func serializeFields(to data: inout Data) {
     data.reserveCapacity(MemoryLayout.size(ofValue: dataSectionCRC))

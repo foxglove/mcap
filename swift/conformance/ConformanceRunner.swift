@@ -58,6 +58,7 @@ class Buffer: IWritable {
 enum TestRecord {
   case header(Header)
   case attachment(Attachment)
+  case metadata(Metadata)
   case schema(Schema)
   case channel(Channel)
   case message(Message)
@@ -127,6 +128,13 @@ enum ConformanceRunner {
             data: Data((fieldsByName["data"] as! [String]).map { UInt8($0)! })
           )
         )
+      case "Metadata":
+        return .metadata(
+          Metadata(
+            name: fieldsByName["name"] as! String,
+            metadata: fieldsByName["metadata"] as! [String: String]
+          )
+        )
       case "DataEnd":
         return .dataEnd
       default:
@@ -167,6 +175,8 @@ enum ConformanceRunner {
         await writer.addMessage(message)
       case .attachment(let attachment):
         await writer.addAttachment(attachment)
+      case .metadata(let metadata):
+        await writer.addMetadata(metadata)
       case .dataEnd:
         await writer.end()
       }

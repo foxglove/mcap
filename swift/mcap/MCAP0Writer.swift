@@ -148,6 +148,20 @@ public final class MCAP0Writer {
     )
   }
 
+  public func addMetadata(_ metadata: Metadata) async {
+    let offset = _position()
+    metadata.serialize(to: &buffer)
+    let length = _position() - offset
+    statistics.metadataCount += 1
+    metadataIndexes.append(
+      MetadataIndex(
+        offset: offset,
+        length: length,
+        name: metadata.name
+      )
+    )
+  }
+
   public func end() async {
     await _flush()
     DataEnd(dataSectionCRC: 0).serialize(to: &buffer)
