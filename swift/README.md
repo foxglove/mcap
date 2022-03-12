@@ -1,3 +1,13 @@
-# mcap
+# Swift implementation of the MCAP file format
 
-A description of this package.
+Build:
+
+```
+swift build
+```
+
+Run tests:
+
+```
+swift test
+```

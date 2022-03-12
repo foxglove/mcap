@@ -20,6 +20,7 @@ words:
   - crc
   - crcs
   - deserialization
+  - fwrite
   - golangci
   - libmcap
   - mcap
@@ -77,3 +78,10 @@ overrides:
       - klass
       - rglob
       - uncompress
+
+  - filename: "**/*.swift"
+    ignoreRegExpList:
+      - "\\b0x[0-9a-f_]+"
+    words:
+      - subrange
+      - unkeyed

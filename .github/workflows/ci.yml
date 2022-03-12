@@ -106,6 +106,27 @@ jobs:
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner ts-
 
+  conformance-swift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          lfs: true
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+          cache: yarn
+      - uses: fwal/setup-swift@v1 # cspell: disable-line
+        with:
+          swift-version: 5.5.2
+      - run: swift build
+      - run: swift test
+      # - run: swift format format --recursive --in-place swift
+      # - run: swift format lint --recursive swift
+      - run: yarn install --frozen-lockfile
+      - run: yarn test:conformance:generate-inputs --verify
+      - run: yarn test:conformance --runner swift-
+
   docs:
     runs-on: ubuntu-latest
     steps:
