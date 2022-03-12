@@ -24,3 +24,6 @@ lint:
 
 test:
 	go test ./...
+
+bench:
+	make -C cmd bench
