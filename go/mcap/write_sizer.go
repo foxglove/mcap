@@ -5,30 +5,30 @@ import (
 	"io"
 )
 
-type WriteSizer struct {
-	w    *CRCWriter
+type writeSizer struct {
+	w    *crcWriter
 	size uint64
 }
 
-func (w *WriteSizer) Write(p []byte) (int, error) {
+func (w *writeSizer) Write(p []byte) (int, error) {
 	w.size += uint64(len(p))
 	return w.w.Write(p)
 }
 
-func NewWriteSizer(w io.Writer) *WriteSizer {
-	return &WriteSizer{
-		w: NewCRCWriter(w),
+func newWriteSizer(w io.Writer) *writeSizer {
+	return &writeSizer{
+		w: newCRCWriter(w),
 	}
 }
 
-func (w *WriteSizer) Size() uint64 {
+func (w *writeSizer) Size() uint64 {
 	return w.size
 }
 
-func (w *WriteSizer) Checksum() uint32 {
+func (w *writeSizer) Checksum() uint32 {
 	return w.w.Checksum()
 }
 
-func (w *WriteSizer) ResetCRC() {
+func (w *writeSizer) ResetCRC() {
 	w.w.crc = crc32.NewIEEE()
 }

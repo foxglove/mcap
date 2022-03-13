@@ -32,13 +32,13 @@ type Writer struct {
 	channels         map[uint16]*Channel
 	schemas          map[uint16]*Schema
 	messageIndexes   map[uint16]*MessageIndex
-	w                *WriteSizer
+	w                *writeSizer
 	buf              []byte
 	msg              []byte
 	chunk            []byte
 	uncompressed     *bytes.Buffer
 	compressed       *bytes.Buffer
-	compressedWriter *CountingCRCWriter
+	compressedWriter *countingCRCWriter
 
 	currentChunkStartTime uint64
 	currentChunkEndTime   uint64
@@ -721,12 +721,12 @@ type WriterOptions struct {
 
 // NewWriter returns a new MCAP writer.
 func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
-	writer := NewWriteSizer(w)
+	writer := newWriteSizer(w)
 	if _, err := writer.Write(Magic); err != nil {
 		return nil, err
 	}
 	compressed := bytes.Buffer{}
-	var compressedWriter *CountingCRCWriter
+	var compressedWriter *countingCRCWriter
 	if opts.Chunked {
 		switch opts.Compression {
 		case CompressionZSTD:
@@ -734,11 +734,11 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 			if err != nil {
 				return nil, err
 			}
-			compressedWriter = NewCountingCRCWriter(zw, opts.IncludeCRC)
+			compressedWriter = newCountingCRCWriter(zw, opts.IncludeCRC)
 		case CompressionLZ4:
-			compressedWriter = NewCountingCRCWriter(lz4.NewWriter(&compressed), opts.IncludeCRC)
+			compressedWriter = newCountingCRCWriter(lz4.NewWriter(&compressed), opts.IncludeCRC)
 		case CompressionNone:
-			compressedWriter = NewCountingCRCWriter(bufCloser{&compressed}, opts.IncludeCRC)
+			compressedWriter = newCountingCRCWriter(bufCloser{&compressed}, opts.IncludeCRC)
 		default:
 			return nil, fmt.Errorf("unsupported compression")
 		}

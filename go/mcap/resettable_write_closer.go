@@ -5,8 +5,8 @@ import (
 	"io"
 )
 
-// ResettableWriteCloser is a WriteCloser that supports a Reset method.
-type ResettableWriteCloser interface {
+// resettableWriteCloser is a WriteCloser that supports a Reset method.
+type resettableWriteCloser interface {
 	io.WriteCloser
 	Reset(io.Writer)
 }
@@ -25,12 +25,4 @@ func (b bufCloser) Write(p []byte) (int, error) {
 
 func (b bufCloser) Reset(w io.Writer) {
 	b.b.Reset()
-}
-
-// NewResettableBufCloser returns a ResettableWriteCloser backed by a
-// bytes.Buffer.
-func NewResettableBufCloser(buf *bytes.Buffer) ResettableWriteCloser {
-	return &bufCloser{
-		b: buf,
-	}
 }
