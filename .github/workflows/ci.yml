@@ -285,7 +285,8 @@ jobs:
       - uses: fwal/setup-swift@v1 # cspell: disable-line
         with:
           swift-version: 5.5.2
-      - run: brew install swiftformat swiftlint
+      - run: brew install mint
+      - run: mint install nicklockwood/SwiftFormat realm/SwiftLint
       - run: swiftformat --lint .
       - run: swiftlint
       - run: swift build
