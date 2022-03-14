@@ -64,7 +64,7 @@ func ParseSchema(buf []byte) (*Schema, error) {
 		ID:       schemaID,
 		Name:     name,
 		Encoding: encoding,
-		Data:     data,
+		Data:     append([]byte{}, data...),
 	}, nil
 }
 
