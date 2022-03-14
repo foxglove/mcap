@@ -5,6 +5,19 @@ public protocol IWritable {
   mutating func write(_ data: Data) async
 }
 
+fileprivate extension Statistics {
+  mutating func addMessage(_ message: Message) {
+    channelMessageCounts[message.channelID, default: 0] += 1
+    if messageCount == 0 || message.logTime < messageStartTime {
+      messageStartTime = message.logTime
+    }
+    if messageCount == 0 || message.logTime > messageEndTime {
+      messageEndTime = message.logTime
+    }
+    messageCount += 1
+  }
+}
+
 public final class MCAPWriter {
 
   public struct Options {
@@ -58,20 +71,25 @@ public final class MCAPWriter {
 
   private var nextChannelID: ChannelID
   private var nextSchemaID: SchemaID = 1
-  private var schemasByID: [SchemaID: Schema] = [:]
-  private var channelsByID: [ChannelID: Channel] = [:]
 
-  //FIXME: don't actually track these if disabled
-  private var chunkIndexes: [ChunkIndex] = []
-  private var attachmentIndexes: [AttachmentIndex] = []
-  private var metadataIndexes: [MetadataIndex] = []
-  private var statistics = Statistics()
+  private var schemasByID: [SchemaID: Schema]?
+  private var channelsByID: [ChannelID: Channel]?
+  private var chunkIndexes: [ChunkIndex]?
+  private var attachmentIndexes: [AttachmentIndex]?
+  private var metadataIndexes: [MetadataIndex]?
+  private var statistics: Statistics?
 
   public init(_ writable: IWritable, _ options: Options = Options()) {
     self.writable = writable
     self.options = options
     self.nextChannelID = options.startChannelID
-    chunkBuilder = options.useChunks ? ChunkBuilder() : nil
+    schemasByID = options.repeatSchemas ? [:] : nil
+    channelsByID = options.repeatChannels ? [:] : nil
+    chunkBuilder = options.useChunks ? ChunkBuilder(useMessageIndex: options.useMessageIndex) : nil
+    chunkIndexes = options.useChunkIndex ? [] : nil
+    attachmentIndexes = options.useAttachmentIndex ? [] : nil
+    metadataIndexes = options.useMetadataIndex ? [] : nil
+    statistics = options.useStatistics ? Statistics() : nil
   }
 
   private func _position() -> UInt64 {
@@ -98,8 +116,8 @@ public final class MCAPWriter {
     } else {
       schema.serialize(to: &buffer)
     }
-    schemasByID[id] = schema
-    statistics.schemaCount += 1
+    schemasByID?[id] = schema
+    statistics?.schemaCount += 1
     return id
   }
 
@@ -123,20 +141,13 @@ public final class MCAPWriter {
     } else {
       channel.serialize(to: &buffer)
     }
-    channelsByID[id] = channel
-    statistics.channelCount += 1
+    channelsByID?[id] = channel
+    statistics?.channelCount += 1
     return id
   }
 
   public func addMessage(_ message: Message) async {
-    statistics.channelMessageCounts[message.channelID, default: 0] += 1
-    if statistics.messageCount == 0 || message.logTime < statistics.messageStartTime {
-      statistics.messageStartTime = message.logTime
-    }
-    if statistics.messageCount == 0 || message.logTime > statistics.messageEndTime {
-      statistics.messageEndTime = message.logTime
-    }
-    statistics.messageCount += 1
+    statistics?.addMessage(message)
 
     if let chunkBuilder = chunkBuilder {
       chunkBuilder.addMessage(message)
@@ -153,8 +164,8 @@ public final class MCAPWriter {
     let offset = _position()
     attachment.serialize(to: &buffer)
     let length = _position() - offset
-    statistics.attachmentCount += 1
-    attachmentIndexes.append(
+    statistics?.attachmentCount += 1
+    attachmentIndexes?.append(
       AttachmentIndex(
         offset: offset,
         length: length,
@@ -171,8 +182,8 @@ public final class MCAPWriter {
     let offset = _position()
     metadata.serialize(to: &buffer)
     let length = _position() - offset
-    statistics.metadataCount += 1
-    metadataIndexes.append(
+    statistics?.metadataCount += 1
+    metadataIndexes?.append(
       MetadataIndex(
         offset: offset,
         length: length,
@@ -207,15 +218,15 @@ public final class MCAPWriter {
     let messageIndexStartOffset = _position()
 
     var messageIndexOffsets: [ChannelID: UInt64] = [:]
-    if options.useMessageIndex {
-      for (channelID, index) in chunkBuilder.messageIndexes {
+    if let messageIndexes = chunkBuilder.messageIndexes {
+      for (channelID, index) in messageIndexes {
         messageIndexOffsets[channelID] = _position()
         index.serialize(to: &buffer)
       }
     }
 
-    statistics.chunkCount += 1
-    chunkIndexes.append(
+    statistics?.chunkCount += 1
+    chunkIndexes?.append(
       ChunkIndex(
         messageStartTime: chunk.messageStartTime,
         messageEndTime: chunk.messageEndTime,
@@ -257,37 +268,37 @@ public final class MCAPWriter {
       )
     }
 
-    if options.repeatSchemas {
+    if let schemasByID = schemasByID {
       group(of: .schema) {
         schemasByID.values.forEach { $0.serialize(to: &buffer) }
       }
     }
 
-    if options.repeatChannels {
+    if let channelsByID = channelsByID {
       group(of: .channel) {
         channelsByID.values.forEach { $0.serialize(to: &buffer) }
       }
     }
 
-    if options.useStatistics {
+    if let statistics = statistics {
       group(of: .statistics) {
         statistics.serialize(to: &buffer)
       }
     }
 
-    if options.useChunkIndex {
+    if let chunkIndexes = chunkIndexes {
       group(of: .chunkIndex) {
         chunkIndexes.forEach { $0.serialize(to: &buffer) }
       }
     }
 
-    if options.useAttachmentIndex {
+    if let attachmentIndexes = attachmentIndexes {
       group(of: .attachmentIndex) {
         attachmentIndexes.forEach { $0.serialize(to: &buffer) }
       }
     }
 
-    if options.useMetadataIndex {
+    if let metadataIndexes = metadataIndexes {
       group(of: .metadataIndex) {
         metadataIndexes.forEach { $0.serialize(to: &buffer) }
       }

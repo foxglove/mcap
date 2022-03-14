@@ -33,7 +33,7 @@ public protocol Record {
 extension Record {
   func serialize(to data: inout Data) {
     data.append(Self.opcode.rawValue)
-    data.append(unsafeBytesOf: UInt64(0))  // placeholder
+    data.append(littleEndian: UInt64(0))  // placeholder
     let fieldsStartOffset = data.count
     self.serializeFields(to: &data)
     let fieldsLength = data.count - fieldsStartOffset
@@ -64,33 +64,33 @@ func prefixedTupleArrayLength<K: UnsignedInteger, V: UnsignedInteger>(_ arr: [(K
 }
 
 extension Data {
-  mutating func append<T: UnsignedInteger>(unsafeBytesOf value: T) {
-    Swift.withUnsafeBytes(of: value) {
+  mutating func append<T: FixedWidthInteger & UnsignedInteger>(littleEndian value: T) {
+    Swift.withUnsafeBytes(of: value.littleEndian) {
       append($0.bindMemory(to: UInt8.self))
     }
   }
 
   mutating func appendUInt32PrefixedData(_ data: Data) {
-    append(unsafeBytesOf: UInt32(data.count).littleEndian)
+    append(littleEndian: UInt32(data.count))
     append(data)
   }
 
   mutating func appendUInt64PrefixedData(_ data: Data) {
-    append(unsafeBytesOf: UInt64(data.count).littleEndian)
+    append(littleEndian: UInt64(data.count))
     append(data)
   }
 
   mutating func appendPrefixedString(_ str: String) {
     var str = str  // withUTF8 may mutate str
     str.withUTF8 {
-      append(unsafeBytesOf: UInt32($0.count).littleEndian)
+      append(littleEndian: UInt32($0.count))
       append($0)
     }
   }
 
   mutating func appendPrefixedMap(_ map: [String: String]) {
     let sizeOffset = self.count
-    append(unsafeBytesOf: UInt32(0))  // placeholder
+    append(littleEndian: UInt32(0))  // placeholder
     for (key, value) in map {
       appendPrefixedString(key)
       appendPrefixedString(value)
@@ -102,26 +102,24 @@ extension Data {
     }
   }
 
-  //FIXME: all reserveCapacity calls
-  //FIXME: move reserveCapacity inside append?
-  mutating func appendPrefixedMap<K: UnsignedInteger, V: UnsignedInteger>(_ map: [K: V]) {
+  mutating func appendPrefixedMap<K: FixedWidthInteger & UnsignedInteger, V: FixedWidthInteger & UnsignedInteger>(_ map: [K: V]) {
     append(
-      unsafeBytesOf: UInt32(map.count * (MemoryLayout<K>.size + MemoryLayout<V>.size)).littleEndian
+      littleEndian: UInt32(map.count * (MemoryLayout<K>.size + MemoryLayout<V>.size))
     )
     for (key, value) in map {
-      append(unsafeBytesOf: key)
-      append(unsafeBytesOf: value)
+      append(littleEndian: key)
+      append(littleEndian: value)
     }
   }
 
   // https://bugs.swift.org/browse/SR-922
-  mutating func appendPrefixedTupleArray<K: UnsignedInteger, V: UnsignedInteger>(_ map: [(K, V)]) {
+  mutating func appendPrefixedTupleArray<K: FixedWidthInteger & UnsignedInteger, V: FixedWidthInteger & UnsignedInteger>(_ map: [(K, V)]) {
     append(
-      unsafeBytesOf: UInt32(map.count * (MemoryLayout<K>.size + MemoryLayout<V>.size)).littleEndian
+      littleEndian: UInt32(map.count * (MemoryLayout<K>.size + MemoryLayout<V>.size))
     )
     for (key, value) in map {
-      append(unsafeBytesOf: key)
-      append(unsafeBytesOf: value)
+      append(littleEndian: key)
+      append(littleEndian: value)
     }
   }
 }
@@ -137,7 +135,6 @@ public struct Header: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(prefixedStringLength(profile) + prefixedStringLength(library))
     data.appendPrefixedString(profile)
     data.appendPrefixedString(library)
   }
@@ -156,12 +153,9 @@ public struct Footer: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(
-      MemoryLayout<UInt64>.size + MemoryLayout<UInt64>.size + MemoryLayout<UInt32>.size
-    )
-    data.append(unsafeBytesOf: summaryStart.littleEndian)
-    data.append(unsafeBytesOf: summaryOffsetStart.littleEndian)
-    data.append(unsafeBytesOf: summaryCRC.littleEndian)
+    data.append(littleEndian: summaryStart)
+    data.append(littleEndian: summaryOffsetStart)
+    data.append(littleEndian: summaryCRC)
   }
 }
 
@@ -180,11 +174,7 @@ public struct Schema: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(
-      MemoryLayout.size(ofValue: id) + prefixedStringLength(name) + prefixedStringLength(encoding)
-        + self.data.count
-    )
-    data.append(unsafeBytesOf: id.littleEndian)
+    data.append(littleEndian: id)
     data.appendPrefixedString(name)
     data.appendPrefixedString(encoding)
     data.appendUInt32PrefixedData(self.data)
@@ -214,13 +204,8 @@ public struct Channel: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(
-      MemoryLayout.size(ofValue: id) + MemoryLayout.size(ofValue: schemaID)
-        + prefixedStringLength(topic)
-        + prefixedStringLength(messageEncoding) + prefixedMapLength(metadata)
-    )
-    data.append(unsafeBytesOf: id.littleEndian)
-    data.append(unsafeBytesOf: schemaID.littleEndian)
+    data.append(littleEndian: id)
+    data.append(littleEndian: schemaID)
     data.appendPrefixedString(topic)
     data.appendPrefixedString(messageEncoding)
     data.appendPrefixedMap(metadata)
@@ -250,14 +235,10 @@ public struct Message: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(
-      MemoryLayout.size(ofValue: channelID) + MemoryLayout.size(ofValue: sequence)
-        + MemoryLayout.size(ofValue: logTime) + MemoryLayout.size(ofValue: publishTime) + data.count
-    )
-    data.append(unsafeBytesOf: channelID.littleEndian)
-    data.append(unsafeBytesOf: sequence.littleEndian)
-    data.append(unsafeBytesOf: logTime.littleEndian)
-    data.append(unsafeBytesOf: publishTime.littleEndian)
+    data.append(littleEndian: channelID)
+    data.append(littleEndian: sequence)
+    data.append(littleEndian: logTime)
+    data.append(littleEndian: publishTime)
     data.append(self.data)
   }
 }
@@ -288,16 +269,10 @@ public struct Chunk: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(
-      MemoryLayout.size(ofValue: messageStartTime) + MemoryLayout.size(ofValue: messageEndTime)
-        + MemoryLayout.size(ofValue: uncompressedSize)
-        + MemoryLayout.size(ofValue: uncompressedCRC) + prefixedStringLength(compression)
-        + self.records.count
-    )
-    data.append(unsafeBytesOf: messageStartTime.littleEndian)
-    data.append(unsafeBytesOf: messageEndTime.littleEndian)
-    data.append(unsafeBytesOf: uncompressedSize.littleEndian)
-    data.append(unsafeBytesOf: uncompressedCRC.littleEndian)
+    data.append(littleEndian: messageStartTime)
+    data.append(littleEndian: messageEndTime)
+    data.append(littleEndian: uncompressedSize)
+    data.append(littleEndian: uncompressedCRC)
     data.appendPrefixedString(compression)
     data.appendUInt64PrefixedData(self.records)
   }
@@ -314,12 +289,7 @@ public struct MessageIndex: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(
-      MemoryLayout.size(ofValue: channelID) + MemoryLayout<UInt32>.size
-        + MemoryLayout<Timestamp>.size
-        + MemoryLayout<UInt64>.size * records.count
-    )
-    data.append(unsafeBytesOf: channelID.littleEndian)
+    data.append(littleEndian: channelID)
     data.appendPrefixedTupleArray(records)
   }
 }
@@ -359,22 +329,15 @@ public struct ChunkIndex: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(
-      MemoryLayout.size(ofValue: messageStartTime) + MemoryLayout.size(ofValue: messageEndTime)
-        + MemoryLayout.size(ofValue: chunkStartOffset) + MemoryLayout.size(ofValue: chunkLength)
-        + MemoryLayout.size(ofValue: messageIndexLength)
-        + MemoryLayout.size(ofValue: compressedSize) + MemoryLayout.size(ofValue: uncompressedSize)
-        + prefixedStringLength(compression) + prefixedMapLength(messageIndexOffsets)
-    )
-    data.append(unsafeBytesOf: messageStartTime.littleEndian)
-    data.append(unsafeBytesOf: messageEndTime.littleEndian)
-    data.append(unsafeBytesOf: chunkStartOffset.littleEndian)
-    data.append(unsafeBytesOf: chunkLength.littleEndian)
+    data.append(littleEndian: messageStartTime)
+    data.append(littleEndian: messageEndTime)
+    data.append(littleEndian: chunkStartOffset)
+    data.append(littleEndian: chunkLength)
     data.appendPrefixedMap(messageIndexOffsets)
-    data.append(unsafeBytesOf: messageIndexLength.littleEndian)
+    data.append(littleEndian: messageIndexLength)
     data.appendPrefixedString(compression)
-    data.append(unsafeBytesOf: compressedSize.littleEndian)
-    data.append(unsafeBytesOf: uncompressedSize.littleEndian)
+    data.append(littleEndian: compressedSize)
+    data.append(littleEndian: uncompressedSize)
   }
 }
 
@@ -401,20 +364,15 @@ public struct Attachment: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(
-      MemoryLayout.size(ofValue: logTime) + MemoryLayout.size(ofValue: createTime)
-        + prefixedStringLength(name) + prefixedStringLength(contentType) + self.data.count
-        + MemoryLayout<UInt32>.size
-    )
     let fieldsStartOffset = data.count
-    data.append(unsafeBytesOf: logTime.littleEndian)
-    data.append(unsafeBytesOf: createTime.littleEndian)
+    data.append(littleEndian: logTime)
+    data.append(littleEndian: createTime)
     data.appendPrefixedString(name)
     data.appendPrefixedString(contentType)
     data.appendUInt64PrefixedData(self.data)
     var crc = CRC32()
     crc.update(data[fieldsStartOffset..<data.count])
-    data.append(unsafeBytesOf: crc.final.littleEndian)
+    data.append(littleEndian: crc.final)
   }
 }
 
@@ -447,16 +405,11 @@ public struct AttachmentIndex: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(
-      MemoryLayout<UInt64>.size + MemoryLayout<UInt64>.size + MemoryLayout<Timestamp>.size
-        + MemoryLayout<Timestamp>.size + MemoryLayout<UInt64>.size + prefixedStringLength(name)
-        + prefixedStringLength(contentType)
-    )
-    data.append(unsafeBytesOf: offset.littleEndian)
-    data.append(unsafeBytesOf: length.littleEndian)
-    data.append(unsafeBytesOf: logTime.littleEndian)
-    data.append(unsafeBytesOf: createTime.littleEndian)
-    data.append(unsafeBytesOf: dataSize.littleEndian)
+    data.append(littleEndian: offset)
+    data.append(littleEndian: length)
+    data.append(littleEndian: logTime)
+    data.append(littleEndian: createTime)
+    data.append(littleEndian: dataSize)
     data.appendPrefixedString(name)
     data.appendPrefixedString(contentType)
   }
@@ -497,21 +450,14 @@ public struct Statistics: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(
-      MemoryLayout.size(ofValue: messageCount) + MemoryLayout.size(ofValue: schemaCount)
-        + MemoryLayout.size(ofValue: channelCount) + MemoryLayout.size(ofValue: attachmentCount)
-        + MemoryLayout.size(ofValue: metadataCount) + MemoryLayout.size(ofValue: chunkCount)
-        + MemoryLayout.size(ofValue: messageStartTime) + MemoryLayout.size(ofValue: messageEndTime)
-        + prefixedMapLength(channelMessageCounts)
-    )
-    data.append(unsafeBytesOf: messageCount.littleEndian)
-    data.append(unsafeBytesOf: schemaCount.littleEndian)
-    data.append(unsafeBytesOf: channelCount.littleEndian)
-    data.append(unsafeBytesOf: attachmentCount.littleEndian)
-    data.append(unsafeBytesOf: metadataCount.littleEndian)
-    data.append(unsafeBytesOf: chunkCount.littleEndian)
-    data.append(unsafeBytesOf: messageStartTime.littleEndian)
-    data.append(unsafeBytesOf: messageEndTime.littleEndian)
+    data.append(littleEndian: messageCount)
+    data.append(littleEndian: schemaCount)
+    data.append(littleEndian: channelCount)
+    data.append(littleEndian: attachmentCount)
+    data.append(littleEndian: metadataCount)
+    data.append(littleEndian: chunkCount)
+    data.append(littleEndian: messageStartTime)
+    data.append(littleEndian: messageEndTime)
     data.appendPrefixedMap(channelMessageCounts)
   }
 }
@@ -527,9 +473,6 @@ public struct Metadata: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(
-      prefixedStringLength(name) + MemoryLayout<UInt32>.size + prefixedMapLength(metadata)
-    )
     data.appendPrefixedString(name)
     data.appendPrefixedMap(metadata)
   }
@@ -548,12 +491,8 @@ public struct MetadataIndex: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(
-      MemoryLayout.size(ofValue: offset) + MemoryLayout.size(ofValue: length)
-        + prefixedStringLength(name)
-    )
-    data.append(unsafeBytesOf: offset.littleEndian)
-    data.append(unsafeBytesOf: length.littleEndian)
+    data.append(littleEndian: offset)
+    data.append(littleEndian: length)
     data.appendPrefixedString(name)
   }
 }
@@ -571,13 +510,9 @@ public struct SummaryOffset: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(
-      MemoryLayout.size(ofValue: groupOpcode) + MemoryLayout.size(ofValue: groupStart)
-        + MemoryLayout.size(ofValue: groupLength)
-    )
     data.append(groupOpcode)
-    data.append(unsafeBytesOf: groupStart.littleEndian)
-    data.append(unsafeBytesOf: groupLength.littleEndian)
+    data.append(littleEndian: groupStart)
+    data.append(littleEndian: groupLength)
   }
 }
 
@@ -590,7 +525,6 @@ public struct DataEnd: Record {
   }
 
   public func serializeFields(to data: inout Data) {
-    data.reserveCapacity(MemoryLayout.size(ofValue: dataSectionCRC))
-    data.append(unsafeBytesOf: dataSectionCRC.littleEndian)
+    data.append(littleEndian: dataSectionCRC)
   }
 }

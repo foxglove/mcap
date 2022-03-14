@@ -1,50 +1,6 @@
 import Foundation
 import mcap
 
-//extension Header: Decodable {
-//  public init(from decoder: Decoder) throws {
-//    var library: String
-//    var profile: String
-//    for field in try decoder.unkeyedContainer().decode(<#T##type: String.Type##String.Type#>)
-//  }
-//}
-//
-//
-//enum TestRecord: Decodable {
-//  case header(Header)
-//  case attachment(Attachment)
-//  case schema(Schema)
-//  case channel(Channel)
-//  case message(Message)
-//  case dataEnd(DataEnd)
-//  case ignored
-//
-//  enum CodingKeys: String, CodingKey {
-//    case type
-//    case fields
-//  }
-//
-//  init(from decoder: Decoder) throws {
-//    let container = try decoder.container(keyedBy: CodingKeys.self)
-//    switch try container.decode(String.self, forKey: .type) {
-//    case "Header":
-//      self = .header(try container.decode(Header.self, forKey: .fields))
-//    case "Attachment":
-//    case "Schema":
-//    case "Channel":
-//    case "Message":
-//    case "DataEnd":
-//      self = .dataEnd(<#T##DataEnd#>)
-//    default:
-//      self = .ignored
-//    }
-//  }
-//}
-//
-//struct TestData: Decodable {
-//  let records: [TestRecord]
-//}
-
 class Buffer: IWritable {
   var data = Data()
   func position() -> UInt64 {
