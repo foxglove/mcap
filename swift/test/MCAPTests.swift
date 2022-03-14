@@ -17,7 +17,7 @@ final class MCAPTests: XCTestCase {
   func testExample() async throws {
 
     let buffer = Buffer()
-    let writer = MCAP0Writer(buffer)
+    let writer = MCAPWriter(buffer)
     await writer.start(library: "", profile: "")
     await writer.end()
     XCTAssertEqual(buffer.data.count, 286)

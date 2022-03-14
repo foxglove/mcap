@@ -5,7 +5,7 @@ public protocol IWritable {
   mutating func write(_ data: Data) async
 }
 
-public final class MCAP0Writer {
+public final class MCAPWriter {
 
   public struct Options {
     let useStatistics: Bool
@@ -53,6 +53,7 @@ public final class MCAP0Writer {
   private var writable: IWritable
   private let options: Options
   private var buffer = Data()
+  private let chunkBuilder: ChunkBuilder?
   private var runningCRC = CRC32()
 
   private var nextChannelID: ChannelID
@@ -70,6 +71,7 @@ public final class MCAP0Writer {
     self.writable = writable
     self.options = options
     self.nextChannelID = options.startChannelID
+    chunkBuilder = options.useChunks ? ChunkBuilder() : nil
   }
 
   private func _position() -> UInt64 {
@@ -91,7 +93,11 @@ public final class MCAP0Writer {
     let id = nextSchemaID
     nextSchemaID += 1
     let schema = Schema(id: id, name: name, encoding: encoding, data: data)
-    schema.serialize(to: &buffer)
+    if let chunkBuilder = chunkBuilder {
+      schema.serialize(to: &chunkBuilder.buffer)
+    } else {
+      schema.serialize(to: &buffer)
+    }
     schemasByID[id] = schema
     statistics.schemaCount += 1
     return id
@@ -112,14 +118,17 @@ public final class MCAP0Writer {
       messageEncoding: messageEncoding,
       metadata: metadata
     )
-    channel.serialize(to: &buffer)
+    if let chunkBuilder = chunkBuilder {
+      channel.serialize(to: &chunkBuilder.buffer)
+    } else {
+      channel.serialize(to: &buffer)
+    }
     channelsByID[id] = channel
     statistics.channelCount += 1
     return id
   }
 
   public func addMessage(_ message: Message) async {
-    message.serialize(to: &buffer)
     statistics.channelMessageCounts[message.channelID, default: 0] += 1
     if statistics.messageCount == 0 || message.logTime < statistics.messageStartTime {
       statistics.messageStartTime = message.logTime
@@ -128,6 +137,16 @@ public final class MCAP0Writer {
       statistics.messageEndTime = message.logTime
     }
     statistics.messageCount += 1
+
+    if let chunkBuilder = chunkBuilder {
+      chunkBuilder.addMessage(message)
+
+      if chunkBuilder.buffer.count >= options.chunkSize {
+        await _closeChunk()
+      }
+    } else {
+      message.serialize(to: &buffer)
+    }
   }
 
   public func addAttachment(_ attachment: Attachment) async {
@@ -162,7 +181,59 @@ public final class MCAP0Writer {
     )
   }
 
+  private func _closeChunk() async {
+    guard let chunkBuilder = chunkBuilder, chunkBuilder.messageCount > 0 else {
+      return
+    }
+
+    var chunkDataCRC = CRC32()
+    chunkDataCRC.update(chunkBuilder.buffer)
+    let uncompressedSize = UInt64(chunkBuilder.buffer.count)
+    let compressionResult =
+      options.compressChunk?(chunkBuilder.buffer) ?? (
+        compression: "", compressedData: chunkBuilder.buffer
+      )
+    let chunk = Chunk(
+      messageStartTime: chunkBuilder.messageStartTime,
+      messageEndTime: chunkBuilder.messageEndTime,
+      uncompressedSize: uncompressedSize,
+      uncompressedCRC: chunkDataCRC.final,
+      compression: compressionResult.compression,
+      records: compressionResult.compressedData
+    )
+
+    let chunkStartOffset = _position()
+    chunk.serialize(to: &buffer)
+    let messageIndexStartOffset = _position()
+
+    var messageIndexOffsets: [ChannelID: UInt64] = [:]
+    if options.useMessageIndex {
+      for (channelID, index) in chunkBuilder.messageIndexes {
+        messageIndexOffsets[channelID] = _position()
+        index.serialize(to: &buffer)
+      }
+    }
+
+    statistics.chunkCount += 1
+    chunkIndexes.append(
+      ChunkIndex(
+        messageStartTime: chunk.messageStartTime,
+        messageEndTime: chunk.messageEndTime,
+        chunkStartOffset: chunkStartOffset,
+        chunkLength: messageIndexStartOffset - chunkStartOffset,
+        messageIndexOffsets: messageIndexOffsets,
+        messageIndexLength: _position() - messageIndexStartOffset,
+        compression: chunk.compression,
+        compressedSize: UInt64(chunk.records.count),
+        uncompressedSize: chunk.uncompressedSize
+      )
+    )
+
+    chunkBuilder.reset()
+  }
+
   public func end() async {
+    await _closeChunk()
     await _flush()
     DataEnd(dataSectionCRC: 0).serialize(to: &buffer)
     // Re-enable when tests are updated to include data section CRC

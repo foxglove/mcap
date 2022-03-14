@@ -24,9 +24,6 @@ export default class SwiftWriterTestRunner extends WriteTestRunner {
   }
 
   supportsVariant(variant: TestVariant): boolean {
-    if (variant.features.has(TestFeatures.UseChunks)) {
-      return false;
-    }
     if (variant.features.has(TestFeatures.AddExtraDataToRecords)) {
       return false;
     }

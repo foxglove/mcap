@@ -143,9 +143,9 @@ enum ConformanceRunner {
     }
 
     let buffer = Buffer()
-    let writer = MCAP0Writer(
+    let writer = MCAPWriter(
       buffer,
-      MCAP0Writer.Options(
+      MCAPWriter.Options(
         useStatistics: features.contains("st"),
         useSummaryOffsets: features.contains("sum"),
         useChunks: features.contains("ch"),

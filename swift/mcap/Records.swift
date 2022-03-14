@@ -370,11 +370,11 @@ public struct ChunkIndex: Record {
     data.append(unsafeBytesOf: messageEndTime.littleEndian)
     data.append(unsafeBytesOf: chunkStartOffset.littleEndian)
     data.append(unsafeBytesOf: chunkLength.littleEndian)
+    data.appendPrefixedMap(messageIndexOffsets)
     data.append(unsafeBytesOf: messageIndexLength.littleEndian)
+    data.appendPrefixedString(compression)
     data.append(unsafeBytesOf: compressedSize.littleEndian)
     data.append(unsafeBytesOf: uncompressedSize.littleEndian)
-    data.appendPrefixedString(compression)
-    data.appendPrefixedMap(messageIndexOffsets)
   }
 }
 
