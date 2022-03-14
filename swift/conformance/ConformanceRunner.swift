@@ -4,8 +4,9 @@ import mcap
 class Buffer: IWritable {
   var data = Data()
   func position() -> UInt64 {
-    return UInt64(data.count)
+    UInt64(data.count)
   }
+
   func write(_ other: Data) async {
     data.append(other)
   }
@@ -21,6 +22,7 @@ enum TestRecord {
   case dataEnd
 }
 
+// swiftlint:disable force_cast
 @main
 enum ConformanceRunner {
   static func main() async throws {
@@ -32,7 +34,7 @@ enum ConformanceRunner {
 
     let testData = try JSONSerialization.jsonObject(with: data) as! [String: Any]
     let features =
-      (((testData["meta"] as! [String: Any])["variant"] as! [String: Any]))["features"] as! [String]
+      ((testData["meta"] as! [String: Any])["variant"] as! [String: Any])["features"] as! [String]
 
     let testRecords: [TestRecord] = (testData["records"] as! [[String: Any]]).compactMap { record in
       let fields = record["fields"] as! [[Any]]
@@ -116,22 +118,22 @@ enum ConformanceRunner {
     )
     for record in testRecords {
       switch record {
-      case .header(let header):
+      case let .header(header):
         await writer.start(library: header.library, profile: header.profile)
-      case .schema(let schema):
+      case let .schema(schema):
         _ = await writer.addSchema(name: schema.name, encoding: schema.encoding, data: schema.data)
-      case .channel(let channel):
+      case let .channel(channel):
         _ = await writer.addChannel(
           schemaID: channel.schemaID,
           topic: channel.topic,
           messageEncoding: channel.messageEncoding,
           metadata: channel.metadata
         )
-      case .message(let message):
+      case let .message(message):
         await writer.addMessage(message)
-      case .attachment(let attachment):
+      case let .attachment(attachment):
         await writer.addAttachment(attachment)
-      case .metadata(let metadata):
+      case let .metadata(metadata):
         await writer.addMetadata(metadata)
       case .dataEnd:
         await writer.end()

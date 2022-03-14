@@ -4,6 +4,7 @@ public typealias SchemaID = UInt16
 public typealias ChannelID = UInt16
 public typealias Timestamp = UInt64
 
+// swiftlint:disable:next identifier_name
 public let MCAP0_MAGIC = Data([137, 77, 67, 65, 80, 48, 13, 10])
 
 public enum Opcode: UInt8 {
@@ -32,13 +33,13 @@ public protocol Record {
 extension Record {
   func serialize(to data: inout Data) {
     data.append(Self.opcode.rawValue)
-    data.append(littleEndian: UInt64(0))  // placeholder
+    data.append(littleEndian: UInt64(0)) // placeholder
     let fieldsStartOffset = data.count
     self.serializeFields(to: &data)
     let fieldsLength = data.count - fieldsStartOffset
     withUnsafeBytes(of: UInt64(fieldsLength).littleEndian) {
       data.replaceSubrange(
-        fieldsStartOffset - MemoryLayout<UInt64>.size..<fieldsStartOffset,
+        fieldsStartOffset - MemoryLayout<UInt64>.size ..< fieldsStartOffset,
         with: $0
       )
     }
@@ -46,8 +47,9 @@ extension Record {
 }
 
 func prefixedStringLength(_ str: String) -> Int {
-  return MemoryLayout<UInt32>.size + str.utf8.count
+  MemoryLayout<UInt32>.size + str.utf8.count
 }
+
 func prefixedMapLength(_ map: [String: String]) -> Int {
   var length = 0
   for (key, value) in map {
@@ -55,11 +57,13 @@ func prefixedMapLength(_ map: [String: String]) -> Int {
   }
   return MemoryLayout<UInt32>.size + length
 }
+
 func prefixedMapLength<K: UnsignedInteger, V: UnsignedInteger>(_ map: [K: V]) -> Int {
-  return MemoryLayout<UInt32>.size + map.count * (MemoryLayout<K>.size + MemoryLayout<V>.size)
+  MemoryLayout<UInt32>.size + map.count * (MemoryLayout<K>.size + MemoryLayout<V>.size)
 }
+
 func prefixedTupleArrayLength<K: UnsignedInteger, V: UnsignedInteger>(_ arr: [(K, V)]) -> Int {
-  return MemoryLayout<UInt32>.size + arr.count * (MemoryLayout<K>.size + MemoryLayout<V>.size)
+  MemoryLayout<UInt32>.size + arr.count * (MemoryLayout<K>.size + MemoryLayout<V>.size)
 }
 
 extension Data {
@@ -80,7 +84,7 @@ extension Data {
   }
 
   mutating func appendPrefixedString(_ str: String) {
-    var str = str  // withUTF8 may mutate str
+    var str = str // withUTF8 may mutate str
     str.withUTF8 {
       append(littleEndian: UInt32($0.count))
       append($0)
@@ -89,7 +93,7 @@ extension Data {
 
   mutating func appendPrefixedMap(_ map: [String: String]) {
     let sizeOffset = self.count
-    append(littleEndian: UInt32(0))  // placeholder
+    append(littleEndian: UInt32(0)) // placeholder
     for (key, value) in map {
       appendPrefixedString(key)
       appendPrefixedString(value)
@@ -97,7 +101,7 @@ extension Data {
     Swift.withUnsafeBytes(
       of: UInt32(self.count - sizeOffset - MemoryLayout<UInt32>.size).littleEndian
     ) {
-      replaceSubrange(sizeOffset..<sizeOffset + MemoryLayout<UInt32>.size, with: $0)
+      replaceSubrange(sizeOffset ..< sizeOffset + MemoryLayout<UInt32>.size, with: $0)
     }
   }
 
@@ -376,7 +380,7 @@ public struct Attachment: Record {
     data.appendPrefixedString(contentType)
     data.appendUInt64PrefixedData(self.data)
     var crc = CRC32()
-    crc.update(data[fieldsStartOffset..<data.count])
+    crc.update(data[fieldsStartOffset ..< data.count])
     data.append(littleEndian: crc.final)
   }
 }

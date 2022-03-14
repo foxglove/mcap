@@ -5,8 +5,8 @@ public protocol IWritable {
   mutating func write(_ data: Data) async
 }
 
-extension Statistics {
-  fileprivate mutating func addMessage(_ message: Message) {
+private extension Statistics {
+  mutating func addMessage(_ message: Message) {
     channelMessageCounts[message.channelID, default: 0] += 1
     if messageCount == 0 || message.logTime < messageStartTime {
       messageStartTime = message.logTime
@@ -19,7 +19,6 @@ extension Statistics {
 }
 
 public final class MCAPWriter {
-
   public struct Options {
     let useStatistics: Bool
     let useSummaryOffsets: Bool
@@ -82,7 +81,7 @@ public final class MCAPWriter {
   public init(_ writable: IWritable, _ options: Options = Options()) {
     self.writable = writable
     self.options = options
-    self.nextChannelID = options.startChannelID
+    nextChannelID = options.startChannelID
     schemasByID = options.repeatSchemas ? [:] : nil
     channelsByID = options.repeatChannels ? [:] : nil
     chunkBuilder = options.useChunks ? ChunkBuilder(useMessageIndex: options.useMessageIndex) : nil
@@ -93,7 +92,7 @@ public final class MCAPWriter {
   }
 
   private func _position() -> UInt64 {
-    return writable.position() + UInt64(buffer.count)
+    writable.position() + UInt64(buffer.count)
   }
 
   private func _flush() async {

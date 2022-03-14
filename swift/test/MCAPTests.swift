@@ -6,8 +6,9 @@ class Buffer: IWritable {
   var data = Data()
 
   func position() -> UInt64 {
-    return UInt64(data.count)
+    UInt64(data.count)
   }
+
   func write(_ other: Data) async {
     data.append(other)
   }
@@ -15,7 +16,6 @@ class Buffer: IWritable {
 
 final class MCAPTests: XCTestCase {
   func testExample() async throws {
-
     let buffer = Buffer()
     let writer = MCAPWriter(buffer)
     await writer.start(library: "", profile: "")
