@@ -285,9 +285,9 @@ jobs:
       - uses: fwal/setup-swift@v1 # cspell: disable-line
         with:
           swift-version: 5.5.2
-      - run: curl -O https://github.com/realm/SwiftLint/releases/download/0.46.5/swiftlint_linux.zip && unzip swiftlint_linux.zip
-      - run: curl -O https://github.com/nicklockwood/SwiftFormat/releases/download/0.49.5/swiftformat_linux.zip && unzip swiftformat_linux.zip
+      - run: curl -LO https://github.com/realm/SwiftLint/releases/download/0.46.5/swiftlint_linux.zip && unzip swiftlint_linux.zip swiftlint
+      - run: curl -LO https://github.com/nicklockwood/SwiftFormat/releases/download/0.49.5/swiftformat_linux.zip && unzip swiftformat_linux.zip
+      - run: ./swiftlint
       - run: ./swiftformat_linux --lint .
-      - run: ./swiftlint_linux
       - run: swift build
       - run: swift test
