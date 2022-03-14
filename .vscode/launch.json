@@ -17,6 +17,33 @@
         "--runInBand",
         "--watchAll=false"
       ]
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Test mcap",
+      "program": "/Applications/Xcode.app/Contents/Developer/usr/bin/xctest",
+      "args": [".build/debug/mcapPackageTests.xctest"],
+      "cwd": "${workspaceFolder:mcap}",
+      "preLaunchTask": "swift: Build All"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug conformance",
+      "program": "${workspaceFolder:mcap}/.build/debug/conformance",
+      "args": [],
+      "cwd": "${workspaceFolder:mcap}",
+      "preLaunchTask": "swift: Build Debug conformance"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Release conformance",
+      "program": "${workspaceFolder:mcap}/.build/release/conformance",
+      "args": [],
+      "cwd": "${workspaceFolder:mcap}",
+      "preLaunchTask": "swift: Build Release conformance"
     }
   ]
 }

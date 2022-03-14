@@ -15,6 +15,7 @@ MCAP libraries are provided in the following languages. For guidance on each lan
 - [Go](./go)
 - [Python](./python)
 - [TypeScript](./typescript)
+- [Swift](./swift)
 
 ## License
 
