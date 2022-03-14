@@ -5,8 +5,8 @@ public protocol IWritable {
   mutating func write(_ data: Data) async
 }
 
-fileprivate extension Statistics {
-  mutating func addMessage(_ message: Message) {
+extension Statistics {
+  fileprivate mutating func addMessage(_ message: Message) {
     channelMessageCounts[message.channelID, default: 0] += 1
     if messageCount == 0 || message.logTime < messageStartTime {
       messageStartTime = message.logTime

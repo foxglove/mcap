@@ -4,7 +4,6 @@ public typealias SchemaID = UInt16
 public typealias ChannelID = UInt16
 public typealias Timestamp = UInt64
 
-// swift-format-ignore: AlwaysUseLowerCamelCase
 public let MCAP0_MAGIC = Data([137, 77, 67, 65, 80, 48, 13, 10])
 
 public enum Opcode: UInt8 {
@@ -102,7 +101,10 @@ extension Data {
     }
   }
 
-  mutating func appendPrefixedMap<K: FixedWidthInteger & UnsignedInteger, V: FixedWidthInteger & UnsignedInteger>(_ map: [K: V]) {
+  mutating func appendPrefixedMap<
+    K: FixedWidthInteger & UnsignedInteger,
+    V: FixedWidthInteger & UnsignedInteger
+  >(_ map: [K: V]) {
     append(
       littleEndian: UInt32(map.count * (MemoryLayout<K>.size + MemoryLayout<V>.size))
     )
@@ -113,7 +115,10 @@ extension Data {
   }
 
   // https://bugs.swift.org/browse/SR-922
-  mutating func appendPrefixedTupleArray<K: FixedWidthInteger & UnsignedInteger, V: FixedWidthInteger & UnsignedInteger>(_ map: [(K, V)]) {
+  mutating func appendPrefixedTupleArray<
+    K: FixedWidthInteger & UnsignedInteger,
+    V: FixedWidthInteger & UnsignedInteger
+  >(_ map: [(K, V)]) {
     append(
       littleEndian: UInt32(map.count * (MemoryLayout<K>.size + MemoryLayout<V>.size))
     )
