@@ -252,8 +252,12 @@ jobs:
           echo "GOARCH=$GOARCH" >> $GITHUB_ENV
       - name: Build binary
         run: make build -e BINARY_NAME=$BINARY_NAME
+      - name: Make release notes
+        run: |
+          git log --oneline --no-merges --first-parent --grep CLI --decorate-refs=refs $(git describe --tags $(git rev-list --tags=releases/mcap-cli --max-count=1))..HEAD > ${{ github.workspace }}-CHANGELOG.txt
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: ./go/cli/mcap/bin/${{env.BINARY_NAME}}
+          body_path: ${{ github.workspace }}-CHANGELOG.txt
           draft: false
