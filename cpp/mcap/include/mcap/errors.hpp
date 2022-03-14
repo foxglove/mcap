@@ -18,6 +18,8 @@ enum class StatusCode {
   InvalidFile,
   InvalidRecord,
   InvalidOpCode,
+  InvalidChunkOffset,
+  InvalidFooter,
   DecompressionFailed,
   DecompressionSizeMismatch,
   UnrecognizedCompression,
@@ -65,6 +67,12 @@ struct Status {
         break;
       case StatusCode::InvalidOpCode:
         message = "invalid opcode";
+        break;
+      case StatusCode::InvalidChunkOffset:
+        message = "invalid chunk offset";
+        break;
+      case StatusCode::InvalidFooter:
+        message = "invalid footer";
         break;
       case StatusCode::DecompressionFailed:
         message = "decompression failed";

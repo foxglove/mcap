@@ -1,5 +1,6 @@
 #pragma once
 
+#include "intervaltree.hpp"
 #include "types.hpp"
 #include <fstream>
 #include <map>
@@ -11,22 +12,25 @@
 
 namespace mcap {
 
-/**
- * @brief Configuration options for McapReader.
- */
-struct McapReaderOptions {
+enum struct ReadSummaryMethod {
   /**
-   * @brief Read the file sequentially from Header to DataEnd, skipping the
-   * Summary section at the end. Seeking requires reading the file up to the
-   * desired seek point.
+   * @brief Parse the Summary section to produce seeking indexes and summary
+   * statistics. If the Summary section is not present or corrupt, a failure
+   * Status is returned and the seeking indexes and summary statistics are not
+   * populated.
    */
-  bool forceScan;
+  NoFallbackScan,
   /**
    * @brief If the Summary section is missing or incomplete, allow falling back
-   * to reading the file sequentially during summary operations or seeking. This
-   * is equivalent to `forceScan = true` when the Summary cannot be read.
+   * to reading the file sequentially to produce seeking indexes and summary
+   * statistics.
    */
-  bool allowFallbackScan;
+  AllowFallbackScan,
+  /**
+   * @brief Read the file sequentially from Header to DataEnd to produce seeking
+   * indexes and summary statistics.
+   */
+  ForceScan,
 };
 
 /**
@@ -175,7 +179,7 @@ public:
    *   returned, the data source is not considered open and McapReader is not
    *   usable until `open()` is called and a success response is returned.
    */
-  Status open(IReadable& reader, const McapReaderOptions& options = {});
+  Status open(IReadable& reader);
   /**
    * @brief Opens an MCAP file for reading from a std::ifstream input file
    * stream.
@@ -186,7 +190,7 @@ public:
    *   returned, the file is not considered open and McapReader is not usable
    *   until `open()` is called and a success response is returned.
    */
-  Status open(std::ifstream& stream, const McapReaderOptions& options = {});
+  Status open(std::ifstream& stream);
 
   /**
    * @brief Closes the MCAP file, clearing any internal data structures and
@@ -202,7 +206,8 @@ public:
    * upon requesting summary data or first seek if Summary section parsing is
    * allowed by the configuration options.
    */
-  Status readSummary();
+  Status readSummary(
+    ReadSummaryMethod method, const ProblemCallback& onProblem = [](const Status&) {});
 
   /**
    * @brief Returns an iterable view with `begin()` and `end()` methods for
@@ -247,6 +252,10 @@ public:
    * @brief Returns the parsed Footer record, if it has been encountered.
    */
   const std::optional<Footer>& footer() const;
+  /**
+   * @brief Returns the parsed Statistics record, if it has been encountered.
+   */
+  const std::optional<Statistics>& statistics() const;
 
   /**
    * @brief Look up a Channel record by channel ID. If the Channel has not been
@@ -294,27 +303,30 @@ public:
   static std::optional<Compression> ParseCompression(const std::string_view compression);
 
 private:
+  using ChunkInterval = internal::Interval<ByteOffset, ChunkIndex>;
   friend LinearMessageView;
 
   IReadable* input_ = nullptr;
-  McapReaderOptions options_{};
   std::unique_ptr<FileStreamReader> fileStreamInput_;
   std::optional<Header> header_;
   std::optional<Footer> footer_;
   std::optional<Statistics> statistics_;
-  std::vector<ChunkIndex> chunkIndexes_;
-  std::vector<AttachmentIndex> attachmentIndexes_;
+  std::vector<ChunkInterval> chunkIndexes_;
+  internal::IntervalTree<ByteOffset, ChunkIndex> chunkRanges_;
+  std::multimap<std::string, AttachmentIndex> attachmentIndexes_;
+  std::multimap<std::string, MetadataIndex> metadataIndexes_;
   std::unordered_map<SchemaId, SchemaPtr> schemas_;
   std::unordered_map<ChannelId, ChannelPtr> channels_;
   // Used for uncompressed messages
   std::unordered_map<ChannelId, std::map<Timestamp, ByteOffset>> messageIndex_;
-  // Used for messages inside compressed chunks
-  std::unordered_map<ChannelId, std::map<Timestamp, ByteOffset>> messageChunkIndex_;
   ByteOffset dataStart_ = 0;
   ByteOffset dataEnd_ = EndOffset;
   Timestamp startTime_ = 0;
   Timestamp endTime_ = 0;
   bool parsedSummary_ = false;
+
+  Status readSummarySection_(IReadable& reader);
+  Status readSummaryFromScan_(IReadable& reader);
 };
 
 /**
@@ -331,7 +343,9 @@ struct RecordReader {
 
   std::optional<Record> next();
 
-  const Status& status();
+  const Status& status() const;
+
+  ByteOffset curRecordOffset() const;
 
 private:
   IReadable* dataSource_ = nullptr;
@@ -340,10 +354,10 @@ private:
 };
 
 struct TypedChunkReader {
-  std::function<void(const SchemaPtr)> onSchema;
-  std::function<void(const ChannelPtr)> onChannel;
-  std::function<void(const Message&)> onMessage;
-  std::function<void(const Record&)> onUnknownRecord;
+  std::function<void(const SchemaPtr, ByteOffset)> onSchema;
+  std::function<void(const ChannelPtr, ByteOffset)> onChannel;
+  std::function<void(const Message&, ByteOffset)> onMessage;
+  std::function<void(const Record&, ByteOffset)> onUnknownRecord;
 
   TypedChunkReader();
 
@@ -368,23 +382,23 @@ private:
  * data source.
  */
 struct TypedRecordReader {
-  std::function<void(const Header&)> onHeader;
-  std::function<void(const Footer&)> onFooter;
-  std::function<void(const SchemaPtr)> onSchema;
-  std::function<void(const ChannelPtr)> onChannel;
-  std::function<void(const Message&)> onMessage;
-  std::function<void(const Chunk&)> onChunk;
-  std::function<void(const MessageIndex&)> onMessageIndex;
-  std::function<void(const ChunkIndex&)> onChunkIndex;
-  std::function<void(const Attachment&)> onAttachment;
-  std::function<void(const AttachmentIndex&)> onAttachmentIndex;
-  std::function<void(const Statistics&)> onStatistics;
-  std::function<void(const Metadata&)> onMetadata;
-  std::function<void(const MetadataIndex&)> onMetadataIndex;
-  std::function<void(const SummaryOffset&)> onSummaryOffset;
-  std::function<void(const DataEnd&)> onDataEnd;
-  std::function<void(const Record&)> onUnknownRecord;
-  std::function<void(void)> onChunkEnd;
+  std::function<void(const Header&, ByteOffset)> onHeader;
+  std::function<void(const Footer&, ByteOffset)> onFooter;
+  std::function<void(const SchemaPtr, ByteOffset, std::optional<ByteOffset>)> onSchema;
+  std::function<void(const ChannelPtr, ByteOffset, std::optional<ByteOffset>)> onChannel;
+  std::function<void(const Message&, ByteOffset, std::optional<ByteOffset>)> onMessage;
+  std::function<void(const Chunk&, ByteOffset)> onChunk;
+  std::function<void(const MessageIndex&, ByteOffset)> onMessageIndex;
+  std::function<void(const ChunkIndex&, ByteOffset)> onChunkIndex;
+  std::function<void(const Attachment&, ByteOffset)> onAttachment;
+  std::function<void(const AttachmentIndex&, ByteOffset)> onAttachmentIndex;
+  std::function<void(const Statistics&, ByteOffset)> onStatistics;
+  std::function<void(const Metadata&, ByteOffset)> onMetadata;
+  std::function<void(const MetadataIndex&, ByteOffset)> onMetadataIndex;
+  std::function<void(const SummaryOffset&, ByteOffset)> onSummaryOffset;
+  std::function<void(const DataEnd&, ByteOffset)> onDataEnd;
+  std::function<void(const Record&, ByteOffset, std::optional<ByteOffset>)> onUnknownRecord;
+  std::function<void(ByteOffset)> onChunkEnd;
 
   TypedRecordReader(IReadable& dataSource, ByteOffset startOffset,
                     ByteOffset endOffset = EndOffset);
