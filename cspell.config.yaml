@@ -9,6 +9,9 @@ ignorePaths:
   - CMakeLists.txt
   - Makefile
   - build
+  - bin
+  - dist
+  - yarn-error.log
   - "*.Dockerfile"
   - "*.mcap"
   - "*.egg-info"
@@ -85,3 +88,4 @@ overrides:
     words:
       - subrange
       - unkeyed
+      - swiftlint

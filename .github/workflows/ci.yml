@@ -285,12 +285,8 @@ jobs:
       - uses: fwal/setup-swift@v1 # cspell: disable-line
         with:
           swift-version: 5.5.2
-      - uses: actions/checkout@v3
-        with:
-          repository: apple/swift-format
-          ref: 0.50500.0
-          path: swift-format
-      - run: (cd swift-format && swift run swift-format --recursive --in-place ../swift ../Package.swift)
-      - run: (cd swift-format && swift run swift-format lint --recursive --strict ../swift ../Package.swift)
+      - run: brew install swiftformat swiftlint
+      - run: swiftformat --lint .
+      - run: swiftlint
       - run: swift build
       - run: swift test
