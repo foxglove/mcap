@@ -140,11 +140,10 @@ enum ConformanceRunner {
       }
     }
 
-    buffer.data.withUnsafeBytes { bytes in
-      let ret = fwrite(bytes.baseAddress, 1, bytes.count, stdout)
-      if ret != bytes.count {
-        fatalError("Only wrote \(ret) of \(bytes.count) bytes")
-      }
+    if #available(macOS 10.15.4, *) {
+      try FileHandle.standardOutput.write(contentsOf: buffer.data)
+    } else {
+      FileHandle.standardOutput.write(buffer.data)
     }
   }
 }
