@@ -75,9 +75,10 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		channel := info.Channels[chanID]
 		schema := info.Schemas[channel.SchemaID]
 		channelMessageCount := info.Statistics.ChannelMessageCounts[chanID]
+		frequency := 1e9 * float64(channelMessageCount) / float64(end-start)
 		row := []string{
 			fmt.Sprintf("\t(%d) %s", channel.ID, channel.Topic),
-			fmt.Sprintf("%*d msgs", maxCountWidth, channelMessageCount),
+			fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency),
 			fmt.Sprintf(" : %s [%s]", schema.Name, schema.Encoding),
 		}
 		rows = append(rows, row)
