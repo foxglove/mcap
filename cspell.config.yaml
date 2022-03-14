@@ -36,6 +36,8 @@ words:
   - rosbag
   - rosmsg
   - stoull
+  - swiftformat
+  - swiftlint
   - typecheck
   - unchunked
   - unindexed
@@ -88,4 +90,3 @@ overrides:
     words:
       - subrange
       - unkeyed
-      - swiftlint
