@@ -12,6 +12,35 @@ std::string_view StringView(const std::byte* data, size_t size) {
   return std::string_view{reinterpret_cast<const char*>(data), size};
 }
 
+struct Buffer : mcap::IReadable, mcap::IWritable {
+  std::vector<std::byte> buffer;
+
+  virtual uint64_t size() const {
+    return buffer.size();
+  }
+
+  // IWritable
+  virtual void end() {}
+  virtual void handleWrite(const std::byte* data, uint64_t size) {
+    buffer.insert(buffer.end(), data, data + size);
+  }
+
+  // IReadable
+  virtual uint64_t read(std::byte** output, uint64_t offset, uint64_t size) {
+    if (offset + size >= buffer.size()) {
+      return 0;
+    }
+    *output = buffer.data() + offset;
+    return size;
+  }
+};
+
+void requireOk(const mcap::Status& status) {
+  CAPTURE(status.code);
+  CAPTURE(status.message);
+  REQUIRE(status.ok());
+}
+
 TEST_CASE("internal::Parse*()", "[reader]") {
   SECTION("uint64_t") {
     const std::array<std::byte, 8> input = {std::byte(0xef), std::byte(0xcd), std::byte(0xab),
@@ -152,7 +181,7 @@ TEST_CASE("McapReader::readSummary()", "[reader]") {
   SECTION("NoFallbackScan") {
     mcap::McapReader reader;
     auto status = reader.open(MCAP001);
-    REQUIRE(status.ok());
+    requireOk(status);
 
     status = reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan);
     REQUIRE(status.code == mcap::StatusCode::MissingStatistics);
@@ -177,10 +206,10 @@ TEST_CASE("McapReader::readSummary()", "[reader]") {
   SECTION("AllowFallbackScan") {
     mcap::McapReader reader;
     auto status = reader.open(MCAP001);
-    REQUIRE(status.ok());
+    requireOk(status);
 
     status = reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan);
-    REQUIRE(status.ok());
+    requireOk(status);
 
     const auto& chunkIndexes = reader.chunkIndexes();
     REQUIRE(chunkIndexes.size() == 1);
@@ -213,10 +242,10 @@ TEST_CASE("McapReader::readSummary()", "[reader]") {
   SECTION("ForceScan") {
     mcap::McapReader reader;
     auto status = reader.open(MCAP001);
-    REQUIRE(status.ok());
+    requireOk(status);
 
     status = reader.readSummary(mcap::ReadSummaryMethod::ForceScan);
-    REQUIRE(status.ok());
+    requireOk(status);
 
     const auto& chunkIndexes = reader.chunkIndexes();
     REQUIRE(chunkIndexes.size() == 1);
