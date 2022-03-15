@@ -1521,21 +1521,20 @@ LinearMessageView::Iterator LinearMessageView::begin() {
 }
 
 LinearMessageView::Iterator LinearMessageView::end() {
-  return LinearMessageView::Iterator::end();
+  return LinearMessageView::Iterator();
 }
 
 // LinearMessageView::Iterator /////////////////////////////////////////////////
 
-LinearMessageView::Iterator::Iterator(McapReader& mcapReader, const ProblemCallback& onProblem)
-    : mcapReader_(mcapReader)
-    , recordReader_(std::nullopt)
-    , startTime_(0)
-    , endTime_(0)
-    , onProblem_(onProblem) {}
-
 LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataStart,
                                       ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
                                       const ProblemCallback& onProblem)
+    : impl_(std::make_unique<Impl>(mcapReader, dataStart, dataEnd, startTime, endTime, onProblem)) {
+}
+
+LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataStart,
+                                        ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
+                                        const ProblemCallback& onProblem)
     : mcapReader_(mcapReader)
     , recordReader_(std::in_place, *mcapReader.dataSource(), dataStart, dataEnd)
     , startTime_(startTime)
@@ -1574,22 +1573,14 @@ LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataSta
     curMessageView_.emplace(curMessage_, maybeChannel, maybeSchema);
   };
 
-  ++(*this);
+  increment();
 }
 
-LinearMessageView::Iterator::reference LinearMessageView::Iterator::operator*() const {
-  return *curMessageView_;
-}
-
-LinearMessageView::Iterator::pointer LinearMessageView::Iterator::operator->() const {
-  return &*curMessageView_;
-}
-
-LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
+void LinearMessageView::Iterator::Impl::increment() {
   curMessageView_ = std::nullopt;
 
   if (!recordReader_.has_value()) {
-    return *this;
+    return;
   }
 
   // Keep iterate through records until we find a message with a logTime >= startTime_
@@ -1604,7 +1595,7 @@ LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
 
     if (!found) {
       recordReader_ = std::nullopt;
-      return *this;
+      return;
     }
   }
 
@@ -1612,24 +1603,39 @@ LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
   if (curMessageView_->message.logTime >= endTime_) {
     recordReader_ = std::nullopt;
   }
+  return;
+}
+
+LinearMessageView::Iterator::reference LinearMessageView::Iterator::Impl::dereference() const {
+  return *curMessageView_;
+}
+
+bool LinearMessageView::Iterator::Impl::has_value() const {
+  return curMessageView_.has_value();
+}
+
+LinearMessageView::Iterator::reference LinearMessageView::Iterator::operator*() const {
+  return impl_->dereference();
+}
+
+LinearMessageView::Iterator::pointer LinearMessageView::Iterator::operator->() const {
+  return &impl_->dereference();
+}
+
+LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
+  impl_->increment();
+  if (!impl_->has_value()) {
+    impl_ = nullptr;
+  }
   return *this;
 }
 
-LinearMessageView::Iterator LinearMessageView::Iterator::operator++(int) {
-  LinearMessageView::Iterator tmp = *this;
-  ++(*this);
-  return tmp;
+void LinearMessageView::Iterator::operator++(int) {
+  ++*this;
 }
 
 bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
-  const bool aEnd = !a.recordReader_.has_value();
-  const bool bEnd = !b.recordReader_.has_value();
-  if (aEnd && bEnd) {
-    return true;
-  } else if (aEnd || bEnd) {
-    return false;
-  }
-  return a.recordReader_->offset() == b.recordReader_->offset();
+  return a.impl_ == b.impl_;
 }
 
 bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {

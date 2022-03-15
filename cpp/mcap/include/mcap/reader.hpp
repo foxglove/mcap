@@ -135,6 +135,12 @@ public:
   uint64_t size() const override;
   Status status() const override;
 
+  BufferReader() = default;
+  BufferReader(const BufferReader&) = delete;
+  BufferReader& operator=(const BufferReader&) = delete;
+  BufferReader(BufferReader&&) = delete;
+  BufferReader& operator=(BufferReader&&) = delete;
+
 private:
   const std::byte* data_;
   uint64_t size_;
@@ -150,6 +156,12 @@ public:
   uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override;
   uint64_t size() const override;
   Status status() const override;
+
+  ZStdReader() = default;
+  ZStdReader(const ZStdReader&) = delete;
+  ZStdReader& operator=(const ZStdReader&) = delete;
+  ZStdReader(ZStdReader&&) = delete;
+  ZStdReader& operator=(ZStdReader&&) = delete;
 
 private:
   Status status_;
@@ -169,6 +181,12 @@ public:
   uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override;
   uint64_t size() const override;
   Status status() const override;
+
+  LZ4Reader() = default;
+  LZ4Reader(const LZ4Reader&) = delete;
+  LZ4Reader& operator=(const LZ4Reader&) = delete;
+  LZ4Reader(LZ4Reader&&) = delete;
+  LZ4Reader& operator=(LZ4Reader&&) = delete;
 
 private:
   Status status_;
@@ -391,6 +409,10 @@ struct TypedChunkReader {
   std::function<void(const Record&, ByteOffset)> onUnknownRecord;
 
   TypedChunkReader();
+  TypedChunkReader(const TypedChunkReader&) = delete;
+  TypedChunkReader& operator=(const TypedChunkReader&) = delete;
+  TypedChunkReader(TypedChunkReader&&) = delete;
+  TypedChunkReader& operator=(TypedChunkReader&&) = delete;
 
   void reset(const Chunk& chunk, Compression compression);
 
@@ -434,6 +456,11 @@ struct TypedRecordReader {
   TypedRecordReader(IReadable& dataSource, ByteOffset startOffset,
                     ByteOffset endOffset = EndOffset);
 
+  TypedRecordReader(const TypedRecordReader&) = delete;
+  TypedRecordReader& operator=(const TypedRecordReader&) = delete;
+  TypedRecordReader(TypedRecordReader&&) = delete;
+  TypedRecordReader& operator=(TypedRecordReader&&) = delete;
+
   bool next();
 
   ByteOffset offset() const;
@@ -452,7 +479,7 @@ private:
  */
 struct LinearMessageView {
   struct Iterator {
-    using iterator_category = std::forward_iterator_tag;
+    using iterator_category = std::input_iterator_tag;
     using difference_type = int64_t;
     using value_type = MessageView;
     using pointer = const MessageView*;
@@ -461,38 +488,51 @@ struct LinearMessageView {
     reference operator*() const;
     pointer operator->() const;
     Iterator& operator++();
-    Iterator operator++(int);
+    void operator++(int);
     friend bool operator==(const Iterator& a, const Iterator& b);
     friend bool operator!=(const Iterator& a, const Iterator& b);
-
-    static const Iterator& end() {
-      static McapReader emptyReader;
-      static auto onProblem = [](const Status&) {};
-      static LinearMessageView::Iterator emptyIterator{emptyReader, onProblem};
-      return emptyIterator;
-    }
 
   private:
     friend LinearMessageView;
 
-    McapReader& mcapReader_;
-    std::optional<TypedRecordReader> recordReader_;
-    Timestamp startTime_;
-    Timestamp endTime_;
-    const ProblemCallback& onProblem_;
-    Message curMessage_;
-    std::optional<MessageView> curMessageView_;
-
-    Iterator(McapReader& mcapReader, const ProblemCallback& onProblem);
+    Iterator() = default;
     Iterator(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd, Timestamp startTime,
              Timestamp endTime, const ProblemCallback& onProblem);
 
-    void readNext();
+    class Impl {
+    public:
+      Impl(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd, Timestamp startTime,
+           Timestamp endTime, const ProblemCallback& onProblem);
+
+      Impl(const Impl&) = delete;
+      Impl& operator=(const Impl&) = delete;
+      Impl(Impl&&) = delete;
+      Impl& operator=(Impl&&) = delete;
+
+      void increment();
+      reference dereference() const;
+      bool has_value() const;
+
+      McapReader& mcapReader_;
+      std::optional<TypedRecordReader> recordReader_;
+      Timestamp startTime_;
+      Timestamp endTime_;
+      const ProblemCallback& onProblem_;
+      Message curMessage_;
+      std::optional<MessageView> curMessageView_;
+    };
+
+    std::unique_ptr<Impl> impl_;
   };
 
   LinearMessageView(McapReader& mcapReader, const ProblemCallback& onProblem);
   LinearMessageView(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd,
                     Timestamp startTime, Timestamp endTime, const ProblemCallback& onProblem);
+
+  LinearMessageView(const LinearMessageView&) = delete;
+  LinearMessageView& operator=(const LinearMessageView&) = delete;
+  LinearMessageView(LinearMessageView&&) = default;
+  LinearMessageView& operator=(LinearMessageView&&) = delete;
 
   Iterator begin();
   Iterator end();
