@@ -2,3 +2,5 @@
 .vscode/c_cpp_properties.json
 node_modules
 yarn-error.log
+.swiftpm
+.build

@@ -6,26 +6,26 @@ import (
 	"io"
 )
 
-type CRCWriter struct {
+type crcWriter struct {
 	w   io.Writer
 	crc hash.Hash32
 }
 
-func (w *CRCWriter) Write(p []byte) (int, error) {
+func (w *crcWriter) Write(p []byte) (int, error) {
 	_, _ = w.crc.Write(p)
 	return w.w.Write(p)
 }
 
-func (w *CRCWriter) Checksum() uint32 {
+func (w *crcWriter) Checksum() uint32 {
 	return w.crc.Sum32()
 }
 
-func (w *CRCWriter) Reset() {
+func (w *crcWriter) Reset() {
 	w.crc = crc32.NewIEEE()
 }
 
-func NewCRCWriter(w io.Writer) *CRCWriter {
-	return &CRCWriter{
+func newCRCWriter(w io.Writer) *crcWriter {
+	return &crcWriter{
 		w:   w,
 		crc: crc32.NewIEEE(),
 	}

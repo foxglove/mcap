@@ -1570,29 +1570,30 @@ LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataSta
       }
     }
 
-    curMessage_.emplace(message, maybeChannel, maybeSchema);
+    curMessage_ = message;  // copy message, which may be a reference to a temporary
+    curMessageView_.emplace(curMessage_, maybeChannel, maybeSchema);
   };
 
   ++(*this);
 }
 
 LinearMessageView::Iterator::reference LinearMessageView::Iterator::operator*() const {
-  return *curMessage_;
+  return *curMessageView_;
 }
 
 LinearMessageView::Iterator::pointer LinearMessageView::Iterator::operator->() const {
-  return &*curMessage_;
+  return &*curMessageView_;
 }
 
 LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
-  curMessage_ = std::nullopt;
+  curMessageView_ = std::nullopt;
 
   if (!recordReader_.has_value()) {
     return *this;
   }
 
   // Keep iterate through records until we find a message with a logTime >= startTime_
-  while (!curMessage_.has_value() || curMessage_->message.logTime < startTime_) {
+  while (!curMessageView_.has_value() || curMessageView_->message.logTime < startTime_) {
     const bool found = recordReader_->next();
 
     // Surface any problem that may have occurred while reading
@@ -1608,7 +1609,7 @@ LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
   }
 
   // Check if this message is past the time range of this view
-  if (curMessage_->message.logTime >= endTime_) {
+  if (curMessageView_->message.logTime >= endTime_) {
     recordReader_ = std::nullopt;
   }
   return *this;

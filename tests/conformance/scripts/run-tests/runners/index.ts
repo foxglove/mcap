@@ -4,6 +4,7 @@ import GoStreamedReaderTestRunner from "./GoStreamedReaderTestRunner";
 import GoStreamedWriterTestRunner from "./GoStreamedWriterTestRunner";
 import PythonStreamedReaderTestRunner from "./PythonStreamedReaderTestRunner";
 import PythonWriterTestRunner from "./PythonWriterTestRunner";
+import SwiftWriterTestRunner from "./SwiftWriterTestRunner";
 import { ReadTestRunner, WriteTestRunner } from "./TestRunner";
 import TypescriptIndexedReaderTestRunner from "./TypescriptIndexedReaderTestRunner";
 import TypescriptStreamedReaderTestRunner from "./TypescriptStreamedReaderTestRunner";
@@ -19,6 +20,7 @@ const runners: readonly (ReadTestRunner | WriteTestRunner)[] = [
   new TypescriptIndexedReaderTestRunner(),
   new TypescriptStreamedReaderTestRunner(),
   new TypescriptWriterTestRunner(),
+  new SwiftWriterTestRunner(),
 ];
 
 export default runners;

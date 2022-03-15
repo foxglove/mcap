@@ -480,7 +480,8 @@ struct LinearMessageView {
     Timestamp startTime_;
     Timestamp endTime_;
     const ProblemCallback& onProblem_;
-    std::optional<MessageView> curMessage_;
+    Message curMessage_;
+    std::optional<MessageView> curMessageView_;
 
     Iterator(McapReader& mcapReader, const ProblemCallback& onProblem);
     Iterator(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd, Timestamp startTime,

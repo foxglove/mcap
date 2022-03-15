@@ -361,11 +361,18 @@ class MessageIndex(McapRecord):
 @dataclass
 class Metadata(McapRecord):
     name: str
-    data: Dict[str, str]
+    metadata: Dict[str, str]
 
     def write(self, stream: RecordBuilder) -> None:
         stream.start_record(Opcode.METADATA)
-        for k, v in self.data.items():
+        stream.write_prefixed_string(self.name)
+        meta_length = 0
+        for k, v in self.metadata.items():
+            meta_length += 8
+            meta_length += len(k.encode())
+            meta_length += len(v.encode())
+        stream.write4(meta_length)
+        for k, v in self.metadata.items():
             stream.write_prefixed_string(k)
             stream.write_prefixed_string(v)
         stream.finish_record()
@@ -373,7 +380,14 @@ class Metadata(McapRecord):
     @staticmethod
     def read(stream: ReadDataStream):
         name = stream.read_prefixed_string()
-        return Metadata(name=name, data={})
+        metadata_length = stream.read4()
+        metadata_end = stream.count + metadata_length
+        metadata: Dict[str, str] = {}
+        while stream.count < metadata_end:
+            key = stream.read_prefixed_string()
+            value = stream.read_prefixed_string()
+            metadata[key] = value
+        return Metadata(name=name, metadata=metadata)
 
 
 @dataclass
@@ -381,6 +395,13 @@ class MetadataIndex(McapRecord):
     offset: int
     length: int
     name: str
+
+    def write(self, stream: RecordBuilder) -> None:
+        stream.start_record(Opcode.METADATA_INDEX)
+        stream.write8(self.offset)
+        stream.write8(self.length)
+        stream.write_prefixed_string(self.name)
+        stream.finish_record()
 
     @staticmethod
     def read(stream: ReadDataStream):

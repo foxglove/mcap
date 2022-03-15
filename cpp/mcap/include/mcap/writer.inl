@@ -1,5 +1,4 @@
-#include <cryptopp/crc.h>
-
+#include "crc32.hpp"
 #include <cassert>
 #include <iostream>
 #include <lz4.h>
@@ -12,10 +11,12 @@ namespace mcap {
 
 // IWritable ///////////////////////////////////////////////////////////////////
 
+IWritable::IWritable() noexcept
+    : crc_(internal::CRC32_INIT) {}
+
 void IWritable::write(const std::byte* data, uint64_t size) {
   if (crcEnabled) {
-    assert(crc_);
-    crc_->Update(reinterpret_cast<const uint8_t*>(data), size);
+    crc_ = internal::crc32Update(crc_, data, size);
   }
   handleWrite(data, size);
 }
@@ -23,14 +24,13 @@ void IWritable::write(const std::byte* data, uint64_t size) {
 uint32_t IWritable::crc() {
   uint32_t crc32 = 0;
   if (crcEnabled) {
-    assert(crc_);
-    crc_->Final(reinterpret_cast<uint8_t*>(&crc32));
+    crc32 = internal::crc32Final(crc_);
   }
   return crc32;
 }
 
 void IWritable::resetCrc() {
-  crc_ = std::make_unique<CryptoPP::CRC32>();
+  crc_ = internal::CRC32_INIT;
 }
 
 // FileWriter //////////////////////////////////////////////////////////////////
@@ -584,18 +584,21 @@ Status McapWriter::write(Attachment& attachment) {
   if (!options_.noCRC) {
     // Calculate the CRC32 of the attachment
     uint32_t sizePrefix = 0;
-    CryptoPP::CRC32 crc;
-    crc.Update(reinterpret_cast<const uint8_t*>(&attachment.logTime), 8);
-    crc.Update(reinterpret_cast<const uint8_t*>(&attachment.createTime), 8);
+    uint32_t crc = internal::CRC32_INIT;
+    crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&attachment.logTime), 8);
+    crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&attachment.createTime), 8);
     sizePrefix = uint32_t(attachment.name.size());
-    crc.Update(reinterpret_cast<const uint8_t*>(&sizePrefix), 4);
-    crc.Update(reinterpret_cast<const uint8_t*>(attachment.name.data()), sizePrefix);
+    crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&sizePrefix), 4);
+    crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(attachment.name.data()),
+                                sizePrefix);
     sizePrefix = uint32_t(attachment.contentType.size());
-    crc.Update(reinterpret_cast<const uint8_t*>(&sizePrefix), 4);
-    crc.Update(reinterpret_cast<const uint8_t*>(attachment.contentType.data()), sizePrefix);
-    crc.Update(reinterpret_cast<const uint8_t*>(&attachment.dataSize), 8);
-    crc.Update(reinterpret_cast<const uint8_t*>(attachment.data), attachment.dataSize);
-    crc.Final(reinterpret_cast<uint8_t*>(&attachment.crc));
+    crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&sizePrefix), 4);
+    crc = internal::crc32Update(
+      crc, reinterpret_cast<const std::byte*>(attachment.contentType.data()), sizePrefix);
+    crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&attachment.dataSize), 8);
+    crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(attachment.data),
+                                attachment.dataSize);
+    attachment.crc = internal::crc32Final(crc);
   }
 
   const uint64_t fileOffset = fileOutput.size();

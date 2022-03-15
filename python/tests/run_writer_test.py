@@ -4,7 +4,15 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Set, Type
 
-from mcap.mcap0.records import Attachment, Channel, Header, McapRecord, Message, Schema
+from mcap.mcap0.records import (
+    Attachment,
+    Channel,
+    Header,
+    McapRecord,
+    Message,
+    Metadata,
+    Schema,
+)
 from mcap.mcap0.writer import CompressionType, IndexType, Writer
 
 
@@ -35,6 +43,8 @@ def index_type_from_features(features: List[str]) -> IndexType:
         type |= IndexType.CHUNK
     if "mx" in features:
         type |= IndexType.MESSAGE
+    if "mdx" in features:
+        type |= IndexType.METADATA
     return type
 
 
@@ -88,6 +98,8 @@ def write_file(features: List[str], expected_records: List[Dict[str, Any]]) -> b
                     name=record.name, encoding=record.encoding, data=record.data
                 )
             seen_schemas.add(record.name)
+        if isinstance(record, Metadata):
+            writer.add_metadata(record.name, record.metadata)
     writer.finish()
     return output.getvalue()
 

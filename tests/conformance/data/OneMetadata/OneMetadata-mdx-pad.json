@@ -1,0 +1,23 @@
+{
+  "records": [
+    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
+    {
+      "type": "Metadata",
+      "fields": [["metadata", {"foo": "bar"}], ["name", "myMetadata"]]
+    },
+    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
+    {
+      "type": "MetadataIndex",
+      "fields": [["length", "44"], ["name", "myMetadata"], ["offset", "28"]]
+    },
+    {
+      "type": "Footer",
+      "fields": [
+        ["summary_crc", "3895734819"],
+        ["summary_offset_start", "0"],
+        ["summary_start", "88"]
+      ]
+    }
+  ],
+  "meta": {"variant": {"features": ["mdx", "pad"]}}
+}

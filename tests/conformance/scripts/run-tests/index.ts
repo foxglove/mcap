@@ -39,9 +39,7 @@ function normalizeJson(json: string, { ignoreDataEnd }: { ignoreDataEnd: boolean
 }
 
 function spaceHexString(s: string): string {
-  return chunk(s, 8)
-    .map((p) => p.join(""))
-    .join(" ");
+  return [[s.substring(0, 2)], ...chunk(s.substring(2), 8)].map((p) => p.join("")).join(" ");
 }
 
 async function runReaderTest(

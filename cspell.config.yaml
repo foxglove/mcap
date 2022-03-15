@@ -10,6 +10,9 @@ ignorePaths:
   - CMakeLists.txt
   - Makefile
   - build
+  - bin
+  - dist
+  - yarn-error.log
   - "*.Dockerfile"
   - "*.mcap"
   - "*.egg-info"
@@ -20,8 +23,8 @@ words:
   - cmake
   - crc
   - crcs
-  - cryptopp
   - deserialization
+  - fwrite
   - golangci
   - libmcap
   - mcap
@@ -34,6 +37,8 @@ words:
   - rosbag
   - rosmsg
   - stoull
+  - swiftformat
+  - swiftlint
   - typecheck
   - unchunked
   - unindexed
@@ -79,3 +84,10 @@ overrides:
       - klass
       - rglob
       - uncompress
+
+  - filename: "**/*.swift"
+    ignoreRegExpList:
+      - "\\b0x[0-9a-f_]+"
+    words:
+      - subrange
+      - unkeyed

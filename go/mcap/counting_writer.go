@@ -6,38 +6,38 @@ import (
 	"io"
 )
 
-type CountingCRCWriter struct {
-	w          ResettableWriteCloser
+type countingCRCWriter struct {
+	w          resettableWriteCloser
 	size       int64
 	crc        hash.Hash32
 	computeCRC bool
 }
 
-func (c *CountingCRCWriter) Reset(w io.Writer) {
+func (c *countingCRCWriter) Reset(w io.Writer) {
 	c.w.Reset(w)
 }
 
-func (c *CountingCRCWriter) ResetCRC() {
+func (c *countingCRCWriter) ResetCRC() {
 	c.crc.Reset()
 }
 
-func (c *CountingCRCWriter) ResetSize() {
+func (c *countingCRCWriter) ResetSize() {
 	c.size = 0
 }
 
-func (c *CountingCRCWriter) CRC() uint32 {
+func (c *countingCRCWriter) CRC() uint32 {
 	return c.crc.Sum32()
 }
 
-func (c *CountingCRCWriter) Size() int64 {
+func (c *countingCRCWriter) Size() int64 {
 	return c.size
 }
 
-func (c *CountingCRCWriter) Close() error {
+func (c *countingCRCWriter) Close() error {
 	return c.w.Close()
 }
 
-func (c *CountingCRCWriter) Write(p []byte) (int, error) {
+func (c *countingCRCWriter) Write(p []byte) (int, error) {
 	c.size += int64(len(p))
 	if c.computeCRC {
 		_, _ = c.crc.Write(p)
@@ -45,8 +45,8 @@ func (c *CountingCRCWriter) Write(p []byte) (int, error) {
 	return c.w.Write(p)
 }
 
-func NewCountingCRCWriter(w ResettableWriteCloser, computeCRC bool) *CountingCRCWriter {
-	return &CountingCRCWriter{
+func newCountingCRCWriter(w resettableWriteCloser, computeCRC bool) *countingCRCWriter {
+	return &countingCRCWriter{
 		w:          w,
 		crc:        crc32.NewIEEE(),
 		computeCRC: computeCRC,

@@ -24,19 +24,21 @@ type Writer struct {
 	ChunkIndexes []*ChunkIndex
 	// AttachmentIndexes created over the course of the recording.
 	AttachmentIndexes []*AttachmentIndex
+	// MetadataIndexes created over the course of the recording.
+	MetadataIndexes []*MetadataIndex
 
 	channelIDs       []uint16
 	schemaIDs        []uint16
 	channels         map[uint16]*Channel
 	schemas          map[uint16]*Schema
 	messageIndexes   map[uint16]*MessageIndex
-	w                *WriteSizer
+	w                *writeSizer
 	buf              []byte
 	msg              []byte
 	chunk            []byte
 	uncompressed     *bytes.Buffer
 	compressed       *bytes.Buffer
-	compressedWriter *CountingCRCWriter
+	compressedWriter *countingCRCWriter
 
 	currentChunkStartTime uint64
 	currentChunkEndTime   uint64
@@ -320,7 +322,17 @@ func (w *Writer) WriteMetadata(m *Metadata) error {
 	w.ensureSized(msglen)
 	offset := putPrefixedString(w.msg, m.Name)
 	offset += copy(w.msg[offset:], data)
-	_, err := w.writeRecord(w.w, OpMetadata, w.msg[:offset])
+	metadataOffset := w.w.Size()
+	c, err := w.writeRecord(w.w, OpMetadata, w.msg[:offset])
+	if err != nil {
+		return err
+	}
+	w.MetadataIndexes = append(w.MetadataIndexes, &MetadataIndex{
+		Offset: metadataOffset,
+		Length: uint64(c),
+		Name:   m.Name,
+	})
+	w.Statistics.MetadataCount++
 	return err
 }
 
@@ -579,6 +591,22 @@ func (w *Writer) writeSummarySection() ([]*SummaryOffset, error) {
 			})
 		}
 	}
+	if !w.opts.SkipMetadataIndex {
+		if len(w.MetadataIndexes) > 0 {
+			metadataIndexOffset := w.w.Size()
+			for _, metadataIndex := range w.MetadataIndexes {
+				err := w.WriteMetadataIndex(metadataIndex)
+				if err != nil {
+					return offsets, fmt.Errorf("failed to write metadata index: %w", err)
+				}
+			}
+			offsets = append(offsets, &SummaryOffset{
+				GroupOpcode: OpMetadataIndex,
+				GroupStart:  metadataIndexOffset,
+				GroupLength: w.w.Size() - metadataIndexOffset,
+			})
+		}
+	}
 
 	return offsets, nil
 }
@@ -693,12 +721,12 @@ type WriterOptions struct {
 
 // NewWriter returns a new MCAP writer.
 func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
-	writer := NewWriteSizer(w)
+	writer := newWriteSizer(w)
 	if _, err := writer.Write(Magic); err != nil {
 		return nil, err
 	}
 	compressed := bytes.Buffer{}
-	var compressedWriter *CountingCRCWriter
+	var compressedWriter *countingCRCWriter
 	if opts.Chunked {
 		switch opts.Compression {
 		case CompressionZSTD:
@@ -706,11 +734,11 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 			if err != nil {
 				return nil, err
 			}
-			compressedWriter = NewCountingCRCWriter(zw, opts.IncludeCRC)
+			compressedWriter = newCountingCRCWriter(zw, opts.IncludeCRC)
 		case CompressionLZ4:
-			compressedWriter = NewCountingCRCWriter(lz4.NewWriter(&compressed), opts.IncludeCRC)
+			compressedWriter = newCountingCRCWriter(lz4.NewWriter(&compressed), opts.IncludeCRC)
 		case CompressionNone:
-			compressedWriter = NewCountingCRCWriter(bufCloser{&compressed}, opts.IncludeCRC)
+			compressedWriter = newCountingCRCWriter(bufCloser{&compressed}, opts.IncludeCRC)
 		default:
 			return nil, fmt.Errorf("unsupported compression")
 		}

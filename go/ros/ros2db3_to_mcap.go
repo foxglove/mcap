@@ -13,31 +13,6 @@ import (
 	"github.com/foxglove/mcap/go/mcap"
 )
 
-var (
-	messageDefinitionSeparator = []byte(
-		"================================================================================\n",
-	)
-)
-
-var rosPrimitives = map[string]bool{
-	"bool":     true,
-	"int8":     true,
-	"uint8":    true,
-	"int16":    true,
-	"uint16":   true,
-	"int32":    true,
-	"uint32":   true,
-	"int64":    true,
-	"uint64":   true,
-	"float32":  true,
-	"float64":  true,
-	"string":   true,
-	"time":     true,
-	"duration": true,
-	"char":     true,
-	"byte":     true,
-}
-
 func getSchema(encoding string, rosType string, directories []string) ([]byte, error) {
 	parts := strings.FieldsFunc(rosType, func(c rune) bool { return c == '/' })
 	if len(parts) < 3 {
@@ -92,7 +67,7 @@ func getSchemas(encoding string, directories []string, types []string) (map[stri
 		for len(subdefinitions) > 0 {
 			subdefinition := subdefinitions[0]
 			if !first {
-				_, err := messageDefinition.Write(messageDefinitionSeparator)
+				_, err := messageDefinition.Write(MessageDefinitionSeparator)
 				if err != nil {
 					return nil, fmt.Errorf("failed to write separator: %w", err)
 				}
@@ -137,7 +112,7 @@ func getSchemas(encoding string, directories []string, types []string) (map[stri
 				}
 
 				// if it's a primitive, no action required
-				if rosPrimitives[baseType] {
+				if Primitives[baseType] {
 					continue
 				}
 
