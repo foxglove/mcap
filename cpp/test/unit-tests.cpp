@@ -229,21 +229,43 @@ TEST_CASE("McapReader", "[reader]") {
     requireOk(reader.open(buffer));
 
     auto view = reader.readMessages();
-    auto it = view.begin();
-    REQUIRE(it != view.end());
-    REQUIRE(it->message.sequence == 0);
-    REQUIRE(it->message.channelId == channel.id);
-    REQUIRE(it->message.logTime == 2);
-    REQUIRE(it->message.publishTime == 1);
-    REQUIRE(it->message.dataSize == msg.dataSize);
-    REQUIRE(std::vector(it->message.data, it->message.data + it->message.dataSize) == data);
-    ++it;
-    REQUIRE(it->message.sequence == 1);
-    REQUIRE(it->message.channelId == channel.id);
-    REQUIRE(it->message.logTime == 4);
-    REQUIRE(it->message.publishTime == 3);
-    REQUIRE(it->message.dataSize == msg.dataSize);
-    REQUIRE(std::vector(it->message.data, it->message.data + it->message.dataSize) == data);
+    {
+      auto it = view.begin();
+      REQUIRE(it != view.end());
+      REQUIRE(it->message.sequence == 0);
+      REQUIRE(it->message.channelId == channel.id);
+      REQUIRE(it->message.logTime == 2);
+      REQUIRE(it->message.publishTime == 1);
+      REQUIRE(it->message.dataSize == msg.dataSize);
+      REQUIRE(std::vector(it->message.data, it->message.data + it->message.dataSize) == data);
+
+      const auto testIterator = [&](const auto& other) {
+        REQUIRE(&other->message != &it->message);
+
+        REQUIRE(other->message.sequence == 0);
+        REQUIRE(other->message.channelId == channel.id);
+        REQUIRE(other->message.logTime == 2);
+        REQUIRE(other->message.publishTime == 1);
+        REQUIRE(other->message.dataSize == msg.dataSize);
+        REQUIRE(std::vector(other->message.data, other->message.data + other->message.dataSize) ==
+                data);
+      };
+
+      // ensire that copies and moves don't
+      auto it2 = it;
+      testIterator(it2);
+      testIterator(mcap::LinearMessageView::Iterator(std::move(it)));
+    }
+
+    {
+      auto it = ++view.begin();
+      REQUIRE(it->message.sequence == 1);
+      REQUIRE(it->message.channelId == channel.id);
+      REQUIRE(it->message.logTime == 4);
+      REQUIRE(it->message.publishTime == 3);
+      REQUIRE(it->message.dataSize == msg.dataSize);
+      REQUIRE(std::vector(it->message.data, it->message.data + it->message.dataSize) == data);
+    }
 
     for (const auto& msg : view) {
       REQUIRE((msg.message.sequence == 0 || msg.message.sequence == 1));

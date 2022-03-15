@@ -1273,6 +1273,18 @@ LinearMessageView::Iterator::Iterator(McapReader& mcapReader, const ProblemCallb
     , endTime_(0)
     , onProblem_(onProblem) {}
 
+LinearMessageView::Iterator::Iterator(const Iterator& other)
+    : mcapReader_(other.mcapReader_)
+    , recordReader_(other.recordReader_)
+    , startTime_(other.startTime_)
+    , endTime_(other.endTime_)
+    , onProblem_(other.onProblem_)
+    , curMessage_(other.curMessage_)
+    , curMessageView_(other.curMessageView_
+                        ? std::optional(MessageView(curMessage_, other.curMessageView_->channel,
+                                                    other.curMessageView_->schema))
+                        : std::nullopt) {}
+
 LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataStart,
                                       ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
                                       const ProblemCallback& onProblem)
@@ -1352,6 +1364,12 @@ LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
     recordReader_ = std::nullopt;
   }
   return *this;
+}
+
+LinearMessageView::Iterator LinearMessageView::Iterator::operator++(int) {
+  LinearMessageView::Iterator tmp = *this;
+  ++(*this);
+  return tmp;
 }
 
 bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
