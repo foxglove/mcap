@@ -298,3 +298,80 @@ TEST_CASE("McapReader::readSummary()", "[reader]") {
     REQUIRE(stats.channelMessageCounts.at(1) == 1);
   }
 }
+
+TEST_CASE("McapReader::readMessages()", "[reader]") {
+  SECTION("MovableIterators") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    writer.open(buffer, mcap::McapWriterOptions("test"));
+    mcap::Schema schema("schema", "schemaEncoding", "ab");
+    writer.addSchema(schema);
+    mcap::Channel channel("topic", "messageEncoding", schema.id);
+    writer.addChannel(channel);
+    mcap::Message msg;
+    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    msg.channelId = channel.id;
+    msg.sequence = 0;
+    msg.logTime = 2;
+    msg.publishTime = 1;
+    msg.data = data.data();
+    msg.dataSize = data.size();
+    requireOk(writer.write(msg));
+    msg.sequence = 1;
+    msg.logTime = 4;
+    msg.publishTime = 3;
+    msg.data = data.data();
+    msg.dataSize = data.size();
+    requireOk(writer.write(msg));
+    writer.close();
+
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+
+    auto view = reader.readMessages();
+    {
+      auto it = view.begin();
+      REQUIRE(it != view.end());
+      auto* originalMsg = &it->message;
+      REQUIRE(it->message.sequence == 0);
+      REQUIRE(it->message.channelId == channel.id);
+      REQUIRE(it->message.logTime == 2);
+      REQUIRE(it->message.publishTime == 1);
+      REQUIRE(it->message.dataSize == msg.dataSize);
+      REQUIRE(std::vector(it->message.data, it->message.data + it->message.dataSize) == data);
+
+      // ensure iterator still works after move
+      mcap::LinearMessageView::Iterator other = std::move(it);
+      REQUIRE(&other->message == originalMsg);
+
+      REQUIRE(other->message.sequence == 0);
+      REQUIRE(other->message.channelId == channel.id);
+      REQUIRE(other->message.logTime == 2);
+      REQUIRE(other->message.publishTime == 1);
+      REQUIRE(other->message.dataSize == msg.dataSize);
+      REQUIRE(std::vector(other->message.data, other->message.data + other->message.dataSize) ==
+              data);
+    }
+
+    {
+      auto it = view.begin();
+      ++it;
+      REQUIRE(it->message.sequence == 1);
+      REQUIRE(it->message.channelId == channel.id);
+      REQUIRE(it->message.logTime == 4);
+      REQUIRE(it->message.publishTime == 3);
+      REQUIRE(it->message.dataSize == msg.dataSize);
+      REQUIRE(std::vector(it->message.data, it->message.data + it->message.dataSize) == data);
+    }
+
+    for (const auto& msg : view) {
+      REQUIRE((msg.message.sequence == 0 || msg.message.sequence == 1));
+      REQUIRE(msg.message.channelId == channel.id);
+      REQUIRE((msg.message.logTime == 2 || msg.message.logTime == 4));
+      REQUIRE((msg.message.publishTime == 1 || msg.message.publishTime == 3));
+      REQUIRE(msg.message.dataSize == msg.message.dataSize);
+      REQUIRE(std::vector(msg.message.data, msg.message.data + msg.message.dataSize) == data);
+    }
+  }
+}
