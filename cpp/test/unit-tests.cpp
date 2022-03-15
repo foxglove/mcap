@@ -168,3 +168,82 @@ TEST_CASE("McapWriter::write()", "[writer]") {
     REQUIRE(StringView(output.data() + 32, 6) == "value2");
   }
 }
+
+struct Buffer : mcap::IReadable, mcap::IWritable {
+  std::vector<std::byte> buffer;
+
+  virtual uint64_t size() const {
+    return buffer.size();
+  }
+
+  // IWritable
+  virtual void end() {}
+  virtual void handleWrite(const std::byte* data, uint64_t size) {
+    buffer.insert(buffer.end(), data, data + size);
+  }
+
+  // IReadable
+  virtual uint64_t read(std::byte** output, uint64_t offset, uint64_t size) {
+    if (offset + size >= buffer.size()) {
+      return 0;
+    }
+    *output = buffer.data() + offset;
+    return size;
+  }
+};
+
+void requireOk(const mcap::Status& status) {
+  CAPTURE(status.code);
+  CAPTURE(status.message);
+  REQUIRE(status.ok());
+}
+
+TEST_CASE("McapReader", "[reader]") {
+  SECTION("readMessages") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    writer.open(buffer, mcap::McapWriterOptions("test"));
+    mcap::Schema schema("schema", "schemaEncoding", "ab");
+    writer.addSchema(schema);
+    mcap::Channel channel("topic", "messageEncoding", schema.id);
+    writer.addChannel(channel);
+    mcap::Message msg;
+    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    msg.channelId = channel.id;
+    msg.sequence = 0;
+    msg.logTime = 2;
+    msg.publishTime = 1;
+    msg.data = data.data();
+    msg.dataSize = data.size();
+    requireOk(writer.write(msg));
+    msg.sequence = 1;
+    msg.logTime = 4;
+    msg.publishTime = 3;
+    msg.data = data.data();
+    msg.dataSize = data.size();
+    requireOk(writer.write(msg));
+    writer.close();
+
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+
+    auto view = reader.readMessages();
+    auto it = view.begin();
+    REQUIRE(it != view.end());
+    REQUIRE(it->message.sequence == 0);
+    REQUIRE(it->message.channelId == channel.id);
+    REQUIRE(it->message.logTime == 2);
+    REQUIRE(it->message.publishTime == 1);
+    REQUIRE(it->message.dataSize == msg.dataSize);
+    REQUIRE(std::vector(it->message.data, it->message.data + it->message.dataSize) == data);
+    auto it2 = it++;
+    REQUIRE(&it2->message != &it->message);
+    REQUIRE(it2->message.sequence == 0);
+    REQUIRE(it2->message.channelId == channel.id);
+    REQUIRE(it2->message.logTime == 2);
+    REQUIRE(it2->message.publishTime == 1);
+    REQUIRE(it2->message.dataSize == msg.dataSize);
+    REQUIRE(std::vector(it2->message.data, it2->message.data + it2->message.dataSize) == data);
+  }
+}
