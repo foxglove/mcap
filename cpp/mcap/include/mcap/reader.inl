@@ -1277,18 +1277,6 @@ TypedRecordReader::TypedRecordReader(IReadable& dataSource, ByteOffset startOffs
     : reader_(dataSource, startOffset, std::min(endOffset, dataSource.size()))
     , status_(StatusCode::Success)
     , parsingChunk_(false) {
-  setupChunkReader_();
-}
-
-TypedRecordReader::TypedRecordReader(TypedRecordReader&& other)
-    : reader_(std::move(other.reader_))
-    , chunkReader_(std::move(other.chunkReader_))
-    , status_(std::move(other.status_))
-    , parsingChunk_(std::move(other.parsingChunk_)) {
-  setupChunkReader_();
-}
-
-void TypedRecordReader::setupChunkReader_() {
   chunkReader_.onSchema = [&](const SchemaPtr schema, ByteOffset chunkOffset) {
     if (onSchema) {
       onSchema(schema, reader_.curRecordOffset(), chunkOffset);
@@ -1533,73 +1521,25 @@ LinearMessageView::Iterator LinearMessageView::begin() {
 }
 
 LinearMessageView::Iterator LinearMessageView::end() {
-  return LinearMessageView::Iterator::end();
+  return LinearMessageView::Iterator();
 }
 
 // LinearMessageView::Iterator /////////////////////////////////////////////////
 
-// LinearMessageView::Iterator::~Iterator() {
-//   std::cout << "destruct " << this << std::endl;
-// }
-
-LinearMessageView::Iterator::Iterator(McapReader& mcapReader, const ProblemCallback& onProblem)
-    : mcapReader_(mcapReader)
-    , recordReader_(std::nullopt)
-    , startTime_(0)
-    , endTime_(0)
-    , onProblem_(onProblem) {
-  std::cout << "construct0 " << this << std::endl;
-}
-
-// LinearMessageView::Iterator::Iterator(const Iterator& other)
-//     : mcapReader_(other.mcapReader_)
-//     , recordReader_(other.recordReader_)
-//     , startTime_(other.startTime_)
-//     , endTime_(other.endTime_)
-//     , onProblem_(other.onProblem_)
-//     , curMessage_(other.curMessage_)
-//     , curMessageView_(other.curMessageView_
-//                         ? std::optional(MessageView(curMessage_, other.curMessageView_->channel,
-//                                                     other.curMessageView_->schema))
-//                         : std::nullopt) {
-//   std::cout << "construct1 " << this << std::endl;
-//   setupRecordReader_();
-// }
-
-LinearMessageView::Iterator::Iterator(Iterator&& other)
-    : mcapReader_(other.mcapReader_)
-    , recordReader_(std::move(other.recordReader_))
-    , startTime_(std::move(other.startTime_))
-    , endTime_(std::move(other.endTime_))
-    , onProblem_(std::move(other.onProblem_))
-    , curMessage_(std::move(other.curMessage_))
-    , curMessageView_(other.curMessageView_
-                        ? std::optional(MessageView(curMessage_, other.curMessageView_->channel,
-                                                    other.curMessageView_->schema))
-                        : std::nullopt) {
-  std::cout << "construct2 " << this << std::endl;
-  setupRecordReader_();
-}
-
 LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataStart,
                                       ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
                                       const ProblemCallback& onProblem)
+    : impl_(std::make_unique<Impl>(mcapReader, dataStart, dataEnd, startTime, endTime, onProblem)) {
+}
+
+LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataStart,
+                                        ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
+                                        const ProblemCallback& onProblem)
     : mcapReader_(mcapReader)
     , recordReader_(std::in_place, *mcapReader.dataSource(), dataStart, dataEnd)
     , startTime_(startTime)
     , endTime_(endTime)
     , onProblem_(onProblem) {
-  std::cout << "construct3 " << this << std::endl;
-  setupRecordReader_();
-  ++(*this);
-}
-
-void LinearMessageView::Iterator::setupRecordReader_() {
-  std::cout << "setupRecordReader_ this=" << this << ' '
-            << (recordReader_ ? &recordReader_.value() : nullptr) << std::endl;
-  if (!recordReader_) {
-    return;
-  }
   recordReader_->onSchema = [this](const SchemaPtr schema, ByteOffset, std::optional<ByteOffset>) {
     mcapReader_.schemas_.insert_or_assign(schema->id, schema);
   };
@@ -1608,7 +1548,6 @@ void LinearMessageView::Iterator::setupRecordReader_() {
     mcapReader_.channels_.insert_or_assign(channel->id, channel);
   };
   recordReader_->onMessage = [this](const Message& message, ByteOffset, std::optional<ByteOffset>) {
-    std::cout << "onMessage " << this << std::endl;
     auto maybeChannel = mcapReader_.channel(message.channelId);
     if (!maybeChannel) {
       onProblem_(Status{
@@ -1633,23 +1572,15 @@ void LinearMessageView::Iterator::setupRecordReader_() {
     curMessage_ = message;  // copy message, which may be a reference to a temporary
     curMessageView_.emplace(curMessage_, maybeChannel, maybeSchema);
   };
+
+  increment();
 }
 
-LinearMessageView::Iterator::reference LinearMessageView::Iterator::operator*() const {
-  return *curMessageView_;
-}
-
-LinearMessageView::Iterator::pointer LinearMessageView::Iterator::operator->() const {
-  return &*curMessageView_;
-}
-
-LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
-  std::cout << "operator++ " << this << ' ' << (recordReader_ ? &recordReader_.value() : nullptr)
-            << std::endl;
+void LinearMessageView::Iterator::Impl::increment() {
   curMessageView_ = std::nullopt;
 
   if (!recordReader_.has_value()) {
-    return *this;
+    return;
   }
 
   // Keep iterate through records until we find a message with a logTime >= startTime_
@@ -1664,7 +1595,7 @@ LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
 
     if (!found) {
       recordReader_ = std::nullopt;
-      return *this;
+      return;
     }
   }
 
@@ -1672,24 +1603,38 @@ LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
   if (curMessageView_->message.logTime >= endTime_) {
     recordReader_ = std::nullopt;
   }
+  return;
+}
+
+LinearMessageView::Iterator::reference LinearMessageView::Iterator::Impl::dereference() const {
+  return *curMessageView_;
+}
+bool LinearMessageView::Iterator::Impl::has_value() const {
+  return curMessageView_.has_value();
+}
+
+LinearMessageView::Iterator::reference LinearMessageView::Iterator::operator*() const {
+  return impl_->dereference();
+}
+
+LinearMessageView::Iterator::pointer LinearMessageView::Iterator::operator->() const {
+  return &impl_->dereference();
+}
+
+LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
+  impl_->increment();
+  if (!impl_->has_value()) {
+    impl_ = nullptr;
+  }
   return *this;
 }
 
-// LinearMessageView::Iterator LinearMessageView::Iterator::operator++(int) {
-//   LinearMessageView::Iterator tmp = *this;
-//   ++(*this);
-//   return tmp;
-// }
+void LinearMessageView::Iterator::operator++(int) {
+  ++*this;
+}
 
 bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
-  const bool aEnd = !a.recordReader_.has_value();
-  const bool bEnd = !b.recordReader_.has_value();
-  if (aEnd && bEnd) {
-    return true;
-  } else if (aEnd || bEnd) {
-    return false;
-  }
-  return a.recordReader_->offset() == b.recordReader_->offset();
+  return a.impl_ == b.impl_;
 }
 
 bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {

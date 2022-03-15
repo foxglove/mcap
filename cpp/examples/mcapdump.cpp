@@ -285,10 +285,11 @@ void DumpMessages(mcap::IReadable& dataSource) {
     std::cout << "[" << channel.topic << "] " << ToString(msgView.message) << "\n";
     ++it;
   }
-  // for (const auto& msgView : view) {
-  //   const mcap::Channel& channel = *msgView.channel;
-  //   std::cout << "[" << channel.topic << "] " << ToString(msgView.message) << "\n";
-  // }
+  std::cout << "======== range-based for loop:" << std::endl;
+  for (const auto& msgView : reader.readMessages(onProblem)) {
+    const mcap::Channel& channel = *msgView.channel;
+    std::cout << "[" << channel.topic << "] " << ToString(msgView.message) << "\n";
+  }
 
   reader.close();
 }

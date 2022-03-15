@@ -300,7 +300,7 @@ TEST_CASE("McapReader::readSummary()", "[reader]") {
 }
 
 TEST_CASE("McapReader::readMessages()", "[reader]") {
-  SECTION("CopyableIterators") {
+  SECTION("MovableIterators") {
     Buffer buffer;
 
     mcap::McapWriter writer;
@@ -333,6 +333,7 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
     {
       auto it = view.begin();
       REQUIRE(it != view.end());
+      auto* originalMsg = &it->message;
       REQUIRE(it->message.sequence == 0);
       REQUIRE(it->message.channelId == channel.id);
       REQUIRE(it->message.logTime == 2);
@@ -340,22 +341,17 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
       REQUIRE(it->message.dataSize == msg.dataSize);
       REQUIRE(std::vector(it->message.data, it->message.data + it->message.dataSize) == data);
 
-      const auto testIterator = [&](const auto& other) {
-        REQUIRE(&other->message != &it->message);
+      // ensure iterator still works after move
+      mcap::LinearMessageView::Iterator other = std::move(it);
+      REQUIRE(&other->message == originalMsg);
 
-        REQUIRE(other->message.sequence == 0);
-        REQUIRE(other->message.channelId == channel.id);
-        REQUIRE(other->message.logTime == 2);
-        REQUIRE(other->message.publishTime == 1);
-        REQUIRE(other->message.dataSize == msg.dataSize);
-        REQUIRE(std::vector(other->message.data, other->message.data + other->message.dataSize) ==
-                data);
-      };
-
-      // ensire that copies and moves still work
-      // auto it2 = it;
-      // testIterator(it2);
-      testIterator(mcap::LinearMessageView::Iterator(std::move(it)));
+      REQUIRE(other->message.sequence == 0);
+      REQUIRE(other->message.channelId == channel.id);
+      REQUIRE(other->message.logTime == 2);
+      REQUIRE(other->message.publishTime == 1);
+      REQUIRE(other->message.dataSize == msg.dataSize);
+      REQUIRE(std::vector(other->message.data, other->message.data + other->message.dataSize) ==
+              data);
     }
 
     {
