@@ -48,10 +48,19 @@ type Writer struct {
 
 // WriteHeader writes a header record to the output.
 func (w *Writer) WriteHeader(header *Header) error {
-	msglen := 4 + len(header.Profile) + 4 + len(header.Library)
+	var library string
+	if !w.opts.OverrideLibrary {
+		library = fmt.Sprintf("mcap go #%s", Version())
+		if header.Library != "" {
+			library += "; " + header.Library
+		}
+	} else {
+		library = header.Library
+	}
+	msglen := 4 + len(header.Profile) + 4 + len(library)
 	w.ensureSized(msglen)
 	offset := putPrefixedString(w.msg, header.Profile)
-	offset += putPrefixedString(w.msg[offset:], header.Library)
+	offset += putPrefixedString(w.msg[offset:], library)
 	_, err := w.writeRecord(w.w, OpHeader, w.msg[:offset])
 	return err
 }
@@ -717,6 +726,10 @@ type WriterOptions struct {
 
 	// SkipSummaryOffsets skips summary offset records.
 	SkipSummaryOffsets bool
+
+	// OverrideLibrary causes the default header library to be overridden, not
+	// appended to.
+	OverrideLibrary bool
 }
 
 // NewWriter returns a new MCAP writer.

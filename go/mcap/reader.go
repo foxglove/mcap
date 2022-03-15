@@ -114,18 +114,45 @@ func (r *Reader) Messages(
 	return r.unindexedIterator(topics, uint64(start), uint64(end)), nil
 }
 
+func (r *Reader) readHeader() (*Header, error) {
+	_, err := r.rs.Seek(8, io.SeekStart)
+	if err != nil {
+		return nil, fmt.Errorf("failed to seek to header: %w", err)
+	}
+	buf := make([]byte, 9)
+	_, err = io.ReadFull(r.rs, buf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read header length: %w", err)
+	}
+	if opcode := buf[0]; opcode != byte(OpHeader) {
+		return nil, fmt.Errorf("unexpected opcode %d in header", opcode)
+	}
+	buf = make([]byte, binary.LittleEndian.Uint64(buf[1:]))
+	_, err = io.ReadFull(r.rs, buf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read header: %w", err)
+	}
+	return ParseHeader(buf)
+}
+
 func (r *Reader) Info() (*Info, error) {
+	header, err := r.readHeader()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read header: %w", err)
+	}
 	it := r.indexedMessageIterator(nil, 0, math.MaxUint64)
-	err := it.parseSummarySection()
+	err = it.parseSummarySection()
 	if err != nil {
 		return nil, err
 	}
+
 	return &Info{
 		Statistics:        it.statistics,
 		Channels:          it.channels,
 		ChunkIndexes:      it.chunkIndexes,
 		AttachmentIndexes: it.attachmentIndexes,
 		Schemas:           it.schemas,
+		Header:            header,
 	}, nil
 }
 

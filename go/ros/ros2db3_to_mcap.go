@@ -217,7 +217,6 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, opts *mcap.WriterOptions, searchdirs []s
 	defer writer.Close()
 	err = writer.WriteHeader(&mcap.Header{
 		Profile: "ros2",
-		Library: "golang-db3-mcap",
 	})
 	if err != nil {
 		return err
