@@ -65,10 +65,15 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	})
 	rows := [][]string{}
 	maxCountWidth := 0
+	maxFrequencyWidth := 0
 	for _, v := range info.Statistics.ChannelMessageCounts {
 		count := fmt.Sprintf("%d", v)
+		frequency := fmt.Sprintf("%.2f", 1e9*float64(v)/float64(end-start))
 		if len(count) > maxCountWidth {
 			maxCountWidth = len(count)
+		}
+		if frequencyWidthLen := len(frequency); frequencyWidthLen > maxFrequencyWidth {
+			maxFrequencyWidth = frequencyWidthLen
 		}
 	}
 	for _, chanID := range chanIDs {
@@ -78,7 +83,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		frequency := 1e9 * float64(channelMessageCount) / float64(end-start)
 		row := []string{
 			fmt.Sprintf("\t(%d) %s", channel.ID, channel.Topic),
-			fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency),
+			fmt.Sprintf("%*d msgs (%*.2f Hz)", maxCountWidth, channelMessageCount, maxFrequencyWidth, frequency),
 			fmt.Sprintf(" : %s [%s]", schema.Name, schema.Encoding),
 		}
 		rows = append(rows, row)
