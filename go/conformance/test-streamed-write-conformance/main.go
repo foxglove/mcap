@@ -36,6 +36,7 @@ func parseOptions(features []string) (*mcap.WriterOptions, error) {
 		SkipMetadataIndex:        true,
 		SkipChunkIndex:           true,
 		SkipSummaryOffsets:       true,
+		OverrideLibrary:          true,
 	}
 	for _, feature := range features {
 		switch feature {

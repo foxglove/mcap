@@ -22,6 +22,8 @@ var (
 
 func printInfo(w io.Writer, info *mcap.Info) error {
 	buf := &bytes.Buffer{}
+	fmt.Fprintf(buf, "library: %s\n", info.Header.Library)
+	fmt.Fprintf(buf, "profile: %s\n", info.Header.Profile)
 	fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
 	start := info.Statistics.MessageStartTime
 	end := info.Statistics.MessageEndTime
