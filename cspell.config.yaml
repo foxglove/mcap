@@ -5,6 +5,7 @@ ignorePaths:
   - node_modules
   - go.mod
   - go.sum
+  - intervaltree.hpp
   - testdata
   - CMakeLists.txt
   - Makefile
