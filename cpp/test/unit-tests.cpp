@@ -40,6 +40,7 @@ void requireOk(const mcap::Status& status) {
   CAPTURE(status.code);
   CAPTURE(status.message);
   REQUIRE(status.ok());
+}
 
 TEST_CASE("internal::crc32", "[writer]") {
   const auto crc32 = [](const uint8_t* data, size_t len) {
