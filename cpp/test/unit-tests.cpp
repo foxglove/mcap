@@ -6,6 +6,8 @@
 
 #include <array>
 
+constexpr const char* MCAP001 = TEST_DATA_PATH "001.mcap";
+
 std::string_view StringView(const std::byte* data, size_t size) {
   return std::string_view{reinterpret_cast<const char*>(data), size};
 }
@@ -143,5 +145,104 @@ TEST_CASE("McapWriter::write()", "[writer]") {
     REQUIRE(uint8_t(output.data()[31]) == 0x00);
     // "value2"
     REQUIRE(StringView(output.data() + 32, 6) == "value2");
+  }
+}
+
+TEST_CASE("McapReader::readSummary()", "[reader]") {
+  SECTION("NoFallbackScan") {
+    mcap::McapReader reader;
+    auto status = reader.open(MCAP001);
+    REQUIRE(status.ok());
+
+    status = reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan);
+    REQUIRE(status.code == mcap::StatusCode::MissingStatistics);
+
+    const auto& chunkIndexes = reader.chunkIndexes();
+    REQUIRE(chunkIndexes.size() == 1);
+    const auto& chunkIndex = chunkIndexes.front();
+    REQUIRE(chunkIndex.messageStartTime == 2);
+    REQUIRE(chunkIndex.messageEndTime == 2);
+    REQUIRE(chunkIndex.chunkStartOffset == 28);
+    REQUIRE(chunkIndex.chunkLength == 164);
+    REQUIRE(chunkIndex.messageIndexOffsets.size() == 1);
+    REQUIRE(chunkIndex.messageIndexOffsets.at(1) == 192);
+    REQUIRE(chunkIndex.messageIndexLength == 34);
+    REQUIRE(chunkIndex.compression == "");
+    REQUIRE(chunkIndex.compressedSize == 115);
+    REQUIRE(chunkIndex.uncompressedSize == 115);
+
+    REQUIRE(!reader.statistics().has_value());
+  }
+
+  SECTION("AllowFallbackScan") {
+    mcap::McapReader reader;
+    auto status = reader.open(MCAP001);
+    REQUIRE(status.ok());
+
+    status = reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan);
+    REQUIRE(status.ok());
+
+    const auto& chunkIndexes = reader.chunkIndexes();
+    REQUIRE(chunkIndexes.size() == 1);
+    const auto& chunkIndex = chunkIndexes.front();
+    REQUIRE(chunkIndex.messageStartTime == 2);
+    REQUIRE(chunkIndex.messageEndTime == 2);
+    REQUIRE(chunkIndex.chunkStartOffset == 28);
+    REQUIRE(chunkIndex.chunkLength == 164);
+    REQUIRE(chunkIndex.messageIndexOffsets.size() == 0);
+    REQUIRE(chunkIndex.messageIndexLength == 0);
+    REQUIRE(chunkIndex.compression == "");
+    REQUIRE(chunkIndex.compressedSize == 115);
+    REQUIRE(chunkIndex.uncompressedSize == 115);
+
+    const auto maybeStats = reader.statistics();
+    REQUIRE(maybeStats.has_value());
+    const auto& stats = *maybeStats;
+    REQUIRE(stats.messageCount == 1);
+    REQUIRE(stats.schemaCount == 1);
+    REQUIRE(stats.channelCount == 1);
+    REQUIRE(stats.attachmentCount == 0);
+    REQUIRE(stats.metadataCount == 0);
+    REQUIRE(stats.chunkCount == 1);
+    REQUIRE(stats.messageStartTime == 2);
+    REQUIRE(stats.messageEndTime == 2);
+    REQUIRE(stats.channelMessageCounts.size() == 1);
+    REQUIRE(stats.channelMessageCounts.at(1) == 1);
+  }
+
+  SECTION("ForceScan") {
+    mcap::McapReader reader;
+    auto status = reader.open(MCAP001);
+    REQUIRE(status.ok());
+
+    status = reader.readSummary(mcap::ReadSummaryMethod::ForceScan);
+    REQUIRE(status.ok());
+
+    const auto& chunkIndexes = reader.chunkIndexes();
+    REQUIRE(chunkIndexes.size() == 1);
+    const auto& chunkIndex = chunkIndexes.front();
+    REQUIRE(chunkIndex.messageStartTime == 2);
+    REQUIRE(chunkIndex.messageEndTime == 2);
+    REQUIRE(chunkIndex.chunkStartOffset == 28);
+    REQUIRE(chunkIndex.chunkLength == 164);
+    REQUIRE(chunkIndex.messageIndexOffsets.size() == 0);
+    REQUIRE(chunkIndex.messageIndexLength == 0);
+    REQUIRE(chunkIndex.compression == "");
+    REQUIRE(chunkIndex.compressedSize == 115);
+    REQUIRE(chunkIndex.uncompressedSize == 115);
+
+    const auto maybeStats = reader.statistics();
+    REQUIRE(maybeStats.has_value());
+    const auto& stats = *maybeStats;
+    REQUIRE(stats.messageCount == 1);
+    REQUIRE(stats.schemaCount == 1);
+    REQUIRE(stats.channelCount == 1);
+    REQUIRE(stats.attachmentCount == 0);
+    REQUIRE(stats.metadataCount == 0);
+    REQUIRE(stats.chunkCount == 1);
+    REQUIRE(stats.messageStartTime == 2);
+    REQUIRE(stats.messageEndTime == 2);
+    REQUIRE(stats.channelMessageCounts.size() == 1);
+    REQUIRE(stats.channelMessageCounts.at(1) == 1);
   }
 }

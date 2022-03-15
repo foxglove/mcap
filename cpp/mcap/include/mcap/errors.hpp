@@ -24,6 +24,7 @@ enum class StatusCode {
   DecompressionSizeMismatch,
   UnrecognizedCompression,
   OpenFailed,
+  MissingStatistics,
 };
 
 /**
@@ -85,6 +86,9 @@ struct Status {
         break;
       case StatusCode::OpenFailed:
         message = "open failed";
+        break;
+      case StatusCode::MissingStatistics:
+        message = "missing statistics";
         break;
       default:
         message = "unknown";

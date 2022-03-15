@@ -9,9 +9,8 @@
 
 namespace mcap {
 
-bool CompareChunkIntervals(const internal::Interval<ByteOffset, ChunkIndex>& a,
-                           const internal::Interval<ByteOffset, ChunkIndex>& b) {
-  return a.start < b.start;
+bool CompareChunkIndexes(const ChunkIndex& a, const ChunkIndex& b) {
+  return a.chunkStartOffset < b.chunkStartOffset;
 }
 
 // BufferReader ////////////////////////////////////////////////////////////////
@@ -41,18 +40,57 @@ Status BufferReader::status() const {
   return StatusCode::Success;
 }
 
+// FileReader //////////////////////////////////////////////////////////////////
+
+FileReader::FileReader(FILE* file)
+    : file_(file)
+    , size_(0)
+    , position_(0) {
+  assert(file_);
+
+  // Determine the size of the file
+  fseeko(file_, 0, SEEK_END);
+  size_ = ftello(file_);
+  fseeko(file_, 0, SEEK_SET);
+}
+
+uint64_t FileReader::size() const {
+  return size_;
+}
+
+uint64_t FileReader::read(std::byte** output, uint64_t offset, uint64_t size) {
+  if (offset >= size_) {
+    return 0;
+  }
+
+  if (offset != position_) {
+    fseeko(file_, offset, SEEK_SET);
+    fflush(file_);
+    position_ = offset;
+  }
+
+  if (size > buffer_.size()) {
+    buffer_.resize(size);
+  }
+
+  const uint64_t bytesRead = uint64_t(fread(buffer_.data(), 1, size, file_));
+  *output = buffer_.data();
+
+  position_ += bytesRead;
+  return bytesRead;
+}
+
 // FileStreamReader ////////////////////////////////////////////////////////////
 
 FileStreamReader::FileStreamReader(std::ifstream& stream)
-    : stream_(stream) {
+    : stream_(stream)
+    , position_(0) {
   assert(stream.is_open());
 
   // Determine the size of the file
   stream_.seekg(0, stream.end);
   size_ = stream_.tellg();
   stream_.seekg(0, stream.beg);
-
-  position_ = 0;
 }
 
 uint64_t FileStreamReader::size() const {
@@ -187,7 +225,7 @@ McapReader::~McapReader() {
 }
 
 Status McapReader::open(IReadable& reader) {
-  close();
+  reset_();
 
   const uint64_t fileSize = reader.size();
 
@@ -238,6 +276,21 @@ Status McapReader::open(IReadable& reader) {
   return StatusCode::Success;
 }
 
+Status McapReader::open(std::string_view filename) {
+  if (file_) {
+    fclose(file_);
+    file_ = nullptr;
+  }
+  file_ = fopen(filename.data(), "rb");
+  if (!file_) {
+    const auto msg = internal::StrFormat(internal::ErrorOpenFileFailed, filename);
+    return Status{StatusCode::OpenFailed, msg};
+  }
+
+  fileInput_ = std::make_unique<FileReader>(file_);
+  return open(*fileInput_);
+}
+
 Status McapReader::open(std::ifstream& stream) {
   fileStreamInput_ = std::make_unique<FileStreamReader>(stream);
   return open(*fileStreamInput_);
@@ -245,7 +298,16 @@ Status McapReader::open(std::ifstream& stream) {
 
 void McapReader::close() {
   input_ = nullptr;
+  if (file_) {
+    fclose(file_);
+    file_ = nullptr;
+  }
+  fileInput_.reset();
   fileStreamInput_.reset();
+  reset_();
+}
+
+void McapReader::reset_() {
   header_ = std::nullopt;
   footer_ = std::nullopt;
   statistics_ = std::nullopt;
@@ -274,30 +336,33 @@ Status McapReader::readSummary(ReadSummaryMethod method, const ProblemCallback& 
   if (method != ReadSummaryMethod::ForceScan) {
     // Build indexes and read stats from the Summary section
     const auto status = readSummarySection_(reader);
-    if (!status.ok()) {
-      onProblem(status);
-    } else {
+    if (status.ok()) {
+      // Summary section parsing was successful
       parsed = true;
+    } else if (method == ReadSummaryMethod::NoFallbackScan) {
+      // No fallback allowed, fail immediately
+      onProblem(status);
+      return status;
     }
   }
 
   if (!parsed) {
-    if (method == ReadSummaryMethod::NoFallbackScan) {
-      const Status status{StatusCode::InvalidFile, "Could not parse Summary information"};
-      onProblem(status);
-      return status;
-    }
-
     const auto status = readSummaryFromScan_(reader);
     if (!status.ok()) {
+      // Scanning failed, fail immediately
       onProblem(status);
       return status;
     }
   }
 
   // Convert the list of chunk indexes to an interval tree
-  std::vector<ChunkInterval> chunkIndexesCopy = chunkIndexes_;
-  chunkRanges_ = internal::IntervalTree<ByteOffset, ChunkIndex>{std::move(chunkIndexesCopy)};
+  std::vector<ChunkInterval> chunkIntervals;
+  chunkIntervals.reserve(chunkIndexes_.size());
+  for (const auto& chunkIndex : chunkIndexes_) {
+    const auto chunkEndOffset = chunkIndex.chunkStartOffset + chunkIndex.chunkLength;
+    chunkIntervals.emplace_back(chunkIndex.chunkStartOffset, chunkEndOffset, chunkIndex);
+  }
+  chunkRanges_ = internal::IntervalTree<ByteOffset, ChunkIndex>{std::move(chunkIntervals)};
 
   parsedSummary_ = true;
   return StatusCode::Success;
@@ -330,6 +395,7 @@ Status McapReader::readSummarySection_(IReadable& reader) {
   chunkIndexes_.clear();
 
   // Read the Summary section
+  bool readStatistics = false;
   TypedRecordReader typedReader{reader, summaryStart, summaryOffsetStart};
   typedReader.onSchema = [&](SchemaPtr schemaPtr, ByteOffset, std::optional<ByteOffset>) {
     schemas_.try_emplace(schemaPtr->id, schemaPtr);
@@ -338,35 +404,31 @@ Status McapReader::readSummarySection_(IReadable& reader) {
     channels_.try_emplace(channelPtr->id, channelPtr);
   };
   typedReader.onAttachmentIndex = [&](const AttachmentIndex& attachmentIndex, ByteOffset) {
-    attachmentIndexes_.insert(
-      std::pair<std::string, AttachmentIndex>{attachmentIndex.name, attachmentIndex});
+    attachmentIndexes_.emplace(attachmentIndex.name, attachmentIndex);
   };
   typedReader.onMetadataIndex = [&](const MetadataIndex& metadataIndex, ByteOffset) {
-    metadataIndexes_.insert(
-      std::pair<std::string, MetadataIndex>{metadataIndex.name, metadataIndex});
+    metadataIndexes_.emplace(metadataIndex.name, metadataIndex);
   };
   typedReader.onChunkIndex = [&](const ChunkIndex chunkIndex, ByteOffset) {
-    ChunkInterval chunkInterval{chunkIndex.chunkStartOffset,
-                                chunkIndex.chunkStartOffset + chunkIndex.chunkLength, chunkIndex};
-
     // Check if this chunk index is a duplicate
-    if (std::binary_search(chunkIndexes_.begin(), chunkIndexes_.end(), chunkInterval,
-                           CompareChunkIntervals)) {
+    if (std::binary_search(chunkIndexes_.begin(), chunkIndexes_.end(), chunkIndex,
+                           CompareChunkIndexes)) {
       return;
     }
 
     // Check if this chunk index is out of order
     const bool needsSorting =
-      !chunkIndexes_.empty() && chunkIndexes_.back().start > chunkIndex.chunkStartOffset;
+      !chunkIndexes_.empty() && chunkIndexes_.back().chunkStartOffset > chunkIndex.chunkStartOffset;
     // Add the new chunk index interval
-    chunkIndexes_.push_back(chunkInterval);
+    chunkIndexes_.push_back(chunkIndex);
     // Sort if the new chunk index is out of order
     if (needsSorting) {
-      std::sort(chunkIndexes_.begin(), chunkIndexes_.end(), CompareChunkIntervals);
+      std::sort(chunkIndexes_.begin(), chunkIndexes_.end(), CompareChunkIndexes);
     }
   };
   typedReader.onStatistics = [&](const Statistics& statistics, ByteOffset) {
     statistics_ = statistics;
+    readStatistics = true;
   };
 
   while (typedReader.next()) {
@@ -377,12 +439,13 @@ Status McapReader::readSummarySection_(IReadable& reader) {
   }
 
   dataEnd_ = summaryStart;
-  return StatusCode::Success;
+  return readStatistics ? StatusCode::Success : StatusCode::MissingStatistics;
 }
 
 Status McapReader::readSummaryFromScan_(IReadable& reader) {
   bool done = false;
   Statistics statistics{};
+  statistics.messageStartTime = EndOffset;
 
   schemas_.clear();
   channels_.clear();
@@ -417,8 +480,7 @@ Status McapReader::readSummaryFromScan_(IReadable& reader) {
     chunkIndex.compressedSize = chunk.compressedSize;
     chunkIndex.uncompressedSize = chunk.uncompressedSize;
 
-    chunkIndexes_.emplace_back(chunkIndex.chunkStartOffset,
-                               chunkIndex.chunkStartOffset + chunkIndex.chunkLength, chunkIndex);
+    chunkIndexes_.emplace_back(std::move(chunkIndex));
   };
   typedReader.onMessage = [&](const Message& message, ByteOffset, std::optional<ByteOffset>) {
     if (message.logTime < statistics.messageStartTime) {
@@ -442,6 +504,9 @@ Status McapReader::readSummaryFromScan_(IReadable& reader) {
     }
   }
 
+  if (statistics.messageStartTime == EndOffset) {
+    statistics.messageStartTime = 0;
+  }
   statistics.schemaCount = schemas_.size();
   statistics.channelCount = channels_.size();
   statistics.attachmentCount = attachmentIndexes_.size();
@@ -492,6 +557,10 @@ ChannelPtr McapReader::channel(ChannelId channelId) const {
 SchemaPtr McapReader::schema(SchemaId schemaId) const {
   const auto& maybeSchema = schemas_.find(schemaId);
   return (maybeSchema == schemas_.end()) ? nullptr : maybeSchema->second;
+}
+
+const std::vector<ChunkIndex>& McapReader::chunkIndexes() const {
+  return chunkIndexes_;
 }
 
 Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record* record) {

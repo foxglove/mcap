@@ -65,6 +65,24 @@ struct IReadable {
 };
 
 /**
+ * @brief IReadable implementation wrapping a FILE* pointer created by fopen()
+ * and a read buffer.
+ */
+class FileReader final : public IReadable {
+public:
+  FileReader(FILE* file);
+
+  uint64_t size() const override;
+  uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override;
+
+private:
+  FILE* file_;
+  std::vector<std::byte> buffer_;
+  uint64_t size_;
+  uint64_t position_;
+};
+
+/**
  * @brief IReadable implementation wrapping a std::ifstream input file stream.
  */
 class FileStreamReader final : public IReadable {
@@ -170,22 +188,30 @@ public:
   ~McapReader();
 
   /**
-   * @brief Opens an MCAP file for reading.
+   * @brief Opens an MCAP file for reading from an already constructed IReadable
+   * implementation.
    *
    * @param reader An implementation of the IReader interface that provides raw
    *   MCAP data.
-   * @param options McapReader configuration options.
    * @return Status StatusCode::Success on success. If a non-success Status is
    *   returned, the data source is not considered open and McapReader is not
    *   usable until `open()` is called and a success response is returned.
    */
   Status open(IReadable& reader);
   /**
+   * @brief Opens an MCAP file for reading from a given filename.
+   *
+   * @param filename Filename to open.
+   * @return Status StatusCode::Success on success. If a non-success Status is
+   *   returned, the data source is not considered open and McapReader is not
+   *   usable until `open()` is called and a success response is returned.
+   */
+  Status open(std::string_view filename);
+  /**
    * @brief Opens an MCAP file for reading from a std::ifstream input file
    * stream.
    *
    * @param stream Input file stream to read MCAP data from.
-   * @param options McapReader configuration options.
    * @return Status StatusCode::Success on success. If a non-success Status is
    *   returned, the file is not considered open and McapReader is not usable
    *   until `open()` is called and a success response is returned.
@@ -274,6 +300,8 @@ public:
    */
   SchemaPtr schema(SchemaId schemaId) const;
 
+  const std::vector<ChunkIndex>& chunkIndexes() const;
+
   // The following static methods are used internally for parsing MCAP records
   // and do not need to be called directly unless you are implementing your own
   // reader functionality or tests.
@@ -307,11 +335,13 @@ private:
   friend LinearMessageView;
 
   IReadable* input_ = nullptr;
+  FILE* file_ = nullptr;
+  std::unique_ptr<FileReader> fileInput_;
   std::unique_ptr<FileStreamReader> fileStreamInput_;
   std::optional<Header> header_;
   std::optional<Footer> footer_;
   std::optional<Statistics> statistics_;
-  std::vector<ChunkInterval> chunkIndexes_;
+  std::vector<ChunkIndex> chunkIndexes_;
   internal::IntervalTree<ByteOffset, ChunkIndex> chunkRanges_;
   std::multimap<std::string, AttachmentIndex> attachmentIndexes_;
   std::multimap<std::string, MetadataIndex> metadataIndexes_;
@@ -325,6 +355,7 @@ private:
   Timestamp endTime_ = 0;
   bool parsedSummary_ = false;
 
+  void reset_();
   Status readSummarySection_(IReadable& reader);
   Status readSummaryFromScan_(IReadable& reader);
 };

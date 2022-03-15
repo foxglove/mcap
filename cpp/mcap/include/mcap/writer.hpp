@@ -139,6 +139,10 @@ private:
   std::unique_ptr<CryptoPP::CRC32> crc_;
 };
 
+/**
+ * @brief Implements the IWritable interface used by McapWriter by wrapping a
+ * FILE* pointer created by fopen() and a write buffer.
+ */
 class FileWriter final : public IWritable {
 public:
   ~FileWriter() override;
