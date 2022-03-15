@@ -30,7 +30,7 @@ func TestMCAPReadWrite(t *testing.T) {
 		assert.Equal(t, "ros1", profile)
 		library, _, err := readPrefixedString(record, offset)
 		assert.Nil(t, err)
-		assert.Equal(t, "", library)
+		assert.Equal(t, "mcap go #unknown", library)
 		assert.Equal(t, TokenHeader, tokenType)
 	})
 	t.Run("zero-valued schema IDs permitted", func(t *testing.T) {
@@ -310,10 +310,10 @@ func TestIndexStructures(t *testing.T) {
 		assert.Equal(t, &ChunkIndex{
 			MessageStartTime: 1,
 			MessageEndTime:   1,
-			ChunkStartOffset: 96,
+			ChunkStartOffset: 112,
 			ChunkLength:      144,
 			MessageIndexOffsets: map[uint16]uint64{
-				1: 240,
+				1: 256,
 			},
 			MessageIndexLength: 31,
 			Compression:        "zstd",
@@ -325,7 +325,7 @@ func TestIndexStructures(t *testing.T) {
 		assert.Equal(t, 1, len(w.AttachmentIndexes))
 		attachmentIndex := w.AttachmentIndexes[0]
 		assert.Equal(t, &AttachmentIndex{
-			Offset:      29,
+			Offset:      45,
 			Length:      67,
 			LogTime:     100,
 			CreateTime:  99,

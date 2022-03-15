@@ -228,7 +228,6 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
 
 	err = writer.WriteHeader(&mcap.Header{
 		Profile: "ros1",
-		Library: "golang-mcap-v0",
 	})
 	if err != nil {
 		return err
