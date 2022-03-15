@@ -645,6 +645,10 @@ Status McapWriter::write(const Metadata& metadata) {
   return StatusCode::Success;
 }
 
+const Statistics& McapWriter::statistics() const {
+  return statistics_;
+}
+
 // Private methods /////////////////////////////////////////////////////////////
 
 IWritable& McapWriter::getOutput() {
