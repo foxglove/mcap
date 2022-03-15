@@ -416,15 +416,18 @@ struct LinearMessageView {
     reference operator*() const;
     pointer operator->() const;
     Iterator& operator++();
-    Iterator operator++(int);
+    Iterator operator++(int) = delete;  // requires copy
     friend bool operator==(const Iterator& a, const Iterator& b);
     friend bool operator!=(const Iterator& a, const Iterator& b);
 
-    static const Iterator& end() {
+    // not supported due to curMessageView_ holding reference to curMessage_
+    Iterator(const Iterator&) = delete;
+    Iterator& operator=(const Iterator&) = delete;
+
+    static Iterator end() {
       static McapReader emptyReader;
       static auto onProblem = [](const Status&) {};
-      static LinearMessageView::Iterator emptyIterator{emptyReader, onProblem};
-      return emptyIterator;
+      return LinearMessageView::Iterator{emptyReader, onProblem};
     }
 
   private:

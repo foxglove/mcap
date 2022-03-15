@@ -1354,12 +1354,6 @@ LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
   return *this;
 }
 
-LinearMessageView::Iterator LinearMessageView::Iterator::operator++(int) {
-  LinearMessageView::Iterator tmp = *this;
-  ++(*this);
-  return tmp;
-}
-
 bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
   const bool aEnd = !a.recordReader_.has_value();
   const bool bEnd = !b.recordReader_.has_value();

@@ -237,13 +237,21 @@ TEST_CASE("McapReader", "[reader]") {
     REQUIRE(it->message.publishTime == 1);
     REQUIRE(it->message.dataSize == msg.dataSize);
     REQUIRE(std::vector(it->message.data, it->message.data + it->message.dataSize) == data);
-    auto it2 = it++;
-    REQUIRE(&it2->message != &it->message);
-    REQUIRE(it2->message.sequence == 0);
-    REQUIRE(it2->message.channelId == channel.id);
-    REQUIRE(it2->message.logTime == 2);
-    REQUIRE(it2->message.publishTime == 1);
-    REQUIRE(it2->message.dataSize == msg.dataSize);
-    REQUIRE(std::vector(it2->message.data, it2->message.data + it2->message.dataSize) == data);
+    ++it;
+    REQUIRE(it->message.sequence == 1);
+    REQUIRE(it->message.channelId == channel.id);
+    REQUIRE(it->message.logTime == 4);
+    REQUIRE(it->message.publishTime == 3);
+    REQUIRE(it->message.dataSize == msg.dataSize);
+    REQUIRE(std::vector(it->message.data, it->message.data + it->message.dataSize) == data);
+
+    for (const auto& msg : view) {
+      REQUIRE((msg.message.sequence == 0 || msg.message.sequence == 1));
+      REQUIRE(msg.message.channelId == channel.id);
+      REQUIRE((msg.message.logTime == 2 || msg.message.logTime == 4));
+      REQUIRE((msg.message.publishTime == 1 || msg.message.publishTime == 3));
+      REQUIRE(msg.message.dataSize == msg.message.dataSize);
+      REQUIRE(std::vector(msg.message.data, msg.message.data + msg.message.dataSize) == data);
+    }
   }
 }
