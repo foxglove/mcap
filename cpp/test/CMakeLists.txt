@@ -21,3 +21,4 @@ target_link_libraries(streamed-writer-conformance ${CONAN_LIBS})
 
 add_executable(unit-tests unit-tests.cpp)
 target_link_libraries(unit-tests ${CONAN_LIBS})
+target_compile_definitions(unit-tests PRIVATE TEST_DATA_PATH="${CMAKE_CURRENT_SOURCE_DIR}/data/")

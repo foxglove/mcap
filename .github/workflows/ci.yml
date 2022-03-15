@@ -143,6 +143,8 @@ jobs:
         working-directory: cpp
     steps:
       - uses: actions/checkout@v3
+        with:
+          lfs: 'true'
       - uses: actions/cache@v2
         with:
           path: ~/.conan/data
