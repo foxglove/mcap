@@ -270,12 +270,25 @@ void DumpMessages(mcap::IReadable& dataSource) {
     std::cerr << "! " << problem.message << "\n";
   };
 
-  auto messages = reader.readMessages(onProblem);
+  auto viewptr = std::make_unique<mcap::LinearMessageView>(reader.readMessages(onProblem));
 
-  for (const auto& msgView : messages) {
+  auto itptr = std::make_unique<mcap::LinearMessageView::Iterator>(viewptr->begin());
+  // auto itptr = viewptr->begin();
+  // auto it = itptr;
+  while (true) {
+    auto& it = *itptr;
+    if (it == viewptr->end()) {
+      break;
+    }
+    const auto& msgView = *it;
     const mcap::Channel& channel = *msgView.channel;
     std::cout << "[" << channel.topic << "] " << ToString(msgView.message) << "\n";
+    ++it;
   }
+  // for (const auto& msgView : view) {
+  //   const mcap::Channel& channel = *msgView.channel;
+  //   std::cout << "[" << channel.topic << "] " << ToString(msgView.message) << "\n";
+  // }
 
   reader.close();
 }
@@ -290,10 +303,10 @@ int main(int argc, char* argv[]) {
   std::ifstream input(inputFile, std::ios::binary);
   mcap::FileStreamReader dataSource{input};
 
-  std::cout << "Raw records:\n";
-  DumpRaw(dataSource);
-  std::cout << "\nParsed records:\n";
-  Dump(dataSource);
+  // std::cout << "Raw records:\n";
+  // DumpRaw(dataSource);
+  // std::cout << "\nParsed records:\n";
+  // Dump(dataSource);
   std::cout << "\nMessage iterator:\n";
   DumpMessages(dataSource);
 

@@ -391,6 +391,8 @@ struct TypedChunkReader {
   std::function<void(const Record&, ByteOffset)> onUnknownRecord;
 
   TypedChunkReader();
+  TypedChunkReader(const TypedChunkReader&) = delete;
+  TypedChunkReader(TypedChunkReader&&) = default;
 
   void reset(const Chunk& chunk, Compression compression);
 
@@ -434,6 +436,9 @@ struct TypedRecordReader {
   TypedRecordReader(IReadable& dataSource, ByteOffset startOffset,
                     ByteOffset endOffset = EndOffset);
 
+  TypedRecordReader(TypedRecordReader&& other);
+  TypedRecordReader(const TypedRecordReader& other) = delete;
+
   bool next();
 
   ByteOffset offset() const;
@@ -445,6 +450,8 @@ private:
   TypedChunkReader chunkReader_;
   Status status_;
   bool parsingChunk_;
+
+  void setupChunkReader_();
 };
 
 /**
@@ -461,18 +468,18 @@ struct LinearMessageView {
     reference operator*() const;
     pointer operator->() const;
     Iterator& operator++();
-    Iterator operator++(int);
+    // Iterator operator++(int);
     friend bool operator==(const Iterator& a, const Iterator& b);
     friend bool operator!=(const Iterator& a, const Iterator& b);
 
-    static const Iterator& end() {
+    static Iterator end() {
       static McapReader emptyReader;
       static auto onProblem = [](const Status&) {};
-      static LinearMessageView::Iterator emptyIterator{emptyReader, onProblem};
-      return emptyIterator;
+      return LinearMessageView::Iterator{emptyReader, onProblem};
     }
 
-    Iterator(const Iterator& other);
+    Iterator(const Iterator& other) = delete;
+    Iterator(Iterator&& other);
 
   private:
     friend LinearMessageView;
@@ -489,7 +496,7 @@ struct LinearMessageView {
     Iterator(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd, Timestamp startTime,
              Timestamp endTime, const ProblemCallback& onProblem);
 
-    void readNext();
+    void setupRecordReader_();
   };
 
   LinearMessageView(McapReader& mcapReader, const ProblemCallback& onProblem);
