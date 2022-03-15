@@ -1,4 +1,5 @@
 #include "internal.hpp"
+#include <algorithm>
 #include <cassert>
 #include <lz4.h>
 
@@ -7,6 +8,10 @@
 #include <zstd_errors.h>
 
 namespace mcap {
+
+bool CompareChunkIndexes(const ChunkIndex& a, const ChunkIndex& b) {
+  return a.chunkStartOffset < b.chunkStartOffset;
+}
 
 // BufferReader ////////////////////////////////////////////////////////////////
 
@@ -35,18 +40,57 @@ Status BufferReader::status() const {
   return StatusCode::Success;
 }
 
+// FileReader //////////////////////////////////////////////////////////////////
+
+FileReader::FileReader(FILE* file)
+    : file_(file)
+    , size_(0)
+    , position_(0) {
+  assert(file_);
+
+  // Determine the size of the file
+  fseeko(file_, 0, SEEK_END);
+  size_ = ftello(file_);
+  fseeko(file_, 0, SEEK_SET);
+}
+
+uint64_t FileReader::size() const {
+  return size_;
+}
+
+uint64_t FileReader::read(std::byte** output, uint64_t offset, uint64_t size) {
+  if (offset >= size_) {
+    return 0;
+  }
+
+  if (offset != position_) {
+    fseeko(file_, offset, SEEK_SET);
+    fflush(file_);
+    position_ = offset;
+  }
+
+  if (size > buffer_.size()) {
+    buffer_.resize(size);
+  }
+
+  const uint64_t bytesRead = uint64_t(fread(buffer_.data(), 1, size, file_));
+  *output = buffer_.data();
+
+  position_ += bytesRead;
+  return bytesRead;
+}
+
 // FileStreamReader ////////////////////////////////////////////////////////////
 
 FileStreamReader::FileStreamReader(std::ifstream& stream)
-    : stream_(stream) {
+    : stream_(stream)
+    , position_(0) {
   assert(stream.is_open());
 
   // Determine the size of the file
   stream_.seekg(0, stream.end);
   size_ = stream_.tellg();
   stream_.seekg(0, stream.beg);
-
-  position_ = 0;
 }
 
 uint64_t FileStreamReader::size() const {
@@ -180,9 +224,8 @@ McapReader::~McapReader() {
   close();
 }
 
-Status McapReader::open(IReadable& reader, const McapReaderOptions& options) {
-  close();
-  options_ = options;
+Status McapReader::open(IReadable& reader) {
+  reset_();
 
   const uint64_t fileSize = reader.size();
 
@@ -233,14 +276,38 @@ Status McapReader::open(IReadable& reader, const McapReaderOptions& options) {
   return StatusCode::Success;
 }
 
-Status McapReader::open(std::ifstream& stream, const McapReaderOptions& options) {
+Status McapReader::open(std::string_view filename) {
+  if (file_) {
+    fclose(file_);
+    file_ = nullptr;
+  }
+  file_ = fopen(filename.data(), "rb");
+  if (!file_) {
+    const auto msg = internal::StrFormat(internal::ErrorOpenFileFailed, filename);
+    return Status{StatusCode::OpenFailed, msg};
+  }
+
+  fileInput_ = std::make_unique<FileReader>(file_);
+  return open(*fileInput_);
+}
+
+Status McapReader::open(std::ifstream& stream) {
   fileStreamInput_ = std::make_unique<FileStreamReader>(stream);
-  return open(*fileStreamInput_, options);
+  return open(*fileStreamInput_);
 }
 
 void McapReader::close() {
   input_ = nullptr;
+  if (file_) {
+    fclose(file_);
+    file_ = nullptr;
+  }
+  fileInput_.reset();
   fileStreamInput_.reset();
+  reset_();
+}
+
+void McapReader::reset_() {
   header_ = std::nullopt;
   footer_ = std::nullopt;
   statistics_ = std::nullopt;
@@ -249,7 +316,6 @@ void McapReader::close() {
   schemas_.clear();
   channels_.clear();
   messageIndex_.clear();
-  messageChunkIndex_.clear();
   dataStart_ = 0;
   dataEnd_ = EndOffset;
   startTime_ = 0;
@@ -257,14 +323,52 @@ void McapReader::close() {
   parsedSummary_ = false;
 }
 
-Status McapReader::readSummary() {
+Status McapReader::readSummary(ReadSummaryMethod method, const ProblemCallback& onProblem) {
   if (!input_) {
-    return StatusCode::NotOpen;
+    const Status status{StatusCode::NotOpen};
+    onProblem(status);
+    return status;
   }
 
-  parsedSummary_ = true;
-
   auto& reader = *input_;
+  bool parsed = false;
+
+  if (method != ReadSummaryMethod::ForceScan) {
+    // Build indexes and read stats from the Summary section
+    const auto status = readSummarySection_(reader);
+    if (status.ok()) {
+      // Summary section parsing was successful
+      parsed = true;
+    } else if (method == ReadSummaryMethod::NoFallbackScan) {
+      // No fallback allowed, fail immediately
+      onProblem(status);
+      return status;
+    }
+  }
+
+  if (!parsed) {
+    const auto status = readSummaryFromScan_(reader);
+    if (!status.ok()) {
+      // Scanning failed, fail immediately
+      onProblem(status);
+      return status;
+    }
+  }
+
+  // Convert the list of chunk indexes to an interval tree
+  std::vector<ChunkInterval> chunkIntervals;
+  chunkIntervals.reserve(chunkIndexes_.size());
+  for (const auto& chunkIndex : chunkIndexes_) {
+    const auto chunkEndOffset = chunkIndex.chunkStartOffset + chunkIndex.chunkLength;
+    chunkIntervals.emplace_back(chunkIndex.chunkStartOffset, chunkEndOffset, chunkIndex);
+  }
+  chunkRanges_ = internal::IntervalTree<ByteOffset, ChunkIndex>{std::move(chunkIntervals)};
+
+  parsedSummary_ = true;
+  return StatusCode::Success;
+}
+
+Status McapReader::readSummarySection_(IReadable& reader) {
   const uint64_t fileSize = reader.size();
 
   // Read the footer
@@ -273,6 +377,142 @@ Status McapReader::readSummary() {
     return status;
   }
   footer_ = footer;
+
+  // Get summartStart and summaryOffsetStart, allowing for zeroed values
+  const ByteOffset summaryStart =
+    footer.summaryStart != 0 ? footer.summaryStart : fileSize - internal::FooterLength;
+  const ByteOffset summaryOffsetStart =
+    footer.summaryOffsetStart != 0 ? footer.summaryOffsetStart : fileSize - internal::FooterLength;
+  // Sanity check the ordering
+  if (summaryOffsetStart < summaryStart) {
+    const auto msg = internal::StrFormat("summary_offset_start {} < summary_start {}",
+                                         summaryOffsetStart, summaryStart);
+    return Status{StatusCode::InvalidFooter, msg};
+  }
+
+  attachmentIndexes_.clear();
+  metadataIndexes_.clear();
+  chunkIndexes_.clear();
+
+  // Read the Summary section
+  bool readStatistics = false;
+  TypedRecordReader typedReader{reader, summaryStart, summaryOffsetStart};
+  typedReader.onSchema = [&](SchemaPtr schemaPtr, ByteOffset, std::optional<ByteOffset>) {
+    schemas_.try_emplace(schemaPtr->id, schemaPtr);
+  };
+  typedReader.onChannel = [&](ChannelPtr channelPtr, ByteOffset, std::optional<ByteOffset>) {
+    channels_.try_emplace(channelPtr->id, channelPtr);
+  };
+  typedReader.onAttachmentIndex = [&](const AttachmentIndex& attachmentIndex, ByteOffset) {
+    attachmentIndexes_.emplace(attachmentIndex.name, attachmentIndex);
+  };
+  typedReader.onMetadataIndex = [&](const MetadataIndex& metadataIndex, ByteOffset) {
+    metadataIndexes_.emplace(metadataIndex.name, metadataIndex);
+  };
+  typedReader.onChunkIndex = [&](const ChunkIndex chunkIndex, ByteOffset) {
+    // Check if this chunk index is a duplicate
+    if (std::binary_search(chunkIndexes_.begin(), chunkIndexes_.end(), chunkIndex,
+                           CompareChunkIndexes)) {
+      return;
+    }
+
+    // Check if this chunk index is out of order
+    const bool needsSorting =
+      !chunkIndexes_.empty() && chunkIndexes_.back().chunkStartOffset > chunkIndex.chunkStartOffset;
+    // Add the new chunk index interval
+    chunkIndexes_.push_back(chunkIndex);
+    // Sort if the new chunk index is out of order
+    if (needsSorting) {
+      std::sort(chunkIndexes_.begin(), chunkIndexes_.end(), CompareChunkIndexes);
+    }
+  };
+  typedReader.onStatistics = [&](const Statistics& statistics, ByteOffset) {
+    statistics_ = statistics;
+    readStatistics = true;
+  };
+
+  while (typedReader.next()) {
+    const auto& status = typedReader.status();
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  dataEnd_ = summaryStart;
+  return readStatistics ? StatusCode::Success : StatusCode::MissingStatistics;
+}
+
+Status McapReader::readSummaryFromScan_(IReadable& reader) {
+  bool done = false;
+  Statistics statistics{};
+  statistics.messageStartTime = EndOffset;
+
+  schemas_.clear();
+  channels_.clear();
+  attachmentIndexes_.clear();
+  metadataIndexes_.clear();
+  chunkIndexes_.clear();
+
+  TypedRecordReader typedReader{reader, dataStart_, dataEnd_};
+  typedReader.onSchema = [&](SchemaPtr schemaPtr, ByteOffset, std::optional<ByteOffset>) {
+    schemas_.try_emplace(schemaPtr->id, schemaPtr);
+  };
+  typedReader.onChannel = [&](ChannelPtr channelPtr, ByteOffset, std::optional<ByteOffset>) {
+    channels_.try_emplace(channelPtr->id, channelPtr);
+  };
+  typedReader.onAttachment = [&](const Attachment& attachment, ByteOffset fileOffset) {
+    AttachmentIndex attachmentIndex{attachment, fileOffset};
+    attachmentIndexes_.emplace(attachment.name, attachmentIndex);
+  };
+  typedReader.onMetadata = [&](const Metadata& metadata, ByteOffset fileOffset) {
+    MetadataIndex metadataIndex{metadata, fileOffset};
+    metadataIndexes_.emplace(metadata.name, metadataIndex);
+  };
+  typedReader.onChunk = [&](const Chunk& chunk, ByteOffset fileOffset) {
+    ChunkIndex chunkIndex{};
+    chunkIndex.messageStartTime = chunk.messageStartTime;
+    chunkIndex.messageEndTime = chunk.messageEndTime;
+    chunkIndex.chunkStartOffset = fileOffset;
+    chunkIndex.chunkLength =
+      9 + 8 + 8 + 8 + 4 + 4 + chunk.compression.size() + 8 + chunk.compressedSize;
+    chunkIndex.messageIndexLength = 0;
+    chunkIndex.compression = chunk.compression;
+    chunkIndex.compressedSize = chunk.compressedSize;
+    chunkIndex.uncompressedSize = chunk.uncompressedSize;
+
+    chunkIndexes_.emplace_back(std::move(chunkIndex));
+  };
+  typedReader.onMessage = [&](const Message& message, ByteOffset, std::optional<ByteOffset>) {
+    if (message.logTime < statistics.messageStartTime) {
+      statistics.messageStartTime = message.logTime;
+    }
+    if (message.logTime > statistics.messageEndTime) {
+      statistics.messageEndTime = message.logTime;
+    }
+    statistics.messageCount++;
+    statistics.channelMessageCounts[message.channelId]++;
+  };
+  typedReader.onDataEnd = [&](const DataEnd&, ByteOffset fileOffset) {
+    dataEnd_ = fileOffset;
+    done = true;
+  };
+
+  while (!done && typedReader.next()) {
+    const auto& status = typedReader.status();
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  if (statistics.messageStartTime == EndOffset) {
+    statistics.messageStartTime = 0;
+  }
+  statistics.schemaCount = schemas_.size();
+  statistics.channelCount = channels_.size();
+  statistics.attachmentCount = attachmentIndexes_.size();
+  statistics.metadataCount = metadataIndexes_.size();
+  statistics.chunkCount = chunkIndexes_.size();
+  statistics_ = std::move(statistics);
 
   return StatusCode::Success;
 }
@@ -305,6 +545,10 @@ const std::optional<Footer>& McapReader::footer() const {
   return footer_;
 }
 
+const std::optional<Statistics>& McapReader::statistics() const {
+  return statistics_;
+}
+
 ChannelPtr McapReader::channel(ChannelId channelId) const {
   const auto& maybeChannel = channels_.find(channelId);
   return (maybeChannel == channels_.end()) ? nullptr : maybeChannel->second;
@@ -313,6 +557,10 @@ ChannelPtr McapReader::channel(ChannelId channelId) const {
 SchemaPtr McapReader::schema(SchemaId schemaId) const {
   const auto& maybeSchema = schemas_.find(schemaId);
   return (maybeSchema == schemas_.end()) ? nullptr : maybeSchema->second;
+}
+
+const std::vector<ChunkIndex>& McapReader::chunkIndexes() const {
+  return chunkIndexes_;
 }
 
 Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record* record) {
@@ -922,8 +1170,12 @@ std::optional<Record> RecordReader::next() {
   return curRecord_;
 }
 
-const Status& RecordReader::status() {
+const Status& RecordReader::status() const {
   return status_;
+}
+
+ByteOffset RecordReader::curRecordOffset() const {
+  return offset - curRecord_.recordSize();
 }
 
 // TypedChunkReader ////////////////////////////////////////////////////////////
@@ -955,7 +1207,7 @@ bool TypedChunkReader::next() {
         SchemaPtr schemaPtr = std::make_shared<Schema>();
         status_ = McapReader::ParseSchema(record, schemaPtr.get());
         if (status_.ok()) {
-          onSchema(schemaPtr);
+          onSchema(schemaPtr, reader_.curRecordOffset());
         }
       }
       break;
@@ -965,7 +1217,7 @@ bool TypedChunkReader::next() {
         ChannelPtr channelPtr = std::make_shared<Channel>();
         status_ = McapReader::ParseChannel(record, channelPtr.get());
         if (status_.ok()) {
-          onChannel(channelPtr);
+          onChannel(channelPtr, reader_.curRecordOffset());
         }
       }
       break;
@@ -975,7 +1227,7 @@ bool TypedChunkReader::next() {
         Message message;
         status_ = McapReader::ParseMessage(record, &message);
         if (status_.ok()) {
-          onMessage(message);
+          onMessage(message, reader_.curRecordOffset());
         }
       }
       break;
@@ -999,7 +1251,10 @@ bool TypedChunkReader::next() {
       break;
     }
     default: {
-      // Unknown opcode, ignore it
+      // Unknown opcode
+      if (onUnknownRecord) {
+        onUnknownRecord(record, reader_.curRecordOffset());
+      }
       break;
     }
   }
@@ -1022,19 +1277,24 @@ TypedRecordReader::TypedRecordReader(IReadable& dataSource, ByteOffset startOffs
     : reader_(dataSource, startOffset, std::min(endOffset, dataSource.size()))
     , status_(StatusCode::Success)
     , parsingChunk_(false) {
-  chunkReader_.onSchema = [&](const SchemaPtr schema) {
+  chunkReader_.onSchema = [&](const SchemaPtr schema, ByteOffset chunkOffset) {
     if (onSchema) {
-      onSchema(schema);
+      onSchema(schema, reader_.curRecordOffset(), chunkOffset);
     }
   };
-  chunkReader_.onChannel = [&](const ChannelPtr channel) {
+  chunkReader_.onChannel = [&](const ChannelPtr channel, ByteOffset chunkOffset) {
     if (onChannel) {
-      onChannel(channel);
+      onChannel(channel, reader_.curRecordOffset(), chunkOffset);
     }
   };
-  chunkReader_.onMessage = [&](const Message& message) {
+  chunkReader_.onMessage = [&](const Message& message, ByteOffset chunkOffset) {
     if (onMessage) {
-      onMessage(message);
+      onMessage(message, reader_.curRecordOffset(), chunkOffset);
+    }
+  };
+  chunkReader_.onUnknownRecord = [&](const Record& record, ByteOffset chunkOffset) {
+    if (onUnknownRecord) {
+      onUnknownRecord(record, reader_.curRecordOffset(), chunkOffset);
     }
   };
 }
@@ -1046,7 +1306,7 @@ bool TypedRecordReader::next() {
     if (!chunkInProgress) {
       parsingChunk_ = false;
       if (onChunkEnd) {
-        onChunkEnd();
+        onChunkEnd(reader_.offset);
       }
     }
     return true;
@@ -1064,7 +1324,7 @@ bool TypedRecordReader::next() {
       if (onHeader) {
         Header header;
         if (status_ = McapReader::ParseHeader(record, &header); status_.ok()) {
-          onHeader(header);
+          onHeader(header, reader_.curRecordOffset());
         }
       }
       break;
@@ -1073,7 +1333,7 @@ bool TypedRecordReader::next() {
       if (onFooter) {
         Footer footer;
         if (status_ = McapReader::ParseFooter(record, &footer); status_.ok()) {
-          onFooter(footer);
+          onFooter(footer, reader_.curRecordOffset());
         }
       }
       reader_.offset = EndOffset;
@@ -1083,7 +1343,7 @@ bool TypedRecordReader::next() {
       if (onSchema) {
         SchemaPtr schemaPtr = std::make_shared<Schema>();
         if (status_ = McapReader::ParseSchema(record, schemaPtr.get()); status_.ok()) {
-          onSchema(schemaPtr);
+          onSchema(schemaPtr, reader_.curRecordOffset(), std::nullopt);
         }
       }
       break;
@@ -1092,7 +1352,7 @@ bool TypedRecordReader::next() {
       if (onChannel) {
         ChannelPtr channelPtr = std::make_shared<Channel>();
         if (status_ = McapReader::ParseChannel(record, channelPtr.get()); status_.ok()) {
-          onChannel(channelPtr);
+          onChannel(channelPtr, reader_.curRecordOffset(), std::nullopt);
         }
       }
       break;
@@ -1101,7 +1361,7 @@ bool TypedRecordReader::next() {
       if (onMessage) {
         Message message;
         if (status_ = McapReader::ParseMessage(record, &message); status_.ok()) {
-          onMessage(message);
+          onMessage(message, reader_.curRecordOffset(), std::nullopt);
         }
       }
       break;
@@ -1114,7 +1374,7 @@ bool TypedRecordReader::next() {
           return true;
         }
         if (onChunk) {
-          onChunk(chunk);
+          onChunk(chunk, reader_.curRecordOffset());
         }
         if (onMessage || onSchema || onChannel) {
           const auto maybeCompression = McapReader::ParseCompression(chunk.compression);
@@ -1137,7 +1397,7 @@ bool TypedRecordReader::next() {
       if (onMessageIndex) {
         MessageIndex messageIndex;
         if (status_ = McapReader::ParseMessageIndex(record, &messageIndex); status_.ok()) {
-          onMessageIndex(messageIndex);
+          onMessageIndex(messageIndex, reader_.curRecordOffset());
         }
       }
       break;
@@ -1146,7 +1406,7 @@ bool TypedRecordReader::next() {
       if (onChunkIndex) {
         ChunkIndex chunkIndex;
         if (status_ = McapReader::ParseChunkIndex(record, &chunkIndex); status_.ok()) {
-          onChunkIndex(chunkIndex);
+          onChunkIndex(chunkIndex, reader_.curRecordOffset());
         }
       }
       break;
@@ -1155,7 +1415,7 @@ bool TypedRecordReader::next() {
       if (onAttachment) {
         Attachment attachment;
         if (status_ = McapReader::ParseAttachment(record, &attachment); status_.ok()) {
-          onAttachment(attachment);
+          onAttachment(attachment, reader_.curRecordOffset());
         }
       }
       break;
@@ -1164,7 +1424,7 @@ bool TypedRecordReader::next() {
       if (onAttachmentIndex) {
         AttachmentIndex attachmentIndex;
         if (status_ = McapReader::ParseAttachmentIndex(record, &attachmentIndex); status_.ok()) {
-          onAttachmentIndex(attachmentIndex);
+          onAttachmentIndex(attachmentIndex, reader_.curRecordOffset());
         }
       }
       break;
@@ -1173,7 +1433,7 @@ bool TypedRecordReader::next() {
       if (onStatistics) {
         Statistics statistics;
         if (status_ = McapReader::ParseStatistics(record, &statistics); status_.ok()) {
-          onStatistics(statistics);
+          onStatistics(statistics, reader_.curRecordOffset());
         }
       }
       break;
@@ -1182,7 +1442,7 @@ bool TypedRecordReader::next() {
       if (onMetadata) {
         Metadata metadata;
         if (status_ = McapReader::ParseMetadata(record, &metadata); status_.ok()) {
-          onMetadata(metadata);
+          onMetadata(metadata, reader_.curRecordOffset());
         }
       }
       break;
@@ -1191,7 +1451,7 @@ bool TypedRecordReader::next() {
       if (onMetadataIndex) {
         MetadataIndex metadataIndex;
         if (status_ = McapReader::ParseMetadataIndex(record, &metadataIndex); status_.ok()) {
-          onMetadataIndex(metadataIndex);
+          onMetadataIndex(metadataIndex, reader_.curRecordOffset());
         }
       }
       break;
@@ -1200,7 +1460,7 @@ bool TypedRecordReader::next() {
       if (onSummaryOffset) {
         SummaryOffset summaryOffset;
         if (status_ = McapReader::ParseSummaryOffset(record, &summaryOffset); status_.ok()) {
-          onSummaryOffset(summaryOffset);
+          onSummaryOffset(summaryOffset, reader_.curRecordOffset());
         }
       }
       break;
@@ -1209,14 +1469,14 @@ bool TypedRecordReader::next() {
       if (onDataEnd) {
         DataEnd dataEnd;
         if (status_ = McapReader::ParseDataEnd(record, &dataEnd); status_.ok()) {
-          onDataEnd(dataEnd);
+          onDataEnd(dataEnd, reader_.curRecordOffset());
         }
       }
       break;
     }
     default:
       if (onUnknownRecord) {
-        onUnknownRecord(record);
+        onUnknownRecord(record, reader_.curRecordOffset(), std::nullopt);
       }
       break;
   }
@@ -1293,13 +1553,14 @@ LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataSta
     , startTime_(startTime)
     , endTime_(endTime)
     , onProblem_(onProblem) {
-  recordReader_->onSchema = [this](const SchemaPtr schema) {
+  recordReader_->onSchema = [this](const SchemaPtr schema, ByteOffset, std::optional<ByteOffset>) {
     mcapReader_.schemas_.insert_or_assign(schema->id, schema);
   };
-  recordReader_->onChannel = [this](const ChannelPtr channel) {
+  recordReader_->onChannel = [this](const ChannelPtr channel, ByteOffset,
+                                    std::optional<ByteOffset>) {
     mcapReader_.channels_.insert_or_assign(channel->id, channel);
   };
-  recordReader_->onMessage = [this](const Message& message) {
+  recordReader_->onMessage = [this](const Message& message, ByteOffset, std::optional<ByteOffset>) {
     auto maybeChannel = mcapReader_.channel(message.channelId);
     if (!maybeChannel) {
       onProblem_(Status{

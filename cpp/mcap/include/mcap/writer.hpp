@@ -135,6 +135,10 @@ private:
   uint32_t crc_;
 };
 
+/**
+ * @brief Implements the IWritable interface used by McapWriter by wrapping a
+ * FILE* pointer created by fopen() and a write buffer.
+ */
 class FileWriter final : public IWritable {
 public:
   ~FileWriter() override;
@@ -372,6 +376,12 @@ public:
    * @return A non-zero error code on failure.
    */
   Status write(const Metadata& metdata);
+
+  /**
+   * @brief Current MCAP file-level statistics. This is written as a Statistics
+   * record in the Summary section of the MCAP file.
+   */
+  const Statistics& statistics() const;
 
   // The following static methods are used for serialization of records and
   // primitives to an output stream. They are not intended to be used directly

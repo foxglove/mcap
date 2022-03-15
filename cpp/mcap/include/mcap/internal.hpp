@@ -14,6 +14,7 @@ namespace internal {
 constexpr std::string_view ErrorMsgInvalidOpcode = "invalid opcode, expected {}: 0x{:02x}";
 constexpr std::string_view ErrorMsgInvalidLength = "invalid {} length: {}";
 constexpr std::string_view ErrorMsgInvalidMagic = "invalid magic bytes in {}: 0x{}";
+constexpr std::string_view ErrorOpenFileFailed = "failed to open \"{}\"";
 
 constexpr uint64_t MinHeaderLength = /* magic bytes */ sizeof(Magic) +
                                      /* opcode */ 1 +

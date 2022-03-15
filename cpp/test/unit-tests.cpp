@@ -7,8 +7,39 @@
 #include <array>
 #include <numeric>
 
+constexpr const char* MCAP001 = TEST_DATA_PATH "001.mcap";
+
 std::string_view StringView(const std::byte* data, size_t size) {
   return std::string_view{reinterpret_cast<const char*>(data), size};
+}
+
+struct Buffer : mcap::IReadable, mcap::IWritable {
+  std::vector<std::byte> buffer;
+
+  virtual uint64_t size() const {
+    return buffer.size();
+  }
+
+  // IWritable
+  virtual void end() {}
+  virtual void handleWrite(const std::byte* data, uint64_t size) {
+    buffer.insert(buffer.end(), data, data + size);
+  }
+
+  // IReadable
+  virtual uint64_t read(std::byte** output, uint64_t offset, uint64_t size) {
+    if (offset + size >= buffer.size()) {
+      return 0;
+    }
+    *output = buffer.data() + offset;
+    return size;
+  }
+};
+
+void requireOk(const mcap::Status& status) {
+  CAPTURE(status.code);
+  CAPTURE(status.message);
+  REQUIRE(status.ok());
 }
 
 TEST_CASE("internal::crc32", "[writer]") {
@@ -169,37 +200,107 @@ TEST_CASE("McapWriter::write()", "[writer]") {
   }
 }
 
-struct Buffer : mcap::IReadable, mcap::IWritable {
-  std::vector<std::byte> buffer;
+TEST_CASE("McapReader::readSummary()", "[reader]") {
+  SECTION("NoFallbackScan") {
+    mcap::McapReader reader;
+    auto status = reader.open(MCAP001);
+    requireOk(status);
 
-  virtual uint64_t size() const {
-    return buffer.size();
+    status = reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan);
+    REQUIRE(status.code == mcap::StatusCode::MissingStatistics);
+
+    const auto& chunkIndexes = reader.chunkIndexes();
+    REQUIRE(chunkIndexes.size() == 1);
+    const auto& chunkIndex = chunkIndexes.front();
+    REQUIRE(chunkIndex.messageStartTime == 2);
+    REQUIRE(chunkIndex.messageEndTime == 2);
+    REQUIRE(chunkIndex.chunkStartOffset == 28);
+    REQUIRE(chunkIndex.chunkLength == 164);
+    REQUIRE(chunkIndex.messageIndexOffsets.size() == 1);
+    REQUIRE(chunkIndex.messageIndexOffsets.at(1) == 192);
+    REQUIRE(chunkIndex.messageIndexLength == 34);
+    REQUIRE(chunkIndex.compression == "");
+    REQUIRE(chunkIndex.compressedSize == 115);
+    REQUIRE(chunkIndex.uncompressedSize == 115);
+
+    REQUIRE(!reader.statistics().has_value());
   }
 
-  // IWritable
-  virtual void end() {}
-  virtual void handleWrite(const std::byte* data, uint64_t size) {
-    buffer.insert(buffer.end(), data, data + size);
+  SECTION("AllowFallbackScan") {
+    mcap::McapReader reader;
+    auto status = reader.open(MCAP001);
+    requireOk(status);
+
+    status = reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan);
+    requireOk(status);
+
+    const auto& chunkIndexes = reader.chunkIndexes();
+    REQUIRE(chunkIndexes.size() == 1);
+    const auto& chunkIndex = chunkIndexes.front();
+    REQUIRE(chunkIndex.messageStartTime == 2);
+    REQUIRE(chunkIndex.messageEndTime == 2);
+    REQUIRE(chunkIndex.chunkStartOffset == 28);
+    REQUIRE(chunkIndex.chunkLength == 164);
+    REQUIRE(chunkIndex.messageIndexOffsets.size() == 0);
+    REQUIRE(chunkIndex.messageIndexLength == 0);
+    REQUIRE(chunkIndex.compression == "");
+    REQUIRE(chunkIndex.compressedSize == 115);
+    REQUIRE(chunkIndex.uncompressedSize == 115);
+
+    const auto maybeStats = reader.statistics();
+    REQUIRE(maybeStats.has_value());
+    const auto& stats = *maybeStats;
+    REQUIRE(stats.messageCount == 1);
+    REQUIRE(stats.schemaCount == 1);
+    REQUIRE(stats.channelCount == 1);
+    REQUIRE(stats.attachmentCount == 0);
+    REQUIRE(stats.metadataCount == 0);
+    REQUIRE(stats.chunkCount == 1);
+    REQUIRE(stats.messageStartTime == 2);
+    REQUIRE(stats.messageEndTime == 2);
+    REQUIRE(stats.channelMessageCounts.size() == 1);
+    REQUIRE(stats.channelMessageCounts.at(1) == 1);
   }
 
-  // IReadable
-  virtual uint64_t read(std::byte** output, uint64_t offset, uint64_t size) {
-    if (offset + size >= buffer.size()) {
-      return 0;
-    }
-    *output = buffer.data() + offset;
-    return size;
-  }
-};
+  SECTION("ForceScan") {
+    mcap::McapReader reader;
+    auto status = reader.open(MCAP001);
+    requireOk(status);
 
-void requireOk(const mcap::Status& status) {
-  CAPTURE(status.code);
-  CAPTURE(status.message);
-  REQUIRE(status.ok());
+    status = reader.readSummary(mcap::ReadSummaryMethod::ForceScan);
+    requireOk(status);
+
+    const auto& chunkIndexes = reader.chunkIndexes();
+    REQUIRE(chunkIndexes.size() == 1);
+    const auto& chunkIndex = chunkIndexes.front();
+    REQUIRE(chunkIndex.messageStartTime == 2);
+    REQUIRE(chunkIndex.messageEndTime == 2);
+    REQUIRE(chunkIndex.chunkStartOffset == 28);
+    REQUIRE(chunkIndex.chunkLength == 164);
+    REQUIRE(chunkIndex.messageIndexOffsets.size() == 0);
+    REQUIRE(chunkIndex.messageIndexLength == 0);
+    REQUIRE(chunkIndex.compression == "");
+    REQUIRE(chunkIndex.compressedSize == 115);
+    REQUIRE(chunkIndex.uncompressedSize == 115);
+
+    const auto maybeStats = reader.statistics();
+    REQUIRE(maybeStats.has_value());
+    const auto& stats = *maybeStats;
+    REQUIRE(stats.messageCount == 1);
+    REQUIRE(stats.schemaCount == 1);
+    REQUIRE(stats.channelCount == 1);
+    REQUIRE(stats.attachmentCount == 0);
+    REQUIRE(stats.metadataCount == 0);
+    REQUIRE(stats.chunkCount == 1);
+    REQUIRE(stats.messageStartTime == 2);
+    REQUIRE(stats.messageEndTime == 2);
+    REQUIRE(stats.channelMessageCounts.size() == 1);
+    REQUIRE(stats.channelMessageCounts.at(1) == 1);
+  }
 }
 
-TEST_CASE("McapReader", "[reader]") {
-  SECTION("readMessages") {
+TEST_CASE("McapReader::readMessages()", "[reader]") {
+  SECTION("CopyableIterators") {
     Buffer buffer;
 
     mcap::McapWriter writer;

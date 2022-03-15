@@ -3,7 +3,6 @@ build/
 *.profdata
 *.profraw
 .vs
-.vscode
 CMakeCache.txt
 CMakeFiles/
 CMakeSettings.json
