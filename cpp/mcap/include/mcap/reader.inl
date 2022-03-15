@@ -1609,6 +1609,7 @@ void LinearMessageView::Iterator::Impl::increment() {
 LinearMessageView::Iterator::reference LinearMessageView::Iterator::Impl::dereference() const {
   return *curMessageView_;
 }
+
 bool LinearMessageView::Iterator::Impl::has_value() const {
   return curMessageView_.has_value();
 }
