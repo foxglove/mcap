@@ -73,11 +73,11 @@ func UnknownField(field string) error {
 
 type InputField struct {
 	Name  string
-	Value interface{}
+	Value any
 }
 
 func (x *InputField) UnmarshalJSON(date []byte) error {
-	xs := []interface{}{}
+	xs := []any{}
 	err := json.Unmarshal(date, &xs)
 	if err != nil {
 		return err
@@ -112,7 +112,7 @@ func parseUint16(s string) (uint16, error) {
 	return uint16(x), nil
 }
 
-func parseBytes(numbers []interface{}) ([]byte, error) {
+func parseBytes(numbers []any) ([]byte, error) {
 	result := []byte{}
 	for _, num := range numbers {
 		x, err := strconv.ParseInt(num.(string), 10, 8)
@@ -169,7 +169,7 @@ func parseSchema(fields []InputField) (*mcap.Schema, error) {
 		case "encoding":
 			schema.Encoding = value.(string)
 		case "data":
-			data, err := parseBytes(value.([]interface{}))
+			data, err := parseBytes(value.([]any))
 			if err != nil {
 				return nil, fmt.Errorf("failed to decode schema data: %w", err)
 			}
@@ -201,7 +201,7 @@ func parseChannel(fields []InputField) (*mcap.Channel, error) {
 		case "message_encoding":
 			channel.MessageEncoding = field.Value.(string)
 		case "metadata":
-			metadata := field.Value.(map[string]interface{})
+			metadata := field.Value.(map[string]any)
 			m := make(map[string]string)
 			for k, v := range metadata {
 				m[k] = v.(string)
@@ -242,7 +242,7 @@ func parseMessage(fields []InputField) (*mcap.Message, error) {
 			}
 			message.PublishTime = publishTime
 		case "data":
-			data, err := parseBytes(field.Value.([]interface{}))
+			data, err := parseBytes(field.Value.([]any))
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse data: %w", err)
 			}
@@ -275,7 +275,7 @@ func parseAttachment(fields []InputField) (*mcap.Attachment, error) {
 		case "content_type":
 			attachment.ContentType = field.Value.(string)
 		case "data":
-			data, err := parseBytes(field.Value.([]interface{}))
+			data, err := parseBytes(field.Value.([]any))
 			if err != nil {
 				return nil, err
 			}
@@ -299,7 +299,7 @@ func parseMetadata(fields []InputField) (*mcap.Metadata, error) {
 		case "name":
 			metadata.Name = field.Value.(string)
 		case "metadata":
-			metadataJson := field.Value.(map[string]interface{})
+			metadataJson := field.Value.(map[string]any)
 			m := make(map[string]string)
 			for k, v := range metadataJson {
 				m[k] = v.(string)

@@ -37,12 +37,12 @@ func toSnakeCase(s string) string {
 
 type Field struct {
 	Name  string
-	Value interface{}
+	Value any
 }
 
 func (x Field) MarshalJSON() ([]byte, error) {
 	t := reflect.TypeOf(x.Value)
-	var v interface{}
+	var v any
 	switch t.Name() {
 	case "string":
 		v = fmt.Sprintf("\"%s\"", x.Value)
@@ -119,13 +119,13 @@ func (x Field) MarshalJSON() ([]byte, error) {
 }
 
 type Record struct {
-	V interface{}
+	V any
 }
 
 type TextOutput struct {
 	Records []struct {
-		Type   string        `json:"type"`
-		Fields []interface{} `json:"fields"`
+		Type   string `json:"type"`
+		Fields []any  `json:"fields"`
 	} `json:"records"`
 }
 
@@ -276,7 +276,7 @@ func mcapToJSON(w io.Writer, filepath string) error {
 		}
 	}
 
-	serializedOutput, err := json.Marshal(map[string]interface{}{
+	serializedOutput, err := json.Marshal(map[string]any{
 		"records": records,
 	})
 	if err != nil {
