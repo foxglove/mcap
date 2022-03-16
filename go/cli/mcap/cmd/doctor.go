@@ -45,22 +45,22 @@ var (
 	}
 )
 
-func (doctor *mcapDoctor) warn(format string, v ...interface{}) {
+func (doctor *mcapDoctor) warn(format string, v ...any) {
 	color.Yellow(format, v...)
 }
 
-func (doctor *mcapDoctor) error(format string, v ...interface{}) {
+func (doctor *mcapDoctor) error(format string, v ...any) {
 	color.Red(format, v...)
 }
 
-func (doctor *mcapDoctor) fatal(v ...interface{}) {
+func (doctor *mcapDoctor) fatal(v ...any) {
 	color.Set(color.FgRed)
 	fmt.Println(v...)
 	color.Unset()
 	os.Exit(1)
 }
 
-func (doctor *mcapDoctor) fatalf(format string, v ...interface{}) {
+func (doctor *mcapDoctor) fatalf(format string, v ...any) {
 	color.Red(format, v...)
 	os.Exit(1)
 }

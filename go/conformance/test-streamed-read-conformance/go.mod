@@ -1,6 +1,6 @@
 module github.com/foxglove/mcap/go/conformance/test-streamed-read-conformance
 
-go 1.17
+go 1.18
 
 replace github.com/foxglove/mcap/go/mcap => ../../mcap
 

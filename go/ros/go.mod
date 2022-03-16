@@ -1,6 +1,6 @@
 module github.com/foxglove/mcap/go/ros
 
-go 1.17
+go 1.18
 
 require (
 	github.com/foxglove/mcap/go/mcap v0.0.0-00010101000000-000000000000
