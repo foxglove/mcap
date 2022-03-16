@@ -19,7 +19,7 @@ func Execute() {
 	cobra.CheckErr(rootCmd.Execute())
 }
 
-func die(s string, args ...interface{}) {
+func die(s string, args ...any) {
 	fmt.Fprintln(os.Stderr, fmt.Sprintf(s, args...))
 	os.Exit(1)
 }
