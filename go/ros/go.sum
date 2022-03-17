@@ -1,5 +1,7 @@
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/foxglove/mcap/go/mcap v0.0.0-20220316142927-cc81709134cd h1:IG8HSe6kkuB4TyoRhp1XYTrjYvy0iUGJXAzfhkJ5By8=
+github.com/foxglove/mcap/go/mcap v0.0.0-20220316142927-cc81709134cd/go.mod h1:gQrB8PzccHW69xedSZ0uVDQVgDd3h1qX+otbS6fjSkE=
 github.com/klauspost/compress v1.14.1 h1:hLQYb23E8/fO+1u53d02A97a8UnsddcvYzq4ERRU4ds=
 github.com/klauspost/compress v1.14.1/go.mod h1:/3/Vjq9QcHkK5uEr5lBEmyoZ1iFhe47etQ6QUkpK6sk=
 github.com/mattn/go-sqlite3 v1.14.11 h1:gt+cp9c0XGqe9S/wAHTL3n/7MqY+siPWgWJgqdsFrzQ=
