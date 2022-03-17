@@ -259,7 +259,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
       const protoMsg = MsgRoot.fromObject(rosMsg);
       const protoMsgBuffer = MsgRoot.encode(protoMsg).finish();
 
-      const timestamp = BigInt(result.timestamp.sec) * 1000000000n + BigInt(result.timestamp.nsec);
+      const timestamp = toNanoSec(result.timestamp);
       await mcapFile.addMessage({
         channelId,
         sequence: 0,
