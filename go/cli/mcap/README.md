@@ -3,27 +3,14 @@
 > Note: this tool is experimental and will change without warning until finalization of the MCAP spec.
 
 A basic command line tool to demonstrate the MCAP file format. See `mcap -h`
-for details:
+for details.
 
-    A small utility for demonstration of the mcap file format
+### Installing:
 
-    Usage:
-      mcap [command]
+Download the latest release binary from
+[releases](https://github.com/foxglove/mcap/releases) or install using go:
 
-    Available Commands:
-      cat         Cat the messages in an mcap file to stdout
-      completion  Generate the autocompletion script for the specified shell
-      convert     Convert a bag file to an mcap file
-      doctor      Check an mcap file structure
-      help        Help about any command
-      info        Report statistics about an mcap file
-
-    Flags:
-          --config string   config file (default is $HOME/.mcap.yaml)
-      -h, --help            help for mcap
-      -t, --toggle          Help message for toggle
-
-    Use "mcap [command] --help" for more information about a command.
+    go install github.com/foxglove/mcap/go/cli/mcap@latest
 
 ### Examples:
 
