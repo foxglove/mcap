@@ -6,7 +6,6 @@ name = "pypi"
 [packages]
 lz4 = "*"
 zstd = "*"
-mcap = {editable = true, path = "."}
 
 [dev-packages]
 black = "*"

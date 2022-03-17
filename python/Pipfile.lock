@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "d9deb88823ccfe17884dc4ae6adb63c50c6c9ead48d9d1dddfef30b8e08c90de"
+            "sha256": "b36d27c319339d5775ef765817f9da5b3909c79a617c8982cbba450607744cc0"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -42,10 +42,6 @@
             ],
             "index": "pypi",
             "version": "==4.0.0"
-        },
-        "mcap": {
-            "editable": true,
-            "path": "."
         },
         "zstd": {
             "hashes": [
