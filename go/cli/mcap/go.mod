@@ -5,14 +5,15 @@ go 1.18
 require (
 	cloud.google.com/go/storage v1.10.0
 	github.com/fatih/color v1.13.0
-	github.com/foxglove/mcap/go/mcap v0.0.0-00010101000000-000000000000
-	github.com/foxglove/mcap/go/ros v0.0.0-00010101000000-000000000000
+	github.com/foxglove/mcap/go/mcap v0.0.0-20220316142927-cc81709134cd
+	github.com/foxglove/mcap/go/ros v0.0.0-20220316142927-cc81709134cd
 	github.com/klauspost/compress v1.14.1
 	github.com/mattn/go-sqlite3 v1.14.11
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pierrec/lz4/v4 v4.1.12
 	github.com/spf13/cobra v1.3.0
 	github.com/spf13/viper v1.10.1
+	github.com/stretchr/testify v1.7.0
 )
 
 require (
@@ -35,7 +36,6 @@ require (
 	github.com/spf13/cast v1.4.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/stretchr/testify v1.7.0 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	golang.org/x/net v0.0.0-20210813160813-60bc85c4be6d // indirect
@@ -52,7 +52,3 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
-
-replace github.com/foxglove/mcap/go/mcap => ../../mcap
-
-replace github.com/foxglove/mcap/go/ros => ../../ros
