@@ -26,6 +26,12 @@ seq:
   - id: footer_magic
     contents: [0x89, "MCAP0\r\n"]
 
+instances:
+  footer:
+    pos: _io.size - 8 - 20 - 9
+    size-eos: true
+    type: record
+
 enums:
   opcode:
     0x01: header
@@ -64,6 +70,13 @@ types:
       - { id: len, type: u4 }
       - { id: entry, size: len, type: entries }
 
+  records:
+    seq:
+      - id: records
+        type: record
+        repeat: until
+        repeat-until: "_io.pos + 8 >= _io.size"
+
   record:
     seq:
       - { id: op, type: u1, enum: opcode }
@@ -99,6 +112,19 @@ types:
       - { id: summary_start, type: u8 }
       - { id: summary_offset_start, type: u8 }
       - { id: summary_crc, type: u4 }
+    instances:
+      summary_section:
+        io: _root._io
+        pos: summary_start
+        size: "(summary_offset_start != 0 ? summary_offset_start : _root._io.size - 8 - 20 - 9) - summary_start"
+        type: records
+        if: summary_start != 0
+      summary_offset_section:
+        io: _root._io
+        pos: summary_offset_start
+        size: "_root._io.size - 8 - 20 - 9 - summary_offset_start"
+        type: records
+        if: summary_offset_start != 0
 
   schema:
     seq:
@@ -259,10 +285,6 @@ types:
       - { id: group_opcode, type: u1, enum: opcode }
       - { id: group_start, type: u8 }
       - { id: group_length, type: u8 }
-    types:
-      records:
-        seq:
-          - { id: records, type: record, repeat: eos }
     instances:
       group:
         io: _root._io
