@@ -7,8 +7,6 @@
 #include <array>
 #include <numeric>
 
-constexpr const char* MCAP001 = TEST_DATA_PATH "001.mcap";
-
 std::string_view StringView(const std::byte* data, size_t size) {
   return std::string_view{reinterpret_cast<const char*>(data), size};
 }
@@ -28,7 +26,7 @@ struct Buffer : mcap::IReadable, mcap::IWritable {
 
   // IReadable
   virtual uint64_t read(std::byte** output, uint64_t offset, uint64_t size) {
-    if (offset + size >= buffer.size()) {
+    if (offset + size > buffer.size()) {
       return 0;
     }
     *output = buffer.data() + offset;
@@ -40,6 +38,32 @@ void requireOk(const mcap::Status& status) {
   CAPTURE(status.code);
   CAPTURE(status.message);
   REQUIRE(status.ok());
+}
+
+static void writeExampleFile(Buffer& buffer) {
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("");
+  opts.library = "";
+  opts.noRepeatedChannels = true;
+  opts.noRepeatedSchemas = true;
+  opts.noStatistics = true;
+  opts.noSummaryOffsets = true;
+  opts.compression = mcap::Compression::None;
+  writer.open(buffer, opts);
+  mcap::Schema schema("Example", "c", "\x04\x05\x06");
+  writer.addSchema(schema);
+  mcap::Channel channel("example", "a", schema.id, {{"foo", "bar"}});
+  writer.addChannel(channel);
+  mcap::Message msg;
+  std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+  msg.channelId = channel.id;
+  msg.sequence = 10;
+  msg.logTime = 2;
+  msg.publishTime = 1;
+  msg.data = data.data();
+  msg.dataSize = data.size();
+  requireOk(writer.write(msg));
+  writer.close();
 }
 
 TEST_CASE("internal::crc32", "[writer]") {
@@ -203,7 +227,9 @@ TEST_CASE("McapWriter::write()", "[writer]") {
 TEST_CASE("McapReader::readSummary()", "[reader]") {
   SECTION("NoFallbackScan") {
     mcap::McapReader reader;
-    auto status = reader.open(MCAP001);
+    Buffer buffer;
+    writeExampleFile(buffer);
+    auto status = reader.open(buffer);
     requireOk(status);
 
     status = reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan);
@@ -214,11 +240,11 @@ TEST_CASE("McapReader::readSummary()", "[reader]") {
     const auto& chunkIndex = chunkIndexes.front();
     REQUIRE(chunkIndex.messageStartTime == 2);
     REQUIRE(chunkIndex.messageEndTime == 2);
-    REQUIRE(chunkIndex.chunkStartOffset == 28);
+    REQUIRE(chunkIndex.chunkStartOffset == 25);
     REQUIRE(chunkIndex.chunkLength == 164);
     REQUIRE(chunkIndex.messageIndexOffsets.size() == 1);
-    REQUIRE(chunkIndex.messageIndexOffsets.at(1) == 192);
-    REQUIRE(chunkIndex.messageIndexLength == 34);
+    REQUIRE(chunkIndex.messageIndexOffsets.at(1) == 189);
+    REQUIRE(chunkIndex.messageIndexLength == 31);
     REQUIRE(chunkIndex.compression == "");
     REQUIRE(chunkIndex.compressedSize == 115);
     REQUIRE(chunkIndex.uncompressedSize == 115);
@@ -228,7 +254,9 @@ TEST_CASE("McapReader::readSummary()", "[reader]") {
 
   SECTION("AllowFallbackScan") {
     mcap::McapReader reader;
-    auto status = reader.open(MCAP001);
+    Buffer buffer;
+    writeExampleFile(buffer);
+    auto status = reader.open(buffer);
     requireOk(status);
 
     status = reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan);
@@ -239,7 +267,7 @@ TEST_CASE("McapReader::readSummary()", "[reader]") {
     const auto& chunkIndex = chunkIndexes.front();
     REQUIRE(chunkIndex.messageStartTime == 2);
     REQUIRE(chunkIndex.messageEndTime == 2);
-    REQUIRE(chunkIndex.chunkStartOffset == 28);
+    REQUIRE(chunkIndex.chunkStartOffset == 25);
     REQUIRE(chunkIndex.chunkLength == 164);
     REQUIRE(chunkIndex.messageIndexOffsets.size() == 0);
     REQUIRE(chunkIndex.messageIndexLength == 0);
@@ -264,7 +292,9 @@ TEST_CASE("McapReader::readSummary()", "[reader]") {
 
   SECTION("ForceScan") {
     mcap::McapReader reader;
-    auto status = reader.open(MCAP001);
+    Buffer buffer;
+    writeExampleFile(buffer);
+    auto status = reader.open(buffer);
     requireOk(status);
 
     status = reader.readSummary(mcap::ReadSummaryMethod::ForceScan);
@@ -275,7 +305,7 @@ TEST_CASE("McapReader::readSummary()", "[reader]") {
     const auto& chunkIndex = chunkIndexes.front();
     REQUIRE(chunkIndex.messageStartTime == 2);
     REQUIRE(chunkIndex.messageEndTime == 2);
-    REQUIRE(chunkIndex.chunkStartOffset == 28);
+    REQUIRE(chunkIndex.chunkStartOffset == 25);
     REQUIRE(chunkIndex.chunkLength == 164);
     REQUIRE(chunkIndex.messageIndexOffsets.size() == 0);
     REQUIRE(chunkIndex.messageIndexLength == 0);
@@ -302,43 +332,47 @@ TEST_CASE("McapReader::readSummary()", "[reader]") {
 TEST_CASE("McapReader::byteRange()", "[reader]") {
   SECTION("After open()") {
     mcap::McapReader reader;
-    auto status = reader.open(MCAP001);
+    Buffer buffer;
+    writeExampleFile(buffer);
+    auto status = reader.open(buffer);
     requireOk(status);
 
     auto [startOffset, endOffset] = reader.byteRange(0);
-    REQUIRE(startOffset == 28);
-    REQUIRE(endOffset == 328);
+    REQUIRE(startOffset == 25);
+    REQUIRE(endOffset == 316);
 
     auto [startOffset2, endOffset2] = reader.byteRange(0, 0);
-    REQUIRE(startOffset2 == 28);
-    REQUIRE(endOffset2 == 328);
+    REQUIRE(startOffset2 == 25);
+    REQUIRE(endOffset2 == 316);
 
     reader.close();
   }
 
   SECTION("After readSummary()") {
     mcap::McapReader reader;
-    auto status = reader.open(MCAP001);
+    Buffer buffer;
+    writeExampleFile(buffer);
+    auto status = reader.open(buffer);
     requireOk(status);
 
     status = reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan);
     requireOk(status);
 
     auto [startOffset, endOffset] = reader.byteRange(0);
-    REQUIRE(startOffset == 28);
-    REQUIRE(endOffset == 192);
+    REQUIRE(startOffset == 25);
+    REQUIRE(endOffset == 189);
 
     auto [startOffset2, endOffset2] = reader.byteRange(0, 0);
     REQUIRE(startOffset2 == 0);
     REQUIRE(endOffset2 == 0);
 
     auto [startOffset3, endOffset3] = reader.byteRange(1, 2);
-    REQUIRE(startOffset3 == 28);
-    REQUIRE(endOffset3 == 192);
+    REQUIRE(startOffset3 == 25);
+    REQUIRE(endOffset3 == 189);
 
     auto [startOffset4, endOffset4] = reader.byteRange(2, 3);
-    REQUIRE(startOffset4 == 28);
-    REQUIRE(endOffset4 == 192);
+    REQUIRE(startOffset4 == 25);
+    REQUIRE(endOffset4 == 189);
 
     auto [startOffset5, endOffset5] = reader.byteRange(3, 4);
     REQUIRE(startOffset5 == 0);
