@@ -59,6 +59,11 @@ overrides:
       - cpuprofile
       - benchmem
 
+  - filename: "docs/**"
+    words:
+      - kaitai
+      - struct
+
   - filename: "CMakeLists.txt"
     words:
       - conanbuildinfo
