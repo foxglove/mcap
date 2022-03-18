@@ -1,6 +1,7 @@
 #pragma once
 
 #include "errors.hpp"
+#include <cstddef>
 #include <functional>
 #include <limits>
 #include <memory>
