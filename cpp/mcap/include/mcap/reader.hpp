@@ -283,6 +283,24 @@ public:
                                  Timestamp endTime = MaxTime);
 
   /**
+   * @brief Returns starting and ending byte offsets that must be read to
+   * iterate all messges in the given time range. If `readSummary()` has been
+   * successfully called and the recording contains Chunk records, this range
+   * will be narrowed to Chunk records that contain messages in the given time
+   * range. Otherwise, this range will be the entire Data section if the Data
+   * End record has been found or the entire file otherwise.
+   *
+   * This method is automatically used by `readMessages()`, and only needs to be
+   * called directly if the caller is manually constructing an iterator.
+   *
+   * @param startTime Start time in nanoseconds.
+   * @param endTime Optional end time in nanoseconds.
+   * @return Start and end byte offsets.
+   */
+  std::pair<ByteOffset, ByteOffset> byteRange(Timestamp startTime,
+                                              Timestamp endTime = MaxTime) const;
+
+  /**
    * @brief Returns a pointer to the IReadable data source backing this reader.
    * Will return nullptr if the reader is not open.
    */
@@ -302,6 +320,17 @@ public:
   const std::optional<Statistics>& statistics() const;
 
   /**
+   * @brief Returns all of the parsed Channel records. Call `readSummary()`
+   * first to fully populate this data structure.
+   */
+  const std::unordered_map<ChannelId, ChannelPtr> channels() const;
+  /**
+   * @brief Returns all of the parsed Schema records. Call `readSummary()`
+   * first to fully populate this data structure.
+   */
+  const std::unordered_map<SchemaId, SchemaPtr> schemas() const;
+
+  /**
    * @brief Look up a Channel record by channel ID. If the Channel has not been
    * encountered yet or does not exist in the file, this will return nullptr.
    *
@@ -318,6 +347,10 @@ public:
    */
   SchemaPtr schema(SchemaId schemaId) const;
 
+  /**
+   * @brief Returns all of the parsed ChunkIndex records. Call `readSummary()`
+   * first to fully populate this data structure.
+   */
   const std::vector<ChunkIndex>& chunkIndexes() const;
 
   // The following static methods are used internally for parsing MCAP records
