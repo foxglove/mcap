@@ -215,6 +215,12 @@ private:
   uint64_t size_ = 0;
 };
 
+static void assertOk(const mcap::Status& status) {
+  if (!status.ok()) {
+    throw std::runtime_error(status.message);
+  }
+}
+
 int main(int argc, char** argv) {
   if (argc != 2) {
     std::cerr << "Usage: " << argv[0] << " <input.mcap>\n";
@@ -250,14 +256,14 @@ int main(int argc, char** argv) {
     } else if (recordType == "Message") {
       mcap::ByteArray buffer;
       const auto message = ReadMessage(record, buffer);
-      mcapWriter.write(message);
+      assertOk(mcapWriter.write(message));
     } else if (recordType == "Attachment") {
       mcap::ByteArray buffer;
       auto attachment = ReadAttachment(record, buffer);
-      mcapWriter.write(attachment);
+      assertOk(mcapWriter.write(attachment));
     } else if (recordType == "Metadata") {
       auto metadata = ReadMetadata(record);
-      mcapWriter.write(metadata);
+      assertOk(mcapWriter.write(metadata));
     } else if (recordType == "DataEnd") {
       mcapWriter.close();
       return 0;

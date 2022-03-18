@@ -7,7 +7,7 @@ class McapConan(ConanFile):
     url = "https://github.com/foxglove/mcap"
     homepage = "https://github.com/foxglove/mcap"
     description = "A C++ implementation of the MCAP file format"
-    license = "MIT"
+    license = "Apache-2.0"
     topics = ("mcap", "serialization", "deserialization", "recording")
 
     settings = ("os", "compiler", "build_type", "arch")
