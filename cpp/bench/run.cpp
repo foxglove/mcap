@@ -34,6 +34,12 @@ static void BM_CRC32(benchmark::State& state) {
   state.SetBytesProcessed(int64_t(state.iterations()) * int64_t(size));
 }
 
+static void assertOk(const mcap::Status& status) {
+  if (!status.ok()) {
+    throw std::runtime_error(status.message);
+  }
+}
+
 static void BM_McapWriterBufferWriterUnchunkedUnindexed(benchmark::State& state) {
   // Create a message payload
   std::array<std::byte, 4 + 13> payload;
@@ -70,7 +76,7 @@ static void BM_McapWriterBufferWriterUnchunkedUnindexed(benchmark::State& state)
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
-      writer.write(msg);
+      (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
   }
@@ -114,7 +120,7 @@ static void BM_McapWriterBufferWriterUnchunked(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
-      writer.write(msg);
+      (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
   }
@@ -158,7 +164,7 @@ static void BM_McapWriterBufferWriterChunked(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
-      writer.write(msg);
+      (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
   }
@@ -203,7 +209,7 @@ static void BM_McapWriterBufferWriterChunkedNoCRC(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
-      writer.write(msg);
+      (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
   }
@@ -248,7 +254,7 @@ static void BM_McapWriterBufferWriterChunkedUnindexed(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
-      writer.write(msg);
+      (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
   }
@@ -294,7 +300,7 @@ static void BM_McapWriterBufferWriterLZ4(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
-      writer.write(msg);
+      (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
   }
@@ -340,7 +346,7 @@ static void BM_McapWriterBufferWriterZStd(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
-      writer.write(msg);
+      (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
   }
@@ -387,7 +393,7 @@ static void BM_McapWriterBufferWriterZStdNoCRC(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
-      writer.write(msg);
+      (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
   }
@@ -432,7 +438,7 @@ static void BM_McapWriterStreamWriterUnchunked(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
-      writer.write(msg);
+      (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
   }
@@ -478,7 +484,7 @@ static void BM_McapWriterStreamWriterChunked(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
-      writer.write(msg);
+      (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
   }
@@ -502,7 +508,7 @@ static void BM_McapWriterFileWriterChunked(benchmark::State& state) {
 
   // Open an output file stream and write the file header
   const std::string filename = TempFilename();
-  writer.open(filename, options);
+  assertOk(writer.open(filename, options));
 
   // Register a Schema record
   mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
@@ -523,7 +529,7 @@ static void BM_McapWriterFileWriterChunked(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
-      writer.write(msg);
+      (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
   }

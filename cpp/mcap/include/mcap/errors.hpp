@@ -30,7 +30,7 @@ enum class StatusCode {
 /**
  * @brief Wraps a status code and string message carrying additional context.
  */
-struct Status {
+struct [[nodiscard]] Status {
   StatusCode code;
   std::string message;
 
