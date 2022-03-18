@@ -3,14 +3,17 @@
 # (https://github.com/kaitai-io/kaitai_struct_visualizer) to parse and visualize MCAP files.
 
 meta:
-  id: mcap
   title: MCAP
+  id: mcap
   file-extension: mcap
   license: Apache-2.0
   endian: le
+doc: |
+  MCAP is a modular container format and logging library for pub/sub messages with
+  arbitrary message serialization. It is primarily intended for use in robotics
+  applications, and works well under various workloads, resource constraints, and
+  durability requirements.
 doc-ref: https://github.com/foxglove/mcap
-doc: MCAP is a modular container format and logging library for pub/sub messages with arbitrary message serialization. It is primarily intended for use in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
-
 seq:
   - id: header_magic
     contents: [0x89, "MCAP0\r\n"]
@@ -102,8 +105,8 @@ types:
       - { id: id, type: u2 }
       - { id: name, type: prefixed_str }
       - { id: encoding, type: prefixed_str }
-      - { id: data_len, type: u4 }
-      - { id: data, size: data_len }
+      - { id: len_data, type: u4 }
+      - { id: data, size: len_data }
 
   channel:
     seq:
@@ -132,9 +135,9 @@ types:
       - { id: uncompressed_size, type: u8 }
       - { id: uncompressed_crc, type: u4 }
       - { id: compression, type: prefixed_str }
-      - { id: records_size, type: u8 }
+      - { id: len_records, type: u8 }
       - id: records
-        size: records_size
+        size: len_records
         type:
           switch-on: compression.str
           cases:
@@ -151,8 +154,8 @@ types:
           - { id: entries, type: message_index_entry, repeat: eos }
     seq:
       - { id: channel_id, type: u2 }
-      - { id: records_size, type: u4 }
-      - { id: records, type: message_index_entries, size: records_size }
+      - { id: len_records, type: u4 }
+      - { id: records, size: len_records, type: message_index_entries }
 
   chunk_index:
     types:
@@ -168,9 +171,9 @@ types:
       - { id: message_end_time, type: u8 }
       - { id: chunk_start_offset, type: u8 }
       - { id: chunk_length, type: u8 }
-      - { id: message_index_offsets_size, type: u4 }
+      - { id: len_message_index_offsets, type: u4 }
       - id: message_index_offsets
-        size: message_index_offsets_size
+        size: len_message_index_offsets
         type: message_index_offsets
       - { id: message_index_length, type: u8 }
       - { id: compression, type: prefixed_str }
@@ -179,9 +182,9 @@ types:
     instances:
       chunk:
         io: _root._io
-        type: record
         pos: chunk_start_offset
         size: chunk_length
+        type: record
 
   attachment:
     seq:
@@ -205,9 +208,9 @@ types:
     instances:
       attachment:
         io: _root._io
-        type: record
         pos: offset
         size: length
+        type: record
 
   statistics:
     types:
@@ -228,7 +231,7 @@ types:
       - { id: metadata_count, type: u4 }
       - { id: chunk_count, type: u4 }
       - { id: message_start_time, type: u8 }
-      - { id: message_end_type, type: u8 }
+      - { id: message_end_time, type: u8 }
       - { id: channel_message_counts_size, type: u4 }
       - id: channel_message_counts
         size: channel_message_counts_size
@@ -247,9 +250,9 @@ types:
     instances:
       metadata:
         io: _root._io
-        type: record
         pos: offset
         size: length
+        type: record
 
   summary_offset:
     seq:
@@ -263,9 +266,9 @@ types:
     instances:
       group:
         io: _root._io
-        type: records
         pos: group_start
         size: group_length
+        type: records
 
   data_end:
     seq:
