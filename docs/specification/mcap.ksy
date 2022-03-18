@@ -113,13 +113,13 @@ types:
       - { id: summary_offset_start, type: u8 }
       - { id: summary_crc, type: u4 }
     instances:
-      summary_records:
+      summary_section:
         io: _root._io
         pos: summary_start
-        size: "(summary_offset_start != 0 ? summary_offset_start : _root._io.size) - summary_start"
+        size: "(summary_offset_start != 0 ? summary_offset_start : _root._io.size - 8 - 20 - 9) - summary_start"
         type: records
         if: summary_start != 0
-      summary_offset_records:
+      summary_offset_section:
         io: _root._io
         pos: summary_offset_start
         type: records
