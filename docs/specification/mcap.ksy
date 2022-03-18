@@ -155,7 +155,7 @@ types:
     seq:
       - { id: channel_id, type: u2 }
       - { id: len_records, type: u4 }
-      - { id: records, type: message_index_entries, size: len_records }
+      - { id: records, size: len_records, type: message_index_entries }
 
   chunk_index:
     types:
