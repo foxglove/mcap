@@ -256,10 +256,14 @@ types:
       - { id: group_opcode, type: u1, enum: opcode }
       - { id: group_start, type: u8 }
       - { id: group_length, type: u8 }
+    types:
+      records:
+        seq:
+          - { id: records, type: record, repeat: eos }
     instances:
       group:
         io: _root._io
-        type: record
+        type: records
         pos: group_start
         size: group_length
 
