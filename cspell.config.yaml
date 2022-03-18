@@ -26,6 +26,7 @@ words:
   - deserialization
   - fwrite
   - golangci
+  - kaitai
   - libmcap
   - mcap
   - nsec
@@ -37,6 +38,7 @@ words:
   - rosbag
   - rosmsg
   - stoull
+  - struct
   - swiftformat
   - swiftlint
   - typecheck
@@ -58,11 +60,6 @@ overrides:
       - memprofile
       - cpuprofile
       - benchmem
-
-  - filename: "docs/**"
-    words:
-      - kaitai
-      - struct
 
   - filename: "CMakeLists.txt"
     words:
