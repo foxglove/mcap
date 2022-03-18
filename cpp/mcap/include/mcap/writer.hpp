@@ -383,6 +383,12 @@ public:
    */
   const Statistics& statistics() const;
 
+  /**
+   * @brief Returns a pointer to the IWritable data destination backing this
+   * writer. Will return nullptr if the writer is not open.
+   */
+  IWritable* dataSink();
+
   // The following static methods are used for serialization of records and
   // primitives to an output stream. They are not intended to be used directly
   // unless you are implementing a lower level writer or tests

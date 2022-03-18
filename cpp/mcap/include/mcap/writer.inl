@@ -649,6 +649,10 @@ const Statistics& McapWriter::statistics() const {
   return statistics_;
 }
 
+IWritable* McapWriter::dataSink() {
+  return output_;
+}
+
 // Private methods /////////////////////////////////////////////////////////////
 
 IWritable& McapWriter::getOutput() {
