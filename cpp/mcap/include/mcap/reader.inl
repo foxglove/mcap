@@ -355,12 +355,11 @@ Status McapReader::readSummary(ReadSummaryMethod method, const ProblemCallback& 
     }
   }
 
-  // Convert the list of chunk indexes to an interval tree
+  // Convert the list of chunk indexes to an interval tree indexed by message start/end times
   std::vector<ChunkInterval> chunkIntervals;
   chunkIntervals.reserve(chunkIndexes_.size());
   for (const auto& chunkIndex : chunkIndexes_) {
-    const auto chunkEndOffset = chunkIndex.chunkStartOffset + chunkIndex.chunkLength;
-    chunkIntervals.emplace_back(chunkIndex.chunkStartOffset, chunkEndOffset, chunkIndex);
+    chunkIntervals.emplace_back(chunkIndex.messageStartTime, chunkIndex.messageEndTime, chunkIndex);
   }
   chunkRanges_ = internal::IntervalTree<ByteOffset, ChunkIndex>{std::move(chunkIntervals)};
 
@@ -530,7 +529,29 @@ LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem, Tim
     return LinearMessageView{*this, onProblem};
   }
 
-  return LinearMessageView{*this, dataStart_, dataEnd_, startTime, endTime, onProblem};
+  const auto [startOffset, endOffset] = byteRange(startTime, endTime);
+  return LinearMessageView{*this, startOffset, endOffset, startTime, endTime, onProblem};
+}
+
+std::pair<ByteOffset, ByteOffset> McapReader::byteRange(Timestamp startTime,
+                                                        Timestamp endTime) const {
+  if (!parsedSummary_ || chunkRanges_.empty()) {
+    return {dataStart_, dataEnd_};
+  }
+
+  ByteOffset dataStart = dataEnd_;
+  ByteOffset dataEnd = dataStart_;
+  chunkRanges_.visit_overlapping(startTime, endTime, [&](const auto& interval) {
+    const auto& chunkIndex = interval.value;
+    dataStart = std::min(dataStart, chunkIndex.chunkStartOffset);
+    dataEnd = std::max(dataEnd, chunkIndex.chunkStartOffset + chunkIndex.chunkLength);
+  });
+  dataEnd = std::max(dataEnd, dataStart);
+
+  if (dataStart == dataEnd) {
+    return {0, 0};
+  }
+  return {dataStart, dataEnd};
 }
 
 IReadable* McapReader::dataSource() {
@@ -547,6 +568,14 @@ const std::optional<Footer>& McapReader::footer() const {
 
 const std::optional<Statistics>& McapReader::statistics() const {
   return statistics_;
+}
+
+const std::unordered_map<ChannelId, ChannelPtr> McapReader::channels() const {
+  return channels_;
+}
+
+const std::unordered_map<SchemaId, SchemaPtr> McapReader::schemas() const {
+  return schemas_;
 }
 
 ChannelPtr McapReader::channel(ChannelId channelId) const {

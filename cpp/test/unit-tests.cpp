@@ -299,6 +299,55 @@ TEST_CASE("McapReader::readSummary()", "[reader]") {
   }
 }
 
+TEST_CASE("McapReader::byteRange()", "[reader]") {
+  SECTION("After open()") {
+    mcap::McapReader reader;
+    auto status = reader.open(MCAP001);
+    requireOk(status);
+
+    auto [startOffset, endOffset] = reader.byteRange(0);
+    REQUIRE(startOffset == 28);
+    REQUIRE(endOffset == 328);
+
+    auto [startOffset2, endOffset2] = reader.byteRange(0, 0);
+    REQUIRE(startOffset2 == 28);
+    REQUIRE(endOffset2 == 328);
+
+    reader.close();
+  }
+
+  SECTION("After readSummary()") {
+    mcap::McapReader reader;
+    auto status = reader.open(MCAP001);
+    requireOk(status);
+
+    status = reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan);
+    requireOk(status);
+
+    auto [startOffset, endOffset] = reader.byteRange(0);
+    REQUIRE(startOffset == 28);
+    REQUIRE(endOffset == 192);
+
+    auto [startOffset2, endOffset2] = reader.byteRange(0, 0);
+    REQUIRE(startOffset2 == 0);
+    REQUIRE(endOffset2 == 0);
+
+    auto [startOffset3, endOffset3] = reader.byteRange(1, 2);
+    REQUIRE(startOffset3 == 28);
+    REQUIRE(endOffset3 == 192);
+
+    auto [startOffset4, endOffset4] = reader.byteRange(2, 3);
+    REQUIRE(startOffset4 == 28);
+    REQUIRE(endOffset4 == 192);
+
+    auto [startOffset5, endOffset5] = reader.byteRange(3, 4);
+    REQUIRE(startOffset5 == 0);
+    REQUIRE(endOffset5 == 0);
+
+    reader.close();
+  }
+}
+
 TEST_CASE("McapReader::readMessages()", "[reader]") {
   SECTION("MovableIterators") {
     Buffer buffer;
@@ -373,5 +422,7 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
       REQUIRE(msg.message.dataSize == msg.message.dataSize);
       REQUIRE(std::vector(msg.message.data, msg.message.data + msg.message.dataSize) == data);
     }
+
+    reader.close();
   }
 }
