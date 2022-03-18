@@ -122,6 +122,7 @@ types:
       summary_offset_section:
         io: _root._io
         pos: summary_offset_start
+        size: "_root._io.size - 8 - 20 - 9 - summary_offset_start"
         type: records
         if: summary_offset_start != 0
 
