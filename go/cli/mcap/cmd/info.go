@@ -20,6 +20,13 @@ var (
 	LongAgo = time.Now().Add(-20 * 365 * 24 * time.Hour)
 )
 
+func decimalTime(t time.Time) string {
+	unix := t.UnixNano()
+	seconds := unix / 1e9
+	nanoseconds := unix % 1e9
+	return fmt.Sprintf("%d.%09d", seconds, nanoseconds)
+}
+
 func printInfo(w io.Writer, info *mcap.Info) error {
 	buf := &bytes.Buffer{}
 	fmt.Fprintf(buf, "library: %s\n", info.Header.Library)
@@ -31,8 +38,8 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	endtime := time.Unix(int64(end/1e9), int64(end%1e9))
 	fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
 	if starttime.After(LongAgo) {
-		fmt.Fprintf(buf, "start: %s\n", starttime.Format(time.RFC3339Nano))
-		fmt.Fprintf(buf, "end: %s\n", endtime.Format(time.RFC3339Nano))
+		fmt.Fprintf(buf, "start: %s (%s)\n", starttime.Format(time.RFC3339Nano), decimalTime(starttime))
+		fmt.Fprintf(buf, "end: %s (%s)\n", endtime.Format(time.RFC3339Nano), decimalTime(endtime))
 	} else {
 		fmt.Fprintf(buf, "start: %.3f\n", float64(starttime.UnixNano())/1e9)
 		fmt.Fprintf(buf, "end: %.3f\n", float64(endtime.UnixNano())/1e9)
