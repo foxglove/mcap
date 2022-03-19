@@ -1,18 +1,51 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb" // cspell:words descriptorpb
 )
+
+var (
+	protobufSchemaSeparator = "================================================================================\n"
+)
+
+func parseDescriptor(b []byte) (*descriptorpb.FileDescriptorSet, error) {
+	descriptor := &descriptorpb.FileDescriptorSet{}
+	if err := proto.Unmarshal(b, descriptor); err != nil {
+		return nil, err
+	}
+	return descriptor, nil
+}
+
+func printDescriptor(desc *descriptorpb.FileDescriptorSet) string {
+	buf := &bytes.Buffer{}
+	for i, file := range desc.File {
+		if i > 0 {
+			fmt.Fprint(buf, protobufSchemaSeparator)
+		}
+		fmt.Fprintln(buf, "file:", strings.TrimSpace(file.GetName()))
+		for _, descriptor := range file.MessageType {
+			for _, field := range descriptor.Field {
+				fieldType := field.GetType()
+				fmt.Fprintf(buf, "  %s %s\n", field.GetName(), fieldType.String())
+			}
+		}
+	}
+	return buf.String()
+}
 
 func printSchemas(w io.Writer, schemas []*mcap.Schema) {
 	tw := tablewriter.NewWriter(w)
@@ -24,11 +57,26 @@ func printSchemas(w io.Writer, schemas []*mcap.Schema) {
 		"data",
 	})
 	for _, schema := range schemas {
+
+		var displayString string
+		switch schema.Encoding {
+		case "ros1msg", "ros2msg":
+			displayString = string(schema.Data)
+		case "protobuf":
+			descriptor, err := parseDescriptor(schema.Data)
+			if err != nil {
+				log.Fatalf("failed to parse descriptor: %v", err)
+			}
+			displayString = printDescriptor(descriptor)
+		default:
+			displayString = string(schema.Data)
+		}
+
 		row := []string{
 			fmt.Sprintf("%d", schema.ID),
 			schema.Name,
 			schema.Encoding,
-			string(schema.Data),
+			displayString,
 		}
 		rows = append(rows, row)
 	}
