@@ -30,21 +30,32 @@ func parseDescriptor(b []byte) (*descriptorpb.FileDescriptorSet, error) {
 	return descriptor, nil
 }
 
-func printDescriptor(desc *descriptorpb.FileDescriptorSet) string {
-	buf := &bytes.Buffer{}
+func toLabel(s string) string {
+	return strings.ToLower(strings.TrimPrefix(s, "LABEL_"))
+}
+
+func toType(s string) string {
+	return strings.ToLower(strings.TrimPrefix(s, "TYPE_"))
+}
+
+func printDescriptor(w io.Writer, desc *descriptorpb.FileDescriptorSet) error {
 	for i, file := range desc.File {
-		if i > 0 {
-			fmt.Fprint(buf, protobufSchemaSeparator)
+		if i == 0 {
+			fmt.Fprintf(w, "syntax = \"%s\";\n\n", file.GetSyntax())
 		}
-		fmt.Fprintln(buf, "file:", strings.TrimSpace(file.GetName()))
-		for _, descriptor := range file.MessageType {
-			for _, field := range descriptor.Field {
-				fieldType := field.GetType()
-				fmt.Fprintf(buf, "  %s %s\n", field.GetName(), fieldType.String())
+		for _, message := range file.GetMessageType() {
+			fmt.Fprintf(w, "message %s.%s {\n", file.GetPackage(), message.GetName())
+			for _, field := range message.GetField() {
+				fieldType := field.GetTypeName()
+				if fieldType == "" {
+					fieldType = toType(field.GetType().String())
+				}
+				fmt.Fprintf(w, "  %s %s %s = %d;\n", toLabel(field.GetLabel().String()), field.GetName(), fieldType, field.GetNumber())
 			}
+			fmt.Fprintf(w, "}\n")
 		}
 	}
-	return buf.String()
+	return nil
 }
 
 func printSchemas(w io.Writer, schemas []*mcap.Schema) {
@@ -67,7 +78,12 @@ func printSchemas(w io.Writer, schemas []*mcap.Schema) {
 			if err != nil {
 				log.Fatalf("failed to parse descriptor: %v", err)
 			}
-			displayString = printDescriptor(descriptor)
+			buf := &bytes.Buffer{}
+			err = printDescriptor(buf, descriptor)
+			if err != nil {
+				log.Fatalf("Failed to print descriptor: %v", err)
+			}
+			displayString = buf.String()
 		default:
 			displayString = string(schema.Data)
 		}
