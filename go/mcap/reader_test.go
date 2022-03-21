@@ -12,6 +12,69 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
+	buf := &bytes.Buffer{}
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked:   true,
+		ChunkSize: 10000,
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, writer.WriteHeader(&Header{}))
+	assert.Nil(t, writer.WriteSchema(&Schema{
+		ID:       0,
+		Name:     "",
+		Encoding: "",
+		Data:     []byte{},
+	}))
+	assert.Nil(t, writer.WriteChannel(&Channel{
+		ID:              0,
+		SchemaID:        0,
+		Topic:           "/foo",
+		MessageEncoding: "",
+		Metadata: map[string]string{
+			"": "",
+		},
+	}))
+	assert.Nil(t, writer.WriteChannel(&Channel{
+		ID:              1,
+		SchemaID:        0,
+		Topic:           "/bar",
+		MessageEncoding: "",
+		Metadata: map[string]string{
+			"": "",
+		},
+	}))
+	assert.Nil(t, writer.WriteMessage(&Message{
+		ChannelID:   0,
+		Sequence:    0,
+		LogTime:     0,
+		PublishTime: 0,
+		Data:        []byte{'h', 'e', 'l', 'l', 'o'},
+	}))
+	assert.Nil(t, writer.WriteMessage(&Message{
+		ChannelID:   1,
+		Sequence:    0,
+		LogTime:     0,
+		PublishTime: 0,
+		Data:        []byte{'g', 'o', 'o', 'd', 'b', 'y', 'e'},
+	}))
+	writer.Close()
+
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	assert.Nil(t, err)
+
+	it, err := reader.Messages(0, 100, []string{}, true)
+	assert.Nil(t, err)
+	expectedTopics := []string{"/foo", "/bar"}
+	for i := 0; i < 2; i++ {
+		_, channel, _, err := it.Next(nil)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		assert.Equal(t, expectedTopics[i], channel.Topic)
+	}
+}
+
 func TestReadPrefixedBytes(t *testing.T) {
 	cases := []struct {
 		assertion      string
