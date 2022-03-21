@@ -262,6 +262,9 @@ func (it *indexedMessageIterator) loadNextChunkset() error {
 		}
 	}
 	sort.Slice(it.messageOffsets, func(i, j int) bool {
+		if it.messageOffsets[i].timestamp == it.messageOffsets[j].timestamp {
+			return it.messageOffsets[i].chunkOffset < it.messageOffsets[j].chunkOffset
+		}
 		return it.messageOffsets[i].timestamp < it.messageOffsets[j].timestamp
 	})
 	it.messageOffsetIdx = 0
