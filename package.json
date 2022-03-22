@@ -10,7 +10,7 @@
   },
   "scripts": {
     "lint:docs": "prettier '**/*.md' 'docs/**' --check",
-    "typedoc": "typedoc --out __docs__/typescript --entryPointStrategy packages typescript/core",
+    "typedoc": "typedoc --out __docs__/typescript typescript/core/src/index.ts --tsconfig typescript/core/tsconfig.json",
     "spellcheck": "cspell --relative '**'",
     "test:conformance:generate-inputs": "yarn workspace @foxglove/mcap-conformance generate-inputs --data-dir \"$(pwd)/tests/conformance/data\"",
     "test:conformance": "yarn workspace @foxglove/mcap-conformance run-tests --data-dir \"$(pwd)/tests/conformance/data\""
