@@ -45,6 +45,7 @@ jobs:
           touch .nojekyll
           cp -R __docs__/{typescript,python} .
           git add .nojekyll typescript python
+          git diff --cached --stat
           if git diff --cached --quiet; then
             echo "No changes to publish"
           else
