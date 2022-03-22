@@ -150,6 +150,7 @@ jobs:
       - name: Push updated docs to GitHub Pages
         run: |
           COMMIT_MSG="Update docs from $(git rev-parse --abbrev-ref HEAD)@$(git rev-parse --short HEAD)"
+          git fetch origin gh-pages
           git checkout gh-pages
           cp -R __docs__/typescript typescript
           git add typescript
