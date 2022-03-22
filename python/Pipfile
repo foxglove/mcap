@@ -10,6 +10,7 @@ zstd = "*"
 [dev-packages]
 black = "*"
 build = "*"
+flake8 = "*"
 pipenv = "*"
 pytest = "*"
 pyright = "*"

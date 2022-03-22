@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-import struct
 from typing import Dict, List, Tuple
 import zlib
 
@@ -44,7 +43,7 @@ class Attachment(McapRecord):
         content_type = stream.read_prefixed_string()
         data_length = stream.read8()
         data = stream.read(data_length)
-        _crc = stream.read4()
+        stream.read4()  # skip crc
         return Attachment(
             create_time=create_time,
             log_time=log_time,
