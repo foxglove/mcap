@@ -163,6 +163,7 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
+          registry-url: https://registry.npmjs.org
       - run: yarn install --frozen-lockfile
       - run: yarn workspace @mcap/core lint:ci
       - run: yarn workspace @mcap/core typecheck
