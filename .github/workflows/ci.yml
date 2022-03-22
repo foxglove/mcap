@@ -149,15 +149,16 @@ jobs:
       - run: yarn typedoc
       - name: Push updated docs to GitHub Pages
         run: |
+          set +x
           COMMIT_MSG="Update docs from $(git rev-parse --abbrev-ref HEAD)@$(git rev-parse --short HEAD)"
           git fetch origin gh-pages
           git checkout gh-pages
           cp -R __docs__/typescript typescript
           git add typescript
-          if [ git diff --cached --quiet ]; then
+          if git diff --cached --quiet; then
             echo "No changes to publish"
           else
-            git commit -m "$COMMIT_MSG"
+            git -c user.name=Foxglove -c user.email=contact@foxglove.dev commit -m "$COMMIT_MSG"
             git push origin gh-pages
           fi
 
