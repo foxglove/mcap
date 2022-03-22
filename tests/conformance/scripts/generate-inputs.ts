@@ -1,5 +1,5 @@
 import { crc32, crc32Init, crc32Update, crc32Final } from "@foxglove/crc";
-import { Mcap0Types, Mcap0Constants, Mcap0RecordBuilder, Mcap0ChunkBuilder } from "@foxglove/mcap";
+import { Mcap0Types, Mcap0Constants, Mcap0RecordBuilder, Mcap0ChunkBuilder } from "@mcap/core";
 import { program } from "commander";
 import fs from "fs/promises";
 import path from "path";

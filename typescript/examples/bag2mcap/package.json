@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "0.17.1",
-    "@foxglove/mcap": "^0.1.0",
+    "@mcap/core": "^0.1.0",
     "@foxglove/rosbag": "0.1.2",
     "@foxglove/rosmsg": "3.0.0",
     "@foxglove/rosmsg-serialization": "1.2.3",

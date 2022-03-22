@@ -1,4 +1,4 @@
-import { Mcap0StreamReader } from "@foxglove/mcap";
+import { Mcap0StreamReader } from "@mcap/core";
 import fs from "fs/promises";
 import { TestVariant } from "variants/types";
 
