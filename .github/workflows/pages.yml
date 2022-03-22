@@ -1,0 +1,33 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn typedoc
+      - name: Push updated docs to GitHub Pages
+        run: |
+          set -x
+          COMMIT_MSG="Update docs from $GITHUB_REF_NAME ($(git rev-parse --short HEAD))"
+          git fetch origin gh-pages
+          git checkout gh-pages
+          cp -R __docs__/typescript .
+          git add typescript
+          if git diff --cached --quiet; then
+            echo "No changes to publish"
+          else
+            git -c user.name=Foxglove -c user.email=contact@foxglove.dev commit -m "$COMMIT_MSG"
+            git push origin gh-pages
+          fi
