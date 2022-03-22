@@ -79,7 +79,7 @@ class StreamReader:
         if not self.__magic:
             self.__magic = read_magic(self.__stream)
 
-        while self.__footer == None:
+        while self.__footer is None:
             opcode = self.__stream.read1()
             length = self.__stream.read8()
             count = self.__stream.count

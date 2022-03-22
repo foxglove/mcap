@@ -111,7 +111,8 @@ class Writer:
         """Adds an attachment to the file.
 
         log_time: Time at which the attachment was recorded.
-        create_time: Time at which the attachment was created. If not available, must be set to zero.
+        create_time: Time at which the attachment was created. If not available,
+            must be set to zero.
         name: Name of the attachment, e.g "scene1.jpg".
         content_type: MIME Type (e.g "text/plain").
         data: Attachment data.
@@ -155,7 +156,8 @@ class Writer:
         channel_id: The id of the channel to which the message should be added.
         sequence: Optional message counter assigned by publisher.
         log_time: Time at which the message was recorded.
-        publish_time: Time at which the message was published. If not available, must be set to the log time.
+        publish_time: Time at which the message was published. If not available, must be set to
+            the log time.
         data: Message data, to be decoded according to the schema of the channel.
         """
         message = Message(
@@ -323,9 +325,11 @@ class Writer:
         """
         Registers a new message channel. Returns the numeric id of the new channel.
 
-        schema_id: The schema for messages on this channel. A schema_id of 0 indicates there is no schema for this channel.
+        schema_id: The schema for messages on this channel. A schema_id of 0 indicates
+            there is no schema for this channel.
         topic: The channel topic.
-        message_encoding: Encoding for messages on this channel. The value should be one of the well-known message encodings
+        message_encoding: Encoding for messages on this channel. The value should be one
+            of the well-known message encodings
             Custom values should use the 'x-` prefix.
         metadata: Metadata about this channel.
         """
@@ -351,9 +355,11 @@ class Writer:
         Registers a new message schema. Returns the new integer schema id.
 
         name: An identifier for the schema.
-        encoding: Format for the schema. The value should be one of the well-known schema encodings
-            Custom values should use the `x-` prefix. An empty string indicates no schema is available.
-        data: Schema data. Must conform to the schema encoding. If `encoding` is an empty string, `data` should be 0 length.
+        encoding: Format for the schema. The value should be one of the well-known schema
+            encodings. Custom values should use the `x-` prefix. An empty string indicates no
+            schema is available.
+        data: Schema data. Must conform to the schema encoding. If `encoding` is an empty string,
+            `data` should be 0 length.
         """
         schema_id = len(self.__schemas) + 1
         schema = Schema(id=schema_id, data=data, encoding=encoding, name=name)
@@ -370,8 +376,10 @@ class Writer:
         """
         Starts writing to the output stream.
 
-        profile: The profile is used for indicating requirements for fields throughout the file (encoding, user_data, etc).
-        library: Free-form string for writer to specify its name, version, or other information for use in debugging.
+        profile: The profile is used for indicating requirements for fields
+            throughout the file (encoding, user_data, etc).
+        library: Free-form string for writer to specify its name, version, or other
+            information for use in debugging.
         """
         self.__stream.write(MCAP0_MAGIC)
         Header(profile, library).write(self.__record_builder)
