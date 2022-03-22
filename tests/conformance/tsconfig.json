@@ -6,7 +6,7 @@
     "noEmit": true,
     "lib": ["es2020", "dom"],
     "paths": {
-      "@foxglove/mcap": ["../../typescript/mcap/src"]
+      "@mcap/core": ["../../typescript/core/src"]
     },
 
     // required for tsconfig-paths https://github.com/dividab/tsconfig-paths/issues/143

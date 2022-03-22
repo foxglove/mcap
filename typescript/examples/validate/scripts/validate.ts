@@ -1,3 +1,6 @@
+import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
+import { LazyMessageReader as ROS1LazyMessageReader } from "@foxglove/rosmsg-serialization";
+import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
 import {
   detectVersion,
   DETECT_VERSION_BYTES_REQUIRED,
@@ -5,10 +8,7 @@ import {
   Mcap0IndexedReader,
   Mcap0StreamReader,
   Mcap0Types,
-} from "@foxglove/mcap";
-import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
-import { LazyMessageReader as ROS1LazyMessageReader } from "@foxglove/rosmsg-serialization";
-import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
+} from "@mcap/core";
 import { program } from "commander";
 import { createReadStream } from "fs";
 import fs from "fs/promises";

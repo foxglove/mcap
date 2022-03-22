@@ -12,7 +12,7 @@
   "devDependencies": {
     "@foxglove/crc": "^0.0.3",
     "@foxglove/eslint-plugin": "0.17.1",
-    "@foxglove/mcap": "*",
+    "@mcap/core": "*",
     "@foxglove/tsconfig": "1.1.0",
     "@types/diff": "^5.0.2",
     "@types/node": "16.11.9",

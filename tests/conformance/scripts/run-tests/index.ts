@@ -1,4 +1,4 @@
-import { Mcap0StreamReader, Mcap0Types } from "@foxglove/mcap";
+import { Mcap0StreamReader, Mcap0Types } from "@mcap/core";
 import colors from "colors";
 import { program } from "commander";
 import * as Diff from "diff";

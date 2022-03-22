@@ -1,4 +1,4 @@
-import { Mcap0Types } from "@foxglove/mcap";
+import { Mcap0Types } from "@mcap/core";
 
 export type TestDataRecord = Mcap0Types.TypedMcapRecords[
   | "Message"

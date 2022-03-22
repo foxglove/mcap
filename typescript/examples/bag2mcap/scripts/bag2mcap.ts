@@ -4,12 +4,12 @@
 
 // convert a ROS1 .bag file to an mcap file with protobuf schema and message encoding
 
-import { Mcap0Writer, IWritable, Mcap0Types } from "@foxglove/mcap";
 import { Bag } from "@foxglove/rosbag";
 import { FileReader } from "@foxglove/rosbag/node";
 import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import { Time } from "@foxglove/rosmsg-serialization";
 import Bzip2 from "@foxglove/wasm-bz2";
+import { Mcap0Writer, IWritable, Mcap0Types } from "@mcap/core";
 import { program } from "commander";
 import { open, FileHandle } from "fs/promises";
 import protobufjs from "protobufjs";

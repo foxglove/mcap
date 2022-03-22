@@ -12,7 +12,7 @@
       "runtimeExecutable": "yarn",
       "args": [
         "workspace",
-        "@foxglove/mcap",
+        "@mcap/core",
         "test",
         "--runInBand",
         "--watchAll=false"
