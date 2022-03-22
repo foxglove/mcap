@@ -1,4 +1,4 @@
-import { Mcap0Writer } from "@foxglove/mcap";
+import { Mcap0Writer } from "@mcap/core";
 import { add, complete, cycle, suite } from "benny";
 
 /**

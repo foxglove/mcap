@@ -1,10 +1,10 @@
-# @foxglove/mcap
+# TypeScript libraries for MCAP
 
 Run lint/tests:
 
 ```
-yarn workspace @foxglove/mcap lint
-yarn workspace @foxglove/mcap test
+yarn workspace @mcap/core lint
+yarn workspace @mcap/core test
 ```
 
 Read and validate an MCAP file:

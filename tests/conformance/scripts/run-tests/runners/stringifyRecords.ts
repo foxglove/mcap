@@ -1,4 +1,4 @@
-import { Mcap0Types } from "@foxglove/mcap";
+import { Mcap0Types } from "@mcap/core";
 import stringify from "json-stringify-pretty-compact";
 import { chain, snakeCase } from "lodash";
 import { TestVariant } from "variants/types";

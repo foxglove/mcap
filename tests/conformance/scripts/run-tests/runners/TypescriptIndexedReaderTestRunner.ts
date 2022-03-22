@@ -1,4 +1,4 @@
-import { Mcap0IndexedReader, Mcap0Types } from "@foxglove/mcap";
+import { Mcap0IndexedReader, Mcap0Types } from "@mcap/core";
 import fs from "fs/promises";
 import { TestFeatures, TestVariant } from "variants/types";
 

@@ -1,4 +1,4 @@
-import { Mcap0Writer, Mcap0Types } from "@foxglove/mcap";
+import { Mcap0Writer, Mcap0Types } from "@mcap/core";
 import fs from "fs/promises";
 import { camelCase } from "lodash";
 import { TestFeatures, TestVariant } from "variants/types";
