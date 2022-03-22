@@ -151,14 +151,14 @@ class Writer:
         sequence: int = 0,
     ):
         """
-        Adds a new message to the file. If chunking is enabled the message will be added
-        to the current chunk.
+        Adds a new message to the file. If chunking is enabled the message will be added to the
+        current chunk.
 
         :param channel_id: The id of the channel to which the message should be added.
         :param sequence: Optional message counter assigned by publisher.
         :param log_time: Time at which the message was recorded.
-        :param publish_time: Time at which the message was published. If not available, must be set to
-            the log time.
+        :param publish_time: Time at which the message was published. If not available, must be set
+            to the log time.
         :param data: Message data, to be decoded according to the schema of the channel.
         """
         message = Message(
@@ -357,10 +357,10 @@ class Writer:
 
         :param name: An identifier for the schema.
         :param encoding: Format for the schema. The value should be one of the well-known schema
-            encodings. Custom values should use the `x-` prefix. An empty string indicates no
-            schema is available.
-        :param data: Schema data. Must conform to the schema encoding. If `encoding` is an empty string,
-            `data` should be 0 length.
+            encodings. Custom values should use the `x-` prefix. An empty string indicates no schema
+            is available.
+        :param data: Schema data. Must conform to the schema encoding. If `encoding` is an empty
+            string, `data` should be 0 length.
         """
         schema_id = len(self.__schemas) + 1
         schema = Schema(id=schema_id, data=data, encoding=encoding, name=name)
