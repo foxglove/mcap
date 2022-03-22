@@ -138,7 +138,7 @@ func TestChunkedReadWrite(t *testing.T) {
 		CompressionLZ4,
 		CompressionNone,
 	} {
-		t.Run(fmt.Sprintf("chunked file with %s", compression), func(t *testing.T) {
+		t.Run(fmt.Sprintf("chunked file with %s compression", compression), func(t *testing.T) {
 			buf := &bytes.Buffer{}
 			w, err := NewWriter(buf, &WriterOptions{
 				Chunked:     true,

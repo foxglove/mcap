@@ -25,7 +25,12 @@ type CompressionFormat string
 
 // String converts a compression format to a string for display.
 func (c CompressionFormat) String() string {
-	return string(c)
+	switch c {
+	case CompressionNone:
+		return "none"
+	default:
+		return string(c)
+	}
 }
 
 func Version() string {
