@@ -22,17 +22,17 @@ jobs:
           python-version: 3.7
           cache: pipenv
 
-      - run: yarn install --frozen-lockfile
-      - run: pip install pipenv
-      - run: pipenv install --dev --deploy
-
       - name: Generate TypeScript documentation
-        run: yarn typedoc
+        run: |
+          yarn install --frozen-lockfile
+          yarn typedoc
 
       - name: Generate Python documentation
         run: |
           set -x
           cd python
+          pip install pipenv
+          pipenv install --dev --deploy
           pipenv run sphinx-apidoc --separate --output-dir docs/__apidoc__ mcap
           pipenv run sphinx-build docs ../__docs__/python
 
