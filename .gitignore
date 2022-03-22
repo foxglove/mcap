@@ -4,3 +4,4 @@ node_modules
 yarn-error.log
 .swiftpm
 .build
+__docs__
