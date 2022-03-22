@@ -3,6 +3,8 @@ name: Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: ["*"]
 
 jobs:
   publish:
@@ -15,16 +17,33 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
+      - uses: actions/setup-python@v3
+        with:
+          python-version: 3.7
+          cache: pipenv
+
       - run: yarn install --frozen-lockfile
-      - run: yarn typedoc
+      - run: pip install pipenv
+      - run: pipenv install --dev --deploy
+
+      - name: Generate TypeScript documentation
+        run: yarn typedoc
+
+      - name: Generate Python documentation
+        run: |
+          set -x
+          cd python
+          pipenv run sphinx-apidoc --separate --output-dir docs/__apidoc__ mcap
+          pipenv run sphinx-build docs ../__docs__/python
+
       - name: Push updated docs to GitHub Pages
         run: |
           set -x
           COMMIT_MSG="Update docs from $GITHUB_REF_NAME ($(git rev-parse --short HEAD))"
           git fetch origin gh-pages
           git checkout gh-pages
-          cp -R __docs__/typescript .
-          git add typescript
+          cp -R __docs__/{typescript,python} .
+          git add typescript python
           if git diff --cached --quiet; then
             echo "No changes to publish"
           else

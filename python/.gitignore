@@ -2,3 +2,4 @@
 build
 dist
 mcap.egg-info
+__apidoc__

@@ -108,14 +108,15 @@ class Writer:
     def add_attachment(
         self, create_time: int, log_time: int, name: str, content_type: str, data: bytes
     ):
-        """Adds an attachment to the file.
+        """
+        Adds an attachment to the file.
 
-        log_time: Time at which the attachment was recorded.
-        create_time: Time at which the attachment was created. If not available,
+        :param log_time: Time at which the attachment was recorded.
+        :param create_time: Time at which the attachment was created. If not available,
             must be set to zero.
-        name: Name of the attachment, e.g "scene1.jpg".
-        content_type: MIME Type (e.g "text/plain").
-        data: Attachment data.
+        :param name: Name of the attachment, e.g "scene1.jpg".
+        :param content_type: MIME Type (e.g "text/plain").
+        :param data: Attachment data.
         """
         self.__flush()
         offset = self.__stream.tell()
@@ -153,12 +154,12 @@ class Writer:
         Adds a new message to the file. If chunking is enabled the message will be added
         to the current chunk.
 
-        channel_id: The id of the channel to which the message should be added.
-        sequence: Optional message counter assigned by publisher.
-        log_time: Time at which the message was recorded.
-        publish_time: Time at which the message was published. If not available, must be set to
+        :param channel_id: The id of the channel to which the message should be added.
+        :param sequence: Optional message counter assigned by publisher.
+        :param log_time: Time at which the message was recorded.
+        :param publish_time: Time at which the message was published. If not available, must be set to
             the log time.
-        data: Message data, to be decoded according to the schema of the channel.
+        :param data: Message data, to be decoded according to the schema of the channel.
         """
         message = Message(
             channel_id=channel_id,
@@ -183,8 +184,8 @@ class Writer:
         """
         Adds key-value metadata to the file.
 
-        name: A name to associate with the metadata.
-        data: Key-value metadata.
+        :param name: A name to associate with the metadata.
+        :param data: Key-value metadata.
         """
         self.__flush()
         offset = self.__stream.tell()
@@ -325,13 +326,13 @@ class Writer:
         """
         Registers a new message channel. Returns the numeric id of the new channel.
 
-        schema_id: The schema for messages on this channel. A schema_id of 0 indicates
+        :param schema_id: The schema for messages on this channel. A schema_id of 0 indicates
             there is no schema for this channel.
-        topic: The channel topic.
-        message_encoding: Encoding for messages on this channel. The value should be one
-            of the well-known message encodings
-            Custom values should use the 'x-` prefix.
-        metadata: Metadata about this channel.
+        :param topic: The channel topic.
+        :param message_encoding: Encoding for messages on this channel. The value should be one
+            of the well-known message encodings.
+            Custom values should use the `x-` prefix.
+        :param metadata: Metadata about this channel.
         """
         channel_id = len(self.__channels) + 1
         channel = Channel(
@@ -354,11 +355,11 @@ class Writer:
         """
         Registers a new message schema. Returns the new integer schema id.
 
-        name: An identifier for the schema.
-        encoding: Format for the schema. The value should be one of the well-known schema
+        :param name: An identifier for the schema.
+        :param encoding: Format for the schema. The value should be one of the well-known schema
             encodings. Custom values should use the `x-` prefix. An empty string indicates no
             schema is available.
-        data: Schema data. Must conform to the schema encoding. If `encoding` is an empty string,
+        :param data: Schema data. Must conform to the schema encoding. If `encoding` is an empty string,
             `data` should be 0 length.
         """
         schema_id = len(self.__schemas) + 1
@@ -376,9 +377,9 @@ class Writer:
         """
         Starts writing to the output stream.
 
-        profile: The profile is used for indicating requirements for fields
+        :param profile: The profile is used for indicating requirements for fields
             throughout the file (encoding, user_data, etc).
-        library: Free-form string for writer to specify its name, version, or other
+        :param library: Free-form string for writer to specify its name, version, or other
             information for use in debugging.
         """
         self.__stream.write(MCAP0_MAGIC)

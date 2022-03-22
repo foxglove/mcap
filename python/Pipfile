@@ -11,9 +11,11 @@ zstd = "*"
 black = "*"
 build = "*"
 flake8 = "*"
+m2r2 = "*"
 pipenv = "*"
 pytest = "*"
 pyright = "*"
+sphinx = "*"
 typing_extensions = "*"
 
 [requires]
