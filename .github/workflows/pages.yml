@@ -33,7 +33,7 @@ jobs:
           cd python
           pip install pipenv
           pipenv install --dev --deploy
-          pipenv run sphinx-apidoc --separate --output-dir docs/__apidoc__ mcap
+          pipenv run sphinx-apidoc --separate --tocfile index --output-dir docs/__apidoc__ mcap
           pipenv run sphinx-build docs ../__docs__/python
           touch ../__docs__/python/.nojekyll
 
