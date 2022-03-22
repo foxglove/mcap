@@ -9,6 +9,7 @@ import { Bag } from "@foxglove/rosbag";
 import { FileReader } from "@foxglove/rosbag/node";
 import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import { Time } from "@foxglove/rosmsg-serialization";
+import { toNanoSec } from "@foxglove/rostime";
 import Bzip2 from "@foxglove/wasm-bz2";
 import { program } from "commander";
 import { open, FileHandle } from "fs/promises";
