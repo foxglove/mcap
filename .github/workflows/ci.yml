@@ -136,6 +136,30 @@ jobs:
       - run: yarn install --frozen-lockfile
       - run: yarn lint:docs
 
+  docs-publish:
+    runs-on: ubuntu-latest
+    # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn typedoc
+      - name: Push updated docs to GitHub Pages
+        run: |
+          COMMIT_MSG="Update docs from $(git rev-parse --abbrev-ref HEAD)@$(git rev-parse --short HEAD)"
+          git checkout gh-pages
+          cp -R __docs__/typescript typescript
+          git add typescript
+          if [ git diff --cached --quiet ]; then
+            echo "No changes to publish"
+          else
+            git commit -m "$COMMIT_MSG"
+            git push origin gh-pages
+          fi
+
   cpp:
     runs-on: ubuntu-latest
     defaults:

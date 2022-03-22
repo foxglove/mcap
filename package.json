@@ -10,12 +10,14 @@
   },
   "scripts": {
     "lint:docs": "prettier '**/*.md' 'docs/**' --check",
+    "typedoc": "typedoc --out __docs__/typescript --entryPointStrategy packages typescript/core",
     "spellcheck": "cspell --relative '**'",
     "test:conformance:generate-inputs": "yarn workspace @foxglove/mcap-conformance generate-inputs --data-dir \"$(pwd)/tests/conformance/data\"",
     "test:conformance": "yarn workspace @foxglove/mcap-conformance run-tests --data-dir \"$(pwd)/tests/conformance/data\""
   },
   "devDependencies": {
     "cspell": "^5.18.0",
-    "prettier": "^2.5.1"
+    "prettier": "^2.5.1",
+    "typedoc": "^0.22.13"
   }
 }
