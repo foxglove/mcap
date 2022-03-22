@@ -42,6 +42,7 @@ words:
   - swiftformat
   - swiftlint
   - typecheck
+  - typedoc
   - unchunked
   - unindexed
   - velodyne
