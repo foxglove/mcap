@@ -35,7 +35,6 @@ jobs:
           pipenv install --dev --deploy
           pipenv run sphinx-apidoc --separate --tocfile index --output-dir docs/__apidoc__ mcap
           pipenv run sphinx-build docs ../__docs__/python
-          touch ../__docs__/python/.nojekyll
 
       - name: Push updated docs to GitHub Pages
         run: |
@@ -43,8 +42,9 @@ jobs:
           COMMIT_MSG="Update docs from $GITHUB_REF_NAME ($(git rev-parse --short HEAD))"
           git fetch origin gh-pages
           git checkout gh-pages
+          touch .nojekyll
           cp -R __docs__/{typescript,python} .
-          git add typescript python
+          git add .nojekyll typescript python
           if git diff --cached --quiet; then
             echo "No changes to publish"
           else
