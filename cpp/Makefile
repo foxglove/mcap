@@ -3,7 +3,7 @@ default: build
 .PHONY: build
 build:
 	docker build -t mcap_cpp -f dev.Dockerfile .
-	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp
+	docker run -it --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp
 
 .PHONE: build-host
 build-host:
@@ -19,16 +19,16 @@ clean:
 .PHONY: format-check
 format-check:
 	docker build -t mcap_cpp -f dev.Dockerfile .
-	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp python3 scripts/format.py /src
+	docker run -it --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp python3 scripts/format.py /src
 
 .PHONY: format-fix
 format-fix:
 	docker build -t mcap_cpp -f dev.Dockerfile .
-	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp python3 scripts/format.py --fix /src
+	docker run -it --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp python3 scripts/format.py --fix /src
 
 .PHONY: bench
 bench:
-	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp ./bench/build/Release/bin/bench-tests
+	docker run -it --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp ./bench/build/Release/bin/bench-tests
 
 .PHONY: bench-host
 bench-host:
@@ -36,18 +36,27 @@ bench-host:
 
 .PHONY: test
 test:
-	docker run --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp ./test/build/Debug/bin/unit-tests
+	docker run -it --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp ./test/build/Debug/bin/unit-tests
 
 .PHONY: test-host
 test-host:
 	./test/build/Debug/bin/unit-tests
 
+.PHONY: hdoc-build
+hdoc-build:
+	docker build -t hdoc - < hdoc.Dockerfile
+
 .PHONY: ci
-ci:
+ci: hdoc-build
 	docker build -t mcap_cpp -f ci.Dockerfile .
-	docker run --rm --name mcap_cpp -v $(HOME):$(HOME) mcap_cpp
+	docker run -it --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp mcap_cpp ./build.sh
+
+.PHONY: ci-docs
+ci-docs: hdoc-build
+	docker build -t mcap_cpp -f ci.Dockerfile .
+	docker run -it --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp -v $(CURDIR)/../__docs__/cpp:/hdoc-output mcap_cpp ./build-docs.sh
 
 .PHONY: ci-format-check
-ci-format-check:
+ci-format-check: hdoc-build
 	docker build -t mcap_cpp -f ci.Dockerfile .
-	docker run --rm --name mcap_cpp -v $(HOME):$(HOME) mcap_cpp python3 scripts/format.py .
+	docker run -it --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp mcap_cpp python3 scripts/format.py .

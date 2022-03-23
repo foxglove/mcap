@@ -10,6 +10,8 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     steps:
+      - uses: satackey/action-docker-layer-caching@v0.0.11
+        continue-on-error: true
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
@@ -22,6 +24,9 @@ jobs:
       - uses: fwal/setup-swift@v1
         with:
           swift-version: "5.6"
+
+      - name: Generate C++ documentation
+        run: cd cpp && make ci-docs
 
       - name: Generate TypeScript documentation
         run: |
@@ -55,7 +60,7 @@ jobs:
           git fetch origin gh-pages
           git checkout gh-pages
           touch .nojekyll; git add .nojekyll
-          for DIR in typescript python swift; do
+          for DIR in typescript python swift cpp; do
             rm -rf $DIR
             cp -R __docs__/$DIR .
             git add $DIR
