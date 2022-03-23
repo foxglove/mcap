@@ -43,6 +43,7 @@ test-host:
 	./test/build/Debug/bin/unit-tests
 
 .PHONY: hdoc-build
+hdoc-build:
 	docker build -t hdoc -f hdoc.Dockerfile .
 
 .PHONY: ci
