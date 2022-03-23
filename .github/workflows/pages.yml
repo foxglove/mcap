@@ -47,7 +47,8 @@ jobs:
             generate-documentation --target mcap \
             --output-path __docs__/swift \
             --disable-indexing \
-            --transform-for-static-hosting
+            --transform-for-static-hosting \
+            --hosting-base-path mcap/swift
 
       - name: Push updated docs to GitHub Pages
         run: |
