@@ -43,6 +43,7 @@ jobs:
           git fetch origin gh-pages
           git checkout gh-pages
           touch .nojekyll
+          rm -r typescript python
           cp -R __docs__/{typescript,python} .
           git add .nojekyll typescript python
           git diff --cached --stat
