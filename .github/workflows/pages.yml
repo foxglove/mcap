@@ -65,7 +65,7 @@ jobs:
           git checkout gh-pages
           touch .nojekyll; git add .nojekyll
           for DIR in typescript python swift cpp; do
-            rm -rf $DIR
+            sudo rm -rf $DIR
             cp -R __docs__/$DIR .
             git add $DIR
           done
