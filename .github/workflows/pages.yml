@@ -27,6 +27,8 @@ jobs:
         with:
           swift-version: "5.6"
 
+      - run: mkdir __docs__
+
       - name: Generate C++ documentation
         run: cd cpp && make ci-docs
 
