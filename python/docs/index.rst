@@ -4,7 +4,7 @@
    :maxdepth: 2
    :caption: Contents:
 
-   __apidoc__/index
+   apidoc/index
 
 Indices and tables
 ==================
