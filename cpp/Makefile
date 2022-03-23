@@ -44,7 +44,7 @@ test-host:
 
 .PHONY: hdoc-build
 hdoc-build:
-	docker build -t hdoc - < hdoc.Dockerfile
+	docker build -t hdoc -f hdoc.Dockerfile .
 
 .PHONY: ci
 ci: hdoc-build

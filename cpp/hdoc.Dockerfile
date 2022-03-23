@@ -19,14 +19,8 @@ RUN git clone https://github.com/hdoc/hdoc.git /hdoc --depth 1 --branch 1.2.2 --
 
 WORKDIR /hdoc
 
-# Enable C language support to fix CMake build
-RUN sed -i -E "s/^project\('hdoc', 'cpp'/project('hdoc', 'cpp', 'c'/" meson.build
-
-# Remove timestamp from build output
-RUN sed -i -E 's/\+ " on " \+ cfg\.timestamp//' src/serde/HTMLWriter.cpp
-
-# Remove enormous hdoc link from sidebar
-RUN sed -i -E 's/aside\.AddChild\(.+a\.is-button is-size-1.+"https:\/\/hdoc\.io".+\);//' src/serde/HTMLWriter.cpp
+COPY hdoc.patch /hdoc.patch
+RUN git apply /hdoc.patch
 
 RUN ~/.local/bin/meson build
 RUN ninja -C build hdoc
