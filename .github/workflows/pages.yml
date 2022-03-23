@@ -83,10 +83,10 @@ jobs:
         run: |
           set -x
           COMMIT_MSG="Update docs from $GITHUB_REF_NAME ($(git rev-parse --short HEAD))"
-          touch .nojekyll; git add .nojekyll
           for DIR in typescript python swift cpp; do
             sudo rm -rf $DIR
             cp -R __docs__/$DIR .
+            touch $DIR/.nojekyll
             git add $DIR
           done
           git diff --cached --stat
