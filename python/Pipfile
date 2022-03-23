@@ -6,14 +6,17 @@ name = "pypi"
 [packages]
 lz4 = "*"
 zstd = "*"
+mcap = { editable = true, path = "." }
 
 [dev-packages]
 black = "*"
 build = "*"
 flake8 = "*"
+m2r2 = "*"
 pipenv = "*"
 pytest = "*"
 pyright = "*"
+sphinx = "*"
 typing_extensions = "*"
 
 [requires]
