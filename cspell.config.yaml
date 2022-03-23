@@ -16,6 +16,7 @@ ignorePaths:
   - "*.Dockerfile"
   - "*.mcap"
   - "*.egg-info"
+  - "*.patch"
 
 words:
   - cbor
@@ -69,6 +70,7 @@ overrides:
   - filename: "cpp/**"
     words:
       - cppstd
+      - hdoc
       - nlohmann
 
   - filename: "**/{*.js,*.ts,*.tsx}"
