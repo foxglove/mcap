@@ -82,6 +82,15 @@ overrides:
       - pytest
       - setuptools
 
+  - filename: "python/**/*.rst"
+    words:
+      - mdinclude
+      - toctree
+      - maxdepth
+      - apidoc
+      - genindex
+      - modindex
+
   - filename: "**/*.py"
     words:
       - klass

@@ -15,16 +15,36 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-      - run: yarn install --frozen-lockfile
-      - run: yarn typedoc
+      - uses: actions/setup-python@v3
+        with:
+          python-version: 3.7
+          cache: pipenv
+
+      - name: Generate TypeScript documentation
+        run: |
+          yarn install --frozen-lockfile
+          yarn typedoc
+
+      - name: Generate Python documentation
+        run: |
+          set -x
+          cd python
+          pip install pipenv
+          pipenv install --dev --deploy
+          pipenv run sphinx-apidoc --separate --tocfile index --output-dir docs/apidoc mcap
+          pipenv run sphinx-build docs ../__docs__/python
+
       - name: Push updated docs to GitHub Pages
         run: |
           set -x
           COMMIT_MSG="Update docs from $GITHUB_REF_NAME ($(git rev-parse --short HEAD))"
           git fetch origin gh-pages
           git checkout gh-pages
-          cp -R __docs__/typescript .
-          git add typescript
+          touch .nojekyll
+          rm -r typescript python
+          cp -R __docs__/{typescript,python} .
+          git add .nojekyll typescript python
+          git diff --cached --stat
           if git diff --cached --quiet; then
             echo "No changes to publish"
           else
