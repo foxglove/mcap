@@ -53,7 +53,7 @@ jobs:
             --output-path __docs__/swift \
             --disable-indexing \
             --transform-for-static-hosting \
-            --hosting-base-path mcap/swift
+            --hosting-base-path mcap/docs/swift
 
       # https://github.com/actions/upload-artifact/issues/85
       - run: tar -czf __docs__.tgz __docs__
