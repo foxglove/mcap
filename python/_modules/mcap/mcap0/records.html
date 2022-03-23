@@ -39,13 +39,13 @@
 <span class="kn">from</span> <span class="nn">.opcode</span> <span class="kn">import</span> <span class="n">Opcode</span>
 
 
-<div class="viewcode-block" id="McapRecord"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.McapRecord">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="McapRecord"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.McapRecord">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">McapRecord</span><span class="p">:</span>
-<div class="viewcode-block" id="McapRecord.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.McapRecord.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="McapRecord.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.McapRecord.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div></div>
 
 
-<div class="viewcode-block" id="Attachment"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Attachment">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="Attachment"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Attachment">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Attachment</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">create_time</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">log_time</span><span class="p">:</span> <span class="nb">int</span>
@@ -53,7 +53,7 @@
     <span class="n">content_type</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span>
 
-<div class="viewcode-block" id="Attachment.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Attachment.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
+<div class="viewcode-block" id="Attachment.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Attachment.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">builder</span> <span class="o">=</span> <span class="n">RecordBuilder</span><span class="p">()</span>
         <span class="n">builder</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">ATTACHMENT</span><span class="p">)</span>
         <span class="n">builder</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_time</span><span class="p">)</span>
@@ -68,7 +68,7 @@
         <span class="n">stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">data</span><span class="p">[:</span><span class="o">-</span><span class="mi">4</span><span class="p">])</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write4</span><span class="p">(</span><span class="n">zlib</span><span class="o">.</span><span class="n">crc32</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mi">9</span><span class="p">:</span><span class="o">-</span><span class="mi">4</span><span class="p">]))</span></div>
 
-<div class="viewcode-block" id="Attachment.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Attachment.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Attachment.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Attachment.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="n">log_time</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
         <span class="n">create_time</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
@@ -86,7 +86,7 @@
         <span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="AttachmentIndex"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.AttachmentIndex">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="AttachmentIndex"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.AttachmentIndex">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">AttachmentIndex</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">offset</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">length</span><span class="p">:</span> <span class="nb">int</span>
@@ -96,7 +96,7 @@
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">content_type</span><span class="p">:</span> <span class="nb">str</span>
 
-<div class="viewcode-block" id="AttachmentIndex.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.AttachmentIndex.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
+<div class="viewcode-block" id="AttachmentIndex.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.AttachmentIndex.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">ATTACHMENT_INDEX</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">offset</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">length</span><span class="p">)</span>
@@ -107,7 +107,7 @@
         <span class="n">stream</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content_type</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="AttachmentIndex.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.AttachmentIndex.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="AttachmentIndex.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.AttachmentIndex.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="n">offset</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
         <span class="n">length</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
@@ -127,7 +127,7 @@
         <span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="Channel"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Channel">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="Channel"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Channel">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Channel</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">topic</span><span class="p">:</span> <span class="nb">str</span>
@@ -135,7 +135,7 @@
     <span class="n">metadata</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>
     <span class="n">schema_id</span><span class="p">:</span> <span class="nb">int</span>
 
-<div class="viewcode-block" id="Channel.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Channel.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
+<div class="viewcode-block" id="Channel.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Channel.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">CHANNEL</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write2</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write2</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">schema_id</span><span class="p">)</span>
@@ -152,7 +152,7 @@
             <span class="n">stream</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="Channel.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Channel.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Channel.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Channel.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="nb">id</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read2</span><span class="p">()</span>
         <span class="n">schema_id</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read2</span><span class="p">()</span>
@@ -174,7 +174,7 @@
         <span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="Chunk"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Chunk">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="Chunk"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Chunk">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Chunk</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">compression</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
@@ -183,7 +183,7 @@
     <span class="n">uncompressed_crc</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">uncompressed_size</span><span class="p">:</span> <span class="nb">int</span>
 
-<div class="viewcode-block" id="Chunk.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Chunk.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
+<div class="viewcode-block" id="Chunk.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Chunk.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">CHUNK</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">message_start_time</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">message_end_time</span><span class="p">)</span>
@@ -194,7 +194,7 @@
         <span class="n">stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="Chunk.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Chunk.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Chunk.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Chunk.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="n">message_start_time</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
         <span class="n">message_end_time</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
@@ -214,7 +214,7 @@
         <span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="ChunkIndex"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.ChunkIndex">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="ChunkIndex"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.ChunkIndex">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">ChunkIndex</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">chunk_length</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">chunk_start_offset</span><span class="p">:</span> <span class="nb">int</span>
@@ -226,7 +226,7 @@
     <span class="n">message_start_time</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">uncompressed_size</span><span class="p">:</span> <span class="nb">int</span>
 
-<div class="viewcode-block" id="ChunkIndex.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.ChunkIndex.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
+<div class="viewcode-block" id="ChunkIndex.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.ChunkIndex.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">CHUNK_INDEX</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">message_start_time</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">message_end_time</span><span class="p">)</span>
@@ -242,7 +242,7 @@
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">uncompressed_size</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="ChunkIndex.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.ChunkIndex.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="ChunkIndex.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.ChunkIndex.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="n">message_start_time</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
         <span class="n">message_end_time</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
@@ -272,35 +272,35 @@
         <span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="DataEnd"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.DataEnd">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="DataEnd"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.DataEnd">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">DataEnd</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">data_section_crc</span><span class="p">:</span> <span class="nb">int</span>
 
-<div class="viewcode-block" id="DataEnd.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.DataEnd.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
+<div class="viewcode-block" id="DataEnd.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.DataEnd.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">DATA_END</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write4</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_section_crc</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="DataEnd.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.DataEnd.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="DataEnd.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.DataEnd.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="n">data_section_crc</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read4</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">DataEnd</span><span class="p">(</span><span class="n">data_section_crc</span><span class="o">=</span><span class="n">data_section_crc</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="Footer"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Footer">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="Footer"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Footer">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Footer</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">summary_start</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">summary_offset_start</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">summary_crc</span><span class="p">:</span> <span class="nb">int</span>
 
-<div class="viewcode-block" id="Footer.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Footer.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
+<div class="viewcode-block" id="Footer.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Footer.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">FOOTER</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">summary_start</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">summary_offset_start</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write4</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">summary_crc</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="Footer.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Footer.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Footer.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Footer.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="n">summary_start</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
         <span class="n">summary_offset_start</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
@@ -312,25 +312,25 @@
         <span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="Header"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Header">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="Header"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Header">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Header</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">profile</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">library</span><span class="p">:</span> <span class="nb">str</span>
 
-<div class="viewcode-block" id="Header.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Header.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
+<div class="viewcode-block" id="Header.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Header.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">HEADER</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">profile</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">library</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="Header.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Header.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Header.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Header.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="n">profile</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read_prefixed_string</span><span class="p">()</span>
         <span class="n">library</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read_prefixed_string</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">Header</span><span class="p">(</span><span class="n">profile</span><span class="p">,</span> <span class="n">library</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="Message"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Message">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="Message"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Message">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Message</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">channel_id</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">log_time</span><span class="p">:</span> <span class="nb">int</span>
@@ -338,7 +338,7 @@
     <span class="n">publish_time</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">sequence</span><span class="p">:</span> <span class="nb">int</span>
 
-<div class="viewcode-block" id="Message.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Message.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
+<div class="viewcode-block" id="Message.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Message.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">MESSAGE</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write2</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">channel_id</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write4</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sequence</span><span class="p">)</span>
@@ -347,7 +347,7 @@
         <span class="n">stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="Message.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Message.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Message.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Message.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">,</span> <span class="n">length</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
         <span class="n">channel_id</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read2</span><span class="p">()</span>
         <span class="n">sequence</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read4</span><span class="p">()</span>
@@ -363,12 +363,12 @@
         <span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="MessageIndex"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.MessageIndex">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="MessageIndex"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.MessageIndex">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">MessageIndex</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">channel_id</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">records</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span>
 
-<div class="viewcode-block" id="MessageIndex.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.MessageIndex.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
+<div class="viewcode-block" id="MessageIndex.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.MessageIndex.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">MESSAGE_INDEX</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write2</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">channel_id</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write4</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">records</span><span class="p">)</span> <span class="o">*</span> <span class="mi">16</span><span class="p">)</span>
@@ -377,7 +377,7 @@
             <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="MessageIndex.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.MessageIndex.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="MessageIndex.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.MessageIndex.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="n">channel_id</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read2</span><span class="p">()</span>
         <span class="n">records_length</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read4</span><span class="p">()</span>
@@ -390,12 +390,12 @@
         <span class="k">return</span> <span class="n">MessageIndex</span><span class="p">(</span><span class="n">channel_id</span><span class="p">,</span> <span class="n">entries</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="Metadata"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Metadata">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="Metadata"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Metadata">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Metadata</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">metadata</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>
 
-<div class="viewcode-block" id="Metadata.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Metadata.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="Metadata.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Metadata.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">METADATA</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
         <span class="n">meta_length</span> <span class="o">=</span> <span class="mi">0</span>
@@ -409,7 +409,7 @@
             <span class="n">stream</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="Metadata.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Metadata.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Metadata.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Metadata.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="n">name</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read_prefixed_string</span><span class="p">()</span>
         <span class="n">metadata_length</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read4</span><span class="p">()</span>
@@ -422,20 +422,20 @@
         <span class="k">return</span> <span class="n">Metadata</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="MetadataIndex"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.MetadataIndex">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="MetadataIndex"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.MetadataIndex">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">MetadataIndex</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">offset</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">length</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
 
-<div class="viewcode-block" id="MetadataIndex.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.MetadataIndex.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<div class="viewcode-block" id="MetadataIndex.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.MetadataIndex.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">METADATA_INDEX</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">offset</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">length</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="MetadataIndex.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.MetadataIndex.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="MetadataIndex.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.MetadataIndex.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="n">offset</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
         <span class="n">length</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
@@ -443,14 +443,14 @@
         <span class="k">return</span> <span class="n">MetadataIndex</span><span class="p">(</span><span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span> <span class="n">length</span><span class="o">=</span><span class="n">length</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="Schema"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Schema">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="Schema"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Schema">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Schema</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span>
     <span class="n">encoding</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
 
-<div class="viewcode-block" id="Schema.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Schema.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
+<div class="viewcode-block" id="Schema.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Schema.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">SCHEMA</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write2</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
@@ -459,7 +459,7 @@
         <span class="n">stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="Schema.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Schema.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Schema.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Schema.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="nb">id</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read2</span><span class="p">()</span>
         <span class="n">name</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read_prefixed_string</span><span class="p">()</span>
@@ -469,7 +469,7 @@
         <span class="k">return</span> <span class="n">Schema</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="nb">id</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="n">encoding</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="Statistics"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Statistics">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="Statistics"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Statistics">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">Statistics</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">attachment_count</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">channel_count</span><span class="p">:</span> <span class="nb">int</span>
@@ -481,7 +481,7 @@
     <span class="n">metadata_count</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">schema_count</span><span class="p">:</span> <span class="nb">int</span>
 
-<div class="viewcode-block" id="Statistics.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Statistics.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
+<div class="viewcode-block" id="Statistics.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Statistics.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">STATISTICS</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">message_count</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write2</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">schema_count</span><span class="p">)</span>
@@ -497,7 +497,7 @@
             <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="Statistics.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.Statistics.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Statistics.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Statistics.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="n">message_count</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
         <span class="n">schema_count</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read2</span><span class="p">()</span>
@@ -527,20 +527,20 @@
         <span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="SummaryOffset"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.SummaryOffset">[docs]</a><span class="nd">@dataclass</span>
+<div class="viewcode-block" id="SummaryOffset"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.SummaryOffset">[docs]</a><span class="nd">@dataclass</span>
 <span class="k">class</span> <span class="nc">SummaryOffset</span><span class="p">(</span><span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">group_opcode</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">group_start</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">group_length</span><span class="p">:</span> <span class="nb">int</span>
 
-<div class="viewcode-block" id="SummaryOffset.write"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.SummaryOffset.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
+<div class="viewcode-block" id="SummaryOffset.write"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.SummaryOffset.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">SUMMARY_OFFSET</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write1</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">group_opcode</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">group_start</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">group_length</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
-<div class="viewcode-block" id="SummaryOffset.read"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.records.html#mcap.mcap0.records.SummaryOffset.read">[docs]</a>    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="SummaryOffset.read"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.records.html#mcap.mcap0.records.SummaryOffset.read">[docs]</a>    <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">):</span>
         <span class="n">group_opcode</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read1</span><span class="p">()</span>
         <span class="n">group_start</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
@@ -570,7 +570,7 @@
 <h3>Navigation</h3>
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../../../__apidoc__/index.html">mcap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../apidoc/index.html">mcap</a></li>
 </ul>
 
 <div class="relations">

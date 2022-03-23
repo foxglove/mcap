@@ -38,7 +38,7 @@
 <span class="n">ValueType</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bytes</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span>
 
 
-<div class="viewcode-block" id="normalize_value"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.serialization.html#mcap.mcap0.serialization.normalize_value">[docs]</a><span class="k">def</span> <span class="nf">normalize_value</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">ValueType</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<div class="viewcode-block" id="normalize_value"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.serialization.html#mcap.mcap0.serialization.normalize_value">[docs]</a><span class="k">def</span> <span class="nf">normalize_value</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">ValueType</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">normalize_value</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">value</span><span class="p">]</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
@@ -49,7 +49,7 @@
         <span class="k">return</span> <span class="n">value</span></div>
 
 
-<div class="viewcode-block" id="stringify_record"><a class="viewcode-back" href="../../../__apidoc__/mcap.mcap0.serialization.html#mcap.mcap0.serialization.stringify_record">[docs]</a><span class="k">def</span> <span class="nf">stringify_record</span><span class="p">(</span><span class="n">record</span><span class="p">:</span> <span class="n">McapRecord</span><span class="p">):</span>
+<div class="viewcode-block" id="stringify_record"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.serialization.html#mcap.mcap0.serialization.stringify_record">[docs]</a><span class="k">def</span> <span class="nf">stringify_record</span><span class="p">(</span><span class="n">record</span><span class="p">:</span> <span class="n">McapRecord</span><span class="p">):</span>
     <span class="n">fields</span> <span class="o">=</span> <span class="p">[(</span><span class="n">k</span><span class="p">,</span> <span class="n">normalize_value</span><span class="p">(</span><span class="n">v</span><span class="p">))</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">items</span><span class="p">())]</span>
     <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="nb">type</span><span class="p">(</span><span class="n">record</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="n">fields</span><span class="p">}</span></div>
 </pre></div>
@@ -72,7 +72,7 @@
 <h3>Navigation</h3>
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="../../../__apidoc__/index.html">mcap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../apidoc/index.html">mcap</a></li>
 </ul>
 
 <div class="relations">
