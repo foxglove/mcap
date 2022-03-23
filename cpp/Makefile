@@ -42,21 +42,18 @@ test:
 test-host:
 	./test/build/Debug/bin/unit-tests
 
-.PHONY: hdoc-build
-hdoc-build:
-	docker build -t hdoc -f hdoc.Dockerfile .
-
 .PHONY: ci
-ci: hdoc-build
-	docker build -t mcap_cpp -f ci.Dockerfile .
+ci:
+	docker build -t mcap_cpp -f ci.Dockerfile --build-arg IMAGE=ubuntu:focal --build-arg CC=clang-13 --build-arg CXX=clang++-13 .
 	docker run -t --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp mcap_cpp ./build.sh
 
 .PHONY: ci-docs
-ci-docs: hdoc-build
+ci-docs:
+	docker build -t hdoc -f hdoc.Dockerfile .
 	docker build -t mcap_cpp -f ci.Dockerfile .
 	docker run -t --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp -v $(CURDIR)/../__docs__/cpp:/hdoc-output mcap_cpp ./build-docs.sh
 
 .PHONY: ci-format-check
-ci-format-check: hdoc-build
-	docker build -t mcap_cpp -f ci.Dockerfile .
+ci-format-check:
+	docker build -t mcap_cpp -f ci.Dockerfile --build-arg IMAGE=ubuntu:focal --build-arg CC=clang-13 --build-arg CXX=clang++-13 .
 	docker run -t --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp mcap_cpp python3 scripts/format.py .
