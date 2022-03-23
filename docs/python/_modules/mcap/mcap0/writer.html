@@ -1,0 +1,560 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>mcap.mcap0.writer &#8212; mcap  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css" />
+    <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+    <script src="../../../_static/jquery.js"></script>
+    <script src="../../../_static/underscore.js"></script>
+    <script src="../../../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for mcap.mcap0.writer</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">struct</span>
+<span class="kn">import</span> <span class="nn">zlib</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span><span class="p">,</span> <span class="n">Flag</span><span class="p">,</span> <span class="n">auto</span>
+<span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BufferedWriter</span><span class="p">,</span> <span class="n">RawIOBase</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">IO</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">OrderedDict</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span> <span class="nn">lz4.frame</span>  <span class="c1"># type: ignore</span>
+<span class="kn">import</span> <span class="nn">zstd</span>
+
+<span class="kn">from</span> <span class="nn">.chunk_builder</span> <span class="kn">import</span> <span class="n">ChunkBuilder</span>
+<span class="kn">from</span> <span class="nn">.data_stream</span> <span class="kn">import</span> <span class="n">RecordBuilder</span>
+<span class="kn">from</span> <span class="nn">.opcode</span> <span class="kn">import</span> <span class="n">Opcode</span>
+<span class="kn">from</span> <span class="nn">.records</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Attachment</span><span class="p">,</span>
+    <span class="n">AttachmentIndex</span><span class="p">,</span>
+    <span class="n">Channel</span><span class="p">,</span>
+    <span class="n">Chunk</span><span class="p">,</span>
+    <span class="n">ChunkIndex</span><span class="p">,</span>
+    <span class="n">DataEnd</span><span class="p">,</span>
+    <span class="n">Footer</span><span class="p">,</span>
+    <span class="n">Header</span><span class="p">,</span>
+    <span class="n">Message</span><span class="p">,</span>
+    <span class="n">Metadata</span><span class="p">,</span>
+    <span class="n">MetadataIndex</span><span class="p">,</span>
+    <span class="n">Schema</span><span class="p">,</span>
+    <span class="n">Statistics</span><span class="p">,</span>
+    <span class="n">SummaryOffset</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">MCAP0_MAGIC</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s2">&quot;&lt;8B&quot;</span><span class="p">,</span> <span class="mi">137</span><span class="p">,</span> <span class="mi">77</span><span class="p">,</span> <span class="mi">67</span><span class="p">,</span> <span class="mi">65</span><span class="p">,</span> <span class="mi">80</span><span class="p">,</span> <span class="mi">48</span><span class="p">,</span> <span class="mi">13</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="CompressionType"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.writer.html#mcap.mcap0.writer.CompressionType">[docs]</a><span class="k">class</span> <span class="nc">CompressionType</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">NONE</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">LZ4</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">ZSTD</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="IndexType"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.writer.html#mcap.mcap0.writer.IndexType">[docs]</a><span class="k">class</span> <span class="nc">IndexType</span><span class="p">(</span><span class="n">Flag</span><span class="p">):</span>
+    <span class="n">NONE</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">ATTACHMENT</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">CHUNK</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">MESSAGE</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">METADATA</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
+    <span class="n">ALL</span> <span class="o">=</span> <span class="n">ATTACHMENT</span> <span class="o">|</span> <span class="n">CHUNK</span> <span class="o">|</span> <span class="n">MESSAGE</span> <span class="o">|</span> <span class="n">METADATA</span></div>
+
+
+<div class="viewcode-block" id="Writer"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.writer.html#mcap.mcap0.writer.Writer">[docs]</a><span class="k">class</span> <span class="nc">Writer</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Writes MCAP data.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">output</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">IO</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">BufferedWriter</span><span class="p">],</span>
+        <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span>
+        <span class="n">compression</span><span class="p">:</span> <span class="n">CompressionType</span> <span class="o">=</span> <span class="n">CompressionType</span><span class="o">.</span><span class="n">ZSTD</span><span class="p">,</span>
+        <span class="n">index_types</span><span class="p">:</span> <span class="n">IndexType</span> <span class="o">=</span> <span class="n">IndexType</span><span class="o">.</span><span class="n">ALL</span><span class="p">,</span>
+        <span class="n">repeat_channels</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">repeat_schemas</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">use_chunking</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">use_statistics</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">use_summary_offsets</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        output: The stream to which data should be written.</span>
+<span class="sd">        chunk_size: The maximum size of individual data chunks in a chunked file.</span>
+<span class="sd">        compression: Compression to apply to chunk data, if any.</span>
+<span class="sd">        index_types: Indexes to write to the file. See IndexType for possibilities.</span>
+<span class="sd">        repeat_channels: Repeat channel information at the end of the file.</span>
+<span class="sd">        repeat_schemas: Repeat schemas at the end of the file.</span>
+<span class="sd">        use_chunking: Group data in chunks.</span>
+<span class="sd">        use_statistics: Write statistics record.</span>
+<span class="sd">        use_summary_offsets: Write summary offset records.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">RawIOBase</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span> <span class="o">=</span> <span class="n">BufferedWriter</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span> <span class="o">=</span> <span class="n">output</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span> <span class="o">=</span> <span class="n">RecordBuilder</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__attachment_indexes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">AttachmentIndex</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__metadata_indexes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">MetadataIndex</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__channels</span><span class="p">:</span> <span class="n">OrderedDict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Channel</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span> <span class="o">=</span> <span class="n">ChunkBuilder</span><span class="p">()</span> <span class="k">if</span> <span class="n">use_chunking</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_indices</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">ChunkIndex</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_size</span> <span class="o">=</span> <span class="n">chunk_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__compression</span> <span class="o">=</span> <span class="n">compression</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__index_types</span> <span class="o">=</span> <span class="n">index_types</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__repeat_channels</span> <span class="o">=</span> <span class="n">repeat_channels</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__repeat_schemas</span> <span class="o">=</span> <span class="n">repeat_schemas</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__schemas</span><span class="p">:</span> <span class="n">OrderedDict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Schema</span><span class="p">]</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span> <span class="o">=</span> <span class="n">Statistics</span><span class="p">(</span>
+            <span class="n">attachment_count</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">channel_count</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">channel_message_counts</span><span class="o">=</span><span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">),</span>
+            <span class="n">chunk_count</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">message_count</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">metadata_count</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">message_start_time</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">message_end_time</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">schema_count</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__summary_offsets</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">SummaryOffset</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__use_statistics</span> <span class="o">=</span> <span class="n">use_statistics</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__use_summary_offsets</span> <span class="o">=</span> <span class="n">use_summary_offsets</span>
+
+<div class="viewcode-block" id="Writer.add_attachment"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.writer.html#mcap.mcap0.writer.Writer.add_attachment">[docs]</a>    <span class="k">def</span> <span class="nf">add_attachment</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">create_time</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">log_time</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">content_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span>
+    <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Adds an attachment to the file.</span>
+
+<span class="sd">        :param log_time: Time at which the attachment was recorded.</span>
+<span class="sd">        :param create_time: Time at which the attachment was created. If not available,</span>
+<span class="sd">            must be set to zero.</span>
+<span class="sd">        :param name: Name of the attachment, e.g &quot;scene1.jpg&quot;.</span>
+<span class="sd">        :param content_type: MIME Type (e.g &quot;text/plain&quot;).</span>
+<span class="sd">        :param data: Attachment data.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">attachment_count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">attachment</span> <span class="o">=</span> <span class="n">Attachment</span><span class="p">(</span>
+            <span class="n">create_time</span><span class="o">=</span><span class="n">create_time</span><span class="p">,</span>
+            <span class="n">log_time</span><span class="o">=</span><span class="n">log_time</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">content_type</span><span class="o">=</span><span class="n">content_type</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">attachment</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__index_types</span> <span class="o">&amp;</span> <span class="n">IndexType</span><span class="o">.</span><span class="n">ATTACHMENT</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">AttachmentIndex</span><span class="p">(</span>
+                <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span>
+                <span class="n">length</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="o">.</span><span class="n">count</span><span class="p">,</span>
+                <span class="n">create_time</span><span class="o">=</span><span class="n">attachment</span><span class="o">.</span><span class="n">create_time</span><span class="p">,</span>
+                <span class="n">log_time</span><span class="o">=</span><span class="n">attachment</span><span class="o">.</span><span class="n">log_time</span><span class="p">,</span>
+                <span class="n">data_size</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">attachment</span><span class="o">.</span><span class="n">data</span><span class="p">),</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">attachment</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                <span class="n">content_type</span><span class="o">=</span><span class="n">attachment</span><span class="o">.</span><span class="n">content_type</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__attachment_indexes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Writer.add_message"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.writer.html#mcap.mcap0.writer.Writer.add_message">[docs]</a>    <span class="k">def</span> <span class="nf">add_message</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">channel_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">log_time</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span>
+        <span class="n">publish_time</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">sequence</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Adds a new message to the file. If chunking is enabled the message will be added to the</span>
+<span class="sd">        current chunk.</span>
+
+<span class="sd">        :param channel_id: The id of the channel to which the message should be added.</span>
+<span class="sd">        :param sequence: Optional message counter assigned by publisher.</span>
+<span class="sd">        :param log_time: Time at which the message was recorded.</span>
+<span class="sd">        :param publish_time: Time at which the message was published. If not available, must be set</span>
+<span class="sd">            to the log time.</span>
+<span class="sd">        :param data: Message data, to be decoded according to the schema of the channel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="n">Message</span><span class="p">(</span>
+            <span class="n">channel_id</span><span class="o">=</span><span class="n">channel_id</span><span class="p">,</span>
+            <span class="n">log_time</span><span class="o">=</span><span class="n">log_time</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">publish_time</span><span class="o">=</span><span class="n">publish_time</span><span class="p">,</span>
+            <span class="n">sequence</span><span class="o">=</span><span class="n">sequence</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_start_time</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_start_time</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">log_time</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_end_time</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">log_time</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">channel_message_counts</span><span class="p">[</span><span class="n">message</span><span class="o">.</span><span class="n">channel_id</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="o">.</span><span class="n">add_message</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__maybe_finalize_chunk</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Writer.add_metadata"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.writer.html#mcap.mcap0.writer.Writer.add_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">add_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Adds key-value metadata to the file.</span>
+
+<span class="sd">        :param name: A name to associate with the metadata.</span>
+<span class="sd">        :param data: Key-value metadata.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">metadata_count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="n">Metadata</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">metadata</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__index_types</span> <span class="o">&amp;</span> <span class="n">IndexType</span><span class="o">.</span><span class="n">METADATA</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">MetadataIndex</span><span class="p">(</span>
+                <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span> <span class="n">length</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="o">.</span><span class="n">count</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__metadata_indexes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Writer.finish"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.writer.html#mcap.mcap0.writer.Writer.finish">[docs]</a>    <span class="k">def</span> <span class="nf">finish</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Writes any final indexes, summaries etc to the file. Note that it does</span>
+<span class="sd">        not close the underlying output stream.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__finalize_chunk</span><span class="p">()</span>
+
+        <span class="n">DataEnd</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span>
+
+        <span class="n">summary_start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
+        <span class="n">summary_builder</span> <span class="o">=</span> <span class="n">RecordBuilder</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__repeat_schemas</span><span class="p">:</span>
+            <span class="n">group_start</span> <span class="o">=</span> <span class="n">summary_builder</span><span class="o">.</span><span class="n">count</span>
+            <span class="k">for</span> <span class="n">schema</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__schemas</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="n">schema</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">summary_builder</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__summary_offsets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">SummaryOffset</span><span class="p">(</span>
+                    <span class="n">group_opcode</span><span class="o">=</span><span class="n">Opcode</span><span class="o">.</span><span class="n">SCHEMA</span><span class="p">,</span>
+                    <span class="n">group_start</span><span class="o">=</span><span class="n">summary_start</span> <span class="o">+</span> <span class="n">group_start</span><span class="p">,</span>
+                    <span class="n">group_length</span><span class="o">=</span><span class="n">summary_builder</span><span class="o">.</span><span class="n">count</span> <span class="o">-</span> <span class="n">group_start</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__repeat_channels</span><span class="p">:</span>
+            <span class="n">group_start</span> <span class="o">=</span> <span class="n">summary_builder</span><span class="o">.</span><span class="n">count</span>
+            <span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__channels</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="n">channel</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">summary_builder</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__summary_offsets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">SummaryOffset</span><span class="p">(</span>
+                    <span class="n">group_opcode</span><span class="o">=</span><span class="n">Opcode</span><span class="o">.</span><span class="n">CHANNEL</span><span class="p">,</span>
+                    <span class="n">group_start</span><span class="o">=</span><span class="n">summary_start</span> <span class="o">+</span> <span class="n">group_start</span><span class="p">,</span>
+                    <span class="n">group_length</span><span class="o">=</span><span class="n">summary_builder</span><span class="o">.</span><span class="n">count</span> <span class="o">-</span> <span class="n">group_start</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__use_statistics</span><span class="p">:</span>
+            <span class="n">group_start</span> <span class="o">=</span> <span class="n">summary_builder</span><span class="o">.</span><span class="n">count</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">summary_builder</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__summary_offsets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">SummaryOffset</span><span class="p">(</span>
+                    <span class="n">group_opcode</span><span class="o">=</span><span class="n">Opcode</span><span class="o">.</span><span class="n">STATISTICS</span><span class="p">,</span>
+                    <span class="n">group_start</span><span class="o">=</span><span class="n">summary_start</span> <span class="o">+</span> <span class="n">group_start</span><span class="p">,</span>
+                    <span class="n">group_length</span><span class="o">=</span><span class="n">summary_builder</span><span class="o">.</span><span class="n">count</span> <span class="o">-</span> <span class="n">group_start</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__index_types</span> <span class="o">&amp;</span> <span class="n">IndexType</span><span class="o">.</span><span class="n">CHUNK</span><span class="p">:</span>
+            <span class="n">group_start</span> <span class="o">=</span> <span class="n">summary_builder</span><span class="o">.</span><span class="n">count</span>
+            <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_indices</span><span class="p">:</span>
+                <span class="n">index</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">summary_builder</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__summary_offsets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">SummaryOffset</span><span class="p">(</span>
+                    <span class="n">group_opcode</span><span class="o">=</span><span class="n">Opcode</span><span class="o">.</span><span class="n">CHUNK_INDEX</span><span class="p">,</span>
+                    <span class="n">group_start</span><span class="o">=</span><span class="n">summary_start</span> <span class="o">+</span> <span class="n">group_start</span><span class="p">,</span>
+                    <span class="n">group_length</span><span class="o">=</span><span class="n">summary_builder</span><span class="o">.</span><span class="n">count</span> <span class="o">-</span> <span class="n">group_start</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__index_types</span> <span class="o">&amp;</span> <span class="n">IndexType</span><span class="o">.</span><span class="n">ATTACHMENT</span><span class="p">:</span>
+            <span class="n">group_start</span> <span class="o">=</span> <span class="n">summary_builder</span><span class="o">.</span><span class="n">count</span>
+            <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__attachment_indexes</span><span class="p">:</span>
+                <span class="n">index</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">summary_builder</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__summary_offsets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">SummaryOffset</span><span class="p">(</span>
+                    <span class="n">group_opcode</span><span class="o">=</span><span class="n">Opcode</span><span class="o">.</span><span class="n">ATTACHMENT_INDEX</span><span class="p">,</span>
+                    <span class="n">group_start</span><span class="o">=</span><span class="n">summary_start</span> <span class="o">+</span> <span class="n">group_start</span><span class="p">,</span>
+                    <span class="n">group_length</span><span class="o">=</span><span class="n">summary_builder</span><span class="o">.</span><span class="n">count</span> <span class="o">-</span> <span class="n">group_start</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__index_types</span> <span class="o">&amp;</span> <span class="n">IndexType</span><span class="o">.</span><span class="n">METADATA</span><span class="p">:</span>
+            <span class="n">group_start</span> <span class="o">=</span> <span class="n">summary_builder</span><span class="o">.</span><span class="n">count</span>
+            <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__metadata_indexes</span><span class="p">:</span>
+                <span class="n">index</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">summary_builder</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__summary_offsets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">SummaryOffset</span><span class="p">(</span>
+                    <span class="n">group_opcode</span><span class="o">=</span><span class="n">Opcode</span><span class="o">.</span><span class="n">METADATA_INDEX</span><span class="p">,</span>
+                    <span class="n">group_start</span><span class="o">=</span><span class="n">summary_start</span> <span class="o">+</span> <span class="n">group_start</span><span class="p">,</span>
+                    <span class="n">group_length</span><span class="o">=</span><span class="n">summary_builder</span><span class="o">.</span><span class="n">count</span> <span class="o">-</span> <span class="n">group_start</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="n">summary_offset_start</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">summary_start</span> <span class="o">+</span> <span class="n">summary_builder</span><span class="o">.</span><span class="n">count</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__use_summary_offsets</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__use_summary_offsets</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">offset</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__summary_offsets</span><span class="p">:</span>
+                <span class="n">offset</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">summary_builder</span><span class="p">)</span>
+
+        <span class="n">summary_data</span> <span class="o">=</span> <span class="n">summary_builder</span><span class="o">.</span><span class="n">end</span><span class="p">()</span>
+        <span class="n">summary_length</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">summary_data</span><span class="p">)</span>
+
+        <span class="n">summary_crc</span> <span class="o">=</span> <span class="n">zlib</span><span class="o">.</span><span class="n">crc32</span><span class="p">(</span><span class="n">summary_data</span><span class="p">)</span>
+        <span class="n">summary_crc</span> <span class="o">=</span> <span class="n">zlib</span><span class="o">.</span><span class="n">crc32</span><span class="p">(</span>
+            <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span>
+                <span class="s2">&quot;&lt;BQQQ&quot;</span><span class="p">,</span>  <span class="c1"># cspell:disable-line</span>
+                <span class="n">Opcode</span><span class="o">.</span><span class="n">FOOTER</span><span class="p">,</span>
+                <span class="mi">8</span> <span class="o">+</span> <span class="mi">8</span> <span class="o">+</span> <span class="mi">4</span><span class="p">,</span>
+                <span class="mi">0</span> <span class="k">if</span> <span class="n">summary_length</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">summary_start</span><span class="p">,</span>
+                <span class="n">summary_offset_start</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">summary_crc</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">summary_data</span><span class="p">)</span>
+
+        <span class="n">Footer</span><span class="p">(</span>
+            <span class="n">summary_start</span><span class="o">=</span><span class="mi">0</span> <span class="k">if</span> <span class="n">summary_length</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">summary_start</span><span class="p">,</span>
+            <span class="n">summary_offset_start</span><span class="o">=</span><span class="n">summary_offset_start</span><span class="p">,</span>
+            <span class="n">summary_crc</span><span class="o">=</span><span class="n">summary_crc</span><span class="p">,</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">MCAP0_MAGIC</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Writer.register_channel"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.writer.html#mcap.mcap0.writer.Writer.register_channel">[docs]</a>    <span class="k">def</span> <span class="nf">register_channel</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">topic</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">message_encoding</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">schema_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{},</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Registers a new message channel. Returns the numeric id of the new channel.</span>
+
+<span class="sd">        :param schema_id: The schema for messages on this channel. A schema_id of 0 indicates</span>
+<span class="sd">            there is no schema for this channel.</span>
+<span class="sd">        :param topic: The channel topic.</span>
+<span class="sd">        :param message_encoding: Encoding for messages on this channel. The value should be one</span>
+<span class="sd">            of the well-known message encodings.</span>
+<span class="sd">            Custom values should use the `x-` prefix.</span>
+<span class="sd">        :param metadata: Metadata about this channel.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">channel_id</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__channels</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">channel</span> <span class="o">=</span> <span class="n">Channel</span><span class="p">(</span>
+            <span class="nb">id</span><span class="o">=</span><span class="n">channel_id</span><span class="p">,</span>
+            <span class="n">topic</span><span class="o">=</span><span class="n">topic</span><span class="p">,</span>
+            <span class="n">message_encoding</span><span class="o">=</span><span class="n">message_encoding</span><span class="p">,</span>
+            <span class="n">schema_id</span><span class="o">=</span><span class="n">schema_id</span><span class="p">,</span>
+            <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__channels</span><span class="p">[</span><span class="n">channel_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">channel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">channel_count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="o">.</span><span class="n">add_channel</span><span class="p">(</span><span class="n">channel</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__maybe_finalize_chunk</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">channel</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">channel_id</span></div>
+
+<div class="viewcode-block" id="Writer.register_schema"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.writer.html#mcap.mcap0.writer.Writer.register_schema">[docs]</a>    <span class="k">def</span> <span class="nf">register_schema</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">encoding</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Registers a new message schema. Returns the new integer schema id.</span>
+
+<span class="sd">        :param name: An identifier for the schema.</span>
+<span class="sd">        :param encoding: Format for the schema. The value should be one of the well-known schema</span>
+<span class="sd">            encodings. Custom values should use the `x-` prefix. An empty string indicates no schema</span>
+<span class="sd">            is available.</span>
+<span class="sd">        :param data: Schema data. Must conform to the schema encoding. If `encoding` is an empty</span>
+<span class="sd">            string, `data` should be 0 length.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">schema_id</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__schemas</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">schema</span> <span class="o">=</span> <span class="n">Schema</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">schema_id</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="n">encoding</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__schemas</span><span class="p">[</span><span class="n">schema_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">schema</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">schema_count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="o">.</span><span class="n">add_schema</span><span class="p">(</span><span class="n">schema</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__maybe_finalize_chunk</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">schema</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">schema_id</span></div>
+
+<div class="viewcode-block" id="Writer.start"><a class="viewcode-back" href="../../../apidoc/mcap.mcap0.writer.html#mcap.mcap0.writer.Writer.start">[docs]</a>    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">profile</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">library</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Starts writing to the output stream.</span>
+
+<span class="sd">        :param profile: The profile is used for indicating requirements for fields</span>
+<span class="sd">            throughout the file (encoding, user_data, etc).</span>
+<span class="sd">        :param library: Free-form string for writer to specify its name, version, or other</span>
+<span class="sd">            information for use in debugging.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">MCAP0_MAGIC</span><span class="p">)</span>
+        <span class="n">Header</span><span class="p">(</span><span class="n">profile</span><span class="p">,</span> <span class="n">library</span><span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span></div>
+
+    <span class="k">def</span> <span class="nf">__flush</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="o">.</span><span class="n">end</span><span class="p">())</span>
+
+    <span class="k">def</span> <span class="nf">__finalize_chunk</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="o">.</span><span class="n">num_messages</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">chunk_count</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="n">chunk_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="o">.</span><span class="n">end</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__compression</span> <span class="o">==</span> <span class="n">CompressionType</span><span class="o">.</span><span class="n">LZ4</span><span class="p">:</span>
+            <span class="n">compression</span> <span class="o">=</span> <span class="s2">&quot;lz4&quot;</span>
+            <span class="n">compressed_data</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="n">lz4</span><span class="o">.</span><span class="n">frame</span><span class="o">.</span><span class="n">compress</span><span class="p">(</span><span class="n">chunk_data</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">__compression</span> <span class="o">==</span> <span class="n">CompressionType</span><span class="o">.</span><span class="n">ZSTD</span><span class="p">:</span>
+            <span class="n">compression</span> <span class="o">=</span> <span class="s2">&quot;zstd&quot;</span>
+            <span class="n">compressed_data</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="n">zstd</span><span class="o">.</span><span class="n">ZSTD_compress</span><span class="p">(</span><span class="n">chunk_data</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">compression</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+            <span class="n">compressed_data</span> <span class="o">=</span> <span class="n">chunk_data</span>
+        <span class="n">chunk</span> <span class="o">=</span> <span class="n">Chunk</span><span class="p">(</span>
+            <span class="n">compression</span><span class="o">=</span><span class="n">compression</span><span class="p">,</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">compressed_data</span><span class="p">,</span>
+            <span class="n">message_start_time</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="o">.</span><span class="n">message_start_time</span><span class="p">,</span>
+            <span class="n">message_end_time</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="o">.</span><span class="n">message_end_time</span><span class="p">,</span>
+            <span class="n">uncompressed_crc</span><span class="o">=</span><span class="n">zlib</span><span class="o">.</span><span class="n">crc32</span><span class="p">(</span><span class="n">chunk_data</span><span class="p">),</span>
+            <span class="n">uncompressed_size</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">chunk_data</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span>
+        <span class="n">chunk_start_offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
+        <span class="n">chunk</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
+        <span class="n">chunk_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="o">.</span><span class="n">count</span>
+
+        <span class="n">chunk_index</span> <span class="o">=</span> <span class="n">ChunkIndex</span><span class="p">(</span>
+            <span class="n">message_start_time</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">message_start_time</span><span class="p">,</span>
+            <span class="n">message_end_time</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">message_end_time</span><span class="p">,</span>
+            <span class="n">chunk_start_offset</span><span class="o">=</span><span class="n">chunk_start_offset</span><span class="p">,</span>
+            <span class="n">chunk_length</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+            <span class="n">message_index_offsets</span><span class="o">=</span><span class="p">{},</span>
+            <span class="n">message_index_length</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">compression</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">compression</span><span class="p">,</span>
+            <span class="n">compressed_size</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">uncompressed_size</span><span class="p">,</span>
+            <span class="n">uncompressed_size</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">uncompressed_size</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span>
+        <span class="n">message_index_start_offset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__index_types</span> <span class="o">&amp;</span> <span class="n">IndexType</span><span class="o">.</span><span class="n">MESSAGE</span><span class="p">:</span>
+            <span class="k">for</span> <span class="nb">id</span><span class="p">,</span> <span class="n">index</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="o">.</span><span class="n">message_indices</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">chunk_index</span><span class="o">.</span><span class="n">message_index_offsets</span><span class="p">[</span><span class="nb">id</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">message_index_start_offset</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="o">.</span><span class="n">count</span>
+                <span class="p">)</span>
+                <span class="n">index</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
+
+        <span class="n">chunk_index</span><span class="o">.</span><span class="n">message_index_length</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="o">.</span><span class="n">count</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chunk_index</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">__maybe_finalize_chunk</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="o">.</span><span class="n">count</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_size</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__finalize_chunk</span><span class="p">()</span></div>
+
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;CompressionType&quot;</span><span class="p">,</span> <span class="s2">&quot;IndexType&quot;</span><span class="p">,</span> <span class="s2">&quot;Writer&quot;</span><span class="p">]</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">mcap</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../apidoc/index.html">mcap</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      
+      
+      
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.4.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
