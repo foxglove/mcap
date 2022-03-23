@@ -19,6 +19,9 @@ jobs:
         with:
           python-version: 3.7
           cache: pipenv
+      - uses: fwal/setup-swift@v1
+        with:
+          swift-version: "5.6"
 
       - name: Generate TypeScript documentation
         run: |
@@ -34,16 +37,29 @@ jobs:
           pipenv run sphinx-apidoc --separate --tocfile index --output-dir docs/apidoc mcap
           pipenv run sphinx-build docs ../__docs__/python
 
+      - name: Generate Swift documentation
+        run: |
+          set -x
+          swift package \
+            --allow-writing-to-directory __docs__ \
+            generate-documentation --target mcap \
+            --output-path __docs__/swift \
+            --disable-indexing \
+            --transform-for-static-hosting \
+            --hosting-base-path mcap/swift
+
       - name: Push updated docs to GitHub Pages
         run: |
           set -x
           COMMIT_MSG="Update docs from $GITHUB_REF_NAME ($(git rev-parse --short HEAD))"
           git fetch origin gh-pages
           git checkout gh-pages
-          touch .nojekyll
-          rm -r typescript python
-          cp -R __docs__/{typescript,python} .
-          git add .nojekyll typescript python
+          touch .nojekyll; git add .nojekyll
+          for DIR in typescript python swift; do
+            rm -rf $DIR
+            cp -R __docs__/$DIR .
+            git add $DIR
+          done
           git diff --cached --stat
           if git diff --cached --quiet; then
             echo "No changes to publish"
