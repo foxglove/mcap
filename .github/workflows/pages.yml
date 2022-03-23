@@ -56,7 +56,7 @@ jobs:
             --hosting-base-path mcap/swift
 
       # https://github.com/actions/upload-artifact/issues/85
-      - run: tar -czf __docs__.tar.gz __docs__
+      - run: tar -czf __docs__.tgz __docs__
       - uses: actions/upload-artifact@v3
         # if: github.ref == 'refs/heads/main'
         with:
