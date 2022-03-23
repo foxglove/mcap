@@ -82,17 +82,13 @@ jobs:
       - name: Push updated docs to GitHub Pages
         run: |
           set -x
-          COMMIT_MSG="Update docs from $GITHUB_REF_NAME ($(git rev-parse --short HEAD))"
-          for DIR in typescript python swift cpp; do
-            sudo rm -rf $DIR
-            cp -R __docs__/$DIR .
-            touch $DIR/.nojekyll
-            git add $DIR
-          done
+          sudo rm -rf docs
+          cp -R __docs__ docs
+          git add docs
           git diff --cached --stat
           if git diff --cached --quiet; then
             echo "No changes to publish"
           else
-            git -c user.name=Foxglove -c user.email=contact@foxglove.dev commit -m "$COMMIT_MSG"
+            git -c user.name=Foxglove -c user.email=contact@foxglove.dev commit -m "Update docs from $GITHUB_REF_NAME (${GITHUB_SHA::7})"
             git push origin gh-pages
           fi
