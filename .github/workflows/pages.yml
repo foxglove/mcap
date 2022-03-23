@@ -3,11 +3,11 @@ name: Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: ["*"]
 
 jobs:
-  publish:
-    permissions:
-      contents: write
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: satackey/action-docker-layer-caching@v0.0.11
@@ -55,12 +55,34 @@ jobs:
             --transform-for-static-hosting \
             --hosting-base-path mcap/swift
 
+      # https://github.com/actions/upload-artifact/issues/85
+      - run: tar -czf __docs__.tgz __docs__
+      - uses: actions/upload-artifact@v3
+        # if: github.ref == 'refs/heads/main'
+        with:
+          name: docs-archive
+          path: __docs__.tgz
+
+  publish:
+    # if: github.ref == 'refs/heads/main'
+    needs: build
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: gh-pages
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: docs-archive
+      - run: tar -xf __docs__.tgz && ls __docs__
+
       - name: Push updated docs to GitHub Pages
         run: |
           set -x
           COMMIT_MSG="Update docs from $GITHUB_REF_NAME ($(git rev-parse --short HEAD))"
-          git fetch origin gh-pages
-          git checkout gh-pages
           touch .nojekyll; git add .nojekyll
           for DIR in typescript python swift cpp; do
             sudo rm -rf $DIR
