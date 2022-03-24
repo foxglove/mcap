@@ -21,7 +21,7 @@ jobs:
       - run: tar -czf docs-cpp.tgz __docs__/cpp
       - uses: actions/upload-artifact@v3
         with:
-          name: docs-cpp
+          name: docs-cpp.tgz
           path: docs-cpp.tgz
           retention-days: 1
 
@@ -43,7 +43,7 @@ jobs:
       - run: tar -czf docs-typescript.tgz __docs__/typescript
       - uses: actions/upload-artifact@v3
         with:
-          name: docs-typescript
+          name: docs-typescript.tgz
           path: docs-typescript.tgz
           retention-days: 1
 
@@ -69,7 +69,7 @@ jobs:
       - run: tar -czf docs-python.tgz __docs__/python
       - uses: actions/upload-artifact@v3
         with:
-          name: docs-python
+          name: docs-python.tgz
           path: docs-python.tgz
           retention-days: 1
 
@@ -97,7 +97,7 @@ jobs:
       - run: tar -czf docs-swift.tgz __docs__/swift
       - uses: actions/upload-artifact@v3
         with:
-          name: docs-swift
+          name: docs-swift.tgz
           path: docs-swift.tgz
           retention-days: 1
 
