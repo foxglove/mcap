@@ -27,7 +27,7 @@ class ChunkBuilder:
         schema.write(self.record_writer)
 
     def add_message(self, message: Message):
-        if self.message_start_time == 0:
+        if self.num_messages == 0:
             self.message_start_time = message.log_time
         self.message_end_time = message.log_time
 
