@@ -98,14 +98,14 @@ jobs:
 
           include_files = []
           for dirpath, dirnames, filenames in os.walk("docs"):
-            for filename in filenames:
-              if filename.startswith("_"):
-                include_files.append(os.path.join(dirpath, filename))
+            for name in filenames + dirnames:
+              if name.startswith("_"):
+                include_files.append(os.path.join(dirpath, name))
 
           with open("_config.yml", "r") as f:
             config = yaml.safe_load(f)
           with open("_config.yml", "w") as f:
-            config["includes"] = include_files
+            config["include"] = include_files
             yaml.dump(config, f)
           EOF
 
