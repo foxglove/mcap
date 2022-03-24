@@ -97,16 +97,16 @@ class StreamReader:
                 self.__footer = record
                 read_magic(self.__stream)
 
-    def __init__(self, input: Union[str, RawIOBase, BufferedReader]):
+    def __init__(self, input: Union[str, BytesIO, RawIOBase, BufferedReader]):
         """
         input: The input stream from which to read records.
         """
-        if isinstance(input, BufferedReader):
-            self.__stream = ReadDataStream(input)
-        elif isinstance(input, str):
+        if isinstance(input, str):
             self.__stream = ReadDataStream(open(input, "rb"))
-        else:
+        elif isinstance(input, RawIOBase):
             self.__stream = ReadDataStream(BufferedReader(input))
+        else:
+            self.__stream = ReadDataStream(input)
         self.__footer: Optional[Footer] = None
         self.__magic = False
 
