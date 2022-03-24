@@ -98,8 +98,9 @@ jobs:
 
           include_files = []
           for dirpath, dirnames, filenames in os.walk("docs"):
+            in_underscored_dir = any(segment.startswith("_") for segment in os.path.split(dirpath))
             for name in filenames + dirnames:
-              if name.startswith("_"):
+              if name.startswith("_") or in_underscored_dir:
                 include_files.append(os.path.join(dirpath, name))
 
           with open("_config.yml", "r") as f:
