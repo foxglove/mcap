@@ -29,7 +29,9 @@ class ChunkBuilder:
     def add_message(self, message: Message):
         if self.num_messages == 0:
             self.message_start_time = message.log_time
-        self.message_end_time = message.log_time
+        else:
+            self.message_start_time = min(self.message_start_time, message.log_time)
+        self.message_end_time = max(self.message_end_time, message.log_time)
 
         if not self.message_indices.get(message.channel_id):
             self.message_indices[message.channel_id] = MessageIndex(
