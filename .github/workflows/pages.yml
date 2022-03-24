@@ -85,6 +85,18 @@ jobs:
           sudo rm -rf docs
           cp -R __docs__ docs
           git add docs
+
+          # Update "include" directive in Jekyll config to include files with underscores in build output
+          # https://talk.jekyllrb.com/t/include-all-files-in-a-specific-directory-even-if-the-filenames-start-with-underscores/5849/5
+          sed -i -E 's/^include: \[.+\]$//' _config.yml
+          readarray -d '' INCLUDE_FILES < <(find docs -name '^_' -print0)
+          INCLUDE_LINE=""
+          for f in "${INCLUDE_FILES[@]}"; do
+            INCLUDE_LINE+="$f,"
+          done
+          echo "\ninclude: [$INCLUDE_LINE]" >> _config.yml
+          git add _config.yml
+
           git diff --cached --stat
           if git diff --cached --quiet; then
             echo "No changes to publish"
