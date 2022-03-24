@@ -7,34 +7,56 @@ on:
     branches: ["*"]
 
 jobs:
-  build:
+  build-cpp:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
       - uses: satackey/action-docker-layer-caching@v0.0.11
         continue-on-error: true
+
+      - run: mkdir __docs__
+      - name: Generate C++ documentation
+        run: cd cpp && make ci-docs
+
+      - run: tar -czf docs-cpp.tgz __docs__/cpp
+      - uses: actions/upload-artifact@v3
+        with:
+          name: docs-cpp
+          path: docs-cpp.tgz
+          retention-days: 1
+
+  build-typescript:
+    runs-on: ubuntu-latest
+    steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
           node-version: 16.x
           cache: yarn
-      - uses: actions/setup-python@v3
-        with:
-          python-version: 3.7
-          cache: pipenv
-      - uses: fwal/setup-swift@v1
-        with:
-          swift-version: "5.6"
 
       - run: mkdir __docs__
-
-      - name: Generate C++ documentation
-        run: cd cpp && make ci-docs
-
       - name: Generate TypeScript documentation
         run: |
           yarn install --frozen-lockfile
           yarn typedoc
 
+      - run: tar -czf docs-typescript.tgz __docs__/typescript
+      - uses: actions/upload-artifact@v3
+        with:
+          name: docs-typescript
+          path: docs-typescript.tgz
+          retention-days: 1
+
+  build-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+        with:
+          python-version: 3.7
+          cache: pipenv
+
+      - run: mkdir __docs__
       - name: Generate Python documentation
         run: |
           set -x
@@ -44,6 +66,22 @@ jobs:
           pipenv run sphinx-apidoc --separate --tocfile index --output-dir docs/apidoc mcap
           pipenv run sphinx-build docs ../__docs__/python
 
+      - run: tar -czf docs-python.tgz __docs__/python
+      - uses: actions/upload-artifact@v3
+        with:
+          name: docs-python
+          path: docs-python.tgz
+          retention-days: 1
+
+  build-swift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: fwal/setup-swift@v1
+        with:
+          swift-version: "5.6"
+
+      - run: mkdir __docs__
       - name: Generate Swift documentation
         run: |
           set -x
@@ -56,16 +94,19 @@ jobs:
             --hosting-base-path mcap/docs/swift
 
       # https://github.com/actions/upload-artifact/issues/85
-      - run: tar -czf __docs__.tgz __docs__
+      - run: tar -czf docs-swift.tgz __docs__/swift
       - uses: actions/upload-artifact@v3
-        if: github.ref == 'refs/heads/main'
         with:
-          name: docs-archive
-          path: __docs__.tgz
+          name: docs-swift
+          path: docs-swift.tgz
+          retention-days: 1
 
   publish:
-    if: github.ref == 'refs/heads/main'
-    needs: build
+    needs:
+      - build-cpp
+      - build-typescript
+      - build-python
+      - build-swift
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -79,11 +120,11 @@ jobs:
       - run: pip install pyyaml
 
       - uses: actions/download-artifact@v3
-        with:
-          name: docs-archive
-      - run: tar -xf __docs__.tgz && ls __docs__
+      - run: ls docs-*
+      - run: for f in docs-*/*.tgz; do tar -xf $f; done
+      - run: ls __docs__
 
-      - name: Push updated docs to GitHub Pages
+      - name: Prepare updates to GitHub Pages
         run: |
           set -x
           sudo rm -rf docs
@@ -111,6 +152,10 @@ jobs:
 
           git add _config.yml
           git diff --cached --stat
+
+      - name: Push updates to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        run: |
           if git diff --cached --quiet; then
             echo "No changes to publish"
           else
