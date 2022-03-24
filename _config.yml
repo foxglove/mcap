@@ -1,1 +1,4 @@
-
+include:
+- docs/python/_static
+- docs/python/_sources
+- docs/python/_modules
