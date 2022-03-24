@@ -121,12 +121,14 @@ jobs:
 
       - uses: actions/download-artifact@v3
       - run: ls docs-*
+      - run: for f in docs-*/*.tgz; do tar -xf $f; done
+      - run: ls __docs__
 
       - name: Prepare updates to GitHub Pages
         run: |
           set -x
           sudo rm -rf docs
-          cp -R docs-*/__docs__/* docs
+          cp -R __docs__ docs
           git add docs
 
           # Update "include" directive in Jekyll config to include files with underscores in build output
