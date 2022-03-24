@@ -21,7 +21,7 @@ jobs:
       - run: tar -czf docs-cpp.tgz __docs__/cpp
       - uses: actions/upload-artifact@v3
         with:
-          name: docs-cpp.tgz
+          name: docs-cpp
           path: docs-cpp.tgz
           retention-days: 1
 
@@ -43,7 +43,7 @@ jobs:
       - run: tar -czf docs-typescript.tgz __docs__/typescript
       - uses: actions/upload-artifact@v3
         with:
-          name: docs-typescript.tgz
+          name: docs-typescript
           path: docs-typescript.tgz
           retention-days: 1
 
@@ -69,7 +69,7 @@ jobs:
       - run: tar -czf docs-python.tgz __docs__/python
       - uses: actions/upload-artifact@v3
         with:
-          name: docs-python.tgz
+          name: docs-python
           path: docs-python.tgz
           retention-days: 1
 
@@ -97,7 +97,7 @@ jobs:
       - run: tar -czf docs-swift.tgz __docs__/swift
       - uses: actions/upload-artifact@v3
         with:
-          name: docs-swift.tgz
+          name: docs-swift
           path: docs-swift.tgz
           retention-days: 1
 
@@ -120,15 +120,13 @@ jobs:
       - run: pip install pyyaml
 
       - uses: actions/download-artifact@v3
-
-      - run: for f in *.tgz; do tar -xf $f; done
-      - run: ls __docs__
+      - run: ls docs-*
 
       - name: Prepare updates to GitHub Pages
         run: |
           set -x
           sudo rm -rf docs
-          cp -R __docs__ docs
+          cp -R docs-*/__docs__/* docs
           git add docs
 
           # Update "include" directive in Jekyll config to include files with underscores in build output
