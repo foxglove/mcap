@@ -37,6 +37,7 @@ words:
   - protobuf
   - rosbag
   - rosmsg
+  - rostime
   - stoull
   - struct
   - swiftformat
