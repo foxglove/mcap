@@ -10,17 +10,16 @@ jobs:
   build-cpp:
     runs-on: ubuntu-latest
     steps:
-      - run: mkdir __docs__
       - uses: actions/checkout@v3
       - uses: satackey/action-docker-layer-caching@v0.0.11
         continue-on-error: true
 
+      - run: mkdir __docs__
       - name: Generate C++ documentation
         run: cd cpp && make ci-docs
 
       - run: tar -czf docs-cpp.tgz __docs__/cpp
       - uses: actions/upload-artifact@v3
-        if: github.ref == 'refs/heads/main'
         with:
           name: docs-cpp
           path: docs-cpp.tgz
@@ -29,13 +28,13 @@ jobs:
   build-typescript:
     runs-on: ubuntu-latest
     steps:
-      - run: mkdir __docs__
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
           node-version: 16.x
           cache: yarn
 
+      - run: mkdir __docs__
       - name: Generate TypeScript documentation
         run: |
           yarn install --frozen-lockfile
@@ -43,7 +42,6 @@ jobs:
 
       - run: tar -czf docs-typescript.tgz __docs__/typescript
       - uses: actions/upload-artifact@v3
-        if: github.ref == 'refs/heads/main'
         with:
           name: docs-typescript
           path: docs-typescript.tgz
@@ -52,13 +50,13 @@ jobs:
   build-python:
     runs-on: ubuntu-latest
     steps:
-      - run: mkdir __docs__
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v3
         with:
           python-version: 3.7
           cache: pipenv
 
+      - run: mkdir __docs__
       - name: Generate Python documentation
         run: |
           set -x
@@ -70,7 +68,6 @@ jobs:
 
       - run: tar -czf docs-python.tgz __docs__/python
       - uses: actions/upload-artifact@v3
-        if: github.ref == 'refs/heads/main'
         with:
           name: docs-python
           path: docs-python.tgz
@@ -79,12 +76,12 @@ jobs:
   build-swift:
     runs-on: ubuntu-latest
     steps:
-      - run: mkdir __docs__
       - uses: actions/checkout@v3
       - uses: fwal/setup-swift@v1
         with:
           swift-version: "5.6"
 
+      - run: mkdir __docs__
       - name: Generate Swift documentation
         run: |
           set -x
@@ -99,7 +96,6 @@ jobs:
       # https://github.com/actions/upload-artifact/issues/85
       - run: tar -czf docs-swift.tgz __docs__/swift
       - uses: actions/upload-artifact@v3
-        if: github.ref == 'refs/heads/main'
         with:
           name: docs-swift
           path: docs-swift.tgz
