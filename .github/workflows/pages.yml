@@ -103,7 +103,7 @@ jobs:
                 include_files.append(os.path.join(dirpath, name))
 
           with open("_config.yml", "r") as f:
-            config = yaml.safe_load(f)
+            config = yaml.safe_load(f) or {}
           with open("_config.yml", "w") as f:
             config["include"] = include_files
             yaml.dump(config, f)
