@@ -41,3 +41,4 @@ include:
 - docs/python/_modules/mcap/mcap0/data_stream.html
 - docs/python/_modules/mcap/mcap0/records.html
 - docs/python/_modules/mcap/mcap0/opcode.html
+\ninclude: []
