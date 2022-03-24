@@ -58,13 +58,13 @@ jobs:
       # https://github.com/actions/upload-artifact/issues/85
       - run: tar -czf __docs__.tgz __docs__
       - uses: actions/upload-artifact@v3
-        if: github.ref == 'refs/heads/main'
+        # if: github.ref == 'refs/heads/main'
         with:
           name: docs-archive
           path: __docs__.tgz
 
   publish:
-    if: github.ref == 'refs/heads/main'
+    # if: github.ref == 'refs/heads/main'
     needs: build
     permissions:
       contents: write
@@ -73,6 +73,10 @@ jobs:
       - uses: actions/checkout@v3
         with:
           ref: gh-pages
+      - uses: actions/setup-python@v3
+        with:
+          python-version: 3.7
+      - run: pip install pyyaml
 
       - uses: actions/download-artifact@v3
         with:
@@ -88,15 +92,24 @@ jobs:
 
           # Update "include" directive in Jekyll config to include files with underscores in build output
           # https://talk.jekyllrb.com/t/include-all-files-in-a-specific-directory-even-if-the-filenames-start-with-underscores/5849/5
-          sed -i -E 's/^include: \[.+\]$//' _config.yml
-          readarray -d '' INCLUDE_FILES < <(find docs -name '^_' -print0)
-          INCLUDE_LINE=""
-          for f in "${INCLUDE_FILES[@]}"; do
-            INCLUDE_LINE+="$f,"
-          done
-          echo "\ninclude: [$INCLUDE_LINE]" >> _config.yml
-          git add _config.yml
+          python3 <<EOF
+          import os
+          import yaml
 
+          include_files = []
+          for dirpath, dirnames, filenames in os.walk("docs"):
+            for filename in filenames:
+              if filename.startswith("_"):
+                include_files.append(os.path.join(dirpath, filename))
+
+          with open("_config.yml", "r") as f:
+            config = yaml.safe_load(f)
+          with open("_config.yml", "w") as f:
+            config["includes"] = include_files
+            yaml.dump(config, f)
+          EOF
+
+          git add _config.yml
           git diff --cached --stat
           if git diff --cached --quiet; then
             echo "No changes to publish"
