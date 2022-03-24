@@ -98,10 +98,9 @@ jobs:
 
           include_files = []
           for dirpath, dirnames, filenames in os.walk("docs"):
-            in_underscored_dir = any(segment.startswith("_") for segment in os.path.normpath(dirpath).split(os.path.sep))
-            for name in filenames + dirnames:
-              if name.startswith("_") or in_underscored_dir:
-                include_files.append(os.path.join(dirpath, name))
+            for name in dirnames:
+              if name.startswith("_"):
+                include_files.append(name)  # As of Jekyll 3.9, the full path does not work, each dir name must be provided separately
 
           with open("_config.yml", "r") as f:
             config = yaml.safe_load(f) or {}
