@@ -158,7 +158,7 @@ jobs:
           git diff --cached --stat
 
       - name: Push updates to GitHub Pages
-        if: github.ref == 'refs/heads/main'
+        # if: github.ref == 'refs/heads/main'
         run: |
           if git diff --cached --quiet; then
             echo "No changes to publish"
