@@ -7,6 +7,28 @@ on:
     branches: ["*"]
 
 jobs:
+  build-pages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+          cache: yarn
+
+      - name: Build documentation site
+        run: |
+          yarn install --frozen-lockfile
+          yarn docs:build
+          mkdir __pages__
+          cp -R docs/gh-pages/*.html docs/gh-pages/dist __pages__
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: __pages__
+          path: __pages__
+          retention-days: 1
+
   build-cpp:
     runs-on: ubuntu-latest
     steps:
@@ -103,6 +125,7 @@ jobs:
 
   publish:
     needs:
+      - build-pages
       - build-cpp
       - build-typescript
       - build-python
@@ -114,43 +137,24 @@ jobs:
       - uses: actions/checkout@v3
         with:
           ref: gh-pages
-      - uses: actions/setup-python@v3
-        with:
-          python-version: 3.7
-      - run: pip install pyyaml
 
       - uses: actions/download-artifact@v3
-      - run: ls docs-*
-      - run: for f in docs-*/*.tgz; do tar -xf $f; done
-      - run: ls __docs__
 
       - name: Prepare updates to GitHub Pages
         run: |
           set -x
-          sudo rm -rf docs
-          cp -R __docs__ docs
-          git add docs
 
-          # Update "include" directive in Jekyll config to include files with underscores in build output
-          # https://talk.jekyllrb.com/t/include-all-files-in-a-specific-directory-even-if-the-filenames-start-with-underscores/5849/5
-          python3 <<EOF
-          import os
-          import yaml
+          # Extract generated API docs
+          rm -rf docs
+          for f in docs-*/*.tgz; do tar -xf $f; done
+          cp -R __docs__ docs && rm -r __docs__ docs-*
 
-          include_files = []
-          for dirpath, dirnames, filenames in os.walk("docs"):
-            for name in dirnames:
-              if name.startswith("_"):
-                include_files.append(name)  # As of Jekyll 3.9, the full path does not work, each dir name must be provided separately
+          # Extract main site
+          rm -rf *.html dist
+          cp -R __pages__/* . && rm -r __pages__
 
-          with open("_config.yml", "r") as f:
-            config = yaml.safe_load(f) or {}
-          with open("_config.yml", "w") as f:
-            config["include"] = include_files
-            yaml.dump(config, f)
-          EOF
-
-          git add _config.yml
+          ls . docs
+          git add .
           git diff --cached --stat
 
       - name: Push updates to GitHub Pages

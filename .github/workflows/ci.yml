@@ -134,7 +134,7 @@ jobs:
           cache: yarn
 
       - run: yarn install --frozen-lockfile
-      - run: yarn lint:docs
+      - run: yarn docs:lint
 
   cpp:
     runs-on: ubuntu-latest
