@@ -2,8 +2,60 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  body {
+    @apply p-6;
+    @apply bg-white text-black;
+    @apply dark:bg-zinc-800 dark:text-gray-100;
+  }
+  h2 {
+    @apply text-2xl font-bold mt-4 mb-2;
+  }
+
+  a {
+    @apply text-sky-600 dark:text-sky-400;
+  }
+  a:hover {
+    @apply text-sky-800 dark:text-sky-400 underline;
+  }
+
+  h1 a,
+  h1 a:hover {
+    @apply text-black dark:text-gray-100 no-underline;
+  }
+}
+
 @layer components {
   .card {
-    @apply bg-white shadow-lg rounded-lg;
+    @apply shadow-sm rounded-lg border;
+    @apply p-2 text-center;
+    @apply grow basis-0;
+  }
+
+  .glossary {
+    @apply table mx-8;
+  }
+  .glossary div {
+    @apply table-row;
+  }
+  .glossary dt {
+    @apply table-cell w-1 pr-2;
+    @apply font-bold italic;
+  }
+  .glossary dd {
+    @apply table-cell pb-2;
+  }
+
+  .links {
+    @apply mx-8 space-x-4;
+  }
+  .links a {
+    @apply border-sky-400 border-b text-black dark:text-gray-100 no-underline;
+  }
+  .links a::after {
+    content: " →";
+  }
+  .links a:hover {
+    @apply border-b-2;
   }
 }
