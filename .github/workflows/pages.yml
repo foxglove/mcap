@@ -19,7 +19,7 @@ jobs:
       - name: Build documentation site
         run: |
           yarn install --frozen-lockfile
-          yarn docs:build
+          yarn docs:build --minify
           mkdir __pages__
           cp -R docs/gh-pages/*.html docs/gh-pages/dist __pages__
 
