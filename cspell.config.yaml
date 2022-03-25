@@ -17,6 +17,7 @@ ignorePaths:
   - "*.mcap"
   - "*.egg-info"
   - "*.patch"
+  - package.json
 
 words:
   - cbor
