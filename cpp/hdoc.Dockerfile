@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends --no-install-su
     xxd \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --user meson
+RUN pip install meson
 RUN git clone https://github.com/hdoc/hdoc.git /hdoc --depth 1 --branch 1.2.2 --single-branch
 
 WORKDIR /hdoc
@@ -22,5 +22,5 @@ WORKDIR /hdoc
 COPY hdoc.patch /hdoc.patch
 RUN git apply /hdoc.patch
 
-RUN ~/.local/bin/meson build
+RUN meson --buildtype=release build
 RUN ninja -C build hdoc
