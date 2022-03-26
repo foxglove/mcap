@@ -73,3 +73,32 @@ int32 foo
 		assert.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
 	})
 }
+
+func TestMessageTopicRegex(t *testing.T) {
+	cases := []struct {
+		assertion string
+		input     string
+		match     bool
+	}{
+		{
+			"message topic",
+			"turtlesim/msg/Pose",
+			true,
+		},
+		{
+			"message topic",
+			"action_msgs/msg/GoalStatusArray",
+			true,
+		},
+		{
+			"action topic",
+			"action_msgs/action/GoalStatusArray",
+			false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.assertion, func(t *testing.T) {
+			assert.Equal(t, c.match, messageTopicRegex.MatchString(c.input))
+		})
+	}
+}
