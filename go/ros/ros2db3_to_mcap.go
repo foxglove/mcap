@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/foxglove/mcap/go/mcap"
@@ -180,7 +181,13 @@ func getTopics(db *sql.DB) ([]topicsRecord, error) {
 		if err != nil {
 			return nil, err
 		}
-		topics = append(topics, record)
+		isMsg, err := regexp.MatchString(`\w+/msg/.*`, record.typ)
+		if err != nil {
+			return nil, err
+		}
+		if isMsg {
+			topics = append(topics, record)
+		}
 	}
 	return topics, nil
 }
