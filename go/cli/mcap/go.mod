@@ -7,7 +7,6 @@ require (
 	github.com/fatih/color v1.13.0
 	github.com/foxglove/mcap/go/mcap v0.0.0-20220316142927-cc81709134cd
 	github.com/foxglove/mcap/go/ros v0.0.0-20220316142927-cc81709134cd
-	github.com/golang/protobuf v1.5.2
 	github.com/klauspost/compress v1.14.1
 	github.com/mattn/go-sqlite3 v1.14.11
 	github.com/olekukonko/tablewriter v0.0.5
@@ -23,6 +22,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.1.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
