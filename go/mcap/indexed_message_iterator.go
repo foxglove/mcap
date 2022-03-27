@@ -230,25 +230,27 @@ func (it *indexedMessageIterator) loadNextChunkset() error {
 	it.messageOffsets = it.messageOffsets[:0]
 	chunkset := it.chunksets[it.activeChunksetIndex]
 	for i, chunkIndex := range chunkset {
-		for channelID, offset := range chunkIndex.MessageIndexOffsets {
-			if _, ok := it.channels[channelID]; !ok {
-				continue
-			}
-			err := it.seekFile(int64(offset))
-			if err != nil {
-				return err
-			}
-			// now we're at the message index implicated by the chunk; parse one record
+
+		// read the full message index section in one pass, discarding records
+		// for irrelevant channels
+		err := it.seekFile(int64(chunkIndex.ChunkStartOffset + chunkIndex.ChunkLength))
+		if err != nil {
+			return err
+		}
+		for {
 			tokenType, record, err := it.lexer.Next(nil)
 			if err != nil {
 				return err
 			}
 			if tokenType != TokenMessageIndex {
-				return fmt.Errorf("unexpected token %s in message index section", tokenType)
+				break
 			}
 			messageIndex, err := ParseMessageIndex(record)
 			if err != nil {
-				return fmt.Errorf("failed to parse message index at %d", offset)
+				return fmt.Errorf("failed to parse message index: %w", err)
+			}
+			if _, ok := it.channels[messageIndex.ChannelID]; !ok {
+				continue
 			}
 			for _, record := range messageIndex.Records {
 				if (it.start == 0 && it.end == 0) || (record.Timestamp >= it.start && record.Timestamp < it.end) {
