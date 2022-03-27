@@ -5,15 +5,15 @@ go 1.18
 require (
 	cloud.google.com/go/storage v1.10.0
 	github.com/fatih/color v1.13.0
-	github.com/foxglove/mcap/go/mcap v0.0.0-20220316142927-cc81709134cd
-	github.com/foxglove/mcap/go/ros v0.0.0-20220316142927-cc81709134cd
-	github.com/klauspost/compress v1.14.1
+	github.com/foxglove/mcap/go/mcap v0.0.0-20220327175234-334b8cd18647
+	github.com/foxglove/mcap/go/ros v0.0.0-20220327175234-334b8cd18647
+	github.com/klauspost/compress v1.15.1
 	github.com/mattn/go-sqlite3 v1.14.11
 	github.com/olekukonko/tablewriter v0.0.5
-	github.com/pierrec/lz4/v4 v4.1.12
+	github.com/pierrec/lz4/v4 v4.1.14
 	github.com/spf13/cobra v1.3.0
 	github.com/spf13/viper v1.10.1
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.7.1
 	google.golang.org/protobuf v1.27.1
 )
 
