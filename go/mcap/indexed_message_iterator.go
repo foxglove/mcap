@@ -237,7 +237,7 @@ func (it *indexedMessageIterator) loadNextChunkset() error {
 		if err != nil {
 			return err
 		}
-		for {
+		for range chunkIndex.MessageIndexOffsets {
 			tokenType, record, err := it.lexer.Next(nil)
 			if err != nil {
 				return err
