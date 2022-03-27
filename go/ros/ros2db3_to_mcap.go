@@ -8,9 +8,14 @@ import (
 	"io"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/foxglove/mcap/go/mcap"
+)
+
+var (
+	messageTopicRegex = regexp.MustCompile(`\w+/msg/.*`)
 )
 
 func getSchema(encoding string, rosType string, directories []string) ([]byte, error) {
@@ -180,7 +185,9 @@ func getTopics(db *sql.DB) ([]topicsRecord, error) {
 		if err != nil {
 			return nil, err
 		}
-		topics = append(topics, record)
+		if messageTopicRegex.MatchString(record.typ) {
+			topics = append(topics, record)
+		}
 	}
 	return topics, nil
 }
