@@ -1,4 +1,4 @@
-import Foundation
+import struct Foundation.Data
 
 public protocol IWritable {
   func position() -> UInt64

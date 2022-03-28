@@ -23,13 +23,12 @@ enum TestRecord {
 }
 
 // swiftlint:disable force_cast
-@main
-enum ConformanceRunner {
+enum WriteConformanceRunner {
   static func main() async throws {
-    if CommandLine.arguments.count < 2 {
-      fatalError("Usage: conformance [test-data.json]")
+    if CommandLine.arguments.count < 3 {
+      fatalError("Usage: conformance write [test-data.json]")
     }
-    let filename = CommandLine.arguments[1]
+    let filename = CommandLine.arguments[2]
     let data = try Data(contentsOf: URL(fileURLWithPath: filename))
 
     let testData = try JSONSerialization.jsonObject(with: data) as! [String: Any]

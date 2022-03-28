@@ -9,10 +9,13 @@ export default class SwiftWriterTestRunner extends WriteTestRunner {
   readonly name = "swift-writer";
 
   async runWriteTest(filePath: string): Promise<Uint8Array> {
-    const { stdout, stderr } = await promisify(exec)(`./.build/debug/conformance ${filePath}`, {
-      cwd: path.join(__dirname, "../../../../.."),
-      encoding: undefined,
-    });
+    const { stdout, stderr } = await promisify(exec)(
+      `./.build/debug/conformance write ${filePath}`,
+      {
+        cwd: path.join(__dirname, "../../../../.."),
+        encoding: undefined,
+      },
+    );
 
     if (stderr instanceof Buffer) {
       const errText = new TextDecoder().decode(stderr);
