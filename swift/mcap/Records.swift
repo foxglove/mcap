@@ -13,6 +13,7 @@ public enum MCAPReadError: Error {
   case stringLengthBeyondBounds
   case dataLengthBeyondBounds
   case invalidCRC
+  case extraneousDataInChunk
 }
 
 public enum Opcode: UInt8 {
@@ -539,10 +540,11 @@ public struct Attachment: Record {
     name = try buffer.readPrefixedString(from: &offset)
     contentType = try buffer.readPrefixedString(from: &offset)
     data = try buffer.readUInt64PrefixedData(from: &offset)
+    let crcEndOffset = offset
     let expectedCRC = try buffer.read(littleEndian: UInt32.self, from: &offset)
     if expectedCRC != 0 {
       var crc = CRC32()
-      crc.update(buffer[..<offset])
+      crc.update(buffer[..<crcEndOffset])
       if expectedCRC != crc.final {
         throw MCAPReadError.invalidCRC
       }

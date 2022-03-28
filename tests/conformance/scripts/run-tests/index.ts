@@ -3,7 +3,7 @@ import colors from "colors";
 import { program } from "commander";
 import * as Diff from "diff";
 import fs from "fs/promises";
-import stringify from "json-stringify-pretty-compact";
+import stableStringify from "json-stable-stringify";
 import { chunk } from "lodash";
 import path from "path";
 
@@ -35,7 +35,7 @@ function normalizeJson(json: string, { ignoreDataEnd }: { ignoreDataEnd: boolean
   if (ignoreDataEnd) {
     data.records = data.records.filter((record) => record.type !== "DataEnd");
   }
-  return stringify(data) + "\n";
+  return stableStringify(data, { space: 2 }) + "\n";
 }
 
 function spaceHexString(s: string): string {
@@ -87,7 +87,9 @@ async function runReaderTest(
       const expectedNorm = normalizeJson(expectedOutput, { ignoreDataEnd: !runner.readsDataEnd });
       if (outputNorm !== expectedNorm) {
         console.error(`Error: output did not match expected for ${filePath}:`);
-        console.error(Diff.createPatch(expectedOutputPath, expectedNorm, outputNorm));
+        console.error(
+          Diff.createPatch(expectedOutputPath, expectedNorm, outputNorm, "expected", "actual"),
+        );
         hadError = true;
         continue;
       }
