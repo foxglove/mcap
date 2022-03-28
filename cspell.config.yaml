@@ -56,6 +56,8 @@ overrides:
   - filename: "**/*.go"
     words:
       - libmcap
+      - descriptorpb
+      - dynamicpb
     ignoreRegExpList:
       - '"github\.com.+?"'
 
