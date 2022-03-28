@@ -5,8 +5,8 @@ go 1.18
 require (
 	cloud.google.com/go/storage v1.10.0
 	github.com/fatih/color v1.13.0
-	github.com/foxglove/mcap/go/mcap v0.0.0-20220327175234-334b8cd18647
-	github.com/foxglove/mcap/go/ros v0.0.0-00010101000000-000000000000
+	github.com/foxglove/mcap/go/mcap v0.0.0-20220327180501-aee9d6ef565b
+	github.com/foxglove/mcap/go/ros v0.0.0-20220327180501-aee9d6ef565b
 	github.com/klauspost/compress v1.15.1
 	github.com/mattn/go-sqlite3 v1.14.11
 	github.com/olekukonko/tablewriter v0.0.5
@@ -52,5 +52,3 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
-
-replace github.com/foxglove/mcap/go/ros => ../../ros
