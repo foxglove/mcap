@@ -1,7 +1,7 @@
 import { exec } from "child_process";
 import path from "path";
 import { promisify } from "util";
-import { TestFeatures, TestVariant } from "variants/types";
+import { TestVariant } from "variants/types";
 
 import { ReadTestRunner } from "./TestRunner";
 
@@ -17,11 +17,7 @@ export default class SwiftStreamedReaderTestRunner extends ReadTestRunner {
     return stdout;
   }
 
-  supportsVariant(variant: TestVariant): boolean {
-    if (variant.features.has(TestFeatures.AddExtraDataToRecords)) {
-      return false;
-    }
-
+  supportsVariant(_variant: TestVariant): boolean {
     return true;
   }
 }
