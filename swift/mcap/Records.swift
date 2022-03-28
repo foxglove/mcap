@@ -7,6 +7,15 @@ public typealias Timestamp = UInt64
 // swiftlint:disable:next identifier_name
 public let MCAP0_MAGIC = Data([137, 77, 67, 65, 80, 48, 13, 10])
 
+public enum MCAPReadError: Error {
+  case invalidMagic
+  case readBeyondBounds
+  case stringLengthBeyondBounds
+  case dataLengthBeyondBounds
+  case invalidCRC
+  case extraneousDataInChunk
+}
+
 public enum Opcode: UInt8 {
   case header = 0x01
   case footer = 0x02
@@ -27,6 +36,7 @@ public enum Opcode: UInt8 {
 
 public protocol Record {
   static var opcode: Opcode { get }
+  init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws
   func serializeFields(to data: inout Data)
 }
 
@@ -66,7 +76,7 @@ func prefixedTupleArrayLength<K: UnsignedInteger, V: UnsignedInteger>(_ arr: [(K
   MemoryLayout<UInt32>.size + arr.count * (MemoryLayout<K>.size + MemoryLayout<V>.size)
 }
 
-extension Data {
+private extension Data {
   mutating func append<T: FixedWidthInteger & UnsignedInteger>(littleEndian value: T) {
     Swift.withUnsafeBytes(of: value.littleEndian) {
       append($0.bindMemory(to: UInt8.self))
@@ -133,6 +143,89 @@ extension Data {
   }
 }
 
+private extension UnsafeRawBufferPointer {
+  func read<T: FixedWidthInteger & UnsignedInteger>(littleEndian _: T.Type, from offset: inout Int) throws -> T {
+    if offset + MemoryLayout<T>.size > self.count {
+      throw MCAPReadError.readBeyondBounds
+    }
+    defer { offset += MemoryLayout<T>.size }
+    var rawValue: T = 0
+    withUnsafeMutableBytes(of: &rawValue) {
+      $0.copyMemory(from: UnsafeRawBufferPointer(rebasing: self[offset ..< offset + MemoryLayout<T>.size]))
+    }
+    return T(littleEndian: rawValue)
+  }
+
+  func readPrefixedString(from offset: inout Int) throws -> String {
+    let length = try read(littleEndian: UInt32.self, from: &offset)
+    if offset + Int(length) > self.count {
+      throw MCAPReadError.stringLengthBeyondBounds
+    }
+    defer { offset += Int(length) }
+    return String(decoding: self[offset ..< offset + Int(length)], as: UTF8.self)
+  }
+
+  func readUInt32PrefixedData(from offset: inout Int) throws -> Data {
+    let length = try read(littleEndian: UInt32.self, from: &offset)
+    if offset + Int(length) > self.count {
+      throw MCAPReadError.dataLengthBeyondBounds
+    }
+    defer { offset += Int(length) }
+    return Data(self[offset ..< offset + Int(length)])
+  }
+
+  func readUInt64PrefixedData(from offset: inout Int) throws -> Data {
+    let length = try read(littleEndian: UInt64.self, from: &offset)
+    if offset + Int(length) > self.count {
+      throw MCAPReadError.dataLengthBeyondBounds
+    }
+    defer { offset += Int(length) }
+    return Data(self[offset ..< offset + Int(length)])
+  }
+
+  func readPrefixedStringMap(from offset: inout Int) throws -> [String: String] {
+    let size = try read(littleEndian: UInt32.self, from: &offset)
+    var result: [String: String] = [:]
+    let subrange = UnsafeRawBufferPointer(rebasing: self[offset ..< offset + Int(size)])
+    var subrangeOffset = 0
+    while subrangeOffset < subrange.count {
+      let key = try subrange.readPrefixedString(from: &subrangeOffset)
+      let value = try subrange.readPrefixedString(from: &subrangeOffset)
+      result[key] = value
+    }
+    offset += subrangeOffset
+    return result
+  }
+
+  func readPrefixedTupleArray(from offset: inout Int) throws -> [(UInt64, UInt64)] {
+    let size = try read(littleEndian: UInt32.self, from: &offset)
+    var result: [(UInt64, UInt64)] = []
+    let subrange = UnsafeRawBufferPointer(rebasing: self[offset ..< offset + Int(size)])
+    var subrangeOffset = 0
+    while subrangeOffset < subrange.count {
+      let key = try subrange.read(littleEndian: UInt64.self, from: &subrangeOffset)
+      let value = try subrange.read(littleEndian: UInt64.self, from: &subrangeOffset)
+      result.append((key, value))
+    }
+    offset += subrangeOffset
+    return result
+  }
+
+  func readPrefixedMap(from offset: inout Int) throws -> [UInt16: UInt64] {
+    let size = try read(littleEndian: UInt32.self, from: &offset)
+    var result: [UInt16: UInt64] = [:]
+    let subrange = UnsafeRawBufferPointer(rebasing: self[offset ..< offset + Int(size)])
+    var subrangeOffset = 0
+    while subrangeOffset < subrange.count {
+      let key = try subrange.read(littleEndian: UInt16.self, from: &subrangeOffset)
+      let value = try subrange.read(littleEndian: UInt64.self, from: &subrangeOffset)
+      result[key] = value
+    }
+    offset += subrangeOffset
+    return result
+  }
+}
+
 public struct Header: Record {
   public static let opcode = Opcode.header
   public var profile: String
@@ -141,6 +234,12 @@ public struct Header: Record {
   public init(profile: String, library: String) {
     self.profile = profile
     self.library = library
+  }
+
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    profile = try buffer.readPrefixedString(from: &offset)
+    library = try buffer.readPrefixedString(from: &offset)
   }
 
   public func serializeFields(to data: inout Data) {
@@ -159,6 +258,13 @@ public struct Footer: Record {
     self.summaryStart = summaryStart
     self.summaryOffsetStart = summaryOffsetStart
     self.summaryCRC = summaryCRC
+  }
+
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    summaryStart = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    summaryOffsetStart = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    summaryCRC = try buffer.read(littleEndian: UInt32.self, from: &offset)
   }
 
   public func serializeFields(to data: inout Data) {
@@ -180,6 +286,14 @@ public struct Schema: Record {
     self.name = name
     self.encoding = encoding
     self.data = data
+  }
+
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    id = try buffer.read(littleEndian: SchemaID.self, from: &offset)
+    name = try buffer.readPrefixedString(from: &offset)
+    encoding = try buffer.readPrefixedString(from: &offset)
+    data = try buffer.readUInt32PrefixedData(from: &offset)
   }
 
   public func serializeFields(to data: inout Data) {
@@ -212,6 +326,15 @@ public struct Channel: Record {
     self.metadata = metadata
   }
 
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    id = try buffer.read(littleEndian: ChannelID.self, from: &offset)
+    schemaID = try buffer.read(littleEndian: SchemaID.self, from: &offset)
+    topic = try buffer.readPrefixedString(from: &offset)
+    messageEncoding = try buffer.readPrefixedString(from: &offset)
+    metadata = try buffer.readPrefixedStringMap(from: &offset)
+  }
+
   public func serializeFields(to data: inout Data) {
     data.append(littleEndian: id)
     data.append(littleEndian: schemaID)
@@ -241,6 +364,15 @@ public struct Message: Record {
     self.logTime = logTime
     self.publishTime = publishTime
     self.data = data
+  }
+
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    channelID = try buffer.read(littleEndian: ChannelID.self, from: &offset)
+    sequence = try buffer.read(littleEndian: UInt32.self, from: &offset)
+    logTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
+    publishTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
+    data = Data(buffer.suffix(from: offset))
   }
 
   public func serializeFields(to data: inout Data) {
@@ -277,6 +409,16 @@ public struct Chunk: Record {
     self.records = records
   }
 
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    messageStartTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
+    messageEndTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
+    uncompressedSize = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    uncompressedCRC = try buffer.read(littleEndian: UInt32.self, from: &offset)
+    compression = try buffer.readPrefixedString(from: &offset)
+    records = try buffer.readUInt64PrefixedData(from: &offset)
+  }
+
   public func serializeFields(to data: inout Data) {
     data.append(littleEndian: messageStartTime)
     data.append(littleEndian: messageEndTime)
@@ -295,6 +437,12 @@ public struct MessageIndex: Record {
   public init(channelID: ChannelID, records: [(logTime: Timestamp, offset: UInt64)]) {
     self.channelID = channelID
     self.records = records
+  }
+
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    channelID = try buffer.read(littleEndian: ChannelID.self, from: &offset)
+    records = try buffer.readPrefixedTupleArray(from: &offset)
   }
 
   public func serializeFields(to data: inout Data) {
@@ -337,6 +485,19 @@ public struct ChunkIndex: Record {
     self.uncompressedSize = uncompressedSize
   }
 
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    messageStartTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
+    messageEndTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
+    chunkStartOffset = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    chunkLength = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    messageIndexOffsets = try buffer.readPrefixedMap(from: &offset)
+    messageIndexLength = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    compression = try buffer.readPrefixedString(from: &offset)
+    compressedSize = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    uncompressedSize = try buffer.read(littleEndian: UInt64.self, from: &offset)
+  }
+
   public func serializeFields(to data: inout Data) {
     data.append(littleEndian: messageStartTime)
     data.append(littleEndian: messageEndTime)
@@ -370,6 +531,24 @@ public struct Attachment: Record {
     self.name = name
     self.contentType = contentType
     self.data = data
+  }
+
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    logTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
+    createTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
+    name = try buffer.readPrefixedString(from: &offset)
+    contentType = try buffer.readPrefixedString(from: &offset)
+    data = try buffer.readUInt64PrefixedData(from: &offset)
+    let crcEndOffset = offset
+    let expectedCRC = try buffer.read(littleEndian: UInt32.self, from: &offset)
+    if expectedCRC != 0 {
+      var crc = CRC32()
+      crc.update(buffer[..<crcEndOffset])
+      if expectedCRC != crc.final {
+        throw MCAPReadError.invalidCRC
+      }
+    }
   }
 
   public func serializeFields(to data: inout Data) {
@@ -411,6 +590,17 @@ public struct AttachmentIndex: Record {
     self.dataSize = dataSize
     self.name = name
     self.contentType = contentType
+  }
+
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    self.offset = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    length = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    logTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
+    createTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
+    dataSize = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    name = try buffer.readPrefixedString(from: &offset)
+    contentType = try buffer.readPrefixedString(from: &offset)
   }
 
   public func serializeFields(to data: inout Data) {
@@ -458,6 +648,19 @@ public struct Statistics: Record {
     self.channelMessageCounts = channelMessageCounts
   }
 
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    messageCount = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    schemaCount = try buffer.read(littleEndian: UInt16.self, from: &offset)
+    channelCount = try buffer.read(littleEndian: UInt32.self, from: &offset)
+    attachmentCount = try buffer.read(littleEndian: UInt32.self, from: &offset)
+    metadataCount = try buffer.read(littleEndian: UInt32.self, from: &offset)
+    chunkCount = try buffer.read(littleEndian: UInt32.self, from: &offset)
+    messageStartTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
+    messageEndTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
+    channelMessageCounts = try buffer.readPrefixedMap(from: &offset)
+  }
+
   public func serializeFields(to data: inout Data) {
     data.append(littleEndian: messageCount)
     data.append(littleEndian: schemaCount)
@@ -481,6 +684,12 @@ public struct Metadata: Record {
     self.metadata = metadata
   }
 
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    name = try buffer.readPrefixedString(from: &offset)
+    metadata = try buffer.readPrefixedStringMap(from: &offset)
+  }
+
   public func serializeFields(to data: inout Data) {
     data.appendPrefixedString(name)
     data.appendPrefixedMap(metadata)
@@ -497,6 +706,13 @@ public struct MetadataIndex: Record {
     self.offset = offset
     self.length = length
     self.name = name
+  }
+
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    self.offset = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    length = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    name = try buffer.readPrefixedString(from: &offset)
   }
 
   public func serializeFields(to data: inout Data) {
@@ -518,6 +734,13 @@ public struct SummaryOffset: Record {
     self.groupLength = groupLength
   }
 
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    groupOpcode = try buffer.read(littleEndian: UInt8.self, from: &offset)
+    groupStart = try buffer.read(littleEndian: UInt64.self, from: &offset)
+    groupLength = try buffer.read(littleEndian: UInt64.self, from: &offset)
+  }
+
   public func serializeFields(to data: inout Data) {
     data.append(groupOpcode)
     data.append(littleEndian: groupStart)
@@ -531,6 +754,11 @@ public struct DataEnd: Record {
 
   public init(dataSectionCRC: UInt32) {
     self.dataSectionCRC = dataSectionCRC
+  }
+
+  public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
+    var offset = 0
+    dataSectionCRC = try buffer.read(littleEndian: UInt32.self, from: &offset)
   }
 
   public func serializeFields(to data: inout Data) {

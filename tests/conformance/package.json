@@ -12,8 +12,8 @@
   "devDependencies": {
     "@foxglove/crc": "^0.0.3",
     "@foxglove/eslint-plugin": "0.17.1",
-    "@mcap/core": "*",
     "@foxglove/tsconfig": "1.1.0",
+    "@mcap/core": "*",
     "@types/diff": "^5.0.2",
     "@types/node": "16.11.9",
     "@typescript-eslint/eslint-plugin": "5.4.0",
@@ -28,6 +28,7 @@
     "eslint-plugin-import": "2.25.3",
     "eslint-plugin-jest": "25.2.4",
     "eslint-plugin-prettier": "4.0.0",
+    "json-stable-stringify": "1.0.1",
     "json-stringify-pretty-compact": "3.0.0",
     "lodash": "4.17.21",
     "prettier": "2.4.1",

@@ -109,3 +109,4 @@ overrides:
     words:
       - subrange
       - unkeyed
+      - lowercased
