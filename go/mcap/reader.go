@@ -85,15 +85,13 @@ func (r *Reader) indexedMessageIterator(topics []string, start uint64, end uint6
 	}
 	r.l.emitChunks = true
 	return &indexedMessageIterator{
-		lexer:               r.l,
-		rs:                  r.rs,
-		channels:            make(map[uint16]*Channel),
-		schemas:             make(map[uint16]*Schema),
-		topics:              topicMap,
-		start:               start,
-		end:                 end,
-		activeChunksetIndex: -1,
-		activeChunkIndex:    -1,
+		lexer:    r.l,
+		rs:       r.rs,
+		channels: make(map[uint16]*Channel),
+		schemas:  make(map[uint16]*Schema),
+		topics:   topicMap,
+		start:    start,
+		end:      end,
 	}
 }
 

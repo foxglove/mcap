@@ -2,6 +2,7 @@ package mcap
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"sort"
@@ -9,12 +10,6 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
 )
-
-type messageOffset struct {
-	chunkIndex  int
-	chunkOffset int
-	timestamp   uint64
-}
 
 // indexedMessageIterator is an iterator over an indexed mcap read seeker (as
 // seeking is required). It makes reads in alternation from the index data
@@ -31,17 +26,13 @@ type indexedMessageIterator struct {
 	channels          map[uint16]*Channel
 	schemas           map[uint16]*Schema
 	statistics        *Statistics
-	chunksets         [][]*ChunkIndex
 	chunkIndexes      []*ChunkIndex
 	attachmentIndexes []*AttachmentIndex
 
 	// current location in the index
-	activeChunksetIndex int           // active chunkset
-	activeChunkIndex    int           // index of the active chunk within the set
-	activeChunkReader   *bytes.Reader // active decompressed chunk
-	activeChunkLexer    *Lexer
-	messageOffsets      []messageOffset
-	messageOffsetIdx    int
+	activeChunkIndex int // index of the active chunk within the set
+	messageOffsets   []MessageIndexEntry
+	messageOffsetIdx int
 }
 
 // parseIndexSection parses the index section of the file and populates the
@@ -67,7 +58,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	}
 
 	// scan the whole summary section
-	err = it.seekFile(int64(footer.SummaryStart))
+	_, err = it.rs.Seek(int64(footer.SummaryStart), io.SeekStart)
 	if err != nil {
 		return fmt.Errorf("failed to seek to summary start")
 	}
@@ -123,166 +114,90 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	}
 }
 
-func sortOverlappingChunks(chunkIndexes []*ChunkIndex) [][]*ChunkIndex {
-	output := [][]*ChunkIndex{}
-	chunkset := []*ChunkIndex{}
-	sort.Slice(chunkIndexes, func(i, j int) bool {
-		return chunkIndexes[i].MessageStartTime < chunkIndexes[j].MessageStartTime
-	})
-
-	var maxend, minstart uint64
-	for _, chunkIndex := range chunkIndexes {
-		if len(chunkset) == 0 {
-			chunkset = append(chunkset, chunkIndex)
-			maxend = chunkIndex.MessageEndTime
-			minstart = chunkIndex.MessageStartTime
-			continue
-		}
-
-		// if this chunk index overlaps with the chunkset in hand, add it
-		if chunkIndex.MessageEndTime >= minstart && chunkIndex.MessageStartTime < maxend {
-			chunkset = append(chunkset, chunkIndex)
-			if minstart > chunkIndex.MessageStartTime {
-				minstart = chunkIndex.MessageStartTime
-			}
-			if maxend < chunkIndex.MessageEndTime {
-				maxend = chunkIndex.MessageEndTime
-			}
-			continue
-		}
-
-		// else the chunk in hand is not overlapping, so close the chunkset and
-		// initialize a new one
-		output = append(output, chunkset)
-		chunkset = []*ChunkIndex{chunkIndex}
-		maxend = chunkIndex.MessageEndTime
-		minstart = chunkIndex.MessageStartTime
+func (it *indexedMessageIterator) loadNextChunk() error {
+	if it.activeChunkIndex >= len(it.chunkIndexes) {
+		return io.EOF
 	}
-
-	if len(chunkset) > 0 {
-		output = append(output, chunkset)
-	}
-
-	return output
-}
-
-func (it *indexedMessageIterator) loadChunk(index int) error {
-	chunkset := it.chunksets[it.activeChunksetIndex]
-	chunkIndex := chunkset[index]
-	err := it.seekFile(int64(chunkIndex.ChunkStartOffset))
+	chunkIndex := it.chunkIndexes[it.activeChunkIndex]
+	it.activeChunkIndex++
+	_, err := it.rs.Seek(int64(chunkIndex.ChunkStartOffset), io.SeekStart)
 	if err != nil {
 		return err
 	}
-
-	tokenType, record, err := it.lexer.Next(it.chunk)
+	chunk := make([]byte, chunkIndex.ChunkLength+chunkIndex.MessageIndexLength)
+	_, err = io.ReadFull(it.rs, chunk)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read chunk data: %w", err)
 	}
-	if tokenType != TokenChunk {
-		return fmt.Errorf("unexpected token %s in chunk section", tokenType)
-	}
-	if len(record) > len(it.chunk) {
-		it.chunk = record
-	}
-	chunk, err := ParseChunk(record)
+	parsedChunk, err := ParseChunk(chunk[9:chunkIndex.ChunkLength])
 	if err != nil {
 		return fmt.Errorf("failed to parse chunk: %w", err)
 	}
-
-	switch CompressionFormat(chunk.Compression) {
-	case CompressionNone:
-		it.activeChunkReader = bytes.NewReader(chunk.Records)
-	case CompressionZSTD:
-		buf := make([]byte, chunk.UncompressedSize)
-		reader, err := zstd.NewReader(bytes.NewReader(chunk.Records))
-		if err != nil {
-			return err
+	messageIndexSection := chunk[chunkIndex.ChunkLength:]
+	var recordLen uint64
+	offset := 0
+	messageOffsets := []MessageIndexEntry{}
+	for offset < len(messageIndexSection) {
+		if op := OpCode(messageIndexSection[offset]); op != OpMessageIndex {
+			return fmt.Errorf("unexpected token %s in message index section", op)
 		}
-		_, err = io.ReadFull(reader, buf)
+		offset++
+		recordLen, offset, err = getUint64(messageIndexSection, offset)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get message index record length: %w", err)
 		}
-		reader.Close()
-		it.activeChunkReader = bytes.NewReader(buf)
-	case CompressionLZ4:
-		buf := make([]byte, chunk.UncompressedSize)
-		reader := lz4.NewReader(bytes.NewReader(chunk.Records))
-		_, err = io.ReadFull(reader, buf)
+		messageIndex, err := ParseMessageIndex(messageIndexSection[offset : uint64(offset)+recordLen])
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to parse message index: %w", err)
 		}
-		it.activeChunkReader = bytes.NewReader(buf)
-	default:
-		return fmt.Errorf("unsupported compression format %s", chunk.Compression)
+		offset += int(recordLen)
+		// skip message indexes for channels we don't need
+		if _, ok := it.channels[messageIndex.ChannelID]; !ok {
+			continue
+		}
+		// append any message index offsets in the requested time range
+		for _, offset := range messageIndex.Records {
+			if offset.Timestamp >= it.start && offset.Timestamp < it.end {
+				messageOffsets = append(messageOffsets, offset)
+			}
+		}
 	}
-	it.activeChunkIndex = index
-	it.activeChunkLexer, err = NewLexer(it.activeChunkReader, &LexerOptions{
-		SkipMagic: true,
+	sort.Slice(messageOffsets, func(i, j int) bool {
+		left := messageOffsets[i]
+		right := messageOffsets[j]
+		if left.Timestamp < right.Timestamp {
+			return true
+		}
+		if left.Timestamp == right.Timestamp {
+			return left.Offset < right.Offset
+		}
+		return false
 	})
-	if err != nil {
-		return fmt.Errorf("failed to read chunk: %w", err)
-	}
-	return nil
-}
-
-func (it *indexedMessageIterator) loadNextChunkset() error {
-	it.activeChunksetIndex++
-	it.messageOffsets = it.messageOffsets[:0]
-	chunkset := it.chunksets[it.activeChunksetIndex]
-	for i, chunkIndex := range chunkset {
-		for channelID, offset := range chunkIndex.MessageIndexOffsets {
-			if _, ok := it.channels[channelID]; !ok {
-				continue
-			}
-			err := it.seekFile(int64(offset))
-			if err != nil {
-				return err
-			}
-			// now we're at the message index implicated by the chunk; parse one record
-			tokenType, record, err := it.lexer.Next(nil)
-			if err != nil {
-				return err
-			}
-			if tokenType != TokenMessageIndex {
-				return fmt.Errorf("unexpected token %s in message index section", tokenType)
-			}
-			messageIndex, err := ParseMessageIndex(record)
-			if err != nil {
-				return fmt.Errorf("failed to parse message index at %d", offset)
-			}
-			for _, record := range messageIndex.Records {
-				if (it.start == 0 && it.end == 0) || (record.Timestamp >= it.start && record.Timestamp < it.end) {
-					it.messageOffsets = append(it.messageOffsets, messageOffset{
-						chunkIndex:  i,
-						chunkOffset: int(record.Offset),
-						timestamp:   record.Timestamp,
-					})
-				}
-			}
-		}
-	}
-	sort.Slice(it.messageOffsets, func(i, j int) bool {
-		if it.messageOffsets[i].timestamp == it.messageOffsets[j].timestamp {
-			return it.messageOffsets[i].chunkOffset < it.messageOffsets[j].chunkOffset
-		}
-		return it.messageOffsets[i].timestamp < it.messageOffsets[j].timestamp
-	})
+	it.messageOffsets = messageOffsets
 	it.messageOffsetIdx = 0
-	return it.loadChunk(0)
-}
 
-func (it *indexedMessageIterator) seekFile(offset int64) error {
-	_, err := it.rs.Seek(offset, io.SeekStart)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (it *indexedMessageIterator) seekChunk(offset int64) error {
-	_, err := it.activeChunkReader.Seek(offset, io.SeekStart)
-	if err != nil {
-		return err
+	// decompress the chunk data
+	switch CompressionFormat(parsedChunk.Compression) {
+	case CompressionNone:
+		it.chunk = parsedChunk.Records
+	case CompressionZSTD:
+		reader, err := zstd.NewReader(bytes.NewReader(parsedChunk.Records))
+		if err != nil {
+			return fmt.Errorf("failed to read zstd chunk: %w", err)
+		}
+		defer reader.Close()
+		it.chunk, err = io.ReadAll(reader)
+		if err != nil {
+			return fmt.Errorf("failed to decompress zstd chunk: %w", err)
+		}
+	case CompressionLZ4:
+		reader := lz4.NewReader(bytes.NewReader(parsedChunk.Records))
+		it.chunk, err = io.ReadAll(reader)
+		if err != nil {
+			return fmt.Errorf("failed to decompress lz4 chunk: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported compression %s", parsedChunk.Compression)
 	}
 	return nil
 }
@@ -293,50 +208,23 @@ func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, e
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		it.chunksets = sortOverlappingChunks(it.chunkIndexes)
 	}
-
-	for it.messageOffsetIdx >= len(it.messageOffsets) {
-		if it.activeChunksetIndex >= len(it.chunksets)-1 {
-			return nil, nil, nil, io.EOF
-		}
-		err := it.loadNextChunkset()
+	for it.messageOffsetIdx == len(it.messageOffsets) {
+		err := it.loadNextChunk()
 		if err != nil {
 			return nil, nil, nil, err
 		}
 	}
-
 	messageOffset := it.messageOffsets[it.messageOffsetIdx]
 	it.messageOffsetIdx++
-
-	// if this message is on a different chunk within the chunkset, we need to
-	// switch to that chunk
-	if messageOffset.chunkIndex != it.activeChunkIndex {
-		err := it.loadChunk(messageOffset.chunkIndex)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-	}
-
-	// now the active chunk matches the one for this message
-	err := it.seekChunk(int64(messageOffset.chunkOffset))
+	chunkOffset := messageOffset.Offset
+	length := binary.LittleEndian.Uint64(it.chunk[chunkOffset+1:])
+	messageData := it.chunk[chunkOffset+1+8 : chunkOffset+1+8+length]
+	message, err := ParseMessage(messageData)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	tokenType, record, err := it.activeChunkLexer.Next(p)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	switch tokenType {
-	case TokenMessage:
-		message, err := ParseMessage(record)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		channel := it.channels[message.ChannelID]
-		schema := it.schemas[channel.SchemaID]
-		return schema, channel, message, nil
-	default:
-		return nil, nil, nil, fmt.Errorf("unexpected token %s in message section", tokenType)
-	}
+	channel := it.channels[message.ChannelID]
+	schema := it.schemas[channel.SchemaID]
+	return schema, channel, message, nil
 }
