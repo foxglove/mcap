@@ -61,7 +61,7 @@ function rosMsgDefinitionToProto(
   const root = new protobufjs.Root();
 
   const BuiltinSrcParse = protobufjs.parse(builtinSrc, { keepCase: true });
-  BuiltinSrcParse.root.nestedArray[0]!.filename = "ros/builtin.proto";
+  BuiltinSrcParse.root.nested!["ros"]!.filename = "ros/builtin.proto";
   root.add(BuiltinSrcParse.root);
 
   const dependenciesByFilename = new Map<string, Set<string>>();
