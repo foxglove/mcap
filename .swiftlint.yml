@@ -1,3 +1,6 @@
+excluded:
+  - .build
+
 disabled_rules:
   - function_body_length
   - type_body_length
@@ -6,3 +9,8 @@ disabled_rules:
 
 trailing_comma:
   mandatory_comma: true
+
+identifier_name:
+  excluded:
+    - op
+    - id
