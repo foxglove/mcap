@@ -5,8 +5,8 @@ go 1.18
 require (
 	cloud.google.com/go/storage v1.10.0
 	github.com/fatih/color v1.13.0
-	github.com/foxglove/mcap/go/mcap v0.0.0-20220327180501-aee9d6ef565b
-	github.com/foxglove/mcap/go/ros v0.0.0-20220327180501-aee9d6ef565b
+	github.com/foxglove/mcap/go/mcap v0.0.0-20220328132551-ffb9c0b0ebdc
+	github.com/foxglove/mcap/go/ros v0.0.0-20220328132551-ffb9c0b0ebdc
 	github.com/klauspost/compress v1.15.1
 	github.com/mattn/go-sqlite3 v1.14.11
 	github.com/olekukonko/tablewriter v0.0.5
