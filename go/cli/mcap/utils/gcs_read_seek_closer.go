@@ -34,16 +34,20 @@ func (r *GCSReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
 	default:
 		return 0, fmt.Errorf("unrecognized whence: %d", whence)
 	}
-	err := r.r.Close()
-	if err != nil {
-		return 0, err
+
+	// only request a new range if we're not currently at the target position
+	if seekTo != r.offset {
+		err := r.r.Close()
+		if err != nil {
+			return 0, err
+		}
+		reader, err := r.object.NewRangeReader(r.ctx, seekTo, -1)
+		if err != nil {
+			return 0, err
+		}
+		r.r = reader
+		r.offset = seekTo
 	}
-	reader, err := r.object.NewRangeReader(r.ctx, seekTo, -1)
-	if err != nil {
-		return 0, err
-	}
-	r.r = reader
-	r.offset = seekTo
 	return seekTo, nil
 }
 
