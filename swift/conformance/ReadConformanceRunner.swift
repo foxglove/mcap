@@ -7,25 +7,59 @@ private extension String {
     var wordStart = startIndex
     while wordStart != endIndex {
       var wordEnd = index(after: wordStart)
-      while wordEnd != endIndex && self[wordEnd].isUppercase {
+      while wordEnd != endIndex, self[wordEnd].isUppercase {
         // handle all-uppercase words at the end of the string, e.g. schemaID and dataSectionCRC
         // (does not handle correctly if the all-uppercase word is followed by another word)
         formIndex(after: &wordEnd)
       }
-      while wordEnd != endIndex && self[wordEnd].isLowercase {
+      while wordEnd != endIndex, self[wordEnd].isLowercase {
         formIndex(after: &wordEnd)
       }
       if !result.isEmpty {
         result.append("_")
       }
-      result.append(self[wordStart..<wordEnd].lowercased())
+      result.append(self[wordStart ..< wordEnd].lowercased())
       wordStart = wordEnd
     }
     return result
   }
 }
 
-// swiftlint:disable force_cast
+private func toJson(_ record: Record) -> [String: Any] {
+  let mirror = Mirror(reflecting: record)
+  var fields: [String: Any] = [:]
+  for child in mirror.children {
+    var jsonValue: Any
+    switch child.value {
+    case let value as String:
+      jsonValue = value
+    case let value as Data:
+      jsonValue = value.map { String($0) }
+    case let value as UInt8:
+      jsonValue = String(value)
+    case let value as UInt16:
+      jsonValue = String(value)
+    case let value as UInt32:
+      jsonValue = String(value)
+    case let value as UInt64:
+      jsonValue = String(value)
+    case let value as [(UInt64, UInt64)]:
+      jsonValue = value.map { [String($0.0), String($0.1)] }
+    case let value as [String: String]:
+      jsonValue = value
+    case let value as [UInt16: UInt64]:
+      jsonValue = Dictionary(uniqueKeysWithValues: value.map { (String($0.key), String($0.value)) })
+    default:
+      fatalError("Unhandled type \(type(of: child.value))")
+    }
+    fields[child.label!.camelToSnake()] = jsonValue
+  }
+  return [
+    "type": String(describing: mirror.subjectType),
+    "fields": fields.sorted(by: { $0.key < $1.key }).map { [$0.key, $0.value] },
+  ]
+}
+
 enum ReadConformanceRunner {
   static func main() async throws {
     if CommandLine.arguments.count < 3 {
@@ -45,42 +79,7 @@ enum ReadConformanceRunner {
       }
     }
 
-    let jsonRecords = records.map { (record: Record) -> [String: Any] in
-      let mirror = Mirror(reflecting: record)
-      var fields: [String: Any] = [:]
-      for child in mirror.children {
-        var value: Any
-        switch child.value {
-        case let x as String:
-          value = x
-        case let x as Data:
-          value = x.map { String($0) }
-        case let x as UInt8:
-          value = String(x)
-        case let x as UInt16:
-          value = String(x)
-        case let x as UInt32:
-          value = String(x)
-        case let x as UInt64:
-          value = String(x)
-        case let x as [(UInt64, UInt64)]:
-          value = x.map { [String($0.0), String($0.1)] }
-        case let x as [String: String]:
-          value = x
-        case let x as [UInt16: UInt64]:
-          value = Dictionary(uniqueKeysWithValues: x.map { (String($0.key), String($0.value)) })
-        default:
-          fatalError("Unhandled type \(type(of: child.value))")
-        }
-        fields[child.label!.camelToSnake()] = value
-      }
-      return [
-        "type": String(describing: mirror.subjectType),
-        "fields": fields.sorted(by: { $0.key < $1.key }).map { [$0.key, $0.value] },
-      ]
-    }
-
-    let data = try JSONSerialization.data(withJSONObject: ["records": jsonRecords], options: .prettyPrinted)
+    let data = try JSONSerialization.data(withJSONObject: ["records": records.map(toJson)], options: .prettyPrinted)
 
     if #available(macOS 10.15.4, *) {
       try FileHandle.standardOutput.write(contentsOf: data)

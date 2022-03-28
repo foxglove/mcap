@@ -45,7 +45,7 @@ public class MCAPStreamedReader {
   }
 }
 
-fileprivate class RecordReader {
+private class RecordReader {
   private var buffer: Data
   private var offset = 0
 
@@ -69,7 +69,7 @@ fileprivate class RecordReader {
 
   public func readMagic() throws -> Bool {
     if offset + 8 < buffer.count {
-      if !MCAP0_MAGIC.elementsEqual(buffer[offset..<offset+8]) {
+      if !MCAP0_MAGIC.elementsEqual(buffer[offset ..< offset + 8]) {
         throw MCAPReadError.invalidMagic
       }
       offset += 8
@@ -85,7 +85,7 @@ fileprivate class RecordReader {
         offset += 1
         var recordLength: UInt64 = 0
         withUnsafeMutableBytes(of: &recordLength) { rawLength in
-          _ = buf.copyBytes(to: rawLength, from: offset..<offset+8)
+          _ = buf.copyBytes(to: rawLength, from: offset ..< offset + 8)
         }
         recordLength = UInt64(littleEndian: recordLength)
         offset += 8

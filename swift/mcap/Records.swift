@@ -144,14 +144,14 @@ private extension Data {
 }
 
 private extension UnsafeRawBufferPointer {
-  func read<T: FixedWidthInteger & UnsignedInteger>(littleEndian type: T.Type, from offset: inout Int) throws -> T {
+  func read<T: FixedWidthInteger & UnsignedInteger>(littleEndian _: T.Type, from offset: inout Int) throws -> T {
     if offset + MemoryLayout<T>.size > self.count {
       throw MCAPReadError.readBeyondBounds
     }
     defer { offset += MemoryLayout<T>.size }
     var rawValue: T = 0
     withUnsafeMutableBytes(of: &rawValue) {
-      $0.copyMemory(from: UnsafeRawBufferPointer(rebasing: self[offset..<offset+MemoryLayout<T>.size]))
+      $0.copyMemory(from: UnsafeRawBufferPointer(rebasing: self[offset ..< offset + MemoryLayout<T>.size]))
     }
     return T(littleEndian: rawValue)
   }
