@@ -206,12 +206,12 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 	}
 
 	if minLogTime != chunk.MessageStartTime {
-		doctor.error("Chunk.start_time %d does not match the latest message record time %d",
+		doctor.error("Chunk.message_start_time %d does not match the earliest message log time %d",
 			chunk.MessageStartTime, minLogTime)
 	}
 
 	if maxLogTime != chunk.MessageEndTime {
-		doctor.error("Chunk.end_time %d does not match the latest message record time %d",
+		doctor.error("Chunk.message_end_time %d does not match the latest message log time %d",
 			chunk.MessageEndTime, maxLogTime)
 	}
 }
