@@ -82,16 +82,15 @@ private class RecordReader {
     try buffer.withUnsafeBytes { buf in
       while offset + 9 < buf.count {
         let op = buf[offset]
-        offset += 1
         var recordLength: UInt64 = 0
         withUnsafeMutableBytes(of: &recordLength) { rawLength in
-          _ = buf.copyBytes(to: rawLength, from: offset ..< offset + 8)
+          _ = buf.copyBytes(to: rawLength, from: offset + 1 ..< offset + 9)
         }
         recordLength = UInt64(littleEndian: recordLength)
-        offset += 8
-        guard offset + Int(recordLength) <= buf.count else {
+        guard offset + 9 + Int(recordLength) <= buf.count else {
           return nil
         }
+        offset += 9
         defer {
           offset += Int(recordLength)
         }

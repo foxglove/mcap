@@ -21,10 +21,13 @@ import (
 )
 
 type mcapDoctor struct {
-	reader io.Reader
+	reader io.ReadSeeker
 
 	channels map[uint16]*mcap.Channel
 	schemas  map[uint16]*mcap.Schema
+
+	// Map from chunk offset to chunk index
+	chunkIndexes map[uint64]*mcap.ChunkIndex
 }
 
 var (
@@ -326,10 +329,14 @@ func (doctor *mcapDoctor) Examine() {
 				doctor.error("Failed to parse message index:", err)
 			}
 		case mcap.TokenChunkIndex:
-			_, err := mcap.ParseChunkIndex(data)
+			chunkIndex, err := mcap.ParseChunkIndex(data)
 			if err != nil {
 				doctor.error("Failed to parse chunk index:", err)
 			}
+			if _, ok := doctor.chunkIndexes[chunkIndex.ChunkStartOffset]; ok {
+				doctor.error("Multiple chunk indexes found for chunk at offset", chunkIndex.ChunkStartOffset)
+			}
+			doctor.chunkIndexes[chunkIndex.ChunkStartOffset] = chunkIndex
 		case mcap.TokenAttachment:
 			_, err := mcap.ParseAttachment(data)
 			if err != nil {
@@ -371,13 +378,49 @@ func (doctor *mcapDoctor) Examine() {
 			doctor.fatalf("Failed to parse:", err)
 		}
 	}
+
+	for chunkOffset, chunkIndex := range doctor.chunkIndexes {
+		doctor.reader.Seek(int64(chunkOffset), io.SeekStart)
+		tokenType, data, err := lexer.Next(msg)
+		if err != nil {
+			doctor.error("Chunk index points to offset %d but encountered error reading at that offset: %v", chunkOffset, err)
+			continue
+		} else if tokenType != mcap.TokenChunk {
+			doctor.error("Chunk index points to offset %d but the record at this offset is a %s", chunkOffset, tokenType.String())
+			continue
+		} else if chunkIndex.ChunkLength != 9+uint64(len(data)) {
+			doctor.error("Chunk index at offset %d has chunk length %d but the chunk at this offset has length %d (including opcode+length)", chunkOffset, chunkIndex.ChunkLength, 9+len(data))
+			continue
+		}
+		chunk, err := mcap.ParseChunk(data)
+		if err != nil {
+			doctor.error("Chunk index points to offset %d but encountered error parsing the chunk at that offset: %v", chunkOffset, err)
+			continue
+		}
+		if chunk.MessageStartTime != chunkIndex.MessageStartTime {
+			doctor.error("Chunk at offset %d has message start time %d, but its chunk index has message start time %d", chunkOffset, chunk.MessageStartTime, chunkIndex.MessageStartTime)
+		}
+		if chunk.MessageEndTime != chunkIndex.MessageEndTime {
+			doctor.error("Chunk at offset %d has message end time %d, but its chunk index has message end time %d", chunkOffset, chunk.MessageEndTime, chunkIndex.MessageEndTime)
+		}
+		if chunk.Compression != chunkIndex.Compression.String() {
+			doctor.error("Chunk at offset %d has compression %s, but its chunk index has compression %s", chunkOffset, chunk.Compression, chunkIndex.Compression)
+		}
+		if uint64(len(chunk.Records)) != chunkIndex.CompressedSize {
+			doctor.error("Chunk at offset %d has data length %d, but its chunk index has compressed size %s", chunkOffset, len(chunk.Records), chunkIndex.CompressedSize)
+		}
+		if chunk.UncompressedSize != chunkIndex.UncompressedSize {
+			doctor.error("Chunk at offset %d has uncompressed size %d, but its chunk index has uncompressed size %d", chunkOffset, chunk.UncompressedSize, chunkIndex.UncompressedSize)
+		}
+	}
 }
 
-func newMcapDoctor(reader io.Reader) *mcapDoctor {
+func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
 	return &mcapDoctor{
-		reader:   reader,
-		channels: make(map[uint16]*mcap.Channel),
-		schemas:  make(map[uint16]*mcap.Schema),
+		reader:       reader,
+		channels:     make(map[uint16]*mcap.Channel),
+		schemas:      make(map[uint16]*mcap.Schema),
+		chunkIndexes: make(map[uint64]*mcap.ChunkIndex),
 	}
 }
 

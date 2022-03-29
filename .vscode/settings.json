@@ -8,7 +8,7 @@
   "eslint.options": {
     "reportUnusedDisableDirectives": true
   },
-  "jest.jestCommandLine": "yarn workspace @foxglove/mcap test",
+  "jest.jestCommandLine": "yarn workspace @mcap/core test",
 
   "cSpell.enabled": true,
 
@@ -30,8 +30,5 @@
   "lldb.library": "/Applications/Xcode.app/Contents/SharedFrameworks/LLDB.framework/Versions/A/LLDB",
   "python.linting.flake8Enabled": true,
   "python.linting.enabled": true,
-  "python.linting.flake8Args": [
-    "--config",
-    "python/.flake8"
-  ]
+  "python.linting.flake8Args": ["--config", "python/.flake8"]
 }
