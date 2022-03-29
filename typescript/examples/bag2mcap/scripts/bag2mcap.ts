@@ -49,12 +49,23 @@ function rosTypenameToProtoPath(typeName: string): string {
 }
 
 // convert a combined ros string message definition to protobuf Root instance
-function rosMsgDefinitionToProto(typeName: string, msgDef: string): protobufjs.Root {
+function rosMsgDefinitionToProto(
+  typeName: string,
+  msgDef: string,
+): {
+  rootType: protobufjs.Type;
+  descriptorSet: ReturnType<protobufjs.Root["toDescriptor"]>;
+  schemaName: string;
+} {
   const definitionArr = parseMessageDefinition(msgDef);
   const root = new protobufjs.Root();
 
   const BuiltinSrcParse = protobufjs.parse(builtinSrc, { keepCase: true });
+  BuiltinSrcParse.root.nested!["ros"]!.filename = "ros/builtin.proto";
   root.add(BuiltinSrcParse.root);
+
+  const dependenciesByFilename = new Map<string, Set<string>>();
+  dependenciesByFilename.set("ros/builtin.proto", new Set());
 
   for (const def of definitionArr) {
     const rosDatatypeName = def.name ?? typeName;
@@ -64,6 +75,13 @@ function rosMsgDefinitionToProto(typeName: string, msgDef: string): protobufjs.R
     }
     const packageName = nameParts[0]!;
     const msgName = nameParts[1]!;
+
+    const filename = `ros/${packageName}.proto`;
+    let dependencies = dependenciesByFilename.get(filename);
+    if (!dependencies) {
+      dependencies = new Set();
+      dependenciesByFilename.set(filename, dependencies);
+    }
 
     const fields: string[] = [];
     let fieldNumber = 1;
@@ -83,12 +101,22 @@ function rosMsgDefinitionToProto(typeName: string, msgDef: string): protobufjs.R
         }
         if (field.isComplex === true) {
           qualifiers.push(rosTypenameToProtoPath(field.type));
+          const fieldNameParts = field.type.split("/");
+          if (fieldNameParts.length !== 2) {
+            throw new Error(`Invalid complex type name: ${field.type}`);
+          }
+          if (packageName !== fieldNameParts[0]!) {
+            dependencies.add(`ros/${fieldNameParts[0]!}.proto`);
+          }
         } else if (BUILTIN_TYPE_MAP.has(field.type)) {
           const protoType = BUILTIN_TYPE_MAP.get(field.type)!;
           if (protoType.includes("int")) {
             lineComments.push(`originally ${field.type}`);
           }
           qualifiers.push(BUILTIN_TYPE_MAP.get(field.type)!);
+          if (field.type === "time" || field.type === "duration") {
+            dependencies.add("ros/builtin.proto");
+          }
         } else {
           qualifiers.push(field.type);
         }
@@ -113,18 +141,39 @@ function rosMsgDefinitionToProto(typeName: string, msgDef: string): protobufjs.R
       `message ${msgName} {\n  ${fields.join("\n  ")}\n}`,
     ];
 
-    const protoSrc = outputSections.filter(Boolean).join("\n\n") + "\n";
-
-    const ProtoSrcParse = protobufjs.parse(protoSrc, { keepCase: true });
+    const ProtoSrcParse = protobufjs.parse(outputSections.join("\n"), { keepCase: true });
+    // HACK: set the filename on the nested namespace object so that `root.toDescriptor` generates
+    // file descriptors with the correct filename.
+    (ProtoSrcParse.root.nested!["ros"] as protobufjs.Namespace).nested![packageName]!.filename =
+      filename;
     root.add(ProtoSrcParse.root);
   }
 
-  return root;
+  const schemaName = rosTypenameToProtoPath(typeName);
+  const rootType = root.lookupType(schemaName);
+
+  // create a descriptor message for the root
+  const descriptorSet = root.toDescriptor("proto3");
+  for (const file of descriptorSet.file) {
+    // Strip leading `.` from the package names to make them relative to the descriptor
+    file.package = file.package?.substring(1);
+    // protobufjs does not generate dependency fields, so fix them up manually
+    if (file.name == undefined || file.name.length === 0) {
+      throw new Error(`Missing filename for ${file.package ?? "(unknown package)"}`);
+    }
+    const deps = dependenciesByFilename.get(file.name);
+    if (deps == undefined) {
+      throw new Error(`Unknown dependencies for ${file.name}`);
+    }
+    file.dependency = Array.from(deps);
+  }
+
+  return { rootType, descriptorSet, schemaName };
 }
 
 type TopicDetail = {
   channelId: number;
-  MsgRoot: protobufjs.Type;
+  rootType: protobufjs.Type;
 };
 
 // Protobuf fromObject doesn't like being given Float64Arrays
@@ -200,19 +249,11 @@ async function convert(filePath: string, options: { indexed: boolean }) {
       continue;
     }
 
-    const schemaName = rosTypenameToProtoPath(connection.type);
-
-    const root = rosMsgDefinitionToProto(connection.type, connection.messageDefinition);
-    const MsgRoot = root.lookupType(schemaName);
-
-    // create a descriptor message for the root
-    // Strip leading `.` from the package names to make them relative to the descriptor
-    const descriptorMsg = root.toDescriptor("proto3");
-    for (const desc of descriptorMsg.file) {
-      desc.package = desc.package?.substring(1);
-    }
-
-    const descriptorMsgEncoded = descriptor.FileDescriptorSet.encode(descriptorMsg).finish();
+    const { rootType, descriptorSet, schemaName } = rosMsgDefinitionToProto(
+      connection.type,
+      connection.messageDefinition,
+    );
+    const descriptorMsgEncoded = descriptor.FileDescriptorSet.encode(descriptorSet).finish();
 
     const schemaId = await mcapFile.registerSchema({
       name: schemaName,
@@ -231,7 +272,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
 
     topicToDetailMap.set(connection.topic, {
       channelId,
-      MsgRoot,
+      rootType,
     });
   }
 
@@ -254,11 +295,11 @@ async function convert(filePath: string, options: { indexed: boolean }) {
       return;
     }
 
-    const { channelId, MsgRoot } = detail;
+    const { channelId, rootType } = detail;
     try {
       const rosMsg = convertTypedArrays(result.message as Record<string, unknown>);
-      const protoMsg = MsgRoot.fromObject(rosMsg);
-      const protoMsgBuffer = MsgRoot.encode(protoMsg).finish();
+      const protoMsg = rootType.fromObject(rosMsg);
+      const protoMsgBuffer = rootType.encode(protoMsg).finish();
 
       const timestamp = toNanoSec(result.timestamp);
       await mcapFile.addMessage({
