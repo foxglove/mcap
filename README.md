@@ -18,6 +18,9 @@ MCAP libraries are provided in the following languages. For guidance on each lan
 - [TypeScript](./typescript)
 - [Swift](./swift)
 
+To run the conformance tests, you will need to use [Git LFS](https://git-lfs.github.com/),
+which is used to store the test logs under `tests/conformance/data`.
+
 ## License
 
 Licensed under the [Apache License, Version 2.0](/LICENSE). Contributors are required to accept the [Contributor License Agreement](https://github.com/foxglove/cla).
