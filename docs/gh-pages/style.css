@@ -9,7 +9,7 @@
     @apply dark:bg-zinc-800 dark:text-gray-100;
   }
   h2 {
-    @apply text-2xl font-bold mt-4 mb-2;
+    @apply text-2xl font-bold mt-4;
   }
 
   a {
@@ -22,6 +22,17 @@
   h1 a,
   h1 a:hover {
     @apply text-black dark:text-gray-100 no-underline;
+  }
+
+  pre {
+    @apply m-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-700  rounded-md;
+    @apply overflow-x-auto;
+  }
+
+  p,
+  dl,
+  nav {
+    @apply my-2;
   }
 }
 
@@ -57,5 +68,14 @@
   }
   .links a:hover {
     @apply border-b-2;
+  }
+
+  .shell-input-line::before {
+    content: "$ ";
+    @apply opacity-50;
+  }
+
+  .code-comment {
+    @apply opacity-50;
   }
 }
