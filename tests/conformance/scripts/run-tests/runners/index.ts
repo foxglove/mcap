@@ -2,6 +2,7 @@ import CppStreamedReaderTestRunner from "./CppStreamedReaderTestRunner";
 import CppStreamedWriterTestRunner from "./CppStreamedWriterTestRunner";
 import GoStreamedReaderTestRunner from "./GoStreamedReaderTestRunner";
 import GoStreamedWriterTestRunner from "./GoStreamedWriterTestRunner";
+import KaitaiStructReaderTestRunner from "./KaitaiStructReaderTestRunner";
 import PythonStreamedReaderTestRunner from "./PythonStreamedReaderTestRunner";
 import PythonWriterTestRunner from "./PythonWriterTestRunner";
 import SwiftStreamedReaderTestRunner from "./SwiftStreamedReaderTestRunner";
@@ -23,6 +24,7 @@ const runners: readonly (ReadTestRunner | WriteTestRunner)[] = [
   new TypescriptWriterTestRunner(),
   new SwiftWriterTestRunner(),
   new SwiftStreamedReaderTestRunner(),
+  new KaitaiStructReaderTestRunner(),
 ];
 
 export default runners;
