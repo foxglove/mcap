@@ -4,6 +4,7 @@ declare module "kaitai-struct" {
 
     readU4le(): number;
     readU8le(): number | bigint;
+    readBytes(len: number | bigint): Uint8Array;
   }
 }
 

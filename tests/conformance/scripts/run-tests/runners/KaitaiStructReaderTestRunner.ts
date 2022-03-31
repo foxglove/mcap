@@ -85,6 +85,13 @@ async function compileMcapClass(): Promise<Mcap> {
     const hi = this.readU4le();
     return (BigInt(hi) << 32n) | BigInt(lo);
   };
+  const originalReadBytes = KaitaiStream.prototype.readBytes; // eslint-disable-line @typescript-eslint/unbound-method
+  KaitaiStream.prototype.readBytes = function (len: number | bigint) {
+    if (len > Number.MAX_SAFE_INTEGER) {
+      throw new Error(`Cannot read ${len} bytes with Number precision`);
+    }
+    return originalReadBytes.call(this, Number(len));
+  };
   const ksy = await fs.readFile(
     path.join(__dirname, "../../../../../docs/specification/mcap.ksy"),
     { encoding: "utf-8" },
