@@ -136,13 +136,13 @@ void LZ4Reader::reset(const std::byte* data, uint64_t size, uint64_t uncompresse
   if (uint64_t(status) != uncompressedSize_) {
     if (status < 0) {
       const auto msg =
-        internal::StrFormat("lz4 decompression of ", compressedSize_, " bytes into ",
-                            uncompressedSize_, " output bytes failed with error ", status);
+        internal::StrCat("lz4 decompression of ", compressedSize_, " bytes into ",
+                         uncompressedSize_, " output bytes failed with error ", status);
       status_ = Status{StatusCode::DecompressionFailed, msg};
     } else {
       const auto msg =
-        internal::StrFormat("lz4 decompression of ", compressedSize_, " bytes into ",
-                            uncompressedSize_, " output bytes only produced ", status, " bytes");
+        internal::StrCat("lz4 decompression of ", compressedSize_, " bytes into ",
+                         uncompressedSize_, " output bytes only produced ", status, " bytes");
       status_ = StatusCode::DecompressionSizeMismatch;
     }
 
@@ -184,14 +184,14 @@ void ZStdReader::reset(const std::byte* data, uint64_t size, uint64_t uncompress
     ZSTD_decompress(uncompressedData_.data(), uncompressedSize_, compressedData_, compressedSize_);
   if (status != uncompressedSize_) {
     if (ZSTD_isError(status)) {
-      const auto msg = internal::StrFormat(
-        "zstd decompression of ", compressedSize_, " bytes into ", uncompressedSize_,
-        " output bytes failed with error ", ZSTD_getErrorName(status));
+      const auto msg = internal::StrCat("zstd decompression of ", compressedSize_, " bytes into ",
+                                        uncompressedSize_, " output bytes failed with error ",
+                                        ZSTD_getErrorName(status));
       status_ = Status{StatusCode::DecompressionFailed, msg};
     } else {
       const auto msg =
-        internal::StrFormat("zstd decompression of ", compressedSize_, " bytes into ",
-                            uncompressedSize_, " output bytes only produced ", status, " bytes");
+        internal::StrCat("zstd decompression of ", compressedSize_, " bytes into ",
+                         uncompressedSize_, " output bytes only produced ", status, " bytes");
       status_ = StatusCode::DecompressionSizeMismatch;
     }
 
@@ -245,7 +245,7 @@ Status McapReader::open(IReadable& reader) {
   // Check the header magic bytes
   if (std::memcmp(data, Magic, sizeof(Magic)) != 0) {
     const auto msg =
-      internal::StrFormat("invalid magic bytes in Header: 0x", internal::MagicToHex(data));
+      internal::StrCat("invalid magic bytes in Header: 0x", internal::MagicToHex(data));
     return Status{StatusCode::MagicMismatch, msg};
   }
 
@@ -255,8 +255,8 @@ Status McapReader::open(IReadable& reader) {
     return status;
   }
   if (record.opcode != OpCode::Header) {
-    const auto msg = internal::StrFormat("invalid opcode, expected Header: 0x",
-                                         internal::ToHex(uint8_t(record.opcode)));
+    const auto msg = internal::StrCat("invalid opcode, expected Header: 0x",
+                                      internal::ToHex(uint8_t(record.opcode)));
     return Status{StatusCode::InvalidFile, msg};
   }
   Header header;
@@ -283,7 +283,7 @@ Status McapReader::open(std::string_view filename) {
   }
   file_ = fopen(filename.data(), "rb");
   if (!file_) {
-    const auto msg = internal::StrFormat("failed to open \"", filename, "\"");
+    const auto msg = internal::StrCat("failed to open \"", filename, "\"");
     return Status{StatusCode::OpenFailed, msg};
   }
 
@@ -384,8 +384,8 @@ Status McapReader::readSummarySection_(IReadable& reader) {
     footer.summaryOffsetStart != 0 ? footer.summaryOffsetStart : fileSize - internal::FooterLength;
   // Sanity check the ordering
   if (summaryOffsetStart < summaryStart) {
-    const auto msg = internal::StrFormat("summary_offset_start ", summaryOffsetStart,
-                                         " < summary_start ", summaryStart);
+    const auto msg = internal::StrCat("summary_offset_start ", summaryOffsetStart,
+                                      " < summary_start ", summaryStart);
     return Status{StatusCode::InvalidFooter, msg};
   }
 
@@ -596,8 +596,8 @@ Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record* record
   // Check that we can read at least 9 bytes (opcode + length)
   auto maxSize = reader.size() - offset;
   if (maxSize < 9) {
-    const auto msg = internal::StrFormat("cannot read record at offset ", offset, ", ", maxSize,
-                                         " bytes remaining");
+    const auto msg =
+      internal::StrCat("cannot read record at offset ", offset, ", ", maxSize, " bytes remaining");
     return Status{StatusCode::InvalidFile, msg};
   }
 
@@ -615,17 +615,17 @@ Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record* record
   // Read payload
   maxSize -= 9;
   if (maxSize < record->dataSize) {
-    const auto msg = internal::StrFormat("record type 0x", internal::ToHex(uint8_t(record->opcode)),
-                                         " at offset ", offset, " has length ", record->dataSize,
-                                         " but only ", maxSize, " bytes remaining");
+    const auto msg = internal::StrCat("record type 0x", internal::ToHex(uint8_t(record->opcode)),
+                                      " at offset ", offset, " has length ", record->dataSize,
+                                      " but only ", maxSize, " bytes remaining");
     return Status{StatusCode::InvalidRecord, msg};
   }
   bytesRead = reader.read(&record->data, offset + 9, record->dataSize);
   if (bytesRead != record->dataSize) {
     const auto msg =
-      internal::StrFormat("attempted to read ", record->dataSize, " bytes for record type 0x",
-                          internal::ToHex(uint8_t(record->opcode)), " at offset ", offset,
-                          " but only read ", bytesRead, " bytes");
+      internal::StrCat("attempted to read ", record->dataSize, " bytes for record type 0x",
+                       internal::ToHex(uint8_t(record->opcode)), " at offset ", offset,
+                       " but only read ", bytesRead, " bytes");
     return Status{StatusCode::ReadFailed, msg};
   }
 
@@ -642,14 +642,14 @@ Status McapReader::ReadFooter(IReadable& reader, uint64_t offset, Footer* footer
   // Check the footer magic bytes
   if (std::memcmp(data + internal::FooterLength - sizeof(Magic), Magic, sizeof(Magic)) != 0) {
     const auto msg =
-      internal::StrFormat("invalid magic bytes in Footer: 0x",
-                          internal::MagicToHex(data + internal::FooterLength - sizeof(Magic)));
+      internal::StrCat("invalid magic bytes in Footer: 0x",
+                       internal::MagicToHex(data + internal::FooterLength - sizeof(Magic)));
     return Status{StatusCode::MagicMismatch, msg};
   }
 
   if (OpCode(data[0]) != OpCode::Footer) {
     const auto msg =
-      internal::StrFormat("invalid opcode, expected Footer: 0x", internal::ToHex(data[0]));
+      internal::StrCat("invalid opcode, expected Footer: 0x", internal::ToHex(data[0]));
     return Status{StatusCode::InvalidFile, msg};
   }
 
@@ -657,7 +657,7 @@ Status McapReader::ReadFooter(IReadable& reader, uint64_t offset, Footer* footer
   // fixed length
   const uint64_t length = internal::ParseUint64(data + 1);
   if (length != 8 + 8 + 4) {
-    const auto msg = internal::StrFormat("invalid Footer length: ", length);
+    const auto msg = internal::StrCat("invalid Footer length: ", length);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -672,7 +672,7 @@ Status McapReader::ParseHeader(const Record& record, Header* header) {
 
   assert(record.opcode == OpCode::Header);
   if (record.dataSize < MinSize) {
-    const auto msg = internal::StrFormat("invalid Header length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid Header length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -692,7 +692,7 @@ Status McapReader::ParseFooter(const Record& record, Footer* footer) {
 
   assert(record.opcode == OpCode::Footer);
   if (record.dataSize != FooterSize) {
-    const auto msg = internal::StrFormat("invalid Footer length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid Footer length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -708,7 +708,7 @@ Status McapReader::ParseSchema(const Record& record, Schema* schema) {
 
   assert(record.opcode == OpCode::Schema);
   if (record.dataSize < MinSize) {
-    const auto msg = internal::StrFormat("invalid Schema length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid Schema length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -746,7 +746,7 @@ Status McapReader::ParseChannel(const Record& record, Channel* channel) {
 
   assert(record.opcode == OpCode::Channel);
   if (record.dataSize < MinSize) {
-    const auto msg = internal::StrFormat("invalid Channel length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid Channel length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -786,7 +786,7 @@ Status McapReader::ParseMessage(const Record& record, Message* message) {
 
   assert(record.opcode == OpCode::Message);
   if (record.dataSize < MessagePreambleSize) {
-    const auto msg = internal::StrFormat("invalid Message length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid Message length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -804,7 +804,7 @@ Status McapReader::ParseChunk(const Record& record, Chunk* chunk) {
 
   assert(record.opcode == OpCode::Chunk);
   if (record.dataSize < ChunkPreambleSize) {
-    const auto msg = internal::StrFormat("invalid Chunk length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid Chunk length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -830,7 +830,7 @@ Status McapReader::ParseChunk(const Record& record, Chunk* chunk) {
   }
   offset += 8;
   if (chunk->compressedSize > record.dataSize - offset) {
-    const auto msg = internal::StrFormat("invalid Chunk.records length: ", chunk->compressedSize);
+    const auto msg = internal::StrCat("invalid Chunk.records length: ", chunk->compressedSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
   // records
@@ -844,7 +844,7 @@ Status McapReader::ParseMessageIndex(const Record& record, MessageIndex* message
 
   assert(record.opcode == OpCode::MessageIndex);
   if (record.dataSize < PreambleSize) {
-    const auto msg = internal::StrFormat("invalid MessageIndex length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid MessageIndex length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -852,7 +852,7 @@ Status McapReader::ParseMessageIndex(const Record& record, MessageIndex* message
   const uint32_t recordsSize = internal::ParseUint32(record.data + 2);
 
   if (recordsSize % 16 != 0 || recordsSize > record.dataSize - PreambleSize) {
-    const auto msg = internal::StrFormat("invalid MessageIndex.records length: ", recordsSize);
+    const auto msg = internal::StrCat("invalid MessageIndex.records length: ", recordsSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -871,7 +871,7 @@ Status McapReader::ParseChunkIndex(const Record& record, ChunkIndex* chunkIndex)
 
   assert(record.opcode == OpCode::ChunkIndex);
   if (record.dataSize < PreambleSize) {
-    const auto msg = internal::StrFormat("invalid ChunkIndex length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid ChunkIndex length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -883,8 +883,8 @@ Status McapReader::ParseChunkIndex(const Record& record, ChunkIndex* chunkIndex)
 
   if (messageIndexOffsetsSize % 10 != 0 ||
       messageIndexOffsetsSize > record.dataSize - PreambleSize) {
-    const auto msg = internal::StrFormat("invalid ChunkIndex.message_index_offsets length:",
-                                         messageIndexOffsetsSize);
+    const auto msg =
+      internal::StrCat("invalid ChunkIndex.message_index_offsets length:", messageIndexOffsetsSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -938,7 +938,7 @@ Status McapReader::ParseAttachment(const Record& record, Attachment* attachment)
 
   assert(record.opcode == OpCode::Attachment);
   if (record.dataSize < MinSize) {
-    const auto msg = internal::StrFormat("invalid Attachment length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid Attachment length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -980,7 +980,7 @@ Status McapReader::ParseAttachment(const Record& record, Attachment* attachment)
   offset += 8;
   // data
   if (attachment->dataSize > record.dataSize - offset) {
-    const auto msg = internal::StrFormat("invalid Attachment.data length: ", attachment->dataSize);
+    const auto msg = internal::StrCat("invalid Attachment.data length: ", attachment->dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
   attachment->data = record.data + offset;
@@ -1000,7 +1000,7 @@ Status McapReader::ParseAttachmentIndex(const Record& record, AttachmentIndex* a
 
   assert(record.opcode == OpCode::AttachmentIndex);
   if (record.dataSize < PreambleSize) {
-    const auto msg = internal::StrFormat("invalid AttachmentIndex length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid AttachmentIndex length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -1034,7 +1034,7 @@ Status McapReader::ParseStatistics(const Record& record, Statistics* statistics)
 
   assert(record.opcode == OpCode::Statistics);
   if (record.dataSize < PreambleSize) {
-    const auto msg = internal::StrFormat("invalid Statistics length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid Statistics length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -1051,8 +1051,8 @@ Status McapReader::ParseStatistics(const Record& record, Statistics* statistics)
     internal::ParseUint32(record.data + 8 + 2 + 4 + 4 + 4 + 4 + 8 + 8);
   if (channelMessageCountsSize % 10 != 0 ||
       channelMessageCountsSize > record.dataSize - PreambleSize) {
-    const auto msg = internal::StrFormat("invalid Statistics.channelMessageCounts length:",
-                                         channelMessageCountsSize);
+    const auto msg =
+      internal::StrCat("invalid Statistics.channelMessageCounts length:", channelMessageCountsSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -1072,7 +1072,7 @@ Status McapReader::ParseMetadata(const Record& record, Metadata* metadata) {
 
   assert(record.opcode == OpCode::Metadata);
   if (record.dataSize < MinSize) {
-    const auto msg = internal::StrFormat("invalid Metadata length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid Metadata length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -1097,7 +1097,7 @@ Status McapReader::ParseMetadataIndex(const Record& record, MetadataIndex* metad
 
   assert(record.opcode == OpCode::MetadataIndex);
   if (record.dataSize < PreambleSize) {
-    const auto msg = internal::StrFormat("invalid MetadataIndex length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid MetadataIndex length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -1118,7 +1118,7 @@ Status McapReader::ParseSummaryOffset(const Record& record, SummaryOffset* summa
 
   assert(record.opcode == OpCode::SummaryOffset);
   if (record.dataSize < MinSize) {
-    const auto msg = internal::StrFormat("invalid SummaryOffset length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid SummaryOffset length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -1134,7 +1134,7 @@ Status McapReader::ParseDataEnd(const Record& record, DataEnd* dataEnd) {
 
   assert(record.opcode == OpCode::DataEnd);
   if (record.dataSize < MinSize) {
-    const auto msg = internal::StrFormat("invalid DataEnd length: ", record.dataSize);
+    const auto msg = internal::StrCat("invalid DataEnd length: ", record.dataSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
 
@@ -1260,7 +1260,7 @@ bool TypedChunkReader::next() {
     case OpCode::DataEnd: {
       // These opcodes should not appear inside chunks
       const auto msg =
-        internal::StrFormat("record type ", uint8_t(record.opcode), " cannot appear in Chunk");
+        internal::StrCat("record type ", uint8_t(record.opcode), " cannot appear in Chunk");
       status_ = Status{StatusCode::InvalidOpCode, msg};
       break;
     }
@@ -1394,7 +1394,7 @@ bool TypedRecordReader::next() {
           const auto maybeCompression = McapReader::ParseCompression(chunk.compression);
           if (!maybeCompression.has_value()) {
             const auto msg =
-              internal::StrFormat("unrecognized compression \"", chunk.compression, "\"");
+              internal::StrCat("unrecognized compression \"", chunk.compression, "\"");
             status_ = Status{StatusCode::UnrecognizedCompression, msg};
             return true;
           }
@@ -1564,10 +1564,10 @@ LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataS
   recordReader_->onMessage = [this](const Message& message, ByteOffset, std::optional<ByteOffset>) {
     auto maybeChannel = mcapReader_.channel(message.channelId);
     if (!maybeChannel) {
-      onProblem_(Status{
-        StatusCode::InvalidChannelId,
-        internal::StrFormat("message at log_time ", message.logTime, " (seq ", message.sequence,
-                            ") references missing channel id ", message.channelId)});
+      onProblem_(
+        Status{StatusCode::InvalidChannelId,
+               internal::StrCat("message at log_time ", message.logTime, " (seq ", message.sequence,
+                                ") references missing channel id ", message.channelId)});
       return;
     }
 
@@ -1576,10 +1576,9 @@ LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataS
     if (channel.schemaId != 0) {
       maybeSchema = mcapReader_.schema(channel.schemaId);
       if (!maybeSchema) {
-        onProblem_(
-          Status{StatusCode::InvalidSchemaId,
-                 internal::StrFormat("channel ", channel.id, " (", channel.topic,
-                                     ") references missing schema id ", channel.schemaId)});
+        onProblem_(Status{StatusCode::InvalidSchemaId,
+                          internal::StrCat("channel ", channel.id, " (", channel.topic,
+                                           ") references missing schema id ", channel.schemaId)});
         return;
       }
     }

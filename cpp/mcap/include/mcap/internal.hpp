@@ -42,7 +42,7 @@ inline std::string to_string(const char* arg) {
   return std::string(arg);
 }
 template <typename... T>
-[[nodiscard]] inline std::string StrFormat(T&&... args) {
+[[nodiscard]] inline std::string StrCat(T&&... args) {
   using mcap::internal::to_string;
   using std::to_string;
   return ("" + ... + to_string(std::forward<T>(args)));
@@ -79,7 +79,7 @@ inline uint32_t ParseUint32(const std::byte* data) {
 
 inline Status ParseUint32(const std::byte* data, uint64_t maxSize, uint32_t* output) {
   if (maxSize < 4) {
-    const auto msg = StrFormat("cannot read uint32 from ", maxSize, " bytes");
+    const auto msg = StrCat("cannot read uint32 from ", maxSize, " bytes");
     return Status{StatusCode::InvalidRecord, msg};
   }
   *output = ParseUint32(data);
@@ -94,7 +94,7 @@ inline uint64_t ParseUint64(const std::byte* data) {
 
 inline Status ParseUint64(const std::byte* data, uint64_t maxSize, uint64_t* output) {
   if (maxSize < 8) {
-    const auto msg = StrFormat("cannot read uint64 from ", maxSize, " bytes");
+    const auto msg = StrCat("cannot read uint64 from ", maxSize, " bytes");
     return Status{StatusCode::InvalidRecord, msg};
   }
   *output = ParseUint64(data);
@@ -104,11 +104,11 @@ inline Status ParseUint64(const std::byte* data, uint64_t maxSize, uint64_t* out
 inline Status ParseStringView(const std::byte* data, uint64_t maxSize, std::string_view* output) {
   uint32_t size = 0;
   if (auto status = ParseUint32(data, maxSize, &size); !status.ok()) {
-    const auto msg = StrFormat("cannot read string size: ", status.message);
+    const auto msg = StrCat("cannot read string size: ", status.message);
     return Status{StatusCode::InvalidRecord, msg};
   }
   if (uint64_t(size) > (maxSize - 4)) {
-    const auto msg = StrFormat("string size ", size, " exceeds remaining bytes ", (maxSize - 4));
+    const auto msg = StrCat("string size ", size, " exceeds remaining bytes ", (maxSize - 4));
     return Status(StatusCode::InvalidRecord, msg);
   }
   *output = std::string_view(reinterpret_cast<const char*>(data + 4), size);
@@ -121,7 +121,7 @@ inline Status ParseString(const std::byte* data, uint64_t maxSize, std::string* 
     return status;
   }
   if (uint64_t(size) > (maxSize - 4)) {
-    const auto msg = StrFormat("string size ", size, " exceeds remaining bytes ", (maxSize - 4));
+    const auto msg = StrCat("string size ", size, " exceeds remaining bytes ", (maxSize - 4));
     return Status(StatusCode::InvalidRecord, msg);
   }
   *output = std::string(reinterpret_cast<const char*>(data + 4), size);
@@ -134,8 +134,7 @@ inline Status ParseByteArray(const std::byte* data, uint64_t maxSize, ByteArray*
     return status;
   }
   if (uint64_t(size) > (maxSize - 4)) {
-    const auto msg =
-      StrFormat("byte array size ", size, " exceeds remaining bytes ", (maxSize - 4));
+    const auto msg = StrCat("byte array size ", size, " exceeds remaining bytes ", (maxSize - 4));
     return Status(StatusCode::InvalidRecord, msg);
   }
   output->resize(size);
@@ -150,7 +149,7 @@ inline Status ParseKeyValueMap(const std::byte* data, uint64_t maxSize, KeyValue
   }
   if (sizeInBytes > (maxSize - 4)) {
     const auto msg =
-      StrFormat("key-value map size ", sizeInBytes, " exceeds remaining bytes ", (maxSize - 4));
+      StrCat("key-value map size ", sizeInBytes, " exceeds remaining bytes ", (maxSize - 4));
     return Status(StatusCode::InvalidRecord, msg);
   }
 
@@ -163,15 +162,14 @@ inline Status ParseKeyValueMap(const std::byte* data, uint64_t maxSize, KeyValue
   while (pos < sizeInBytes) {
     std::string_view key;
     if (auto status = ParseStringView(data + pos, sizeInBytes - pos, &key); !status.ok()) {
-      const auto msg =
-        StrFormat("cannot read key-value map key at pos ", pos, ": ", status.message);
+      const auto msg = StrCat("cannot read key-value map key at pos ", pos, ": ", status.message);
       return Status{StatusCode::InvalidRecord, msg};
     }
     pos += 4 + key.size();
     std::string_view value;
     if (auto status = ParseStringView(data + pos, sizeInBytes - pos, &value); !status.ok()) {
-      const auto msg = StrFormat("cannot read key-value map value for key \"", key, "\" at pos ",
-                                 pos, ": ", status.message);
+      const auto msg = StrCat("cannot read key-value map value for key \"", key, "\" at pos ", pos,
+                              ": ", status.message);
       return Status{StatusCode::InvalidRecord, msg};
     }
     pos += 4 + value.size();
