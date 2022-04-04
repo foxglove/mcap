@@ -2,6 +2,7 @@
 
 #include "intervaltree.hpp"
 #include "types.hpp"
+#include <cstdio>
 #include <fstream>
 #include <map>
 #include <memory>
@@ -70,13 +71,13 @@ struct IReadable {
  */
 class FileReader final : public IReadable {
 public:
-  FileReader(FILE* file);
+  FileReader(std::FILE* file);
 
   uint64_t size() const override;
   uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override;
 
 private:
-  FILE* file_;
+  std::FILE* file_;
   std::vector<std::byte> buffer_;
   uint64_t size_;
   uint64_t position_;
@@ -386,7 +387,7 @@ private:
   friend LinearMessageView;
 
   IReadable* input_ = nullptr;
-  FILE* file_ = nullptr;
+  std::FILE* file_ = nullptr;
   std::unique_ptr<FileReader> fileInput_;
   std::unique_ptr<FileStreamReader> fileStreamInput_;
   std::optional<Header> header_;

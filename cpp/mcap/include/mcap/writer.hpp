@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <unordered_set>
@@ -152,7 +153,7 @@ public:
 private:
   std::vector<std::byte> buffer_;
   size_t bufferCapacity_;
-  FILE* file_ = nullptr;
+  std::FILE* file_ = nullptr;
   uint64_t size_ = 0;
 };
 

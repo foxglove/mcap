@@ -42,16 +42,16 @@ Status BufferReader::status() const {
 
 // FileReader //////////////////////////////////////////////////////////////////
 
-FileReader::FileReader(FILE* file)
+FileReader::FileReader(std::FILE* file)
     : file_(file)
     , size_(0)
     , position_(0) {
   assert(file_);
 
   // Determine the size of the file
-  fseeko(file_, 0, SEEK_END);
-  size_ = ftello(file_);
-  fseeko(file_, 0, SEEK_SET);
+  std::fseek(file_, 0, SEEK_END);
+  size_ = std::ftell(file_);
+  std::fseek(file_, 0, SEEK_SET);
 }
 
 uint64_t FileReader::size() const {
@@ -64,8 +64,8 @@ uint64_t FileReader::read(std::byte** output, uint64_t offset, uint64_t size) {
   }
 
   if (offset != position_) {
-    fseeko(file_, offset, SEEK_SET);
-    fflush(file_);
+    std::fseek(file_, offset, SEEK_SET);
+    std::fflush(file_);
     position_ = offset;
   }
 
@@ -73,7 +73,7 @@ uint64_t FileReader::read(std::byte** output, uint64_t offset, uint64_t size) {
     buffer_.resize(size);
   }
 
-  const uint64_t bytesRead = uint64_t(fread(buffer_.data(), 1, size, file_));
+  const uint64_t bytesRead = uint64_t(std::fread(buffer_.data(), 1, size, file_));
   *output = buffer_.data();
 
   position_ += bytesRead;
@@ -278,10 +278,10 @@ Status McapReader::open(IReadable& reader) {
 
 Status McapReader::open(std::string_view filename) {
   if (file_) {
-    fclose(file_);
+    std::fclose(file_);
     file_ = nullptr;
   }
-  file_ = fopen(filename.data(), "rb");
+  file_ = std::fopen(filename.data(), "rb");
   if (!file_) {
     const auto msg = internal::StrCat("failed to open \"", filename, "\"");
     return Status{StatusCode::OpenFailed, msg};
@@ -299,7 +299,7 @@ Status McapReader::open(std::ifstream& stream) {
 void McapReader::close() {
   input_ = nullptr;
   if (file_) {
-    fclose(file_);
+    std::fclose(file_);
     file_ = nullptr;
   }
   fileInput_.reset();
