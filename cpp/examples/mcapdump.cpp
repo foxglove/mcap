@@ -8,20 +8,27 @@
 
 using mcap::ByteOffset;
 
-inline std::string to_string(const std::string& arg) {
+static std::string to_string(const std::string& arg) {
   return arg;
 }
-inline std::string to_string(std::string_view arg) {
+static std::string to_string(std::string_view arg) {
   return std::string(arg);
 }
-inline std::string to_string(const char* arg) {
+static std::string to_string(const char* arg) {
   return std::string(arg);
 }
 template <typename... T>
-[[nodiscard]] inline std::string StrCat(T&&... args) {
+[[nodiscard]] static std::string StrCat(T&&... args) {
   using ::to_string;
   using std::to_string;
   return ("" + ... + to_string(std::forward<T>(args)));
+}
+
+static std::string ToHex(uint8_t byte) {
+  std::string result{2, '\0'};
+  result[0] = "0123456789ABCDEF"[(uint8_t(byte) >> 4) & 0x0F];
+  result[1] = "0123456789ABCDEF"[uint8_t(byte) & 0x0F];
+  return result;
 }
 
 std::string ToString(const mcap::KeyValueMap& map) {
@@ -159,7 +166,7 @@ std::string ToString(const mcap::MetadataIndex& metadataIndex) {
 
 std::string ToString(const mcap::SummaryOffset& summaryOffset) {
   return StrCat("[SummaryOffset] group_opcode=", mcap::OpCodeString(summaryOffset.groupOpCode),
-                " (0x", uint8_t(summaryOffset.groupOpCode),
+                " (0x", ToHex(uint8_t(summaryOffset.groupOpCode)),
                 "), group_start=", summaryOffset.groupStart,
                 ", group_length=", summaryOffset.groupLength);
 }
@@ -169,13 +176,13 @@ std::string ToString(const mcap::DataEnd& dataEnd) {
 }
 
 std::string ToString(const mcap::Record& record) {
-  return StrCat("[Unknown] opcode=0x", uint8_t(record.opcode), ", data=<", record.dataSize,
+  return StrCat("[Unknown] opcode=0x", ToHex(uint8_t(record.opcode)), ", data=<", record.dataSize,
                 " bytes>");
 }
 
 std::string ToStringRaw(const mcap::Record& record) {
-  return StrCat("[", mcap::OpCodeString(record.opcode), "] opcode=0x", uint8_t(record.opcode),
-                ", data=<", record.dataSize, " bytes>");
+  return StrCat("[", mcap::OpCodeString(record.opcode), "] opcode=0x",
+                ToHex(uint8_t(record.opcode)), ", data=<", record.dataSize, " bytes>");
 }
 
 void DumpRaw(mcap::IReadable& dataSource) {
