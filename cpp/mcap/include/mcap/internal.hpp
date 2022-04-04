@@ -2,7 +2,6 @@
 
 #include "types.hpp"
 #include <cstring>
-#include <type_traits>
 
 // Do not compile on systems with non-8-bit bytes
 static_assert(std::numeric_limits<unsigned char>::digits == 8);
