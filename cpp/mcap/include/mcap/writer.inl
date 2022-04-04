@@ -43,7 +43,7 @@ Status FileWriter::open(std::string_view filename, size_t bufferCapacity) {
   end();
   file_ = fopen(filename.data(), "wb");
   if (!file_) {
-    const auto msg = internal::StrFormat("failed to open file \"{}\" for writing", filename);
+    const auto msg = internal::StrCat("failed to open file \"", filename, "\" for writing");
     return Status(StatusCode::OpenFailed, msg);
   }
   bufferCapacity_ = bufferCapacity;
@@ -498,7 +498,7 @@ Status McapWriter::write(const Message& message) {
   if (channelMessageCounts.find(message.channelId) == channelMessageCounts.end()) {
     const size_t channelIndex = message.channelId - 1;
     if (channelIndex >= channels_.size()) {
-      const auto msg = internal::StrFormat("invalid channel id {}", message.channelId);
+      const auto msg = internal::StrCat("invalid channel id ", message.channelId);
       return Status{StatusCode::InvalidChannelId, msg};
     }
 
@@ -508,7 +508,7 @@ Status McapWriter::write(const Message& message) {
     if (writtenSchemas_.find(channel.schemaId) == writtenSchemas_.end()) {
       const size_t schemaIndex = channel.schemaId - 1;
       if (schemaIndex >= schemas_.size()) {
-        const auto msg = internal::StrFormat("invalid schema id {}", channel.schemaId);
+        const auto msg = internal::StrCat("invalid schema id ", channel.schemaId);
         return Status{StatusCode::InvalidSchemaId, msg};
       }
 

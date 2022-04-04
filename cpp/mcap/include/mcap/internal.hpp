@@ -1,8 +1,7 @@
 #pragma once
 
-#include <fmt/core.h>
-
 #include "types.hpp"
+#include <cstring>
 
 // Do not compile on systems with non-8-bit bytes
 static_assert(std::numeric_limits<unsigned char>::digits == 8);
@@ -10,11 +9,6 @@ static_assert(std::numeric_limits<unsigned char>::digits == 8);
 namespace mcap {
 
 namespace internal {
-
-constexpr std::string_view ErrorMsgInvalidOpcode = "invalid opcode, expected {}: 0x{:02x}";
-constexpr std::string_view ErrorMsgInvalidLength = "invalid {} length: {}";
-constexpr std::string_view ErrorMsgInvalidMagic = "invalid magic bytes in {}: 0x{}";
-constexpr std::string_view ErrorOpenFileFailed = "failed to open \"{}\"";
 
 constexpr uint64_t MinHeaderLength = /* magic bytes */ sizeof(Magic) +
                                      /* opcode */ 1 +
@@ -28,13 +22,30 @@ constexpr uint64_t FooterLength = /* opcode */ 1 +
                                   /* summary crc */ 4 +
                                   /* magic bytes */ sizeof(Magic);
 
-/**
- * @brief String formatting compatible with std::format(), used to construct
- * Status messages.
- */
+inline std::string ToHex(uint8_t byte) {
+  std::string result{2, '\0'};
+  result[0] = "0123456789ABCDEF"[(uint8_t(byte) >> 4) & 0x0F];
+  result[1] = "0123456789ABCDEF"[uint8_t(byte) & 0x0F];
+  return result;
+}
+inline std::string ToHex(std::byte byte) {
+  return ToHex(uint8_t(byte));
+}
+
+inline std::string to_string(const std::string& arg) {
+  return arg;
+}
+inline std::string to_string(std::string_view arg) {
+  return std::string(arg);
+}
+inline std::string to_string(const char* arg) {
+  return std::string(arg);
+}
 template <typename... T>
-[[nodiscard]] inline std::string StrFormat(std::string_view msg, T&&... args) {
-  return fmt::format(msg, std::forward<T>(args)...);
+[[nodiscard]] inline std::string StrCat(T&&... args) {
+  using mcap::internal::to_string;
+  using std::to_string;
+  return ("" + ... + to_string(std::forward<T>(args)));
 }
 
 inline uint32_t KeyValueMapSize(const KeyValueMap& map) {
@@ -68,7 +79,7 @@ inline uint32_t ParseUint32(const std::byte* data) {
 
 inline Status ParseUint32(const std::byte* data, uint64_t maxSize, uint32_t* output) {
   if (maxSize < 4) {
-    const auto msg = StrFormat("cannot read uint32 from {} bytes", maxSize);
+    const auto msg = StrCat("cannot read uint32 from ", maxSize, " bytes");
     return Status{StatusCode::InvalidRecord, msg};
   }
   *output = ParseUint32(data);
@@ -83,7 +94,7 @@ inline uint64_t ParseUint64(const std::byte* data) {
 
 inline Status ParseUint64(const std::byte* data, uint64_t maxSize, uint64_t* output) {
   if (maxSize < 8) {
-    const auto msg = StrFormat("cannot read uint64 from {} bytes", maxSize);
+    const auto msg = StrCat("cannot read uint64 from ", maxSize, " bytes");
     return Status{StatusCode::InvalidRecord, msg};
   }
   *output = ParseUint64(data);
@@ -93,11 +104,11 @@ inline Status ParseUint64(const std::byte* data, uint64_t maxSize, uint64_t* out
 inline Status ParseStringView(const std::byte* data, uint64_t maxSize, std::string_view* output) {
   uint32_t size = 0;
   if (auto status = ParseUint32(data, maxSize, &size); !status.ok()) {
-    const auto msg = StrFormat("cannot read string size: {}", status.message);
+    const auto msg = StrCat("cannot read string size: ", status.message);
     return Status{StatusCode::InvalidRecord, msg};
   }
   if (uint64_t(size) > (maxSize - 4)) {
-    const auto msg = StrFormat("string size {} exceeds remaining bytes {}", size, (maxSize - 4));
+    const auto msg = StrCat("string size ", size, " exceeds remaining bytes ", (maxSize - 4));
     return Status(StatusCode::InvalidRecord, msg);
   }
   *output = std::string_view(reinterpret_cast<const char*>(data + 4), size);
@@ -110,7 +121,7 @@ inline Status ParseString(const std::byte* data, uint64_t maxSize, std::string* 
     return status;
   }
   if (uint64_t(size) > (maxSize - 4)) {
-    const auto msg = StrFormat("string size {} exceeds remaining bytes {}", size, (maxSize - 4));
+    const auto msg = StrCat("string size ", size, " exceeds remaining bytes ", (maxSize - 4));
     return Status(StatusCode::InvalidRecord, msg);
   }
   *output = std::string(reinterpret_cast<const char*>(data + 4), size);
@@ -123,8 +134,7 @@ inline Status ParseByteArray(const std::byte* data, uint64_t maxSize, ByteArray*
     return status;
   }
   if (uint64_t(size) > (maxSize - 4)) {
-    const auto msg =
-      StrFormat("byte array size {} exceeds remaining bytes {}", size, (maxSize - 4));
+    const auto msg = StrCat("byte array size ", size, " exceeds remaining bytes ", (maxSize - 4));
     return Status(StatusCode::InvalidRecord, msg);
   }
   output->resize(size);
@@ -139,7 +149,7 @@ inline Status ParseKeyValueMap(const std::byte* data, uint64_t maxSize, KeyValue
   }
   if (sizeInBytes > (maxSize - 4)) {
     const auto msg =
-      StrFormat("key-value map size {} exceeds remaining bytes {}", sizeInBytes, (maxSize - 4));
+      StrCat("key-value map size ", sizeInBytes, " exceeds remaining bytes ", (maxSize - 4));
     return Status(StatusCode::InvalidRecord, msg);
   }
 
@@ -152,15 +162,14 @@ inline Status ParseKeyValueMap(const std::byte* data, uint64_t maxSize, KeyValue
   while (pos < sizeInBytes) {
     std::string_view key;
     if (auto status = ParseStringView(data + pos, sizeInBytes - pos, &key); !status.ok()) {
-      const auto msg =
-        StrFormat("cannot read key-value map key at pos {}: {}", pos, status.message);
+      const auto msg = StrCat("cannot read key-value map key at pos ", pos, ": ", status.message);
       return Status{StatusCode::InvalidRecord, msg};
     }
     pos += 4 + key.size();
     std::string_view value;
     if (auto status = ParseStringView(data + pos, sizeInBytes - pos, &value); !status.ok()) {
-      const auto msg = StrFormat("cannot read key-value map value for key \"{}\" at pos {}: {}",
-                                 key, pos, status.message);
+      const auto msg = StrCat("cannot read key-value map value for key \"", key, "\" at pos ", pos,
+                              ": ", status.message);
       return Status{StatusCode::InvalidRecord, msg};
     }
     pos += 4 + value.size();
@@ -170,8 +179,9 @@ inline Status ParseKeyValueMap(const std::byte* data, uint64_t maxSize, KeyValue
 }
 
 inline std::string MagicToHex(const std::byte* data) {
-  return StrFormat("{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}", data[0], data[1], data[2],
-                   data[3], data[4], data[5], data[6], data[7]);
+  return internal::ToHex(data[0]) + internal::ToHex(data[1]) + internal::ToHex(data[2]) +
+         internal::ToHex(data[3]) + internal::ToHex(data[4]) + internal::ToHex(data[5]) +
+         internal::ToHex(data[6]) + internal::ToHex(data[7]);
 }
 
 }  // namespace internal
