@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include <cstring>
 #include <type_traits>
 
 // Do not compile on systems with non-8-bit bytes
