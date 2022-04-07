@@ -1,6 +1,29 @@
 [build-system]
-requires = [
-    "setuptools>=42",
-    "wheel"
-]
+requires = ["setuptools>=61.2.0", "wheel", "setuptools_scm[toml]>=3.4.3"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcap"
+version = "0.0.8"
+description = "MCAP libraries for Python"
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+urls = {Homepage = "https://github.com/foxglove/mcap"}
+requires-python = ">=3.7"
+dependencies = [
+    "lz4",
+    "zstd",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages]
+find = {namespaces = false}
+
+[tool.setuptools.package-data]
+mcap = ["py.typed"]
