@@ -1,9 +1,9 @@
 import { crc32 } from "@foxglove/crc";
 
-import Mcap0IndexedReader from ".";
-import { ChunkBuilder } from "../ChunkBuilder";
-import { Mcap0RecordBuilder } from "../Mcap0RecordBuilder";
-import { MCAP0_MAGIC, Opcode } from "../constants";
+import { Mcap0IndexedReader } from "./Mcap0IndexedReader";
+import { ChunkBuilder } from "./ChunkBuilder";
+import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
+import { MCAP0_MAGIC, Opcode } from "./constants";
 import {
   record,
   uint64LE,
@@ -13,8 +13,8 @@ import {
   collect,
   uint16LE,
   uint32PrefixedBytes,
-} from "../testUtils";
-import { TypedMcapRecord, TypedMcapRecords } from "../types";
+} from "./testUtils";
+import { TypedMcapRecord, TypedMcapRecords } from "./types";
 
 /**
  * Create an IReadable from a buffer. Simulates small buffer reuse to help test that readers aren't

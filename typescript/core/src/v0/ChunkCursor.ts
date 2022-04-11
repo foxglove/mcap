@@ -1,8 +1,8 @@
 import Heap from "heap-js";
 import { sortedIndexBy } from "lodash";
 
-import { parseRecord } from "../parse";
-import { IReadable, TypedMcapRecords } from "../types";
+import { parseRecord } from "./parse";
+import { IReadable, TypedMcapRecords } from "./types";
 
 type ChunkCursorParams = {
   chunkIndex: TypedMcapRecords["ChunkIndex"];
