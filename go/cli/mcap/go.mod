@@ -2,11 +2,6 @@ module github.com/foxglove/mcap/go/cli/mcap
 
 go 1.18
 
-replace (
-	github.com/foxglove/mcap/go/mcap => ../../mcap
-	github.com/foxglove/mcap/go/ros => ../../ros
-)
-
 require (
 	cloud.google.com/go/storage v1.10.0
 	github.com/fatih/color v1.13.0

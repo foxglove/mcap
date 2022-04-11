@@ -2,8 +2,6 @@ module github.com/foxglove/mcap/go/ros
 
 go 1.18
 
-replace github.com/foxglove/mcap/go/mcap => ../../mcap
-
 require (
 	github.com/foxglove/mcap/go/mcap v0.0.0-20220316142927-cc81709134cd
 	github.com/mattn/go-sqlite3 v1.14.11
