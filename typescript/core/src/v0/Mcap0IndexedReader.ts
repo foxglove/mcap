@@ -6,6 +6,20 @@ import { parseMagic, parseRecord } from "./parse";
 import { DecompressHandlers, IReadable, TypedMcapRecords } from "./types";
 import { ChunkCursor } from "./ChunkCursor";
 
+type Mcap0IndexedReaderArgs = {
+  readable: IReadable;
+  chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
+  attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
+  metadataIndexes: readonly TypedMcapRecords["MetadataIndex"][];
+  statistics: TypedMcapRecords["Statistics"] | undefined;
+  decompressHandlers?: DecompressHandlers;
+  channelsById: ReadonlyMap<number, TypedMcapRecords["Channel"]>;
+  schemasById: ReadonlyMap<number, TypedMcapRecords["Schema"]>;
+  summaryOffsetsByOpcode: ReadonlyMap<number, TypedMcapRecords["SummaryOffset"]>;
+  header: TypedMcapRecords["Header"];
+  footer: TypedMcapRecords["Footer"];
+};
+
 export class Mcap0IndexedReader {
   readonly chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
   readonly attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
@@ -23,44 +37,20 @@ export class Mcap0IndexedReader {
   private startTime: bigint | undefined;
   private endTime: bigint | undefined;
 
-  private constructor({
-    readable,
-    chunkIndexes,
-    attachmentIndexes,
-    metadataIndexes,
-    statistics,
-    decompressHandlers,
-    channelsById,
-    schemasById,
-    summaryOffsetsByOpcode,
-    header,
-    footer,
-  }: {
-    readable: IReadable;
-    chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
-    attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
-    metadataIndexes: readonly TypedMcapRecords["MetadataIndex"][];
-    statistics: TypedMcapRecords["Statistics"] | undefined;
-    decompressHandlers?: DecompressHandlers;
-    channelsById: ReadonlyMap<number, TypedMcapRecords["Channel"]>;
-    schemasById: ReadonlyMap<number, TypedMcapRecords["Schema"]>;
-    summaryOffsetsByOpcode: ReadonlyMap<number, TypedMcapRecords["SummaryOffset"]>;
-    header: TypedMcapRecords["Header"];
-    footer: TypedMcapRecords["Footer"];
-  }) {
-    this.readable = readable;
-    this.chunkIndexes = chunkIndexes;
-    this.attachmentIndexes = attachmentIndexes;
-    this.metadataIndexes = metadataIndexes;
-    this.statistics = statistics;
-    this.decompressHandlers = decompressHandlers;
-    this.channelsById = channelsById;
-    this.schemasById = schemasById;
-    this.summaryOffsetsByOpcode = summaryOffsetsByOpcode;
-    this.header = header;
-    this.footer = footer;
+  private constructor(args: Mcap0IndexedReaderArgs) {
+    this.readable = args.readable;
+    this.chunkIndexes = args.chunkIndexes;
+    this.attachmentIndexes = args.attachmentIndexes;
+    this.metadataIndexes = args.metadataIndexes;
+    this.statistics = args.statistics;
+    this.decompressHandlers = args.decompressHandlers;
+    this.channelsById = args.channelsById;
+    this.schemasById = args.schemasById;
+    this.summaryOffsetsByOpcode = args.summaryOffsetsByOpcode;
+    this.header = args.header;
+    this.footer = args.footer;
 
-    for (const chunk of chunkIndexes) {
+    for (const chunk of args.chunkIndexes) {
       if (this.startTime == undefined || chunk.messageStartTime < this.startTime) {
         this.startTime = chunk.messageStartTime;
       }
@@ -74,6 +64,7 @@ export class Mcap0IndexedReader {
     return new Error(`${message} [library=${this.header.library}]`);
   }
 
+  // fixme - what is this and when do I call it?
   static async Initialize({
     readable,
     decompressHandlers,
