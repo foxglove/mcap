@@ -58,6 +58,9 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	}
 
 	// scan the whole summary section
+	if footer.SummaryStart == 0 {
+		return nil
+	}
 	_, err = it.rs.Seek(int64(footer.SummaryStart), io.SeekStart)
 	if err != nil {
 		return fmt.Errorf("failed to seek to summary start")

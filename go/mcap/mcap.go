@@ -2,6 +2,7 @@ package mcap
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"runtime/debug"
 )
@@ -92,7 +93,7 @@ func (c OpCode) String() string {
 	case OpDataEnd:
 		return "data end"
 	default:
-		return "unrecognized opcode"
+		return fmt.Sprintf("<unrecognized opcode 0x%02x>", byte(c))
 	}
 }
 

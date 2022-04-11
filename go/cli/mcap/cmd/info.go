@@ -31,18 +31,20 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	buf := &bytes.Buffer{}
 	fmt.Fprintf(buf, "library: %s\n", info.Header.Library)
 	fmt.Fprintf(buf, "profile: %s\n", info.Header.Profile)
-	fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
-	start := info.Statistics.MessageStartTime
-	end := info.Statistics.MessageEndTime
-	starttime := time.Unix(int64(start/1e9), int64(start%1e9))
-	endtime := time.Unix(int64(end/1e9), int64(end%1e9))
-	fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
-	if starttime.After(LongAgo) {
-		fmt.Fprintf(buf, "start: %s (%s)\n", starttime.Format(time.RFC3339Nano), decimalTime(starttime))
-		fmt.Fprintf(buf, "end: %s (%s)\n", endtime.Format(time.RFC3339Nano), decimalTime(endtime))
-	} else {
-		fmt.Fprintf(buf, "start: %.3f\n", float64(starttime.UnixNano())/1e9)
-		fmt.Fprintf(buf, "end: %.3f\n", float64(endtime.UnixNano())/1e9)
+	if info.Statistics != nil {
+		fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
+		start := info.Statistics.MessageStartTime
+		end := info.Statistics.MessageEndTime
+		starttime := time.Unix(int64(start/1e9), int64(start%1e9))
+		endtime := time.Unix(int64(end/1e9), int64(end%1e9))
+		fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
+		if starttime.After(LongAgo) {
+			fmt.Fprintf(buf, "start: %s (%s)\n", starttime.Format(time.RFC3339Nano), decimalTime(starttime))
+			fmt.Fprintf(buf, "end: %s (%s)\n", endtime.Format(time.RFC3339Nano), decimalTime(endtime))
+		} else {
+			fmt.Fprintf(buf, "start: %.3f\n", float64(starttime.UnixNano())/1e9)
+			fmt.Fprintf(buf, "end: %.3f\n", float64(endtime.UnixNano())/1e9)
+		}
 	}
 	if len(info.ChunkIndexes) > 0 {
 		compressionFormatStats := make(map[mcap.CompressionFormat]struct {
@@ -74,10 +76,12 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	})
 	rows := [][]string{}
 	maxCountWidth := 0
-	for _, v := range info.Statistics.ChannelMessageCounts {
-		count := fmt.Sprintf("%d", v)
-		if len(count) > maxCountWidth {
-			maxCountWidth = len(count)
+	if info.Statistics != nil {
+		for _, v := range info.Statistics.ChannelMessageCounts {
+			count := fmt.Sprintf("%d", v)
+			if len(count) > maxCountWidth {
+				maxCountWidth = len(count)
+			}
 		}
 	}
 	for _, chanID := range chanIDs {
@@ -87,9 +91,11 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		frequency := 1e9 * float64(channelMessageCount) / float64(end-start)
 		row := []string{
 			fmt.Sprintf("\t(%d) %s", channel.ID, channel.Topic),
-			fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency),
-			fmt.Sprintf(" : %s [%s]", schema.Name, schema.Encoding),
 		}
+		if info.Statistics != nil {
+			row = append(row, fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency))
+		}
+		row = append(row, fmt.Sprintf(" : %s [%s]", schema.Name, schema.Encoding))
 		rows = append(rows, row)
 	}
 	tw := tablewriter.NewWriter(buf)
@@ -100,7 +106,11 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	tw.AppendBulk(rows)
 	tw.Render()
 
-	fmt.Fprintf(buf, "attachments: %d\n", info.Statistics.AttachmentCount)
+	var attachmentCount uint32
+	if info.Statistics != nil {
+		attachmentCount = info.Statistics.AttachmentCount
+	}
+	fmt.Fprintf(buf, "attachments: %d\n", attachmentCount)
 	_, err := buf.WriteTo(w)
 	return err
 }
