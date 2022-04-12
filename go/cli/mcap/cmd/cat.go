@@ -90,7 +90,11 @@ func printMessages(
 			log.Fatalf("Failed to read next message: %s", err)
 		}
 		if !formatJSON {
-			fmt.Fprintf(w, "%d %s [%s] %v...\n", message.LogTime, channel.Topic, schema.Name, message.Data[:10])
+			if len(message.Data) > 10 {
+				fmt.Fprintf(w, "%d %s [%s] %v...\n", message.LogTime, channel.Topic, schema.Name, message.Data[:10])
+			} else {
+				fmt.Fprintf(w, "%d %s [%s] %v\n", message.LogTime, channel.Topic, schema.Name, message.Data)
+			}
 			continue
 		}
 		switch schema.Encoding {
