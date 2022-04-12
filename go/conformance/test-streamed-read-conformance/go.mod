@@ -2,9 +2,7 @@ module github.com/foxglove/mcap/go/conformance/test-streamed-read-conformance
 
 go 1.18
 
-replace github.com/foxglove/mcap/go/mcap => ../../mcap
-
-require github.com/foxglove/mcap/go/mcap v0.0.0-00010101000000-000000000000
+require github.com/foxglove/mcap/go/mcap v0.0.0-20220328132551-ffb9c0b0ebdc
 
 require (
 	github.com/davecgh/go-spew v1.1.0 // indirect
