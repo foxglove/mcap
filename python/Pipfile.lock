@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "b68382180c482f96303000e196ed5804b2c8aa0a861ecf28240c0d75e1a20a6f"
+            "sha256": "2c4c2025837fc4e9c4b2b9d4cda6676eea3f0d121a7d83ad9901b87389289ab6"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -45,7 +45,8 @@
         },
         "mcap": {
             "editable": true,
-            "path": "."
+            "path": ".",
+            "use_pep517": true
         },
         "zstd": {
             "hashes": [
