@@ -218,7 +218,7 @@ jobs:
           python-version: 3.9
           cache: pipenv
       - run: pip install --upgrade --pre pip setuptools setuptools_scm wheel build pipenv
-      - run: pipenv install --dev --deploy
+      - run: pipenv install --dev --deploy -vvvvv
       - run: pipenv run black --check --diff --color .
       - run: pipenv run python -m flake8 mcap tests
       - run: pipenv run python -m pytest
