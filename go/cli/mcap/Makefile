@@ -10,6 +10,11 @@ else
 flags:: version
 	$(eval FLAGS="-tags sqlite_omit_load_extension -ldflags '-s -w -X github.com/foxglove/mcap/go/cli/mcap/cmd.Version=$(VERSION)'")
 endif
+ifeq ($(GOOS),windows)
+	ifneq ($(suffix $(BINARY_NAME)),.exe)
+    BINARY_NAME := $(addsuffix .exe,$(BINARY_NAME))
+	endif
+endif
 
 version: $(eval VERSION=$(shell sed 's_releases/mcap-cli/__g' <<< $$(git describe --tags)))
 version:
