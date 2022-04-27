@@ -1,7 +1,14 @@
-SHELL=/bin/bash
-BINARY_NAME ?= mcap
+# enable cgo to build sqlite
+export CGO_ENABLED = 1
 
 GOOS=$(shell go env GOOS)
+
+OUTPUT ?= mcap
+
+ifeq ($(GOOS),windows)
+	OUTPUT := $(addsuffix .exe,$(OUTPUT))
+endif
+
 ifeq ($(GOOS),linux)
 flags:: version
 	# statically link binaries to support alpine linux
@@ -17,7 +24,7 @@ version:
 
 build: flags
 	mkdir -p bin
-	go build -o bin/$(BINARY_NAME) $(subst $\",,$(FLAGS)) .
+	go build -o bin/$(OUTPUT) $(subst $\",,$(FLAGS)) .
 
 lint:
 	golangci-lint run ./...
