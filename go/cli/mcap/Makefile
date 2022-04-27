@@ -1,7 +1,8 @@
 SHELL=/bin/bash
-BINARY_NAME ?= mcap
-
 GOOS=$(shell go env GOOS)
+
+OUTPUT ?= mcap
+
 ifeq ($(GOOS),linux)
 flags:: version
 	# statically link binaries to support alpine linux
@@ -10,9 +11,10 @@ else
 flags:: version
 	$(eval FLAGS="-tags sqlite_omit_load_extension -ldflags '-s -w -X github.com/foxglove/mcap/go/cli/mcap/cmd.Version=$(VERSION)'")
 endif
+
 ifeq ($(GOOS),windows)
-	ifneq ($(suffix $(BINARY_NAME)),.exe)
-    BINARY_NAME := $(addsuffix .exe,$(BINARY_NAME))
+	ifneq ($(suffix $(OUTPUT)),.exe)
+		OUTPUT := $(addsuffix .exe,$(OUTPUT))
 	endif
 endif
 
@@ -22,7 +24,7 @@ version:
 
 build: flags
 	mkdir -p bin
-	go build -o bin/$(BINARY_NAME) $(subst $\",,$(FLAGS)) .
+	go build -o bin/$(OUTPUT) $(subst $\",,$(FLAGS)) .
 
 lint:
 	golangci-lint run ./...
