@@ -20,11 +20,13 @@ var (
 	db3Magic = []byte{0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x33, 0x00}
 )
 
-var amentPrefixPath string
-var compression string
-var chunkSize int64
-var includeCRC bool
-var chunked bool
+var (
+	convertAmentPrefixPath string
+	convertCompression     string
+	convertChunkSize       int64
+	convertIncludeCRC      bool
+	convertChunked         bool
+)
 
 type FileType string
 
@@ -83,7 +85,7 @@ var convertCmd = &cobra.Command{
 		defer w.Close()
 
 		var compressionFormat mcap.CompressionFormat
-		switch compression {
+		switch convertCompression {
 		case "lz4":
 			compressionFormat = mcap.CompressionLZ4
 		case "zstd":
@@ -93,9 +95,9 @@ var convertCmd = &cobra.Command{
 		}
 
 		opts := &mcap.WriterOptions{
-			IncludeCRC:  includeCRC,
-			Chunked:     chunked,
-			ChunkSize:   chunkSize,
+			IncludeCRC:  convertIncludeCRC,
+			Chunked:     convertChunked,
+			ChunkSize:   convertChunkSize,
 			Compression: compressionFormat,
 		}
 
@@ -112,7 +114,7 @@ var convertCmd = &cobra.Command{
 				die("failed to open sqlite3: %s", err)
 			}
 
-			amentPath := amentPrefixPath
+			amentPath := convertAmentPrefixPath
 			prefixPath := os.Getenv("AMENT_PREFIX_PATH")
 			if prefixPath != "" {
 				amentPath += ":" + prefixPath
@@ -131,35 +133,35 @@ var convertCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(convertCmd)
 	convertCmd.PersistentFlags().StringVarP(
-		&amentPrefixPath,
+		&convertAmentPrefixPath,
 		"ament-prefix-path",
 		"",
 		"",
 		"(ros2 only) colon-separated list of directories to search for message definitions (e.g /opt/ros/galactic:/opt/ros/noetic)",
 	)
 	convertCmd.PersistentFlags().StringVarP(
-		&compression,
+		&convertCompression,
 		"compression",
 		"",
 		"zstd",
 		"chunk compression algorithm (supported: zstd, lz4, none)",
 	)
 	convertCmd.PersistentFlags().Int64VarP(
-		&chunkSize,
+		&convertChunkSize,
 		"chunk-size",
 		"",
 		8*1024*1024,
 		"chunk size to target",
 	)
 	convertCmd.PersistentFlags().BoolVarP(
-		&includeCRC,
+		&convertIncludeCRC,
 		"include-crc",
 		"",
 		true,
 		"include chunk CRC checksums in output",
 	)
 	convertCmd.PersistentFlags().BoolVarP(
-		&chunked,
+		&convertChunked,
 		"chunked",
 		"",
 		true,

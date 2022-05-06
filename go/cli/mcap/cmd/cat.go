@@ -26,10 +26,10 @@ import (
 )
 
 var (
-	topics     string
-	start      int64
-	end        int64
-	formatJSON bool
+	catTopics     string
+	catStart      int64
+	catEnd        int64
+	catFormatJSON bool
 )
 
 type DecimalTime uint64
@@ -175,12 +175,12 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("Failed to create reader: %s", err)
 			}
-			topics := strings.FieldsFunc(topics, func(c rune) bool { return c == ',' })
-			it, err := reader.Messages(start*1e9, end*1e9, topics, false)
+			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
+			it, err := reader.Messages(catStart*1e9, catEnd*1e9, topics, false)
 			if err != nil {
 				log.Fatalf("Failed to read messages: %s", err)
 			}
-			err = printMessages(ctx, os.Stdout, it, formatJSON)
+			err = printMessages(ctx, os.Stdout, it, catFormatJSON)
 			if err != nil {
 				log.Fatalf("Failed to print messages: %s", err)
 			}
@@ -197,12 +197,12 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to create reader: %w", err)
 			}
-			topics := strings.FieldsFunc(topics, func(c rune) bool { return c == ',' })
-			it, err := reader.Messages(start*1e9, end*1e9, topics, true)
+			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
+			it, err := reader.Messages(catStart*1e9, catEnd*1e9, topics, true)
 			if err != nil {
 				return fmt.Errorf("failed to read messages: %w", err)
 			}
-			err = printMessages(ctx, os.Stdout, it, formatJSON)
+			err = printMessages(ctx, os.Stdout, it, catFormatJSON)
 			if err != nil {
 				return fmt.Errorf("failed to print messages: %w", err)
 			}
@@ -217,8 +217,8 @@ var catCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(catCmd)
 
-	catCmd.PersistentFlags().Int64VarP(&start, "start-secs", "", 0, "start time")
-	catCmd.PersistentFlags().Int64VarP(&end, "end-secs", "", math.MaxInt64, "end time")
-	catCmd.PersistentFlags().StringVarP(&topics, "topics", "", "", "comma-separated list of topics")
-	catCmd.PersistentFlags().BoolVarP(&formatJSON, "json", "", false, "print messages as JSON")
+	catCmd.PersistentFlags().Int64VarP(&catStart, "start-secs", "", 0, "start time")
+	catCmd.PersistentFlags().Int64VarP(&catEnd, "end-secs", "", math.MaxInt64, "end time")
+	catCmd.PersistentFlags().StringVarP(&catTopics, "topics", "", "", "comma-separated list of topics")
+	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false, "print messages as JSON")
 }
