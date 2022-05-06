@@ -31,10 +31,11 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	buf := &bytes.Buffer{}
 	fmt.Fprintf(buf, "library: %s\n", info.Header.Library)
 	fmt.Fprintf(buf, "profile: %s\n", info.Header.Profile)
+	var start, end uint64
 	if info.Statistics != nil {
 		fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
-		start := info.Statistics.MessageStartTime
-		end := info.Statistics.MessageEndTime
+		start = info.Statistics.MessageStartTime
+		end = info.Statistics.MessageEndTime
 		starttime := time.Unix(int64(start/1e9), int64(start%1e9))
 		endtime := time.Unix(int64(end/1e9), int64(end%1e9))
 		fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
