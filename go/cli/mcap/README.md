@@ -7,8 +7,25 @@ for details.
 
 ### Installing:
 
-Download the latest release binary from
-[releases](https://github.com/foxglove/mcap/releases) or install using go:
+Either install from [releases
+binaries](https://github.com/foxglove/mcap/releases) or by using go.
+
+#### From release binaries
+
+Download the executable for your platform and mark it executable (if on mac or
+linux). For example,
+
+    wget https://github.com/foxglove/mcap/releases/latest/download/mcap-linux-amd64 -O mcap
+    chmod +x mcap
+
+If desired, move the binary onto your path.
+
+If on windows, download and run the appropriate .exe for your architecture from
+the releases page.
+
+#### Using go
+
+To install from the latest commit, use
 
     go install github.com/foxglove/mcap/go/cli/mcap@latest
 
