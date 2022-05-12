@@ -6,7 +6,7 @@ from io import BufferedWriter, RawIOBase
 from typing import IO, Any, Dict, List, OrderedDict, Union
 
 import lz4.frame  # type: ignore
-import zstd
+import zstandard
 
 from .chunk_builder import ChunkBuilder
 from .data_stream import RecordBuilder
@@ -404,7 +404,7 @@ class Writer:
             compressed_data: bytes = lz4.frame.compress(chunk_data)  # type: ignore
         elif self.__compression == CompressionType.ZSTD:
             compression = "zstd"
-            compressed_data: bytes = zstd.ZSTD_compress(chunk_data)  # type: ignore
+            compressed_data: bytes = zstandard.compress(chunk_data)  # type: ignore
         else:
             compression = ""
             compressed_data = chunk_data
