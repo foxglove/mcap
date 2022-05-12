@@ -1,10 +1,10 @@
 import { crc32, crc32Final, crc32Init, crc32Update } from "@foxglove/crc";
 import Heap from "heap-js";
 
+import { ChunkCursor } from "./ChunkCursor";
 import { MCAP0_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
 import { DecompressHandlers, IReadable, TypedMcapRecords } from "./types";
-import { ChunkCursor } from "./ChunkCursor";
 
 type Mcap0IndexedReaderArgs = {
   readable: IReadable;
@@ -64,7 +64,6 @@ export class Mcap0IndexedReader {
     return new Error(`${message} [library=${this.header.library}]`);
   }
 
-  // fixme - what is this and when do I call it?
   static async Initialize({
     readable,
     decompressHandlers,

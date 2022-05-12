@@ -1,7 +1,7 @@
 import { crc32 } from "@foxglove/crc";
 
-import { Mcap0IndexedReader } from "./Mcap0IndexedReader";
 import { ChunkBuilder } from "./ChunkBuilder";
+import { Mcap0IndexedReader } from "./Mcap0IndexedReader";
 import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
 import { MCAP0_MAGIC, Opcode } from "./constants";
 import {

@@ -281,7 +281,7 @@ export class ChunkCursor {
 
       let startIndex = 0;
       if (reverse) {
-        if (this.endTime) {
+        if (this.endTime != undefined) {
           startIndex = sortedIndexBy(
             result.record.records,
             [this.endTime],
@@ -289,7 +289,7 @@ export class ChunkCursor {
           );
         }
       } else {
-        if (this.startTime) {
+        if (this.startTime != undefined) {
           startIndex = sortedIndexBy(
             result.record.records,
             [this.startTime],
