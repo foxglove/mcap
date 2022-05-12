@@ -5,7 +5,7 @@ name = "pypi"
 
 [packages]
 lz4 = "*"
-zstd = "*"
+zstandard = "*"
 mcap = { editable = true, path = "." }
 
 [dev-packages]
