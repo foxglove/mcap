@@ -9,6 +9,16 @@ type ChunkCursorParams = {
   relevantChannels: Set<number> | undefined;
   startTime: bigint | undefined;
   endTime: bigint | undefined;
+  reverse: boolean;
+};
+
+type MessageIndexCursor = {
+  channelId: number;
+
+  /** index of next message within `records` array */
+  index: number;
+
+  records: TypedMcapRecords["MessageIndex"]["records"];
 };
 
 /**
@@ -24,21 +34,16 @@ export class ChunkCursor {
   private relevantChannels?: Set<number>;
   private startTime: bigint | undefined;
   private endTime: bigint | undefined;
+  private reverse: boolean;
 
-  private messageIndexCursors?: Heap<{
-    channelId: number;
-
-    /** index of next message within `records` array */
-    index: number;
-
-    records: TypedMcapRecords["MessageIndex"]["records"];
-  }>;
+  private messageIndexCursors?: Heap<MessageIndexCursor>;
 
   constructor(params: ChunkCursorParams) {
     this.chunkIndex = params.chunkIndex;
     this.relevantChannels = params.relevantChannels;
     this.startTime = params.startTime;
     this.endTime = params.endTime;
+    this.reverse = params.reverse;
 
     if (this.chunkIndex.messageIndexLength === 0n) {
       throw new Error(`Chunks without message indexes are not currently supported`);
@@ -54,12 +59,23 @@ export class ChunkCursor {
    * and re-sort the cursors.
    */
   compare(other: ChunkCursor): number {
-    // If chunks don't overlap at all, sort earlier chunk first
-    if (this.chunkIndex.messageEndTime < other.chunkIndex.messageStartTime) {
-      return -1;
-    }
-    if (this.chunkIndex.messageStartTime > other.chunkIndex.messageEndTime) {
-      return 1;
+    const reverse = this.reverse;
+    if (reverse) {
+      // If chunks don't overlap at all, sort later chunk first
+      if (this.chunkIndex.messageEndTime > other.chunkIndex.messageStartTime) {
+        return -1;
+      }
+      if (this.chunkIndex.messageStartTime < other.chunkIndex.messageEndTime) {
+        return 1;
+      }
+    } else {
+      // If chunks don't overlap at all, sort earlier chunk first
+      if (this.chunkIndex.messageEndTime < other.chunkIndex.messageStartTime) {
+        return -1;
+      }
+      if (this.chunkIndex.messageStartTime > other.chunkIndex.messageEndTime) {
+        return 1;
+      }
     }
 
     // If a cursor has not loaded message indexes, sort it first so it can get loaded and re-sorted.
@@ -87,12 +103,22 @@ export class ChunkCursor {
     }
     const logTimeA = cursorA.records[cursorA.index]![0];
     const logTimeB = cursorB.records[cursorB.index]![0];
-    if (logTimeA !== logTimeB) {
-      return Number(logTimeA - logTimeB);
-    }
 
-    // Break ties by chunk offset in the file
-    return Number(this.chunkIndex.chunkStartOffset - other.chunkIndex.chunkStartOffset);
+    if (reverse) {
+      if (logTimeA !== logTimeB) {
+        return Number(logTimeB - logTimeA);
+      }
+
+      // Break ties by chunk offset in the file
+      return Number(other.chunkIndex.chunkStartOffset - this.chunkIndex.chunkStartOffset);
+    } else {
+      if (logTimeA !== logTimeB) {
+        return Number(logTimeA - logTimeB);
+      }
+
+      // Break ties by chunk offset in the file
+      return Number(this.chunkIndex.chunkStartOffset - other.chunkIndex.chunkStartOffset);
+    }
   }
 
   /**
@@ -148,15 +174,28 @@ export class ChunkCursor {
   }
 
   async loadMessageIndexes(readable: IReadable): Promise<void> {
+    const reverse = this.reverse;
     this.messageIndexCursors = new Heap((a, b) => {
       const logTimeA = a.records[a.index]?.[0];
       const logTimeB = b.records[b.index]?.[0];
-      if (logTimeA == undefined) {
-        return 1;
-      } else if (logTimeB == undefined) {
-        return -1;
+
+      if (reverse) {
+        if (logTimeA == undefined) {
+          return -1;
+        } else if (logTimeB == undefined) {
+          return 1;
+        }
+
+        return Number(logTimeB - logTimeA);
+      } else {
+        if (logTimeA == undefined) {
+          return 1;
+        } else if (logTimeB == undefined) {
+          return -1;
+        }
+
+        return Number(logTimeA - logTimeB);
       }
-      return Number(logTimeA - logTimeB);
     });
 
     let messageIndexStartOffset: bigint | undefined;

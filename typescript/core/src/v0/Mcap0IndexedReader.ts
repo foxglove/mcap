@@ -300,15 +300,16 @@ export class Mcap0IndexedReader {
     });
   }
 
-  async *readMessages({
-    topics,
-    startTime = this.startTime,
-    endTime = this.endTime,
-  }: {
-    topics?: readonly string[];
-    startTime?: bigint;
-    endTime?: bigint;
-  } = {}): AsyncGenerator<TypedMcapRecords["Message"], void, void> {
+  async *readMessages(
+    args: {
+      topics?: readonly string[];
+      startTime?: bigint;
+      endTime?: bigint;
+      reverse?: boolean;
+    } = {},
+  ): AsyncGenerator<TypedMcapRecords["Message"], void, void> {
+    const { topics, startTime = this.startTime, endTime = this.endTime, reverse = false } = args;
+
     if (startTime == undefined || endTime == undefined) {
       return;
     }
@@ -326,7 +327,9 @@ export class Mcap0IndexedReader {
     const chunkCursors = new Heap<ChunkCursor>((a, b) => a.compare(b));
     for (const chunkIndex of this.chunkIndexes) {
       if (chunkIndex.messageStartTime <= endTime && chunkIndex.messageEndTime >= startTime) {
-        chunkCursors.push(new ChunkCursor({ chunkIndex, relevantChannels, startTime, endTime }));
+        chunkCursors.push(
+          new ChunkCursor({ chunkIndex, relevantChannels, startTime, endTime, reverse }),
+        );
       }
     }
 
@@ -334,45 +337,6 @@ export class Mcap0IndexedReader {
     // cursor becomes active (i.e. when we first need to access messages from the chunk) and removed
     // when the cursor is removed from the heap.
     const chunkViewCache = new Map<bigint, DataView>();
-    const loadChunkData = async (chunkIndex: TypedMcapRecords["ChunkIndex"]): Promise<DataView> => {
-      const chunkData = await this.readable.read(
-        chunkIndex.chunkStartOffset,
-        chunkIndex.chunkLength,
-      );
-      const chunkResult = parseRecord({
-        view: new DataView(chunkData.buffer, chunkData.byteOffset, chunkData.byteLength),
-        startOffset: 0,
-        validateCrcs: true,
-      });
-      if (chunkResult.record?.type !== "Chunk") {
-        throw this.errorWithLibrary(
-          `Chunk start offset ${
-            chunkIndex.chunkStartOffset
-          } does not point to chunk record (found ${String(chunkResult.record?.type)})`,
-        );
-      }
-
-      const chunk = chunkResult.record;
-      let buffer = chunk.records;
-      if (chunk.compression !== "" && buffer.byteLength > 0) {
-        const decompress = this.decompressHandlers?.[chunk.compression];
-        if (!decompress) {
-          throw this.errorWithLibrary(`Unsupported compression ${chunk.compression}`);
-        }
-        buffer = decompress(buffer, chunk.uncompressedSize);
-      }
-      if (chunk.uncompressedCrc !== 0) {
-        const chunkCrc = crc32(buffer);
-        if (chunkCrc !== chunk.uncompressedCrc) {
-          throw this.errorWithLibrary(
-            `Incorrect chunk CRC ${chunkCrc} (expected ${chunk.uncompressedCrc})`,
-          );
-        }
-      }
-
-      return new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-    };
-
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
@@ -387,7 +351,7 @@ export class Mcap0IndexedReader {
 
       let chunkView = chunkViewCache.get(cursor.chunkIndex.chunkStartOffset);
       if (!chunkView) {
-        chunkView = await loadChunkData(cursor.chunkIndex);
+        chunkView = await this.loadChunkData(cursor.chunkIndex);
         chunkViewCache.set(cursor.chunkIndex.chunkStartOffset, chunkView);
       }
 
@@ -426,5 +390,41 @@ export class Mcap0IndexedReader {
         chunkViewCache.delete(cursor.chunkIndex.chunkStartOffset);
       }
     }
+  }
+
+  private async loadChunkData(chunkIndex: TypedMcapRecords["ChunkIndex"]): Promise<DataView> {
+    const chunkData = await this.readable.read(chunkIndex.chunkStartOffset, chunkIndex.chunkLength);
+    const chunkResult = parseRecord({
+      view: new DataView(chunkData.buffer, chunkData.byteOffset, chunkData.byteLength),
+      startOffset: 0,
+      validateCrcs: true,
+    });
+    if (chunkResult.record?.type !== "Chunk") {
+      throw this.errorWithLibrary(
+        `Chunk start offset ${
+          chunkIndex.chunkStartOffset
+        } does not point to chunk record (found ${String(chunkResult.record?.type)})`,
+      );
+    }
+
+    const chunk = chunkResult.record;
+    let buffer = chunk.records;
+    if (chunk.compression !== "" && buffer.byteLength > 0) {
+      const decompress = this.decompressHandlers?.[chunk.compression];
+      if (!decompress) {
+        throw this.errorWithLibrary(`Unsupported compression ${chunk.compression}`);
+      }
+      buffer = decompress(buffer, chunk.uncompressedSize);
+    }
+    if (chunk.uncompressedCrc !== 0) {
+      const chunkCrc = crc32(buffer);
+      if (chunkCrc !== chunk.uncompressedCrc) {
+        throw this.errorWithLibrary(
+          `Incorrect chunk CRC ${chunkCrc} (expected ${chunk.uncompressedCrc})`,
+        );
+      }
+    }
+
+    return new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   }
 }
