@@ -1,7 +1,7 @@
 import struct
 from io import BufferedReader, BytesIO, RawIOBase
 from typing import Iterator, List, Optional, Tuple, Union
-from zstd import ZSTD_uncompress  # type: ignore
+import zstandard
 import lz4.frame  # type: ignore
 
 from .data_stream import ReadDataStream
@@ -50,7 +50,7 @@ def breakup_chunk(chunk: Chunk) -> List[McapRecord]:
 
 def get_chunk_data_stream(chunk: Chunk) -> Tuple[ReadDataStream, int]:
     if chunk.compression == "zstd":
-        data: bytes = ZSTD_uncompress(chunk.data)
+        data: bytes = zstandard.decompress(chunk.data, chunk.uncompressed_size)
         return ReadDataStream(BytesIO(data)), len(data)
     elif chunk.compression == "lz4":
         data: bytes = lz4.frame.decompress(chunk.data)  # type: ignore

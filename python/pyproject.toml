@@ -4,3 +4,8 @@ requires = [
     "wheel"
 ]
 build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+addopts = "-vv --color=yes"
+log_cli = true
+xfail_strict = true

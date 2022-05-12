@@ -87,6 +87,8 @@ overrides:
       - pyright
       - pytest
       - setuptools
+      - addopts
+      - xfail
 
   - filename: "python/**/*.rst"
     words:
