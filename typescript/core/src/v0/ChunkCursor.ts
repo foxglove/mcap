@@ -62,11 +62,11 @@ export class ChunkCursor {
     const reverse = this.reverse;
     if (reverse) {
       // If chunks don't overlap at all, sort later chunk first
-      if (this.chunkIndex.messageEndTime > other.chunkIndex.messageStartTime) {
-        return -1;
-      }
-      if (this.chunkIndex.messageStartTime < other.chunkIndex.messageEndTime) {
+      if (this.chunkIndex.messageEndTime < other.chunkIndex.messageStartTime) {
         return 1;
+      }
+      if (this.chunkIndex.messageStartTime > other.chunkIndex.messageEndTime) {
+        return -1;
       }
     } else {
       // If chunks don't overlap at all, sort earlier chunk first
@@ -153,15 +153,28 @@ export class ChunkCursor {
         `Encountered message with logTime (${logTime}) prior to startTime (${this.startTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
       );
     }
-    if (
-      cursor.index + 1 < cursor.records.length &&
-      (this.endTime == undefined || cursor.records[cursor.index + 1]![0] <= this.endTime)
-    ) {
-      cursor.index++;
-      this.messageIndexCursors.replace(cursor);
-    } else {
-      this.messageIndexCursors.pop();
+    if (this.endTime != undefined && logTime > this.endTime) {
+      throw new Error(
+        `Encountered message with logTime (${logTime}) after endTime (${this.endTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
+      );
     }
+
+    const nextRecord = cursor.records[cursor.index + 1];
+    if (nextRecord && this.reverse) {
+      if (this.startTime == undefined || nextRecord[0] >= this.startTime) {
+        cursor.index++;
+        this.messageIndexCursors.replace(cursor);
+        return record;
+      }
+    } else if (nextRecord) {
+      if (this.endTime == undefined || nextRecord[0] <= this.endTime) {
+        cursor.index++;
+        this.messageIndexCursors.replace(cursor);
+        return record;
+      }
+    }
+
+    this.messageIndexCursors.pop();
     return record;
   }
 
@@ -246,7 +259,11 @@ export class ChunkCursor {
         continue;
       }
 
-      result.record.records.sort(([logTimeA], [logTimeB]) => Number(logTimeA - logTimeB));
+      if (reverse) {
+        result.record.records.sort(([logTimeA], [logTimeB]) => Number(logTimeB - logTimeA));
+      } else {
+        result.record.records.sort(([logTimeA], [logTimeB]) => Number(logTimeA - logTimeB));
+      }
 
       for (let i = 0; i < result.record.records.length; i++) {
         const [logTime] = result.record.records[i]!;
@@ -261,13 +278,30 @@ export class ChunkCursor {
           );
         }
       }
-      const startIndex =
-        this.startTime == undefined
-          ? 0
-          : sortedIndexBy(result.record.records, [this.startTime], ([logTime]) => logTime);
+
+      let startIndex = 0;
+      if (reverse) {
+        if (this.endTime) {
+          startIndex = sortedIndexBy(
+            result.record.records,
+            [this.endTime],
+            ([logTime]) => -logTime!,
+          );
+        }
+      } else {
+        if (this.startTime) {
+          startIndex = sortedIndexBy(
+            result.record.records,
+            [this.startTime],
+            ([logTime]) => logTime,
+          );
+        }
+      }
+
       if (startIndex >= result.record.records.length) {
         continue;
       }
+
       this.messageIndexCursors.push({
         index: startIndex,
         channelId: result.record.channelId,
