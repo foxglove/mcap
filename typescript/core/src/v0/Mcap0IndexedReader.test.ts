@@ -244,7 +244,7 @@ describe("Mcap0IndexedReader", () => {
       logTime: 12n,
       data: new Uint8Array(),
     };
-    it.only.each([
+    it.each([
       {
         startTime: undefined,
         endTime: undefined,
