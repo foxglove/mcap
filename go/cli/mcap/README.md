@@ -1,4 +1,4 @@
-## `mcap` tool
+## `mcap` CLI
 
 > Note: this tool is experimental and will change without warning until finalization of the MCAP spec.
 
@@ -41,46 +41,13 @@ Convert a bag file to MCAP:
 
 <!-- cspell: enable -->
 
-#### File summarization
-
-Report summary statistics on an MCAP file:
-
-    [~/work/mcap/go/cli/mcap] (main) $ mcap info demo.mcap
-    messages: 1606
-    duration: 7.780758504s
-    start: 2017-03-21T19:26:20.103843113-07:00
-    end: 2017-03-21T19:26:27.884601617-07:00
-    chunks:
-            zstd: [14/14 chunks] (50.79%)
-    channels:
-            (0) /diagnostics              52 msgs   : diagnostic_msgs/DiagnosticArray [ros1msg]
-            (1) /image_color/compressed  234 msgs   : sensor_msgs/CompressedImage [ros1msg]
-            (2) /tf                      774 msgs   : tf2_msgs/TFMessage [ros1msg]
-            (3) /radar/points            156 msgs   : sensor_msgs/PointCloud2 [ros1msg]
-            (4) /radar/range             156 msgs   : sensor_msgs/Range [ros1msg]
-            (5) /radar/tracks            156 msgs   : radar_driver/RadarTracks [ros1msg]
-            (6) /velodyne_points          78 msgs   : sensor_msgs/PointCloud2 [ros1msg]
-    attachments: 0
-
-#### Indexed reading
-
-Echo messages to stdout using the end of file index:
-
-    [~/work/mcap/go/mcap] (task/mcap-client) $ mcap cat demo.mcap --topics /tf,/diagnostics | head -n 10
-    1490149580103843113 /diagnostics [42 10 0 0 204 224 209 88 99 250]...
-    1490149580103843113 /tf [1 0 0 0 0 0 0 0 204 224]...
-    1490149580113944947 /tf [1 0 0 0 0 0 0 0 204 224]...
-    1490149580124028613 /tf [1 0 0 0 0 0 0 0 204 224]...
-    1490149580134219155 /tf [1 0 0 0 0 0 0 0 204 224]...
-    1490149580144292780 /tf [1 0 0 0 0 0 0 0 204 224]...
-    1490149580154895238 /tf [1 0 0 0 0 0 0 0 204 224]...
-    1490149580165152280 /diagnostics [94 13 0 0 204 224 209 88 174 52]...
-    1490149580165152280 /diagnostics [95 13 0 0 204 224 209 88 215 86]...
-    1490149580165152280 /tf [1 0 0 0 0 0 0 0 204 224]...
-
 Convert a ros2 bag file to mcap:
 
+<!-- cspell: disable -->
+
     [~/work/mcap/go/mcap] (task/mcap-client) $ mcap convert multiple_files_1.db3 demo.mcap
+
+<!-- cspell: enable -->
 
 Note that if the system the conversion is called on is not the original ros2
 system, the command requires a search directory for packages. This can be found
@@ -89,26 +56,75 @@ system
 
     [~/work/mcap/go/mcap] (task/mcap-client) $ mcap convert multiple_files_1.db3 demo.mcap --ament-prefix-path ./galactic
 
+#### File summarization
+
+Report summary statistics on an MCAP file:
+
+<!-- cspell: disable -->
+
+    [~/work/mcap/go/cli/mcap] (main) $ mcap info demo.mcap
+    library: mcap go #(devel)
+    profile: ros1
+    messages: 1606
+    duration: 7.780758504s
+    start: 2017-03-21T19:26:20.103843113-07:00 (1490149580.103843113)
+    end: 2017-03-21T19:26:27.884601617-07:00 (1490149587.884601617)
+    compression:
+    	zstd: [14/14 chunks] (50.73%)
+    channels:
+      	(0) /diagnostics              52 msgs (6.68 Hz)    : diagnostic_msgs/DiagnosticArray [ros1msg]
+      	(1) /image_color/compressed  234 msgs (30.07 Hz)   : sensor_msgs/CompressedImage [ros1msg]
+      	(2) /tf                      774 msgs (99.48 Hz)   : tf2_msgs/TFMessage [ros1msg]
+      	(3) /radar/points            156 msgs (20.05 Hz)   : sensor_msgs/PointCloud2 [ros1msg]
+      	(4) /radar/range             156 msgs (20.05 Hz)   : sensor_msgs/Range [ros1msg]
+      	(5) /radar/tracks            156 msgs (20.05 Hz)   : radar_driver/RadarTracks [ros1msg]
+      	(6) /velodyne_points          78 msgs (10.02 Hz)   : sensor_msgs/PointCloud2 [ros1msg]
+    attachments: 0
+
+<!-- cspell: enable -->
+
+#### Indexed reading
+
+Echo messages for a specific topic to stdout as JSON:
+
+    [~/work/mcap/go/mcap] $ mcap cat demo.mcap --topics /tf --json | head -n 10
+    {"topic":"/tf","sequence":2,"log_time":1490149580.103843113,"publish_time":1490149580.103843113,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.117017840,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":3,"log_time":1490149580.113944947,"publish_time":1490149580.113944947,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.127078895,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":8,"log_time":1490149580.124028613,"publish_time":1490149580.124028613,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.137141823,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":10,"log_time":1490149580.134219155,"publish_time":1490149580.134219155,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.147199242,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":11,"log_time":1490149580.144292780,"publish_time":1490149580.144292780,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.157286100,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":12,"log_time":1490149580.154895238,"publish_time":1490149580.154895238,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.167376974,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":15,"log_time":1490149580.165152280,"publish_time":1490149580.165152280,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.177463023,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":20,"log_time":1490149580.175192697,"publish_time":1490149580.175192697,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.187523449,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":21,"log_time":1490149580.185428613,"publish_time":1490149580.185428613,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.197612248,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":22,"log_time":1490149580.196638030,"publish_time":1490149580.196638030,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.207699065,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+
 #### Remote file support
 
 All commands except `convert` support reading from remote files stored in GCS:
 
+<!-- cspell: disable -->
+
     $ mcap info gs://foxglove-wyatt-dev-inbox/demo.mcap
+    library: mcap go #(devel)
+    profile: ros1
     messages: 1606
     duration: 7.780758504s
-    start: 2017-03-21T19:26:20.103843113-07:00
-    end: 2017-03-21T19:26:27.884601617-07:00
-    chunks:
-            zstd: [14/14 chunks] (50.79%)
+    start: 2017-03-21T19:26:20.103843113-07:00 (1490149580.103843113)
+    end: 2017-03-21T19:26:27.884601617-07:00 (1490149587.884601617)
+    compression:
+    	zstd: [14/14 chunks] (50.73%)
     channels:
-            (0) /diagnostics              52 msgs   : diagnostic_msgs/DiagnosticArray [ros1msg]
-            (1) /image_color/compressed  234 msgs   : sensor_msgs/CompressedImage [ros1msg]
-            (2) /tf                      774 msgs   : tf2_msgs/TFMessage [ros1msg]
-            (3) /radar/points            156 msgs   : sensor_msgs/PointCloud2 [ros1msg]
-            (4) /radar/range             156 msgs   : sensor_msgs/Range [ros1msg]
-            (5) /radar/tracks            156 msgs   : radar_driver/RadarTracks [ros1msg]
-            (6) /velodyne_points          78 msgs   : sensor_msgs/PointCloud2 [ros1msg]
+      	(0) /diagnostics              52 msgs (6.68 Hz)    : diagnostic_msgs/DiagnosticArray [ros1msg]
+      	(1) /image_color/compressed  234 msgs (30.07 Hz)   : sensor_msgs/CompressedImage [ros1msg]
+      	(2) /tf                      774 msgs (99.48 Hz)   : tf2_msgs/TFMessage [ros1msg]
+      	(3) /radar/points            156 msgs (20.05 Hz)   : sensor_msgs/PointCloud2 [ros1msg]
+      	(4) /radar/range             156 msgs (20.05 Hz)   : sensor_msgs/Range [ros1msg]
+      	(5) /radar/tracks            156 msgs (20.05 Hz)   : radar_driver/RadarTracks [ros1msg]
+      	(6) /velodyne_points          78 msgs (10.02 Hz)   : sensor_msgs/PointCloud2 [ros1msg]
     attachments: 0
+
+<!-- cspell: enable -->
 
 Remote reads will use the index at the end of the file to minimize latency and data transfer.
 
