@@ -28,15 +28,29 @@ const (
 )
 
 var (
-	headerCompression       = []byte("compression")
-	headerOp                = []byte("op")
-	headerTopic             = []byte("topic")
-	headerConn              = []byte("conn")
-	headerType              = []byte("type")
-	headerMD5Sum            = []byte("md5sum")
-	headerMessageDefinition = []byte("message_definition")
-	headerTime              = []byte("time")
+	headerCompression = []byte("compression")
+	headerOp          = []byte("op")
+	headerTopic       = []byte("topic")
+	headerConn        = []byte("conn")
+	headerTime        = []byte("time")
 )
+
+func headerToMap(header []byte) (map[string]string, error) {
+	offset := 0
+	m := make(map[string]string)
+	for offset < len(header) {
+		fieldlen := binary.LittleEndian.Uint32(header[offset : offset+4])
+		offset += 4
+		index := bytes.IndexByte(header[offset:offset+int(fieldlen)], '=')
+		if index < 0 {
+			return nil, fmt.Errorf("missing kv separator")
+		}
+		key := string(header[offset : offset+index])
+		m[key] = string(header[offset+index+1 : offset+int(fieldlen)])
+		offset += int(fieldlen)
+	}
+	return m, nil
+}
 
 func getUint32(buf []byte, offset int) (result uint32, newoffset int, err error) {
 	if len(buf[offset:]) < 4 {
@@ -245,19 +259,16 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
 			if err != nil {
 				return err
 			}
-			typ, err := extractHeaderValue(data, headerType)
+			connectionDataHeader, err := headerToMap(data)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to parse connection data: %w", err)
 			}
-			md5sum, err := extractHeaderValue(data, headerMD5Sum)
-			if err != nil {
-				return err
-			}
-			msgdef, err := extractHeaderValue(data, headerMessageDefinition)
-			if err != nil {
-				return err
-			}
-			key := fmt.Sprintf("%s/%s", topic, md5sum)
+			typ := connectionDataHeader["type"]
+			delete(connectionDataHeader, "type")
+			msgdef := connectionDataHeader["message_definition"]
+			delete(connectionDataHeader, "message_definition")
+
+			key := fmt.Sprintf("%s/%s", topic, connectionDataHeader["md5sum"])
 			if _, ok := schemas[key]; !ok {
 				schemaID := uint16(len(schemas) + 1)
 				msgdefCopy := make([]byte, len(msgdef))
@@ -265,7 +276,7 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
 				err := writer.WriteSchema(&mcap.Schema{
 					ID:       schemaID,
 					Encoding: "ros1msg",
-					Name:     string(typ),
+					Name:     typ,
 					Data:     msgdefCopy,
 				})
 				if err != nil {
@@ -278,9 +289,7 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
 				Topic:           string(topic),
 				MessageEncoding: "ros1",
 				SchemaID:        schemas[key],
-				Metadata: map[string]string{
-					"md5sum": string(md5sum),
-				},
+				Metadata:        connectionDataHeader,
 			}
 			return writer.WriteChannel(channelInfo)
 		},
