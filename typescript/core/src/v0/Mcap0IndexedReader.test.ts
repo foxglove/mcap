@@ -249,31 +249,15 @@ describe("Mcap0IndexedReader", () => {
         startTime: undefined,
         endTime: undefined,
         expected: [message1, message2, message3],
-        reverse: false,
       },
-      { startTime: 11n, endTime: 11n, expected: [message2], reverse: false },
+      { startTime: 11n, endTime: 11n, expected: [message2] },
 
-      { startTime: 11n, endTime: undefined, expected: [message2, message3], reverse: false },
-      { startTime: undefined, endTime: 11n, expected: [message1, message2], reverse: false },
-      { startTime: 10n, endTime: 12n, expected: [message1, message2, message3], reverse: false },
-      {
-        startTime: undefined,
-        endTime: undefined,
-        expected: [message3, message2, message1],
-        reverse: true,
-      },
-      { startTime: 11n, endTime: 11n, expected: [message2], reverse: true },
-      { startTime: 11n, endTime: undefined, expected: [message3, message2], reverse: true },
-      {
-        startTime: undefined,
-        endTime: 11n,
-        expected: [message2, message1],
-        reverse: true,
-      },
-      { startTime: 10n, endTime: 12n, expected: [message3, message2, message1], reverse: true },
+      { startTime: 11n, endTime: undefined, expected: [message2, message3] },
+      { startTime: undefined, endTime: 11n, expected: [message1, message2] },
+      { startTime: 10n, endTime: 12n, expected: [message1, message2, message3] },
     ])(
       "fetches chunk data and reads requested messages between $startTime and $endTime, reverse: $reverse",
-      async ({ startTime, endTime, expected, reverse }) => {
+      async ({ startTime, endTime, expected }) => {
         const schema = record(Opcode.SCHEMA, [
           ...uint16LE(1), // schema id
           ...string("some data"), // schema name
@@ -366,11 +350,24 @@ describe("Mcap0IndexedReader", () => {
           ]),
           ...MCAP0_MAGIC,
         );
-        const readable = makeReadable(new Uint8Array(data));
-        const reader = await Mcap0IndexedReader.Initialize({ readable });
-        const collected = await collect(reader.readMessages({ startTime, endTime, reverse }));
-        expect(collected).toEqual(expected);
-        expect(readable.readCalls).toBe(6);
+
+        {
+          const readable = makeReadable(new Uint8Array(data));
+          const reader = await Mcap0IndexedReader.Initialize({ readable });
+          const collected = await collect(reader.readMessages({ startTime, endTime }));
+          expect(collected).toEqual(expected);
+          expect(readable.readCalls).toBe(6);
+        }
+
+        {
+          const readable = makeReadable(new Uint8Array(data));
+          const reader = await Mcap0IndexedReader.Initialize({ readable });
+          const collected = await collect(
+            reader.readMessages({ startTime, endTime, reverse: true }),
+          );
+          expect(collected).toEqual(expected.reverse());
+          expect(readable.readCalls).toBe(6);
+        }
       },
     );
   });
