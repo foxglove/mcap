@@ -1,4 +1,4 @@
-# MCAP ![](https://img.shields.io/badge/beta-blue)
+# MCAP
 
 MCAP is a modular container format and logging library for pub/sub messages with arbitrary message serialization. It is primarily intended for use in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
 
