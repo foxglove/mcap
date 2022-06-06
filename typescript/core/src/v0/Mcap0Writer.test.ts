@@ -1,6 +1,6 @@
 import { crc32 } from "@foxglove/crc";
 
-import Mcap0IndexedReader from "./Mcap0IndexedReader";
+import { Mcap0IndexedReader } from "./Mcap0IndexedReader";
 import Mcap0StreamReader from "./Mcap0StreamReader";
 import { Mcap0Writer } from "./Mcap0Writer";
 import { Opcode } from "./constants";
