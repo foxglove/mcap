@@ -245,18 +245,13 @@ describe("Mcap0IndexedReader", () => {
       data: new Uint8Array(),
     };
     it.each([
-      {
-        startTime: undefined,
-        endTime: undefined,
-        expected: [message1, message2, message3],
-      },
+      { startTime: undefined, endTime: undefined, expected: [message1, message2, message3] },
       { startTime: 11n, endTime: 11n, expected: [message2] },
-
       { startTime: 11n, endTime: undefined, expected: [message2, message3] },
       { startTime: undefined, endTime: 11n, expected: [message1, message2] },
       { startTime: 10n, endTime: 12n, expected: [message1, message2, message3] },
     ])(
-      "fetches chunk data and reads requested messages between $startTime and $endTime, reverse: $reverse",
+      "fetches chunk data and reads requested messages between $startTime and $endTime",
       async ({ startTime, endTime, expected }) => {
         const schema = record(Opcode.SCHEMA, [
           ...uint16LE(1), // schema id
