@@ -1,9 +1,9 @@
 import { crc32 } from "@foxglove/crc";
 
-import Mcap0IndexedReader from ".";
-import { ChunkBuilder } from "../ChunkBuilder";
-import { Mcap0RecordBuilder } from "../Mcap0RecordBuilder";
-import { MCAP0_MAGIC, Opcode } from "../constants";
+import { ChunkBuilder } from "./ChunkBuilder";
+import { Mcap0IndexedReader } from "./Mcap0IndexedReader";
+import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
+import { MCAP0_MAGIC, Opcode } from "./constants";
 import {
   record,
   uint64LE,
@@ -13,8 +13,8 @@ import {
   collect,
   uint16LE,
   uint32PrefixedBytes,
-} from "../testUtils";
-import { TypedMcapRecord, TypedMcapRecords } from "../types";
+} from "./testUtils";
+import { TypedMcapRecord, TypedMcapRecords } from "./types";
 
 /**
  * Create an IReadable from a buffer. Simulates small buffer reuse to help test that readers aren't
@@ -345,12 +345,24 @@ describe("Mcap0IndexedReader", () => {
           ]),
           ...MCAP0_MAGIC,
         );
-        const readable = makeReadable(new Uint8Array(data));
-        const reader = await Mcap0IndexedReader.Initialize({ readable });
-        await expect(collect(reader.readMessages({ startTime, endTime }))).resolves.toEqual(
-          expected,
-        );
-        expect(readable.readCalls).toBe(6);
+
+        {
+          const readable = makeReadable(new Uint8Array(data));
+          const reader = await Mcap0IndexedReader.Initialize({ readable });
+          const collected = await collect(reader.readMessages({ startTime, endTime }));
+          expect(collected).toEqual(expected);
+          expect(readable.readCalls).toBe(6);
+        }
+
+        {
+          const readable = makeReadable(new Uint8Array(data));
+          const reader = await Mcap0IndexedReader.Initialize({ readable });
+          const collected = await collect(
+            reader.readMessages({ startTime, endTime, reverse: true }),
+          );
+          expect(collected).toEqual(expected.reverse());
+          expect(readable.readCalls).toBe(6);
+        }
       },
     );
   });
