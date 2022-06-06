@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends --no-install-su
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install meson
-RUN git clone https://github.com/hdoc/hdoc.git /hdoc --depth 1 --branch 1.2.2 --single-branch
+RUN git clone https://github.com/hdoc/hdoc.git /hdoc --depth 1 --branch 1.2.3 --single-branch
 
 WORKDIR /hdoc
 

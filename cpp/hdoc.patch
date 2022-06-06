@@ -3,8 +3,8 @@ index c1daf2e..b8b981d 100644
 --- a/meson.build
 +++ b/meson.build
 @@ -1,4 +1,4 @@
--project('hdoc', 'cpp', version: '1.2.2', default_options: ['cpp_std=c++17', 'warning_level=3'])
-+project('hdoc', 'cpp', 'c', version: '1.2.2', default_options: ['cpp_std=c++17', 'warning_level=3'])
+-project('hdoc', 'cpp', version: '1.2.3', default_options: ['cpp_std=c++17', 'warning_level=3'])
++project('hdoc', 'cpp', 'c', version: '1.2.3', default_options: ['cpp_std=c++17', 'warning_level=3'])
  
  dep_llvm = dependency('LLVM', include_type: 'system')
  clang_modules = [
@@ -63,25 +63,6 @@ index 2d9e22b..aeda844 100644
      if (f.isRecordMember) {
        continue;
      }
-@@ -575,7 +594,7 @@ static void printMemberVariables(const hdoc::types::RecordSymbol& c, CTML::Node&
-   uint64_t   numVars = 0;
- 
-   for (const hdoc::types::MemberVariable& var : c.vars) {
--    if (isInherited == true && var.access == clang::AS_private) {
-+    if (var.access == clang::AS_private) {
-       continue;
-     }
- 
-@@ -717,6 +736,9 @@ void hdoc::serde::HTMLWriter::printRecord(const hdoc::types::RecordSymbol& c) co
-     CTML::Node ul("ul");
-     for (auto methodID : sortedMethodIDs) {
-       const hdoc::types::FunctionSymbol m = this->index->functions.entries.at(methodID);
-+      if (m.access == clang::AS_private) {
-+        continue;
-+      }
- 
-       // Divide up the full function declaration so its name can be bold in the HTML
-       const uint64_t    nameLen  = m.name.size();
 @@ -772,6 +794,9 @@ void hdoc::serde::HTMLWriter::printRecords() const {
    CTML::Node ul("ul");
    for (const auto& id : getSortedIDs(map2vec(this->index->records), this->index->records)) {
