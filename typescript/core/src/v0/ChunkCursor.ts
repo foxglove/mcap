@@ -60,6 +60,10 @@ export class ChunkCursor {
    */
   compare(other: ChunkCursor): number {
     const reverse = this.reverse;
+    if (this.reverse !== other.reverse) {
+      throw new Error("Cannot compare a reversed ChunkCursor to a non-reversed ChunkCursor");
+    }
+
     if (reverse) {
       // If chunks don't overlap at all, sort later chunk first
       if (this.chunkIndex.messageEndTime < other.chunkIndex.messageStartTime) {
