@@ -6,3 +6,6 @@ git_repo_url = "https://github.com/foxglove/mcap/blob/main/cpp/"
 [paths]
 compile_commands = "./docs/build/Release/compile_commands.json"
 output_dir = "/hdoc-output"
+
+[ignore]
+ignore_private_members = true
