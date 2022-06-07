@@ -22,6 +22,21 @@ func GetScheme(filename string) (string, string, string) {
 	return match[1], match[2], match[3]
 }
 
+func ReadingStdin() (bool, error) {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return false, err
+	}
+	return stat.Mode()&os.ModeCharDevice == 0, nil
+}
+
+func StdoutRedirected() bool {
+	if fi, _ := os.Stdout.Stat(); (fi.Mode() & os.ModeCharDevice) == os.ModeCharDevice {
+		return false
+	}
+	return true
+}
+
 func GetReader(ctx context.Context, filename string) (func() error, io.ReadSeekCloser, error) {
 	var rs io.ReadSeekCloser
 	var err error

@@ -44,6 +44,8 @@ type Writer struct {
 	currentChunkEndTime   uint64
 
 	opts *WriterOptions
+
+	closed bool
 }
 
 // WriteHeader writes a header record to the output.
@@ -108,7 +110,7 @@ func (w *Writer) WriteSchema(s *Schema) (err error) {
 	offset += putPrefixedString(w.msg[offset:], s.Name)
 	offset += putPrefixedString(w.msg[offset:], s.Encoding)
 	offset += putPrefixedBytes(w.msg[offset:], s.Data)
-	if w.opts.Chunked {
+	if w.opts.Chunked && !w.closed {
 		_, err = w.writeRecord(w.compressedWriter, OpSchema, w.msg[:offset])
 	} else {
 		_, err = w.writeRecord(w.w, OpSchema, w.msg[:offset])
@@ -147,7 +149,7 @@ func (w *Writer) WriteChannel(c *Channel) error {
 	offset += putPrefixedString(w.msg[offset:], c.MessageEncoding)
 	offset += copy(w.msg[offset:], userdata)
 	var err error
-	if w.opts.Chunked {
+	if w.opts.Chunked && !w.closed {
 		_, err = w.writeRecord(w.compressedWriter, OpChannel, w.msg[:offset])
 		if err != nil {
 			return err
@@ -183,7 +185,7 @@ func (w *Writer) WriteMessage(m *Message) error {
 	offset += copy(w.msg[offset:], m.Data)
 	w.Statistics.ChannelMessageCounts[m.ChannelID]++
 	w.Statistics.MessageCount++
-	if w.opts.Chunked {
+	if w.opts.Chunked && !w.closed {
 		idx, ok := w.messageIndexes[m.ChannelID]
 		if !ok {
 			idx = &MessageIndex{
@@ -628,8 +630,7 @@ func (w *Writer) Close() error {
 			return fmt.Errorf("failed to flush active chunks: %w", err)
 		}
 	}
-	w.opts.Chunked = false
-
+	w.closed = true
 	err := w.WriteDataEnd(&DataEnd{
 		DataSectionCRC: 0,
 	})
