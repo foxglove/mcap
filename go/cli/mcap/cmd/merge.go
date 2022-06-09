@@ -19,6 +19,7 @@ var (
 	mergeChunkSize   int64
 	mergeIncludeCRC  bool
 	mergeChunked     bool
+	mergeOutputFile  string
 )
 
 type mergeOpts struct {
@@ -239,8 +240,8 @@ var mergeCmd = &cobra.Command{
 	Use:   "merge file1.mcap [file2.mcap] [file3.mcap]...",
 	Short: "Merge a selection of mcap files by record timestamp",
 	Run: func(cmd *cobra.Command, args []string) {
-		if !utils.StdoutRedirected() {
-			die("Binary output can screw up your terminal. Redirect output to a file or pipe.")
+		if mergeOutputFile == "" && !utils.StdoutRedirected() {
+			die("Binary output can screw up your terminal. Supply -o or redirect to a file or pipe.")
 		}
 		var readers []io.Reader
 		for _, arg := range args {
@@ -259,7 +260,18 @@ var mergeCmd = &cobra.Command{
 			chunked:     mergeChunked,
 		}
 		merger := newMCAPMerger(opts)
-		err := merger.mergeInputs(os.Stdout, readers)
+		var writer io.Writer
+		if mergeOutputFile == "" {
+			writer = os.Stdout
+		} else {
+			f, err := os.Create(mergeOutputFile)
+			if err != nil {
+				die("failed to open output file %s: %s\n", mergeOutputFile, err)
+			}
+			defer f.Close()
+			writer = f
+		}
+		err := merger.mergeInputs(writer, readers)
 		if err != nil {
 			die(err.Error())
 		}
@@ -274,6 +286,13 @@ func init() {
 		"",
 		"zstd",
 		"chunk compression algorithm (supported: zstd, lz4, none)",
+	)
+	mergeCmd.PersistentFlags().StringVarP(
+		&mergeOutputFile,
+		"output-file",
+		"o",
+		"",
+		"output file",
 	)
 	mergeCmd.PersistentFlags().Int64VarP(
 		&mergeChunkSize,
