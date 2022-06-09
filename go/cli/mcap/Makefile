@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 # enable cgo to build sqlite
 export CGO_ENABLED = 1
 

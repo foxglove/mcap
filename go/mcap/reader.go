@@ -2,6 +2,7 @@ package mcap
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -60,6 +61,22 @@ type Reader struct {
 
 type MessageIterator interface {
 	Next([]byte) (*Schema, *Channel, *Message, error)
+}
+
+func Range(it MessageIterator, f func(*Schema, *Channel, *Message) error) error {
+	for {
+		schema, channel, message, err := it.Next(nil)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return fmt.Errorf("failed to read record: %w", err)
+		}
+		err = f(schema, channel, message)
+		if err != nil {
+			return fmt.Errorf("failed to process record: %w", err)
+		}
+	}
 }
 
 func (r *Reader) unindexedIterator(topics []string, start uint64, end uint64) *unindexedMessageIterator {
