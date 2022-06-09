@@ -7,7 +7,7 @@ This document describes well known values for MCAP files.
 The Chunk `compression` field may contain the following options:
 
 - [lz4](<https://en.wikipedia.org/wiki/lz4_(compression_algorithm)>): an algorithm that prioritizes compression/decompression speed over compression ratio.
-- [zstd](https://en.wikipedia.org/wiki/zstandard): an algorithm that prioritizes compression ratio over compression/decompression speed.
+- [zstd](https://en.wikipedia.org/wiki/zstandard): an algorithm with a tunable compression ratio/speed tradeoff.
 
 ## Well-known message encodings
 
