@@ -27,6 +27,17 @@ which is used to store the test logs under `tests/conformance/data`.
 
 A CLI tool for interacting with the format is available [here](./go/cli/mcap).
 
+## Release
+
+## NPM
+
+* Checkout the version of the code you want to release
+* Run this yarn command to tag a new version `yarn workspace @mcap/core version --minor|--major|--patch`
+* Make a PR with your changes to package.json
+* Wait for the PR to pass CI and merge
+* Checkout main and tag the merged commit with `releases/typescript/core/v#.#.#` (replace #.#.# with the version you want to release)
+* Push the new tag to the repo with `git push origin releases/typescript/core/v#.#.#`
+
 ## License
 
 Licensed under the [Apache License, Version 2.0](/LICENSE). Contributors are required to accept the [Contributor License Agreement](https://github.com/foxglove/cla).
