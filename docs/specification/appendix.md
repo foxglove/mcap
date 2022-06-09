@@ -1,0 +1,111 @@
+# MCAP File Format Specification Appendix
+
+This document describes well known values for MCAP files.
+
+## Well-known compression formats
+
+The Chunk `compression` field may contain the following options:
+
+- [lz4](<https://en.wikipedia.org/wiki/lz4_(compression_algorithm)>): an algorithm that prioritizes compression/decompression speed over compression ratio.
+- [zstd](https://en.wikipedia.org/wiki/zstandard): an algorithm with a tunable compression ratio/speed tradeoff.
+
+## Well-known message encodings
+
+The Channel `message_encoding` field describes the encoding for all messages within a channel. This field is mandatory.
+
+### ros1
+
+- `message_encoding`: [`ros1`](http://wiki.ros.org/msg)
+
+### cdr
+
+- `message_encoding`: [`cdr`](https://www.omg.org/cgi-bin/doc?formal/02-06-51) (used in ROS 2)
+
+### protobuf
+
+- `message_encoding`: [`protobuf`](https://developers.google.com/protocol-buffers/docs/encoding)
+
+### cbor
+
+- `message_encoding`: [`cbor`](https://cbor.io/)
+
+### json
+
+- `message_encoding`: [`json`](https://www.json.org/json-en.html)
+
+## Well-known schema encodings
+
+The Schema `encoding` field describes the encoding of a Channel's schema. Typically, this is related to the Channel's `message_encoding`, but they are separate concepts (e.g. there are multiple schema languages for `json`).
+
+This field is required for some message encodings (e.g. `protobuf`) and optional for others (e.g. `json`).
+
+### (empty string)
+
+Schema `encoding` may only be omitted for self-describing message encodings such as `json`.
+
+- `name`: May contain any value
+- `encoding`: (empty string)
+- `data`: Must be empty (0 bytes)
+
+### protobuf
+
+- `name`: Fully qualified name to the message within the descriptor set. For example, in a proto file containing `package foo.bar; message Baz {}` the fully qualified message name is `foo.bar.Baz`.
+- `encoding`: `protobuf`
+- `data`: A binary [FileDescriptorSet](https://github.com/protocolbuffers/protobuf/blob/master/src/google/protobuf/descriptor.proto) as produced by `protoc --descriptor_set_out`.
+
+### ros1msg
+
+- `name`: A valid [package resource name](http://wiki.ros.org/Names#Package_Resource_Names), e.g. `sensor_msgs/PointCloud2`
+- `encoding`: `ros1msg`
+- `data`: Concatenated ROS1 .msg files
+
+### ros2msg
+
+- `name`: A valid [package resource name](http://wiki.ros.org/Names#Package_Resource_Names), e.g. `sensor_msgs/msg/PointCloud2`
+- `encoding`: `ros2msg`
+- `data`: Concatenated ROS2 .msg files
+
+### jsonschema
+
+- `name`: May contain any value
+- `encoding`: `jsonschema`
+- `data`: [JSON Schema](https://json-schema.org)
+
+## Well-known profiles
+
+### ROS1
+
+The `ros1` profile describes how to create MCAP files for [ROS 1](https://wiki.ros.org/Distributions).
+
+#### Header
+
+- `profile`: MUST contain `ros1`
+
+#### Channel
+
+- `message_encoding`: MUST contain `ros`
+- `metadata` keys:
+  - `callerid` (optional, string) <!-- cspell:disable-line -->
+  - `latching` (optional, bool stringified as "true" or "false")
+
+#### Schema
+
+- `encoding`: MUST contain `ros1msg`
+
+### ROS2
+
+The `ros2` profile describes how to create MCAP files for [ROS 2](https://docs.ros.org/).
+
+#### Header
+
+- `profile`: MUST contain `ros2`
+
+#### Channel
+
+- `message_encoding`: MUST contain `cdr`
+- `metadata`:
+  - `offered_qos_profiles` (required, string)
+
+#### Schema
+
+- `encoding`: MUST contain `ros2msg`
