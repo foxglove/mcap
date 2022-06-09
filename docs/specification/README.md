@@ -1,5 +1,11 @@
 # MCAP File Format Specification
 
+[compression_formats]: ./appendix.md#well-known-compression-formats
+[message_encodings]: ./appendix.md#well-known-message-encodings
+[schema_encodings]: ./appendix.md#well-known-schema-encodings
+[profiles]: ./appendix.md#well-known-profiles
+[feature_explanations]: ./explanatory-notes.md#feature-explanations
+
 > Status: DRAFT
 
 ## Overview
@@ -152,7 +158,7 @@ Schema records are uniquely identified within a file by their schema ID. A Schem
 | --- | --- | --- | --- |
 | 2 | id | uint16 | A unique identifier for this schema within the file. Must not be zero |
 | 4 + N | name | String | An identifier for the schema. |
-| 4 + N | encoding | String | Format for the schema. The value should be one of the [well-known schema encodings](./well-known-schema-encodings.md). Custom values should use the `x-` prefix. An empty string indicates no schema is available. |
+| 4 + N | encoding | String | Format for the schema. The value should be one of the [well-known schema encodings][schema_encodings]. Custom values should use the `x-` prefix. An empty string indicates no schema is available. |
 | 4 + N | data | uint32 length-prefixed Bytes | Must conform to the schema encoding. If `encoding` is an empty string, `data` should be 0 length. |
 
 Schema records may be duplicated in the summary section. A Schema record with an id of zero is invalid and should be ignored by readers.
@@ -168,7 +174,7 @@ Channel records are uniquely identified within a file by their channel ID. A Cha
 | 2 | id | uint16 | A unique identifier for this channel within the file. |
 | 2 | schema_id | uint16 | The schema for messages on this channel. A schema_id of 0 indicates there is no schema for this channel. |
 | 4 + N | topic | String | The channel topic. |
-| 4 + N | message_encoding | String | Encoding for messages on this channel. The value should be one of the [well-known message encodings](./well-known-message-encodings.md). Custom values should use `x-` prefix. |
+| 4 + N | message_encoding | String | Encoding for messages on this channel. The value should be one of the [well-known message encodings][message_encodings]. Custom values should use `x-` prefix. |
 | 4 + N | metadata | Map<string, string> | Metadata about this channel |
 
 Channel records may be duplicated in the summary section.
@@ -199,7 +205,7 @@ All messages in the chunk must reference channels recorded earlier in the file (
 | 8 | message_end_time | Timestamp | Latest message log_time in the chunk. Zero if the chunk has no messages. |
 | 8 | uncompressed_size | uint64 | Uncompressed size of the `records` field. |
 | 4 | uncompressed_crc | uint32 | CRC32 checksum of uncompressed `records` field. A value of zero indicates that CRC validation should not be performed. |
-| 4 + N | compression | String | compression algorithm. i.e. `zstd`, `lz4`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression formats]. |
+| 4 + N | compression | String | compression algorithm. i.e. `zstd`, `lz4`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression_formats]. |
 | 8 + N | records | uint64 length-prefixed Bytes | Repeating sequences of `<record type><record content length><record content>`. Compressed with the algorithm in the `compression` field. |
 
 ### Message Index (op=0x07)
@@ -229,7 +235,7 @@ A Chunk Index record exists for every Chunk in the file.
 | 8 | chunk_length | uint64 | Byte length of the chunk record, including opcode and length prefix. |
 | 4 + N | message_index_offsets | Map<uint16, uint64> | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. An empty map indicates no message indexing is available. |
 | 8 | message_index_length | uint64 | Total length in bytes of the message index records after the chunk. |
-| 4 + N | compression | String | The compression used within the chunk. Refer to [well-known compression formats formats][compression formats]. This field should match the the value in the corresponding Chunk record. |
+| 4 + N | compression | String | The compression used within the chunk. Refer to [well-known compression formats][compression_formats]. This field should match the the value in the corresponding Chunk record. |
 | 8 | compressed_size | uint64 | The size of the chunk `records` field. |
 | 8 | uncompressed_size | uint64 | The uncompressed size of the chunk `records` field. This field should match the value in the corresponding Chunk record. |
 
@@ -532,9 +538,4 @@ A writer may choose to put messages in Chunks to compress record data. This MCAP
 
 ## Further Reading
 
-- [Feature explanations][feature explanations]: includes usage details that may be useful to implementers of readers or writers.
-
-[profiles]: ./profiles
-[compression formats]: ./compression/supported-compression-formats.md
-[explanatory notes]: ./notes/explanatory-notes.md
-[feature explanations]: ./notes/explanatory-notes.md#feature-explanations
+- [Feature explanations][feature_explanations]: includes usage details that may be useful to implementers of readers or writers.
