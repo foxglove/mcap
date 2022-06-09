@@ -25,6 +25,10 @@ The Channel `message_encoding` field describes the encoding for all messages wit
 
 - `message_encoding`: [`protobuf`](https://developers.google.com/protocol-buffers/docs/encoding)
 
+### flatbuffer
+
+- `message_encoding`: [`flatbuffer`](https://google.github.io/flatbuffers/)
+
 ### cbor
 
 - `message_encoding`: [`cbor`](https://cbor.io/)
@@ -52,6 +56,12 @@ Schema `encoding` may only be omitted for self-describing message encodings such
 - `name`: Fully qualified name to the message within the descriptor set. For example, in a proto file containing `package foo.bar; message Baz {}` the fully qualified message name is `foo.bar.Baz`.
 - `encoding`: `protobuf`
 - `data`: A binary [FileDescriptorSet](https://github.com/protocolbuffers/protobuf/blob/master/src/google/protobuf/descriptor.proto) as produced by `protoc --descriptor_set_out`.
+
+### flatbuffer
+
+- `name`: FIXME
+- `encoding`: `flatbuffer`
+- `data`: FIXME
 
 ### ros1msg
 
@@ -85,7 +95,7 @@ The `ros1` profile describes how to create MCAP files for [ROS 1](https://wiki.r
 
 - `message_encoding`: MUST contain `ros`
 - `metadata` keys:
-  - `callerid` (optional, string) <!-- cspell:disable-line -->
+  - `callerid` (optional, string)
   - `latching` (optional, bool stringified as "true" or "false")
 
 #### Schema
