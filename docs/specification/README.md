@@ -6,8 +6,6 @@
 [profiles]: ./appendix.md#well-known-profiles
 [feature_explanations]: ./explanatory-notes.md#feature-explanations
 
-> Status: DRAFT
-
 ## Overview
 
 MCAP is a modular container file format for recording timestamped [pub/sub](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) messages with arbitrary serialization formats.
