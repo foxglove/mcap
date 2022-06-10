@@ -305,6 +305,15 @@ export class ChunkCursor {
       if (startIndex >= result.record.records.length) {
         continue;
       }
+      if (reverse) {
+        if (this.startTime != undefined && result.record.records[startIndex]![0] < this.startTime) {
+          continue;
+        }
+      } else {
+        if (this.endTime != undefined && result.record.records[startIndex]![0] > this.endTime) {
+          continue;
+        }
+      }
 
       this.messageIndexCursors.push({
         index: startIndex,
