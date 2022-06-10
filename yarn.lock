@@ -891,15 +891,6 @@
     "@types/yargs" "^16.0.0"
     chalk "^4.0.0"
 
-"@mcap/core@^0.1.0":
-  version "0.1.1"
-  resolved "https://registry.yarnpkg.com/@mcap/core/-/core-0.1.1.tgz#4133d8505ea108f650d5bedca1aeb422c3afaea6"
-  integrity sha512-8TiYLkmzHSvWglWqbdIR2lQi3djZt4/SyopeXBGaKewfoG9E8m5lxBvLrXB4GrCNPf/S39275BlXpRlILZBZcQ==
-  dependencies:
-    "@foxglove/crc" "^0.0.3"
-    heap-js "^2.1.6"
-    tslib "^2"
-
 "@nodelib/fs.scandir@2.1.5":
   version "2.1.5"
   resolved "https://registry.yarnpkg.com/@nodelib/fs.scandir/-/fs.scandir-2.1.5.tgz#7619c2eb21b25483f6d167548b4cfd5a7488c3d5"
