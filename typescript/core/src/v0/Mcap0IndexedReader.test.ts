@@ -3,6 +3,8 @@ import { crc32 } from "@foxglove/crc";
 import { ChunkBuilder } from "./ChunkBuilder";
 import { Mcap0IndexedReader } from "./Mcap0IndexedReader";
 import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
+import { Mcap0Writer } from "./Mcap0Writer";
+import { TempBuffer } from "./TempBuffer";
 import { MCAP0_MAGIC, Opcode } from "./constants";
 import {
   record,
@@ -362,6 +364,74 @@ describe("Mcap0IndexedReader", () => {
           );
           expect(collected).toEqual(expected.reverse());
           expect(readable.readCalls).toBe(6);
+        }
+      },
+    );
+  });
+
+  describe("indexed with multiple channels", () => {
+    const messages = [
+      {
+        type: "Message",
+        sequence: 1,
+        publishTime: 0n,
+        logTime: 10n,
+        data: new Uint8Array(),
+      },
+      {
+        type: "Message",
+        sequence: 2,
+        publishTime: 1n,
+        logTime: 11n,
+        data: new Uint8Array(),
+      },
+    ];
+    it.each([
+      { startTime: undefined, endTime: undefined, expectedIndices: [0, 1] },
+      { startTime: undefined, endTime: 10n, expectedIndices: [0] },
+      { startTime: 11n, endTime: 11n, expectedIndices: [1] },
+      { startTime: 11n, endTime: undefined, expectedIndices: [1] },
+      { startTime: undefined, endTime: 11n, expectedIndices: [0, 1] },
+      { startTime: 10n, endTime: 12n, expectedIndices: [0, 1] },
+    ])(
+      "fetches chunk data and reads requested messages between $startTime and $endTime",
+      async ({ startTime, endTime, expectedIndices }) => {
+        const tempBuffer = new TempBuffer();
+        const writer = new Mcap0Writer({ writable: tempBuffer });
+        await writer.start({ library: "", profile: "" });
+        const channelId1 = await writer.registerChannel({
+          topic: "test1",
+          schemaId: 0,
+          messageEncoding: "json",
+          metadata: new Map(),
+        });
+        const channelId2 = await writer.registerChannel({
+          topic: "test2",
+          schemaId: 0,
+          messageEncoding: "json",
+          metadata: new Map(),
+        });
+        const channelIds = [channelId1, channelId2];
+        await writer.addMessage({ channelId: channelId1, ...messages[0]! });
+        await writer.addMessage({ channelId: channelId2, ...messages[1]! });
+        await writer.end();
+
+        {
+          const reader = await Mcap0IndexedReader.Initialize({ readable: tempBuffer });
+          const collected = await collect(reader.readMessages({ startTime, endTime }));
+          expect(collected).toEqual(
+            expectedIndices.map((i) => ({ channelId: channelIds[i]!, ...messages[i]! })),
+          );
+        }
+
+        {
+          const reader = await Mcap0IndexedReader.Initialize({ readable: tempBuffer });
+          const collected = await collect(
+            reader.readMessages({ startTime, endTime, reverse: true }),
+          );
+          expect(collected).toEqual(
+            expectedIndices.map((i) => ({ channelId: channelIds[i]!, ...messages[i]! })).reverse(),
+          );
         }
       },
     );

@@ -3,42 +3,11 @@ import { crc32 } from "@foxglove/crc";
 import { Mcap0IndexedReader } from "./Mcap0IndexedReader";
 import Mcap0StreamReader from "./Mcap0StreamReader";
 import { Mcap0Writer } from "./Mcap0Writer";
+import { TempBuffer } from "./TempBuffer";
 import { Opcode } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
 import { collect, keyValues, record, string, uint16LE, uint32LE, uint64LE } from "./testUtils";
 import { TypedMcapRecord } from "./types";
-
-class TempBuffer {
-  private _buffer = new ArrayBuffer(1024);
-  private _size = 0;
-
-  position() {
-    return BigInt(this._size);
-  }
-  async write(data: Uint8Array) {
-    if (this._size + data.byteLength > this._buffer.byteLength) {
-      const newBuffer = new ArrayBuffer(this._size + data.byteLength);
-      new Uint8Array(newBuffer).set(new Uint8Array(this._buffer));
-      this._buffer = newBuffer;
-    }
-    new Uint8Array(this._buffer, this._size).set(data);
-    this._size += data.byteLength;
-  }
-
-  async size() {
-    return BigInt(this._size);
-  }
-  async read(offset: bigint, size: bigint) {
-    if (offset < 0n || offset + size > BigInt(this._buffer.byteLength)) {
-      throw new Error("read out of range");
-    }
-    return new Uint8Array(this._buffer, Number(offset), Number(size));
-  }
-
-  get() {
-    return new Uint8Array(this._buffer, 0, this._size);
-  }
-}
 
 describe("Mcap0Writer", () => {
   it("supports messages with logTime 0", async () => {
