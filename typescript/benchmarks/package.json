@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "0.17.1",
-    "@mcap/core": "^0.1.0",
+    "@mcap/core": "*",
     "@foxglove/tsconfig": "1.1.0",
     "@types/node": "16.11.9",
     "@typescript-eslint/eslint-plugin": "5.4.0",
