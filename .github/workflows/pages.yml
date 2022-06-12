@@ -7,7 +7,7 @@ on:
     branches: ["*"]
 
 jobs:
-  build-pages:
+  pages-home:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -20,16 +20,14 @@ jobs:
         run: |
           yarn install --frozen-lockfile
           yarn docs:build --minify
-          mkdir __pages__
-          cp -R docs/gh-pages/*.html docs/gh-pages/dist __pages__
 
       - uses: actions/upload-artifact@v3
         with:
-          name: __pages__
-          path: __pages__
+          name: __home__
+          path: docs/website
           retention-days: 1
 
-  build-cpp:
+  pages-cpp:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -47,7 +45,7 @@ jobs:
           path: docs-cpp.tgz
           retention-days: 1
 
-  build-typescript:
+  pages-typescript:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -69,7 +67,7 @@ jobs:
           path: docs-typescript.tgz
           retention-days: 1
 
-  build-python:
+  pages-python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -95,7 +93,7 @@ jobs:
           path: docs-python.tgz
           retention-days: 1
 
-  build-swift:
+  pages-swift:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -123,13 +121,13 @@ jobs:
           path: docs-swift.tgz
           retention-days: 1
 
-  publish:
+  pages-publish:
     needs:
-      - build-pages
-      - build-cpp
-      - build-typescript
-      - build-python
-      - build-swift
+      - pages-home
+      - pages-cpp
+      - pages-typescript
+      - pages-python
+      - pages-swift
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -137,24 +135,24 @@ jobs:
       - uses: actions/checkout@v3
         with:
           ref: gh-pages
+      - name: Prepare working directory
+        run: git rm -r .
 
       - uses: actions/download-artifact@v3
-
-      - name: Prepare updates to GitHub Pages
+      - name: Prepare GitHub Pages
         run: |
           set -x
 
-          # Extract generated API docs
-          rm -rf docs
-          for f in docs-*/*.tgz; do tar -xf $f; done
-          cp -R __docs__ docs && rm -r __docs__ docs-*
-
           # Extract main site
-          rm -rf *.html dist
-          cp -R __pages__/* . && rm -r __pages__
+          find __home__ -mindepth 1 -maxdepth 1 -exec mv {} ./ \;
+          rm -rf __home__
 
-          ls . docs
-          git add .
+          # Extract generated API docs
+          for f in docs-*/*.tgz; do tar -xf $f; done
+          mv __docs__ docs
+          rm -rf docs-*
+
+          git add --all
           git diff --cached --stat
 
       - name: Push updates to GitHub Pages
@@ -163,6 +161,9 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to publish"
           else
-            git -c user.name=Foxglove -c user.email=contact@foxglove.dev commit -m "Update docs from $GITHUB_REF_NAME (${GITHUB_SHA::7})"
+            set -x
+            git config user.name "Foxglove"
+            git config user.email "contact@foxglove.dev"
+            git commit -m "Update docs from $GITHUB_REF_NAME (${GITHUB_SHA::7})"
             git push origin gh-pages
           fi
