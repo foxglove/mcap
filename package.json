@@ -10,7 +10,7 @@
   },
   "scripts": {
     "docs:lint": "prettier '**/*.md' 'docs/**' --check",
-    "docs:build": "tailwindcss --config docs/gh-pages/tailwind.config.js -i docs/gh-pages/style.css -o docs/gh-pages/dist/bundle.css",
+    "docs:build": "tailwindcss --config docs/website/tailwind.config.js -i docs/website/style.css -o docs/website/dist/bundle.css",
     "typedoc": "typedoc --out __docs__/typescript typescript/core/src/index.ts --tsconfig typescript/core/tsconfig.json",
     "spellcheck": "cspell --relative '**'",
     "test:conformance:generate-inputs": "yarn workspace @foxglove/mcap-conformance generate-inputs --data-dir \"$(pwd)/tests/conformance/data\"",
