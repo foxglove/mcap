@@ -44,7 +44,7 @@
   }
 
   .glossary {
-    @apply table mx-8;
+    @apply table m-8;
   }
   .glossary div {
     @apply table-row;
@@ -55,6 +55,14 @@
   }
   .glossary dd {
     @apply table-cell pb-2;
+  }
+
+  .features ul,
+  .quick-start ul,
+  .resources ul {
+    list-style: unset;
+    margin: revert;
+    padding: revert;
   }
 
   .links {
