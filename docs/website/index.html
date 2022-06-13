@@ -16,11 +16,16 @@
       </h1>
 
       <p>
-        MCAP is a modular container file format for pub/sub messages with
-        arbitrary message serialization. It is primarily intended for use in
-        robotics applications, and works well under various workloads, resource
-        constraints, and durability requirements.
+        MCAP (pronounced "em-cap") is a modular container file format for
+        heterogeneous timestamped data. It is ideal for robotics applications,
+        as it can record multiple streams of structured and unstructured data in
+        a single file.
       </p>
+      <p>
+        MCAP works well under various workloads, resource constraints, and
+        durability requirements.
+      </p>
+
       <h2>Concepts</h2>
       <dl class="glossary">
         <div>
@@ -32,69 +37,154 @@
         <div>
           <dt>Channel</dt>
           <dd>
-            A stream of messages which have the same type, often corresponding
-            to a connection between a publisher and a subscriber.
+            A stream of messages which have the same type, or schema. Often
+            corresponds to a connection between a publisher and a subscriber.
           </dd>
         </div>
         <div>
           <dt>Schema</dt>
           <dd>
             A description of the structure and contents of messages on a
-            channel. For example, a
+            channel, e.g. a
             <a
               href="https://developers.google.com/protocol-buffers/docs/techniques#self-description"
               >Protobuf <code>FileDescriptorSet</code></a
             >
-            or a <a href="https://json-schema.org">JSON Schema</a>.
+            or <a href="https://json-schema.org">JSON Schema</a>.
           </dd>
         </div>
       </dl>
 
-      <h2>Quick start</h2>
-      <p>
-        Install the
-        <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap"
-          ><code>mcap</code> CLI tool</a
-        >
-        by downloading the
-        <a href="https://github.com/foxglove/mcap/releases">
-          latest <code>mcap-cli</code> release binary</a
-        >
-        for your platform. You can now examine MCAP files, convert a
-        <a href="https://wiki.ros.org/Bags">ROS 1 <code>.bag</code></a> or
-        <a
-          href="https://docs.ros.org/en/galactic/Tutorials/Ros2bag/Recording-And-Playing-Back-Data.html"
-          >ROS 2 <code>.db3</code></a
-        >
-        file into a MCAP file, and more:
-      </p>
-      <pre><code class="shell-input-line">mcap <b>help</b>    <span class="code-comment"># List supported commands</span></code>
-<code class="shell-input-line">mcap <b>info</b> input.mcap    <span class="code-comment"># Display statistics about an MCAP file</span></code>
-<code class="shell-input-line">mcap <b>doctor</b> input.mcap  <span class="code-comment"># Validate an MCAP file</span></code>
-<code class="shell-input-line">mcap <b>cat</b> input.mcap     <span class="code-comment"># Dump messages to stdout</span></code>
-<code class="shell-input-line">mcap <b>convert</b> input.bag output.mcap  <span class="code-comment"># Convert a ROS bag to MCAP</span></code></pre>
+      <dl class="features">
+        <h2>Features</h2>
+        <ul>
+          <li>
+            <b>Supports heterogeneous data</b>
+            <ul>
+              <li>
+                Store messages encoded in a variety of serialization formats
+                (e.g. ROS, Protobuf, JSON Schema, MessagePack, etc.) in a single
+                file
+              </li>
+              <li>
+                Can include metadata and attachments with application-specific
+                data
+              </li>
+            </ul>
+          </li>
+          <li>
+            <b>Optimized for high-performance writing</b>
+            <ul>
+              <li>Append-only structure</li>
+              <li>
+                Recover partially-written files, even when data recording is
+                interrupted
+              </li>
+            </ul>
+          </li>
+          <li>
+            <b>Efficient reading and seeking within files</b>
+            <ul>
+              <li>
+                Use indexing to extract data without scanning the entire file,
+                even over remote connections
+              </li>
+              <li>Fast access to summary data</li>
+            </ul>
+          </li>
+          <li>
+            <b>Self-contained</b>
+            <ul>
+              <li>Embedded message schemas</li>
+              <li>No additional dependencies required for decoding</li>
+            </ul>
+          </li>
+          <li>
+            <b>Reliable under various limitations</b>
+            <ul>
+              <li>Workload sizes</li>
+              <li>Resource constraints</li>
+              <li>Durability requirements</li>
+            </ul>
+          </li>
+        </ul>
+      </dl>
 
-      <h2>Resources</h2>
-      <p>Learn more about MCAP:</p>
-      <nav class="links">
-        <a href="https://github.com/foxglove/mcap/tree/main/docs/specification">
-          File format specification
-        </a>
-        <a href="https://github.com/foxglove/mcap">MCAP on GitHub </a>
-      </nav>
+      <dl class="quick-start">
+        <h2>Quick start</h2>
+        <p>
+          Install the
+          <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap"
+            ><code>mcap</code> CLI tool</a
+          >
+          to accomplish any of the following tasks and more:
+        </p>
+        <ul>
+          <li>Examine and get summary information about MCAP files</li>
+          <li>Validate MCAP files</li>
+          <li>Dump an MCAP file’s contents to <code>stdout</code></li>
+          <li>
+            Convert a ROS 1 <code>.bag</code> or ROS 2 <code>.db3</code> file
+            into an MCAP file
+          </li>
+        </ul>
 
-      <h2>API docs</h2>
-      <p>
-        MCAP libraries are available in several languages for you to read and
-        write your own MCAP files:
-      </p>
-      <nav class="links">
-        <a href="./docs/cpp">C++</a>
-        <a href="./docs/python">Python</a>
-        <a href="./docs/typescript">TypeScript</a>
-        <a href="https://pkg.go.dev/github.com/foxglove/mcap/go/mcap"> Go </a>
-        <a href="./docs/swift/documentation/mcap">Swift</a>
-      </nav>
+        <p>
+          You can also use the MCAP libraries below to read and write your own
+          MCAP files:
+        </p>
+        <nav class="links">
+          <a href="https://mcap.dev/docs/cpp/">C++</a>
+          <a href="https://mcap.dev/docs/python/">Python</a>
+          <a href="https://mcap.dev/docs/typescript/">TypeScript</a>
+          <a href="https://pkg.go.dev/github.com/foxglove/mcap/go/mcap">Go</a>
+          <a href="https://mcap.dev/docs/swift/documentation/mcap/">Swift</a>
+        </nav>
+      </dl>
+      <dl class="resources">
+        <h2>Resources</h2>
+        <p>To learn more about MCAP:</p>
+        <nav>
+          <ul>
+            <li>
+              <a
+                href="https://github.com/foxglove/mcap/blob/main/docs/motivation/evaluation-of-robotics-data-recording-file-formats.md"
+                >Motivation for MCAP: Evaluation of robotics data recording file
+                formats</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/foxglove/mcap"
+                >MCAP implementations on GitHub</a
+              >
+            </li>
+            <li>
+              <a
+                href="https://github.com/foxglove/mcap/tree/main/docs/specification"
+                >File format specification</a
+              >
+            </li>
+
+            <li>
+              <a
+                href="https://github.com/foxglove/mcap/tree/main/tests/conformance"
+                >Conformance tests</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/ros-tooling/rosbag2_storage_mcap"
+                >ROS 2 storage plugin</a
+              >
+            </li>
+          </ul>
+        </nav>
+
+        <p>
+          Join the
+          <a href="https://foxglove.dev/slack">Foxglove Slack community</a> to
+          ask questions and give feedback.
+        </p>
+      </dl>
     </div>
   </body>
 </html>
