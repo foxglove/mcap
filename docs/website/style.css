@@ -44,7 +44,7 @@
   }
 
   .glossary {
-    @apply table m-8;
+    @apply table mt-4;
   }
   .glossary div {
     @apply table-row;
@@ -55,6 +55,32 @@
   }
   .glossary dd {
     @apply table-cell pb-2;
+  }
+
+  .features table {
+    @apply mt-8;
+    font-size: 12px;
+  }
+
+  .features .headers {
+    text-transform: uppercase;
+    text-align: center;
+    font-weight: bold;
+  }
+  
+  .features td {
+    vertical-align: top;
+    width: 25%;
+  }
+
+  .features th svg {
+    height: 48px;
+    width: 48px;
+    margin: 10px auto;
+  }
+
+  .features li {
+    margin-top: 10px;
   }
 
   .features ul,

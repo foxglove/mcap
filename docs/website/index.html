@@ -25,96 +25,82 @@
       <p>
         MCAP (pronounced "em-cap") is a modular container file format for
         heterogeneous timestamped data. It is ideal for robotics applications,
-        as it can record multiple streams of structured and unstructured data in
-        a single file.
+        as it can record multiple streams of structured and unstructured data 
+        (e.g. ROS, Protobuf, JSON Schema, MessagePack, etc.) in a single file.
       </p>
+
       <p>
         MCAP works well under various workloads, resource constraints, and
         durability requirements.
       </p>
 
-      <h2>Concepts</h2>
-      <dl class="glossary">
-        <div>
-          <dt>Message</dt>
-          <dd>
-            The unit of communication between nodes in the pub/sub system.
-          </dd>
-        </div>
-        <div>
-          <dt>Channel</dt>
-          <dd>
-            A stream of messages which have the same type, or schema. Often
-            corresponds to a connection between a publisher and a subscriber.
-          </dd>
-        </div>
-        <div>
-          <dt>Schema</dt>
-          <dd>
-            A description of the structure and contents of messages on a
-            channel, e.g. a
-            <a
-              href="https://developers.google.com/protocol-buffers/docs/techniques#self-description"
-              >Protobuf <code>FileDescriptorSet</code></a
-            >
-            or <a href="https://json-schema.org">JSON Schema</a>.
-          </dd>
-        </div>
-      </dl>
-
       <dl class="features">
-        <h2>Features</h2>
-        <ul>
-          <li>
-            <b>Supports heterogeneous data</b>
-            <ul>
-              <li>
-                Store messages encoded in a variety of serialization formats
-                (e.g. ROS, Protobuf, JSON Schema, MessagePack, etc.) in a single
-                file
-              </li>
-              <li>
-                Can include metadata and attachments with application-specific
-                data
-              </li>
-            </ul>
-          </li>
-          <li>
-            <b>Optimized for high-performance writing</b>
-            <ul>
-              <li>Append-only structure</li>
-              <li>
-                Recover partially-written files, even when data recording is
-                interrupted
-              </li>
-            </ul>
-          </li>
-          <li>
-            <b>Efficient reading and seeking within files</b>
-            <ul>
-              <li>
-                Use indexing to extract data without scanning the entire file,
-                even over remote connections
-              </li>
-              <li>Fast access to summary data</li>
-            </ul>
-          </li>
-          <li>
-            <b>Self-contained</b>
-            <ul>
-              <li>Embedded message schemas</li>
-              <li>No additional dependencies required for decoding</li>
-            </ul>
-          </li>
-          <li>
-            <b>Reliable under various limitations</b>
-            <ul>
-              <li>Workload sizes</li>
-              <li>Resource constraints</li>
-              <li>Durability requirements</li>
-            </ul>
-          </li>
-        </ul>
+        <table>
+          <thead>
+            <th>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+              </svg>
+            </th>
+            <th>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </th>
+            <th>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            </th>
+            <th class="icon">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+              </svg>
+            </th>
+          </thead>
+          <tbody>
+            <tr class="headers">
+              <td>Heterogeneous data</td>
+              <td>High-performance writing</td>
+              <td>Efficient seeking</td>
+              <td>Self-contained</td> 
+            </tr>
+            <tr>
+              <td>
+                <ul>
+                  <li>
+                    Store data in multiple encoding formats in a file
+                  </li>
+                  <li>
+                    Include metadata and attachments
+                  </li>
+                </ul>
+              </td>
+              <td>
+                <ul>
+                  <li>Append-only structure</li>
+                  <li>
+                    Recover partially-written files when recording is interrupted
+                  </li>
+                </ul>
+              </td>
+              <td>
+                <ul>
+                  <li>
+                    Extract data without scanning the entire file
+                  </li>
+                  <li>Fast access to indexed summary data</li>
+                </ul>
+              </td>
+              <td>
+                <ul>
+                  <li>Embedded schemas</li>
+                  <li>No additional dependencies required for decoding</li>
+                </ul>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </dl>
 
       <dl class="quick-start">
@@ -148,9 +134,38 @@
           <a href="https://mcap.dev/docs/swift/documentation/mcap/">Swift</a>
         </nav>
       </dl>
+
       <dl class="resources">
-        <h2>Resources</h2>
-        <p>To learn more about MCAP:</p>
+        <h2>Additional resources</h2>
+        <p>MCAP organizes its data via the following concepts:</p>
+        <dl class="glossary">
+          <div>
+            <dt>Message</dt>
+            <dd>
+              The unit of communication between nodes in the pub/sub system.
+            </dd>
+          </div>
+          <div>
+            <dt>Channel</dt>
+            <dd>
+              A stream of messages which have the same type, or schema. Often
+              corresponds to a connection between a publisher and a subscriber.
+            </dd>
+          </div>
+          <div>
+            <dt>Schema</dt>
+            <dd>
+              A description of the structure and contents of messages on a
+              channel, e.g. a
+              <a
+                href="https://developers.google.com/protocol-buffers/docs/techniques#self-description"
+                >Protobuf <code>FileDescriptorSet</code></a
+              >
+              or <a href="https://json-schema.org">JSON Schema</a>.
+            </dd>
+          </div>
+        </dl>
+        <p>Check out the resources below to learn more about MCAP:</p>
         <nav>
           <ul>
             <li>
