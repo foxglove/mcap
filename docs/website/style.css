@@ -57,26 +57,37 @@
     @apply table-cell pb-2;
   }
 
-  .features table {
-    @apply mt-8;
-    font-size: 12px;
+  .features {
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 15px;
   }
 
-  .features .headers {
+  .features .colWrapper {
+    @apply pt-4;
+    display: flex;
+    flex-wrap: wrap;
+    flex: 1;
+  }
+
+  .features .col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 180px;
+    padding: 2px;
+    flex: 1;
+  }
+
+  .features .header {
     text-transform: uppercase;
-    text-align: center;
     font-weight: bold;
   }
-  
-  .features td {
-    vertical-align: top;
-    width: 25%;
-  }
 
-  .features th svg {
-    height: 48px;
-    width: 48px;
-    margin: 10px auto;
+  .features svg {
+    height: 36px;
+    width: 36px;
+    margin: 5px auto 20px;
   }
 
   .features li {

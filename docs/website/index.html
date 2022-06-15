@@ -25,8 +25,12 @@
       <p>
         MCAP (pronounced "em-cap") is a modular container file format for
         heterogeneous timestamped data. It is ideal for robotics applications,
-        as it can record multiple streams of structured and unstructured data 
-        (e.g. ROS, Protobuf, JSON Schema, MessagePack, etc.) in a single file.
+        as it can record multiple streams of structured and unstructured data
+        (e.g. <a href="https://ros.org">ROS</a>,
+        <a href="https://developers.google.com/protocol-buffers">Protobuf</a>,
+        <a href="https://json-schema.org/">JSON Schema</a>,
+        <a href="https://msgpack.org/index.html">MessagePack</a>, etc.) in a
+        single file.
       </p>
 
       <p>
@@ -35,72 +39,103 @@
       </p>
 
       <dl class="features">
-        <table>
-          <thead>
-            <th>
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-              </svg>
-            </th>
-            <th>
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-            </th>
-            <th>
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-            </th>
-            <th class="icon">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-              </svg>
-            </th>
-          </thead>
-          <tbody>
-            <tr class="headers">
-              <td>Heterogeneous data</td>
-              <td>High-performance writing</td>
-              <td>Efficient seeking</td>
-              <td>Self-contained</td> 
-            </tr>
-            <tr>
-              <td>
-                <ul>
-                  <li>
-                    Store data in multiple encoding formats in a file
-                  </li>
-                  <li>
-                    Include metadata and attachments
-                  </li>
-                </ul>
-              </td>
-              <td>
-                <ul>
-                  <li>Append-only structure</li>
-                  <li>
-                    Recover partially-written files when recording is interrupted
-                  </li>
-                </ul>
-              </td>
-              <td>
-                <ul>
-                  <li>
-                    Extract data without scanning the entire file
-                  </li>
-                  <li>Fast access to indexed summary data</li>
-                </ul>
-              </td>
-              <td>
-                <ul>
-                  <li>Embedded schemas</li>
-                  <li>No additional dependencies required for decoding</li>
-                </ul>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="colWrapper">
+          <div class="col">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
+              />
+            </svg>
+            <h3 class="header">Heterogeneous data</h3>
+            <ul>
+              <li>
+                Store messages encoded in multiple serialization formats in a
+                single file
+              </li>
+              <li>Include metadata and attachments</li>
+            </ul>
+          </div>
+
+          <div class="col">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+              />
+            </svg>
+            <h3 class="header">Performant writing</h3>
+            <ul>
+              <li>Append-only structure</li>
+              <li>
+                Recover partially-written files when data recording is
+                interrupted
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="colWrapper">
+          <div class="col">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+              />
+            </svg>
+            <h3 class="header">Efficient seeking</h3>
+            <ul>
+              <li>Extract data without scanning the entire file</li>
+              <li>Fast access to indexed summary data</li>
+            </ul>
+          </div>
+
+          <div class="col">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+              />
+            </svg>
+            <h3 class="header">Self-contained files</h3>
+            <ul>
+              <li>Embed all message schemas in the file</li>
+              <li>No additional dependencies required for decoding</li>
+            </ul>
+          </div>
+        </div>
       </dl>
 
       <dl class="quick-start">
