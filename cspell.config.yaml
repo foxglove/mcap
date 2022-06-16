@@ -28,6 +28,7 @@ words:
   - crcs
   - deserialization
   - flatbuffer
+  - flatc
   - fwrite
   - golangci
   - kaitai
