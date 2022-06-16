@@ -17,7 +17,18 @@
   </head>
   <body>
     <div class="max-w-3xl mx-auto">
-      <h1 class="mb-4 text-center font-bold text-4xl md:text-5xl">
+      <nav class="nav-links links">
+        <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap"
+          ><code>mcap</code> CLI</a
+        >
+        <a href="https://mcap.dev/docs/cpp/">For C++</a>
+        <a href="https://mcap.dev/docs/python/">For Python</a>
+        <a href="https://mcap.dev/docs/typescript/">For TypeScript</a>
+        <a href="https://pkg.go.dev/github.com/foxglove/mcap/go/mcap">For Go</a>
+        <a href="https://mcap.dev/docs/swift/documentation/mcap/">For Swift</a>
+      </nav>
+
+      <h1 class="mt-8 mb-4 text-center font-bold text-4xl md:text-5xl">
         <img src="mcap.png" alt="" class="inline-block h-16" />
         <a href="https://github.com/foxglove/mcap">MCAP</a>
       </h1>
@@ -39,7 +50,7 @@
       </p>
 
       <dl class="features">
-        <div class="colWrapper">
+        <div class="row">
           <div class="col">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -91,7 +102,7 @@
           </div>
         </div>
 
-        <div class="colWrapper">
+        <div class="row">
           <div class="col">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -132,7 +143,7 @@
             <h3 class="header">Self-contained files</h3>
             <ul>
               <li>Embed all message schemas in the file</li>
-              <li>No additional dependencies required for decoding</li>
+              <li>No extra dependencies needed for decoding</li>
             </ul>
           </div>
         </div>
