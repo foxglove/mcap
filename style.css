@@ -44,7 +44,7 @@
   }
 
   .glossary {
-    @apply table m-8;
+    @apply table mt-4;
   }
   .glossary div {
     @apply table-row;
@@ -55,6 +55,40 @@
   }
   .glossary dd {
     @apply table-cell pb-2;
+  }
+
+  .nav-links {
+    display: flex;
+    justify-content: space-around;
+    margin-bottom: 2em;
+  }
+
+  .features {
+    @apply pt-4 flex flex-col flex-wrap;
+    font-size: 15px;
+  }
+
+  .features .row {
+    @apply flex flex-wrap flex-1;
+  }
+
+  .features .col {
+    @apply flex flex-col items-center flex-1 m-2 p-4;
+    min-width: 180px;
+    border: 1px solid gray;
+    border-radius: 5px;
+  }
+
+  .features .header {
+    @apply uppercase font-bold;
+  }
+
+  .features svg {
+    @apply mt-0 mx-auto mb-2 h-6 w-6;
+  }
+
+  .features li {
+    @apply mt-0;
   }
 
   .features ul,
@@ -73,6 +107,9 @@
   }
   .links a::after {
     content: " →";
+  }
+  .nav-links a::after {
+    content: "";
   }
   .links a:hover {
     @apply border-b-2;
