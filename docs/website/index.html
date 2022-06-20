@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="./dist/bundle.css" rel="stylesheet" />
+    <link rel="icon" href="favicon32.png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="favicon144.png" sizes="144x144" />
     <title>
       MCAP: a serialization-agnostic container file format for pub/sub
     </title>
@@ -18,18 +20,30 @@
   <body>
     <div class="max-w-3xl mx-auto">
       <nav class="nav-links links">
-        <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap"
-          ><code>mcap</code> CLI</a
+        <span
+          ><a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap"
+            ><code>mcap</code> CLI</a
+          ></span
         >
-        <a href="https://mcap.dev/docs/cpp/">For C++</a>
-        <a href="https://mcap.dev/docs/python/">For Python</a>
-        <a href="https://mcap.dev/docs/typescript/">For TypeScript</a>
-        <a href="https://pkg.go.dev/github.com/foxglove/mcap/go/mcap">For Go</a>
-        <a href="https://mcap.dev/docs/swift/documentation/mcap/">For Swift</a>
+        <span><a href="https://mcap.dev/docs/cpp/">C++ API</a></span>
+        <span><a href="https://mcap.dev/docs/python/">Python API</a></span>
+        <span
+          ><a href="https://mcap.dev/docs/typescript/">TypeScript API</a></span
+        >
+        <span
+          ><a href="https://pkg.go.dev/github.com/foxglove/mcap/go/mcap"
+            >Go API</a
+          ></span
+        >
+        <span
+          ><a href="https://mcap.dev/docs/swift/documentation/mcap/"
+            >Swift API</a
+          ></span
+        >
       </nav>
 
       <h1 class="mt-8 mb-4 text-center font-bold text-4xl md:text-5xl">
-        <img src="mcap.png" alt="" class="inline-block h-16" />
+        <img src="mcap.png" alt="MCAP logo" class="header-logo" />
         <a href="https://github.com/foxglove/mcap">MCAP</a>
       </h1>
 
@@ -49,7 +63,7 @@
         durability requirements.
       </p>
 
-      <dl class="features">
+      <div class="features">
         <div class="row">
           <div class="col">
             <svg
@@ -147,112 +161,108 @@
             </ul>
           </div>
         </div>
-      </dl>
+      </div>
 
-      <dl class="quick-start">
-        <h2>Quick start</h2>
-        <p>
-          Install the
-          <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap"
-            ><code>mcap</code> CLI tool</a
-          >
-          to accomplish any of the following tasks and more:
-        </p>
+      <h2>Quick start</h2>
+      <p>
+        Install the
+        <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap"
+          ><code>mcap</code> CLI tool</a
+        >
+        to accomplish any of the following tasks and more:
+      </p>
+      <ul>
+        <li>Examine and get summary information about MCAP files</li>
+        <li>Validate MCAP files</li>
+        <li>Dump an MCAP file’s contents to <code>stdout</code></li>
+        <li>
+          Convert a ROS 1 <code>.bag</code> or ROS 2 <code>.db3</code> file into
+          an MCAP file
+        </li>
+      </ul>
+
+      <p>
+        You can also use the MCAP libraries below to read and write your own
+        MCAP files:
+      </p>
+      <nav class="links space-x-4">
+        <a href="https://mcap.dev/docs/cpp/">C++</a>
+        <a href="https://mcap.dev/docs/python/">Python</a>
+        <a href="https://mcap.dev/docs/typescript/">TypeScript</a>
+        <a href="https://pkg.go.dev/github.com/foxglove/mcap/go/mcap">Go</a>
+        <a href="https://mcap.dev/docs/swift/documentation/mcap/">Swift</a>
+      </nav>
+
+      <h2>Additional resources</h2>
+      <p>MCAP organizes its data via the following concepts:</p>
+      <dl class="glossary">
+        <div>
+          <dt>Message</dt>
+          <dd>
+            The unit of communication between nodes in the pub/sub system.
+          </dd>
+        </div>
+        <div>
+          <dt>Channel</dt>
+          <dd>
+            A stream of messages which have the same type, or schema. Often
+            corresponds to a connection between a publisher and a subscriber.
+          </dd>
+        </div>
+        <div>
+          <dt>Schema</dt>
+          <dd>
+            A description of the structure and contents of messages on a
+            channel, e.g. a
+            <a
+              href="https://developers.google.com/protocol-buffers/docs/techniques#self-description"
+              >Protobuf <code>FileDescriptorSet</code></a
+            >
+            or <a href="https://json-schema.org">JSON Schema</a>.
+          </dd>
+        </div>
+      </dl>
+      <p>Check out the resources below to learn more about MCAP:</p>
+      <nav>
         <ul>
-          <li>Examine and get summary information about MCAP files</li>
-          <li>Validate MCAP files</li>
-          <li>Dump an MCAP file’s contents to <code>stdout</code></li>
           <li>
-            Convert a ROS 1 <code>.bag</code> or ROS 2 <code>.db3</code> file
-            into an MCAP file
+            <a
+              href="https://github.com/foxglove/mcap/blob/main/docs/motivation/evaluation-of-robotics-data-recording-file-formats.md"
+              >Motivation for MCAP: Evaluation of robotics data recording file
+              formats</a
+            >
+          </li>
+          <li>
+            <a href="https://github.com/foxglove/mcap"
+              >MCAP implementations on GitHub</a
+            >
+          </li>
+          <li>
+            <a
+              href="https://github.com/foxglove/mcap/tree/main/docs/specification"
+              >File format specification</a
+            >
+          </li>
+
+          <li>
+            <a
+              href="https://github.com/foxglove/mcap/tree/main/tests/conformance"
+              >Conformance tests</a
+            >
+          </li>
+          <li>
+            <a href="https://github.com/ros-tooling/rosbag2_storage_mcap"
+              >ROS 2 storage plugin</a
+            >
           </li>
         </ul>
+      </nav>
 
-        <p>
-          You can also use the MCAP libraries below to read and write your own
-          MCAP files:
-        </p>
-        <nav class="links">
-          <a href="https://mcap.dev/docs/cpp/">C++</a>
-          <a href="https://mcap.dev/docs/python/">Python</a>
-          <a href="https://mcap.dev/docs/typescript/">TypeScript</a>
-          <a href="https://pkg.go.dev/github.com/foxglove/mcap/go/mcap">Go</a>
-          <a href="https://mcap.dev/docs/swift/documentation/mcap/">Swift</a>
-        </nav>
-      </dl>
-
-      <dl class="resources">
-        <h2>Additional resources</h2>
-        <p>MCAP organizes its data via the following concepts:</p>
-        <dl class="glossary">
-          <div>
-            <dt>Message</dt>
-            <dd>
-              The unit of communication between nodes in the pub/sub system.
-            </dd>
-          </div>
-          <div>
-            <dt>Channel</dt>
-            <dd>
-              A stream of messages which have the same type, or schema. Often
-              corresponds to a connection between a publisher and a subscriber.
-            </dd>
-          </div>
-          <div>
-            <dt>Schema</dt>
-            <dd>
-              A description of the structure and contents of messages on a
-              channel, e.g. a
-              <a
-                href="https://developers.google.com/protocol-buffers/docs/techniques#self-description"
-                >Protobuf <code>FileDescriptorSet</code></a
-              >
-              or <a href="https://json-schema.org">JSON Schema</a>.
-            </dd>
-          </div>
-        </dl>
-        <p>Check out the resources below to learn more about MCAP:</p>
-        <nav>
-          <ul>
-            <li>
-              <a
-                href="https://github.com/foxglove/mcap/blob/main/docs/motivation/evaluation-of-robotics-data-recording-file-formats.md"
-                >Motivation for MCAP: Evaluation of robotics data recording file
-                formats</a
-              >
-            </li>
-            <li>
-              <a href="https://github.com/foxglove/mcap"
-                >MCAP implementations on GitHub</a
-              >
-            </li>
-            <li>
-              <a
-                href="https://github.com/foxglove/mcap/tree/main/docs/specification"
-                >File format specification</a
-              >
-            </li>
-
-            <li>
-              <a
-                href="https://github.com/foxglove/mcap/tree/main/tests/conformance"
-                >Conformance tests</a
-              >
-            </li>
-            <li>
-              <a href="https://github.com/ros-tooling/rosbag2_storage_mcap"
-                >ROS 2 storage plugin</a
-              >
-            </li>
-          </ul>
-        </nav>
-
-        <p>
-          Join the
-          <a href="https://foxglove.dev/slack">Foxglove Slack community</a> to
-          ask questions and give feedback.
-        </p>
-      </dl>
+      <p>
+        Join the
+        <a href="https://foxglove.dev/slack">Foxglove Slack community</a> to ask
+        questions and give feedback.
+      </p>
     </div>
   </body>
 </html>
