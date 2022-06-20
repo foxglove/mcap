@@ -76,9 +76,8 @@
   }
 
   .features .col {
-    @apply flex flex-col items-center flex-1 p-4 border border-zinc-400 dark:border-zinc-600;
+    @apply flex flex-col items-center flex-1 p-4 border rounded border-zinc-400 dark:border-zinc-600;
     min-width: 180px;
-    border-radius: 5px;
   }
 
   .features .header {
