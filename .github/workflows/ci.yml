@@ -325,6 +325,19 @@ jobs:
           body_path: ${{ github.workspace }}-CHANGELOG.txt
           draft: false
 
+  update-homebrew-formula:
+    needs:
+      - go-release-cli
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: mislav/bump-homebrew-formula-action@64410e9c960837db57b7e35627eb716faaaaec51
+        with:
+          formula-name: mcap
+          push-to: foxglove/homebrew-core
+        env:
+          COMMITTER_TOKEN: ${{ secrets.HOMEBREW_GITHUB_TOKEN }}
+
   swift:
     runs-on: ubuntu-latest
     steps:
