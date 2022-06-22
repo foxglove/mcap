@@ -152,7 +152,7 @@ func printMessages(
 		target.Data = msg.Bytes()
 		err = encoder.Encode(target)
 		if err != nil {
-			return fmt.Errorf("failed to write encoded message")
+			return fmt.Errorf("failed to write encoded message: %s", err)
 		}
 		msg.Reset()
 	}
