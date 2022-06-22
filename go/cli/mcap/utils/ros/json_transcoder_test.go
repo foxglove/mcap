@@ -13,7 +13,7 @@ func TestJSONTranscoding(t *testing.T) {
 		parentPackage     string
 		messageDefinition string
 		input             []byte
-		output            string
+		expectedJSON      string
 	}{
 		{
 			"simple string",
@@ -28,6 +28,13 @@ func TestJSONTranscoding(t *testing.T) {
 			"string foo",
 			[]byte{0x00, 0x00, 0x00, 0x00},
 			`{"foo":""}`,
+		},
+		{
+			"string with characters that need to be escaped",
+			"",
+			"string foo",
+			[]byte{0x03, 0x00, 0x00, 0x00, '"', '\n', '\\'},
+			`{"foo":"\"\n\\"}`,
 		},
 		{
 			"two primitive fields",
@@ -152,7 +159,7 @@ func TestJSONTranscoding(t *testing.T) {
 			assert.Nil(t, err)
 			err = transcoder.Transcode(buf, bytes.NewReader(c.input))
 			assert.Nil(t, err)
-			assert.Equal(t, c.output, buf.String())
+			assert.JSONEq(t, c.expectedJSON, buf.String())
 		})
 	}
 }
@@ -431,7 +438,7 @@ func TestSingleRecordConversion(t *testing.T) {
 			converter := transcoder.record(c.fields)
 			err := converter(buf, bytes.NewBuffer(c.input))
 			assert.Nil(t, err)
-			assert.Equal(t, c.output, buf.String())
+			assert.JSONEq(t, c.output, buf.String())
 		})
 	}
 }

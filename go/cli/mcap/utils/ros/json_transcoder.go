@@ -3,6 +3,7 @@ package ros
 import (
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -14,7 +15,6 @@ import (
 var (
 	trueBytes  = []byte("true")
 	falseBytes = []byte("false")
-	asciizero  = []byte{'0'}
 )
 
 type converter func(io.Writer, io.Reader) error
@@ -202,17 +202,16 @@ func (t *JSONTranscoder) string(w io.Writer, r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	length := binary.LittleEndian.Uint32(t.buf[:4]) + 2 // for the quotes
+	length := binary.LittleEndian.Uint32(t.buf[:4])
 	if uint32(len(t.buf)) < length {
 		t.buf = make([]byte, length)
 	}
-	n, err := io.ReadFull(r, t.buf[1:length-1])
+	_, err = io.ReadFull(r, t.buf[:length])
 	if err != nil {
 		return err
 	}
-	t.buf[0] = '"'
-	t.buf[n+1] = '"'
-	_, err = w.Write(t.buf[:n+2])
+	enc := json.NewEncoder(w)
+	err = enc.Encode(string(t.buf[:length]))
 	if err != nil {
 		return err
 	}
