@@ -331,7 +331,7 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
     runs-on: ubuntu-latest
     steps:
-      - uses: mislav/bump-homebrew-formula-action@9750a1166b188c9d191826c9709f694d756a3f0b
+      - uses: mislav/bump-homebrew-formula-action@fcd7e28e549f14d3aebc53b4d9e929de579f372f
         with:
           formula-name: mcap
           push-to: foxglove/homebrew-core
