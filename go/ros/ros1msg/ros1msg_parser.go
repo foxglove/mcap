@@ -2,11 +2,16 @@ package ros1msg
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/foxglove/mcap/go/ros"
 )
+
+// Field names are restricted to "an alphabetical character followed by any mixture of alphanumeric and underscores",
+// per http://wiki.ros.org/msg#Fields
+var fieldMatcher = regexp.MustCompile(`([^ ]+) +([a-zA-Z][a-zA-Z0-9_]+)`)
 
 type Type struct {
 	BaseType  string
@@ -44,12 +49,12 @@ func resolveDependentFields(
 		}
 
 		// must be a field
-		parts := strings.FieldsFunc(line, func(c rune) bool { return c == ' ' })
-		if len(parts) < 2 {
+		matches := fieldMatcher.FindStringSubmatch(line)
+		if len(matches) < 3 {
 			return nil, fmt.Errorf("malformed field on line %d: %s", i, line)
 		}
-		fieldType := parts[0]
-		fieldName := parts[1]
+		fieldType := matches[1]
+		fieldName := matches[2]
 
 		var isRecord bool
 		var recordFields []Field
