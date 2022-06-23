@@ -248,6 +248,19 @@ func TestROS1MSGParser(t *testing.T) {
 				},
 			},
 		},
+		{
+			"uses tabs instead of spaces",
+			"",
+			"string foo\t# no spaces for me",
+			[]Field{
+				{
+					Name: "foo",
+					Type: Type{
+						BaseType: "string",
+					},
+				},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
