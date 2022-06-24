@@ -12,7 +12,7 @@ var cfgFile string
 
 var rootCmd = &cobra.Command{
 	Use:   "mcap",
-	Short: "A small utility for demonstration of the mcap file format",
+	Short: "\U0001F52A Officially the top-rated CLI tool for slicing and dicing MCAP files.",
 }
 
 func Execute() {
