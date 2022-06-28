@@ -13,25 +13,33 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func printAttachments(w io.Writer, attachmentIndexes []*mcap.AttachmentIndex) {
+func printAttachments(w io.Writer, r io.Reader) error {
 	tw := tablewriter.NewWriter(w)
-	rows := make([][]string, 0, len(attachmentIndexes))
+	rows := make([][]string, 0)
 	rows = append(rows, []string{
 		"log time",
 		"name",
 		"content type",
 		"content length",
-		"offset",
 	})
-	for _, idx := range attachmentIndexes {
-		row := []string{
-			fmt.Sprintf("%d", idx.LogTime),
-			idx.Name,
-			idx.ContentType,
-			fmt.Sprintf("%d", idx.DataSize),
-			fmt.Sprintf("%d", idx.Offset),
-		}
-		rows = append(rows, row)
+
+	cbReader, err := mcap.NewCallbackReader(mcap.ReadOptions{
+		OnAttachment: func(a *mcap.Attachment) error {
+			row := []string{
+				fmt.Sprintf("%d", a.LogTime),
+				a.Name,
+				a.ContentType,
+				fmt.Sprintf("%d", len(a.Data)),
+			}
+			rows = append(rows, row)
+			return nil
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if err := cbReader.Read(r); err != nil {
+		return err
 	}
 	tw.SetBorder(false)
 	tw.SetAutoWrapText(false)
@@ -40,6 +48,7 @@ func printAttachments(w io.Writer, attachmentIndexes []*mcap.AttachmentIndex) {
 	tw.SetColumnSeparator("")
 	tw.AppendBulk(rows)
 	tw.Render()
+	return nil
 }
 
 var attachmentsCmd = &cobra.Command{
@@ -52,16 +61,7 @@ var attachmentsCmd = &cobra.Command{
 		}
 		filename := args[0]
 		err := utils.WithReader(ctx, filename, func(matched bool, rs io.ReadSeeker) error {
-			reader, err := mcap.NewReader(rs)
-			if err != nil {
-				return fmt.Errorf("failed to get reader: %w", err)
-			}
-			info, err := reader.Info()
-			if err != nil {
-				return fmt.Errorf("failed to get info: %w", err)
-			}
-			printChunks(os.Stdout, info.ChunkIndexes)
-			return nil
+			return printAttachments(os.Stdout, rs)
 		})
 		if err != nil {
 			log.Fatal("Failed to list attachments: %w", err)

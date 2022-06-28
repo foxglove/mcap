@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -68,40 +67,29 @@ type Message struct {
 	Data        json.RawMessage `json:"data"`
 }
 
-func printMessages(
-	ctx context.Context,
-	w io.Writer,
-	it mcap.MessageIterator,
-	formatJSON bool,
-) error {
+func printMessages(r io.Reader, w io.Writer, formatJSON bool) error {
 	msg := &bytes.Buffer{}
 	msgReader := &bytes.Reader{}
-	buf := make([]byte, 1024*1024)
 	transcoders := make(map[uint16]*ros.JSONTranscoder)
 	descriptors := make(map[uint16]protoreflect.MessageDescriptor)
 	encoder := json.NewEncoder(w)
 	target := Message{}
-	for {
-		schema, channel, message, err := it.Next(buf)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			log.Fatalf("Failed to read next message: %s", err)
-		}
+
+	handleMessage := func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
 		if !formatJSON {
 			if len(message.Data) > 10 {
 				fmt.Fprintf(w, "%d %s [%s] %v...\n", message.LogTime, channel.Topic, schema.Name, message.Data[:10])
 			} else {
 				fmt.Fprintf(w, "%d %s [%s] %v\n", message.LogTime, channel.Topic, schema.Name, message.Data)
 			}
-			continue
+			return nil
 		}
 		switch schema.Encoding {
 		case "ros1msg":
 			transcoder, ok := transcoders[channel.SchemaID]
 			if !ok {
 				packageName := strings.Split(schema.Name, "/")[0]
+				var err error
 				transcoder, err = ros.NewJSONTranscoder(packageName, schema.Data)
 				if err != nil {
 					return fmt.Errorf("failed to build transcoder for %s: %w", channel.Topic, err)
@@ -109,7 +97,7 @@ func printMessages(
 				transcoders[channel.SchemaID] = transcoder
 			}
 			msgReader.Reset(message.Data)
-			err = transcoder.Transcode(msg, msgReader)
+			err := transcoder.Transcode(msg, msgReader)
 			if err != nil {
 				return fmt.Errorf("failed to transcode %s record on %s: %w", schema.Name, channel.Topic, err)
 			}
@@ -150,66 +138,70 @@ func printMessages(
 		target.LogTime = DecimalTime(message.LogTime)
 		target.PublishTime = DecimalTime(message.PublishTime)
 		target.Data = msg.Bytes()
-		err = encoder.Encode(target)
-		if err != nil {
+		if err := encoder.Encode(target); err != nil {
 			return fmt.Errorf("failed to write encoded message: %s", err)
 		}
 		msg.Reset()
+		return nil
+	}
+
+	topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
+	cbReader, err := mcap.NewCallbackReader(mcap.ReadOptions{
+		OnMessage: handleMessage,
+		ChannelFilter: func(schema *mcap.Schema, channel *mcap.Channel) bool {
+			if len(topics) == 0 {
+				return true
+			}
+			for _, topic := range topics {
+				if topic == channel.Topic {
+					return true
+				}
+			}
+			return false
+		},
+		StartTime: uint64(catStart * 1e9),
+		EndTime:   uint64(catEnd * 1e9),
+	})
+	cbReader.Read(r)
+	if err != nil {
+		return err
 	}
 	return nil
+}
+
+func isReadingStdin() (bool, error) {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return false, err
+	}
+	return stat.Mode()&os.ModeCharDevice == 0, nil
 }
 
 var catCmd = &cobra.Command{
 	Use:   "cat [file]",
 	Short: "Cat the messages in an mcap file to stdout",
 	Run: func(cmd *cobra.Command, args []string) {
-		ctx := context.Background()
-		stat, err := os.Stdin.Stat()
-		if err != nil {
-			log.Fatal(err)
-		}
-		readingStdin := stat.Mode()&os.ModeCharDevice == 0
 		// stdin is a special case, since we can't seek
+		readingStdin, err := isReadingStdin()
+		if err != nil {
+			log.Fatalf("Failed to determine status of stdin: %s", err)
+		}
 		if readingStdin {
-			reader, err := mcap.NewReader(os.Stdin)
+			err := printMessages(os.Stdin, os.Stdout, catFormatJSON)
 			if err != nil {
-				log.Fatalf("Failed to create reader: %s", err)
-			}
-			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-			it, err := reader.Messages(catStart*1e9, catEnd*1e9, topics, false)
-			if err != nil {
-				log.Fatalf("Failed to read messages: %s", err)
-			}
-			err = printMessages(ctx, os.Stdout, it, catFormatJSON)
-			if err != nil {
-				log.Fatalf("Failed to print messages: %s", err)
+				log.Fatalf("error printing messages: %s", err)
 			}
 			return
 		}
 
-		// otherwise, could be a remote or local file
-		if len(args) != 1 {
-			log.Fatal("supply a file")
+		if len(args) == 0 {
+			log.Fatalf("supply a file")
 		}
-		filename := args[0]
-		err = utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
-			reader, err := mcap.NewReader(rs)
-			if err != nil {
-				return fmt.Errorf("failed to create reader: %w", err)
-			}
-			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-			it, err := reader.Messages(catStart*1e9, catEnd*1e9, topics, true)
-			if err != nil {
-				return fmt.Errorf("failed to read messages: %w", err)
-			}
-			err = printMessages(ctx, os.Stdout, it, catFormatJSON)
-			if err != nil {
-				return fmt.Errorf("failed to print messages: %w", err)
-			}
-			return nil
+		err = utils.WithReader(context.Background(), args[0], func(remote bool, rs io.ReadSeeker) error {
+			return printMessages(rs, os.Stdout, catFormatJSON)
 		})
 		if err != nil {
-			log.Fatalf("Error: %s", err)
+			log.Fatalf("Failed to print messages: %s", err)
 		}
 	},
 }
