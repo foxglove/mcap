@@ -117,9 +117,9 @@ var convertCmd = &cobra.Command{
 			amentPath := convertAmentPrefixPath
 			prefixPath := os.Getenv("AMENT_PREFIX_PATH")
 			if prefixPath != "" {
-				amentPath += ":" + prefixPath
+				amentPath += string(os.PathListSeparator) + prefixPath
 			}
-			dirs := strings.FieldsFunc(amentPath, func(c rune) bool { return c == ':' })
+			dirs := strings.FieldsFunc(amentPath, func(c rune) bool { return (c == os.PathListSeparator) })
 			err = ros.DB3ToMCAP(w, db, opts, dirs)
 			if err != nil {
 				die("failed to convert file: %s", err)
@@ -137,7 +137,9 @@ func init() {
 		"ament-prefix-path",
 		"",
 		"",
-		"(ros2 only) colon-separated list of directories to search for message definitions (e.g /opt/ros/galactic:/opt/ros/noetic)",
+		"(ros2 only) list of directories to search for message definitions\n"+
+			"separated by ':' on Unix-like platforms and ';' on Windows\n"+
+			"(e.g /opt/ros/galactic:/opt/ros/noetic, or C:\\opt\\ros\\galactic;C:\\opt\\ros\\noetic)",
 	)
 	convertCmd.PersistentFlags().StringVarP(
 		&convertCompression,
