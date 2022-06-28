@@ -23,7 +23,7 @@ from mcap.mcap0.writer import Writer
 stream = open("example.mcap", "wb")
 writer = Writer(stream)
 
-# The library argument help identify what tool wrote the file.
+# The library argument helps identify what tool wrote the file.
 writer.start(profile="x-custom", library="my-writer-v1")
 
 schema_id = writer.register_schema(
