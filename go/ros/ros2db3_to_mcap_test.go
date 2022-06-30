@@ -57,6 +57,26 @@ func TestDB3MCAPConversion(t *testing.T) {
 	assert.Equal(t, 7, messageCount)
 }
 
+func TestMergesNonNewlineDelimitedSchemas(t *testing.T) {
+	schemas, err := getSchemas(
+		"msg", []string{"./testdata/galactic"},
+		[]string{"package_a/msg/NoNewline"})
+	assert.Nil(t, err)
+	schema := schemas["package_a/msg/NoNewline"]
+	expected := `
+string data
+package_b/NoNewline SpaceMe
+package_b/TypeB FancyType
+================================================================================
+MSG: package_b/NoNewline
+string data
+================================================================================
+MSG: package_b/TypeB
+int32 foo
+`
+	assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(string(schema)))
+}
+
 func TestSchemaComposition(t *testing.T) {
 	t.Run("schema dependencies are resolved", func(t *testing.T) {
 		schemas, err := getSchemas("msg", []string{"./testdata/galactic"}, []string{"package_a/msg/TypeA"})

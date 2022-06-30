@@ -72,6 +72,13 @@ func getSchemas(encoding string, directories []string, types []string) (map[stri
 		for len(subdefinitions) > 0 {
 			subdefinition := subdefinitions[0]
 			if !first {
+				// if the previous write did not end with a newline, add one now
+				if messageDefinition.Bytes()[messageDefinition.Len()-1] != '\n' {
+					err := messageDefinition.WriteByte('\n')
+					if err != nil {
+						return nil, fmt.Errorf("failed to write newline")
+					}
+				}
 				_, err := messageDefinition.Write(MessageDefinitionSeparator)
 				if err != nil {
 					return nil, fmt.Errorf("failed to write separator: %w", err)
