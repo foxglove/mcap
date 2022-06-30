@@ -261,6 +261,19 @@ func TestROS1MSGParser(t *testing.T) {
 				},
 			},
 		},
+		{
+			"very short field name",
+			"",
+			"string f",
+			[]Field{
+				{
+					Name: "f",
+					Type: Type{
+						BaseType: "string",
+					},
+				},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {

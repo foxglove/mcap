@@ -11,7 +11,7 @@ import (
 
 // Field names are restricted to "an alphabetical character followed by any mixture of alphanumeric and underscores",
 // per http://wiki.ros.org/msg#Fields
-var fieldMatcher = regexp.MustCompile(`([^ ]+) +([a-zA-Z][a-zA-Z0-9_]+)`)
+var fieldMatcher = regexp.MustCompile(`([^ ]+) +([a-zA-Z][a-zA-Z0-9_]*)`)
 
 type Type struct {
 	BaseType  string
