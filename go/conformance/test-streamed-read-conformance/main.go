@@ -170,11 +170,15 @@ func mcapToJSON(w io.Writer, filepath string) error {
 	}
 	records := []Record{}
 	for {
-		tokenType, data, err := lexer.Next(nil)
+		tokenType, recordReader, _, err := lexer.Next()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
+			return err
+		}
+		data, err := io.ReadAll(recordReader)
+		if err != nil {
 			return err
 		}
 		switch tokenType {

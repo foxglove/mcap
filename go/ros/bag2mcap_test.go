@@ -29,10 +29,12 @@ func TestBag2MCAPPreservesChannelMetadata(t *testing.T) {
 	assert.Nil(t, err)
 	channelCount := 0
 	for {
-		tokenType, token, err := lexer.Next(nil)
+		tokenType, recordReader, _, err := lexer.Next()
 		if errors.Is(err, io.EOF) {
 			break
 		}
+		assert.Nil(t, err)
+		token, err := io.ReadAll(recordReader)
 		assert.Nil(t, err)
 		switch tokenType {
 		case mcap.TokenChannel:

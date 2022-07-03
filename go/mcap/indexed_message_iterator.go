@@ -65,10 +65,22 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	if err != nil {
 		return fmt.Errorf("failed to seek to summary start")
 	}
+	recordBuf := make([]byte, 1024)
 	for {
-		tokenType, record, err := it.lexer.Next(nil)
+		tokenType, recordReader, recordLen, err := it.lexer.Next()
 		if err != nil {
 			return fmt.Errorf("failed to get next token: %w", err)
+		}
+		var record []byte
+		if int64(len(recordBuf)) < recordLen {
+			recordBuf = make([]byte, recordLen)
+			record = recordBuf
+		} else {
+			record = recordBuf[:recordLen]
+		}
+		_, err = io.ReadFull(recordReader, record)
+		if err != nil {
+			return fmt.Errorf("failed to read next record: %w", err)
 		}
 		switch tokenType {
 		case TokenSchema:

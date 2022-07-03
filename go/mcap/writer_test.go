@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -21,7 +22,8 @@ func TestMCAPReadWrite(t *testing.T) {
 		assert.Nil(t, err)
 		lexer, err := NewLexer(buf)
 		assert.Nil(t, err)
-		tokenType, record, err := lexer.Next(nil)
+		tokenType, recordReader, _, err := lexer.Next()
+		record, err := io.ReadAll(recordReader)
 		assert.Nil(t, err)
 		// body of the header is the profile, followed by the metadata map
 		offset := 0
@@ -203,7 +205,7 @@ func TestChunkedReadWrite(t *testing.T) {
 				TokenSummaryOffset,
 				TokenFooter,
 			} {
-				tokenType, _, err := lexer.Next(nil)
+				tokenType, _, _, err := lexer.Next()
 				assert.Nil(t, err)
 				assert.Equal(t, expected, tokenType,
 					fmt.Sprintf("want %s got %s at %d", expected, tokenType, i))
@@ -458,7 +460,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		TokenSummaryOffset,
 		TokenFooter,
 	} {
-		tokenType, _, err := lexer.Next(nil)
+		tokenType, _, _, err := lexer.Next()
 		assert.Nil(t, err)
 		assert.Equal(t, expected, tokenType, fmt.Sprintf("want %s got %s", expected, tokenType))
 	}

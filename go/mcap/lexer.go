@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"io/ioutil"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
@@ -111,13 +112,23 @@ type Lexer struct {
 	validateCRC              bool
 	maxRecordSize            int
 	maxDecompressedChunkSize int
+	lastReturnedReader       *io.LimitedReader
 }
 
 // Next returns the next token from the lexer as a byte array. The result will
 // be sliced out of the provided buffer `p`, if p has adequate space. If p does
 // not have adequate space, a new buffer with sufficient size is allocated for
 // the result.
-func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
+func (l *Lexer) Next() (TokenType, io.Reader, int64, error) {
+	// If the user has not consumed their previous buffer, consume it for them.
+	if l.lastReturnedReader != nil && l.lastReturnedReader.N != 0 {
+		if rs, ok := l.lastReturnedReader.R.(io.ReadSeeker); ok {
+			rs.Seek(l.lastReturnedReader.N, io.SeekCurrent)
+		} else {
+			io.Copy(ioutil.Discard, l.lastReturnedReader)
+		}
+		l.lastReturnedReader = nil
+	}
 	for {
 		_, err := io.ReadFull(l.reader, l.buf[:9])
 		if err != nil {
@@ -129,69 +140,58 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 				continue
 			}
 			if unexpectedEOF || eof {
-				return TokenError, nil, io.EOF
+				return TokenError, nil, 0, io.EOF
 			}
-			return TokenError, nil, err
+			return TokenError, nil, 0, err
 		}
 		opcode := OpCode(l.buf[0])
-		recordLen := binary.LittleEndian.Uint64(l.buf[1:9])
-		if l.maxRecordSize > 0 && recordLen > uint64(l.maxRecordSize) {
-			return TokenError, nil, ErrRecordTooLarge
+		recordLen := int64(binary.LittleEndian.Uint64(l.buf[1:9]))
+		if l.maxRecordSize > 0 && recordLen > int64(l.maxRecordSize) {
+			return TokenError, nil, 0, ErrRecordTooLarge
 		}
 		if opcode == OpChunk && !l.emitChunks {
 			err := loadChunk(l)
 			if err != nil {
-				return TokenError, nil, err
+				return TokenError, nil, 0, err
 			}
 			continue
 		}
 
-		if recordLen > uint64(len(p)) {
-			p, err = makeSafe(recordLen)
-			if err != nil {
-				return TokenError, nil, fmt.Errorf("failed to allocate %d bytes for %s token: %w", recordLen, opcode, err)
-			}
-		}
-
-		record := p[:recordLen]
-		_, err = io.ReadFull(l.reader, record)
-		if err != nil {
-			return TokenError, nil, err
-		}
-
+		record := &io.LimitedReader{R: l.reader, N: recordLen}
+		l.lastReturnedReader = record
 		switch opcode {
 		case OpMessage:
-			return TokenMessage, record, nil
+			return TokenMessage, record, recordLen, nil
 		case OpHeader:
-			return TokenHeader, record, nil
+			return TokenHeader, record, recordLen, nil
 		case OpSchema:
-			return TokenSchema, record, nil
+			return TokenSchema, record, recordLen, nil
 		case OpDataEnd:
-			return TokenDataEnd, record, nil
+			return TokenDataEnd, record, recordLen, nil
 		case OpChannel:
-			return TokenChannel, record, nil
+			return TokenChannel, record, recordLen, nil
 		case OpFooter:
-			return TokenFooter, record, nil
+			return TokenFooter, record, recordLen, nil
 		case OpAttachment:
-			return TokenAttachment, record, nil
+			return TokenAttachment, record, recordLen, nil
 		case OpAttachmentIndex:
-			return TokenAttachmentIndex, record, nil
+			return TokenAttachmentIndex, record, recordLen, nil
 		case OpChunkIndex:
-			return TokenChunkIndex, record, nil
+			return TokenChunkIndex, record, recordLen, nil
 		case OpStatistics:
-			return TokenStatistics, record, nil
+			return TokenStatistics, record, recordLen, nil
 		case OpMessageIndex:
-			return TokenMessageIndex, record, nil
+			return TokenMessageIndex, record, recordLen, nil
 		case OpChunk:
-			return TokenChunk, record, nil
+			return TokenChunk, record, recordLen, nil
 		case OpMetadata:
-			return TokenMetadata, record, nil
+			return TokenMetadata, record, recordLen, nil
 		case OpMetadataIndex:
-			return TokenMetadataIndex, record, nil
+			return TokenMetadataIndex, record, recordLen, nil
 		case OpSummaryOffset:
-			return TokenSummaryOffset, record, nil
+			return TokenSummaryOffset, record, recordLen, nil
 		case OpReserved:
-			return TokenError, nil, fmt.Errorf("invalid zero opcode")
+			return TokenError, nil, 0, fmt.Errorf("invalid zero opcode")
 		default:
 			continue // skip unrecognized opcodes
 		}

@@ -131,19 +131,23 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 
 	msg := make([]byte, 1024)
 	for {
-		tokenType, data, err := lexer.Next(msg)
+		tokenType, recordReader, recordLen, err := lexer.Next()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
 			log.Fatal("Failed to read token:", err)
 		}
-		if len(data) > len(msg) {
-			msg = data
+		var data []byte
+		var readErr error
+		if int64(len(msg)) < recordLen {
+			data, readErr = io.ReadAll(recordReader)
+		} else {
+			data = msg[:recordLen]
+			_, readErr = io.ReadFull(recordReader, data)
 		}
-
-		if len(data) > len(msg) {
-			msg = data
+		if readErr != nil {
+			log.Fatal("Failed to read record:", err)
 		}
 		switch tokenType {
 		case mcap.TokenSchema:
@@ -232,15 +236,24 @@ func (doctor *mcapDoctor) Examine() {
 	var lastMessageTime uint64
 	msg := make([]byte, 1024)
 	for {
-		tokenType, data, err := lexer.Next(msg)
+		tokenType, recordReader, recordLen, err := lexer.Next()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
 			log.Fatal("Failed to read token:", err)
 		}
-		if len(data) > len(msg) {
+		var data []byte
+		var readErr error
+		if int64(len(msg)) < recordLen {
+			data, readErr = io.ReadAll(recordReader)
 			msg = data
+		} else {
+			data = msg[:recordLen]
+			_, readErr = io.ReadFull(recordReader, data)
+		}
+		if readErr != nil {
+			log.Fatalf("failed to read next record: %s", err)
 		}
 		switch tokenType {
 		case mcap.TokenHeader:
@@ -381,16 +394,27 @@ func (doctor *mcapDoctor) Examine() {
 
 	for chunkOffset, chunkIndex := range doctor.chunkIndexes {
 		doctor.reader.Seek(int64(chunkOffset), io.SeekStart)
-		tokenType, data, err := lexer.Next(msg)
+		tokenType, recordReader, recordLen, err := lexer.Next()
 		if err != nil {
 			doctor.error("Chunk index points to offset %d but encountered error reading at that offset: %v", chunkOffset, err)
 			continue
 		} else if tokenType != mcap.TokenChunk {
 			doctor.error("Chunk index points to offset %d but the record at this offset is a %s", chunkOffset, tokenType.String())
 			continue
-		} else if chunkIndex.ChunkLength != 9+uint64(len(data)) {
-			doctor.error("Chunk index at offset %d has chunk length %d but the chunk at this offset has length %d (including opcode+length)", chunkOffset, chunkIndex.ChunkLength, 9+len(data))
+		} else if chunkIndex.ChunkLength != 9+uint64(recordLen) {
+			doctor.error("Chunk index at offset %d has chunk length %d but the chunk at this offset has length %d (including opcode+length)", chunkOffset, chunkIndex.ChunkLength, 9+recordLen)
 			continue
+		}
+		var data []byte
+		var readErr error
+		if int64(len(msg)) < recordLen {
+			data, readErr = io.ReadAll(recordReader)
+		} else {
+			data = msg[:recordLen]
+			_, readErr = io.ReadFull(recordReader, data)
+		}
+		if readErr != nil {
+			doctor.error("Chunk at offset %d has chunk length %d but could not read that far: %v", chunkOffset, recordLen, readErr)
 		}
 		chunk, err := mcap.ParseChunk(data)
 		if err != nil {
