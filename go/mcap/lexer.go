@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"io/ioutil"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
@@ -122,10 +121,14 @@ type Lexer struct {
 func (l *Lexer) Next() (TokenType, io.Reader, int64, error) {
 	// If the user has not consumed their previous buffer, consume it for them.
 	if l.lastReturnedReader != nil && l.lastReturnedReader.N != 0 {
+		var err error
 		if rs, ok := l.lastReturnedReader.R.(io.ReadSeeker); ok {
-			rs.Seek(l.lastReturnedReader.N, io.SeekCurrent)
+			_, err = rs.Seek(l.lastReturnedReader.N, io.SeekCurrent)
 		} else {
-			io.Copy(ioutil.Discard, l.lastReturnedReader)
+			_, err = io.Copy(io.Discard, l.lastReturnedReader)
+		}
+		if err != nil {
+			return TokenError, nil, 0, err
 		}
 		l.lastReturnedReader = nil
 	}

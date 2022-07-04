@@ -60,3 +60,19 @@ func putPrefixedBytes(buf []byte, s []byte) int {
 	offset += copy(buf[offset:], s)
 	return offset
 }
+
+// ReadIntoOrReplace returns a slice of length `length`, read out of the reader `r`.
+// if `buf` is large enough, the returned slice will be sliced out of `buf`. Otherwise,
+// `buf` will be replaced by a new, larger buffer, and the returned slice will be sliced
+// from that.
+func ReadIntoOrReplace(r io.Reader, length int64, buf *[]byte) ([]byte, error) {
+	if len(*buf) < int(length) {
+		newBuf := make([]byte, length)
+		*buf = newBuf
+		_, err := io.ReadFull(r, newBuf)
+		return newBuf, err
+	}
+	out := (*buf)[:length]
+	_, err := io.ReadFull(r, out)
+	return out, err
+}

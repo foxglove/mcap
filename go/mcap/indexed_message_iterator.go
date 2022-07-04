@@ -71,14 +71,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 		if err != nil {
 			return fmt.Errorf("failed to get next token: %w", err)
 		}
-		var record []byte
-		if int64(len(recordBuf)) < recordLen {
-			recordBuf = make([]byte, recordLen)
-			record = recordBuf
-		} else {
-			record = recordBuf[:recordLen]
-		}
-		_, err = io.ReadFull(recordReader, record)
+		record, err := ReadIntoOrReplace(recordReader, recordLen, &recordBuf)
 		if err != nil {
 			return fmt.Errorf("failed to read next record: %w", err)
 		}

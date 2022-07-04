@@ -138,15 +138,8 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 			}
 			log.Fatal("Failed to read token:", err)
 		}
-		var data []byte
-		var readErr error
-		if int64(len(msg)) < recordLen {
-			data, readErr = io.ReadAll(recordReader)
-		} else {
-			data = msg[:recordLen]
-			_, readErr = io.ReadFull(recordReader, data)
-		}
-		if readErr != nil {
+		data, err := mcap.ReadIntoOrReplace(recordReader, recordLen, &msg)
+		if err != nil {
 			log.Fatal("Failed to read record:", err)
 		}
 		switch tokenType {
@@ -243,16 +236,8 @@ func (doctor *mcapDoctor) Examine() {
 			}
 			log.Fatal("Failed to read token:", err)
 		}
-		var data []byte
-		var readErr error
-		if int64(len(msg)) < recordLen {
-			data, readErr = io.ReadAll(recordReader)
-			msg = data
-		} else {
-			data = msg[:recordLen]
-			_, readErr = io.ReadFull(recordReader, data)
-		}
-		if readErr != nil {
+		data, err := mcap.ReadIntoOrReplace(recordReader, recordLen, &msg)
+		if err != nil {
 			log.Fatalf("failed to read next record: %s", err)
 		}
 		switch tokenType {
@@ -405,14 +390,7 @@ func (doctor *mcapDoctor) Examine() {
 			doctor.error("Chunk index at offset %d has chunk length %d but the chunk at this offset has length %d (including opcode+length)", chunkOffset, chunkIndex.ChunkLength, 9+recordLen)
 			continue
 		}
-		var data []byte
-		var readErr error
-		if int64(len(msg)) < recordLen {
-			data, readErr = io.ReadAll(recordReader)
-		} else {
-			data = msg[:recordLen]
-			_, readErr = io.ReadFull(recordReader, data)
-		}
+		data, readErr := mcap.ReadIntoOrReplace(recordReader, recordLen, &msg)
 		if readErr != nil {
 			doctor.error("Chunk at offset %d has chunk length %d but could not read that far: %v", chunkOffset, recordLen, readErr)
 		}

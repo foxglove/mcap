@@ -2,17 +2,15 @@ package mcap
 
 import (
 	"fmt"
-	"io"
 )
 
 type unindexedMessageIterator struct {
-	lexer     *Lexer
-	schemas   map[uint16]*Schema
-	channels  map[uint16]*Channel
-	topics    map[string]bool
-	start     uint64
-	end       uint64
-	recordBuf []byte
+	lexer    *Lexer
+	schemas  map[uint16]*Schema
+	channels map[uint16]*Channel
+	topics   map[string]bool
+	start    uint64
+	end      uint64
 }
 
 func (it *unindexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, error) {
@@ -21,14 +19,7 @@ func (it *unindexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message,
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		var record []byte
-		var readErr error
-		if int64(len(p)) < recordLen {
-			record, readErr = io.ReadAll(recordReader)
-		} else {
-			record = p[:recordLen]
-			_, readErr = io.ReadFull(recordReader, record)
-		}
+		record, readErr := ReadIntoOrReplace(recordReader, recordLen, &p)
 		if readErr != nil {
 			return nil, nil, nil, err
 		}

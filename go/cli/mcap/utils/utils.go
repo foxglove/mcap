@@ -98,3 +98,15 @@ func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.
 	defer rs.Close()
 	return f(remote, rs)
 }
+
+func readIntoOrReplace(r io.Reader, length int64, buf *[]byte) ([]byte, error) {
+	if len(*buf) < int(length) {
+		newBuf := make([]byte, length)
+		*buf = newBuf
+		_, err := io.ReadFull(r, newBuf)
+		return newBuf, err
+	}
+	out := (*buf)[:length]
+	_, err := io.ReadFull(r, out)
+	return out, err
+}

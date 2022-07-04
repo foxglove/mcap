@@ -23,6 +23,7 @@ func TestMCAPReadWrite(t *testing.T) {
 		lexer, err := NewLexer(buf)
 		assert.Nil(t, err)
 		tokenType, recordReader, _, err := lexer.Next()
+		assert.Nil(t, err)
 		record, err := io.ReadAll(recordReader)
 		assert.Nil(t, err)
 		// body of the header is the profile, followed by the metadata map
