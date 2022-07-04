@@ -65,6 +65,34 @@ func (it *unindexedContentIterator) Next(p []byte) (ContentRecord, error) {
 					return &ResolvedMessage{Message: message, Schema: schema, Channel: channel}, nil
 				}
 			}
+		case TokenAttachment:
+			if it.config.attachmentFilter == nil {
+				continue
+			}
+			attachmentReader, err := ParseAttachmentAsReader(recordReader)
+			if err != nil {
+				return nil, err
+			}
+			if it.config.isWithinTimeBounds(attachmentReader.LogTime) {
+				if it.config.attachmentFilter(attachmentReader.Name) {
+					return attachmentReader, nil
+				}
+			}
+		case TokenMetadata:
+			if it.config.metadataFilter == nil {
+				continue
+			}
+			record, err := ReadIntoOrReplace(recordReader, recordLen, &p)
+			if err != nil {
+				return nil, err
+			}
+			metadata, err := ParseMetadata(record)
+			if err != nil {
+				return nil, err
+			}
+			if it.config.metadataFilter(metadata.Name) {
+				return metadata, nil
+			}
 		default:
 			// skip all other tokens
 		}
