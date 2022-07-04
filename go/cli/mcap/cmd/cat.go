@@ -71,7 +71,7 @@ type Message struct {
 func printMessages(
 	ctx context.Context,
 	w io.Writer,
-	it mcap.MessageIterator,
+	it mcap.ContentIterator,
 	formatJSON bool,
 ) error {
 	msg := &bytes.Buffer{}
@@ -82,13 +82,19 @@ func printMessages(
 	encoder := json.NewEncoder(w)
 	target := Message{}
 	for {
-		schema, channel, message, err := it.Next(buf)
+		content, err := it.Next(buf)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
 			log.Fatalf("Failed to read next message: %s", err)
 		}
+		message := content.AsMessage()
+		if message == nil {
+			panic(fmt.Sprintf("expected only messages from ContentIterator, got %T", content))
+		}
+		channel := message.Channel
+		schema := message.Schema
 		if !formatJSON {
 			if len(message.Data) > 10 {
 				fmt.Fprintf(w, "%d %s [%s] %v...\n", message.LogTime, channel.Topic, schema.Name, message.Data[:10])
@@ -159,6 +165,25 @@ func printMessages(
 	return nil
 }
 
+func makeContentIterator(reader *mcap.Reader) (mcap.ContentIterator, error) {
+	topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
+	messageFilter := func(*mcap.Schema, *mcap.Channel) bool { return true }
+	if len(topics) > 0 {
+		topicMap := make(map[string]bool, len(topics))
+		for _, topic := range topics {
+			topicMap[topic] = true
+		}
+		messageFilter = func(_ *mcap.Schema, channel *mcap.Channel) bool {
+			_, ok := topicMap[channel.Topic]
+			return ok
+		}
+	}
+	return reader.Content(
+		mcap.WithMessagesMatching(messageFilter),
+		mcap.WithTimeBounds(uint64(catStart), uint64(catEnd)),
+	)
+}
+
 var catCmd = &cobra.Command{
 	Use:   "cat [file]",
 	Short: "Cat the messages in an mcap file to stdout",
@@ -175,8 +200,7 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("Failed to create reader: %s", err)
 			}
-			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-			it, err := reader.Messages(catStart*1e9, catEnd*1e9, topics, false)
+			it, err := makeContentIterator(reader)
 			if err != nil {
 				log.Fatalf("Failed to read messages: %s", err)
 			}
@@ -197,8 +221,7 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to create reader: %w", err)
 			}
-			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-			it, err := reader.Messages(catStart*1e9, catEnd*1e9, topics, true)
+			it, err := makeContentIterator(reader)
 			if err != nil {
 				return fmt.Errorf("failed to read messages: %w", err)
 			}

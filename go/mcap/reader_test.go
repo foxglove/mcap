@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -63,15 +62,17 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
 	assert.Nil(t, err)
 
-	it, err := reader.Messages(0, 100, []string{}, true)
+	it, err := reader.Content(WithAllMessages(), ForceIndexed())
 	assert.Nil(t, err)
 	expectedTopics := []string{"/foo", "/bar"}
 	for i := 0; i < 2; i++ {
-		_, channel, _, err := it.Next(nil)
+		contentRecord, err := it.Next(nil)
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		assert.Equal(t, expectedTopics[i], channel.Topic)
+		message := contentRecord.AsMessage()
+		assert.NotNil(t, message)
+		assert.Equal(t, expectedTopics[i], message.Channel.Topic)
 	}
 }
 
@@ -273,20 +274,23 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(0, 10000, []string{}, useIndex)
+						it, err := r.Content(
+							WithAllMessages(),
+						)
 						assert.Nil(t, err)
 						c := 0
 						for {
-							schema, channel, message, err := it.Next(nil)
+							contentRecord, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
 							assert.Nil(t, err)
-							assert.NotNil(t, channel)
+							message := contentRecord.AsMessage()
 							assert.NotNil(t, message)
-							assert.Equal(t, message.ChannelID, channel.ID)
-							assert.NotNil(t, schema)
-							assert.Equal(t, schema.ID, channel.SchemaID)
+							assert.NotNil(t, message.Channel)
+							assert.NotNil(t, message.Schema)
+							assert.Equal(t, message.ChannelID, message.Channel.ID)
+							assert.Equal(t, message.Schema.ID, message.Channel.SchemaID)
 							c++
 						}
 						assert.Equal(t, 1000, c)
@@ -295,20 +299,23 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(0, 10000, []string{"/test1"}, useIndex)
+						it, err := r.Content(
+							WithMessagesMatching(func(_ *Schema, channel *Channel) bool { return channel.Topic == "/test1" }),
+						)
 						assert.Nil(t, err)
 						c := 0
 						for {
-							schema, channel, message, err := it.Next(nil)
+							contentRecord, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
 							assert.Nil(t, err)
-							assert.NotNil(t, channel)
+							message := contentRecord.AsMessage()
 							assert.NotNil(t, message)
-							assert.NotNil(t, schema)
-							assert.Equal(t, message.ChannelID, channel.ID)
-							assert.Equal(t, schema.ID, channel.SchemaID)
+							assert.NotNil(t, message.Channel)
+							assert.NotNil(t, message.Schema)
+							assert.Equal(t, message.ChannelID, message.Channel.ID)
+							assert.Equal(t, message.Schema.ID, message.Channel.SchemaID)
 							c++
 						}
 						assert.Equal(t, 500, c)
@@ -317,20 +324,26 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(0, 10000, []string{"/test1", "/test2"}, useIndex)
+						it, err := r.Content(
+							WithMessagesMatching(func(_ *Schema, channel *Channel) bool {
+								return channel.Topic == "/test1" || channel.Topic == "/test2"
+							}),
+							WithTimeBounds(0, 10000),
+						)
 						assert.Nil(t, err)
 						c := 0
 						for {
-							schema, channel, message, err := it.Next(nil)
+							contentRecord, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
 							assert.Nil(t, err)
-							assert.NotNil(t, channel)
+							message := contentRecord.AsMessage()
 							assert.NotNil(t, message)
-							assert.NotNil(t, schema)
-							assert.Equal(t, message.ChannelID, channel.ID)
-							assert.Equal(t, channel.SchemaID, schema.ID)
+							assert.NotNil(t, message.Channel)
+							assert.NotNil(t, message.Schema)
+							assert.Equal(t, message.ChannelID, message.Channel.ID)
+							assert.Equal(t, message.Channel.SchemaID, message.Schema.ID)
 							c++
 						}
 						assert.Equal(t, 1000, c)
@@ -339,11 +352,14 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(100, 200, []string{}, useIndex)
+						it, err := r.Content(
+							WithAllMessages(),
+							WithTimeBounds(100, 200),
+						)
 						assert.Nil(t, err)
 						c := 0
 						for {
-							_, _, _, err := it.Next(nil)
+							_, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
@@ -368,12 +384,19 @@ func TestReaderCounting(t *testing.T) {
 			assert.Nil(t, err)
 			defer f.Close()
 			r, err := NewReader(f)
+			configOption := ForceUnindexed()
+			if indexed {
+				configOption = ForceIndexed()
+			}
 			assert.Nil(t, err)
-			it, err := r.Messages(0, time.Now().UnixNano(), []string{}, indexed)
+			it, err := r.Content(
+				WithAllMessages(),
+				configOption,
+			)
 			assert.Nil(t, err)
 			c := 0
 			for {
-				_, _, _, err := it.Next(nil)
+				_, err := it.Next(nil)
 				if errors.Is(err, io.EOF) {
 					break
 				}
@@ -418,11 +441,14 @@ func TestReadingDiagnostics(t *testing.T) {
 	assert.Nil(t, err)
 	r, err := NewReader(f)
 	assert.Nil(t, err)
-	it, err := r.Messages(0, time.Now().UnixNano(), []string{"/diagnostics"}, true)
+	it, err := r.Content(
+		WithMessagesMatching(func(_ *Schema, channel *Channel) bool { return channel.Topic == "/diagnostics" }),
+		ForceIndexed(),
+	)
 	assert.Nil(t, err)
 	c := 0
 	for {
-		_, _, _, err := it.Next(nil)
+		_, err := it.Next(nil)
 		if errors.Is(err, io.EOF) {
 			break
 		}

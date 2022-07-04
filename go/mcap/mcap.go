@@ -292,6 +292,7 @@ type Info struct {
 	Schemas           map[uint16]*Schema
 	ChunkIndexes      []*ChunkIndex
 	AttachmentIndexes []*AttachmentIndex
+	MetadataIndexes   []*MetadataIndex
 	Header            *Header
 }
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
@@ -125,12 +124,12 @@ func (m *mcapMerger) addSchema(w *mcap.Writer, inputID int, schema *mcap.Schema)
 	return newSchema.ID, nil
 }
 
-func buildIterator(r io.Reader) (mcap.MessageIterator, error) {
+func buildIterator(r io.Reader) (mcap.ContentIterator, error) {
 	reader, err := mcap.NewReader(r)
 	if err != nil {
 		return nil, err
 	}
-	iterator, err := reader.Messages(0, math.MaxInt64, nil, false)
+	iterator, err := reader.Content(mcap.WithAllMessages())
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +153,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 		return fmt.Errorf("failed to write header: %w", err)
 	}
 
-	iterators := make([]mcap.MessageIterator, len(inputs))
+	iterators := make([]mcap.ContentIterator, len(inputs))
 	pq := utils.NewPriorityQueue(nil)
 
 	// for each input reader, initialize an mcap reader and read the first
@@ -166,7 +165,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 		if err != nil {
 			return fmt.Errorf("failed to build iterator for input %d: %w", inputID, err)
 		}
-		schema, channel, message, err := iterator.Next(nil)
+		content, err := iterator.Next(nil)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				// the file may be an empty mcap. if so, just ignore it.
@@ -174,6 +173,9 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 			}
 			return fmt.Errorf("failed to read first message on input %d: %w", inputID, err)
 		}
+		message := content.AsMessage()
+		schema := message.Schema
+		channel := message.Channel
 		schema.ID, err = m.addSchema(writer, inputID, schema)
 		if err != nil {
 			return fmt.Errorf("failed to add initial schema for input %d: %w", inputID, err)
@@ -185,7 +187,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 		iterators[inputID] = iterator
 
 		// push the first message onto the priority queue
-		heap.Push(pq, utils.NewTaggedMessage(inputID, message))
+		heap.Push(pq, utils.NewTaggedMessage(inputID, message.Message))
 	}
 	// there's one message per input on the heap now. Pop messages off,
 	// replacing them with the next message from the corresponding input.
@@ -202,7 +204,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 		// Pull the next message off the iterator, to replace the one just
 		// popped from the queue. Before pushing this message, it must be
 		// renumbered and the related channels/schemas may need to be inserted.
-		newSchema, newChannel, newMessage, err := iterators[msg.InputID].Next(nil)
+		newContent, err := iterators[msg.InputID].Next(nil)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				// if the iterator is empty, skip this read. No further messages
@@ -214,6 +216,9 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 			}
 			return fmt.Errorf("failed to pull next message: %w", err)
 		}
+		newMessage := newContent.AsMessage()
+		newSchema := newMessage.Schema
+		newChannel := newMessage.Channel
 
 		// if the channel is unknown, need to add it to the output
 		var ok bool
@@ -229,7 +234,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 				return fmt.Errorf("failed to add channel: %w", err)
 			}
 		}
-		heap.Push(pq, utils.NewTaggedMessage(msg.InputID, newMessage))
+		heap.Push(pq, utils.NewTaggedMessage(msg.InputID, newMessage.Message))
 	}
 	return writer.Close()
 }

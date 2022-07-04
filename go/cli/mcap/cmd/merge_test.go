@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"io"
-	"math"
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
@@ -51,12 +50,13 @@ func TestMCAPMerging(t *testing.T) {
 		// output should now be a well-formed mcap
 		reader, err := mcap.NewReader(output)
 		assert.Nil(t, err)
-		it, err := reader.Messages(0, math.MaxInt64, nil, false)
+		it, err := reader.Content(mcap.WithAllMessages())
 		assert.Nil(t, err)
 
 		messages := make(map[string]int)
-		err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
-			messages[channel.Topic]++
+		err = mcap.Range(it, func(contentRecord mcap.ContentRecord) error {
+			message := contentRecord.AsMessage()
+			messages[message.Channel.Topic]++
 			return nil
 		})
 		assert.Nil(t, err)
@@ -80,10 +80,11 @@ func TestMultiChannelInput(t *testing.T) {
 	assert.Nil(t, merger.mergeInputs(output, []io.Reader{multiChannelInput, buf3}))
 	reader, err := mcap.NewReader(output)
 	assert.Nil(t, err)
-	it, err := reader.Messages(0, math.MaxInt64, nil, false)
+	it, err := reader.Content(mcap.WithAllMessages())
 	assert.Nil(t, err)
 	messages := make(map[string]int)
-	err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
+	err = mcap.Range(it, func(contentRecord mcap.ContentRecord) error {
+		channel := contentRecord.AsMessage().Channel
 		messages[channel.Topic]++
 		return nil
 	})

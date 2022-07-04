@@ -1,6 +1,7 @@
 package mcap
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 )
@@ -299,6 +300,64 @@ func ParseAttachment(buf []byte) (*Attachment, error) {
 		ContentType: contentType,
 		Data:        data,
 		CRC:         crc,
+	}, nil
+}
+
+func ParseAttachmentAsReader(r io.Reader) (*AttachmentReader, error) {
+	var buf [8]byte
+
+	logTimeBytes := buf[:8]
+	_, err := io.ReadFull(r, logTimeBytes)
+	if err != nil {
+		return nil, err
+	}
+	logTime := binary.LittleEndian.Uint64(logTimeBytes)
+
+	createTimeBytes := buf[:8]
+	_, err = io.ReadFull(r, createTimeBytes)
+	if err != nil {
+		return nil, err
+	}
+	createTime := binary.LittleEndian.Uint64(createTimeBytes)
+
+	nameLengthBytes := buf[:4]
+	_, err = io.ReadFull(r, nameLengthBytes)
+	if err != nil {
+		return nil, err
+	}
+	nameLength := binary.LittleEndian.Uint32(nameLengthBytes)
+	name := make([]byte, nameLength)
+	_, err = io.ReadFull(r, name)
+	if err != nil {
+		return nil, err
+	}
+	contentTypeLengthBytes := buf[:4]
+	_, err = io.ReadFull(r, contentTypeLengthBytes)
+	if err != nil {
+		return nil, err
+	}
+	contentTypeLength := binary.LittleEndian.Uint32(contentTypeLengthBytes)
+	contentType := make([]byte, contentTypeLength)
+	_, err = io.ReadFull(r, contentType)
+	if err != nil {
+		return nil, err
+	}
+	dataLenBytes := buf[:8]
+	_, err = io.ReadFull(r, dataLenBytes)
+	if err != nil {
+		return nil, err
+	}
+	dataLen := int64(binary.LittleEndian.Uint64(dataLenBytes))
+	return &AttachmentReader{
+		Attachment: Attachment{
+			LogTime:     logTime,
+			CreateTime:  createTime,
+			Name:        string(name),
+			ContentType: string(contentType),
+			Data:        nil,
+			CRC:         0,
+		},
+		DataReader: io.LimitReader(r, dataLen),
 	}, nil
 }
 

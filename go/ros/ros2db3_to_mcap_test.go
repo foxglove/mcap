@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"io"
-	"math"
 	"strings"
 	"testing"
 
@@ -39,19 +38,24 @@ func TestDB3MCAPConversion(t *testing.T) {
 	assert.Equal(t, 1, len(info.Channels))
 	assert.Equal(t, "/chatter", info.Channels[1].Topic)
 	messageCount := 0
-	it, err := reader.Messages(0, math.MaxInt64, []string{"/chatter"}, true)
+	it, err := reader.Content(
+		mcap.WithMessagesMatching(func(_ *mcap.Schema, channel *mcap.Channel) bool { return channel.Topic == "/chatter" }),
+		mcap.ForceIndexed(),
+	)
 	assert.Nil(t, err)
 	for {
-		schema, channel, message, err := it.Next(nil)
+		content, err := it.Next(nil)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
 			t.Errorf("failed to pull message from serialized file: %s", err)
 		}
+		message := content.AsMessage()
+		assert.NotNil(t, message)
 		assert.NotEmpty(t, message.Data)
-		assert.Equal(t, channel.Topic, "/chatter")
-		assert.Equal(t, schema.Name, "std_msgs/msg/String")
+		assert.Equal(t, message.Channel.Topic, "/chatter")
+		assert.Equal(t, message.Schema.Name, "std_msgs/msg/String")
 		messageCount++
 	}
 	assert.Equal(t, 7, messageCount)
