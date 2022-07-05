@@ -107,6 +107,7 @@ overrides:
       - klass
       - rglob
       - uncompress
+      - ivar
 
   - filename: "**/*.swift"
     ignoreRegExpList:
