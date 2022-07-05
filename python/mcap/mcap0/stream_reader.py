@@ -1,11 +1,11 @@
 import struct
-from io import BufferedReader, BytesIO, RawIOBase
+from io import BufferedReader, BytesIO, IOBase, RawIOBase
 from typing import Iterator, List, Optional, Tuple, Union
 import zstandard
 import lz4.frame  # type: ignore
 
 from .data_stream import ReadDataStream
-from .exceptions import McapError
+from .exceptions import InvalidMagic
 from .opcode import Opcode
 from .records import (
     Attachment,
@@ -60,9 +60,9 @@ def get_chunk_data_stream(chunk: Chunk) -> Tuple[ReadDataStream, int]:
 
 
 def read_magic(stream: ReadDataStream) -> bool:
-    magic = struct.unpack("<8B", stream.read(8))
+    magic = struct.unpack("<8B", stream.read(MAGIC_SIZE))
     if magic != (137, 77, 67, 65, 80, 48, 13, 10):
-        raise McapError("Not valid mcap data.")
+        raise InvalidMagic()
     return True
 
 
@@ -97,7 +97,11 @@ class StreamReader:
                 self.__footer = record
                 read_magic(self.__stream)
 
-    def __init__(self, input: Union[str, BytesIO, RawIOBase, BufferedReader]):
+    def __init__(
+        self,
+        input: Union[str, BytesIO, RawIOBase, BufferedReader, IOBase],
+        skip_magic: bool = False,
+    ):
         """
         input: The input stream from which to read records.
         """
@@ -108,7 +112,7 @@ class StreamReader:
         else:
             self.__stream = ReadDataStream(input)
         self.__footer: Optional[Footer] = None
-        self.__magic = False
+        self.__magic: bool = skip_magic
 
     def __read_record(self, opcode: int, length: int) -> Optional[McapRecord]:
         if opcode == Opcode.ATTACHMENT:
