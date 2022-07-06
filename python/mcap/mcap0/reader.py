@@ -59,7 +59,8 @@ def _read_summary_from_stream_reader(stream_reader: StreamReader) -> Optional[Su
 
 
 def _chunks_matching_topics(
-    summary: Summary, topics: Optional[Iterable[str]],
+    summary: Summary,
+    topics: Optional[Iterable[str]],
     start_time: Optional[float],
     end_time: Optional[float],
 ) -> List[ChunkIndex]:
@@ -77,7 +78,9 @@ def _chunks_matching_topics(
             continue
         for channel_id in chunk_index.message_index_offsets.keys():
             if topics is None or summary.channels[channel_id].topic in topics:
-                print(f"start: {chunk_index.message_start_time}, end: {chunk_index.message_end_time}")
+                print(
+                    f"start: {chunk_index.message_start_time}, end: {chunk_index.message_end_time}"
+                )
                 out.append(chunk_index)
                 break
     return out
@@ -86,7 +89,8 @@ def _chunks_matching_topics(
 class MCAPReader(ABC):
     @abstractmethod
     def iter_messages(
-        self, topics: Optional[Iterable[str]] = None,
+        self,
+        topics: Optional[Iterable[str]] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
@@ -113,7 +117,8 @@ class SeekingReader(MCAPReader):
         self._summary: Optional[Summary] = None
 
     def iter_messages(
-        self, topics: Optional[Iterable[str]] = None,
+        self,
+        topics: Optional[Iterable[str]] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
@@ -214,7 +219,8 @@ class NonSeekingReader(MCAPReader):
         self._spent = True
 
     def iter_messages(
-        self, topics: Optional[Iterable[str]] = None,
+        self,
+        topics: Optional[Iterable[str]] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:

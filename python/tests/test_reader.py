@@ -1,4 +1,4 @@
-""" tests for the MCAPReader implementations. """
+"""tests for the MCAPReader implementations."""
 import os
 from pathlib import Path
 
@@ -21,14 +21,14 @@ def pipe():
 
 
 def test_make_seeking():
-    """ test that seekable streams get read with the seeking reader. """
+    """test that seekable streams get read with the seeking reader."""
     with open(DEMO_MCAP, "rb") as f:
         reader = make_reader(f)
         assert isinstance(reader, SeekingReader)
 
 
 def test_make_not_seeking(pipe):
-    """ test that non-seekable streams get read with the non-seeking reader. """
+    """test that non-seekable streams get read with the non-seeking reader."""
     r, _ = pipe
     reader: MCAPReader = make_reader(r)
     assert isinstance(reader, NonSeekingReader)
@@ -36,7 +36,7 @@ def test_make_not_seeking(pipe):
 
 @pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
 def test_all_messages(reader_cls):
-    """ test that we can find all messages correctly with all reader implementations. """
+    """test that we can find all messages correctly with all reader implementations."""
     with open(DEMO_MCAP, "rb") as f:
         reader: MCAPReader = reader_cls(f)
         count = 0
@@ -51,7 +51,7 @@ def test_all_messages(reader_cls):
 
 @pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
 def test_time_range(reader_cls):
-    """ test that we can filter by time range with all reader implementations. """
+    """test that we can filter by time range with all reader implementations."""
     with open(DEMO_MCAP, "rb") as f:
         reader: MCAPReader = reader_cls(f)
         count = 0
@@ -70,7 +70,7 @@ def test_time_range(reader_cls):
 
 @pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
 def test_only_diagnostics(reader_cls):
-    """ test that we can filter by topic with all reader implementations. """
+    """test that we can filter by topic with all reader implementations."""
     with open(DEMO_MCAP, "rb") as f:
         reader: MCAPReader = reader_cls(f)
         count = 0
@@ -85,7 +85,7 @@ def test_only_diagnostics(reader_cls):
 
 
 def test_non_seeking_used_once():
-    """ test that the non-seeking reader blocks users from trying to read more that once. """
+    """test that the non-seeking reader blocks users from trying to read more that once."""
     with open(DEMO_MCAP, "rb") as f:
         reader = NonSeekingReader(f)
         reader.get_summary()

@@ -94,9 +94,7 @@ def write_file(features: List[str], expected_records: List[Dict[str, Any]]) -> b
             )
         if isinstance(record, Schema):
             if record.name not in seen_schemas:
-                writer.register_schema(
-                    name=record.name, encoding=record.encoding, data=record.data
-                )
+                writer.register_schema(name=record.name, encoding=record.encoding, data=record.data)
             seen_schemas.add(record.name)
         if isinstance(record, Metadata):
             writer.add_metadata(record.name, record.metadata)
