@@ -133,8 +133,12 @@ class SeekingReader(MCAPReader):
         assert summary is not None
         if summary is None:
             # no index available, use a non-seeking reader to read linearly through the stream.
-            return NonSeekingReader(self._stream).iter_messages(topics, start_time, end_time)
-        for chunk_index in _chunks_matching_topics(summary, topics, start_time, end_time):
+            return NonSeekingReader(self._stream).iter_messages(
+                topics, start_time, end_time
+            )
+        for chunk_index in _chunks_matching_topics(
+            summary, topics, start_time, end_time
+        ):
             self._stream.seek(chunk_index.chunk_start_offset + 1 + 8, io.SEEK_SET)
             chunk = Chunk.read(ReadDataStream(self._stream))
             for record in breakup_chunk(chunk):
@@ -158,7 +162,9 @@ class SeekingReader(MCAPReader):
             self._stream.seek(-(FOOTER_SIZE + MAGIC_SIZE), io.SEEK_END)
             footer = next(StreamReader(self._stream, skip_magic=True).records)
             if not isinstance(footer, Footer):
-                raise McapError(f"expected footer at end of mcap file, found {type(footer)}")
+                raise McapError(
+                    f"expected footer at end of mcap file, found {type(footer)}"
+                )
             if footer.summary_offset_start == 0:
                 return None
             self._stream.seek(footer.summary_start, io.SEEK_SET)
@@ -215,7 +221,9 @@ class NonSeekingReader(MCAPReader):
 
     def _check_spent(self):
         if self._spent:
-            raise RuntimeError("cannot use more than one query against a non-seeking data source")
+            raise RuntimeError(
+                "cannot use more than one query against a non-seeking data source"
+            )
         self._spent = True
 
     def iter_messages(
@@ -237,11 +245,15 @@ class NonSeekingReader(MCAPReader):
                 self._schemas[record.id] = record
             if isinstance(record, Channel):
                 if record.schema_id not in self._schemas:
-                    raise McapError(f"no schema record found with id {record.schema_id}")
+                    raise McapError(
+                        f"no schema record found with id {record.schema_id}"
+                    )
                 self._channels[record.id] = record
             if isinstance(record, Message):
                 if record.channel_id not in self._channels:
-                    raise McapError(f"no channel record found with id {record.channel_id}")
+                    raise McapError(
+                        f"no channel record found with id {record.channel_id}"
+                    )
                 channel = self._channels[record.channel_id]
                 if topics is not None and channel.topic not in topics:
                     continue

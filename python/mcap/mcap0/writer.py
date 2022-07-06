@@ -193,7 +193,9 @@ class Writer:
         metadata = Metadata(name=name, metadata=data)
         metadata.write(self.__record_builder)
         if self.__index_types & IndexType.METADATA:
-            index = MetadataIndex(offset=offset, length=self.__record_builder.count, name=name)
+            index = MetadataIndex(
+                offset=offset, length=self.__record_builder.count, name=name
+            )
             self.__metadata_indexes.append(index)
         self.__flush()
 

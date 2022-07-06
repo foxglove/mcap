@@ -8,7 +8,9 @@ from mcap.mcap0.stream_reader import StreamReader
 
 def main():
     reader = StreamReader(open(sys.argv[1], "rb"))
-    records = [stringify_record(r) for r in reader.records if not isinstance(r, MessageIndex)]
+    records = [
+        stringify_record(r) for r in reader.records if not isinstance(r, MessageIndex)
+    ]
     print(json.dumps({"records": records}, indent=2))
 
 

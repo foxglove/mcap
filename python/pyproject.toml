@@ -5,10 +5,6 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
-
-[tool.black]
-line-length = 100
-
 [tool.pytest.ini_options]
 addopts = "-vv --color=yes"
 log_cli = true

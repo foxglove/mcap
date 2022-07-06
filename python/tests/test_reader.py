@@ -57,7 +57,9 @@ def test_time_range(reader_cls):
         count = 0
         start = int(1490149582 * 1e9)
         end = int(1490149586 * 1e9)
-        for schema, channel, message in reader.iter_messages(start_time=start, end_time=end):
+        for schema, channel, message in reader.iter_messages(
+            start_time=start, end_time=end
+        ):
             assert isinstance(schema, Schema)
             assert isinstance(channel, Channel)
             assert isinstance(message, Message)
