@@ -5,12 +5,12 @@ This library provides classes for reading and writing the MCAP file format.
 ## Reader Example
 
 ```python
-from mcap.mcap0.stream_reader import StreamReader
+from mcap.mcap0.reader import make_reader
 
-stream = open("example.mcap", "rb")
-reader = StreamReader(stream)
-for record in reader.records:
-    print(record)
+with open("example.mcap", "rb") as f:
+    reader = make_reader(f)
+    for schema, channel, message in reader.iter_messages(topics=["/diagnostics"]):
+        print(f"{channel.topic} ({schema.name}): {message.data}")
 ```
 
 ## Writer Example
