@@ -1,8 +1,15 @@
 import contextlib
 import json
 from tempfile import TemporaryFile
+from typing import List
+import zlib
+
+import lz4.frame
+import pytest
 
 from mcap.mcap0.writer import CompressionType, Writer
+from mcap.mcap0.records import Chunk, ChunkIndex
+from mcap.mcap0.stream_reader import StreamReader
 
 
 @contextlib.contextmanager
@@ -44,13 +51,33 @@ def generate_sample_data(compression: CompressionType):
     yield file
 
 
-def test_raw_read():
+def test_lz4_chunks():
+    """tests that compression metadata is correctly written to chunks and chunk indices."""
+    chunks: List[Chunk] = []
+    chunk_indexes: List[ChunkIndex] = []
     with generate_sample_data(CompressionType.LZ4) as t:
-        data = t.read()
-        assert len(data) == 785
+        for record in StreamReader(t, emit_chunks=True).records:
+            if isinstance(record, Chunk):
+                chunks.append(record)
+            elif isinstance(record, ChunkIndex):
+                chunk_indexes.append(record)
+
+    assert len(chunks) == 1
+    assert len(chunk_indexes) == 1
+
+    for chunk, index in zip(chunks, chunk_indexes):
+        assert index.compressed_size == len(chunk.data)
+        assert index.uncompressed_size == chunk.uncompressed_size
+        uncompressed_data: bytes = lz4.frame.decompress(chunk.data)
+        assert chunk.uncompressed_size == len(uncompressed_data)
+        assert chunk.uncompressed_crc == zlib.crc32(uncompressed_data)
 
 
-def test_decode_read():
-    with generate_sample_data(CompressionType.ZSTD) as t:
+@pytest.mark.parametrize(
+    "compression_type,length", [(CompressionType.ZSTD, 747), (CompressionType.LZ4, 785)]
+)
+def test_decode_read(compression_type, length):
+    """tests that chunk compression is happening when writing."""
+    with generate_sample_data(compression_type) as t:
         data = t.read()
-        assert len(data) == 747
+        assert len(data) == length

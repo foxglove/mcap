@@ -214,6 +214,8 @@ jobs:
         working-directory: python
     steps:
       - uses: actions/checkout@v3
+        with:
+          lfs: true
       - uses: actions/setup-python@v4
         with:
           python-version: 3.7

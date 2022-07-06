@@ -1,11 +1,11 @@
 import struct
 from io import BufferedReader, BytesIO, RawIOBase
-from typing import Iterator, List, Optional, Tuple, Union
+from typing import Iterator, List, Optional, Tuple, Union, IO
 import zstandard
 import lz4.frame  # type: ignore
 
 from .data_stream import ReadDataStream
-from .exceptions import McapError
+from .exceptions import InvalidMagic
 from .opcode import Opcode
 from .records import (
     Attachment,
@@ -25,6 +25,8 @@ from .records import (
     Statistics,
     SummaryOffset,
 )
+
+MAGIC_SIZE = 8
 
 
 def breakup_chunk(chunk: Chunk) -> List[McapRecord]:
@@ -60,9 +62,9 @@ def get_chunk_data_stream(chunk: Chunk) -> Tuple[ReadDataStream, int]:
 
 
 def read_magic(stream: ReadDataStream) -> bool:
-    magic = struct.unpack("<8B", stream.read(8))
+    magic = struct.unpack("<8B", stream.read(MAGIC_SIZE))
     if magic != (137, 77, 67, 65, 80, 48, 13, 10):
-        raise McapError("Not valid mcap data.")
+        raise InvalidMagic()
     return True
 
 
@@ -87,7 +89,7 @@ class StreamReader:
             padding = length - (self.__stream.count - count)
             if padding > 0:
                 self.__stream.read(padding)
-            if isinstance(record, Chunk):
+            if isinstance(record, Chunk) and not self.__emit_chunks:
                 chunk_records = breakup_chunk(record)
                 for chunk_record in chunk_records:
                     yield chunk_record
@@ -97,7 +99,12 @@ class StreamReader:
                 self.__footer = record
                 read_magic(self.__stream)
 
-    def __init__(self, input: Union[str, BytesIO, RawIOBase, BufferedReader]):
+    def __init__(
+        self,
+        input: Union[str, BytesIO, RawIOBase, BufferedReader, IO[bytes]],
+        skip_magic: bool = False,
+        emit_chunks: bool = False,
+    ):
         """
         input: The input stream from which to read records.
         """
@@ -108,7 +115,8 @@ class StreamReader:
         else:
             self.__stream = ReadDataStream(input)
         self.__footer: Optional[Footer] = None
-        self.__magic = False
+        self.__magic: bool = skip_magic
+        self.__emit_chunks: bool = emit_chunks
 
     def __read_record(self, opcode: int, length: int) -> Optional[McapRecord]:
         if opcode == Opcode.ATTACHMENT:
