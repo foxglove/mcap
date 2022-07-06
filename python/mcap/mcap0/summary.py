@@ -1,4 +1,3 @@
-from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from .records import (
@@ -16,8 +15,8 @@ class Summary:
         """contains information from the summary section of an MCAP.
         :ivar schemas: a dict of schema ID to schema record.
         :ivar channels: a dict of channel ID to channel record.
-        :ivar chunk_indexes: a list of ChunkIndex records, indicating the offset and content of Chunk
-            records in the MCAP.
+        :ivar chunk_indexes: a list of ChunkIndex records, indicating the offset and content of
+            Chunk records in the MCAP.
         :ivar attachment_indexes: a list of AttachmentIndex records, indicating the offset of
             attachments in the MCAP.
         :ivar metadata_indexes: a list of MetadataIndex records, indicating the offset of metadata

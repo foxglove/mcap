@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 from typing import Iterable, Tuple, Iterator, Dict, Optional, List
 import io
+
 from .data_stream import ReadDataStream
 from .exceptions import McapError
 from .records import (
