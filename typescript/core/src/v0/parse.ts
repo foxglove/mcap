@@ -107,10 +107,9 @@ export function parseRecord({
         throw new Error(`Schema data length ${dataLen} exceeds bounds of record`);
       }
       const data = new Uint8Array(
-        recordView.buffer.slice(
-          recordView.byteOffset + reader.offset,
-          recordView.byteOffset + reader.offset + dataLen,
-        ),
+        recordView.buffer,
+        recordView.byteOffset + reader.offset,
+        dataLen,
       );
       reader.offset += dataLen;
 
@@ -153,10 +152,9 @@ export function parseRecord({
       const logTime = reader.uint64();
       const publishTime = reader.uint64();
       const data = new Uint8Array(
-        recordView.buffer.slice(
-          recordView.byteOffset + reader.offset,
-          recordView.byteOffset + recordView.byteLength,
-        ),
+        recordView.buffer,
+        recordView.byteOffset + reader.offset,
+        recordView.byteLength - reader.offset,
       );
       const record: TypedMcapRecord = {
         type: "Message",
@@ -179,11 +177,12 @@ export function parseRecord({
       if (recordByteLength + reader.offset > recordView.byteLength) {
         throw new Error("Chunk records length exceeds remaining record size");
       }
+      // TODO: Something in at least the tests (if not elsewhere) is overwriting the
+      // underlying buffer, I think.
       const records = new Uint8Array(
-        recordView.buffer.slice(
-          recordView.byteOffset + reader.offset,
-          recordView.byteOffset + reader.offset + recordByteLength,
-        ),
+        recordView.buffer,
+        recordView.byteOffset + reader.offset,
+        recordByteLength,
       );
       const record: TypedMcapRecord = {
         type: "Chunk",
@@ -250,10 +249,9 @@ export function parseRecord({
         throw new Error(`Attachment data length ${dataLen} exceeds bounds of record`);
       }
       const data = new Uint8Array(
-        recordView.buffer.slice(
-          recordView.byteOffset + reader.offset,
-          recordView.byteOffset + reader.offset + Number(dataLen),
-        ),
+        recordView.buffer,
+        recordView.byteOffset + reader.offset,
+        Number(dataLen),
       );
       reader.offset += Number(dataLen);
       const crcLength = reader.offset;
