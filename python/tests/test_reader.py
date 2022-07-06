@@ -1,10 +1,10 @@
-"""tests for the MCAPReader implementations."""
+"""tests for the McapReader implementations."""
 import os
 from pathlib import Path
 
 import pytest
 
-from mcap.mcap0.reader import make_reader, SeekingReader, NonSeekingReader, MCAPReader
+from mcap.mcap0.reader import make_reader, SeekingReader, NonSeekingReader, McapReader
 from mcap.mcap0.records import Schema, Channel, Message
 
 DEMO_MCAP = Path(__file__).parent.parent.parent / "testdata" / "mcap" / "demo.mcap"
@@ -30,7 +30,7 @@ def test_make_seeking():
 def test_make_not_seeking(pipe):
     """test that non-seekable streams get read with the non-seeking reader."""
     r, _ = pipe
-    reader: MCAPReader = make_reader(r)
+    reader: McapReader = make_reader(r)
     assert isinstance(reader, NonSeekingReader)
 
 
@@ -38,7 +38,7 @@ def test_make_not_seeking(pipe):
 def test_all_messages(reader_cls):
     """test that we can find all messages correctly with all reader implementations."""
     with open(DEMO_MCAP, "rb") as f:
-        reader: MCAPReader = reader_cls(f)
+        reader: McapReader = reader_cls(f)
         count = 0
         for schema, channel, message in reader.iter_messages():
             assert isinstance(schema, Schema)
@@ -53,7 +53,7 @@ def test_all_messages(reader_cls):
 def test_time_range(reader_cls):
     """test that we can filter by time range with all reader implementations."""
     with open(DEMO_MCAP, "rb") as f:
-        reader: MCAPReader = reader_cls(f)
+        reader: McapReader = reader_cls(f)
         count = 0
         start = int(1490149582 * 1e9)
         end = int(1490149586 * 1e9)
@@ -74,7 +74,7 @@ def test_time_range(reader_cls):
 def test_only_diagnostics(reader_cls):
     """test that we can filter by topic with all reader implementations."""
     with open(DEMO_MCAP, "rb") as f:
-        reader: MCAPReader = reader_cls(f)
+        reader: McapReader = reader_cls(f)
         count = 0
         for schema, channel, message in reader.iter_messages(topics=["/diagnostics"]):
             assert isinstance(schema, Schema)
