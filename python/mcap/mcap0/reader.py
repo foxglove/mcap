@@ -1,6 +1,6 @@
 """ High-level classes for reading content out of MCAP data sources. """
 from abc import ABC, abstractmethod
-from typing import Iterable, Tuple, Iterator, Dict, Optional, List
+from typing import Iterable, Tuple, Iterator, Dict, Optional, List, IO
 import io
 
 from .data_stream import ReadDataStream
@@ -113,7 +113,7 @@ class McapReader(ABC):
 class SeekingReader(McapReader):
     """an McapReader for reading out of seekable data sources."""
 
-    def __init__(self, stream: io.IOBase):
+    def __init__(self, stream: IO[bytes]):
         self._stream = stream
         self._summary: Optional[Summary] = None
 
@@ -204,7 +204,7 @@ class SeekingReader(McapReader):
 
 
 class NonSeekingReader(McapReader):
-    def __init__(self, stream: io.IOBase):
+    def __init__(self, stream: IO[bytes]):
         self._stream = stream
         self._schemas: Dict[int, Schema] = {}
         self._channels: Dict[int, Channel] = {}
@@ -275,7 +275,7 @@ class NonSeekingReader(McapReader):
                 yield record
 
 
-def make_reader(stream: io.IOBase) -> McapReader:
+def make_reader(stream: IO[bytes]) -> McapReader:
     if stream.seekable():
         return SeekingReader(stream)
     return NonSeekingReader(stream)
