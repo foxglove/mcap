@@ -7,7 +7,7 @@ import pytest
 from mcap.mcap0.reader import make_reader, SeekingReader, NonSeekingReader, MCAPReader
 from mcap.mcap0.records import Schema, Channel, Message
 
-DEMO_MCAP = Path(__file__).parent.parent.parent.parent / "testdata" / "mcap" / "demo.mcap"
+DEMO_MCAP = Path(__file__).parent.parent.parent / "testdata" / "mcap" / "demo.mcap"
 
 
 @pytest.fixture
@@ -82,3 +82,30 @@ def test_only_diagnostics(reader_cls):
             count += 1
 
         assert count == 52
+
+
+def test_non_seeking_used_once():
+    """ test that the non-seeking reader blocks users from trying to read more that once. """
+    with open(DEMO_MCAP, "rb") as f:
+        reader = NonSeekingReader(f)
+        reader.get_summary()
+        with pytest.raises(RuntimeError):
+            reader.get_summary()
+
+    with open(DEMO_MCAP, "rb") as f:
+        reader = NonSeekingReader(f)
+        _ = list(reader.iter_messages())
+        with pytest.raises(RuntimeError):
+            _ = list(reader.iter_messages())
+
+    with open(DEMO_MCAP, "rb") as f:
+        reader = NonSeekingReader(f)
+        _ = list(reader.iter_attachments())
+        with pytest.raises(RuntimeError):
+            _ = list(reader.iter_attachments())
+
+    with open(DEMO_MCAP, "rb") as f:
+        reader = NonSeekingReader(f)
+        _ = list(reader.iter_metadata())
+        with pytest.raises(RuntimeError):
+            _ = list(reader.iter_metadata())

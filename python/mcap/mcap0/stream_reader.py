@@ -26,6 +26,8 @@ from .records import (
     SummaryOffset,
 )
 
+MAGIC_SIZE = 8
+
 
 def breakup_chunk(chunk: Chunk) -> List[McapRecord]:
     stream, stream_length = get_chunk_data_stream(chunk)
