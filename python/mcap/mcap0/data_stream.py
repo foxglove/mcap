@@ -1,17 +1,15 @@
 import struct
-from io import BufferedIOBase, BytesIO
+from io import BytesIO
+from typing import IO
 
 from .exceptions import EndOfFile
 from .opcode import Opcode
 
 
 class ReadDataStream:
-    def __init__(self, stream: BufferedIOBase):
+    def __init__(self, stream: IO[bytes]):
         self.__count = 0
         self.__stream = stream
-
-    def __del__(self):
-        self.__stream.close()
 
     @property
     def count(self) -> int:

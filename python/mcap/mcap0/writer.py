@@ -430,7 +430,7 @@ class Writer:
             message_index_offsets={},
             message_index_length=0,
             compression=chunk.compression,
-            compressed_size=chunk.uncompressed_size,
+            compressed_size=len(compressed_data),
             uncompressed_size=chunk.uncompressed_size,
         )
 
