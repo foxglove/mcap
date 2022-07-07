@@ -80,12 +80,12 @@ func buildFilterOptions() (*filterOpts, error) {
 
 // filterCmd represents the filter command
 var filterCmd = &cobra.Command{
-	Use:   "filter",
+	Use:   "filter [file]",
 	Short: "copy some filtered MCAP data to a new file",
 	Long: `This subcommand filters an MCAP by topic and time range to a new file.
 When multiple regexes are used, topics that match any regex are included (or excluded).
 
-usage example:
+usage:
   mcap filter in.mcap -o out.mcap -y /diagnostics -y /tf -y /camera_(front|back)`,
 	Run: func(cmd *cobra.Command, args []string) {
 		filterOptions, err := buildFilterOptions()
@@ -101,7 +101,7 @@ usage example:
 			if stat.Mode()&os.ModeCharDevice == 0 {
 				reader = os.Stdin
 			} else {
-				die("supply a file to read")
+				die("please supply a file. see --help for usage details.")
 			}
 		} else {
 			close, newReader, err := utils.GetReader(context.Background(), args[0])
@@ -224,19 +224,17 @@ func filter(
 			if err != nil {
 				return err
 			}
-			if len(opts.includeTopics) > 0 {
-				for _, matcher := range opts.includeTopics {
-					if matcher.MatchString(channel.Topic) {
-						channels[channel.ID] = markableChannel{channel, false}
-					}
+			for _, matcher := range opts.includeTopics {
+				if matcher.MatchString(channel.Topic) {
+					channels[channel.ID] = markableChannel{channel, false}
 				}
-			} else if len(opts.excludeTopics) > 0 {
-				for _, matcher := range opts.excludeTopics {
-					if !matcher.MatchString(channel.Topic) {
-						channels[channel.ID] = markableChannel{channel, false}
-					}
+			}
+			for _, matcher := range opts.excludeTopics {
+				if !matcher.MatchString(channel.Topic) {
+					channels[channel.ID] = markableChannel{channel, false}
 				}
-			} else {
+			}
+			if len(opts.includeTopics) == 0 && len(opts.excludeTopics) == 0 {
 				channels[channel.ID] = markableChannel{channel, false}
 			}
 		case mcap.TokenMessage:
