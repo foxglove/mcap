@@ -284,7 +284,7 @@ func (w *Writer) WriteAttachmentIndex(idx *AttachmentIndex) error {
 	if w.opts.SkipAttachmentIndex {
 		return nil
 	}
-	msglen := 8 + 8 + 8 + 8 + 4 + len(idx.Name) + 4 + len(idx.ContentType)
+	msglen := 8 + 8 + 8 + 8 + 8 + 4 + len(idx.Name) + 4 + len(idx.ContentType)
 	w.ensureSized(msglen)
 	offset := putUint64(w.msg, idx.Offset)
 	offset += putUint64(w.msg[offset:], idx.Length)
