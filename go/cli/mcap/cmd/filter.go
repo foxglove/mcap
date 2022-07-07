@@ -37,10 +37,14 @@ type filterOpts struct {
 
 func buildFilterOptions() (*filterOpts, error) {
 	opts := &filterOpts{
-		start:              filterStart,
-		end:                filterEnd,
 		includeMetadata:    filterIncludeMetadata,
 		includeAttachments: filterIncludeAttachments,
+	}
+	opts.start = filterStart * 1e9
+	if filterEnd == 0 {
+		opts.end = math.MaxUint64
+	} else {
+		opts.end = filterEnd * 1e9
 	}
 	if len(filterIncludeTopics) > 0 && len(filterExcludeTopics) > 0 {
 		return nil, errors.New("can only use one of --include-topic-regex and --exclude-topic-regex")
@@ -117,12 +121,17 @@ usage example:
 			if !utils.StdoutRedirected() {
 				die("Binary output can screw up your terminal. Supply -o or redirect to a file or pipe")
 			}
-			writer = os.Stdin
+			writer = os.Stdout
 		} else {
 			newWriter, err := os.Create(filterOutput)
 			if err != nil {
 				die("failed to open %s for writing: %s", filterOutput, err)
 			}
+			defer func() {
+				if err := newWriter.Close(); err != nil {
+					die("error closing write target: %s", err)
+				}
+			}()
 			writer = newWriter
 		}
 
@@ -307,10 +316,10 @@ func init() {
 	rootCmd.AddCommand(filterCmd)
 
 	filterCmd.PersistentFlags().StringVarP(&filterOutput, "output", "o", "", "output filename")
-	filterCmd.PersistentFlags().StringArrayVarP(&filterIncludeTopics, "include-topic-regex", "y", []string{}, "messages with topic names matching this regex will be included")
-	filterCmd.PersistentFlags().StringArrayVarP(&filterExcludeTopics, "exclude-topic-regex", "n", []string{}, "messages with topic names matching this regex will be included")
-	filterCmd.PersistentFlags().Uint64VarP(&filterStart, "start-time-ns", "s", 0, "messages with log times after or equal to this timestamp will be included.")
-	filterCmd.PersistentFlags().Uint64VarP(&filterEnd, "end-time-ns", "e", math.MaxUint64, "messages with log times before timestamp will be included.")
+	filterCmd.PersistentFlags().StringArrayVarP(&filterIncludeTopics, "include-topic-regex", "y", []string{}, "messages with topic names matching this regex will be included, can be supplied multiple times")
+	filterCmd.PersistentFlags().StringArrayVarP(&filterExcludeTopics, "exclude-topic-regex", "n", []string{}, "messages with topic names matching this regex will be excluded, can be supplied multiple times")
+	filterCmd.PersistentFlags().Uint64VarP(&filterStart, "start-secs", "s", 0, "messages with log times after or equal to this timestamp will be included.")
+	filterCmd.PersistentFlags().Uint64VarP(&filterEnd, "end-secs", "e", 0, "messages with log times before timestamp will be included.")
 	filterCmd.PersistentFlags().BoolVar(&filterIncludeMetadata, "include-metadata", false, "whether to include metadata in the output bag")
 	filterCmd.PersistentFlags().BoolVar(&filterIncludeAttachments, "include-attachments", false, "whether to include attachments in the output mcap")
 	filterCmd.PersistentFlags().StringVar(&filterOutputCompression, "output-compression", "zstd", "compression algorithm to use on output file")
