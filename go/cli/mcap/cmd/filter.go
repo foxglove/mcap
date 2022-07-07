@@ -311,7 +311,7 @@ func init() {
 	filterCmd.PersistentFlags().StringArrayVarP(&filterExcludeTopics, "exclude-topic-regex", "n", []string{}, "messages with topic names matching this regex will be included")
 	filterCmd.PersistentFlags().Uint64VarP(&filterStart, "start-time-ns", "s", 0, "messages with log times after or equal to this timestamp will be included.")
 	filterCmd.PersistentFlags().Uint64VarP(&filterEnd, "end-time-ns", "e", math.MaxUint64, "messages with log times before timestamp will be included.")
-	filterCmd.PersistentFlags().BoolVar(&filterIncludeMetadata, "include-metadata", true, "whether to include metadata in the output bag")
-	filterCmd.PersistentFlags().BoolVar(&filterIncludeAttachments, "include-attachments", true, "whether to include attachments in the output mcap")
+	filterCmd.PersistentFlags().BoolVar(&filterIncludeMetadata, "include-metadata", false, "whether to include metadata in the output bag")
+	filterCmd.PersistentFlags().BoolVar(&filterIncludeAttachments, "include-attachments", false, "whether to include attachments in the output mcap")
 	filterCmd.PersistentFlags().StringVar(&filterOutputCompression, "output-compression", "zstd", "compression algorithm to use on output file")
 }
