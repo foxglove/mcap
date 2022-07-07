@@ -434,6 +434,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 
 	assert.Equal(t, 0, len(w.ChunkIndexes))
 	assert.Equal(t, 1, len(w.AttachmentIndexes))
+	assert.Equal(t, "image/jpeg", w.AttachmentIndexes[0].ContentType)
 	assert.Equal(t, uint64(1), w.Statistics.MessageCount)
 	assert.Equal(t, uint32(1), w.Statistics.AttachmentCount)
 	assert.Equal(t, uint32(1), w.Statistics.ChannelCount)
