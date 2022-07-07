@@ -187,7 +187,9 @@ func filter(
 		return err
 	}
 	defer func() {
-		err = mcapWriter.Close()
+		if err := mcapWriter.Close(); err != nil {
+			fmt.Fprintln(os.Stderr, "failed to close mcap writer: %w", err)
+		}
 	}()
 
 	buf := make([]byte, 1024)
