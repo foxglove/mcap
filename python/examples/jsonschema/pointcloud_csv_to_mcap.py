@@ -69,7 +69,7 @@ def main():
     with open(args.output, "wb") as f:
         writer = Writer(f)
         # "jsonschema" is a well-known message encoding per the MCAP spec.
-        writer.start("jsonschema", library="my-excellent-library")
+        writer.start("x-jsonschema", library="my-excellent-library")
         schema_id = writer.register_schema(
             name="foxglove.PointCloud",
             encoding="jsonschema",
