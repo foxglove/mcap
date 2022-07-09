@@ -24,12 +24,12 @@ import jsonschema
 from mcap.mcap0.writer import Writer
 
 
-def load_schema() -> typing.Dict[typing.Any, typing.Any]:
+def load_schema(filename: str) -> typing.Dict[typing.Any, typing.Any]:
     """Load the foxglove pointcloud schema as a JSON object.
     The schema is a copy of the original at
     https://github.com/foxglove/schemas/blob/main/schemas/jsonschema/PointCloud.json
     """
-    with open(Path(__file__).parent / "PointCloud.json", "r") as f:
+    with open(Path(__file__).parent / filename, "r") as f:
         return json.load(f)
 
 
@@ -58,12 +58,14 @@ def main():
     for point_timestamp, intensity, x, y, z in point_reader(args.csv):
         if base_timestamp is None:
             base_timestamp = parse_timestamp(point_timestamp)
+
+        print(f"{x}, {y}, {z}, {intensity}")
         points.extend(
             struct.pack("<ffff", float(x), float(y), float(z), float(intensity))
         )
     assert base_timestamp is not None, "found no points in input csv"
 
-    schema = load_schema()
+    schema = load_schema("PointCloud.json")
 
     # time to write the MCAP!
     with open(args.output, "wb") as f:
@@ -78,18 +80,29 @@ def main():
         channel_id = writer.register_channel(
             topic="/pointcloud", message_encoding="json", schema_id=schema_id
         )
+        tf_schema_id = writer.register_schema(
+            name="foxglove.FrameTransform",
+            encoding="jsonschema",
+            data=json.dumps(load_schema("FrameTransform.json")).encode("utf-8"),
+        )
+        tf_channel_id = writer.register_channel(
+            topic="/tf",
+            message_encoding="json",
+            schema_id=tf_schema_id,
+        )
 
         for n in range(10):
             timestamp = base_timestamp + timedelta(seconds=n)
             timestamp_nanoseconds = int(timestamp.timestamp() * 1e9)
+            timestamp_dict = {
+                "sec": int(timestamp.timestamp()),
+                "nsec": timestamp.microsecond * 1000,
+            }
 
             # build the pointcloud object as specified in the included schema.
             pointcloud = {
-                "timestamp": {
-                    "sec": int(timestamp.timestamp()),
-                    "nsec": timestamp.microsecond * 1000,
-                },
-                "frame_id": "lidar",
+                "timestamp": timestamp_dict,
+                "frame_id": "base_link",
                 "pose": {
                     "position": {"x": 0, "y": 0, "z": 0},
                     "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
@@ -99,9 +112,10 @@ def main():
                     {"name": "x", "offset": 0, "type": 7},
                     {"name": "y", "offset": 4, "type": 7},
                     {"name": "z", "offset": 8, "type": 7},
-                    {"name": "i", "offset": 12, "type": 7},
+                    {"name": "intensity", "offset": 12, "type": 7},
                 ],
                 "data": str(base64.b64encode(points)),
+                "fogensus": "boob",
             }
 
             jsonschema.validate(pointcloud, schema)
@@ -112,6 +126,23 @@ def main():
                 data=json.dumps(pointcloud).encode("utf-8"),
                 publish_time=timestamp_nanoseconds,
             )
+
+            tf = {
+                "timestamp": timestamp_dict,
+                "parent_frame_id": "map",
+                "child_frame_id": "base_link",
+                "transform": {
+                    "timestamp": timestamp_dict,
+                    "translation": {"x": 0, "y": 0, "z": 0},
+                    "rotation": {"x": 0, "y": 0, "z": 0, "w": 1},
+                },
+            }
+            # writer.add_message(
+            #     channel_id=tf_channel_id,
+            #     log_time=timestamp_nanoseconds,
+            #     data=json.dumps(tf).encode("utf-8"),
+            #     publish_time=timestamp_nanoseconds,
+            # )
         writer.finish()
 
 
