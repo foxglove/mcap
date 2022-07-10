@@ -5,7 +5,7 @@ Tutorial: Converting CSV to MCAP
 Introduction
 ------------
 
-In this tutorial we'll take a publically-available dataset and demonstrate a simple case
+In this tutorial we'll take a publicly-available dataset and demonstrate a simple case
 of converting CSV data to MCAP for viewing in Foxglove Studio. All of the code from this tutorial
 is runnable, and can be found
 `in the MCAP repo <https://github.com/foxglove/mcap/tree/main/python/examples/jsonschema/pointcloud_csv_to_mcap.py>`_.

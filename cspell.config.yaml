@@ -26,17 +26,21 @@ words:
   - conanfile
   - crc
   - crcs
+  - datetime
   - deserialization
   - flatbuffer
   - flatc
   - fwrite
   - golangci
+  - jsonschema
   - kaitai
   - libmcap
   - mcap
   - nsec
   - nsecs
   - pipenv
+  - pointcloud
+  - pointclouds
   - proto
   - protobuf
   - protoc
@@ -101,6 +105,7 @@ overrides:
       - apidoc
       - genindex
       - modindex
+      - literalinclude
 
   - filename: "**/*.py"
     words:
