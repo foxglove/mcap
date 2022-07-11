@@ -116,13 +116,16 @@ from the `Python MCAP library <https://github.com/foxglove/mcap/tree/main/python
     :dedent:
 
 Let's open a file where we'll write our output MCAP data. First, we'll need to write our header.
-Note that we can chose whatever name we want for both ``profile`` and ``library``, but the profile
-must start with ``x-``.
 
 .. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-write-header-start
     :end-before: # tutorial-write-header-end
     :dedent:
+
+.. note::
+  We can choose whatever name we want for ``library``. We're not using one of the
+  `MCAP well-known profiles <https://github.com/foxglove/mcap/blob/main/docs/specification/appendix.md#well-known-profiles>`_,
+  so we use our own custom profile name. Custom profile names must begin with ``x-``.
 
 Next, create a "channel" of messages to contain our point cloud. The schema
 name and content informs Foxglove Studio that it can parse and display this message as a point
