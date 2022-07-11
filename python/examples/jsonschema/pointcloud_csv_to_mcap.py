@@ -6,9 +6,8 @@ The original dataset can be downloaded from here:
 https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml
 
 usage:
-    mkdir -p dataset
     curl https://www.acfr.usyd.edu.au/papers/data/sydney-urban-objects-dataset.tar.gz | tar -x
-    pip install mcap jsonschema
+    pip install mcap
     python3 pointcloud_csv_to_mcap.py sydney-urban-objects-dataset/objects/4wd.0.2299.csv -o 4wd.mcap
 """
 import argparse
@@ -18,7 +17,7 @@ import json
 import typing
 import struct
 from pathlib import Path
-from datetime import datetime
+import datetime
 
 # tutorial-mcap-imports-start
 from mcap.mcap0.writer import Writer
@@ -27,16 +26,12 @@ from mcap.mcap0.well_known import SchemaEncoding, MessageEncoding
 # tutorial-mcap-imports-end
 
 # tutorial-csv-decode-start
-
-
 def point_reader(csv_path: typing.Union[str, Path]):
     with open(csv_path, "r") as f:
         for timestring, i, _, x, y, z, _, _, _ in csv.reader(f):
-            timestamp = datetime.strptime(timestring, "%Y%m%dT%H%M%S.%f")
+            timestamp = datetime.datetime.strptime(timestring, "%Y%m%dT%H%M%S.%f")
             yield (timestamp, float(i), float(x), float(y), float(z))
-
-
-# tutorial-csv-decode-end
+            # tutorial-csv-decode-end
 
 
 def main():
@@ -69,15 +64,8 @@ def main():
             base_timestamp = point_timestamp
         points.extend(struct.pack("<ffff", x, y, z, intensity))
     assert base_timestamp is not None, "found no points in input csv"
-    pointcloud["data"] = str(base64.b64encode(points))
+    pointcloud["data"] = base64.b64encode(points).decode("utf-8")
     # tutorial-pack-points-end
-
-    # tutorial-timestamp-start
-    pointcloud["timestamp"] = {
-        "sec": int(base_timestamp.timestamp()),
-        "nsec": base_timestamp.microsecond * 1000,
-    }
-    # tutorial-timestamp-end
 
     # tutorial-pose-frame-id-start
     pointcloud["pose"] = {
@@ -108,14 +96,22 @@ def main():
         )
         # tutorial-write-channel-end
         # tutorial-write-message-start
-        writer.add_message(
-            channel_id,
-            log_time=int(base_timestamp.timestamp() * 1e9),
-            data=json.dumps(pointcloud).encode("utf-8"),
-            publish_time=int(base_timestamp.timestamp() * 1e9),
-        )
-        writer.finish()
+        for i in range(10):
+            frame_timestamp = base_timestamp + datetime.timedelta(seconds=(i / 10.0))
+            pointcloud["timestamp"] = {
+                "sec": int(frame_timestamp.timestamp()),
+                "nsec": frame_timestamp.microsecond * 1000,
+            }
+            writer.add_message(
+                channel_id,
+                log_time=int(frame_timestamp.timestamp() * 1e9),
+                data=json.dumps(pointcloud).encode("utf-8"),
+                publish_time=int(frame_timestamp.timestamp() * 1e9),
+            )
         # tutorial-write-message-end
+        # tutorial-finish-start
+        writer.finish()
+        # tutorial-finish-end
 
 
 if __name__ == "__main__":
