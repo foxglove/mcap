@@ -40,7 +40,6 @@ words:
   - nsecs
   - pipenv
   - pointcloud
-  - pointclouds
   - proto
   - protobuf
   - protoc

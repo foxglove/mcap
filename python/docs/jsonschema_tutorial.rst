@@ -174,4 +174,4 @@ check this with the `MCAP CLI tool <https://github.com/foxglove/mcap/tree/main/g
 
 View your point cloud in `Foxglove Studio <https://studio.foxglove.dev>`_ by
 dragging the MCAP file into the window. Add a 3D Panel and enable the **/pointcloud** topic to
-see the result.
+see the result!
