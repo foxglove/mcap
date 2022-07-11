@@ -142,8 +142,12 @@ func printMessages(
 			if _, err = msg.Write(bytes); err != nil {
 				return fmt.Errorf("failed to write message bytes: %w", err)
 			}
+		case "jsonschema":
+			if _, err = msg.Write(message.Data); err != nil {
+				return fmt.Errorf("failed to write message bytes: %w", err)
+			}
 		default:
-			return fmt.Errorf("JSON output only supported for ros1msg and protobuf schemas")
+			return fmt.Errorf("JSON output only supported for ros1msg, protobuf, and JSON schemas")
 		}
 		target.Topic = channel.Topic
 		target.Sequence = message.Sequence
