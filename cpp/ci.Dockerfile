@@ -18,6 +18,9 @@ RUN apt-get update && \
   python3-pip \
   clang \
   clang-format \
+  protobuf-compiler \
+  libprotobuf-dev \
+  xxd \
   && rm -rf /var/lib/apt/lists/*
 
 RUN if [ "$IMAGE" = "ubuntu:focal" ]; then \
