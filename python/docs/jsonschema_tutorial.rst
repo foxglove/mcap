@@ -137,7 +137,7 @@ cloud.
     :dedent:
 
 Next, we write our messages. If we only wrote one message, our MCAP file would have an infinitely
-short duration. To address that, we write our point cloud message a few times with increasing
+short duration. To address that, let's write our point cloud message a few times with successive
 timestamps.
 
 .. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
