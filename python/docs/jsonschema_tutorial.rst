@@ -10,7 +10,7 @@ data to MCAP. We'll use Python and `JSON Schema <https://json-schema.org/>`_ to 
 quickly. All of the code from this tutorial is runnable, and can be found
 `in the MCAP repo <https://github.com/foxglove/mcap/tree/main/python/examples/jsonschema/pointcloud_csv_to_mcap.py>`_.
 
-Decoding the Data Source
+Decoding the data source
 ------------------------
 
 This tutorial uses the public CSV dataset "Sydney Urban Objects Dataset",
