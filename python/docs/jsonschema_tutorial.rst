@@ -9,8 +9,8 @@ In this tutorial we'll take a publicly available dataset and demonstrate how to 
 CSV format to an MCAP file. We'll use Python and `JSON Schema <https://json-schema.org/>`_ to
 quickly create messages without requiring extra serialization libraries or generated code.
 
-You can run all the code in this tutorial, or reference it
- `in the MCAP repo <https://github.com/foxglove/mcap/tree/main/python/examples/jsonschema/pointcloud_csv_to_mcap.py>`_.
+You can run all the code in this tutorial or reference it
+`in the MCAP repo <https://github.com/foxglove/mcap/tree/main/python/examples/jsonschema/pointcloud_csv_to_mcap.py>`_.
 
 Decoding the data source
 ------------------------
@@ -143,5 +143,5 @@ check this with the `MCAP CLI tool <https://github.com/foxglove/mcap/tree/main/g
     Examining output.mcap
 
 View your point cloud in `Foxglove Studio <https://studio.foxglove.dev>`_ by
-dragging the MCAP file into the window. Add a 3D Panel and enable the **/pointcloud** topic to
-see the result!
+dragging the MCAP file into the window. Add a `3D Panel <https://foxglove.dev/docs/studio/panels/3d>`_
+and enable the **/pointcloud** topic to see the result!
