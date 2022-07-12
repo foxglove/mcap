@@ -133,7 +133,7 @@ Each record definition below contains a `Type` column. See the [Serialization](#
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 4 + N | profile | String | The profile is used for indicating requirements for fields throughout the file (encoding, user_data, etc). If the value matches one of the [well-known profiles][profiles], the file should conform to the profile. This field may also be supplied empty or containing a framework that is not one of those recognized. When specifying a custom profile, prefer the `x-` prefix to avoid conflict with future well-known profiles. |
+| 4 + N | profile | String | The profile is used for indicating requirements for fields throughout the file (encoding, user_data, etc). If the value matches one of the [well-known profiles][profiles], the file should conform to the profile. This field may also be supplied empty or containing a framework that is not one of those recognized. |
 | 4 + N | library | String | Free-form string for writer to specify its name, version, or other information for use in debugging |
 
 ### Footer (op=0x02)
@@ -156,7 +156,7 @@ Schema records are uniquely identified within a file by their schema ID. A Schem
 | --- | --- | --- | --- |
 | 2 | id | uint16 | A unique identifier for this schema within the file. Must not be zero |
 | 4 + N | name | String | An identifier for the schema. |
-| 4 + N | encoding | String | Format for the schema. The value should be one of the [well-known schema encodings][schema_encodings]. Custom values should use the `x-` prefix. An empty string indicates no schema is available. |
+| 4 + N | encoding | String | Format for the schema. The [well-known schema encodings][schema_encodings] are preferred. An empty string indicates no schema is available. |
 | 4 + N | data | uint32 length-prefixed Bytes | Must conform to the schema encoding. If `encoding` is an empty string, `data` should be 0 length. |
 
 Schema records may be duplicated in the summary section. A Schema record with an id of zero is invalid and should be ignored by readers.
@@ -172,7 +172,7 @@ Channel records are uniquely identified within a file by their channel ID. A Cha
 | 2 | id | uint16 | A unique identifier for this channel within the file. |
 | 2 | schema_id | uint16 | The schema for messages on this channel. A schema_id of 0 indicates there is no schema for this channel. |
 | 4 + N | topic | String | The channel topic. |
-| 4 + N | message_encoding | String | Encoding for messages on this channel. The value should be one of the [well-known message encodings][message_encodings]. Custom values should use `x-` prefix. |
+| 4 + N | message_encoding | String | Encoding for messages on this channel. The [well-known message encodings][message_encodings] are preferred. |
 | 4 + N | metadata | Map<string, string> | Metadata about this channel |
 
 Channel records may be duplicated in the summary section.
