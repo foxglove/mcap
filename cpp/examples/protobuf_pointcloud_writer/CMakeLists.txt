@@ -1,5 +1,5 @@
 INCLUDE(FindProtobuf)
-FIND_PACKAGE(Protobuf 3.6 REQUIRED)
+FIND_PACKAGE(Protobuf 3.21 REQUIRED)
 INCLUDE_DIRECTORIES(${PROTOBUF_INCLUDE_DIR} ${Protobuf_INCLUDE_DIRS})
 
 FILE(GLOB all_protos "proto/foxglove/*.proto")
