@@ -5,19 +5,20 @@ Tutorial: Converting CSV to MCAP with JSON Schema
 Introduction
 ------------
 
-In this tutorial we'll take a publicly available dataset and demonstrate how to convert CSV
-data to MCAP. We'll use Python and `JSON Schema <https://json-schema.org/>`_ to get up and running
-quickly. All of the code from this tutorial is runnable, and can be found
-`in the MCAP repo <https://github.com/foxglove/mcap/tree/main/python/examples/jsonschema/pointcloud_csv_to_mcap.py>`_.
+In this tutorial we'll take a publicly available dataset and demonstrate how to convert it from a
+CSV format to an MCAP file. We'll use Python and `JSON Schema <https://json-schema.org/>`_ to
+quickly create messages without requiring extra serialization libraries or generated code.
+
+You can run all the code in this tutorial, or reference it
+ `in the MCAP repo <https://github.com/foxglove/mcap/tree/main/python/examples/jsonschema/pointcloud_csv_to_mcap.py>`_.
 
 Decoding the data source
 ------------------------
 
-This tutorial uses the public CSV dataset "Sydney Urban Objects Dataset",
+This tutorial uses the public CSV dataset
+`"Sydney Urban Objects Dataset" <https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml>`_,
 released by the **Australian Centre for Field Robotics** at the University of Sydney.
-The original dataset can be downloaded from
-`their website <https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml>`_. This is a
-collection of CSV files containing point clouds collected from objects on the street.
+This is a collection of CSV files containing point clouds collected from objects on the street.
 
 Decoding the data is pretty simple, thanks to Python's built-in ``csv`` and ``datetime`` libraries:
 
@@ -36,49 +37,11 @@ JSON ``PointCloud`` instance, using the provided
 `schema <https://github.com/foxglove/schemas/blob/main/schemas/jsonschema/PointCloud.json>`_.
 
 Let's start with encoding the point data. The schema expects a single ``base64``-encoded buffer
-containing all point data, and some metadata describing how to decode it:
-
-.. code-block:: json
-
-    "point_stride": { "type": "integer", "minimum": 0, "description": "Number of bytes between points in the `data`" },
-    "fields": {
-      "type": "array",
-      "items": {
-        "$comment": "Generated from PackedElementField by @foxglove/schemas",
-        "title": "PackedElementField",
-        "description": "A field present within each element in a byte array of packed elements.",
-        "type": "object",
-        "properties": {
-          "name": { "type": "string", "description": "Name of the field" },
-          "offset": { "type": "integer", "minimum": 0, "description": "Byte offset from start of data buffer" },
-          "type": {
-            "title": "NumericType: Numeric type",
-            "description": "Type of data in the field. Integers are stored using little-endian byte order.",
-            "oneOf": [
-              { "title": "UNKNOWN", "const": 0 },
-              { "title": "UINT8", "const": 1 },
-              { "title": "INT8", "const": 2 },
-              { "title": "UINT16", "const": 3 },
-              { "title": "INT16", "const": 4 },
-              { "title": "UINT32", "const": 5 },
-              { "title": "INT32", "const": 6 },
-              { "title": "FLOAT32", "const": 7 },
-              { "title": "FLOAT64", "const": 8 }
-            ]
-          }
-        }
-      },
-      "description": "Fields in the `data`"
-    },
-    "data": {
-      "type": "string",
-      "contentEncoding": "base64",
-      "description": "Point data, interpreted using `fields`"
-    }
+containing all point data, and some metadata describing how to decode it.
 
 The CSV data contains one timestamp and four floating-point data fields per point.
 ``foxglove.PointCloud`` uses one timestamp for the whole point cloud, so we'll use the first
-point for that. We'll pack each field as a four byte single-precision little-endian float.
+point's timestamp. We'll pack each field as a four byte single-precision little-endian float.
 
 We start by describing our data layout in the ``foxglove.PointCloud`` message:
 
@@ -87,15 +50,19 @@ We start by describing our data layout in the ``foxglove.PointCloud`` message:
     :end-before: # tutorial-point-layout-end
     :dedent:
 
-And pack the points using the Python built-in ``struct`` and ``base64`` libraries.
+And pack the points using Python's built-in ``struct`` and ``base64`` libraries.
 
 .. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-pack-points-start
     :end-before: # tutorial-pack-points-end
     :dedent:
 
-We set an identity pose to place our point cloud at the center of the scene, and add an arbitrary
-``frame_id``.
+In Foxglove Studio, each 3D object exists in its own coordinate frame. A point cloud's ``frame_id``
+identifies which coordinate frame it belongs in, and its ``pose`` determines it's relative position
+from the center of that coordinate frame.
+
+Since we will only have one coordinate frame in our MCAP file, we can choose any string as our
+``frame_id``, and use the identity pose to place our point cloud in the center of it.
 
 .. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-pose-frame-id-start
