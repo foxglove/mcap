@@ -14,7 +14,7 @@ Decoding the Data Source
 ------------------------
 
 This tutorial uses the public CSV dataset "Sydney Urban Objects Dataset",
-released by the **Australian Centre for Field Robotics** at the University of Sydney, NSW, Australia.
+released by the **Australian Centre for Field Robotics** at the University of Sydney.
 The original dataset can be downloaded from
 `their website <https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml>`_. This is a
 collection of CSV files containing point clouds collected from objects on the street.
