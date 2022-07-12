@@ -12,7 +12,8 @@ RUN apt-get update && \
   make \
   perl \
   python3 \
-  python3-pip 
+  python3-pip \
+  xxd
 
 
 RUN echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main" >> /etc/apt/sources.list && \
@@ -31,7 +32,5 @@ ENV CXX=clang++-13
 WORKDIR /src
 
 RUN pip --no-cache-dir install conan
-
-ENV CONAN_V2_MODE=1
 
 CMD [ "./build.sh" ]
