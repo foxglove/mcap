@@ -1,8 +1,8 @@
 #define MCAP_IMPLEMENTATION
 
+#include "descriptor.pb.h"
 #include "foxglove/PointCloud.pb.h"
 #include "mcap/writer.hpp"
-#include "pointcloud_descriptor.pb.h"
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -50,7 +50,6 @@ void write_float_little_endian(float input, char* output) {
   output[1] = (as_int >> 8) & 0xFF;
   output[2] = (as_int >> 16) & 0xFF;
   output[3] = (as_int >> 24) & 0xFF;
-  return;
 }
 
 int main(int, char**) {
@@ -59,9 +58,8 @@ int main(int, char**) {
   const char OutputFilename[] = "sphere.mcap";
   std::ofstream out(OutputFilename, std::ios::binary);
 
-  mcap::Schema schema(
-    "foxglove.PointCloud", "protobuf",
-    std::string_view((char*)(pointcloud_descriptor_pb), pointcloud_descriptor_pb_len));
+  mcap::Schema schema("foxglove.PointCloud", "protobuf",
+                      std::string_view((char*)(descriptor_pb_bin), descriptor_pb_bin_len));
   writer.addSchema(schema);
 
   mcap::Channel channel("/pointcloud", "protobuf", schema.id);

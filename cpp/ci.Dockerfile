@@ -18,8 +18,6 @@ RUN apt-get update && \
   python3-pip \
   clang \
   clang-format \
-  protobuf-compiler \
-  libprotobuf-dev \
   xxd \
   && rm -rf /var/lib/apt/lists/*
 
@@ -43,8 +41,6 @@ RUN if [ "$IMAGE" = "ubuntu:focal" ]; then \
 RUN pip --no-cache-dir install conan
 
 WORKDIR /mcap/cpp
-
-ENV CONAN_V2_MODE=1
 
 COPY --from=hdoc /hdoc/build/hdoc /usr/local/bin/hdoc
 
