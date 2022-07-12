@@ -76,7 +76,7 @@ containing all point data, and some metadata describing how to decode it:
       "description": "Point data, interpreted using `fields`"
     }
 
-From the CSV data we have one timestamp and four floating-point data fields per point.
+The CSV data contains one timestamp and four floating-point data fields per point.
 ``foxglove.PointCloud`` uses one timestamp for the whole point cloud, so we'll just use the first
 point for that. We'll pack each field as a four byte single-precision little-endian float.
 
