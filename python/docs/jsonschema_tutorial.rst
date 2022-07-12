@@ -145,7 +145,7 @@ timestamps.
     :end-before: # tutorial-write-message-end
     :dedent:
 
-Finally we can invoke ``finish()`` on the MCAP writer. This will include the summary and footer
+Finally, we invoke ``finish()`` on the MCAP writer to include the summary and footer
 in the output file.
 
 .. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
