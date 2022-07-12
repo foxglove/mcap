@@ -35,7 +35,7 @@ it knows how to display. These are available for a variety of serializations
 JSON ``PointCloud`` instance, using the provided 
 `schema <https://github.com/foxglove/schemas/blob/main/schemas/jsonschema/PointCloud.json>`_.
 
-Lets start with encoding the point data. The schema expects a single ``base64``-encoded buffer
+Let's start with encoding the point data. The schema expects a single ``base64``-encoded buffer
 containing all point data, and some metadata describing how to decode it:
 
 .. code-block:: json
