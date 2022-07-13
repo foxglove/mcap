@@ -1,3 +1,6 @@
+// Example code for writing Protobuf messages to an MCAP file. This executable
+// writes a sequence of foxglove.PointCloud messages to an MCAP which should
+// show an expanding sphere when viewed in Foxglove Studio.
 #define MCAP_IMPLEMENTATION
 
 #include <google/protobuf/descriptor.pb.h>
@@ -40,6 +43,8 @@ public:
   }
 };
 
+// Writes the FileDescriptor of this descriptor and all transitive dependencies
+// to a string, for use as a channel schema.
 std::string SerializeFdSet(const google::protobuf::Descriptor* toplevelDescriptor) {
   google::protobuf::FileDescriptorSet fdSet;
   std::queue<const google::protobuf::FileDescriptor*> toAdd;
