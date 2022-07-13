@@ -62,59 +62,67 @@ std::string SerializeFdSet(const google::protobuf::Descriptor* toplevelDescripto
 
 int main(int argc, char** argv) {
   if (argc != 2) {
-    std::cerr << "Usage: " << argv[0] << " <output.mcap>\n";
+    std::cerr << "Usage: " << argv[0] << " <output.mcap>" << std::endl;
     return 1;
   }
   const char* outputFilename = argv[1];
 
   mcap::McapWriter writer;
-  auto options = mcap::McapWriterOptions("x-protobuf");
-  const auto openRes = writer.open(outputFilename, options);
-  if (!openRes.ok()) {
-    std::cerr << "Failed to open " << outputFilename << " for writing: " << openRes.message
-              << std::endl;
-    return 1;
+  {
+    auto options = mcap::McapWriterOptions("x-protobuf");
+    const auto res = writer.open(outputFilename, options);
+    if (!res.ok()) {
+      std::cerr << "Failed to open " << outputFilename << " for writing: " << res.message
+                << std::endl;
+      return 1;
+    }
   }
 
   // set up the schema and channel.
-  mcap::Schema schema("foxglove.PointCloud", "protobuf",
-                      SerializeFdSet(foxglove::PointCloud::descriptor()));
+  mcap::ChannelId channelId;
+  {
+    mcap::Schema schema("foxglove.PointCloud", "protobuf",
+                        SerializeFdSet(foxglove::PointCloud::descriptor()));
 
-  writer.addSchema(schema);
+    writer.addSchema(schema);
 
-  mcap::Channel channel("/pointcloud", "protobuf", schema.id);
-  writer.addChannel(channel);
+    mcap::Channel channel("/pointcloud", "protobuf", schema.id);
+    writer.addChannel(channel);
+    channelId = channel.id;
+  }
+
+  // Set up the fields in the point cloud that don't need to change.
+  foxglove::PointCloud pcl;
+  {
+    auto* pose = pcl.mutable_pose();
+    auto* position = pose->mutable_position();
+    position->set_x(0);
+    position->set_y(0);
+    position->set_z(0);
+    auto* orientation = pose->mutable_orientation();
+    orientation->set_x(0);
+    orientation->set_y(0);
+    orientation->set_z(0);
+    orientation->set_w(1);
+
+    pcl.set_point_stride(sizeof(float) * FIELDS_PER_POINT);
+    const char* const fieldNames[] = {"x", "y", "z"};
+    int fieldOffset = 0;
+    for (const auto& name : fieldNames) {
+      auto field = pcl.add_fields();
+      field->set_name(name);
+      field->set_offset(fieldOffset);
+      field->set_type(foxglove::PackedElementField_NumericType_FLOAT32);
+      fieldOffset += sizeof(float);
+    }
+    pcl.mutable_data()->append(POINTS_PER_CLOUD * FIELDS_PER_POINT * sizeof(float), '\0');
+    pcl.set_frame_id("pointcloud");
+  }
 
   mcap::Timestamp startTime = std::chrono::duration_cast<std::chrono::nanoseconds>(
                                 std::chrono::system_clock::now().time_since_epoch())
                                 .count();
-
   PointGenerator pointGenerator;
-  foxglove::PointCloud pcl;
-  auto* pose = pcl.mutable_pose();
-  auto* position = pose->mutable_position();
-  position->set_x(0);
-  position->set_y(0);
-  position->set_z(0);
-  auto* orientation = pose->mutable_orientation();
-  orientation->set_x(0);
-  orientation->set_y(0);
-  orientation->set_z(0);
-  orientation->set_w(1);
-
-  pcl.set_point_stride(sizeof(float) * FIELDS_PER_POINT);
-  const char* const fieldNames[] = {"x", "y", "z"};
-  int fieldOffset = 0;
-  for (const auto& name : fieldNames) {
-    auto field = pcl.add_fields();
-    field->set_name(name);
-    field->set_offset(fieldOffset);
-    field->set_type(foxglove::PackedElementField_NumericType_FLOAT32);
-    fieldOffset += sizeof(float);
-  }
-  pcl.mutable_data()->append(POINTS_PER_CLOUD * FIELDS_PER_POINT * sizeof(float), '\0');
-  pcl.set_frame_id("pointcloud");
-
   // write 100 pointcloud messages into the output MCAP file.
   for (uint64_t frameIndex = 0; frameIndex < 100; ++frameIndex) {
     mcap::Timestamp cloudTime = startTime + (frameIndex * 100 * NS_PER_MS);
@@ -137,7 +145,7 @@ int main(int argc, char** argv) {
     }
     std::string serialized = pcl.SerializeAsString();
     mcap::Message msg;
-    msg.channelId = channel.id;
+    msg.channelId = channelId;
     msg.sequence = frameIndex;
     msg.publishTime = cloudTime;
     msg.logTime = cloudTime;
