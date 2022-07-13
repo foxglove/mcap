@@ -51,7 +51,7 @@ std::string SerializeFdSet(const google::protobuf::Descriptor* toplevelDescripto
   toAdd.push(toplevelDescriptor->file());
   std::unordered_set<std::string> added;
   while (!toAdd.empty()) {
-    const auto& next = toAdd.front();
+    const google::protobuf::FileDescriptor* next = toAdd.front();
     toAdd.pop();
     next->CopyTo(fdSet.add_file());
     added.insert(next->name());
