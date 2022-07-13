@@ -15,7 +15,7 @@ class Profile:
 
 
 class SchemaEncoding:
-    """well-known encodings for schema records."""
+    """Well-known encodings for schema records."""
 
     SelfDescribing = ""  # used for self-describing content, such as arbitrary JSON.
     Protobuf = "protobuf"
@@ -26,7 +26,7 @@ class SchemaEncoding:
 
 
 class MessageEncoding:
-    """well-known message encodings for message records"""
+    """Well-known message encodings for message records"""
 
     ROS1 = "ros1"
     CDR = "cdr"

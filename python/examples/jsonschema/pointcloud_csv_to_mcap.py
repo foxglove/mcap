@@ -57,7 +57,7 @@ def main():
     # tutorial-point-layout-end
 
     # tutorial-pack-points-start
-    points = bytearray([])
+    points = bytearray()
     base_timestamp = None
     for point_timestamp, intensity, x, y, z in point_reader(args.csv):
         if base_timestamp is None:
@@ -90,7 +90,7 @@ def main():
             data=schema,
         )
         channel_id = writer.register_channel(
-            topic="/pointcloud",
+            topic="pointcloud",
             message_encoding=MessageEncoding.JSON,
             schema_id=schema_id,
         )
