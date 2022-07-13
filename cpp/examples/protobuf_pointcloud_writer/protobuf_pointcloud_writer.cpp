@@ -83,33 +83,32 @@ int main(int argc, char** argv) {
     }
   }
 
-  // set up the schema and channel.
+  // Create a channel and schema for our messages.
+  // A message's channel informs the reader on the topic those messages were published on.
+  // A channel's schema informs the reader on how to interpret the messages' content.
+  // MCAP follows a relational model, where:
+  // * messages have a many-to-one relationship with channels (indicated by their channel_id)
+  // * channels have a many-to-one relationship with schemas (indicated by their schema_id)
   mcap::ChannelId channelId;
   {
+    // protobuf schemas in MCAP are represented as a serialized FileDescriptorSet.
+    // You can use the method in SerializeFdSet to generate this at runtime, or generate them
+    // ahead of time with protoc:
+    //   protoc --include_imports --descriptor_set_out=filename your_type.proto
     mcap::Schema schema("foxglove.PointCloud", "protobuf",
                         SerializeFdSet(foxglove::PointCloud::descriptor()));
-
     writer.addSchema(schema);
 
-    mcap::Channel channel("/pointcloud", "protobuf", schema.id);
+    // choose an arbitrary topic name.
+    mcap::Channel channel("pointcloud", "protobuf", schema.id);
     writer.addChannel(channel);
     channelId = channel.id;
   }
 
-  // Set up the fields in the point cloud that don't need to change.
   foxglove::PointCloud pcl;
   {
-    auto* pose = pcl.mutable_pose();
-    auto* position = pose->mutable_position();
-    position->set_x(0);
-    position->set_y(0);
-    position->set_z(0);
-    auto* orientation = pose->mutable_orientation();
-    orientation->set_x(0);
-    orientation->set_y(0);
-    orientation->set_z(0);
-    orientation->set_w(1);
-
+    // Describe the data layout to the consumer of the pointcloud. There are 3 single-precision
+    // float fields per point.
     pcl.set_point_stride(sizeof(float) * FIELDS_PER_POINT);
     const char* const fieldNames[] = {"x", "y", "z"};
     int fieldOffset = 0;
@@ -120,8 +119,26 @@ int main(int argc, char** argv) {
       field->set_type(foxglove::PackedElementField_NumericType_FLOAT32);
       fieldOffset += sizeof(float);
     }
+    // Reserve enough space for all of our points.
     pcl.mutable_data()->append(POINTS_PER_CLOUD * FIELDS_PER_POINT * sizeof(float), '\0');
+
+    // Position the pointcloud in 3D space. the "frame_id" identifies the coordinate frame
+    // of this pointcloud, and the "pose" determines the pointcloud's position relative to that
+    // coordinate frame's center.
+    // Here there is only one coordinate frame, so any frame_id string can be used.
     pcl.set_frame_id("pointcloud");
+
+    // Position the pointclouds in the center of their coordinate frame.
+    auto* pose = pcl.mutable_pose();
+    auto* position = pose->mutable_position();
+    position->set_x(0);
+    position->set_y(0);
+    position->set_z(0);
+    auto* orientation = pose->mutable_orientation();
+    orientation->set_x(0);
+    orientation->set_y(0);
+    orientation->set_z(0);
+    orientation->set_w(1);
   }
 
   mcap::Timestamp startTime = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -130,13 +147,16 @@ int main(int argc, char** argv) {
   PointGenerator pointGenerator;
   // write 100 pointcloud messages into the output MCAP file.
   for (uint64_t frameIndex = 0; frameIndex < 100; ++frameIndex) {
+    // Space these frames 100ms apart in time.
     mcap::Timestamp cloudTime = startTime + (frameIndex * 100 * NS_PER_MS);
+    // Slightly increase the size of the cloud on every frame.
     float cloudScale = 1.0 + (float(frameIndex) / 50.0);
 
     auto timestamp = pcl.mutable_timestamp();
     timestamp->set_seconds(cloudTime / NS_PER_S);
     timestamp->set_nanos(cloudTime % NS_PER_S);
 
+    // write 1000 points into each pointcloud message.
     size_t offset = 0;
     for (int pointIndex = 0; pointIndex < POINTS_PER_CLOUD; ++pointIndex) {
       auto [x, y, z] = pointGenerator.next(cloudScale);
@@ -149,6 +169,7 @@ int main(int argc, char** argv) {
       offset += sizeof(z);
     }
     std::string serialized = pcl.SerializeAsString();
+    // Include the pointcloud data in a message, then write it into the MCAP file.
     mcap::Message msg;
     msg.channelId = channelId;
     msg.sequence = frameIndex;
@@ -165,6 +186,7 @@ int main(int argc, char** argv) {
       return 1;
     }
   }
+  // Write the index and footer to the file, then close it.
   writer.close();
   std::cerr << "wrote 100 pointcloud messages to " << outputFilename << std::endl;
   return 0;
