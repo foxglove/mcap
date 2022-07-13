@@ -30,5 +30,5 @@ target_include_directories(pointcloud_proto_lib PUBLIC ${CMAKE_CURRENT_BINARY_DI
 # downgraded back to warnings for all targets that depends on them.
 target_compile_options(pointcloud_proto_lib PUBLIC -Wno-error=unused-parameter)
 
-add_executable(protobuf_pointcloud_writer protobuf_pointcloud_writer.cpp)
-target_link_libraries(protobuf_pointcloud_writer ${CONAN_LIBS} pointcloud_proto_lib)
+add_executable(example_protobuf_writer writer.cpp)
+target_link_libraries(example_protobuf_writer ${CONAN_LIBS} pointcloud_proto_lib)
