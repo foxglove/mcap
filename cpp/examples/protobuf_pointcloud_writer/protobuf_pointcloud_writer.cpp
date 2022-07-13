@@ -1,25 +1,22 @@
 #define MCAP_IMPLEMENTATION
 
-#include "descriptor.pb.h"
+#include <google/protobuf/descriptor.pb.h>
+
 #include "foxglove/PointCloud.pb.h"
 #include "mcap/writer.hpp"
 #include <chrono>
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <queue>
 #include <random>
+#include <sstream>
+#include <unordered_set>
 
 #define NS_PER_MS 1000000
 #define NS_PER_S 1000000000
 #define POINTS_PER_CLOUD 1000
 #define FIELDS_PER_POINT 3
-
-// Point represents a point in 3D space.
-struct Point {
-  float x;
-  float y;
-  float z;
-};
 
 // PointGenerator generates random points on a sphere.
 class PointGenerator {
@@ -33,33 +30,34 @@ public:
       , _distribution(0.0, 1.0) {}
 
   // next produces a random point on the unit sphere, scaled by `scale`.
-  Point next(float scale) {
+  std::tuple<float, float, float> next(float scale) {
     float theta = 2 * M_PI * _distribution(_generator);
-    float phi = acos(1 - 2 * _distribution(_generator));
-    Point point;
-    point.x = float((sin(phi) * cos(theta)) * scale);
-    point.y = float((sin(phi) * sin(theta)) * scale);
-    point.z = float(cos(phi) * scale);
-    return point;
+    float phi = acos(1.0 - (2.0 * _distribution(_generator)));
+    float x = float((sin(phi) * cos(theta)) * scale);
+    float y = float((sin(phi) * sin(theta)) * scale);
+    float z = float(cos(phi) * scale);
+    return {x, y, z};
   }
 };
 
-// WriteLittleEndianFloat writes a little-endian float into the `output` string of bytes at
-// `offset`.
-void WriteLittleEndianFloat(float input, std::string* output, size_t offset) {
-  static_assert(sizeof(uint32_t) == sizeof(float));
-  uint32_t asInt = *reinterpret_cast<uint32_t*>(&input);
-  if (output->size() <= offset + 3) {
-    std::cerr << "tried to write 4 bytes at offset " << offset << " into buffer of size "
-              << output->size() << std::endl;
-    abort();
+std::string SerializeFdSet(const google::protobuf::Descriptor* toplevelDescriptor) {
+  google::protobuf::FileDescriptorSet fdSet;
+  std::queue<const google::protobuf::FileDescriptor*> toAdd;
+  toAdd.push(toplevelDescriptor->file());
+  std::unordered_set<std::string> added;
+  while (!toAdd.empty()) {
+    const auto& next = toAdd.front();
+    toAdd.pop();
+    next->CopyTo(fdSet.add_file());
+    added.insert(next->name());
+    for (int i = 0; i < next->dependency_count(); ++i) {
+      const auto& dep = next->dependency(i);
+      if (added.find(dep->name()) == added.end()) {
+        toAdd.push(dep);
+      }
+    }
   }
-  // write in little-endian order, no matter what endian-ness the host uses.
-  // the LSB goes into the first byte.
-  (*output)[offset + 0] = asInt & 0xFF;
-  (*output)[offset + 1] = (asInt >> 8) & 0xFF;
-  (*output)[offset + 2] = (asInt >> 16) & 0xFF;
-  (*output)[offset + 3] = (asInt >> 24) & 0xFF;
+  return fdSet.SerializeAsString();
 }
 
 int main(int argc, char** argv) {
@@ -71,11 +69,17 @@ int main(int argc, char** argv) {
 
   mcap::McapWriter writer;
   auto options = mcap::McapWriterOptions("x-protobuf");
-  std::ofstream out(outputFilename, std::ios::binary);
-  writer.open(out, options);
+  const auto openRes = writer.open(outputFilename, options);
+  if (!openRes.ok()) {
+    std::cerr << "Failed to open " << outputFilename << " for writing: " << openRes.message
+              << std::endl;
+    return 1;
+  }
+
   // set up the schema and channel.
   mcap::Schema schema("foxglove.PointCloud", "protobuf",
-                      std::string_view((char*)(descriptor_pb_bin), descriptor_pb_bin_len));
+                      SerializeFdSet(foxglove::PointCloud::descriptor()));
+
   writer.addSchema(schema);
 
   mcap::Channel channel("/pointcloud", "protobuf", schema.id);
@@ -87,12 +91,12 @@ int main(int argc, char** argv) {
 
   PointGenerator pointGenerator;
   foxglove::PointCloud pcl;
-  foxglove::Pose* pose = pcl.mutable_pose();
-  foxglove::Vector3* position = pose->mutable_position();
+  auto* pose = pcl.mutable_pose();
+  auto* position = pose->mutable_position();
   position->set_x(0);
   position->set_y(0);
   position->set_z(0);
-  foxglove::Quaternion* orientation = pose->mutable_orientation();
+  auto* orientation = pose->mutable_orientation();
   orientation->set_x(0);
   orientation->set_y(0);
   orientation->set_z(0);
@@ -116,33 +120,34 @@ int main(int argc, char** argv) {
     mcap::Timestamp cloudTime = startTime + (frameIndex * 100 * NS_PER_MS);
     float cloudScale = 1.0 + (float(frameIndex) / 50.0);
 
-    google::protobuf::Timestamp* timestamp = pcl.mutable_timestamp();
+    auto timestamp = pcl.mutable_timestamp();
     timestamp->set_seconds(cloudTime / NS_PER_S);
     timestamp->set_nanos(cloudTime % NS_PER_S);
 
-    std::string* data = pcl.mutable_data();
+    size_t offset = 0;
     for (int pointIndex = 0; pointIndex < POINTS_PER_CLOUD; ++pointIndex) {
-      auto point = pointGenerator.next(cloudScale);
-      auto baseOffset = (pointIndex * sizeof(float) * FIELDS_PER_POINT);
-      WriteLittleEndianFloat(point.x, data, baseOffset);
-      WriteLittleEndianFloat(point.y, data, baseOffset + sizeof(float));
-      WriteLittleEndianFloat(point.z, data, baseOffset + (2 * sizeof(float)));
+      auto [x, y, z] = pointGenerator.next(cloudScale);
+      char* data = pcl.mutable_data()->data();
+      std::memcpy(&data[offset], reinterpret_cast<const char*>(&x), sizeof(x));
+      offset += sizeof(x);
+      std::memcpy(&data[offset], reinterpret_cast<const char*>(&y), sizeof(y));
+      offset += sizeof(y);
+      std::memcpy(&data[offset], reinterpret_cast<const char*>(&z), sizeof(z));
+      offset += sizeof(z);
     }
-    std::string serialized;
-    pcl.SerializeToString(&serialized);
-
+    std::string serialized = pcl.SerializeAsString();
     mcap::Message msg;
     msg.channelId = channel.id;
     msg.sequence = frameIndex;
     msg.publishTime = cloudTime;
     msg.logTime = cloudTime;
-    msg.data = (std::byte*)(serialized.data());
+    msg.data = reinterpret_cast<const std::byte*>(serialized.data());
     msg.dataSize = serialized.size();
     const auto res = writer.write(msg);
     if (!res.ok()) {
       std::cerr << "Failed to write message: " << res.message << "\n";
       writer.terminate();
-      out.close();
+      writer.close();
       std::remove(outputFilename);
       return 1;
     }

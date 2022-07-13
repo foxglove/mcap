@@ -18,7 +18,6 @@ RUN apt-get update && \
   python3-pip \
   clang \
   clang-format \
-  xxd \
   && rm -rf /var/lib/apt/lists/*
 
 RUN if [ "$IMAGE" = "ubuntu:focal" ]; then \

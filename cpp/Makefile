@@ -60,3 +60,8 @@ ci-docs: hdoc-build
 ci-format-check: hdoc-build
 	docker build -t mcap_cpp -f ci.Dockerfile --build-arg IMAGE=ubuntu:focal --build-arg CC=clang-13 --build-arg CXX=clang++-13 .
 	docker run -t --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp mcap_cpp python3 scripts/format.py .
+
+.PHONY: dev-shell
+dev-shell:
+	docker build -t mcap_cpp_dev -f dev.Dockerfile .
+	docker run -it --rm --name mcap_cpp_dev -v $(CURDIR):/mcap/cpp mcap_cpp_dev /bin/bash
