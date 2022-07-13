@@ -30,24 +30,6 @@ type mcapDoctor struct {
 	chunkIndexes map[uint64]*mcap.ChunkIndex
 }
 
-var (
-	supportedMessageEncodings = map[string]bool{
-		"":         true,
-		"ros1":     true,
-		"cdr":      true,
-		"protobuf": true,
-		"cbor":     true,
-		"json":     true,
-	}
-	supportedSchemaEncodings = map[string]bool{
-		"":           true,
-		"protobuf":   true,
-		"ros1msg":    true,
-		"ros2msg":    true,
-		"jsonschema": true,
-	}
-)
-
 func (doctor *mcapDoctor) warn(format string, v ...any) {
 	color.Yellow(format, v...)
 }
@@ -152,13 +134,6 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 				doctor.error("Failed to parse schema:", err)
 			}
 
-			var schemaEncoding = schema.Encoding
-			var isCustomSchemaEncoding = strings.HasPrefix(schemaEncoding, "x-")
-			if _, ok := supportedSchemaEncodings[schemaEncoding]; !ok && !isCustomSchemaEncoding {
-				doctor.error(`
-					Schema.encoding field is not valid: %s. Only a well-known schemas are allowed.
-					Other schemas must use x- prefix`, schemaEncoding)
-			}
 			if schema.Encoding == "" && len(schema.Data) > 0 {
 				doctor.error("Schema.data field should not be set when Schema.encoding is empty")
 			}
@@ -174,12 +149,6 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 				doctor.error("Error parsing Channel: %s", err)
 			}
 
-			var msgEncoding = channel.MessageEncoding
-			var isCustomMessageEncoding = strings.HasPrefix(msgEncoding, "x-")
-			if _, ok := supportedMessageEncodings[msgEncoding]; !ok && !isCustomMessageEncoding {
-				doctor.error(`Channel.messageEncoding field is not valid: %s.
-					Only a well-known encodings are allowed. Other encodings must use x- prefix`, msgEncoding)
-			}
 			doctor.channels[channel.ID] = channel
 			if _, ok := doctor.schemas[channel.SchemaID]; !ok {
 				doctor.error("Encountered Channel (%d) with unknown Schema (%d)", channel.ID, channel.SchemaID)
@@ -269,12 +238,6 @@ func (doctor *mcapDoctor) Examine() {
 				doctor.error("Failed to parse schema:", err)
 			}
 
-			var schemaEncoding = schema.Encoding
-			var isCustomSchemaEncoding = strings.HasPrefix(schemaEncoding, "x-")
-			if _, ok := supportedSchemaEncodings[schemaEncoding]; !ok && !isCustomSchemaEncoding {
-				doctor.error(`Schema.encoding field is not valid: %s.
-					Only a well-known schemas are allowed. Other schemas must use x- prefix`, schemaEncoding)
-			}
 			if schema.Encoding == "" && len(schema.Data) > 0 {
 				doctor.error("Schema.data field should not be set when Schema.encoding is empty")
 			}
@@ -288,13 +251,6 @@ func (doctor *mcapDoctor) Examine() {
 			channel, err := mcap.ParseChannel(data)
 			if err != nil {
 				doctor.error("Error parsing Channel: %s", err)
-			}
-
-			var msgEncoding = channel.MessageEncoding
-			var isCustomMessageEncoding = strings.HasPrefix(msgEncoding, "x-")
-			if _, ok := supportedMessageEncodings[msgEncoding]; !ok && !isCustomMessageEncoding {
-				doctor.error(`Channel.messageEncoding field is not valid: %s.
-					Only a well-known encodings are allowed. Other encodings must use x- prefix`, msgEncoding)
 			}
 
 			doctor.channels[channel.ID] = channel
