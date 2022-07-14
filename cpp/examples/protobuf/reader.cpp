@@ -102,9 +102,12 @@ int main(int argc, char** argv) {
 
   bool poolLoaded = false;
   for (auto it = messageView.begin(); it != messageView.end(); it++) {
+    // skip any messages that aren't PointCloud messages.
     if ((it->schema->encoding != "protobuf") || (it->schema->name != "foxglove.PointCloud")) {
       continue;
     }
+    // The first time we encounter a PointCloud message, we load its schema into the
+    // DescriptorPool to create Message instances with its type.
     if (!poolLoaded) {
       gp::FileDescriptorSet fdSet;
       size_t size = it->schema->data.size();
