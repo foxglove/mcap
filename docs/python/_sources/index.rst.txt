@@ -5,6 +5,7 @@
    :caption: Contents:
 
    apidoc/index
+   jsonschema_tutorial
 
 Indices and tables
 ==================

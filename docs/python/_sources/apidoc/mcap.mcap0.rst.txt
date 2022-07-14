@@ -16,6 +16,7 @@ Submodules
    mcap.mcap0.serialization
    mcap.mcap0.stream_reader
    mcap.mcap0.summary
+   mcap.mcap0.well_known
    mcap.mcap0.writer
 
 Module contents
