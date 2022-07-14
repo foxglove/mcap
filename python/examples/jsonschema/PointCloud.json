@@ -1,0 +1,153 @@
+{
+  "$comment": "Generated from PointCloud by @foxglove/schemas",
+  "title": "PointCloud",
+  "description": "A collection of N-dimensional points, which may contain additional fields with information like normals, intensity, etc.",
+  "type": "object",
+  "properties": {
+    "timestamp": {
+      "type": "object",
+      "title": "time",
+      "properties": {
+        "sec": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "nsec": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999999
+        }
+      },
+      "description": "Timestamp of point cloud"
+    },
+    "frame_id": {
+      "type": "string",
+      "description": "Frame of reference"
+    },
+    "pose": {
+      "$comment": "Generated from Pose by @foxglove/schemas",
+      "title": "Pose",
+      "description": "The origin of the point cloud relative to the frame of reference",
+      "type": "object",
+      "properties": {
+        "position": {
+          "$comment": "Generated from Vector3 by @foxglove/schemas",
+          "title": "Vector3",
+          "description": "Point denoting position in 3D space",
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "x coordinate length"
+            },
+            "y": {
+              "type": "number",
+              "description": "y coordinate length"
+            },
+            "z": {
+              "type": "number",
+              "description": "z coordinate length"
+            }
+          }
+        },
+        "orientation": {
+          "$comment": "Generated from Quaternion by @foxglove/schemas",
+          "title": "Quaternion",
+          "description": "Quaternion denoting orientation in 3D space",
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "x value"
+            },
+            "y": {
+              "type": "number",
+              "description": "y value"
+            },
+            "z": {
+              "type": "number",
+              "description": "z value"
+            },
+            "w": {
+              "type": "number",
+              "description": "w value"
+            }
+          }
+        }
+      }
+    },
+    "point_stride": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of bytes between points in the `data`"
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "$comment": "Generated from PackedElementField by @foxglove/schemas",
+        "title": "PackedElementField",
+        "description": "A field present within each element in a byte array of packed elements.",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the field"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Byte offset from start of data buffer"
+          },
+          "type": {
+            "title": "NumericType: Numeric type",
+            "description": "Type of data in the field. Integers are stored using little-endian byte order.",
+            "oneOf": [
+              {
+                "title": "UNKNOWN",
+                "const": 0
+              },
+              {
+                "title": "UINT8",
+                "const": 1
+              },
+              {
+                "title": "INT8",
+                "const": 2
+              },
+              {
+                "title": "UINT16",
+                "const": 3
+              },
+              {
+                "title": "INT16",
+                "const": 4
+              },
+              {
+                "title": "UINT32",
+                "const": 5
+              },
+              {
+                "title": "INT32",
+                "const": 6
+              },
+              {
+                "title": "FLOAT32",
+                "const": 7
+              },
+              {
+                "title": "FLOAT64",
+                "const": 8
+              }
+            ]
+          }
+        }
+      },
+      "description": "Fields in the `data`"
+    },
+    "data": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "description": "Point data, interpreted using `fields`"
+    }
+  }
+}
