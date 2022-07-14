@@ -1,8 +1,7 @@
-
-// Example code for writing Protobuf messages from an MCAP file. Uses the proto definition
+// Example code for reading Protobuf messages from an MCAP file. Uses the proto definition
 // from within the MCAP, with no dependency on generated headers.
 // Try it out by generating some PointCloud messages with the protobuf writer example,
-// and running this executable on the resulting MCAP file.
+// and running this executable with the resulting MCAP file.
 #define MCAP_IMPLEMENTATION
 #include "mcap/reader.hpp"
 
@@ -102,15 +101,15 @@ int main(int argc, char** argv) {
   gp::DescriptorPool protoPool;
   gp::DynamicMessageFactory protoFactory(&protoPool);
 
-  bool poolLoaded = false;
+  std::cout << "topic\ttype\ttimestamp\tfields" << std::endl;
+
   for (auto it = messageView.begin(); it != messageView.end(); it++) {
-    // skip any messages that aren't PointCloud messages.
-    if ((it->schema->encoding != "protobuf") || (it->schema->name != "foxglove.PointCloud")) {
+    // skip any non-protobuf-encoded messages.
+    if (it->schema->encoding != "protobuf") {
       continue;
     }
-    // The first time we encounter a PointCloud message, we load its schema into the
-    // DescriptorPool to create Message instances with its type.
-    if (!poolLoaded) {
+    // If the proto descriptor is not yet loaded, load it.
+    if (protoPool.FindMessageTypeByName(it->schema->name) == nullptr) {
       gp::FileDescriptorSet fdSet;
       size_t size = it->schema->data.size();
       if (!fdSet.ParseFromArray(static_cast<const void*>(&(it->schema->data[0])), size)) {
@@ -119,15 +118,15 @@ int main(int argc, char** argv) {
         return 1;
       }
       if (!WriteFileDescriptorsToPool(&fdSet, &protoPool)) {
-        std::cerr << "failed to insert proto schema into descriptor pool" << std::endl;
+        std::cerr << "failed to insert file descriptor set for type " << it->schema->name
+                  << " into descriptor pool" << std::endl;
         reader.close();
         return 1;
       }
-      poolLoaded = true;
     }
-    auto descriptor = protoPool.FindMessageTypeByName("foxglove.PointCloud");
+    auto descriptor = protoPool.FindMessageTypeByName(it->schema->name);
     if (descriptor == nullptr) {
-      std::cerr << "failed to create PointCloud desriptor after loading pool" << std::endl;
+      std::cerr << "failed to find descriptor after loading pool" << std::endl;
       reader.close();
       return 1;
     }
@@ -138,10 +137,15 @@ int main(int argc, char** argv) {
       reader.close();
       return 1;
     }
-    auto reflection = message->GetReflection();
-    auto frameIdDescriptor = descriptor->FindFieldByName("frame_id");
-    std::cout << it->message.logTime << ": pointcloud message with frame_id: "
-              << reflection->GetString(*message, frameIdDescriptor) << std::endl;
+
+    std::vector<const gp::FieldDescriptor*> fields;
+    message->GetReflection()->ListFields(*message, &fields);
+    std::cout << it->channel->topic << "\t(" << it->schema->name << ")\t[" << it->message.logTime
+              << "]:\t{ ";
+    for (const auto field : fields) {
+      std::cout << field->name() << " ";
+    }
+    std::cout << "}" << std::endl;
   }
   reader.close();
   return 0;
