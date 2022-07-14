@@ -1,6 +1,8 @@
 
 // Example code for writing Protobuf messages from an MCAP file. Uses the proto definition
 // from within the MCAP, with no dependency on generated headers.
+// Try it out by generating some PointCloud messages with the protobuf writer example,
+// and running this executable on the resulting MCAP file.
 #define MCAP_IMPLEMENTATION
 #include "mcap/reader.hpp"
 
