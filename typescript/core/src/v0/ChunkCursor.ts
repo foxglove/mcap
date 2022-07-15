@@ -59,20 +59,15 @@ export class ChunkCursor {
    * and re-sort the cursors.
    */
   compare(other: ChunkCursor): number {
-    const reverse = this.reverse;
     if (this.reverse !== other.reverse) {
       throw new Error("Cannot compare a reversed ChunkCursor to a non-reversed ChunkCursor");
     }
 
-    const diff = Number(this.getSortTime() - other.getSortTime());
+    let diff = Number(this.getSortTime() - other.getSortTime());
+
+    // Break ties by chunk offset in the file
     if (diff === 0) {
-      if (reverse) {
-        // Break ties by chunk offset in the file
-        return Number(other.chunkIndex.chunkStartOffset - this.chunkIndex.chunkStartOffset);
-      } else {
-        // Break ties by chunk offset in the file
-        return Number(this.chunkIndex.chunkStartOffset - other.chunkIndex.chunkStartOffset);
-      }
+      diff = Number(this.chunkIndex.chunkStartOffset - other.chunkIndex.chunkStartOffset);
     }
 
     return this.reverse ? -diff : diff;

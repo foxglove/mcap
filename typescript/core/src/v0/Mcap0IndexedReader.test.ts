@@ -574,6 +574,12 @@ describe("Mcap0IndexedReader", () => {
     const message5 = makeMessage(5);
     const message6 = makeMessage(6);
 
+    /* Chunks have this layout:
+      1: [3       6]
+      2:   [4]
+      3:      [5]
+    */
+
     const chunk1 = new ChunkBuilder({ useMessageIndex: true });
     chunk1.addChannel(channel1);
     chunk1.addMessage(message3);
@@ -643,12 +649,17 @@ describe("Mcap0IndexedReader", () => {
     builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
     builder.writeMagic();
 
-    {
+    for (const reverse of [true, false]) {
+      let expected = [message3, message4, message5, message6];
+      if (reverse) {
+        expected = expected.reverse();
+      }
+
       const readable = makeReadable(builder.buffer);
       const reader = await Mcap0IndexedReader.Initialize({ readable });
       expect(readable.readCalls).toEqual(4);
 
-      const messageIter = reader.readMessages();
+      const messageIter = reader.readMessages({ reverse });
       expect(readable.readCalls).toEqual(4);
 
       const collected = [];
@@ -662,29 +673,7 @@ describe("Mcap0IndexedReader", () => {
       collected.push((await messageIter.next()).value);
       expect(readable.readCalls).toEqual(10);
 
-      expect(collected).toEqual([message3, message4, message5, message6]);
-    }
-
-    {
-      const readable = makeReadable(builder.buffer);
-      const reader = await Mcap0IndexedReader.Initialize({ readable });
-      expect(readable.readCalls).toEqual(4);
-
-      const messageIter = reader.readMessages({ reverse: true });
-      expect(readable.readCalls).toEqual(4);
-
-      const collected = [];
-
-      collected.push((await messageIter.next()).value);
-      expect(readable.readCalls).toEqual(6);
-      collected.push((await messageIter.next()).value);
-      expect(readable.readCalls).toEqual(8);
-      collected.push((await messageIter.next()).value);
-      expect(readable.readCalls).toEqual(10);
-      collected.push((await messageIter.next()).value);
-      expect(readable.readCalls).toEqual(10);
-
-      expect(collected).toEqual([message3, message4, message5, message6].reverse());
+      expect(collected).toEqual(expected);
     }
   });
 
