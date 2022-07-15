@@ -16,7 +16,7 @@ import {
   uint16LE,
   uint32PrefixedBytes,
 } from "./testUtils";
-import { TypedMcapRecord, TypedMcapRecords } from "./types";
+import { Channel, TypedMcapRecord, TypedMcapRecords } from "./types";
 
 /**
  * Create an IReadable from a buffer. Simulates small buffer reuse to help test that readers aren't
@@ -547,5 +547,270 @@ describe("Mcap0IndexedReader", () => {
       message5,
       message6,
     ]);
+  });
+
+  it("uses stable sort when loading overlapping chunks", async () => {
+    const channel1: TypedMcapRecord = {
+      type: "Channel",
+      id: 1,
+      schemaId: 0,
+      topic: "a",
+      messageEncoding: "utf12",
+      metadata: new Map(),
+    };
+    const makeMessage = (idx: number): TypedMcapRecords["Message"] => {
+      return {
+        type: "Message",
+        channelId: channel1.id,
+        sequence: idx,
+        logTime: BigInt(idx),
+        publishTime: 0n,
+        data: new Uint8Array(),
+      };
+    };
+
+    const message3 = makeMessage(3);
+    const message4 = makeMessage(4);
+    const message5 = makeMessage(5);
+    const message6 = makeMessage(6);
+
+    /* Chunks have this layout:
+      1: [3       6]
+      2:   [4]
+      3:      [5]
+    */
+
+    const chunk1 = new ChunkBuilder({ useMessageIndex: true });
+    chunk1.addChannel(channel1);
+    chunk1.addMessage(message3);
+    chunk1.addMessage(message6);
+
+    const chunk2 = new ChunkBuilder({ useMessageIndex: true });
+    chunk2.addChannel(channel1);
+    chunk2.addMessage(message4);
+
+    const chunk3 = new ChunkBuilder({ useMessageIndex: true });
+    chunk3.addChannel(channel1);
+    chunk3.addMessage(message5);
+
+    const builder = new Mcap0RecordBuilder();
+    builder.writeMagic();
+    builder.writeHeader({ profile: "", library: "" });
+
+    const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
+    function writeChunk(chunk: ChunkBuilder) {
+      const chunkStartOffset = BigInt(builder.length);
+      const chunkLength = builder.writeChunk({
+        messageStartTime: chunk.messageStartTime,
+        messageEndTime: chunk.messageEndTime,
+        uncompressedSize: BigInt(chunk.buffer.length),
+        uncompressedCrc: 0,
+        compression: "",
+        records: chunk.buffer,
+      });
+
+      const messageIndexStart = BigInt(builder.length);
+      let messageIndexLength = 0n;
+      const chunkMessageIndexOffsets = new Map<number, bigint>();
+      for (const messageIndex of chunk.indices) {
+        chunkMessageIndexOffsets.set(
+          messageIndex.channelId,
+          messageIndexStart + messageIndexLength,
+        );
+        messageIndexLength += builder.writeMessageIndex(messageIndex);
+      }
+
+      chunkIndexes.push({
+        type: "ChunkIndex",
+        messageStartTime: chunk.messageStartTime,
+        messageEndTime: chunk.messageEndTime,
+        chunkStartOffset,
+        chunkLength,
+        messageIndexOffsets: chunkMessageIndexOffsets,
+        messageIndexLength,
+        compression: "",
+        compressedSize: BigInt(chunk.buffer.byteLength),
+        uncompressedSize: BigInt(chunk.buffer.byteLength),
+      });
+    }
+
+    writeChunk(chunk1);
+    writeChunk(chunk2);
+    writeChunk(chunk3);
+
+    builder.writeDataEnd({ dataSectionCrc: 0 });
+
+    const summaryStart = BigInt(builder.length);
+
+    for (const index of chunkIndexes) {
+      builder.writeChunkIndex(index);
+    }
+
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeMagic();
+
+    for (const reverse of [true, false]) {
+      let expected = [message3, message4, message5, message6];
+      if (reverse) {
+        expected = expected.reverse();
+      }
+
+      const readable = makeReadable(builder.buffer);
+      const reader = await Mcap0IndexedReader.Initialize({ readable });
+      expect(readable.readCalls).toEqual(4);
+
+      const messageIter = reader.readMessages({ reverse });
+      expect(readable.readCalls).toEqual(4);
+
+      const collected = [];
+
+      collected.push((await messageIter.next()).value);
+      expect(readable.readCalls).toEqual(6);
+      collected.push((await messageIter.next()).value);
+      expect(readable.readCalls).toEqual(8);
+      collected.push((await messageIter.next()).value);
+      expect(readable.readCalls).toEqual(10);
+      collected.push((await messageIter.next()).value);
+      expect(readable.readCalls).toEqual(10);
+
+      expect(collected).toEqual(expected);
+    }
+  });
+
+  it("ensure that chunks are loaded only when needed", async () => {
+    const channelA: TypedMcapRecord = {
+      type: "Channel",
+      id: 1,
+      schemaId: 0,
+      topic: "a",
+      messageEncoding: "utf12",
+      metadata: new Map(),
+    };
+    const channelB: TypedMcapRecord = {
+      type: "Channel",
+      id: 2,
+      schemaId: 0,
+      topic: "b",
+      messageEncoding: "utf12",
+      metadata: new Map(),
+    };
+    const makeMessage = (channel: Channel, idx: number): TypedMcapRecords["Message"] => {
+      return {
+        type: "Message",
+        channelId: channel.id,
+        sequence: idx,
+        logTime: BigInt(idx),
+        publishTime: 0n,
+        data: new Uint8Array(),
+      };
+    };
+
+    const messageA1 = makeMessage(channelA, 1);
+    const messageB1 = makeMessage(channelB, 1);
+    const messageB2 = makeMessage(channelB, 2);
+
+    const chunk1 = new ChunkBuilder({ useMessageIndex: true });
+    chunk1.addChannel(channelA);
+    chunk1.addChannel(channelB);
+    chunk1.addMessage(messageA1);
+    chunk1.addMessage(messageB2);
+
+    const chunk2 = new ChunkBuilder({ useMessageIndex: true });
+    chunk2.addChannel(channelB);
+    chunk2.addMessage(messageB1);
+
+    const builder = new Mcap0RecordBuilder();
+    builder.writeMagic();
+    builder.writeHeader({ profile: "", library: "" });
+
+    const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
+    function writeChunk(chunk: ChunkBuilder) {
+      const chunkStartOffset = BigInt(builder.length);
+      const chunkLength = builder.writeChunk({
+        messageStartTime: chunk.messageStartTime,
+        messageEndTime: chunk.messageEndTime,
+        uncompressedSize: BigInt(chunk.buffer.length),
+        uncompressedCrc: 0,
+        compression: "",
+        records: chunk.buffer,
+      });
+
+      const messageIndexStart = BigInt(builder.length);
+      let messageIndexLength = 0n;
+      const chunkMessageIndexOffsets = new Map<number, bigint>();
+      for (const messageIndex of chunk.indices) {
+        chunkMessageIndexOffsets.set(
+          messageIndex.channelId,
+          messageIndexStart + messageIndexLength,
+        );
+        messageIndexLength += builder.writeMessageIndex(messageIndex);
+      }
+
+      chunkIndexes.push({
+        type: "ChunkIndex",
+        messageStartTime: chunk.messageStartTime,
+        messageEndTime: chunk.messageEndTime,
+        chunkStartOffset,
+        chunkLength,
+        messageIndexOffsets: chunkMessageIndexOffsets,
+        messageIndexLength,
+        compression: "",
+        compressedSize: BigInt(chunk.buffer.byteLength),
+        uncompressedSize: BigInt(chunk.buffer.byteLength),
+      });
+    }
+
+    writeChunk(chunk1);
+    writeChunk(chunk2);
+
+    builder.writeDataEnd({ dataSectionCrc: 0 });
+
+    const summaryStart = BigInt(builder.length);
+
+    builder.writeChannel(channelA);
+    builder.writeChannel(channelB);
+
+    for (const index of chunkIndexes) {
+      builder.writeChunkIndex(index);
+    }
+
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeMagic();
+
+    {
+      const readable = makeReadable(builder.buffer);
+      const reader = await Mcap0IndexedReader.Initialize({ readable });
+      expect(readable.readCalls).toEqual(4);
+
+      const messageIter = reader.readMessages({ topics: [channelB.topic] });
+      expect(readable.readCalls).toEqual(4);
+
+      const collected = [];
+
+      collected.push((await messageIter.next()).value);
+      expect(readable.readCalls).toEqual(7);
+      collected.push((await messageIter.next()).value);
+      expect(readable.readCalls).toEqual(8);
+
+      expect(collected).toEqual([messageB1, messageB2]);
+    }
+
+    {
+      const readable = makeReadable(builder.buffer);
+      const reader = await Mcap0IndexedReader.Initialize({ readable });
+      expect(readable.readCalls).toEqual(4);
+
+      const messageIter = reader.readMessages({ topics: [channelB.topic], reverse: true });
+      expect(readable.readCalls).toEqual(4);
+
+      const collected = [];
+
+      collected.push((await messageIter.next()).value);
+      expect(readable.readCalls).toEqual(6);
+      collected.push((await messageIter.next()).value);
+      expect(readable.readCalls).toEqual(8);
+
+      expect(collected).toEqual([messageB1, messageB2].reverse());
+    }
   });
 });
