@@ -64,65 +64,18 @@ export class ChunkCursor {
       throw new Error("Cannot compare a reversed ChunkCursor to a non-reversed ChunkCursor");
     }
 
-    if (reverse) {
-      // If chunks don't overlap at all, sort later chunk first
-      if (this.chunkIndex.messageEndTime < other.chunkIndex.messageStartTime) {
-        return 1;
-      }
-      if (this.chunkIndex.messageStartTime > other.chunkIndex.messageEndTime) {
-        return -1;
-      }
-    } else {
-      // If chunks don't overlap at all, sort earlier chunk first
-      if (this.chunkIndex.messageEndTime < other.chunkIndex.messageStartTime) {
-        return -1;
-      }
-      if (this.chunkIndex.messageStartTime > other.chunkIndex.messageEndTime) {
-        return 1;
+    const diff = Number(this.getSortTime() - other.getSortTime());
+    if (diff === 0) {
+      if (reverse) {
+        // Break ties by chunk offset in the file
+        return Number(other.chunkIndex.chunkStartOffset - this.chunkIndex.chunkStartOffset);
+      } else {
+        // Break ties by chunk offset in the file
+        return Number(this.chunkIndex.chunkStartOffset - other.chunkIndex.chunkStartOffset);
       }
     }
 
-    // If a cursor has not loaded message indexes, sort it first so it can get loaded and re-sorted.
-    // If it overlaps with other cursors, we won't know its order relative to other cursors until we
-    // have the message indexes.
-    if (!this.messageIndexCursors) {
-      return -1;
-    }
-    if (!other.messageIndexCursors) {
-      return 1;
-    }
-
-    // Earlier messages come first
-    const cursorA = this.messageIndexCursors.peek();
-    if (!cursorA) {
-      throw new Error(
-        `Unexpected empty cursor for chunk at offset ${this.chunkIndex.chunkStartOffset}`,
-      );
-    }
-    const cursorB = other.messageIndexCursors.peek();
-    if (!cursorB) {
-      throw new Error(
-        `Unexpected empty cursor for chunk at offset ${other.chunkIndex.chunkStartOffset}`,
-      );
-    }
-    const logTimeA = cursorA.records[cursorA.index]![0];
-    const logTimeB = cursorB.records[cursorB.index]![0];
-
-    if (reverse) {
-      if (logTimeA !== logTimeB) {
-        return Number(logTimeB - logTimeA);
-      }
-
-      // Break ties by chunk offset in the file
-      return Number(other.chunkIndex.chunkStartOffset - this.chunkIndex.chunkStartOffset);
-    } else {
-      if (logTimeA !== logTimeB) {
-        return Number(logTimeA - logTimeB);
-      }
-
-      // Break ties by chunk offset in the file
-      return Number(this.chunkIndex.chunkStartOffset - other.chunkIndex.chunkStartOffset);
-    }
+    return this.reverse ? -diff : diff;
   }
 
   /**
@@ -327,5 +280,20 @@ export class ChunkCursor {
         `${messageIndexesView.byteLength - offset} bytes remaining in message index section`,
       );
     }
+  }
+
+  private getSortTime(): bigint {
+    if (!this.messageIndexCursors) {
+      return this.reverse ? this.chunkIndex.messageEndTime : this.chunkIndex.messageStartTime;
+    }
+
+    const cursor = this.messageIndexCursors.peek();
+    if (!cursor) {
+      throw new Error(
+        `Unexpected empty cursor for chunk at offset ${this.chunkIndex.chunkStartOffset}`,
+      );
+    }
+
+    return cursor.records[cursor.index]![0];
   }
 }
