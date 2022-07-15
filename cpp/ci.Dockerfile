@@ -41,8 +41,6 @@ RUN pip --no-cache-dir install conan
 
 WORKDIR /mcap/cpp
 
-ENV CONAN_V2_MODE=1
-
 COPY --from=hdoc /hdoc/build/hdoc /usr/local/bin/hdoc
 
 CMD [ "./build.sh" ]
