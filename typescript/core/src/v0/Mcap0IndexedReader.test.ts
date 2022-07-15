@@ -549,7 +549,7 @@ describe("Mcap0IndexedReader", () => {
     ]);
   });
 
-  it("correctly reads overlapping chunks", async () => {
+  it("uses stable sort when loading overlapping chunks", async () => {
     const channel1: TypedMcapRecord = {
       type: "Channel",
       id: 1,
