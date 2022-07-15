@@ -688,7 +688,7 @@ describe("Mcap0IndexedReader", () => {
     }
   });
 
-  it.only("ensure that chunks are loaded only when needed", async () => {
+  it("ensure that chunks are loaded only when needed", async () => {
     const channelA: TypedMcapRecord = {
       type: "Channel",
       id: 1,
