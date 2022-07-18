@@ -13,23 +13,22 @@
 #define NS_PER_MS 1000000
 
 static const char* SCHEMA_NAME = "foxglove.Point2";
-static const char* SCHEMA_TEXT =
-  "{ \
-  \"$comment\": \"Generated from Point2 by @foxglove/schemas\", \
-  \"title\": \"Point2\", \
-  \"description\": \"A point representing a position in 2D space\", \
-  \"type\": \"object\", \
-  \"properties\": { \
-    \"x\": { \
-      \"type\": \"number\", \
-      \"description\": \"x coordinate position\" \
-    }, \
-    \"y\": { \
-      \"type\": \"number\", \
-      \"description\": \"y coordinate position\" \
-    } \
-  } \
-}";
+static const char* SCHEMA_TEXT = R"({
+  "$comment": "Generated from Point2 by @foxglove/schemas", 
+  "title": "Point2", 
+  "description": "A point representing a position in 2D space", 
+  "type": "object", 
+  "properties": { 
+    "x": { 
+      "type": "number", 
+      "description": "x coordinate position" 
+    }, 
+    "y": { 
+      "type": "number", 
+      "description": "y coordinate position" 
+    } 
+  } 
+})";
 
 int main(int argc, char** argv) {
   if (argc != 2) {
@@ -51,9 +50,7 @@ int main(int argc, char** argv) {
   // Create a channel and schema for our messages.
   // A message's channel informs the reader which topic those messages were published on.
   // A channel's schema informs the reader of how to interpret the messages' content.
-  // MCAP follows a relational model, where:
-  // * messages have a many-to-one relationship with channels (indicated by their channel_id)
-  // * channels have a many-to-one relationship with schemas (indicated by their schema_id)
+  // A schema can be used by multiple channels, and a channel can be used by multiple messages.
   mcap::ChannelId channelId;
   {
     mcap::Schema schema(SCHEMA_NAME, "jsonschema", SCHEMA_TEXT);
