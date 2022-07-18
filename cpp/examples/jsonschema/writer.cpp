@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
     }
   }
   // Create a channel and schema for our messages.
-  // A message's channel informs the reader on the topic those messages were published on.
+  // A message's channel informs the reader which topic those messages were published on.
   // A channel's schema informs the reader of how to interpret the messages' content.
   // MCAP follows a relational model, where:
   // * messages have a many-to-one relationship with channels (indicated by their channel_id)
