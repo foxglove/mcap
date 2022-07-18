@@ -1,4 +1,5 @@
 #!/bin/bash
+# Runs the built examples as a smoke test.
 set -e
 
 proto_mcap_filepath=/tmp/example_out.mcap

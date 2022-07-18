@@ -1,5 +1,7 @@
 // Example code for reading Protobuf foxglove.PointCloud messages from an MCAP file using generated
 // protobuf headers.
+// Try it out by generating some PointCloud messages with the protobuf writer example,
+// and running this executable with the resulting MCAP file.
 #define MCAP_IMPLEMENTATION
 #include "foxglove/PointCloud.pb.h"
 #include "mcap/reader.hpp"

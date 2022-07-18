@@ -3,7 +3,7 @@ default: build
 .PHONY: build
 build:
 	docker build -t mcap_cpp -f dev.Dockerfile .
-	docker run -t --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp
+	docker run -t --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp mcap_cpp
 
 .PHONE: build-host
 build-host:
@@ -19,16 +19,16 @@ clean:
 .PHONY: format-check
 format-check:
 	docker build -t mcap_cpp -f dev.Dockerfile .
-	docker run -t --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp python3 scripts/format.py /src
+	docker run -t --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp mcap_cpp python3 scripts/format.py /mcap/cpp
 
 .PHONY: format-fix
 format-fix:
 	docker build -t mcap_cpp -f dev.Dockerfile .
-	docker run -t --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp python3 scripts/format.py --fix /src
+	docker run -t --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp mcap_cpp python3 scripts/format.py --fix /mcap/cpp
 
 .PHONY: bench
 bench:
-	docker run -t --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp ./bench/build/Release/bin/bench-tests
+	docker run -t --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp mcap_cpp ./bench/build/Release/bin/bench-tests
 
 .PHONY: bench-host
 bench-host:
@@ -36,7 +36,7 @@ bench-host:
 
 .PHONY: test
 test:
-	docker run -t --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp ./test/build/Debug/bin/unit-tests
+	docker run -t --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp mcap_cpp ./test/build/Debug/bin/unit-tests
 
 .PHONY: test-host
 test-host:
@@ -48,7 +48,11 @@ hdoc-build:
 
 .PHONY: run-examples
 run-examples:
-	docker run -t --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp ./run_examples.sh
+	docker run -t --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp mcap_cpp ./run_examples.sh
+
+.PHONY: run-examples-host
+run-examples:
+	./run_examples.sh
 
 .PHONY: ci
 ci: hdoc-build
@@ -64,3 +68,8 @@ ci-docs: hdoc-build
 ci-format-check: hdoc-build
 	docker build -t mcap_cpp -f ci.Dockerfile --build-arg IMAGE=ubuntu:focal --build-arg CC=clang-13 --build-arg CXX=clang++-13 .
 	docker run -t --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp mcap_cpp python3 scripts/format.py .
+
+.PHONY: dev-shell
+dev-shell:
+	docker build -t mcap_cpp -f ci.Dockerfile --build-arg IMAGE=ubuntu:focal --build-arg CC=clang-13 --build-arg CXX=clang++-13 .
+	docker run -it --rm --name mcap_cpp -v $(CURDIR):/mcap/cpp mcap_cpp /bin/bash

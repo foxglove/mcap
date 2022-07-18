@@ -12,6 +12,27 @@
 
 namespace gp = google::protobuf;
 
+// Loads the FileDescriptorSet from a protobuf schema definition into a SimpleDescriptorDatabase.
+bool LoadSchema(const mcap::SchemaPtr schema, gp::SimpleDescriptorDatabase* protoDb) {
+  gp::FileDescriptorSet fdSet;
+  size_t size = schema->data.size();
+  if (!fdSet.ParseFromArray(static_cast<const void*>(&(schema->data[0])), size)) {
+    std::cerr << "failed to parse schema data" << std::endl;
+    return false;
+  }
+  gp::FileDescriptorProto unused;
+  for (int i = 0; i < fdSet.file_size(); ++i) {
+    const auto& file = fdSet.file(i);
+    if (!protoDb->FindFileByName(file.name(), &unused)) {
+      if (!protoDb->Add(file)) {
+        std::cerr << "failed to add definition " << file.name() << "to protoDB" << std::endl;
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 int main(int argc, char** argv) {
   if (argc != 2) {
     std::cerr << "Usage: " << argv[0] << " <input.mcap>" << std::endl;
@@ -41,32 +62,26 @@ int main(int argc, char** argv) {
     if (it->schema->encoding != "protobuf") {
       continue;
     }
+    if (it->channel->messageEncoding != "protobuf") {
+      std::cerr << "expected channel with ID " << it->channel->id << " and schema ID "
+                << it->schema->id << "to use message encoding 'protobuf', but message encoding is "
+                << it->channel->messageEncoding << std::endl;
+      reader.close();
+      return 1;
+    }
+    const gp::Descriptor* descriptor = protoPool.FindMessageTypeByName(it->schema->name);
     // If the proto descriptor is not yet loaded, load it.
-    if (protoPool.FindMessageTypeByName(it->schema->name) == nullptr) {
-      gp::FileDescriptorSet fdSet;
-      size_t size = it->schema->data.size();
-      if (!fdSet.ParseFromArray(static_cast<const void*>(&(it->schema->data[0])), size)) {
-        std::cerr << "failed to parse schema data" << std::endl;
+    if (descriptor == nullptr) {
+      if (!LoadSchema(it->schema, &protoDb)) {
         reader.close();
         return 1;
       }
-      gp::FileDescriptorProto unused;
-      for (int i = 0; i < fdSet.file_size(); ++i) {
-        const auto& file = fdSet.file(i);
-        if (!protoDb.FindFileByName(file.name(), &unused)) {
-          if (!protoDb.Add(file)) {
-            std::cerr << "failed to add definition " << file.name() << "to protoDB" << std::endl;
-            reader.close();
-            return 1;
-          }
-        }
+      descriptor = protoPool.FindMessageTypeByName(it->schema->name);
+      if (descriptor == nullptr) {
+        std::cerr << "failed to find descriptor after loading pool" << std::endl;
+        reader.close();
+        return 1;
       }
-    }
-    auto descriptor = protoPool.FindMessageTypeByName(it->schema->name);
-    if (descriptor == nullptr) {
-      std::cerr << "failed to find descriptor after loading pool" << std::endl;
-      reader.close();
-      return 1;
     }
     gp::Message* message = protoFactory.GetPrototype(descriptor)->New();
     if (!message->ParseFromArray(static_cast<const void*>(it->message.data),
