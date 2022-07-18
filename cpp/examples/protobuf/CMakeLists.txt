@@ -33,8 +33,10 @@ target_compile_options(pointcloud_proto_lib PUBLIC -Wno-error=unused-parameter)
 add_executable(example_protobuf_writer writer.cpp)
 target_link_libraries(example_protobuf_writer ${CONAN_LIBS} pointcloud_proto_lib)
 
-# NOTE: reader does not depend on pointcloud_proto_lib because it reads definitions
-# dynamically out of the MCAP file.
-add_executable(example_protobuf_reader reader.cpp)
-target_link_libraries(example_protobuf_reader ${CONAN_LIBS} ${Protobuf_LIBRARIES})
-target_compile_options(example_protobuf_reader PUBLIC -Wno-error=unused-parameter)
+add_executable(example_protobuf_dynamic_reader dynamic_reader.cpp)
+target_link_libraries(example_protobuf_dynamic_reader ${CONAN_LIBS} ${Protobuf_LIBRARIES})
+target_compile_options(example_protobuf_dynamic_reader PUBLIC -Wno-error=unused-parameter)
+
+add_executable(example_protobuf_static_reader static_reader.cpp)
+target_link_libraries(example_protobuf_static_reader ${CONAN_LIBS} pointcloud_proto_lib)
+target_compile_options(example_protobuf_static_reader PUBLIC -Wno-error=unused-parameter)

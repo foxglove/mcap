@@ -3,11 +3,10 @@
 // Try it out by generating some PointCloud messages with the protobuf writer example,
 // and running this executable with the resulting MCAP file.
 #define MCAP_IMPLEMENTATION
-#include "mcap/reader.hpp"
-
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/dynamic_message.h>
 
+#include "mcap/reader.hpp"
 #include <functional>
 #include <unordered_set>
 #include <vector>
@@ -101,7 +100,7 @@ int main(int argc, char** argv) {
   gp::DescriptorPool protoPool;
   gp::DynamicMessageFactory protoFactory(&protoPool);
 
-  std::cout << "topic\ttype\ttimestamp\tfields" << std::endl;
+  std::cout << "topic\t\ttype\t\t\ttimestamp\t\tfields" << std::endl;
 
   for (auto it = messageView.begin(); it != messageView.end(); it++) {
     // skip any non-protobuf-encoded messages.
