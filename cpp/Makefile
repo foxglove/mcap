@@ -46,6 +46,10 @@ test-host:
 hdoc-build:
 	docker build -t hdoc -f hdoc.Dockerfile .
 
+.PHONY: run-examples
+run-examples:
+	docker run -t --rm --name mcap_cpp -v $(CURDIR):/src mcap_cpp ./run_examples.sh
+
 .PHONY: ci
 ci: hdoc-build
 	docker build -t mcap_cpp -f ci.Dockerfile --build-arg IMAGE=ubuntu:focal --build-arg CC=clang-13 --build-arg CXX=clang++-13 .

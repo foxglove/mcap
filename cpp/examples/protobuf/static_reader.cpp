@@ -1,7 +1,5 @@
-// Example code for reading Protobuf messages from an MCAP file. Uses the proto definition
-// from within the MCAP, with no dependency on generated headers.
-// Try it out by generating some PointCloud messages with the protobuf writer example,
-// and running this executable with the resulting MCAP file.
+// Example code for reading Protobuf foxglove.PointCloud messages from an MCAP file using generated
+// protobuf headers.
 #define MCAP_IMPLEMENTATION
 #include "foxglove/PointCloud.pb.h"
 #include "mcap/reader.hpp"
@@ -38,6 +36,7 @@ int main(int argc, char** argv) {
       std::cerr << "could not parse pointcloud message" << std::endl;
       return 1;
     }
+    // Read a field out from the message, to prove that we can.
     std::cout << it->channel->topic << "\t(" << it->schema->name << ")\t[" << it->message.logTime
               << "]:\t{ frame_id: " << pointCloud.frame_id() << " }" << std::endl;
   }
