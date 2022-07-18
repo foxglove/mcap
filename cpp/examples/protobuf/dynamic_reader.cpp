@@ -4,80 +4,13 @@
 // and running this executable with the resulting MCAP file.
 #define MCAP_IMPLEMENTATION
 #include <google/protobuf/descriptor.pb.h>
+#include <google/protobuf/descriptor_database.h>
 #include <google/protobuf/dynamic_message.h>
 
 #include "mcap/reader.hpp"
-#include <functional>
-#include <unordered_set>
 #include <vector>
 
 namespace gp = google::protobuf;
-
-bool WriteFileDescriptorsToPool(const gp::FileDescriptorSet* fdSet, gp::DescriptorPool* pool) {
-  // The FileDescriptorSet structure contains a repeated field of FileDescriptorProto instances.
-  // Adding these to the DescriptorPool should be as simple as calling pool->BuildFile,
-  // however BuildFile fails if any of a FileDescriptorProto's dependencies have not already been
-  // added.
-  // Therefore, do a topological sort first to put the FileDescriptorProtos in dependency order.
-  // we use the technique described here:
-  // https://en.wikipedia.org/wiki/Topological_sorting#Depth-first_search
-  std::vector<const gp::FileDescriptorProto*> sorted;
-  std::unordered_set<std::string> marked;
-  std::unordered_set<std::string> added;
-
-  std::function<bool(const gp::FileDescriptorProto*)> visit;
-  visit = [&](const gp::FileDescriptorProto* fd) {
-    if (added.find(fd->name()) != added.end()) {
-      return true;
-    }
-    if (marked.find(fd->name()) != marked.end()) {
-      std::cerr << "encountered circular descriptor dependency including name " << fd->name()
-                << std::endl;
-      return false;
-    }
-    marked.insert(fd->name());
-
-    for (int i = 0; i < fd->dependency_size(); ++i) {
-      const auto dependency_name = fd->dependency(i);
-      const gp::FileDescriptorProto* dependencyProto = nullptr;
-      for (int j = 0; j < fdSet->file_size(); ++j) {
-        if (fdSet->file(j).name() == dependency_name) {
-          dependencyProto = &fdSet->file(j);
-        }
-      }
-      if (dependencyProto == nullptr) {
-        std::cerr << "could not find proto descriptor by name: " << dependency_name << std::endl;
-        return false;
-      }
-      if (!visit(dependencyProto)) {
-        return false;
-      }
-    }
-    sorted.push_back(fd);
-    marked.erase(fd->name());
-    added.insert(fd->name());
-    return true;
-  };
-
-  while (sorted.size() < size_t(fdSet->file_size())) {
-    for (int i = 0; i < fdSet->file_size(); ++i) {
-      const gp::FileDescriptorProto* next = &fdSet->file(i);
-      if (marked.find(next->name()) == marked.end()) {
-        if (!visit(next)) {
-          return false;
-        }
-      }
-    }
-  }
-  for (const auto* descriptorProto : sorted) {
-    if (pool->BuildFile(*descriptorProto) == nullptr) {
-      std::cerr << "failed to insert descriptor into pool: " << descriptorProto->name()
-                << std::endl;
-      return false;
-    }
-  }
-  return true;
-}
 
 int main(int argc, char** argv) {
   if (argc != 2) {
@@ -97,7 +30,8 @@ int main(int argc, char** argv) {
   }
 
   auto messageView = reader.readMessages();
-  gp::DescriptorPool protoPool;
+  gp::SimpleDescriptorDatabase protoDb;
+  gp::DescriptorPool protoPool(&protoDb);
   gp::DynamicMessageFactory protoFactory(&protoPool);
 
   std::cout << "topic\t\ttype\t\t\ttimestamp\t\tfields" << std::endl;
@@ -116,11 +50,16 @@ int main(int argc, char** argv) {
         reader.close();
         return 1;
       }
-      if (!WriteFileDescriptorsToPool(&fdSet, &protoPool)) {
-        std::cerr << "failed to insert file descriptor set for type " << it->schema->name
-                  << " into descriptor pool" << std::endl;
-        reader.close();
-        return 1;
+      gp::FileDescriptorProto unused;
+      for (int i = 0; i < fdSet.file_size(); ++i) {
+        const auto& file = fdSet.file(i);
+        if (!protoDb.FindFileByName(file.name(), &unused)) {
+          if (!protoDb.Add(file)) {
+            std::cerr << "failed to add definition " << file.name() << "to protoDB" << std::endl;
+            reader.close();
+            return 1;
+          }
+        }
       }
     }
     auto descriptor = protoPool.FindMessageTypeByName(it->schema->name);
