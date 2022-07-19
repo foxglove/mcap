@@ -34,6 +34,10 @@ RUN python3 -m pip install mcap
 
 WORKDIR /mcap/ros2
 
-COPY run.sh run.sh
+COPY py_mcap_demo py_mcap_demo
 
-ENTRYPOINT ["/bin/bash", "run.sh"]
+RUN . /opt/ros/humble/setup.sh && colcon build
+
+COPY entry.sh entry.sh
+
+ENTRYPOINT ["/bin/bash", "entry.sh"]

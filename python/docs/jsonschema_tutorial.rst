@@ -103,9 +103,7 @@ cloud.
     :end-before: # tutorial-write-channel-end
     :dedent:
 
-Next, we write our messages. If we only wrote one message, our MCAP file would be zero duration.
-To address that, let's write our point cloud message a few times with successive
-timestamps.
+Next, we write our message.
 
 .. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-write-message-start
