@@ -15,8 +15,7 @@ namespace gp = google::protobuf;
 // Loads the FileDescriptorSet from a protobuf schema definition into a SimpleDescriptorDatabase.
 bool LoadSchema(const mcap::SchemaPtr schema, gp::SimpleDescriptorDatabase* protoDb) {
   gp::FileDescriptorSet fdSet;
-  size_t size = schema->data.size();
-  if (!fdSet.ParseFromArray(static_cast<const void*>(&(schema->data[0])), size)) {
+  if (!fdSet.ParseFromArray(static_cast<const void*>(schema->data.data()), schema->data.size())) {
     std::cerr << "failed to parse schema data" << std::endl;
     return false;
   }
