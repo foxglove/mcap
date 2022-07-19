@@ -14,10 +14,12 @@ ignorePaths:
   - dist
   - yarn-error.log
   - "*.Dockerfile"
+  - Dockerfile
   - "*.mcap"
   - "*.egg-info"
   - "*.patch"
   - package.json
+  - package.xml
 
 words:
   - callerid

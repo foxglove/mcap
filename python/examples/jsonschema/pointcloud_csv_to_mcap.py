@@ -96,16 +96,18 @@ def main():
         )
         # tutorial-write-channel-end
         # tutorial-write-message-start
-        pointcloud["timestamp"] = {
-            "sec": int(base_timestamp.timestamp()),
-            "nsec": base_timestamp.microsecond * 1000,
-        }
-        writer.add_message(
-            channel_id,
-            log_time=int(base_timestamp.timestamp() * 1e9),
-            data=json.dumps(pointcloud).encode("utf-8"),
-            publish_time=int(base_timestamp.timestamp() * 1e9),
-        )
+        for i in range(10):
+            frame_timestamp = base_timestamp + datetime.timedelta(seconds=(i / 10.0))
+            pointcloud["timestamp"] = {
+                "sec": int(frame_timestamp.timestamp()),
+                "nsec": frame_timestamp.microsecond * 1000,
+            }
+            writer.add_message(
+                channel_id,
+                log_time=int(frame_timestamp.timestamp() * 1e9),
+                data=json.dumps(pointcloud).encode("utf-8"),
+                publish_time=int(frame_timestamp.timestamp() * 1e9),
+            )
         # tutorial-write-message-end
         # tutorial-finish-start
         writer.finish()
