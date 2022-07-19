@@ -170,6 +170,7 @@ jobs:
       - run: make ci-format-check
       - run: make ci
       - run: make test-host
+      - run: make run-examples-host
 
   typescript:
     runs-on: ubuntu-latest
