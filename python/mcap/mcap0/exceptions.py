@@ -1,11 +1,5 @@
-class McapError(Exception):
-    pass
+from . import warn_mcap0_deprecated
 
+warn_mcap0_deprecated()
 
-class InvalidMagic(McapError):
-    def __init__(self):
-        super().__init__("not a valid MCAP file")
-
-
-class EndOfFile(McapError):
-    pass
+from mcap.exceptions import *
