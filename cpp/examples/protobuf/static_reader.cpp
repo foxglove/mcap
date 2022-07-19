@@ -32,6 +32,12 @@ int main(int argc, char** argv) {
     if ((it->schema->encoding != "protobuf") || it->schema->name != "foxglove.PointCloud") {
       continue;
     }
+    if (it->channel->messageEncoding != "protobuf") {
+      std::cerr << "expected message encoding 'protobuf', got " << it->channel->messageEncoding
+                << std::endl;
+      reader.close();
+      return 1;
+    }
     foxglove::PointCloud pointCloud;
     if (!pointCloud.ParseFromArray(static_cast<const void*>(it->message.data),
                                    it->message.dataSize)) {
