@@ -36,4 +36,4 @@ WORKDIR /mcap/ros2
 
 COPY run.sh run.sh
 
-CMD = ["/bin/bash", "run.sh"]
+ENTRYPOINT ["/bin/bash", "run.sh"]
