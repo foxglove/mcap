@@ -89,11 +89,6 @@ Let's open a file where we'll write our output MCAP data. First, we'll need to w
     :end-before: # tutorial-write-header-end
     :dedent:
 
-.. note::
-  We can choose whatever name we want for ``library``. We're not using one of the
-  `MCAP well-known profiles <https://github.com/foxglove/mcap/blob/main/docs/specification/appendix.md#well-known-profiles>`_,
-  so we use our own custom profile name.
-
 Next, create a "channel" of messages to contain our point cloud. The schema
 name and content informs Foxglove Studio that it can parse and display this message as a point
 cloud.
@@ -128,8 +123,8 @@ check this with the `MCAP CLI tool <https://github.com/foxglove/mcap/tree/main/g
     $ brew install mcap
     ...
     $ mcap info output.mcap
-    library: my-excellent-library
-    profile: x-jsonschema
+    library: mcap python 0.0.11
+    profile:
     messages: 10
     duration: 900ms
     start: 2011-11-04T01:32:10.881030912+11:00 (1320330730.881030912)
