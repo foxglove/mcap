@@ -6,6 +6,6 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
-addopts = "-vv --color=yes"
+addopts = "-vv --color=yes --ignore=examples/ros2"
 log_cli = true
 xfail_strict = true
