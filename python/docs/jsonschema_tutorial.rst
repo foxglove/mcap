@@ -69,6 +69,8 @@ Since we will only have one coordinate frame in our MCAP file, we can choose any
     :end-before: # tutorial-pose-frame-id-end
     :dedent:
 
+We'll leave the ``timestamp`` field for later, when we write the messages into the MCAP file.
+
 Writing the MCAP file
 ---------------------
 
@@ -96,7 +98,9 @@ cloud.
     :end-before: # tutorial-write-channel-end
     :dedent:
 
-Next, we write our message.
+Next, we write our messages. If we only wrote one message, our MCAP file would be zero duration.
+To address that, let's write our point cloud message a few times with successive
+timestamps.
 
 .. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-write-message-start
