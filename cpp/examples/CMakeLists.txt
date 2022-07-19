@@ -20,3 +20,4 @@ add_executable(mcapdump mcapdump.cpp)
 target_link_libraries(mcapdump ${CONAN_LIBS})
 
 add_subdirectory(protobuf)
+add_subdirectory(jsonschema)
