@@ -20,12 +20,20 @@ RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/r
 
 RUN apt-get update && \
   apt-get install -y --no-install-recommends --no-install-suggests \
+  build-essential \
   ros-humble-ros-base \
   ros-humble-ros2bag \
   ros-humble-rosbag2-transport \
   ros-humble-rosbag2-storage-mcap \
   python3 \
   python3-pip \
+  python3-colcon-common-extensions \
   && rm -rf /var/lib/apt/lists/*
 
+RUN python3 -m pip install mcap
+
 WORKDIR /mcap/ros2
+
+COPY run.sh run.sh
+
+CMD = ["/bin/bash", "run.sh"]
