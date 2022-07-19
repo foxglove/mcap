@@ -27,8 +27,11 @@ from .records import (
     Statistics,
     SummaryOffset,
 )
+from .__version__ import __version__
 
 MCAP0_MAGIC = struct.pack("<8B", 137, 77, 67, 65, 80, 48, 13, 10)
+
+LIBRARY_IDENTIFIER = f"mcap python {__version__}"
 
 
 class CompressionType(Enum):
@@ -373,7 +376,7 @@ class Writer:
             schema.write(self.__record_builder)
         return schema_id
 
-    def start(self, profile: str, library: str):
+    def start(self, profile: str = "", library: str = LIBRARY_IDENTIFIER):
         """
         Starts writing to the output stream.
 

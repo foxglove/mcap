@@ -78,7 +78,7 @@ def main():
     # tutorial-write-header-start
     with open(args.output, "wb") as f:
         writer = Writer(f)
-        writer.start("x-jsonschema", library="my-excellent-library")
+        writer.start()
         # tutorial-write-header-end
 
         # tutorial-write-channel-start
