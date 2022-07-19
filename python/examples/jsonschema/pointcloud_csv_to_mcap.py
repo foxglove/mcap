@@ -73,6 +73,10 @@ def main():
         "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
     }
     pointcloud["frame_id"] = "lidar"
+    pointcloud["timestamp"] = {
+        "sec": int(base_timestamp.timestamp()),
+        "nsec": base_timestamp.microsecond * 1000,
+    }
     # tutorial-pose-frame-id-end
 
     # tutorial-write-header-start
@@ -96,18 +100,12 @@ def main():
         )
         # tutorial-write-channel-end
         # tutorial-write-message-start
-        for i in range(10):
-            frame_timestamp = base_timestamp + datetime.timedelta(seconds=(i / 10.0))
-            pointcloud["timestamp"] = {
-                "sec": int(frame_timestamp.timestamp()),
-                "nsec": frame_timestamp.microsecond * 1000,
-            }
-            writer.add_message(
-                channel_id,
-                log_time=int(frame_timestamp.timestamp() * 1e9),
-                data=json.dumps(pointcloud).encode("utf-8"),
-                publish_time=int(frame_timestamp.timestamp() * 1e9),
-            )
+        writer.add_message(
+            channel_id,
+            log_time=int(base_timestamp.timestamp() * 1e9),
+            data=json.dumps(pointcloud).encode("utf-8"),
+            publish_time=int(base_timestamp.timestamp() * 1e9),
+        )
         # tutorial-write-message-end
         # tutorial-finish-start
         writer.finish()

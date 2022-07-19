@@ -36,14 +36,14 @@ it knows how to display. These are available for a variety of serializations
 JSON ``PointCloud`` instance, using the provided 
 `schema <https://github.com/foxglove/schemas/blob/main/schemas/jsonschema/PointCloud.json>`_.
 
-Let's start with encoding the point data. The schema expects a single ``base64``-encoded buffer
-containing all point data, and some metadata describing how to decode it.
+Let's start with encoding the point data. In addition to fields like ``timestamp`` and ``point_stride``,
+the foxglove.PointCloud schema expects a ``data`` field that contains a single base64-encoded buffer
+with all point data, as well as some metadata (``fields``) describing how to decode it.
 
-The CSV data contains one timestamp and four floating-point data fields per point.
-``foxglove.PointCloud`` uses one timestamp for the whole point cloud, so we'll use the first
-point's timestamp. We'll pack each field as a four byte single-precision little-endian float.
+Since foxglove.PointCloud requires a single timestamp, let's get it from the first point we see in
+our file. Then, we'll pack each field as a four byte single-precision little-endian float.
 
-We start by describing our data layout in the ``foxglove.PointCloud`` message:
+Let's start by describing the layout of our data in a foxglove.PointCloud message:
 
 .. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-point-layout-start
@@ -68,8 +68,6 @@ Since we will only have one coordinate frame in our MCAP file, we can choose any
     :start-after: # tutorial-pose-frame-id-start
     :end-before: # tutorial-pose-frame-id-end
     :dedent:
-
-We'll leave the ``timestamp`` field for later, when we write the messages into the MCAP file.
 
 Writing the MCAP file
 ---------------------
@@ -98,9 +96,7 @@ cloud.
     :end-before: # tutorial-write-channel-end
     :dedent:
 
-Next, we write our messages. If we only wrote one message, our MCAP file would be zero duration.
-To address that, let's write our point cloud message a few times with successive
-timestamps.
+Next, we write our message.
 
 .. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-write-message-start
@@ -132,11 +128,11 @@ check this with the `MCAP CLI tool <https://github.com/foxglove/mcap/tree/main/g
     compression:
             zstd: [1/1 chunks] (93.43%)
     channels:
-            (1) /pointcloud  10 msgs (11.11 Hz)   : foxglove.PointCloud [jsonschema]
+            (1) pointcloud  10 msgs (11.11 Hz)   : foxglove.PointCloud [jsonschema]
     attachments: 0
     $ mcap doctor output.mcap
     Examining output.mcap
 
 View your point cloud in `Foxglove Studio <https://studio.foxglove.dev>`_ by
 dragging the MCAP file into the window. Add a `3D Panel <https://foxglove.dev/docs/studio/panels/3d>`_
-and enable the **/pointcloud** topic to see the result!
+and enable the **pointcloud** topic to see the result!
