@@ -114,6 +114,8 @@ overrides:
       - rglob
       - uncompress
       - ivar
+      - rclpy
+      - rosidl
 
   - filename: "**/*.swift"
     ignoreRegExpList:
