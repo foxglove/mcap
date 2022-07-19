@@ -5,7 +5,7 @@ This library provides classes for reading and writing the MCAP file format.
 ## Reader Example
 
 ```python
-from mcap.mcap0.reader import make_reader
+from mcap.reader import make_reader
 
 with open("example.mcap", "rb") as f:
     reader = make_reader(f)
@@ -18,13 +18,13 @@ with open("example.mcap", "rb") as f:
 ```python
 from time import time_ns
 import json
-from mcap.mcap0.writer import Writer
+from mcap.writer import Writer
 
 stream = open("example.mcap", "wb")
 writer = Writer(stream)
 
 # The library argument helps identify what tool wrote the file.
-writer.start(profile="x-custom", library="my-writer-v1")
+writer.start()
 
 schema_id = writer.register_schema(
     name="sample",
