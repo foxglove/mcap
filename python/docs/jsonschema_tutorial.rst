@@ -1,13 +1,13 @@
-*************************************************
-Tutorial: Converting CSV to MCAP with JSON Schema
-*************************************************
+******************************************
+Tutorial: Converting CSV to MCAP with JSON
+******************************************
 
 Introduction
 ------------
 
 In this tutorial we'll take a publicly available dataset and demonstrate how to convert it from a
-CSV format to an MCAP file. We'll use Python and `JSON Schema <https://json-schema.org/>`_ to
-quickly create messages without requiring extra serialization libraries or generated code.
+CSV format to an MCAP file. We'll use Python and JSON to quickly create messages without requiring
+extra serialization libraries or generated code.
 
 You can run all the code in this tutorial or reference it
 `in the MCAP repo <https://github.com/foxglove/mcap/tree/main/python/examples/jsonschema/pointcloud_csv_to_mcap.py>`_.
@@ -69,8 +69,6 @@ Since we will only have one coordinate frame in our MCAP file, we can choose any
     :end-before: # tutorial-pose-frame-id-end
     :dedent:
 
-We'll leave the ``timestamp`` field for later, when we write the messages into the MCAP file.
-
 Writing the MCAP file
 ---------------------
 
@@ -89,11 +87,6 @@ Let's open a file where we'll write our output MCAP data. First, we'll need to w
     :end-before: # tutorial-write-header-end
     :dedent:
 
-.. note::
-  We can choose whatever name we want for ``library``. We're not using one of the
-  `MCAP well-known profiles <https://github.com/foxglove/mcap/blob/main/docs/specification/appendix.md#well-known-profiles>`_,
-  so we use our own custom profile name.
-
 Next, create a "channel" of messages to contain our point cloud. The schema
 name and content informs Foxglove Studio that it can parse and display this message as a point
 cloud.
@@ -103,9 +96,7 @@ cloud.
     :end-before: # tutorial-write-channel-end
     :dedent:
 
-Next, we write our messages. If we only wrote one message, our MCAP file would be zero duration.
-To address that, let's write our point cloud message a few times with successive
-timestamps.
+Next, we write our message.
 
 .. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-write-message-start
@@ -121,27 +112,38 @@ in the output file.
     :dedent:
 
 That's it! We now have a valid MCAP file with 10 point cloud messages. We can
-check this with the `MCAP CLI tool <https://github.com/foxglove/mcap/tree/main/go/cli/mcap>`_:
+check this with the `MCAP CLI tool <https://github.com/foxglove/mcap/tree/main/go/cli/mcap>`_.
+First, install it with Homebrew on Mac (or download a release binary from
+`GitHub <https://github.com/foxglove/mcap/releases>`):
 
 .. code-block:: bash
 
-    $ brew install mcap
-    ...
-    $ mcap info output.mcap
-    library: my-excellent-library
-    profile: x-jsonschema
-    messages: 10
-    duration: 900ms
-    start: 2011-11-04T01:32:10.881030912+11:00 (1320330730.881030912)
-    end: 2011-11-04T01:32:11.781030912+11:00 (1320330731.781030912)
-    compression:
-            zstd: [1/1 chunks] (93.43%)
-    channels:
-            (1) /pointcloud  10 msgs (11.11 Hz)   : foxglove.PointCloud [jsonschema]
-    attachments: 0
-    $ mcap doctor output.mcap
-    Examining output.mcap
+  $ brew install mcap
 
-View your point cloud in `Foxglove Studio <https://studio.foxglove.dev>`_ by
-dragging the MCAP file into the window. Add a `3D Panel <https://foxglove.dev/docs/studio/panels/3d>`_
-and enable the **/pointcloud** topic to see the result!
+Run the following commands to summarize your file’s contents and to verify that it has no issues:
+
+.. code-block:: bash
+
+  $ mcap info output.mcap
+  library: python mcap 0.0.11
+  profile:
+  messages: 1
+  duration: 0s
+  start: 2011-11-04T01:36:05.987339008+11:00 (1320330965.987339008)
+  end: 2011-11-04T01:36:05.987339008+11:00 (1320330965.987339008)
+  compression:
+    zstd: [1/1 chunks] (48.09%)
+  channels:
+    (1) pointcloud  1 msgs (+Inf Hz)   : foxglove.PointCloud [jsonschema]
+  attachments: 0
+  $ mcap doctor output.mcap
+  Examining output.mcap
+
+For a more visual representation of this data, let's use Foxglove Studio. Open either the
+`desktop <https://foxglove.dev/download>`_ or `web app <https://studio.foxglove.dev>`_, and add a
+`RawMessages <https://foxglove.dev/docs/studio/panels/raw-messages>`_ and a
+ `3D (Beta) <https://foxglove.dev/docs/studio/panels/3d-beta>`_ panel to your layout.
+
+Then, simply drag and drop your output MCAP file into the app window to start playing the data. Make
+sure to enable the ``pointcloud`` topic in the 3D (Beta) panel to display the point cloud in 3D
+space.
