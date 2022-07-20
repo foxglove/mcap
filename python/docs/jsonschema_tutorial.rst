@@ -114,7 +114,7 @@ in the output file.
 That's it! We now have a valid MCAP file with 10 point cloud messages. We can
 check this with the `MCAP CLI tool <https://github.com/foxglove/mcap/tree/main/go/cli/mcap>`_.
 First, install it with Homebrew on Mac (or download a release binary from
-`GitHub <https://github.com/foxglove/mcap/releases>`):
+`GitHub <https://github.com/foxglove/mcap/releases>`_):
 
 .. code-block:: bash
 
@@ -142,7 +142,7 @@ Run the following commands to summarize your file’s contents and to verify tha
 For a more visual representation of this data, let's use Foxglove Studio. Open either the
 `desktop <https://foxglove.dev/download>`_ or `web app <https://studio.foxglove.dev>`_, and add a
 `RawMessages <https://foxglove.dev/docs/studio/panels/raw-messages>`_ and a
- `3D (Beta) <https://foxglove.dev/docs/studio/panels/3d-beta>`_ panel to your layout.
+`3D (Beta) <https://foxglove.dev/docs/studio/panels/3d-beta>`_ panel to your layout.
 
 Then, simply drag and drop your output MCAP file into the app window to start playing the data. Make
 sure to enable the ``pointcloud`` topic in the 3D (Beta) panel to display the point cloud in 3D

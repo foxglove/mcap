@@ -66,6 +66,7 @@ def _chunks_matching_topics(
     end_time: Optional[float],
 ) -> List[ChunkIndex]:
     """returns a list of ChunkIndex records that include one or more messages of the given topics.
+
     :param summary: the summary of this MCAP.
     :param topics: topics to match. If None, all chunk indices in the summary are returned.
     :param start_time: if not None, messages from before this unix timestamp are not included.
@@ -124,6 +125,7 @@ class SeekingReader(McapReader):
         end_time: Optional[int] = None,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
         """iterates through the messages in an MCAP.
+
         :param topics: if not None, only messages from these topics will be returned.
         :param start_time: an integer nanosecond timestamp. if provided, messages logged before
             this timestamp are not included.
@@ -224,6 +226,7 @@ class NonSeekingReader(McapReader):
         end_time: Optional[int] = None,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
         """iterates through the messages in an MCAP.
+
         :param topics: if not None, only messages from these topics will be returned.
         :param start_time: an integer nanosecond timestamp. if provided, messages logged before
             this timestamp are not included.
