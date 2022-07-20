@@ -20,6 +20,8 @@ ignorePaths:
   - "*.patch"
   - package.json
   - package.xml
+  - "*_pb2.py"
+  - Pipfile*
 
 words:
   - callerid
@@ -33,6 +35,7 @@ words:
   - flatbuffer
   - flatc
   - fwrite
+  - genpy
   - golangci
   - jsonschema
   - kaitai
@@ -97,6 +100,7 @@ overrides:
       - setuptools
       - addopts
       - xfail
+      - Pipfile
 
   - filename: "python/**/*.rst"
     words:

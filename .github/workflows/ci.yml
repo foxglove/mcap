@@ -89,7 +89,7 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: 3.7
-      - run: cd python && pip install .
+      - run: cd python && pip install -e mcap
       - run: yarn install --frozen-lockfile
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner py-
@@ -222,13 +222,9 @@ jobs:
           python-version: 3.7
           cache: pipenv
       - run: pip install pipenv
-      - run: pipenv install --dev --deploy
-      - run: pipenv run black --check --diff --color .
-      - run: pipenv run python -m flake8 mcap tests
-      - run: pipenv run python -m pytest
-      - run: pipenv run pyright mcap tests
-      - run: pipenv run python -m build
-
+      - run: make lint
+      - run: make test
+      - run: make build
       - name: Publish to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         if: ${{ !github.event.pull_request.head.repo.fork }}
