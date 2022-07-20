@@ -22,7 +22,7 @@ This is a collection of CSV files containing point clouds collected from objects
 
 Decoding the data is pretty simple, thanks to Python's built-in ``csv`` and ``datetime`` libraries:
 
-.. literalinclude:: ../mcap/examples/jsonschema/pointcloud_csv_to_mcap.py
+.. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-csv-decode-start
     :end-before: # tutorial-csv-decode-end
 
@@ -45,14 +45,14 @@ point's timestamp. We'll pack each field as a four byte single-precision little-
 
 We start by describing our data layout in the ``foxglove.PointCloud`` message:
 
-.. literalinclude:: ../mcap/examples/jsonschema/pointcloud_csv_to_mcap.py
+.. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-point-layout-start
     :end-before: # tutorial-point-layout-end
     :dedent:
 
 And pack the points using Python's built-in ``struct`` and ``base64`` libraries.
 
-.. literalinclude:: ../mcap/examples/jsonschema/pointcloud_csv_to_mcap.py
+.. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-pack-points-start
     :end-before: # tutorial-pack-points-end
     :dedent:
@@ -64,7 +64,7 @@ from that coordinate frame's center.
 Since we will only have one coordinate frame in our MCAP file, we can choose any string as our
 ``frame_id``, and use the identity pose to place our point cloud in its center.
 
-.. literalinclude:: ../mcap/examples/jsonschema/pointcloud_csv_to_mcap.py
+.. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-pose-frame-id-start
     :end-before: # tutorial-pose-frame-id-end
     :dedent:
@@ -77,14 +77,14 @@ Writing the MCAP file
 Now that the point cloud is built, we can write it into an MCAP file. We'll start with some imports
 from the `Python MCAP library <https://github.com/foxglove/mcap/tree/main/python>`_:
 
-.. literalinclude:: ../mcap/examples/jsonschema/pointcloud_csv_to_mcap.py
+.. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-mcap-imports-start
     :end-before: # tutorial-mcap-imports-end
     :dedent:
 
 Let's open a file where we'll write our output MCAP data. First, we'll need to write our header.
 
-.. literalinclude:: ../mcap/examples/jsonschema/pointcloud_csv_to_mcap.py
+.. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-write-header-start
     :end-before: # tutorial-write-header-end
     :dedent:
@@ -98,7 +98,7 @@ Next, create a "channel" of messages to contain our point cloud. The schema
 name and content informs Foxglove Studio that it can parse and display this message as a point
 cloud.
 
-.. literalinclude:: ../mcap/examples/jsonschema/pointcloud_csv_to_mcap.py
+.. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-write-channel-start
     :end-before: # tutorial-write-channel-end
     :dedent:
@@ -107,7 +107,7 @@ Next, we write our messages. If we only wrote one message, our MCAP file would b
 To address that, let's write our point cloud message a few times with successive
 timestamps.
 
-.. literalinclude:: ../mcap/examples/jsonschema/pointcloud_csv_to_mcap.py
+.. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-write-message-start
     :end-before: # tutorial-write-message-end
     :dedent:
@@ -115,7 +115,7 @@ timestamps.
 Finally, we invoke ``finish()`` on the MCAP writer to include the summary and footer
 in the output file.
 
-.. literalinclude:: ../mcap/examples/jsonschema/pointcloud_csv_to_mcap.py
+.. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-finish-start
     :end-before: # tutorial-finish-end
     :dedent:
