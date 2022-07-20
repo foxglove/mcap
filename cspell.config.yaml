@@ -14,10 +14,12 @@ ignorePaths:
   - dist
   - yarn-error.log
   - "*.Dockerfile"
+  - Dockerfile
   - "*.mcap"
   - "*.egg-info"
   - "*.patch"
   - package.json
+  - package.xml
 
 words:
   - callerid
@@ -112,6 +114,8 @@ overrides:
       - rglob
       - uncompress
       - ivar
+      - rclpy
+      - rosidl
 
   - filename: "**/*.swift"
     ignoreRegExpList:

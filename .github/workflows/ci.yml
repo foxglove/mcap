@@ -366,3 +366,14 @@ jobs:
       - run: ./swiftformat_linux --lint .
       - run: swift build
       - run: swift test
+
+  ros2-example:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python/examples/ros2
+    steps:
+      - uses: actions/checkout@v3
+      - uses: satackey/action-docker-layer-caching@v0.0.11
+        continue-on-error: true
+      - run: make test
