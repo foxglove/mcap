@@ -23,6 +23,7 @@ var (
 	filterIncludeMetadata    bool
 	filterIncludeAttachments bool
 	filterOutputCompression  string
+	filterChunkSize          int64
 )
 
 type filterOpts struct {
@@ -33,6 +34,7 @@ type filterOpts struct {
 	includeMetadata    bool
 	includeAttachments bool
 	compressionFormat  mcap.CompressionFormat
+	chunkSize          int64
 }
 
 func buildFilterOptions() (*filterOpts, error) {
@@ -75,6 +77,7 @@ func buildFilterOptions() (*filterOpts, error) {
 		return nil, err
 	}
 	opts.excludeTopics = excludeTopics
+	opts.chunkSize = filterChunkSize
 	return opts, nil
 }
 
@@ -182,6 +185,8 @@ func filter(
 	}
 	mcapWriter, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Compression: opts.compressionFormat,
+		Chunked:     true,
+		ChunkSize:   opts.chunkSize,
 	})
 	if err != nil {
 		return err
@@ -320,6 +325,7 @@ func init() {
 	filterCmd.PersistentFlags().StringArrayVarP(&filterExcludeTopics, "exclude-topic-regex", "n", []string{}, "messages with topic names matching this regex will be excluded, can be supplied multiple times")
 	filterCmd.PersistentFlags().Uint64VarP(&filterStart, "start-secs", "s", 0, "messages with log times after or equal to this timestamp will be included.")
 	filterCmd.PersistentFlags().Uint64VarP(&filterEnd, "end-secs", "e", 0, "messages with log times before timestamp will be included.")
+	filterCmd.PersistentFlags().Int64VarP(&filterChunkSize, "chunk-size", "", 4*1024*1024, "chunk size of output file")
 	filterCmd.PersistentFlags().BoolVar(&filterIncludeMetadata, "include-metadata", false, "whether to include metadata in the output bag")
 	filterCmd.PersistentFlags().BoolVar(&filterIncludeAttachments, "include-attachments", false, "whether to include attachments in the output mcap")
 	filterCmd.PersistentFlags().StringVar(&filterOutputCompression, "output-compression", "zstd", "compression algorithm to use on output file")
