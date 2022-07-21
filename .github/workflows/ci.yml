@@ -257,10 +257,8 @@ jobs:
 
       - name: Publish mcap to PyPI
         if: |
-          !github.event.pull_request.head.repo.fork && (
-            startsWith(github.ref, 'refs/tags/releases/python/v') ||
-            startsWith(github.ref, 'refs/tags/releases/python-mcap/v')
-          )
+          !github.event.pull_request.head.repo.fork &&
+          startsWith(github.ref, 'refs/tags/releases/python/mcap/v')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
@@ -270,7 +268,7 @@ jobs:
       - name: Publish mcap-protobuf-support to PyPI
         if: |
           !github.event.pull_request.head.repo.fork &&
-          startsWith(github.ref, 'refs/tags/releases/python-mcap-protobuf-support/v')
+          startsWith(github.ref, 'refs/tags/releases/python/mcap-protobuf-support/v')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
@@ -280,7 +278,7 @@ jobs:
       - name: Publish mcap-ros1-support to PyPI
         if: |
           !github.event.pull_request.head.repo.fork &&
-          startsWith(github.ref, 'refs/tags/releases/python-mcap-ros1-support/v')
+          startsWith(github.ref, 'refs/tags/releases/python/mcap-ros1-support/v')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
