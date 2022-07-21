@@ -4,9 +4,9 @@ pipenv:
 
 .PHONY: build
 build: pipenv
-	pipenv run python -m build mcap -o dist
-	pipenv run python -m build mcap-protobuf-support -o dist
-	pipenv run python -m build mcap-ros1-support -o dist
+	pipenv run python -m build mcap
+	pipenv run python -m build mcap-protobuf-support
+	pipenv run python -m build mcap-ros1-support
 
 .PHONY: test
 test: pipenv

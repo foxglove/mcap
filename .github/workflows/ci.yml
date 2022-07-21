@@ -225,24 +225,59 @@ jobs:
       - run: make lint
       - run: make test
       - run: make build
-      - name: Publish to TestPyPI
+      - name: Publish mcap to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         if: ${{ !github.event.pull_request.head.repo.fork }}
-        with:
+        with: &testpypi_with
           user: __token__
           password: ${{ secrets.TESTPYPI_API_TOKEN }}
-          packages_dir: python/dist
+          packages_dir: python/mcap/dist
           repository_url: https://test.pypi.org/legacy/
           skip_existing: true
 
-      - name: Publish to PyPI
-        if: ${{ !github.event.pull_request.head.repo.fork && startsWith(github.ref, 'refs/tags/releases/python/v') }}
+      - name: Publish mcap-protobuf-support to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        if: ${{ !github.event.pull_request.head.repo.fork }}
         with:
+          <<: *testpypi_with
+          packages_dir: python/mcap-protobuf-support/dist
+
+      - name: Publish mcap-ros1-support to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        if: ${{ !github.event.pull_request.head.repo.fork }}
+        with:
+          <<: *testpypi_with
+          packages_dir: python/mcap-ros1-support/dist
+
+      - name: Publish mcap to PyPI
+        if: |
+          !github.event.pull_request.head.repo.fork && (
+            startsWith(github.ref, 'refs/tags/releases/python/v') ||
+            startsWith(github.ref, 'refs/tags/releases/python-mcap/v')
+          )
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with: &pypi_with
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
-          packages_dir: python/dist
+          packages_dir: python/mcap/dist
 
+      - name: Publish mcap-protobuf-support to PyPI
+        if: |
+          !github.event.pull_request.head.repo.fork &&
+          startsWith(github.ref, 'refs/tags/releases/python-mcap-protobuf-support/v')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          <<: *pypi_with
+          packages_dir: python/mcap-protobuf-support/dist
+
+      - name: Publish mcap-ros1-support to PyPI
+        if: |
+          !github.event.pull_request.head.repo.fork &&
+          startsWith(github.ref, 'refs/tags/releases/python-mcap-ros1-support/v')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          <<: *pypi_with
+          packages_dir: python/mcap-ros1-support/dist
   go:
     runs-on: ubuntu-latest
     defaults:
