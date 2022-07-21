@@ -228,7 +228,7 @@ jobs:
       - name: Publish mcap to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         if: ${{ !github.event.pull_request.head.repo.fork }}
-        with: &testpypi_with
+        with:
           user: __token__
           password: ${{ secrets.TESTPYPI_API_TOKEN }}
           packages_dir: python/mcap/dist
@@ -239,14 +239,20 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         if: ${{ !github.event.pull_request.head.repo.fork }}
         with:
-          <<: *testpypi_with
+          user: __token__
+          password: ${{ secrets.TESTPYPI_API_TOKEN }}
+          repository_url: https://test.pypi.org/legacy/
+          skip_existing: true
           packages_dir: python/mcap-protobuf-support/dist
 
       - name: Publish mcap-ros1-support to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         if: ${{ !github.event.pull_request.head.repo.fork }}
         with:
-          <<: *testpypi_with
+          user: __token__
+          password: ${{ secrets.TESTPYPI_API_TOKEN }}
+          repository_url: https://test.pypi.org/legacy/
+          skip_existing: true
           packages_dir: python/mcap-ros1-support/dist
 
       - name: Publish mcap to PyPI
@@ -256,7 +262,7 @@ jobs:
             startsWith(github.ref, 'refs/tags/releases/python-mcap/v')
           )
         uses: pypa/gh-action-pypi-publish@release/v1
-        with: &pypi_with
+        with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
           packages_dir: python/mcap/dist
@@ -267,7 +273,8 @@ jobs:
           startsWith(github.ref, 'refs/tags/releases/python-mcap-protobuf-support/v')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          <<: *pypi_with
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
           packages_dir: python/mcap-protobuf-support/dist
 
       - name: Publish mcap-ros1-support to PyPI
@@ -276,8 +283,10 @@ jobs:
           startsWith(github.ref, 'refs/tags/releases/python-mcap-ros1-support/v')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          <<: *pypi_with
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
           packages_dir: python/mcap-ros1-support/dist
+
   go:
     runs-on: ubuntu-latest
     defaults:
