@@ -261,7 +261,7 @@ public:
 private:
   std::vector<std::byte> uncompressedBuffer_;
   std::vector<std::byte> compressedBuffer_;
-  int acceleration_ = 1;
+  CompressionLevel compressionLevel_;
 };
 
 /**

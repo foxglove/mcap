@@ -84,6 +84,9 @@ overrides:
       - cppstd
       - hdoc
       - nlohmann
+    ignoreRegExpList:
+      - "LZ4F_\\w+"
+      - "LZ4HC_\\w+"
 
   - filename: "**/{*.js,*.ts,*.tsx}"
     ignoreRegExpList:
