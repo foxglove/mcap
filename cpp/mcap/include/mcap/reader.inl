@@ -377,7 +377,7 @@ Status McapReader::readSummarySection_(IReadable& reader) {
   }
   footer_ = footer;
 
-  // Get summartStart and summaryOffsetStart, allowing for zeroed values
+  // Get summaryStart and summaryOffsetStart, allowing for zeroed values
   const ByteOffset summaryStart =
     footer.summaryStart != 0 ? footer.summaryStart : fileSize - internal::FooterLength;
   const ByteOffset summaryOffsetStart =
@@ -1544,6 +1544,9 @@ LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataSta
                                       ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
                                       const ProblemCallback& onProblem)
     : impl_(std::make_unique<Impl>(mcapReader, dataStart, dataEnd, startTime, endTime, onProblem)) {
+  if (!impl_->has_value()) {
+    impl_ = nullptr;
+  }
 }
 
 LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataStart,
