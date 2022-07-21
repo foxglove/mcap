@@ -1,7 +1,7 @@
 #include "internal.hpp"
 #include <algorithm>
 #include <cassert>
-#include <lz4.h>
+#include <lz4frame.h>
 
 #define ZSTD_STATIC_LINKING_ONLY
 #include <zstd.h>
@@ -121,7 +121,27 @@ uint64_t FileStreamReader::read(std::byte** output, uint64_t offset, uint64_t si
 
 // LZ4Reader ///////////////////////////////////////////////////////////////////
 
+LZ4Reader::LZ4Reader() {
+  const LZ4F_errorCode_t err =
+    LZ4F_createDecompressionContext((LZ4F_dctx**)&decompressionContext_, LZ4F_VERSION);
+  if (LZ4F_isError(err)) {
+    const auto msg =
+      internal::StrCat("failed to create lz4 decompression context: ", LZ4F_getErrorName(err));
+    status_ = Status{StatusCode::DecompressionFailed, msg};
+    decompressionContext_ = nullptr;
+  }
+}
+
+LZ4Reader::~LZ4Reader() {
+  if (decompressionContext_) {
+    LZ4F_freeDecompressionContext((LZ4F_dctx*)decompressionContext_);
+  }
+}
+
 void LZ4Reader::reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) {
+  if (!decompressionContext_) {
+    return;
+  }
   status_ = StatusCode::Success;
   compressedData_ = data;
   compressedSize_ = size;
@@ -130,22 +150,39 @@ void LZ4Reader::reset(const std::byte* data, uint64_t size, uint64_t uncompresse
   // Allocate a buffer for the uncompressed data
   uncompressedData_.resize(uncompressedSize_);
 
-  const auto status = LZ4_decompress_safe(reinterpret_cast<const char*>(compressedData_),
-                                          reinterpret_cast<char*>(uncompressedData_.data()),
-                                          compressedSize_, uncompressedSize_);
-  if (uint64_t(status) != uncompressedSize_) {
-    if (status < 0) {
-      const auto msg =
-        internal::StrCat("lz4 decompression of ", compressedSize_, " bytes into ",
-                         uncompressedSize_, " output bytes failed with error ", status);
+  size_t dstSize = uncompressedSize_;
+  size_t srcSize = compressedSize_;
+  LZ4F_resetDecompressionContext((LZ4F_dctx*)decompressionContext_);
+  const auto status = LZ4F_decompress((LZ4F_dctx*)decompressionContext_, uncompressedData_.data(),
+                                      &dstSize, compressedData_, &srcSize, nullptr);
+  if (status != 0) {
+    if (LZ4F_isError(status)) {
+      const auto msg = internal::StrCat("lz4 decompression of ", compressedSize_, " bytes into ",
+                                        uncompressedSize_, " output bytes failed with error ",
+                                        (int)status, " (", LZ4F_getErrorName(status), ")");
       status_ = Status{StatusCode::DecompressionFailed, msg};
     } else {
       const auto msg =
         internal::StrCat("lz4 decompression of ", compressedSize_, " bytes into ",
-                         uncompressedSize_, " output bytes only produced ", status, " bytes");
-      status_ = StatusCode::DecompressionSizeMismatch;
+                         uncompressedSize_, " incomplete: consumed ", srcSize, " and produced ",
+                         dstSize, " bytes so far, expect ", status, " more input bytes");
+      status_ = Status{StatusCode::DecompressionSizeMismatch, msg};
     }
 
+    uncompressedSize_ = 0;
+    uncompressedData_.clear();
+  } else if (srcSize != compressedSize_) {
+    const auto msg =
+      internal::StrCat("lz4 decompression of ", compressedSize_, " bytes into ", uncompressedSize_,
+                       " output bytes only consumed ", srcSize, " bytes");
+    status_ = Status{StatusCode::DecompressionSizeMismatch, msg};
+    uncompressedSize_ = 0;
+    uncompressedData_.clear();
+  } else if (dstSize != uncompressedSize_) {
+    const auto msg =
+      internal::StrCat("lz4 decompression of ", compressedSize_, " bytes into ", uncompressedSize_,
+                       " output bytes only produced ", dstSize, " bytes");
+    status_ = Status{StatusCode::DecompressionSizeMismatch, msg};
     uncompressedSize_ = 0;
     uncompressedData_.clear();
   }

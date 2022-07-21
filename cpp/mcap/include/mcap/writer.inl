@@ -1,7 +1,8 @@
 #include "crc32.hpp"
 #include <cassert>
 #include <iostream>
-#include <lz4.h>
+#include <lz4frame.h>
+#include <lz4hc.h>
 
 #define ZSTD_STATIC_LINKING_ONLY
 #include <zstd.h>
@@ -154,24 +155,26 @@ const std::byte* BufferWriter::compressedData() const {
 
 namespace internal {
 
-int LZ4AccelerationLevel(CompressionLevel level) {
+int LZ4CompressionLevel(CompressionLevel level) {
   switch (level) {
     case CompressionLevel::Fastest:
-      return 65537;
+      return -1;  // "fast acceleration"
     case CompressionLevel::Fast:
-      return 32768;
+      return 0;  // "fast mode"
     case CompressionLevel::Default:
-    case CompressionLevel::Slow:
-    case CompressionLevel::Slowest:
     default:
-      return 1;
+      return LZ4HC_CLEVEL_DEFAULT;
+    case CompressionLevel::Slow:
+      return LZ4HC_CLEVEL_OPT_MIN;
+    case CompressionLevel::Slowest:
+      return LZ4HC_CLEVEL_MAX;
   }
 }
 
 }  // namespace internal
 
-LZ4Writer::LZ4Writer(CompressionLevel compressionLevel, uint64_t chunkSize) {
-  acceleration_ = internal::LZ4AccelerationLevel(compressionLevel);
+LZ4Writer::LZ4Writer(CompressionLevel compressionLevel, uint64_t chunkSize)
+    : compressionLevel_(compressionLevel) {
   uncompressedBuffer_.reserve(chunkSize);
 }
 
@@ -180,11 +183,17 @@ void LZ4Writer::handleWrite(const std::byte* data, uint64_t size) {
 }
 
 void LZ4Writer::end() {
-  const auto dstCapacity = LZ4_compressBound(uncompressedBuffer_.size());
+  LZ4F_preferences_t preferences = LZ4F_INIT_PREFERENCES;
+  preferences.compressionLevel = internal::LZ4CompressionLevel(compressionLevel_);
+  const auto dstCapacity = LZ4F_compressFrameBound(uncompressedBuffer_.size(), &preferences);
   compressedBuffer_.resize(dstCapacity);
-  const int dstSize = LZ4_compress_fast(reinterpret_cast<const char*>(uncompressedBuffer_.data()),
-                                        reinterpret_cast<char*>(compressedBuffer_.data()),
-                                        uncompressedBuffer_.size(), dstCapacity, acceleration_);
+  const auto dstSize =
+    LZ4F_compressFrame(compressedBuffer_.data(), dstCapacity, uncompressedBuffer_.data(),
+                       uncompressedBuffer_.size(), &preferences);
+  if (LZ4F_isError(dstSize)) {
+    std::cerr << "LZ4F_compressFrame failed: " << LZ4F_getErrorName(dstSize) << "\n";
+    std::abort();
+  }
   compressedBuffer_.resize(dstSize);
 }
 

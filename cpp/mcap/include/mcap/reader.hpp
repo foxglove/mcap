@@ -183,13 +183,15 @@ public:
   uint64_t size() const override;
   Status status() const override;
 
-  LZ4Reader() = default;
+  LZ4Reader();
   LZ4Reader(const LZ4Reader&) = delete;
   LZ4Reader& operator=(const LZ4Reader&) = delete;
   LZ4Reader(LZ4Reader&&) = delete;
   LZ4Reader& operator=(LZ4Reader&&) = delete;
+  ~LZ4Reader();
 
 private:
+  void* decompressionContext_ = nullptr;  // LZ4F_dctx*
   Status status_;
   const std::byte* compressedData_;
   ByteArray uncompressedData_;
