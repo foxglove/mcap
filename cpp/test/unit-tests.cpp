@@ -383,6 +383,29 @@ TEST_CASE("McapReader::byteRange()", "[reader]") {
 }
 
 TEST_CASE("McapReader::readMessages()", "[reader]") {
+  SECTION("Empty file") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    writer.open(buffer, mcap::McapWriterOptions("test"));
+    mcap::Schema schema("schema", "schemaEncoding", "ab");
+    writer.addSchema(schema);
+    mcap::Channel channel("topic", "messageEncoding", schema.id);
+    writer.addChannel(channel);
+    writer.close();
+
+    mcap::McapReader reader;
+    auto status = reader.open(buffer);
+    requireOk(status);
+
+    for (const auto& msg : reader.readMessages()) {
+      FAIL("Shouldn't have gotten a message: topic " + msg.channel->topic + ", schema " +
+           msg.schema->name);
+    }
+
+    reader.close();
+  }
+
   SECTION("MovableIterators") {
     Buffer buffer;
 
