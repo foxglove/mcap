@@ -36,14 +36,14 @@ it knows how to display. These are available for a variety of serializations
 JSON ``PointCloud`` instance, using the provided 
 `schema <https://github.com/foxglove/schemas/blob/main/schemas/jsonschema/PointCloud.json>`_.
 
-Let's start with encoding the point data. The schema expects a single ``base64``-encoded buffer
-containing all point data, and some metadata describing how to decode it.
+Let's start with encoding the point data. In addition to fields like ``timestamp`` and ``point_stride``,
+the foxglove.PointCloud schema expects a ``data`` field that contains a single base64-encoded buffer
+with all point data, as well as some metadata (``fields``) describing how to decode it.
 
-The CSV data contains one timestamp and four floating-point data fields per point.
-``foxglove.PointCloud`` uses one timestamp for the whole point cloud, so we'll use the first
-point's timestamp. We'll pack each field as a four byte single-precision little-endian float.
+Since foxglove.PointCloud requires a single timestamp, let's get it from the first point we see in
+our file. Then, we'll pack each field as a four byte single-precision little-endian float.
 
-We start by describing our data layout in the ``foxglove.PointCloud`` message:
+Let's start by describing the layout of our data in a foxglove.PointCloud message:
 
 .. literalinclude:: ../examples/jsonschema/pointcloud_csv_to_mcap.py
     :start-after: # tutorial-point-layout-start
@@ -89,11 +89,6 @@ Let's open a file where we'll write our output MCAP data. First, we'll need to w
     :end-before: # tutorial-write-header-end
     :dedent:
 
-.. note::
-  We can choose whatever name we want for ``library``. We're not using one of the
-  `MCAP well-known profiles <https://github.com/foxglove/mcap/blob/main/docs/specification/appendix.md#well-known-profiles>`_,
-  so we use our own custom profile name.
-
 Next, create a "channel" of messages to contain our point cloud. The schema
 name and content informs Foxglove Studio that it can parse and display this message as a point
 cloud.
@@ -128,8 +123,8 @@ check this with the `MCAP CLI tool <https://github.com/foxglove/mcap/tree/main/g
     $ brew install mcap
     ...
     $ mcap info output.mcap
-    library: my-excellent-library
-    profile: x-jsonschema
+    library: mcap python 0.0.11
+    profile:
     messages: 10
     duration: 900ms
     start: 2011-11-04T01:32:10.881030912+11:00 (1320330730.881030912)
@@ -137,11 +132,11 @@ check this with the `MCAP CLI tool <https://github.com/foxglove/mcap/tree/main/g
     compression:
             zstd: [1/1 chunks] (93.43%)
     channels:
-            (1) /pointcloud  10 msgs (11.11 Hz)   : foxglove.PointCloud [jsonschema]
+            (1) pointcloud  10 msgs (11.11 Hz)   : foxglove.PointCloud [jsonschema]
     attachments: 0
     $ mcap doctor output.mcap
     Examining output.mcap
 
 View your point cloud in `Foxglove Studio <https://studio.foxglove.dev>`_ by
 dragging the MCAP file into the window. Add a `3D Panel <https://foxglove.dev/docs/studio/panels/3d>`_
-and enable the **/pointcloud** topic to see the result!
+and enable the **pointcloud** topic to see the result!

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from mcap.mcap0.reader import make_reader, SeekingReader, NonSeekingReader, McapReader
-from mcap.mcap0.records import Schema, Channel, Message
+from mcap.reader import make_reader, SeekingReader, NonSeekingReader, McapReader
+from mcap.records import Schema, Channel, Message
 
 DEMO_MCAP = Path(__file__).parent.parent.parent / "testdata" / "mcap" / "demo.mcap"
 

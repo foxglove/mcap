@@ -4,7 +4,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Set, Type
 
-from mcap.mcap0.records import (
+from mcap.records import (
     Attachment,
     Channel,
     Header,
@@ -13,7 +13,7 @@ from mcap.mcap0.records import (
     Metadata,
     Schema,
 )
-from mcap.mcap0.writer import CompressionType, IndexType, Writer
+from mcap.writer import CompressionType, IndexType, Writer
 
 
 def deserialize_value(klass: Type[McapRecord], field: str, value: Any) -> Any:

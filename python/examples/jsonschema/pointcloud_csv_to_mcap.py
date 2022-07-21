@@ -20,8 +20,8 @@ from pathlib import Path
 import datetime
 
 # tutorial-mcap-imports-start
-from mcap.mcap0.writer import Writer
-from mcap.mcap0.well_known import SchemaEncoding, MessageEncoding
+from mcap.writer import Writer
+from mcap.well_known import SchemaEncoding, MessageEncoding
 
 # tutorial-mcap-imports-end
 
@@ -78,7 +78,7 @@ def main():
     # tutorial-write-header-start
     with open(args.output, "wb") as f:
         writer = Writer(f)
-        writer.start("x-jsonschema", library="my-excellent-library")
+        writer.start()
         # tutorial-write-header-end
 
         # tutorial-write-channel-start

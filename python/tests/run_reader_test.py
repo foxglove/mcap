@@ -1,9 +1,9 @@
 import json
 import sys
 
-from mcap.mcap0.records import MessageIndex
-from mcap.mcap0.serialization import stringify_record
-from mcap.mcap0.stream_reader import StreamReader
+from mcap.records import MessageIndex
+from mcap.serialization import stringify_record
+from mcap.stream_reader import StreamReader
 
 
 def main():

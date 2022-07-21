@@ -1,9 +1,9 @@
 import json
 from io import BytesIO
 
-from mcap.mcap0.records import ChunkIndex
-from mcap.mcap0.stream_reader import StreamReader
-from mcap.mcap0.writer import Writer
+from mcap.records import ChunkIndex
+from mcap.stream_reader import StreamReader
+from mcap.writer import Writer
 
 
 def test_json_schema():
