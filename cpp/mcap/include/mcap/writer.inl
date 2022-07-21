@@ -160,9 +160,9 @@ int LZ4CompressionLevel(CompressionLevel level) {
     case CompressionLevel::Fastest:
       return -1;  // "fast acceleration"
     case CompressionLevel::Fast:
-    default:
       return 0;  // "fast mode"
     case CompressionLevel::Default:
+    default:
       return LZ4HC_CLEVEL_DEFAULT;
     case CompressionLevel::Slow:
       return LZ4HC_CLEVEL_OPT_MIN;
