@@ -78,16 +78,20 @@ function updateSearchResults() {
 
     res.forEach(function(obj){
         var a = document.createElement("a");
-        a.classList.add('list-item');
+        a.classList.add('panel-block');
         a.classList.add('is-family-code');
 
-        // Method, class, struct, or union
-        if (obj.type === 0 || obj.type === 2 || obj.type === 3 || obj.type === 4) {
-            a.setAttribute("href", "r" + obj.id + ".html");
+        // Method
+        if (obj.type === 0) {
+            a.setAttribute("href", "r" + obj.id);
         }
         // Function
         if (obj.type === 1) {
             a.setAttribute("href", "f" + obj.id + ".html");
+        }
+        // Class, struct, or union
+        if (obj.type === 2 || obj.type === 3 || obj.type === 4) {
+            a.setAttribute("href", "r" + obj.id + ".html");
         }
         // Enum or enum val
         if (obj.type === 5 || obj.type === 6) {
@@ -98,9 +102,11 @@ function updateSearchResults() {
         span.classList.add("tag");
         span.classList.add("is-dark");
         span.classList.add("is-family-sans-serif");
+        span.classList.add("mr-2");
         span.textContent = typeIntToStr(obj.type);
 
         var decl = document.createElement("strong");
+        decl.classList.add("has-text-link");
         decl.textContent = " " + obj.decl;
 
         a.appendChild(span);
