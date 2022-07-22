@@ -7,8 +7,14 @@ for details.
 
 ### Installing:
 
-Either install from [releases
+Either install from [Homebrew](https://formulae.brew.sh/formula/mcap#default), [releases
 binaries](https://github.com/foxglove/mcap/releases) or by using go.
+
+#### From Homebrew
+
+To install using [Homebrew](https://brew.sh) on macOS or Linux, run:
+
+    brew install mcap
 
 #### From release binaries
 
