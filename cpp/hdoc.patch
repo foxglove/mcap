@@ -1,13 +1,3 @@
-diff --git a/meson.build b/meson.build
-index c1daf2e..b8b981d 100644
---- a/meson.build
-+++ b/meson.build
-@@ -1,4 +1,4 @@
--project('hdoc', 'cpp', version: '1.2.4', default_options: ['cpp_std=c++17', 'warning_level=3'])
-+project('hdoc', 'cpp', 'c', version: '1.2.4', default_options: ['cpp_std=c++17', 'warning_level=3'])
- 
- dep_llvm = dependency('LLVM', include_type: 'system')
- clang_modules = [
 diff --git a/src/serde/HTMLWriter.cpp b/src/serde/HTMLWriter.cpp
 index 2d9e22b..aeda844 100644
 --- a/src/serde/HTMLWriter.cpp
