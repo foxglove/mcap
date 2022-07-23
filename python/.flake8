@@ -1,2 +1,5 @@
 [flake8]
 max-line-length = 100
+exclude =
+  examples/protobuf/*pb2.py,
+  mcap-protobuf-support/tests/*pb2.py,

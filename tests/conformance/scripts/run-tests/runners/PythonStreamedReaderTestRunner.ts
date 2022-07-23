@@ -10,7 +10,7 @@ export default class PythonStreamedReaderTestRunner extends ReadTestRunner {
 
   async runReadTest(filePath: string): Promise<string> {
     const { stdout } = await promisify(exec)(`python3 tests/run_reader_test.py ${filePath}`, {
-      cwd: "../../python",
+      cwd: "../../python/mcap",
     });
     return stdout.trim();
   }

@@ -78,16 +78,8 @@ jobs:
           python-version: 3.7
           cache: pipenv
 
-      - run: mkdir __docs__
-      - name: Generate Python documentation
-        run: |
-          set -x
-          cd python
-          pip install pipenv
-          pipenv install --dev --deploy
-          pipenv run sphinx-apidoc --separate --tocfile index --output-dir docs/apidoc mcap
-          pipenv run sphinx-build docs ../__docs__/python
-
+      - run: pip install pipenv
+      - run: make -C python docs
       - run: tar -czf docs-python.tgz __docs__/python
       - uses: actions/upload-artifact@v3
         with:

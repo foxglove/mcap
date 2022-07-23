@@ -1,9 +1,9 @@
 """Enums listing the sets of well-known profiles, schema encodings and message encodings
-available in the MCAP Specification:
-https://github.com/foxglove/mcap/blob/main/docs/specification/appendix.md
+available in the
+`MCAP Specification <https://github.com/foxglove/mcap/blob/main/docs/specification/appendix.md>`_.
 
-NOTE: you don't need to use these profiles or encodings to use MCAP! custom profiles and
-encodings are allowed with the `x-` prefix.
+.. note:: you don't need to use these profiles or encodings to use MCAP! Custom profiles and
+    encoding strings are allowed, though we recommend using an `x-` prefix for clarity.
 """
 
 

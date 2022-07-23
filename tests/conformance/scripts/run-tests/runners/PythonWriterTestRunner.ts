@@ -11,7 +11,7 @@ export default class PythonWriterTestRunner extends WriteTestRunner {
     const { stdout, stderr } = await promisify(exec)(
       `python3 tests/run_writer_test.py ${filePath}`,
       {
-        cwd: "../../python",
+        cwd: "../../python/mcap",
         encoding: undefined,
       },
     );

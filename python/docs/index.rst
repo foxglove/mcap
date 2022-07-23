@@ -1,10 +1,12 @@
-.. mdinclude:: ../README.md
+.. mdinclude:: ../mcap/README.md
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
-   apidoc/index
+   mcap-apidoc/index
+   mcap-protobuf-apidoc/index
+   mcap-ros1-apidoc/index
    jsonschema_tutorial
 
 Indices and tables
