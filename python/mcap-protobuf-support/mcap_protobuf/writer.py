@@ -2,7 +2,6 @@ import time
 from typing import Optional, Dict, Any, Tuple
 
 from mcap.mcap0.writer import Writer as McapWriter
-from mcap.mcap0.records import Schema, Channel, Message
 from mcap.mcap0.well_known import MessageEncoding
 import mcap
 
@@ -41,7 +40,8 @@ class Writer:
         :param topic: the topic that this message was originally published on.
         :param message: a Protobuf object to write into the MCAP.
         :param log_time: unix nanosecond timestamp of when this message was written to the MCAP.
-        :param publish_time: unix nanosecond timestamp of when this message was originally published.
+        :param publish_time: unix nanosecond timestamp of when this message was originally
+            published.
         :param sequence: an optional sequence count for messages on this topic.
         """
         msg_typename = type(message).DESCRIPTOR.full_name
@@ -50,7 +50,7 @@ class Writer:
             schema_id, schema_name = self._schemas[topic]
             if msg_typename != schema_name:
                 raise ValueError(
-                    f"cannot write message of type {msg_typename} to topic {topic} of type {schema_name}"
+                    f"topic '{topic}' has type {schema_name}, cannot write a {msg_typename}"
                 )
         else:
             schema_id = register_schema(self._writer, type(message))

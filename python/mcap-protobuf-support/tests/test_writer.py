@@ -1,5 +1,4 @@
 from io import BytesIO
-from pathlib import Path
 
 from mcap_protobuf.writer import Writer
 from mcap_protobuf.decoder import Decoder
