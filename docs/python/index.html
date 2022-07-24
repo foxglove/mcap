@@ -1,10 +1,10 @@
 
 <!DOCTYPE html>
 
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
     <title>MCAP Python Library &#8212; mcap  documentation</title>
     <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
@@ -12,10 +12,11 @@
     <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
     <script src="_static/jquery.js"></script>
     <script src="_static/underscore.js"></script>
+    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
     <script src="_static/doctools.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="mcap" href="apidoc/index.html" />
+    <link rel="next" title="mcap" href="mcap-apidoc/index.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
   
@@ -33,10 +34,10 @@
           <div class="body" role="main">
             
   <section id="mcap-python-library">
-<h1>MCAP Python Library<a class="headerlink" href="#mcap-python-library" title="Permalink to this headline">¶</a></h1>
+<h1>MCAP Python Library<a class="headerlink" href="#mcap-python-library" title="Permalink to this heading">¶</a></h1>
 <p>This library provides classes for reading and writing the MCAP file format.</p>
 <section id="reader-example">
-<h2>Reader Example<a class="headerlink" href="#reader-example" title="Permalink to this headline">¶</a></h2>
+<h2>Reader Example<a class="headerlink" href="#reader-example" title="Permalink to this heading">¶</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">mcap.mcap0.reader</span> <span class="kn">import</span> <span class="n">make_reader</span>
 
 <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;example.mcap&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
@@ -47,7 +48,7 @@
 </div>
 </section>
 <section id="writer-example">
-<h2>Writer Example<a class="headerlink" href="#writer-example" title="Permalink to this headline">¶</a></h2>
+<h2>Writer Example<a class="headerlink" href="#writer-example" title="Permalink to this heading">¶</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">time</span> <span class="kn">import</span> <span class="n">time_ns</span>
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">from</span> <span class="nn">mcap.mcap0.writer</span> <span class="kn">import</span> <span class="n">Writer</span>
@@ -91,8 +92,16 @@
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="apidoc/index.html">mcap</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="apidoc/mcap.html">mcap package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcap-apidoc/index.html">mcap</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mcap-apidoc/mcap.html">mcap package</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mcap-protobuf-apidoc/index.html">mcap_protobuf</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mcap-protobuf-apidoc/mcap_protobuf.html">mcap_protobuf package</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mcap-ros1-apidoc/index.html">mcap_ros1</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mcap-ros1-apidoc/mcap_ros1.html">mcap_ros1 package</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="jsonschema_tutorial.html">Tutorial: Converting CSV to MCAP with JSON Schema</a><ul>
@@ -107,7 +116,7 @@
 </section>
 </section>
 <section id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this heading">¶</a></h1>
 <ul class="simple">
 <li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
 <li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
@@ -134,7 +143,9 @@
 <h3>Navigation</h3>
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="apidoc/index.html">mcap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcap-apidoc/index.html">mcap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcap-protobuf-apidoc/index.html">mcap_protobuf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcap-ros1-apidoc/index.html">mcap_ros1</a></li>
 <li class="toctree-l1"><a class="reference internal" href="jsonschema_tutorial.html">Tutorial: Converting CSV to MCAP with JSON Schema</a></li>
 </ul>
 
@@ -142,7 +153,7 @@
 <h3>Related Topics</h3>
 <ul>
   <li><a href="#">Documentation overview</a><ul>
-      <li>Next: <a href="apidoc/index.html" title="next chapter">mcap</a></li>
+      <li>Next: <a href="mcap-apidoc/index.html" title="next chapter">mcap</a></li>
   </ul></li>
 </ul>
 </div>
@@ -155,7 +166,7 @@
     </form>
     </div>
 </div>
-<script>$('#searchbox').show(0);</script>
+<script>document.getElementById('searchbox').style.display = "block"</script>
 
 
 
@@ -172,7 +183,7 @@
       
       
       
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.5.0</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.0.2</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |

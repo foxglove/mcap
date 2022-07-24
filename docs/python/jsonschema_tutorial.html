@@ -1,10 +1,10 @@
 
 <!DOCTYPE html>
 
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
     <title>Tutorial: Converting CSV to MCAP with JSON Schema &#8212; mcap  documentation</title>
     <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
@@ -12,10 +12,11 @@
     <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
     <script src="_static/jquery.js"></script>
     <script src="_static/underscore.js"></script>
+    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
     <script src="_static/doctools.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="prev" title="mcap.mcap0.writer module" href="apidoc/mcap.mcap0.writer.html" />
+    <link rel="prev" title="mcap_ros1.writer module" href="mcap-ros1-apidoc/mcap_ros1.writer.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
   
@@ -33,9 +34,9 @@
           <div class="body" role="main">
             
   <section id="tutorial-converting-csv-to-mcap-with-json-schema">
-<h1>Tutorial: Converting CSV to MCAP with JSON Schema<a class="headerlink" href="#tutorial-converting-csv-to-mcap-with-json-schema" title="Permalink to this headline">¶</a></h1>
+<h1>Tutorial: Converting CSV to MCAP with JSON Schema<a class="headerlink" href="#tutorial-converting-csv-to-mcap-with-json-schema" title="Permalink to this heading">¶</a></h1>
 <section id="introduction">
-<h2>Introduction<a class="headerlink" href="#introduction" title="Permalink to this headline">¶</a></h2>
+<h2>Introduction<a class="headerlink" href="#introduction" title="Permalink to this heading">¶</a></h2>
 <p>In this tutorial we’ll take a publicly available dataset and demonstrate how to convert it from a
 CSV format to an MCAP file. We’ll use Python and <a class="reference external" href="https://json-schema.org/">JSON Schema</a> to
 quickly create messages without requiring extra serialization libraries or generated code.</p>
@@ -43,7 +44,7 @@ quickly create messages without requiring extra serialization libraries or gener
 <a class="reference external" href="https://github.com/foxglove/mcap/tree/main/python/examples/jsonschema/pointcloud_csv_to_mcap.py">in the MCAP repo</a>.</p>
 </section>
 <section id="decoding-the-data-source">
-<h2>Decoding the data source<a class="headerlink" href="#decoding-the-data-source" title="Permalink to this headline">¶</a></h2>
+<h2>Decoding the data source<a class="headerlink" href="#decoding-the-data-source" title="Permalink to this heading">¶</a></h2>
 <p>This tutorial uses the public CSV dataset
 <a class="reference external" href="https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml">“Sydney Urban Objects Dataset”</a>,
 released by the <strong>Australian Centre for Field Robotics</strong> at the University of Sydney.
@@ -58,7 +59,7 @@ This is a collection of CSV files containing point clouds collected from objects
 </div>
 </section>
 <section id="creating-a-foxglove-pointcloud">
-<h2>Creating a <code class="docutils literal notranslate"><span class="pre">foxglove.PointCloud</span></code><a class="headerlink" href="#creating-a-foxglove-pointcloud" title="Permalink to this headline">¶</a></h2>
+<h2>Creating a <code class="docutils literal notranslate"><span class="pre">foxglove.PointCloud</span></code><a class="headerlink" href="#creating-a-foxglove-pointcloud" title="Permalink to this heading">¶</a></h2>
 <p>To view this point cloud, we must encode these points in a way that Foxglove Studio
 understands. To facilitate this, Foxglove Studio provides a collection of message schemas that
 it knows how to display. These are available for a variety of serializations
@@ -109,7 +110,7 @@ from that coordinate frame’s center.</p>
 <p>We’ll leave the <code class="docutils literal notranslate"><span class="pre">timestamp</span></code> field for later, when we write the messages into the MCAP file.</p>
 </section>
 <section id="writing-the-mcap-file">
-<h2>Writing the MCAP file<a class="headerlink" href="#writing-the-mcap-file" title="Permalink to this headline">¶</a></h2>
+<h2>Writing the MCAP file<a class="headerlink" href="#writing-the-mcap-file" title="Permalink to this heading">¶</a></h2>
 <p>Now that the point cloud is built, we can write it into an MCAP file. We’ll start with some imports
 from the <a class="reference external" href="https://github.com/foxglove/mcap/tree/main/python">Python MCAP library</a>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">mcap.mcap0.writer</span> <span class="kn">import</span> <span class="n">Writer</span>
@@ -213,7 +214,9 @@ and enable the <strong>/pointcloud</strong> topic to see the result!</p>
 <h3>Navigation</h3>
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="apidoc/index.html">mcap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcap-apidoc/index.html">mcap</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcap-protobuf-apidoc/index.html">mcap_protobuf</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mcap-ros1-apidoc/index.html">mcap_ros1</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Tutorial: Converting CSV to MCAP with JSON Schema</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#introduction">Introduction</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#decoding-the-data-source">Decoding the data source</a></li>
@@ -227,7 +230,7 @@ and enable the <strong>/pointcloud</strong> topic to see the result!</p>
 <h3>Related Topics</h3>
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
-      <li>Previous: <a href="apidoc/mcap.mcap0.writer.html" title="previous chapter">mcap.mcap0.writer module</a></li>
+      <li>Previous: <a href="mcap-ros1-apidoc/mcap_ros1.writer.html" title="previous chapter">mcap_ros1.writer module</a></li>
   </ul></li>
 </ul>
 </div>
@@ -240,7 +243,7 @@ and enable the <strong>/pointcloud</strong> topic to see the result!</p>
     </form>
     </div>
 </div>
-<script>$('#searchbox').show(0);</script>
+<script>document.getElementById('searchbox').style.display = "block"</script>
 
 
 
@@ -257,7 +260,7 @@ and enable the <strong>/pointcloud</strong> topic to see the result!</p>
       
       
       
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.5.0</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.0.2</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |

@@ -1,0 +1,7 @@
+mcap\_protobuf.schema module
+============================
+
+.. automodule:: mcap_protobuf.schema
+   :members:
+   :undoc-members:
+   :show-inheritance:

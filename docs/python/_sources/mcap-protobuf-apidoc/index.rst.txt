@@ -1,0 +1,7 @@
+mcap_protobuf
+=============
+
+.. toctree::
+   :maxdepth: 4
+
+   mcap_protobuf

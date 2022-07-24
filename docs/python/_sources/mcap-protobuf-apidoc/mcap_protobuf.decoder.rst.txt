@@ -1,0 +1,7 @@
+mcap\_protobuf.decoder module
+=============================
+
+.. automodule:: mcap_protobuf.decoder
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -1,0 +1,7 @@
+mcap\_ros1.decoder module
+=========================
+
+.. automodule:: mcap_ros1.decoder
+   :members:
+   :undoc-members:
+   :show-inheritance:

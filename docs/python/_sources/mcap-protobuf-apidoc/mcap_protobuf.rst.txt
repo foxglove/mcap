@@ -1,0 +1,19 @@
+mcap\_protobuf package
+======================
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   mcap_protobuf.decoder
+   mcap_protobuf.schema
+
+Module contents
+---------------
+
+.. automodule:: mcap_protobuf
+   :members:
+   :undoc-members:
+   :show-inheritance:

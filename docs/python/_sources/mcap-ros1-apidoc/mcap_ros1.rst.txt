@@ -1,0 +1,19 @@
+mcap\_ros1 package
+==================
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   mcap_ros1.decoder
+   mcap_ros1.writer
+
+Module contents
+---------------
+
+.. automodule:: mcap_ros1
+   :members:
+   :undoc-members:
+   :show-inheritance:
