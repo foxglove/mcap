@@ -6,9 +6,9 @@ The original dataset can be downloaded from here:
 https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml
 
 usage:
-    curl https://www.acfr.usyd.edu.au/papers/data/sydney-urban-objects-dataset.tar.gz | tar -x
-    pip install mcap
-    python3 pointcloud_csv_to_mcap.py sydney-urban-objects-dataset/objects/4wd.0.2299.csv -o 4wd.mcap
+  curl https://www.acfr.usyd.edu.au/papers/data/sydney-urban-objects-dataset.tar.gz | tar -x
+  pip install mcap
+  python3 pointcloud_csv_to_mcap.py sydney-urban-objects-dataset/objects/4wd.0.2299.csv -o out.mcap
 """
 import argparse
 import base64
@@ -24,6 +24,7 @@ from mcap.mcap0.writer import Writer
 from mcap.mcap0.well_known import SchemaEncoding, MessageEncoding
 
 # tutorial-mcap-imports-end
+
 
 # tutorial-csv-decode-start
 def point_reader(csv_path: typing.Union[str, Path]):
