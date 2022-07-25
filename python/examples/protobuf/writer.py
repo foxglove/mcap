@@ -1,3 +1,4 @@
+import sys
 from mcap_protobuf.writer import Writer
 
 from complex_message_pb2 import ComplexMessage
@@ -5,7 +6,7 @@ from simple_message_pb2 import SimpleMessage
 
 
 def main():
-    with open("example.mcap", "wb") as f, Writer(f) as mcap_writer:
+    with open(sys.argv[1], "wb") as f, Writer(f) as mcap_writer:
         for i in range(1, 11):
             mcap_writer.write_message(
                 topic="/simple_messages",

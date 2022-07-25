@@ -32,6 +32,7 @@ words:
   - crcs
   - datetime
   - deserialization
+  - distro
   - flatbuffer
   - flatc
   - fwrite
