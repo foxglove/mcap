@@ -41,6 +41,7 @@ words:
   - kaitai
   - libmcap
   - mcap
+  - nanos
   - nsec
   - nsecs
   - pipenv

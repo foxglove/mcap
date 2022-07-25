@@ -7,7 +7,7 @@ def register_schema(writer: McapWriter, message_class: Any):
     file_descriptor_set = build_file_descriptor_set(message_class=message_class)
 
     return writer.register_schema(
-        name=message_class.DESCRIPTOR.name,
+        name=message_class.DESCRIPTOR.full_name,
         encoding="protobuf",
         data=file_descriptor_set.SerializeToString(),
     )
