@@ -221,9 +221,12 @@ jobs:
         with:
           python-version: 3.7
           cache: pipenv
+      - uses: satackey/action-docker-layer-caching@v0.0.11
+        continue-on-error: true
       - run: pip install pipenv
       - run: make lint
       - run: make test
+      - run: make examples
       - run: make build
       - name: Publish mcap to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -404,14 +407,3 @@ jobs:
       - run: ./swiftformat_linux --lint .
       - run: swift build
       - run: swift test
-
-  ros2-example:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: python/examples/ros2
-    steps:
-      - uses: actions/checkout@v3
-      - uses: satackey/action-docker-layer-caching@v0.0.11
-        continue-on-error: true
-      - run: make test

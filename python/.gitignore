@@ -1,5 +1,6 @@
 **/*.pyc
 build
 dist
-mcap.egg-info
+*.egg-info
 *-apidoc
+example_mcaps
