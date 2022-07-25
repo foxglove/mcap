@@ -1,0 +1,7 @@
+mcap\_protobuf.writer module
+============================
+
+.. automodule:: mcap_protobuf.writer
+   :members:
+   :undoc-members:
+   :show-inheritance:

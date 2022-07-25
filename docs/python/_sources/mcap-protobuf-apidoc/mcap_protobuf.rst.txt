@@ -9,6 +9,7 @@ Submodules
 
    mcap_protobuf.decoder
    mcap_protobuf.schema
+   mcap_protobuf.writer
 
 Module contents
 ---------------

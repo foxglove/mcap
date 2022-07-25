@@ -41,7 +41,7 @@
     <span class="n">file_descriptor_set</span> <span class="o">=</span> <span class="n">build_file_descriptor_set</span><span class="p">(</span><span class="n">message_class</span><span class="o">=</span><span class="n">message_class</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">writer</span><span class="o">.</span><span class="n">register_schema</span><span class="p">(</span>
-        <span class="n">name</span><span class="o">=</span><span class="n">message_class</span><span class="o">.</span><span class="n">DESCRIPTOR</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">message_class</span><span class="o">.</span><span class="n">DESCRIPTOR</span><span class="o">.</span><span class="n">full_name</span><span class="p">,</span>
         <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;protobuf&quot;</span><span class="p">,</span>
         <span class="n">data</span><span class="o">=</span><span class="n">file_descriptor_set</span><span class="o">.</span><span class="n">SerializeToString</span><span class="p">(),</span>
     <span class="p">)</span></div>
