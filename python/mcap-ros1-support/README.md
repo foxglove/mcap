@@ -47,7 +47,6 @@ for topic, record, message in decoder.messages:
 
 ```python
 # Reading from raw mcap data
-from mcap.mcap0.stream_reader import StreamReader
 from mcap_ros1.decoder import Decoder
 
 data = open("my_data.mcap", "rb").read()
