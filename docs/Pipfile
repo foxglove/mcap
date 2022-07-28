@@ -1,0 +1,14 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+sphinx = "*"
+docutils = "<=0.18.1"
+m2r2 = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.9"

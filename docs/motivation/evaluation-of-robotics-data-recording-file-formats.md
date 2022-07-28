@@ -2,11 +2,9 @@
 
 <!-- cspell:words packetized pluggable checksumming mitigations Karsten Knese Hurliman jhurliman -->
 
-_Oct 6, 2021_  
-_John Hurliman ([@jhurliman](https://github.com/jhurliman))_  
-_[Foxglove](https://foxglove.dev)_
+**Oct 6, 2021** **John Hurliman** ([@jhurliman](https://github.com/jhurliman)) [Foxglove Technologies Inc](https://foxglove.dev)
 
-_Originally posted on [ROS Discourse](https://discourse.ros.org/t/evaluation-of-robotics-data-recording-file-formats/22588)_
+Originally posted on [ROS Discourse](https://discourse.ros.org/t/evaluation-of-robotics-data-recording-file-formats/22588)
 
 The transition from ROS 1 to ROS 2 involves switching recording file formats from the classic “rosbag” (.bag) file format to a new serialization format. The rosbag2 recording software includes a pluggable interface to support different serialization methods, with the current default using SQLite (.db3) files. Non-ROS robotics frameworks each use their own recording format, leading to further fragmentation. This document reviews desirable properties of a robotics data recording format (including those considered during ROS 2 development) and evaluates existing and proposed solutions against those requirements.
 

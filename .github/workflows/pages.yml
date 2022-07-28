@@ -86,6 +86,11 @@ jobs:
           name: docs-python
           path: docs-python.tgz
           retention-days: 1
+      - uses: actions/upload-artifact@v3
+        with:
+          name: docs-python-preview
+          path: __docs__/python
+          retention-days: 1
 
   pages-swift:
     runs-on: ubuntu-latest
