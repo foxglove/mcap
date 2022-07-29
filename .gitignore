@@ -6,3 +6,4 @@ yarn-error.log
 .build
 __docs__
 dist
+.vercel
