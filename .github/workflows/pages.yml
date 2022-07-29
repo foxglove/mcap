@@ -9,6 +9,9 @@ on:
 jobs:
   pages-home:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
     steps:
       - uses: actions/checkout@v3
         with:
@@ -20,7 +23,8 @@ jobs:
           cache: pipenv
 
       - run: pip install pipenv
-      - run: pipenv run sphinx-build docs __home__
+      - run: pipenv install --deploy
+      - run: pipenv run sphinx-build . ../__home__
 
       - uses: actions/upload-artifact@v3
         with:
