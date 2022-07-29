@@ -13,20 +13,19 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 16.x
-          cache: yarn
 
-      - name: Build documentation site
-        run: |
-          yarn install --frozen-lockfile
-          yarn docs:build --minify
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.7
+          cache: pipenv
+
+      - run: pip install pipenv
+      - run: pipenv run sphinx-build docs __home__
 
       - uses: actions/upload-artifact@v3
         with:
           name: __home__
-          path: docs/website
+          path: __home__
           retention-days: 1
 
   pages-cpp:
@@ -85,11 +84,6 @@ jobs:
         with:
           name: docs-python
           path: docs-python.tgz
-          retention-days: 1
-      - uses: actions/upload-artifact@v3
-        with:
-          name: docs-python-preview
-          path: __docs__/python
           retention-days: 1
 
   pages-swift:
@@ -166,3 +160,12 @@ jobs:
             git commit -m "Update docs from $GITHUB_REF_NAME (${GITHUB_SHA::7})"
             git push origin gh-pages
           fi
+
+      - name: Push Preview Pages Site
+        if: "!github.event.pull_request.head.repo.fork && github.ref != 'refs/heads/main'"
+        run: |
+          set -x
+          git config user.name "Foxglove"
+          git config user.email "contact@foxglove.dev"
+          git commit -m "Update docs from $GITHUB_REF_NAME (${GITHUB_SHA::7})"
+          git push origin gh-pages
