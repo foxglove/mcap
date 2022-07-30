@@ -1,9 +1,9 @@
 ## `mcap` CLI
 
-> Note: this tool is experimental and will change without warning until finalization of the MCAP spec.
+> Note: this tool is experimental and may change without warning between versions.
 
-A basic command line tool to demonstrate the MCAP file format. See `mcap -h`
-for details.
+A command line tool to demonstrate the MCAP file format. See `mcap -h` for
+details.
 
 ### Installing:
 
@@ -43,7 +43,7 @@ Convert a bag file to MCAP:
 
 <!-- cspell: disable -->
 
-    [~/work/mcap/go/mcap] (task/mcap-client) $ mcap convert ../../testdata/bags/demo.bag demo.mcap
+    $ mcap convert demo.bag demo.mcap
 
 <!-- cspell: enable -->
 
@@ -51,7 +51,7 @@ Convert a ros2 bag file to mcap:
 
 <!-- cspell: disable -->
 
-    [~/work/mcap/go/mcap] (task/mcap-client) $ mcap convert multiple_files_1.db3 demo.mcap
+    $ mcap convert multiple_files_1.db3 demo.mcap
 
 <!-- cspell: enable -->
 
@@ -60,7 +60,7 @@ system, the command requires a search directory for packages. This can be found
 by copying the relevant directory (e.g /opt/ros/galactic) from the original
 system
 
-    [~/work/mcap/go/mcap] (task/mcap-client) $ mcap convert multiple_files_1.db3 demo.mcap --ament-prefix-path ./galactic
+    $ mcap convert multiple_files_1.db3 demo.mcap --ament-prefix-path ./galactic
 
 #### File summarization
 
@@ -68,7 +68,7 @@ Report summary statistics on an MCAP file:
 
 <!-- cspell: disable -->
 
-    [~/work/mcap/go/cli/mcap] (main) $ mcap info demo.mcap
+    $ mcap info demo.mcap
     library: mcap go #(devel)
     profile: ros1
     messages: 1606
@@ -93,7 +93,7 @@ Report summary statistics on an MCAP file:
 
 Echo messages for a specific topic to stdout as JSON:
 
-    [~/work/mcap/go/mcap] $ mcap cat demo.mcap --topics /tf --json | head -n 10
+    $ mcap cat demo.mcap --topics /tf --json | head -n 10
     {"topic":"/tf","sequence":2,"log_time":1490149580.103843113,"publish_time":1490149580.103843113,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.117017840,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
     {"topic":"/tf","sequence":3,"log_time":1490149580.113944947,"publish_time":1490149580.113944947,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.127078895,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
     {"topic":"/tf","sequence":8,"log_time":1490149580.124028613,"publish_time":1490149580.124028613,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.137141823,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
@@ -111,7 +111,7 @@ All commands except `convert` support reading from remote files stored in GCS:
 
 <!-- cspell: disable -->
 
-    $ mcap info gs://foxglove-wyatt-dev-inbox/demo.mcap
+    $ mcap info gs://your-remote-bucket/demo.mcap
     library: mcap go #(devel)
     profile: ros1
     messages: 1606
