@@ -80,9 +80,6 @@ def _chunks_matching_topics(
             continue
         for channel_id in chunk_index.message_index_offsets.keys():
             if topics is None or summary.channels[channel_id].topic in topics:
-                print(
-                    f"start: {chunk_index.message_start_time}, end: {chunk_index.message_end_time}"
-                )
                 out.append(chunk_index)
                 break
     return out
