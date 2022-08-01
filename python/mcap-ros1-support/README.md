@@ -9,7 +9,7 @@ You can install directly via pip. This also requires the rosbag package from the
 ROS package index.
 
 ```bash
-pip install --index-url https://rospypi.github.io/simple rosbag
+pip install --index-url https://rospypi.github.io/simple genpy
 pip install mcap-ros1-support
 ```
 
@@ -29,7 +29,7 @@ name = "ros"
 
 [packages]
 mcap-ros1-support = "*"
-rosbag = "*"
+genpy = "*"
 ```
 
 ## Reading ROS1 Messages
