@@ -60,11 +60,14 @@ class Writer:
 
         buffer = BytesIO()
         message.serialize(buffer)
-        log_time = log_time or time.time_ns()
+        if log_time is None:
+            log_time = time.time_ns()
+        if publish_time is None:
+            publish_time = log_time
         self.__writer.add_message(
             channel_id=channel_id,
-            log_time=log_time or time.time_ns(),
-            publish_time=publish_time or log_time,
+            log_time=log_time,
+            publish_time=publish_time,
             sequence=sequence,
             data=buffer.getvalue(),
         )
