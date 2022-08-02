@@ -8,13 +8,18 @@ test: image
 
 .PHONY: write
 write: image
-	docker run -t --rm --name mcap_ros2 -v $(CURDIR):/mcap/ros2 mcap_ros2 ros2 run py_mcap_demo writer bag
+	mkdir -p bags
+	docker run -t --rm --name mcap_ros2 -v $(CURDIR)/bags:/mcap/ros2/bags mcap_ros2 ros2 run py_mcap_demo writer bags/demo
 
 .PHONY: read
 read: image
-	mkdir -p output
-	docker run -t --rm --name mcap_ros2 -v $(CURDIR):/mcap/ros2 mcap_ros2 ros2 run py_mcap_demo reader bag
+	mkdir -p bags
+	docker run -t --rm --name mcap_ros2 -v $(CURDIR)/bags:/mcap/ros2/bags mcap_ros2 ros2 run py_mcap_demo reader bags/demo
 
 .PHONY: shell
 shell: image
 	docker run -it --rm --name mcap_ros2 mcap_ros2 /bin/bash
+
+.PHONY: clean
+clean:
+	rm -rf bags install log build

@@ -66,6 +66,7 @@ def _chunks_matching_topics(
     end_time: Optional[float],
 ) -> List[ChunkIndex]:
     """returns a list of ChunkIndex records that include one or more messages of the given topics.
+
     :param summary: the summary of this MCAP.
     :param topics: topics to match. If None, all chunk indices in the summary are returned.
     :param start_time: if not None, messages from before this unix timestamp are not included.
@@ -79,15 +80,16 @@ def _chunks_matching_topics(
             continue
         for channel_id in chunk_index.message_index_offsets.keys():
             if topics is None or summary.channels[channel_id].topic in topics:
-                print(
-                    f"start: {chunk_index.message_start_time}, end: {chunk_index.message_end_time}"
-                )
                 out.append(chunk_index)
                 break
     return out
 
 
 class McapReader(ABC):
+    """Reads data out of an MCAP file, using the summary section where available to efficiently
+    read only the parts of the file that are needed.
+    """
+
     @abstractmethod
     def iter_messages(
         self,
@@ -95,19 +97,37 @@ class McapReader(ABC):
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
+        """iterates through the messages in an MCAP.
+
+        :param topics: if not None, only messages from these topics will be returned.
+        :param start_time: an integer nanosecond timestamp. if provided, messages logged before this
+            timestamp are not included.
+        :param end_time: an integer nanosecond timestamp. if provided, messages logged after this
+            timestamp are not included.
+        """
         raise NotImplementedError()
 
     @abstractmethod
     def get_summary(self) -> Optional[Summary]:
+        """Reads the (optional) summary section from the MCAP file."""
         raise NotImplementedError()
 
     @abstractmethod
     def iter_attachments(self) -> Iterator[Attachment]:
+        """Iterates through attachment records in the MCAP."""
         raise NotImplementedError()
 
     @abstractmethod
     def iter_metadata(self) -> Iterator[Metadata]:
+        """Iterates through metadata records in the MCAP."""
         raise NotImplementedError()
+
+
+def make_reader(stream: IO[bytes]) -> McapReader:
+    """constructs the appropriate McapReader implementation for this data source."""
+    if stream.seekable():
+        return SeekingReader(stream)
+    return NonSeekingReader(stream)
 
 
 class SeekingReader(McapReader):
@@ -124,11 +144,12 @@ class SeekingReader(McapReader):
         end_time: Optional[int] = None,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
         """iterates through the messages in an MCAP.
+
         :param topics: if not None, only messages from these topics will be returned.
-        :param start_time: an integer nanosecond timestamp. if provided, messages logged before
-            this timestamp are not included.
-        :param end_time: an integer nanosecond timestamp. if provided, messages logged after
-            this timestamp are not included.
+        :param start_time: an integer nanosecond timestamp. if provided, messages logged before this
+            timestamp are not included.
+        :param end_time: an integer nanosecond timestamp. if provided, messages logged after this
+            timestamp are not included.
         """
         summary = self.get_summary()
         assert summary is not None
@@ -156,7 +177,7 @@ class SeekingReader(McapReader):
                     yield (schema, channel, record)
 
     def get_summary(self) -> Optional[Summary]:
-        """returns a Summary object containing records from the (optional) summary section."""
+        """Reads the (optional) summary section from the MCAP file."""
         if self._summary is not None:
             return self._summary
         self._stream.seek(-(FOOTER_SIZE + MAGIC_SIZE), io.SEEK_END)
@@ -174,7 +195,7 @@ class SeekingReader(McapReader):
         return self._summary
 
     def iter_attachments(self) -> Iterator[Attachment]:
-        """iterates through attachment records in the MCAP."""
+        """Iterates through attachment records in the MCAP."""
         summary = self.get_summary()
         if summary is None:
             # no index available, use a non-seeking reader to read linearly through the stream.
@@ -188,7 +209,7 @@ class SeekingReader(McapReader):
                 raise McapError(f"expected attachment record, got {type(record)}")
 
     def iter_metadata(self) -> Iterator[Metadata]:
-        """iterates through metadata records in the MCAP."""
+        """Iterates through metadata records in the MCAP."""
         summary = self.get_summary()
         if summary is None:
             # fall back to a non-seeking reader
@@ -223,12 +244,13 @@ class NonSeekingReader(McapReader):
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
-        """iterates through the messages in an MCAP.
+        """Iterates through the messages in an MCAP.
+
         :param topics: if not None, only messages from these topics will be returned.
-        :param start_time: an integer nanosecond timestamp. if provided, messages logged before
-            this timestamp are not included.
-        :param end_time: an integer nanosecond timestamp. if provided, messages logged after
-            this timestamp are not included.
+        :param start_time: an integer nanosecond timestamp. if provided, messages logged before this
+            timestamp are not included.
+        :param end_time: an integer nanosecond timestamp. if provided, messages logged after this
+            timestamp are not included.
         """
         self._check_spent()
         for record in StreamReader(self._stream).records:
@@ -256,26 +278,20 @@ class NonSeekingReader(McapReader):
                 yield (schema, channel, record)
 
     def get_summary(self) -> Optional[Summary]:
-        """returns a Summary object containing records from the (optional) summary section."""
+        """Returns a Summary object containing records from the (optional) summary section."""
         self._check_spent()
         return _read_summary_from_stream_reader(StreamReader(self._stream))
 
     def iter_attachments(self) -> Iterator[Attachment]:
-        """iterates through attachment records in the MCAP."""
+        """Iterates through attachment records in the MCAP."""
         self._check_spent()
         for record in StreamReader(self._stream).records:
             if isinstance(record, Attachment):
                 yield record
 
     def iter_metadata(self) -> Iterator[Metadata]:
-        """iterates through metadata records in the MCAP."""
+        """Iterates through metadata records in the MCAP."""
         self._check_spent()
         for record in StreamReader(self._stream).records:
             if isinstance(record, Metadata):
                 yield record
-
-
-def make_reader(stream: IO[bytes]) -> McapReader:
-    if stream.seekable():
-        return SeekingReader(stream)
-    return NonSeekingReader(stream)

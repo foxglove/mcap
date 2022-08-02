@@ -1,14 +1,27 @@
-.. mdinclude:: ../README.md
+.. mdinclude:: ../mcap/README.md
+
+Usage Examples
+--------------
+
+.. toctree::
+   raw_reader_writer_example
+   protobuf_example
+   ros1_example
+   ros2_example
+   jsonschema_tutorial
+
+API Documentation
+-----------------
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
 
-   apidoc/index
-   jsonschema_tutorial
+   mcap-apidoc/index
+   mcap-protobuf-apidoc/index
+   mcap-ros1-apidoc/index
 
 Indices and tables
-==================
+------------------
 
 * :ref:`genindex`
 * :ref:`modindex`

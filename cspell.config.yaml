@@ -20,6 +20,8 @@ ignorePaths:
   - "*.patch"
   - package.json
   - package.xml
+  - "*_pb2.py"
+  - Pipfile*
 
 words:
   - callerid
@@ -30,14 +32,17 @@ words:
   - crcs
   - datetime
   - deserialization
+  - distro
   - flatbuffer
   - flatc
   - fwrite
+  - genpy
   - golangci
   - jsonschema
   - kaitai
   - libmcap
   - mcap
+  - nanos
   - nsec
   - nsecs
   - pipenv
@@ -100,6 +105,7 @@ overrides:
       - setuptools
       - addopts
       - xfail
+      - Pipfile
 
   - filename: "python/**/*.rst"
     words:
