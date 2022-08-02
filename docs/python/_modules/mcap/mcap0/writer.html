@@ -204,9 +204,15 @@
             <span class="n">publish_time</span><span class="o">=</span><span class="n">publish_time</span><span class="p">,</span>
             <span class="n">sequence</span><span class="o">=</span><span class="n">sequence</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_start_time</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_start_time</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">log_time</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_end_time</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">log_time</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_start_time</span> <span class="o">=</span> <span class="n">log_time</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_start_time</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span>
+                <span class="n">log_time</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_start_time</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_end_time</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span>
+            <span class="n">log_time</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_end_time</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">channel_message_counts</span><span class="p">[</span><span class="n">message</span><span class="o">.</span><span class="n">channel_id</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__statistics</span><span class="o">.</span><span class="n">message_count</span> <span class="o">+=</span> <span class="mi">1</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="p">:</span>
