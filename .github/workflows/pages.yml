@@ -180,6 +180,13 @@ jobs:
           parent: false
           destination: "foxglove-mcap-dev-preview/${{ github.ref }}"
 
-      - name: "Preview: print URL"
+      - name: "Preview: display URL"
         if: "!github.event.pull_request.head.repo.fork && github.ref != 'refs/heads/main'"
-        run: "echo 'See generated docs at https://storage.googleapis.com/foxglove-mcap-dev-preview/${{ github.ref }}/index.html'"
+        uses: Sibz/github-status-action@v1
+        with:
+          authToken: ${{secrets.GITHUB_TOKEN}}
+          context: "Pages Preview"
+          description: "Available in details"
+          state: "success"
+          sha: ${{github.event.pull_request.head.sha || github.sha}}
+          target_url: "https://storage.googleapis.com/foxglove-mcap-dev-preview/${{ github.ref }}/index.html"
