@@ -1,5 +1,6 @@
 import contextlib
 import json
+from io import BytesIO
 from tempfile import TemporaryFile
 from typing import List
 import zlib
@@ -8,7 +9,7 @@ import lz4.frame
 import pytest
 
 from mcap.mcap0.writer import CompressionType, Writer
-from mcap.mcap0.records import Chunk, ChunkIndex
+from mcap.mcap0.records import Chunk, ChunkIndex, Statistics
 from mcap.mcap0.stream_reader import StreamReader
 
 
@@ -81,3 +82,36 @@ def test_decode_read(compression_type, length):
     with generate_sample_data(compression_type) as t:
         data = t.read()
         assert len(data) == length
+
+
+def test_out_of_order_messages():
+    io = BytesIO()
+    writer = Writer(io, compression=CompressionType.ZSTD)
+    writer.start(profile="x-json", library="test")
+    schema_id = writer.register_schema("schema", "unknown", b"")
+    channel_id = writer.register_channel("topic", "enc", schema_id)
+    writer.add_message(channel_id, 100, b"a", 100)
+    writer.add_message(channel_id, 0, b"b", 0)
+    writer.add_message(channel_id, 1, b"c", 1)
+    writer.finish()
+
+    io.seek(0)
+    reader = StreamReader(io)
+    records = list(reader.records)
+
+    statistics = next(r for r in records if isinstance(r, Statistics))
+    assert statistics == Statistics(
+        attachment_count=0,
+        channel_count=1,
+        channel_message_counts={channel_id: 3},
+        chunk_count=1,
+        message_count=3,
+        schema_count=1,
+        metadata_count=0,
+        message_start_time=0,
+        message_end_time=100,
+    )
+
+    chunk_index = next(r for r in records if isinstance(r, ChunkIndex))
+    assert chunk_index.message_start_time == 0
+    assert chunk_index.message_end_time == 100
