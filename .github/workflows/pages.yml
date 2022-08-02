@@ -182,11 +182,9 @@ jobs:
 
       - name: "Preview: display URL"
         if: "!github.event.pull_request.head.repo.fork && github.ref != 'refs/heads/main'"
-        uses: Sibz/github-status-action@v1
+        uses: LouisBrunner/checks-action@v1.1.1
         with:
-          authToken: ${{secrets.GITHUB_TOKEN}}
-          context: "Pages Preview"
-          description: "Available in details"
-          state: "success"
-          sha: ${{github.event.pull_request.head.sha || github.sha}}
-          target_url: "https://storage.googleapis.com/foxglove-mcap-dev-preview/${{ github.ref }}/index.html"
+          token: ${{secrets.GITHUB_TOKEN}}
+          name: "Pages Preview"
+          conclusion: "${{ job.status }}"
+          details_url: "https://storage.googleapis.com/foxglove-mcap-dev-preview/${{ github.ref }}/index.html"
