@@ -332,6 +332,9 @@ func (doctor *mcapDoctor) Examine() {
 			if err != nil {
 				doctor.error("Failed to parse statistics:", err)
 			}
+			if doctor.statistics != nil {
+				doctor.error("File contains multiple Statistics records")
+			}
 			doctor.statistics = statistics
 		case mcap.TokenMetadata:
 			_, err := mcap.ParseMetadata(data)
