@@ -168,9 +168,15 @@ class Writer:
             publish_time=publish_time,
             sequence=sequence,
         )
-        if self.__statistics.message_start_time == 0:
-            self.__statistics.message_start_time = message.log_time
-        self.__statistics.message_end_time = message.log_time
+        if self.__statistics.message_count == 0:
+            self.__statistics.message_start_time = log_time
+        else:
+            self.__statistics.message_start_time = min(
+                log_time, self.__statistics.message_start_time
+            )
+        self.__statistics.message_end_time = max(
+            log_time, self.__statistics.message_end_time
+        )
         self.__statistics.channel_message_counts[message.channel_id] += 1
         self.__statistics.message_count += 1
         if self.__chunk_builder:
