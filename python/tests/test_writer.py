@@ -98,19 +98,20 @@ def test_out_of_order_messages():
     io.seek(0)
     reader = StreamReader(io)
     records = list(reader.records)
-    assert [r for r in records if isinstance(r, Statistics)] == [
-        Statistics(
-            attachment_count=0,
-            channel_count=1,
-            channel_message_counts={channel_id: 3},
-            chunk_count=1,
-            message_count=3,
-            schema_count=1,
-            metadata_count=0,
-            message_start_time=0,
-            message_end_time=100,
-        )
-    ]
+
+    statistics = next(r for r in records if isinstance(r, Statistics))
+    assert statistics == Statistics(
+        attachment_count=0,
+        channel_count=1,
+        channel_message_counts={channel_id: 3},
+        chunk_count=1,
+        message_count=3,
+        schema_count=1,
+        metadata_count=0,
+        message_start_time=0,
+        message_end_time=100,
+    )
+
     chunk_index = next(r for r in records if isinstance(r, ChunkIndex))
     assert chunk_index.message_start_time == 0
     assert chunk_index.message_end_time == 100
