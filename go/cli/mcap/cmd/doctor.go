@@ -230,7 +230,7 @@ func (doctor *mcapDoctor) Examine() {
 			}
 
 			if header.Library == "" {
-				doctor.warn("Header.library field should be non-empty. Its good to include a library field for reference.")
+				doctor.warn("Header.library field should be non-empty. The library field should be set to a value that identifies the software which produced the file.")
 			}
 
 			var customProfile = strings.HasPrefix(header.Profile, "x-")
