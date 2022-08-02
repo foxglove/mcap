@@ -29,8 +29,9 @@ type mcapDoctor struct {
 	// Map from chunk offset to chunk index
 	chunkIndexes map[uint64]*mcap.ChunkIndex
 
-	minStartTime uint64
-	maxEndTime   uint64
+	messageCount uint64
+	minLogTime   uint64
+	maxLogTime   uint64
 	statistics   *mcap.Statistics
 }
 
@@ -57,13 +58,6 @@ func (doctor *mcapDoctor) fatalf(format string, v ...any) {
 func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 	compressionFormat := mcap.CompressionFormat(chunk.Compression)
 	var uncompressedBytes []byte
-
-	if chunk.MessageStartTime < doctor.minStartTime {
-		doctor.minStartTime = chunk.MessageStartTime
-	}
-	if chunk.MessageEndTime > doctor.maxEndTime {
-		doctor.maxEndTime = chunk.MessageEndTime
-	}
 
 	switch compressionFormat {
 	case mcap.CompressionNone:
@@ -183,6 +177,8 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 				maxLogTime = message.LogTime
 			}
 
+			doctor.messageCount++
+
 		default:
 			doctor.error("Illegal record in chunk: %d", tokenType)
 		}
@@ -196,6 +192,13 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 	if maxLogTime != chunk.MessageEndTime {
 		doctor.error("Chunk.message_end_time %d does not match the latest message log time %d",
 			chunk.MessageEndTime, maxLogTime)
+	}
+
+	if minLogTime < doctor.minLogTime {
+		doctor.minLogTime = minLogTime
+	}
+	if maxLogTime > doctor.maxLogTime {
+		doctor.maxLogTime = maxLogTime
 	}
 }
 
@@ -283,6 +286,16 @@ func (doctor *mcapDoctor) Examine() {
 					message.LogTime, channel.Topic, lastMessageTime)
 			}
 			lastMessageTime = message.LogTime
+
+			if message.LogTime < doctor.minLogTime {
+				doctor.minLogTime = message.LogTime
+			}
+			if message.LogTime > doctor.maxLogTime {
+				doctor.maxLogTime = message.LogTime
+			}
+
+			doctor.messageCount++
+
 		case mcap.TokenChunk:
 			chunk, err := mcap.ParseChunk(data)
 			if err != nil {
@@ -383,11 +396,16 @@ func (doctor *mcapDoctor) Examine() {
 	}
 
 	if doctor.statistics != nil {
-		if doctor.statistics.MessageStartTime != doctor.minStartTime {
-			doctor.error("Statistics has message start time %d, but the minimum chunk start time is %d", doctor.statistics.MessageStartTime, doctor.minStartTime)
+		if doctor.messageCount > 0 {
+			if doctor.statistics.MessageStartTime != doctor.minLogTime {
+				doctor.error("Statistics has message start time %d, but the minimum message start time is %d", doctor.statistics.MessageStartTime, doctor.minLogTime)
+			}
+			if doctor.statistics.MessageEndTime != doctor.maxLogTime {
+				doctor.error("Statistics has message end time %d, but the maximum message end time is %d", doctor.statistics.MessageEndTime, doctor.maxLogTime)
+			}
 		}
-		if doctor.statistics.MessageEndTime != doctor.maxEndTime {
-			doctor.error("Statistics has message end time %d, but the maximum chunk end time is %d", doctor.statistics.MessageEndTime, doctor.maxEndTime)
+		if doctor.statistics.MessageCount != doctor.messageCount {
+			doctor.error("Statistics has message count %d, but actual number of messages is %d", doctor.statistics.MessageCount, doctor.messageCount)
 		}
 	}
 }
@@ -398,6 +416,7 @@ func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
 		channels:     make(map[uint16]*mcap.Channel),
 		schemas:      make(map[uint16]*mcap.Schema),
 		chunkIndexes: make(map[uint64]*mcap.ChunkIndex),
+		minLogTime:   math.MaxUint64,
 	}
 }
 
