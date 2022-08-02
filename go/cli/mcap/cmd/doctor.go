@@ -28,6 +28,10 @@ type mcapDoctor struct {
 
 	// Map from chunk offset to chunk index
 	chunkIndexes map[uint64]*mcap.ChunkIndex
+
+	minStartTime uint64
+	maxEndTime   uint64
+	statistics   *mcap.Statistics
 }
 
 func (doctor *mcapDoctor) warn(format string, v ...any) {
@@ -53,6 +57,13 @@ func (doctor *mcapDoctor) fatalf(format string, v ...any) {
 func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 	compressionFormat := mcap.CompressionFormat(chunk.Compression)
 	var uncompressedBytes []byte
+
+	if chunk.MessageStartTime < doctor.minStartTime {
+		doctor.minStartTime = chunk.MessageStartTime
+	}
+	if chunk.MessageEndTime > doctor.maxEndTime {
+		doctor.maxEndTime = chunk.MessageEndTime
+	}
 
 	switch compressionFormat {
 	case mcap.CompressionNone:
@@ -304,10 +315,11 @@ func (doctor *mcapDoctor) Examine() {
 				doctor.error("Failed to parse attachment index:", err)
 			}
 		case mcap.TokenStatistics:
-			_, err := mcap.ParseStatistics(data)
+			statistics, err := mcap.ParseStatistics(data)
 			if err != nil {
 				doctor.error("Failed to parse statistics:", err)
 			}
+			doctor.statistics = statistics
 		case mcap.TokenMetadata:
 			_, err := mcap.ParseMetadata(data)
 			if err != nil {
@@ -367,6 +379,15 @@ func (doctor *mcapDoctor) Examine() {
 		}
 		if chunk.UncompressedSize != chunkIndex.UncompressedSize {
 			doctor.error("Chunk at offset %d has uncompressed size %d, but its chunk index has uncompressed size %d", chunkOffset, chunk.UncompressedSize, chunkIndex.UncompressedSize)
+		}
+	}
+
+	if doctor.statistics != nil {
+		if doctor.statistics.MessageStartTime != doctor.minStartTime {
+			doctor.error("Statistics has message start time %d, but the minimum chunk start time is %d", doctor.statistics.MessageStartTime, doctor.minStartTime)
+		}
+		if doctor.statistics.MessageEndTime != doctor.maxEndTime {
+			doctor.error("Statistics has message end time %d, but the maximum chunk end time is %d", doctor.statistics.MessageEndTime, doctor.maxEndTime)
 		}
 	}
 }
