@@ -94,11 +94,14 @@
 
         <span class="n">buffer</span> <span class="o">=</span> <span class="n">BytesIO</span><span class="p">()</span>
         <span class="n">message</span><span class="o">.</span><span class="n">serialize</span><span class="p">(</span><span class="n">buffer</span><span class="p">)</span>
-        <span class="n">log_time</span> <span class="o">=</span> <span class="n">log_time</span> <span class="ow">or</span> <span class="n">time</span><span class="o">.</span><span class="n">time_ns</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">log_time</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">log_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time_ns</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">publish_time</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">publish_time</span> <span class="o">=</span> <span class="n">log_time</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__writer</span><span class="o">.</span><span class="n">add_message</span><span class="p">(</span>
             <span class="n">channel_id</span><span class="o">=</span><span class="n">channel_id</span><span class="p">,</span>
-            <span class="n">log_time</span><span class="o">=</span><span class="n">log_time</span> <span class="ow">or</span> <span class="n">time</span><span class="o">.</span><span class="n">time_ns</span><span class="p">(),</span>
-            <span class="n">publish_time</span><span class="o">=</span><span class="n">publish_time</span> <span class="ow">or</span> <span class="n">log_time</span><span class="p">,</span>
+            <span class="n">log_time</span><span class="o">=</span><span class="n">log_time</span><span class="p">,</span>
+            <span class="n">publish_time</span><span class="o">=</span><span class="n">publish_time</span><span class="p">,</span>
             <span class="n">sequence</span><span class="o">=</span><span class="n">sequence</span><span class="p">,</span>
             <span class="n">data</span><span class="o">=</span><span class="n">buffer</span><span class="o">.</span><span class="n">getvalue</span><span class="p">(),</span>
         <span class="p">)</span></div></div>
