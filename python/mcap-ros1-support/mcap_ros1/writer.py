@@ -1,7 +1,15 @@
 from io import BufferedWriter, BytesIO
 from typing import IO, Any, Dict, Optional, Union
 from mcap.mcap0.writer import Writer as McapWriter
+import mcap
 import time
+
+from . import __version__
+
+
+def _library_identifier():
+    mcap_version = getattr(mcap, "__version__", "<=0.0.10")
+    return f"mcap-ros1-support {__version__}; mcap {mcap_version}"
 
 
 class Writer:
@@ -9,7 +17,7 @@ class Writer:
         self.__writer = McapWriter(output=output)
         self.__schema_ids: Dict[str, int] = {}
         self.__channel_ids: Dict[str, int] = {}
-        self.__writer.start(profile="ros1", library="python-mcap-ros1-support")
+        self.__writer.start(profile="ros1", library=_library_identifier())
         self.__finished = False
 
     def finish(self):
