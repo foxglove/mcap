@@ -35,7 +35,15 @@
 <span></span><span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BufferedWriter</span><span class="p">,</span> <span class="n">BytesIO</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">IO</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 <span class="kn">from</span> <span class="nn">mcap.mcap0.writer</span> <span class="kn">import</span> <span class="n">Writer</span> <span class="k">as</span> <span class="n">McapWriter</span>
+<span class="kn">import</span> <span class="nn">mcap</span>
 <span class="kn">import</span> <span class="nn">time</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">__version__</span>
+
+
+<span class="k">def</span> <span class="nf">_library_identifier</span><span class="p">():</span>
+    <span class="n">mcap_version</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">mcap</span><span class="p">,</span> <span class="s2">&quot;__version__&quot;</span><span class="p">,</span> <span class="s2">&quot;&lt;=0.0.10&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;mcap-ros1-support </span><span class="si">{</span><span class="n">__version__</span><span class="si">}</span><span class="s2">; mcap </span><span class="si">{</span><span class="n">mcap_version</span><span class="si">}</span><span class="s2">&quot;</span>
 
 
 <div class="viewcode-block" id="Writer"><a class="viewcode-back" href="../../mcap-ros1-apidoc/mcap_ros1.writer.html#mcap_ros1.writer.Writer">[docs]</a><span class="k">class</span> <span class="nc">Writer</span><span class="p">:</span>
@@ -43,7 +51,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">__writer</span> <span class="o">=</span> <span class="n">McapWriter</span><span class="p">(</span><span class="n">output</span><span class="o">=</span><span class="n">output</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__schema_ids</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__channel_ids</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__writer</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="n">profile</span><span class="o">=</span><span class="s2">&quot;ros1&quot;</span><span class="p">,</span> <span class="n">library</span><span class="o">=</span><span class="s2">&quot;python-mcap-ros1-support&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__writer</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="n">profile</span><span class="o">=</span><span class="s2">&quot;ros1&quot;</span><span class="p">,</span> <span class="n">library</span><span class="o">=</span><span class="n">_library_identifier</span><span class="p">())</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__finished</span> <span class="o">=</span> <span class="kc">False</span>
 
 <div class="viewcode-block" id="Writer.finish"><a class="viewcode-back" href="../../mcap-ros1-apidoc/mcap_ros1.writer.html#mcap_ros1.writer.Writer.finish">[docs]</a>    <span class="k">def</span> <span class="nf">finish</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
