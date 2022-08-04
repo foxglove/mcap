@@ -9,6 +9,9 @@ on:
 jobs:
   pages-home:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docusaurus-docs
     steps:
       - uses: actions/checkout@v3
         with:
@@ -21,12 +24,12 @@ jobs:
       - name: Build documentation site
         run: |
           yarn install --frozen-lockfile
-          yarn docs:build --minify
+          yarn build
 
       - uses: actions/upload-artifact@v3
         with:
           name: __home__
-          path: docs/website
+          path: build
           retention-days: 1
 
   pages-cpp:
