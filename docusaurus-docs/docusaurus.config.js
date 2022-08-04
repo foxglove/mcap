@@ -65,15 +65,9 @@ const config = {
         items: [
           {
             type: 'doc',
-            docId: 'intro',
+            docId: 'what-is-mcap',
             position: 'left',
-            label: 'Tutorial',
-          },
-          {to: '/blog', label: 'Blog', position: 'left'},
-          {
-            href: 'https://github.com/foxglove/mcap',
-            label: 'GitHub',
-            position: 'right',
+            label: 'Documentation',
           },
         ],
       },
@@ -84,8 +78,16 @@ const config = {
             title: 'Docs',
             items: [
               {
-                label: 'Tutorial',
-                to: '/docs/intro',
+                label: 'Overview',
+                to: '/docs/what-is-mcap',
+              },
+              {
+                label: 'Guides',
+                to: '/docs/Guides',
+              },
+              {
+                label: 'API Documentation',
+                to: '/docs/API',
               },
             ],
           },
