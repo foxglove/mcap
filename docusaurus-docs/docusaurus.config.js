@@ -85,11 +85,11 @@ const config = {
               },
               {
                 label: 'Guides',
-                to: '/docs/Guides',
+                to: '/docs/Guides/getting-startted',
               },
               {
                 label: 'API Documentation',
-                to: '/docs/API',
+                to: '/docs/API/go',
               },
             ],
           },
