@@ -21,9 +21,16 @@ jobs:
           node-version: 16.x
           cache: yarn
 
+      - name: set preview site build env
+        if: "!github.event.pull_request.head.repo.fork && github.ref != 'refs/heads/main'"
+        run: |
+          echo "DOCUSAURUS_URL=https://storage.googleapis.com" >> $GITHUB_ENV
+          echo "DOCUSAURUS_BASE_URL=/foxglove-mcap-dev-preview/${{ github.ref }}/index.html/" >> $GITHUB_ENV
+
       - name: Build documentation site
         run: |
           yarn install --frozen-lockfile
+          echo "BASE_URL_IS $DOCUSAURUS_BASE_URL"
           yarn build
 
       - uses: actions/upload-artifact@v3
