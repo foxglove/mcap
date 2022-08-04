@@ -5,6 +5,7 @@ hidden: false
 createdAt: "2022-07-21T19:47:47.821Z"
 updatedAt: "2022-07-27T01:08:12.990Z"
 ---
+
 ## Reading Protobuf from MCAP
 
 ## Writing Protobuf to MCAP
@@ -25,7 +26,7 @@ if (!s.ok) {
 
 Configure your writer to your desired specifications using `McapWriterOptions`. For example, `opts.compressionLevel = mcap::CompressionLevel::Fast` customizes your writer to use a faster compression level.
 
-### Register schema 
+### Register schema
 
 Before we can write messages, we need to register a schema and a channel to write our messages to.
 
@@ -101,7 +102,8 @@ writer.close();
 
 Now, we can inspect our output MCAP file's messages. I used the _Data source_ dialog in Foxglove Studio to “Open local file”.
 
-I then added a few relevant panels ([Plot](/docs/studio/panels/plot), [Image](/docs/studio/panels/image), [Raw Messages](/docs/studio/panels/raw-messages), [3D](/docs/studio/panels/3d)) to visualize my robot's performance.
+I then added a few relevant panels ([Plot](https://foxglove.dev/docs/studio/panels/plot), [Image](https://foxglove.dev/docs/studio/panels/image), [Raw Messages](https://foxglove.dev/docs/studio/panels/raw-messages), [3D](https://foxglove.dev/docs/studio/panels/3d)) to visualize my robot's performance.
 
 ## Important links
+
 - [Example code](https://github.com/foxglove/mcap/tree/main/cpp/examples/protobuf)

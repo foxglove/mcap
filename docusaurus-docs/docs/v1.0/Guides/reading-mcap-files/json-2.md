@@ -5,6 +5,7 @@ hidden: false
 createdAt: "2022-07-21T19:49:13.412Z"
 updatedAt: "2022-07-26T23:55:02.630Z"
 ---
+
 ## Writing JSON to MCAP
 
 > From [Recording JSON Data to MCAP Files](https://foxglove.dev/blog/recording-json-data-to-mcap-files). While JSON might not be the most efficient format for storing point cloud data, it’s easy to get started with as an MCAP beginner.
@@ -14,17 +15,17 @@ updatedAt: "2022-07-26T23:55:02.630Z"
 Let’s work with some publicly available data – the “[Sydney Urban Objects Dataset](https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml)”, released by the [Australian Centre for Field Robotics](https://www.sydney.edu.au/engineering/our-research/robotics-and-intelligent-systems/australian-centre-for-field-robotics.html) – and write it as JSON to an MCAP file.
 [block:image]
 {
-  "images": [
-    {
-      "image": [
-        "https://files.readme.io/705a434-sydney.png",
-        "sydney.png",
-        1058,
-        421,
-        "#dfe1de"
-      ]
-    }
-  ]
+"images": [
+{
+"image": [
+"https://files.readme.io/705a434-sydney.png",
+"sydney.png",
+1058,
+421,
+"#dfe1de"
+]
+}
+]
 }
 [/block]
 This CSV dataset contains a variety of common urban road objects scanned with a Velodyne HDL-64E LIDAR. Each of the 600+ scanned object contains the following fields:
@@ -51,7 +52,7 @@ This prints out the timestamp, intensity, and coordinates for each point in the 
 
 ### Encoding the data into a `foxglove.PointCloud`
 
-Let's encode this CSV data as a [`foxglove.PointCloud` schema](/docs/studio/messages/point-cloud), so we can later visualize this data in [Foxglove Studio](doc:visualize-in-foxglove-studio):
+Let's encode this CSV data as a [`foxglove.PointCloud` schema](https://foxglove.dev/docs/studio/messages/point-cloud), so we can later visualize this data in [Foxglove Studio](doc:visualize-in-foxglove-studio):
 
 | field          | type                 | description                                                      |
 | -------------- | -------------------- | ---------------------------------------------------------------- |
@@ -61,7 +62,7 @@ Let's encode this CSV data as a [`foxglove.PointCloud` schema](/docs/studio/mess
 | `point_stride` | uint32               | Number of bytes between points in the data                       |
 | `fields`       | PackedElementField[] | Fields in the data                                               |
 | `data`         | bytes                | Point data, interpreted using fields                             |
- 
+
 The `foxglove.PointCloud` schema expects a `data` field that contains a single base64-encoded buffer with all point data, as well as a `fields` field that contains metadata describing how to decode the `data`.
 
 Since `foxglove.PointCloud` requires a single timestamp, let’s get it from the first point we see in our file. Then, we’ll pack each field as a four byte single-precision little-endian float.
@@ -197,24 +198,26 @@ $ mcap doctor output.mcap
 
 ### Visualize your MCAP data
 
-For a more visual representation of this data, let's use Foxglove Studio. Open either the [desktop](/download) or [web app](https://studio.foxglove.dev), and add a [Raw Messages](/docs/studio/panels/raw-messages) and our [newly added](/blog/try-foxglove-studios-new-beta-3d-panel) [3D (Beta)](/docs/studio/panels/3d-beta) panel to your layout.
+For a more visual representation of this data, let's use Foxglove Studio. Open either the [desktop](https://foxglove.dev/download) or [web app](https://studio.foxglove.dev), and add a [Raw Messages](https://foxglove.dev/docs/studio/panels/raw-messages) and our [newly added](https://foxglove.dev/blog/try-foxglove-studios-new-beta-3d-panel) [3D (Beta)](https://foxglove.dev/docs/studio/panels/3d-beta) panel to your layout.
 
 Then, simply drag and drop your output MCAP file into the app window to start playing the data. Make sure to enable the `pointcloud` topic in the 3D (Beta) panel to display the point cloud in 3D space. You can also inspect the raw data for the `pointcloud` topic in your Raw Messages panel:
 [block:image]
 {
-  "images": [
-    {
-      "image": [
-        "https://files.readme.io/0398582-hero.png",
-        "hero.png",
-        1600,
-        1034,
-        "#121415"
-      ]
-    }
-  ]
+"images": [
+{
+"image": [
+"https://files.readme.io/0398582-hero.png",
+"hero.png",
+1600,
+1034,
+"#121415"
+]
+}
+]
 }
 [/block]
+
 ### Important links
+
 - [MCAP Python library](https://github.com/foxglove/mcap/tree/main/python/mcap)
 - [Example code](https://github.com/foxglove/mcap/tree/main/python/examples/jsonschema)
