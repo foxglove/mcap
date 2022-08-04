@@ -121,10 +121,6 @@ jobs:
   pages-publish:
     needs:
       - pages-home
-      - pages-cpp
-      - pages-typescript
-      - pages-python
-      - pages-swift
     permissions:
       contents: write
       statuses: write
