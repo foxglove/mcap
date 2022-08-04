@@ -29,7 +29,7 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           name: __home__
-          path: build
+          path: docusaurus-docs/build
           retention-days: 1
 
   pages-cpp:
