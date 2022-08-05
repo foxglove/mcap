@@ -24,12 +24,7 @@ nav:
       - Library Support: "support-matrix.md"
   - Guides:
       - "Guides/getting-started.md"
-  - API Documentation:
-      - Python: docs/python
-      - C++: docs/cpp
-      - Typescript: docs/typescript
-      - Go: "https://pkg.go.dev/github.com/foxglove/mcap/go/mcap"
-      - Swift: docs/swift/documentation/mcap
+  - API Documentation: "api-docs.md"
 
 markdown_extensions:
   - pymdownx.snippets
