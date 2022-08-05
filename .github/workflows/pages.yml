@@ -17,6 +17,11 @@ jobs:
         with:
           python-version: 3.7
           cache: pipenv
+      - name: Install pipenv
+        run: pip install pipenv
+
+      - name: Install dependencies
+        run: pipenv install --deploy
 
       - name: Build documentation site
         run: pipenv run mkdocs build
