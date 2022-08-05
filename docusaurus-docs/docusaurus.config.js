@@ -19,7 +19,7 @@ const config = {
   organizationName: 'foxglove', // Usually your GitHub org/user name.
   projectName: 'mcap', // Usually your repo name.
   deploymentBranch: 'gh-pages',
-  trailingSlash: false,
+  trailingSlash: true,
 
   // Even if you don't use internalization, you can use this field to set useful
   // metadata like html lang. For example, if your site is Chinese, you may want
