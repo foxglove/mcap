@@ -1,0 +1,14 @@
+site_name: "MCAP"
+theme:
+  name: material
+  favicon: img/favicon32.png
+  logo: img/mcap.png
+  palette:
+    # Palette toggle for dark mode
+    scheme: slate
+    primary: "deep purple"
+  features:
+    - navigation.tabs
+
+markdown_extensions:
+  - pymdownx.snippets

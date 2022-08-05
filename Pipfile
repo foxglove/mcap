@@ -1,0 +1,3 @@
+[packages]
+mkdocs = "*"
+mkdocs-material = "*"

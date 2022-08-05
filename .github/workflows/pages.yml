@@ -13,20 +13,18 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-python@v4
         with:
-          node-version: 16.x
-          cache: yarn
+          python-version: 3.7
+          cache: pipenv
 
       - name: Build documentation site
-        run: |
-          yarn install --frozen-lockfile
-          yarn docs:build --minify
+        run: pipenv run mkdocs build
 
       - uses: actions/upload-artifact@v3
         with:
           name: __home__
-          path: docs/website
+          path: site
           retention-days: 1
 
   pages-cpp:
