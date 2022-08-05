@@ -11,7 +11,7 @@ theme:
     - navigation.tabs
 
 nav:
-  - Home: "Home/index.md"
+  - Home: "index.md"
   - Documentation:
       - Specification:
           - "specification/README.md"
@@ -19,12 +19,15 @@ nav:
           - "specification/appendix.md"
       - Motivation:
           - "motivation/evaluation-of-robotics-data-recording-file-formats.md"
-      - Library Support: "Home/support-matrix.md"
+      - Library Support: "support-matrix.md"
   - Guides:
       - "Guides/getting-started.md"
   - API Documentation:
       - Python: docs/python
       - C++: docs/cpp
+      - Typescript: docs/typescript
+      - Go: "https://pkg.go.dev/github.com/foxglove/mcap/go/mcap"
+      - Swift: docs/swift/documentation/mcap
 
 markdown_extensions:
   - pymdownx.snippets
