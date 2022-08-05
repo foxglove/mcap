@@ -10,7 +10,25 @@ theme:
   features:
     - navigation.tabs
 
+nav:
+  - Home: "Home/index.md"
+  - Documentation:
+      - Specification:
+          - "specification/README.md"
+          - "specification/explanatory-notes.md"
+          - "specification/appendix.md"
+      - Motivation:
+          - "motivation/evaluation-of-robotics-data-recording-file-formats.md"
+      - Library Support: "Home/support-matrix.md"
+  - Guides:
+      - "Guides/getting-started.md"
+  - API Documentation:
+      - Python: docs/python
+      - C++: docs/cpp
+
 markdown_extensions:
   - pymdownx.snippets
+  - footnotes
+  - admonition
 
 repo_url: https://github.com/foxglove/mcap
