@@ -7,8 +7,9 @@ const FeatureList = [
     title: 'Heterogenous Data',
     svg: (<svg
     xmlns="http://www.w3.org/2000/svg"
-    class="h-6 w-6"
     fill="none"
+    width="24"
+    height="24"
     viewBox="0 0 24 24"
     stroke="currentColor"
     stroke-width="2"
@@ -30,8 +31,8 @@ const FeatureList = [
     title: 'Performant Writing',
     svg: (<svg
       xmlns="http://www.w3.org/2000/svg"
-      class="h-6 w-6"
-      fill="none"
+      width="24"
+      height="24"
       viewBox="0 0 24 24"
       stroke="currentColor"
       stroke-width="2"
@@ -55,8 +56,9 @@ const FeatureList = [
     title: 'Efficient seeking',
     svg: (<svg
       xmlns="http://www.w3.org/2000/svg"
-      class="h-6 w-6"
       fill="none"
+      width="24"
+      height="24"
       viewBox="0 0 24 24"
       stroke="currentColor"
       stroke-width="2"
@@ -78,8 +80,9 @@ const FeatureList = [
     title: 'Self-contained files',
     svg: (<svg
       xmlns="http://www.w3.org/2000/svg"
-      class="h-6 w-6"
       fill="none"
+      width="24"
+      height="24"
       viewBox="0 0 24 24"
       stroke="currentColor"
       stroke-width="2"
