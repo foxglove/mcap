@@ -25,7 +25,7 @@ jobs:
         if: "!github.event.pull_request.head.repo.fork && github.ref != 'refs/heads/main'"
         run: |
           echo "DOCUSAURUS_URL=https://storage.googleapis.com" >> $GITHUB_ENV
-          echo "DOCUSAURUS_BASE_URL=/foxglove-mcap-dev-preview/${{ github.ref }}/index.html/" >> $GITHUB_ENV
+          echo "DOCUSAURUS_BASE_URL=/foxglove-mcap-dev-preview/${{ github.ref }}/" >> $GITHUB_ENV
 
       - name: Build documentation site
         run: |
