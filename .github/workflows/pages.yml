@@ -30,7 +30,8 @@ jobs:
       - name: Build documentation site
         run: |
           yarn install --frozen-lockfile
-          echo "BASE_URL_IS $DOCUSAURUS_BASE_URL"
+          echo "BASE_URL IS $DOCUSAURUS_BASE_URL"
+          echo "URL IS $DOCUSAURUS_URL"
           yarn build
 
       - uses: actions/upload-artifact@v3
