@@ -12,3 +12,5 @@ theme:
 
 markdown_extensions:
   - pymdownx.snippets
+
+repo_url: https://github.com/foxglove/mcap

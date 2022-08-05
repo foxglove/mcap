@@ -14,29 +14,6 @@ MCAP files are designed to work well under various workloads, resource constrain
 
 A [Kaitai Struct](http://kaitai.io) description for the MCAP format is provided at [mcap.ksy](mcap.ksy).
 
-- [Structure](#file-structure)
-  - [Header](#header)
-  - [Footer](#footer)
-  - [Data Section](#data-section)
-  - [Summary Section](#summary-section)
-- [Records](#records)
-  - [Header](#header-op0x01)
-  - [Footer](#footer-op0x02)
-  - [Schema](#schema-op0x03)
-  - [Channel](#channel-op0x04)
-  - [Message](#message-op0x05)
-  - [Chunk](#chunk-op0x06)
-  - [Message Index](#message-index-op0x07)
-  - [Chunk Index](#chunk-index-op0x08)
-  - [Attachment](#attachment-op0x09)
-  - [Attachment Index](#attachment-index-op0x0A)
-  - [Statistics](#statistics-op0x0B)
-  - [Metadata](#metadata-op0x0C)
-  - [Metadata Index](#metadata-index-op0x0D)
-  - [Summary Offset](#summary-offset-op0x0E)
-  - [Data End](#data-end-op0x0F)
-- [Serialization](#serialization)
-
 ## File Structure
 
 A valid MCAP file is structured as follows. The Summary and Summary Offset sections are optional.
