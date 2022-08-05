@@ -10,6 +10,8 @@ theme:
   features:
     - navigation.tabs
 
+use_directory_urls: false
+
 nav:
   - Home: "index.md"
   - Documentation:
