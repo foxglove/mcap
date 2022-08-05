@@ -8,8 +8,8 @@ const darkCodeTheme = require('prism-react-renderer/themes/dracula');
 const config = {
   title: 'MCAP',
   tagline: 'a serialization-agnostic container file format for pub/sub',
-  url: (process.env.DOCUSAURUS_URL ?? 'https://mcap.dev'),
-  baseUrl: (process.env.DOCUSAURUS_BASE_URL ?? '/'),
+  url: 'https://mcap.dev',
+  baseUrl: '/',
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
   favicon: 'img/favicon32.png',
