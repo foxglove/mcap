@@ -30,8 +30,6 @@ PyYaml = "*"
 sphinx = "*"
 std_msgs = {version = "*", index = "ros"}
 typing_extensions = "*"
-mkdocs = "*"
-
 
 [requires]
 python_version = "3"
