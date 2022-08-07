@@ -4,7 +4,6 @@ theme:
   favicon: img/favicon32.png
   logo: img/mcap.png
   palette:
-    # Palette toggle for dark mode
     scheme: slate
     primary: "deep purple"
   features:
@@ -48,3 +47,15 @@ markdown_extensions:
   - pymdownx.superfences
 
 repo_url: https://github.com/foxglove/mcap
+
+extra:
+  social:
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/foxglove
+      name: Twitter
+    - icon: fontawesome/brands/slack
+      link: https://foxglovedev.slack.com
+      name: Slack
+    - icon: fontawesome/brands/github
+      link: https://github.com/foxglove/mcap
+      name: GitHub
