@@ -8,7 +8,6 @@ Usage Examples
    protobuf_example
    ros1_example
    ros2_example
-   jsonschema_tutorial
 
 API Documentation
 -----------------

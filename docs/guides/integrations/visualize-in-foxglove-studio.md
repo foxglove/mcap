@@ -1,11 +1,6 @@
----
-title: "Foxglove Studio"
-slug: "visualize-in-foxglove-studio"
-hidden: false
-createdAt: "2022-07-26T19:06:30.461Z"
-updatedAt: "2022-07-26T23:29:18.429Z"
----
-## Using Foxglove schemas 
+# Visualizing in Foxglove Studio
+
+## Using Foxglove schemas
 
 To start visualizing and debugging your MCAP data in [Foxglove Studio](https://foxglove.dev/studio) (and leveraging all the visualizations it has to offer), you must write messages that adhere to a pre-defined set of Foxglove schemas.
 
@@ -19,7 +14,7 @@ The [@foxglove/schemas](https://github.com/foxglove/schemas) repo provides pre-d
 
 ## Visualizing MCAP files
 
-Download Foxglove Studio as a [desktop app](https://foxglove.dev/download), or navigate to [studio.foxglove.dev](https://studio.foxglove.dev) in your web browser. 
+Download Foxglove Studio as a [desktop app](https://foxglove.dev/download), or navigate to [studio.foxglove.dev](https://studio.foxglove.dev) in your web browser.
 
 **For local MCAP files**, simply drag and drop the file into the Studio app to start playing back your data.
 

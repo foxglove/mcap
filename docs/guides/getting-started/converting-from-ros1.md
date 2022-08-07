@@ -1,11 +1,4 @@
----
-title: "ROS 1"
-slug: "ros-1"
-hidden: false
-createdAt: "2022-08-04T23:11:39.123Z"
-updatedAt: "2022-08-04T23:29:26.688Z"
----
-## Converting ROS 1 bag files to MCAP
+# Converting ROS 1 bag files to MCAP
 
 If you already have existing data that is not in the MCAP file format, you may want to **convert this non-MCAP data into MCAP files**.
 
@@ -19,9 +12,10 @@ You can also use the mcap CLI tool to inspect MCAP files, validate them, and eve
 
 ## Writing ROS 1 data to MCAP files
 
-If you're starting from scratch, you may want to write code to **read and write your own MCAP data**. 
+If you're starting from scratch, you may want to write code to **read and write your own MCAP data**.
 
 We provide MCAP readers and writers in the following languages:
+
 - [Python](https://github.com/foxglove/mcap/tree/main/python)
 - [C++](https://github.com/foxglove/mcap/tree/main/cpp)
 - [Go](https://github.com/foxglove/mcap/tree/main/go)

@@ -1,11 +1,4 @@
----
-title: "ROS 2"
-slug: "ros-2"
-hidden: false
-createdAt: "2022-08-04T23:12:26.102Z"
-updatedAt: "2022-08-04T23:29:48.006Z"
----
-## Converting ROS 2 db3 files to MCAP
+# Converting ROS 2 db3 files to MCAP
 
 If you already have existing data that is not in the MCAP file format, you may want to **convert this non-MCAP data into MCAP files**.
 
@@ -27,9 +20,10 @@ You can also use the mcap CLI tool to inspect MCAP files, validate them, and eve
 
 ## Writing ROS 2 data to MCAP files
 
-If you're starting from scratch, you may want to write code to **read and write your own MCAP data**. 
+If you're starting from scratch, you may want to write code to **read and write your own MCAP data**.
 
 We provide MCAP readers and writers in the following languages:
+
 - [Python](https://github.com/foxglove/mcap/tree/main/python)
 - [C++](https://github.com/foxglove/mcap/tree/main/cpp)
 - [Go](https://github.com/foxglove/mcap/tree/main/go)

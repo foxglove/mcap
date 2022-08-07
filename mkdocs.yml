@@ -29,21 +29,22 @@ nav:
           - "guides/getting-started/converting-from-ros2.md"
           - "guides/getting-started/reading-and-writing-mcap.md"
       - Python:
-          - "guides/python/writing-jsonschema.md"
           - "guides/python/reading-writing-ros1.md"
           - "guides/python/reading-writing-ros2.md"
-          - "guides/python/reading-writing-json.md"
+          - "guides/python/writing-jsonschema.md"
           - "guides/python/reading-writing-protobuf.md"
       - C++:
           - "guides/cpp/writing-protobuf.md"
       - Integrations:
           - "guides/integrations/visualize-in-foxglove-studio.md"
 
-  - API Documentation: "api-docs.md"
+  - API: "api-docs.md"
 
 markdown_extensions:
-  - pymdownx.snippets
   - footnotes
   - admonition
+  - pymdownx.highlight:
+      use_pygments: true
+  - pymdownx.superfences
 
 repo_url: https://github.com/foxglove/mcap

@@ -1,10 +1,5 @@
----
-title: "ROS 1"
-slug: "ros-1-1"
-hidden: false
-createdAt: "2022-07-21T19:43:27.835Z"
-updatedAt: "2022-07-26T23:57:39.148Z"
----
+# Reading and writing ROS 1 messages
+
 To start writing Python code that reads and writes ROS 1 data in MCAP, install the [`mcap-ros1-support` helper library](https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support).
 
 ## Reading ROS 1 from MCAP
@@ -79,6 +74,7 @@ Finally, specify the channel ("/chatter") and its schema (`String`) you will be 
 ```
 
 ### Important links
+
 - [MCAP Python library](https://github.com/foxglove/mcap/tree/main/python/mcap)
-- [`mcap-ros1-support` helper library](https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support) 
+- [`mcap-ros1-support` helper library](https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support)
 - [Example code](https://github.com/foxglove/mcap/tree/main/python/examples/ros1)

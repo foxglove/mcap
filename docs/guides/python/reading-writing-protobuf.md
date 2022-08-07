@@ -1,10 +1,5 @@
----
-title: "Protobuf"
-slug: "protobuf-1"
-hidden: false
-createdAt: "2022-07-21T19:43:35.144Z"
-updatedAt: "2022-07-26T23:54:57.543Z"
----
+# Reading and writing Protobuf messages
+
 To start writing Python code that reads and writes Protobuf data in MCAP, install the [`mcap-protobuf-support` helper library](https://github.com/foxglove/mcap/tree/main/python/mcap-protobuf-support).
 
 ## Reading Protobuf from MCAP
@@ -63,6 +58,7 @@ if __name__ == "__main__":
 ```
 
 ### Important links
+
 - [MCAP Python library](https://github.com/foxglove/mcap/tree/main/python/mcap)
-- [`mcap-protobuf-support` helper library](https://github.com/foxglove/mcap/tree/main/python/mcap-protobuf-support) 
+- [`mcap-protobuf-support` helper library](https://github.com/foxglove/mcap/tree/main/python/mcap-protobuf-support)
 - [Example code](https://github.com/foxglove/mcap/tree/main/python/examples/protobuf)

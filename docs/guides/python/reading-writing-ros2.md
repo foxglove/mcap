@@ -1,10 +1,5 @@
----
-title: "ROS 2"
-slug: "ros-2-1"
-hidden: false
-createdAt: "2022-07-21T19:43:31.335Z"
-updatedAt: "2022-07-26T23:54:53.200Z"
----
+# Reading and writing ROS 2 messages
+
 To start writing Python code that reads ROS 2 data from MCAP, install the [`rosbag2_py` package](https://index.ros.org/p/rosbag2_py/).
 
 ## Reading ROS 2 from MCAP
@@ -64,5 +59,6 @@ if __name__ == "__main__":
 ```
 
 ### Important links
+
 - [MCAP Python library](https://github.com/foxglove/mcap/tree/main/python/mcap)
 - [Example code](https://github.com/foxglove/mcap/tree/main/python/examples/ros2)
