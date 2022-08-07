@@ -24,7 +24,9 @@ jobs:
         run: pipenv install --deploy
 
       - name: Build documentation site
-        run: pipenv run mkdocs build
+        run: |
+          pipenv run mkdocs build
+          touch site/.nojekyll
 
       - uses: actions/upload-artifact@v3
         with:
