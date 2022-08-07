@@ -23,7 +23,22 @@ nav:
           - "motivation/evaluation-of-robotics-data-recording-file-formats.md"
       - Library Support: "support-matrix.md"
   - Guides:
-      - "Guides/getting-started.md"
+      - Getting Started:
+          - "guides/getting-started/index.md"
+          - "guides/getting-started/converting-from-ros1.md"
+          - "guides/getting-started/converting-from-ros2.md"
+          - "guides/getting-started/reading-and-writing-mcap.md"
+      - Python:
+          - "guides/python/writing-jsonschema.md"
+          - "guides/python/reading-writing-ros1.md"
+          - "guides/python/reading-writing-ros2.md"
+          - "guides/python/reading-writing-json.md"
+          - "guides/python/reading-writing-protobuf.md"
+      - C++:
+          - "guides/cpp/writing-protobuf.md"
+      - Integrations:
+          - "guides/integrations/visualize-in-foxglove-studio.md"
+
   - API Documentation: "api-docs.md"
 
 markdown_extensions:
