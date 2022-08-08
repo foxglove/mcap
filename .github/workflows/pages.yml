@@ -9,6 +9,8 @@ on:
 jobs:
   pages-home:
     runs-on: ubuntu-latest
+    env:
+      PIPENV_PIPFILE: "docs/Pipfile"
     steps:
       - uses: actions/checkout@v3
         with:
