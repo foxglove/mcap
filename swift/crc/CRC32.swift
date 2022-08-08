@@ -1,7 +1,7 @@
 import struct Foundation.Data
 
 #if arch(arm) || arch(arm64)
-  import _Builtin_intrinsics.arm.acle
+  import _Builtin_intrinsics.arm.acle // cspell:disable-line
 #endif
 
 // swiftlint:disable identifier_name
