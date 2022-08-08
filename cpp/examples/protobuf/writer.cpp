@@ -74,7 +74,7 @@ int main(int argc, char** argv) {
 
   mcap::McapWriter writer;
   {
-    auto options = mcap::McapWriterOptions("x-protobuf");
+    auto options = mcap::McapWriterOptions("");
     const auto res = writer.open(outputFilename, options);
     if (!res.ok()) {
       std::cerr << "Failed to open " << outputFilename << " for writing: " << res.message

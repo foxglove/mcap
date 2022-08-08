@@ -39,8 +39,8 @@ int main(int argc, char** argv) {
 
   mcap::McapWriter writer;
   {
-    auto options = mcap::McapWriterOptions("x-jsonschema");
-    const auto res = writer.open(outputFilename, options);
+    auto options = mcap::McapWriterOptions("");
+    const auto res = writer.open(outputFilename);
     if (!res.ok()) {
       std::cerr << "Failed to open " << outputFilename << " for writing: " << res.message
                 << std::endl;

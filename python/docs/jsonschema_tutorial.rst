@@ -129,7 +129,7 @@ check this with the `MCAP CLI tool <https://github.com/foxglove/mcap/tree/main/g
     ...
     $ mcap info output.mcap
     library: my-excellent-library
-    profile: x-jsonschema
+    profile: 
     messages: 10
     duration: 900ms
     start: 2011-11-04T01:32:10.881030912+11:00 (1320330730.881030912)

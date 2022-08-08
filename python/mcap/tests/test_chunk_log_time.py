@@ -10,7 +10,7 @@ def test_json_schema():
     output = BytesIO()
     writer = Writer(output)
 
-    writer.start(profile="x-custom", library="my-writer-v1")
+    writer.start(profile="", library="my-writer-v1")
 
     schema_id = writer.register_schema(
         name="foxglove.FrameTransform",

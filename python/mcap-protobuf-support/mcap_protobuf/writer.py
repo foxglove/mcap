@@ -25,7 +25,7 @@ class Writer:
         self._schemas: Dict[str, Tuple[int, str]] = {}
         self._channels: Dict[str, int] = {}
         self._finished = False
-        self._writer.start(profile="x-protobuf", library=_library_identifier())
+        self._writer.start(profile="", library=_library_identifier())
 
     def write_message(
         self,

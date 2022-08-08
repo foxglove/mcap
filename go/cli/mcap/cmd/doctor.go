@@ -10,7 +10,6 @@ import (
 	"log"
 	"math"
 	"os"
-	"strings"
 
 	"github.com/fatih/color"
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
@@ -236,10 +235,8 @@ func (doctor *mcapDoctor) Examine() {
 				doctor.warn("Header.library field should be non-empty. The library field should be set to a value that identifies the software which produced the file.")
 			}
 
-			var customProfile = strings.HasPrefix(header.Profile, "x-")
-			if len(header.Profile) > 0 && header.Profile != "ros1" && header.Profile != "ros2" && !customProfile {
-				doctor.error(`Header.profile field is not valid: %s.
-					Only a well-known profile is allowed. Other profiles must use x- prefix`, header.Profile)
+			if len(header.Profile) > 0 && header.Profile != "ros1" && header.Profile != "ros2" {
+				doctor.warn(`Header.profile field "%s" is not a well-known profile.`, header.Profile)
 			}
 		case mcap.TokenFooter:
 			_, err := mcap.ParseFooter(data)
