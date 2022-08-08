@@ -38,4 +38,4 @@ Use the [mcap CLI tool](https://github.com/foxglove/mcap/tree/main/go/cli/mcap) 
 
 Foxglove Studio supports playing back local and remote ROS 2 db3 files, as well as MCAP files including ROS 2 data.
 
-With that said, ROS 2
+For more details, check the [Visualizing in Foxglove Studio](../integrations/visualize-in-foxglove-studio.md) page.
