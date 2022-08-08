@@ -1,6 +1,4 @@
 [packages]
 mkdocs = "*"
 mkdocs-material = "*"
-install = "*"
-markdown-include-lines = {git = "https://github.com/simonrenger/markdown-include-lines.git"}
 pygments = "*"
