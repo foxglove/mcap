@@ -75,7 +75,7 @@ def test_lz4_chunks():
 
 
 @pytest.mark.parametrize(
-    "compression_type,length", [(CompressionType.ZSTD, 747), (CompressionType.LZ4, 785)]
+    "compression_type,length", [(CompressionType.ZSTD, 741), (CompressionType.LZ4, 779)]
 )
 def test_decode_read(compression_type, length):
     """tests that chunk compression is happening when writing."""
