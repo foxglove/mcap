@@ -1,37 +1,44 @@
-from typing import Dict, Type
+from typing import Iterator, Tuple, Any, Dict
 
 from google.protobuf.descriptor_pb2 import FileDescriptorSet
 from google.protobuf.message_factory import GetMessages
 from mcap.mcap0.exceptions import McapError
 from mcap.mcap0.records import Channel, Message, Schema
-from mcap.mcap0.stream_reader import StreamReader
+from mcap.mcap0.well_known import SchemaEncoding
 
 
-class Decoder:
-    def __init__(self, reader: StreamReader):
-        self.__reader = reader
+def decode_proto_messages(
+    message_iterator: Iterator[Tuple[Schema, Channel, Message]],
+    ignore_non_protobuf_messages: bool = False,
+) -> Iterator[Tuple[str, Any, int]]:
+    """takes a stream of messages from a McapReader, and automatically parses the Protobuf
+    messages using the definitions in the MCAP.
 
-    @property
-    def messages(self):
-        channels: Dict[int, Channel] = {}
-        schemas: Dict[int, Schema] = {}
-        generated: Dict[str, Type[Message]] = {}
-        for record in self.__reader.records:
-            if isinstance(record, Schema):
-                schemas[record.id] = record
-                if record.encoding != "protobuf":
-                    raise McapError(
-                        f"Can't decode schema with encoding {record.encoding}"
-                    )
-                fds = FileDescriptorSet.FromString(record.data)
-                messages = GetMessages(fds.file)
-                for name, klass in messages.items():
-                    generated[name] = klass  # type: ignore
-            if isinstance(record, Channel):
-                channels[record.id] = record
-            if isinstance(record, Message):
-                channel = channels[record.channel_id]
-                schema = schemas[channel.schema_id]
-                message = generated[schema.name]()  # type: ignore
-                message.ParseFromString(record.data)  # type: ignore
-                yield (channel.topic, message)
+    :param message_iterator: an iterator of Schema, Channel, and Message records.
+        `McapReader.iter_messages()` is a convenient way to get this parameter.
+    :param ignore_non_protobuf_messages: if True, ignores non-protobuf messages in the MCAP rather
+        than raising an exception.
+    :returns: an iterator of (topic, protobuf message, log_time) tuples. Timestamps are provided
+        as a nanosecond unix timestamp.
+    """
+    generated: Dict[str, Any] = {}
+    for schema, channel, record in message_iterator:
+        if schema.encoding != SchemaEncoding.Protobuf:
+            if ignore_non_protobuf_messages:
+                continue
+            raise McapError(f"Can't decode schema with encoding {schema.encoding}")
+        generated_type = generated.get(schema.name)
+        if generated_type is None:
+            fds = FileDescriptorSet.FromString(schema.data)
+            messages = GetMessages(fds.file)
+            for name, klass in messages.items():
+                generated[name] = klass  # type: ignore
+                if name == schema.name:
+                    generated_type = klass
+        if generated_type is None:
+            raise McapError(
+                f"FileDescriptorSet for type {schema.name} is missing that schema"
+            )
+        message = generated_type()
+        message.ParseFromString(record.data)
+        yield channel.topic, message, record.log_time
