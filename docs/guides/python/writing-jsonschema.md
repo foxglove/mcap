@@ -4,7 +4,7 @@
 
 ### Decoding CSV data
 
-Let's work with some publicly available data – the “[Sydney Urban Objects Dataset](https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml)”, released by the [Australian Centre for Field Robotics](https://www.sydney.edu.au/engineering/our-research/robotics-and-intelligent-systems/australian-centre-for-field-robotics.html) – and write it as JSON to an MCAP file. ![sydney](../../img/705a434-sydney.png)
+Let's work with some publicly available data – the "[Sydney Urban Objects Dataset](https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml)", released by the [Australian Centre for Field Robotics](https://www.sydney.edu.au/engineering/our-research/robotics-and-intelligent-systems/australian-centre-for-field-robotics.html) – and write it as JSON to an MCAP file. ![sydney](../../img/705a434-sydney.png)
 
 This CSV dataset contains a variety of common urban road objects scanned with a Velodyne HDL-64E LIDAR. Each of the 600+ scanned object contains the following fields:
 
@@ -149,11 +149,7 @@ That's it! We now have a valid MCAP file with a single point cloud message.
 
 ### Inspect your file
 
-To inspect your MCAP file, install the [MCAP CLI tool](https://github.com/foxglove/mcap/tree/main/go/cli/mcap):
-
-```bash
-$ brew install mcap
-```
+To inspect your MCAP file, install the [MCAP CLI tool](https://github.com/foxglove/mcap/tree/main/go/cli/mcap#installing).
 
 Run the following commands to summarize your file's contents and to verify that it has no issues:
 
