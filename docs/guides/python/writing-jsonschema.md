@@ -1,10 +1,10 @@
 # Writing JSON to MCAP
 
-> From [Recording JSON Data to MCAP Files](https://foxglove.dev/blog/recording-json-data-to-mcap-files). While JSON might not be the most efficient format for storing point cloud data, it’s easy to get started with as an MCAP beginner.
+> From [Recording JSON Data to MCAP Files](https://foxglove.dev/blog/recording-json-data-to-mcap-files). While JSON might not be the most efficient format for storing point cloud data, it's easy to get started with as an MCAP beginner.
 
 ### Decoding CSV data
 
-Let’s work with some publicly available data – the “[Sydney Urban Objects Dataset](https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml)”, released by the [Australian Centre for Field Robotics](https://www.sydney.edu.au/engineering/our-research/robotics-and-intelligent-systems/australian-centre-for-field-robotics.html) – and write it as JSON to an MCAP file. ![sydney](../../img/705a434-sydney.png)
+Let's work with some publicly available data – the “[Sydney Urban Objects Dataset](https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml)”, released by the [Australian Centre for Field Robotics](https://www.sydney.edu.au/engineering/our-research/robotics-and-intelligent-systems/australian-centre-for-field-robotics.html) – and write it as JSON to an MCAP file. ![sydney](../../img/705a434-sydney.png)
 
 This CSV dataset contains a variety of common urban road objects scanned with a Velodyne HDL-64E LIDAR. Each of the 600+ scanned object contains the following fields:
 
@@ -16,7 +16,7 @@ This CSV dataset contains a variety of common urban road objects scanned with a 
 - `range` - Range of laser return
 - `pid` - Point ID of the original scan
 
-Use Python’s built-in [`csv`](https://docs.python.org/3/library/csv.html) and [`datetime`](https://docs.python.org/3/library/datetime.html) libraries to decode this CSV data:
+Use Python's built-in [`csv`](https://docs.python.org/3/library/csv.html) and [`datetime`](https://docs.python.org/3/library/datetime.html) libraries to decode this CSV data:
 
 ```python
 def point_reader(csv_path: typing.Union[str, Path]):
@@ -43,9 +43,9 @@ Let's encode this CSV data as a [`foxglove.PointCloud` schema](/docs/studio/mess
 
 The `foxglove.PointCloud` schema expects a `data` field that contains a single base64-encoded buffer with all point data, as well as a `fields` field that contains metadata describing how to decode the `data`.
 
-Since `foxglove.PointCloud` requires a single timestamp, let’s get it from the first point we see in our file. Then, we’ll pack each field as a four byte single-precision little-endian float.
+Since `foxglove.PointCloud` requires a single timestamp, let's get it from the first point we see in our file. Then, we'll pack each field as a four byte single-precision little-endian float.
 
-Let’s start by describing the layout of our data in a `foxglove.PointCloud` message:
+Let's start by describing the layout of our data in a `foxglove.PointCloud` message:
 
 ```python
 float32 = 7  # as defined in the schema
@@ -60,7 +60,7 @@ pointcloud = {
 }
 ```
 
-Next, let’s pack the points using Python’s built-in [`struct`](https://docs.python.org/3/library/struct.html) and [`base64`](https://docs.python.org/3/library/base64.html) libraries.
+Next, let's pack the points using Python's built-in [`struct`](https://docs.python.org/3/library/struct.html) and [`base64`](https://docs.python.org/3/library/base64.html) libraries.
 
 ```python
 points = bytearray()
@@ -73,7 +73,7 @@ assert base_timestamp is not None, "found no points in input csv"
 pointcloud["data"] = base64.b64encode(points).decode("utf-8")
 ```
 
-Each 3D object must exist in its own coordinate frame. A point cloud’s `frame_id` identifies the coordinate frame it belongs in, and its `pose` determines its relative position from that coordinate frame’s center. Since we will only have one coordinate frame in our MCAP file, we can choose any arbitrary string as our `frame_id`, and use the identity pose to place our point cloud in its center.
+Each 3D object must exist in its own coordinate frame. A point cloud's `frame_id` identifies the coordinate frame it belongs in, and its `pose` determines its relative position from that coordinate frame's center. Since we will only have one coordinate frame in our MCAP file, we can choose any arbitrary string as our `frame_id`, and use the identity pose to place our point cloud in its center.
 
 ```python
 pointcloud["pose"] = {
@@ -83,18 +83,18 @@ pointcloud["pose"] = {
 pointcloud["frame_id"] = "lidar"
 ```
 
-We’ll leave the timestamp field for later, when we write the messages into the MCAP file.
+We'll leave the timestamp field for later, when we write the messages into the MCAP file.
 
 ### Creating a writer
 
-We’ll start with some imports from the Python MCAP library:
+We'll start with some imports from the Python MCAP library:
 
 ```python
 from mcap.mcap0.writer import Writer
 from mcap.mcap0.well_known import SchemaEncoding, MessageEncoding
 ```
 
-Open a file where we’ll output our MCAP data and write our header:
+Open a file where we'll output our MCAP data and write our header:
 
 ```python
 with open(args.output, "wb") as f:
@@ -145,7 +145,7 @@ Close the MCAP writer to include the summary and footer in your output MCAP file
 writer.finish()
 ```
 
-That’s it! We now have a valid MCAP file with a single point cloud message.
+That's it! We now have a valid MCAP file with a single point cloud message.
 
 ### Inspect your file
 
@@ -155,7 +155,7 @@ To inspect your MCAP file, install the [MCAP CLI tool](https://github.com/foxglo
 $ brew install mcap
 ```
 
-Run the following commands to summarize your file’s contents and to verify that it has no issues:
+Run the following commands to summarize your file's contents and to verify that it has no issues:
 
 ```bash
 $ mcap info output.mcap
