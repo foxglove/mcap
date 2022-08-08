@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "ddf3b226943e17414dccd8f0df057ff3b481839c42f7d5ef115c926c36e882c2"
+            "sha256": "b04fdf5ec2d40cc0142e8a695d832385ee778eaaf0e33862a6656e7f6c698f82"
         },
         "pipfile-spec": 6,
         "requires": {},
@@ -98,6 +98,14 @@
             ],
             "markers": "python_version >= '3.7'",
             "version": "==2.1.1"
+        },
+        "mdx-truly-sane-lists": {
+            "hashes": [
+                "sha256:b661022df7520a1e113af7c355c62216b384c867e4f59fb8ee7ad511e6e77f45",
+                "sha256:b9546a4c40ff8f1ab692f77cee4b6bfe8ddf9cccf23f0a24e71f3716fe290a37"
+            ],
+            "index": "pypi",
+            "version": "==1.3"
         },
         "mergedeep": {
             "hashes": [

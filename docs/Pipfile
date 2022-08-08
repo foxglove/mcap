@@ -2,3 +2,4 @@
 mkdocs = "*"
 mkdocs-material = "*"
 pygments = "*"
+mdx-truly-sane-lists = "*"

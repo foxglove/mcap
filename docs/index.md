@@ -6,25 +6,18 @@ MCAP works well under various workloads, resource constraints, and durability re
 
 ## Features
 
-### Heterogenous data
-
-- Store messages encoded in multiple serialization formats in a single file
-- Include metadata and attachments
-
-### Performant writing
-
-- Append-only structure
-- Recover partially-written files when data recording is interrupted
-
-### Efficient seeking
-
-- Extract data without scanning the entire file
-- Fast access to indexed summary data
-
-### Self-contained files
-
-- Embed all message schemas in the file
-- No extra dependencies needed for decoding
+- Heterogenous data
+  - Store messages encoded in multiple serialization formats in a single file
+  - Include metadata and attachments
+- Performant writing
+  - Append-only structure
+  - Recover partially-written files when data recording is interrupted
+- Efficient seeking
+  - Extract data without scanning the entire file
+  - Fast access to indexed summary data
+- Self-contained files
+  - Embed all message schemas in the file
+  - No extra dependencies needed for decoding
 
 ## Quick start
 

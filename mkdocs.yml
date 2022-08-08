@@ -56,6 +56,7 @@ markdown_extensions:
   - pymdownx.highlight:
       use_pygments: true
   - pymdownx.superfences
+  - mdx_truly_sane_lists
 
 repo_url: https://github.com/foxglove/mcap
 
