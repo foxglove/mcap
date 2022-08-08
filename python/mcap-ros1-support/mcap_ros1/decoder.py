@@ -1,44 +1,39 @@
-from io import BufferedReader, BytesIO, RawIOBase
-from typing import Any, Dict, Union
+from typing import Any, Dict, Tuple, Iterator
 
 from genpy import dynamic  # type: ignore
 from mcap.mcap0.exceptions import McapError
 from mcap.mcap0.records import Channel, Message, Schema
-from mcap.mcap0.stream_reader import StreamReader
+from mcap.mcap0.well_known import SchemaEncoding
 
 
-class Decoder:
-    def __init__(
-        self, source: Union[bytes, BytesIO, RawIOBase, BufferedReader, StreamReader]
-    ):
-        if isinstance(source, StreamReader):
-            self.__reader = source
-        elif isinstance(source, (BufferedReader, BytesIO, RawIOBase)):
-            self.__reader = StreamReader(input=source)
-        else:
-            self.__reader = StreamReader(BytesIO(source))
+def decode_ros1_messages(
+    message_iterator: Iterator[Tuple[Schema, Channel, Message]],
+    ignore_non_ros1_messages: bool = False,
+) -> Iterator[Tuple[str, Any, int]]:
+    """takes a stream of messages from a McapReader, and automatically parses the ROS 1
+    messages using the definitions in the MCAP.
 
-    @property
-    def messages(self):
-        channels: Dict[int, Channel] = {}
-        schemas: Dict[int, Schema] = {}
-        msg_types: Dict[str, Any] = {}
-        for record in self.__reader.records:
-            if isinstance(record, Schema):
-                schemas[record.id] = record
-                if record.encoding != "ros1msg":
-                    raise McapError(
-                        f"Can't decode schema with encoding {record.encoding}"
-                    )
-                if record.name not in msg_types:
-                    msg_type = dynamic.generate_dynamic(  # type: ignore
-                        record.name, record.data.decode()
-                    )
-                    msg_types[record.name] = msg_type[record.name]
-            if isinstance(record, Channel):
-                channels[record.id] = record
-            if isinstance(record, Message):
-                channel = channels[record.channel_id]
-                schema = schemas[channel.schema_id]
-                message = msg_types[schema.name]().deserialize(record.data)
-                yield (channel.topic, record, message)
+    :param message_iterator: an iterator of Schema, Channel, and Message records.
+        `McapReader.iter_messages()` is a convenient way to get this parameter.
+    :param ignore_non_ros1_messages: if True, ignores non-ros1 messages in the MCAP rather
+        than raising an exception.
+    :returns: an iterator of (topic, ros1_message, log_time) tuples. Timestamps are provided
+        as a nanosecond unix timestamp.
+    """
+    generated: Dict[str, Any] = {}
+    for schema, channel, record in message_iterator:
+        if schema.encoding != SchemaEncoding.ROS1:
+            if ignore_non_ros1_messages:
+                continue
+            raise McapError(f"can't decode schema with encoding {schema.encoding}")
+        generated_type = generated.get(schema.name)
+        if generated_type is None:
+            type_dict = dynamic.generate_dynamic(  # type: ignore
+                schema.name, schema.data.decode()
+            )
+            generated_type = type_dict[schema.name]
+            generated[schema.name] = generated_type
+
+        message = generated_type()
+        message.deserialize(record.data)
+        yield channel.topic, message, record.log_time
