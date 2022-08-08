@@ -184,7 +184,7 @@ jobs:
         with:
           path: "/tmp/preview-files"
           parent: false
-          destination: "foxglove-mcap-dev-preview/${{ github.ref }}"
+          destination: "foxglove-mcap-dev-preview/${{ github.sha }}"
 
       - name: "Preview: display URL"
         if: "!github.event.pull_request.head.repo.fork && github.ref != 'refs/heads/main'"
@@ -195,4 +195,4 @@ jobs:
           description: "Available in details"
           state: "success"
           sha: ${{github.event.pull_request.head.sha || github.sha}}
-          target_url: "https://storage.googleapis.com/foxglove-mcap-dev-preview/${{ github.ref }}/index.html"
+          target_url: "https://storage.googleapis.com/foxglove-mcap-dev-preview/${{ github.sha }}/index.html"
