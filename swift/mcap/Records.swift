@@ -1,3 +1,4 @@
+import crc
 import struct Foundation.Data
 
 public typealias SchemaID = UInt16

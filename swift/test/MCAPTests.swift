@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import mcap
+import mcap
 
 class Buffer: IWritable {
   var data = Data()
@@ -21,15 +21,5 @@ final class MCAPTests: XCTestCase {
     await writer.start(library: "", profile: "")
     await writer.end()
     XCTAssertEqual(buffer.data.count, 286)
-  }
-}
-
-final class CRC32Tests: XCTestCase {
-  func testKnownValues() {
-    XCTAssertEqual(CRC32().final, 0)
-
-    var crc = CRC32()
-    crc.update(Data([1]))
-    XCTAssertEqual(crc.final, 2_768_625_435)
   }
 }
