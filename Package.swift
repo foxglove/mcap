@@ -5,9 +5,11 @@ import PackageDescription
 
 let package = Package(
   name: "mcap",
+  platforms: [.macOS(.v10_15)], // for async/await
   products: [
     // Products define the executables and libraries a package produces, and make them visible to other packages.
     .library(name: "mcap", targets: ["mcap"]),
+    .library(name: "crc", targets: ["crc", "crc-tests"]),
     .executable(name: "conformance", targets: ["conformance"]),
   ],
   dependencies: [
@@ -17,8 +19,11 @@ let package = Package(
   targets: [
     // Targets are the basic building blocks of a package. A target can define a module or a test suite.
     // Targets can depend on other targets in this package, and on products in packages this package depends on.
-    .target(name: "mcap", dependencies: [], path: "swift/mcap"),
+    .target(name: "mcap", dependencies: ["crc"], path: "swift/mcap"),
     .testTarget(name: "unit-tests", dependencies: ["mcap"], path: "swift/test"),
     .executableTarget(name: "conformance", dependencies: ["mcap"], path: "swift/conformance"),
+
+    .target(name: "crc", dependencies: [], path: "swift/crc"),
+    .testTarget(name: "crc-tests", dependencies: ["crc"], path: "swift/crc-tests"),
   ]
 )
