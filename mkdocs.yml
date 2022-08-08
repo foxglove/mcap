@@ -62,7 +62,7 @@ repo_url: https://github.com/foxglove/mcap
 extra:
   social:
     - icon: fontawesome/brands/twitter
-      link: https://twitter.com/foxglove
+      link: https://twitter.com/foxglovedev
       name: Twitter
     - icon: fontawesome/brands/slack
       link: https://foxglovedev.slack.com
