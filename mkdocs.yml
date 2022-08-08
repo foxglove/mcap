@@ -16,9 +16,8 @@ theme:
         icon: material/brightness-7
         name: Switch to dark mode
       primary: "white"
-
-  features:
-    - navigation.tabs
+  font:
+    text: Open Sans
 
 use_directory_urls: false
 
