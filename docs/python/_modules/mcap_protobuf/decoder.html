@@ -32,43 +32,50 @@
           <div class="body" role="main">
             
   <h1>Source code for mcap_protobuf.decoder</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Type</span>
+<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span>
 
 <span class="kn">from</span> <span class="nn">google.protobuf.descriptor_pb2</span> <span class="kn">import</span> <span class="n">FileDescriptorSet</span>
 <span class="kn">from</span> <span class="nn">google.protobuf.message_factory</span> <span class="kn">import</span> <span class="n">GetMessages</span>
 <span class="kn">from</span> <span class="nn">mcap.mcap0.exceptions</span> <span class="kn">import</span> <span class="n">McapError</span>
 <span class="kn">from</span> <span class="nn">mcap.mcap0.records</span> <span class="kn">import</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">,</span> <span class="n">Schema</span>
-<span class="kn">from</span> <span class="nn">mcap.mcap0.stream_reader</span> <span class="kn">import</span> <span class="n">StreamReader</span>
+<span class="kn">from</span> <span class="nn">mcap.mcap0.well_known</span> <span class="kn">import</span> <span class="n">SchemaEncoding</span>
 
 
-<div class="viewcode-block" id="Decoder"><a class="viewcode-back" href="../../mcap-protobuf-apidoc/mcap_protobuf.decoder.html#mcap_protobuf.decoder.Decoder">[docs]</a><span class="k">class</span> <span class="nc">Decoder</span><span class="p">:</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reader</span><span class="p">:</span> <span class="n">StreamReader</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__reader</span> <span class="o">=</span> <span class="n">reader</span>
+<div class="viewcode-block" id="decode_proto_messages"><a class="viewcode-back" href="../../mcap-protobuf-apidoc/mcap_protobuf.decoder.html#mcap_protobuf.decoder.decode_proto_messages">[docs]</a><span class="k">def</span> <span class="nf">decode_proto_messages</span><span class="p">(</span>
+    <span class="n">message_iterator</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Schema</span><span class="p">,</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]],</span>
+    <span class="n">ignore_non_protobuf_messages</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+    <span class="sd">&quot;&quot;&quot;takes a stream of messages from a McapReader, and automatically parses the Protobuf</span>
+<span class="sd">    messages using the definitions in the MCAP.</span>
 
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">messages</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">channels</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Channel</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">schemas</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Schema</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">generated</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Type</span><span class="p">[</span><span class="n">Message</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__reader</span><span class="o">.</span><span class="n">records</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Schema</span><span class="p">):</span>
-                <span class="n">schemas</span><span class="p">[</span><span class="n">record</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">record</span>
-                <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">encoding</span> <span class="o">!=</span> <span class="s2">&quot;protobuf&quot;</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="n">McapError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Can&#39;t decode schema with encoding </span><span class="si">{</span><span class="n">record</span><span class="o">.</span><span class="n">encoding</span><span class="si">}</span><span class="s2">&quot;</span>
-                    <span class="p">)</span>
-                <span class="n">fds</span> <span class="o">=</span> <span class="n">FileDescriptorSet</span><span class="o">.</span><span class="n">FromString</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
-                <span class="n">messages</span> <span class="o">=</span> <span class="n">GetMessages</span><span class="p">(</span><span class="n">fds</span><span class="o">.</span><span class="n">file</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">klass</span> <span class="ow">in</span> <span class="n">messages</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                    <span class="n">generated</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">klass</span>  <span class="c1"># type: ignore</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Channel</span><span class="p">):</span>
-                <span class="n">channels</span><span class="p">[</span><span class="n">record</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">record</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Message</span><span class="p">):</span>
-                <span class="n">channel</span> <span class="o">=</span> <span class="n">channels</span><span class="p">[</span><span class="n">record</span><span class="o">.</span><span class="n">channel_id</span><span class="p">]</span>
-                <span class="n">schema</span> <span class="o">=</span> <span class="n">schemas</span><span class="p">[</span><span class="n">channel</span><span class="o">.</span><span class="n">schema_id</span><span class="p">]</span>
-                <span class="n">message</span> <span class="o">=</span> <span class="n">generated</span><span class="p">[</span><span class="n">schema</span><span class="o">.</span><span class="n">name</span><span class="p">]()</span>  <span class="c1"># type: ignore</span>
-                <span class="n">message</span><span class="o">.</span><span class="n">ParseFromString</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
-                <span class="k">yield</span> <span class="p">(</span><span class="n">channel</span><span class="o">.</span><span class="n">topic</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span></div>
+<span class="sd">    :param message_iterator: an iterator of Schema, Channel, and Message records.</span>
+<span class="sd">        Use :py:func:`mcap.mcap0.reader.McapReader.iter_messages()` to create this.</span>
+<span class="sd">    :param ignore_non_protobuf_messages: if True, ignores non-protobuf messages in the MCAP rather</span>
+<span class="sd">        than raising an exception.</span>
+<span class="sd">    :returns: an iterator of (topic, protobuf message, log_time) tuples. Timestamps are provided</span>
+<span class="sd">        as a nanosecond unix timestamp.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">generated</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">schema</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">message_iterator</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">schema</span><span class="o">.</span><span class="n">encoding</span> <span class="o">!=</span> <span class="n">SchemaEncoding</span><span class="o">.</span><span class="n">Protobuf</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">ignore_non_protobuf_messages</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">raise</span> <span class="n">McapError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Can&#39;t decode schema with encoding </span><span class="si">{</span><span class="n">schema</span><span class="o">.</span><span class="n">encoding</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">generated_type</span> <span class="o">=</span> <span class="n">generated</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">schema</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">generated_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">fds</span> <span class="o">=</span> <span class="n">FileDescriptorSet</span><span class="o">.</span><span class="n">FromString</span><span class="p">(</span><span class="n">schema</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+            <span class="n">messages</span> <span class="o">=</span> <span class="n">GetMessages</span><span class="p">(</span><span class="n">fds</span><span class="o">.</span><span class="n">file</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">klass</span> <span class="ow">in</span> <span class="n">messages</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">generated</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">klass</span>  <span class="c1"># type: ignore</span>
+                <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="n">schema</span><span class="o">.</span><span class="n">name</span><span class="p">:</span>
+                    <span class="n">generated_type</span> <span class="o">=</span> <span class="n">klass</span>
+        <span class="k">if</span> <span class="n">generated_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">McapError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;FileDescriptorSet for type </span><span class="si">{</span><span class="n">schema</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> is missing that schema&quot;</span>
+            <span class="p">)</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="n">generated_type</span><span class="p">()</span>
+        <span class="n">message</span><span class="o">.</span><span class="n">ParseFromString</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">yield</span> <span class="n">channel</span><span class="o">.</span><span class="n">topic</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">log_time</span></div>
 </pre></div>
 
           </div>

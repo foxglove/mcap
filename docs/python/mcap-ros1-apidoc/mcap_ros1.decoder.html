@@ -36,15 +36,25 @@
             
   <section id="module-mcap_ros1.decoder">
 <span id="mcap-ros1-decoder-module"></span><h1>mcap_ros1.decoder module<a class="headerlink" href="#module-mcap_ros1.decoder" title="Permalink to this heading">¶</a></h1>
-<dl class="py class">
-<dt class="sig sig-object py" id="mcap_ros1.decoder.Decoder">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">mcap_ros1.decoder.</span></span><span class="sig-name descname"><span class="pre">Decoder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">bytes</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">BytesIO</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">RawIOBase</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">BufferedReader</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="../mcap-apidoc/mcap.mcap0.stream_reader.html#mcap.mcap0.stream_reader.StreamReader" title="mcap.mcap0.stream_reader.StreamReader"><span class="pre">StreamReader</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/mcap_ros1/decoder.html#Decoder"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap_ros1.decoder.Decoder" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<dl class="py property">
-<dt class="sig sig-object py" id="mcap_ros1.decoder.Decoder.messages">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">messages</span></span><a class="headerlink" href="#mcap_ros1.decoder.Decoder.messages" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
+<dl class="py function">
+<dt class="sig sig-object py" id="mcap_ros1.decoder.decode_ros1_messages">
+<span class="sig-prename descclassname"><span class="pre">mcap_ros1.decoder.</span></span><span class="sig-name descname"><span class="pre">decode_ros1_messages</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message_iterator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Schema" title="mcap.mcap0.records.Schema"><span class="pre">Schema</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="../mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Channel" title="mcap.mcap0.records.Channel"><span class="pre">Channel</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="../mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Message" title="mcap.mcap0.records.Message"><span class="pre">Message</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_non_ros1_messages</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Iterator</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../_modules/mcap_ros1/decoder.html#decode_ros1_messages"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap_ros1.decoder.decode_ros1_messages" title="Permalink to this definition">¶</a></dt>
+<dd><p>takes a stream of messages from a McapReader, and automatically parses the ROS 1
+messages using the definitions in the MCAP.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>message_iterator</strong> – an iterator of Schema, Channel, and Message records.
+Use <a class="reference internal" href="../mcap-apidoc/mcap.mcap0.reader.html#mcap.mcap0.reader.McapReader.iter_messages" title="mcap.mcap0.reader.McapReader.iter_messages"><code class="xref py py-func docutils literal notranslate"><span class="pre">mcap.mcap0.reader.McapReader.iter_messages()</span></code></a> to create this.</p></li>
+<li><p><strong>ignore_non_ros1_messages</strong> – if True, ignores non-ros1 messages in the MCAP rather
+than raising an exception.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>an iterator of (topic, ros1_message, log_time) tuples. Timestamps are provided
+as a nanosecond unix timestamp.</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>
