@@ -8,7 +8,7 @@ The unit of communication between nodes in the pub/sub system.
 
 ## Channel
 
-A stream of messages which have the same topic and type, or schema. This is often called a "topic" in pub/sub framework terminology.
+A stream of messages which have the same type, or schema. Often corresponds to a connection between a publisher and a subscriber.
 
 ## Schema
 
