@@ -1,6 +1,8 @@
 # Writing Protobuf to MCAP
 
-> From [Recording Robocar Data with MCAP](https://foxglove.dev/blog/recording-robocar-data-with-mcap)
+!!! info
+
+    From [Recording Robocar Data with MCAP](https://foxglove.dev/blog/recording-robocar-data-with-mcap)
 
 ### Creating a writer
 

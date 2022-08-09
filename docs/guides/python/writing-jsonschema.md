@@ -1,6 +1,8 @@
 # Writing JSON to MCAP
 
-> From [Recording JSON Data to MCAP Files](https://foxglove.dev/blog/recording-json-data-to-mcap-files). While JSON might not be the most efficient format for storing point cloud data, it's easy to get started with as an MCAP beginner.
+!!! info
+
+    From [Recording JSON Data to MCAP Files](https://foxglove.dev/blog/recording-json-data-to-mcap-files). While JSON might not be the most efficient format for storing point cloud data, it's easy to get started with as an MCAP beginner.
 
 ### Decoding CSV data
 
