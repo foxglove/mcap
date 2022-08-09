@@ -4,19 +4,27 @@ theme:
   name: material
   favicon: img/favicon32.png
   logo: img/mcap.png
+  icon:
+    repo: fontawesome/brands/github
   palette:
-    - scheme: default
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
       primary: "white"
-    - scheme: slate
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
       primary: "black"
   font:
-    text: Open Sans
+    text: IBM Plex Sans
+    code: IBM Plex Mono
+
+extra_css: [styles/extra.css]
+
 markdown_extensions:
   - footnotes
   - admonition
@@ -52,7 +60,7 @@ nav:
   - API Reference:
       - Python: docs/python/index.html
       - C++: docs/cpp/index.html
-      - Typescript: docs/typescript/index.html
+      - TypeScript: docs/typescript/index.html
       - Go: https://pkg.go.dev/github.com/foxglove/mcap/go/mcap
       - Swift: docs/swift/documentation/mcap/
 
