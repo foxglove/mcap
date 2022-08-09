@@ -1,14 +1,14 @@
 import sys
 
-from mcap.mcap0.stream_reader import StreamReader
-from mcap_protobuf.decoder import Decoder
+from mcap.mcap0.reader import make_reader
+from mcap_protobuf.decoder import decode_proto_messages
 
 
 def main():
-    reader = StreamReader(sys.argv[1])
-    decoder = Decoder(reader)
-    for topic, message in decoder.messages:
-        print(f"{topic}: {message}")
+    with open(sys.argv[1], "rb") as f:
+        mcap_iterator = make_reader(f).iter_messages()
+        for topic, message, timestamp in decode_proto_messages(mcap_iterator):
+            print(f"{topic} [{timestamp}]: {message}")
 
 
 if __name__ == "__main__":

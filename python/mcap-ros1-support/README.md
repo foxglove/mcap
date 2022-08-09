@@ -35,23 +35,15 @@ genpy = "*"
 ## Reading ROS1 Messages
 
 ```python
-# Reading from a stream
-from mcap.mcap0.stream_reader import StreamReader
-from mcap_ros1.decoder import Decoder
+# Reading from a stream of bytes
+from mcap.mcap0.reader import make_reader
+from mcap_ros1.decoder import decode_ros1_messages
 
-reader = StreamReader("my_data.mcap")
-decoder = Decoder(reader)
-for topic, record, message in decoder.messages:
-    print(message)
-```
-
-```python
-# Reading from raw mcap data
-from mcap_ros1.decoder import Decoder
-
-data = open("my_data.mcap", "rb").read()
-for topic, record, message in Decoder(data).messages:
-    print(message)
+with open("my_data.mcap", "rb") as f:
+    reader = make_reader(f)
+    message_iterator = decode_ros1_messages(reader.iter_messages())
+    for topic, message, timestamp in message_iterator:
+        print(message)
 ```
 
 ## Writing ROS1 Messages
