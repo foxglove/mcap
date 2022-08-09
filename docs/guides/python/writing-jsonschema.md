@@ -30,7 +30,7 @@ This prints out the timestamp, intensity, and coordinates for each point in the 
 
 ### Encoding the data into a `foxglove.PointCloud`
 
-Let's encode this CSV data as a [`foxglove.PointCloud` schema](/docs/studio/messages/point-cloud), so we can later visualize this data in [Foxglove Studio](../integrations/visualize-in-foxglove-studio.md):
+Let's encode this CSV data as a [`foxglove.PointCloud` schema](/docs/studio/messages/point-cloud), so we can later visualize this data in [Foxglove Studio](../../getting-started/visualize-in-foxglove-studio.md):
 
 | field | type | description |
 | --- | --- | --- |

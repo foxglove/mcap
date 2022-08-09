@@ -22,21 +22,18 @@ theme:
 use_directory_urls: false
 
 nav:
-  - Home: "index.md"
-  - Documentation:
-      - Specification:
-          - "specification/README.md"
-          - "specification/explanatory-notes.md"
-          - "specification/appendix.md"
-      - Motivation:
-          - "motivation/evaluation-of-robotics-data-recording-file-formats.md"
-      - Library Support: "support-matrix.md"
+  - Home:
+      - "index.md"
+      - "home/messages-channels-and-schemas.md"
+      - "home/data-serialization-formats.md"
+  - Getting Started:
+      - "getting-started/overview.md"
+      - "getting-started/ros-1.md"
+      - "getting-started/ros-2.md"
+      - "getting-started/protobuf.md"
+      - "getting-started/json.md"
+      - "getting-started/visualize-in-foxglove-studio.md"
   - Guides:
-      - Getting Started:
-          - "guides/getting-started/index.md"
-          - "guides/getting-started/converting-from-ros1.md"
-          - "guides/getting-started/converting-from-ros2.md"
-          - "guides/getting-started/reading-and-writing-mcap.md"
       - Python:
           - "guides/python/reading-writing-ros1.md"
           - "guides/python/reading-writing-ros2.md"
@@ -44,10 +41,25 @@ nav:
           - "guides/python/reading-writing-protobuf.md"
       - C++:
           - "guides/cpp/writing-protobuf.md"
-      - Integrations:
-          - "guides/integrations/visualize-in-foxglove-studio.md"
+  - API Reference:
+      - Python: docs/python/index.html
+      - C++: docs/cpp/index.html
+      - Typescript: docs/typescript/index.html
+      - Go: https://pkg.go.dev/github.com/foxglove/mcap/go/mcap
+      - Swift: docs/swift/documentation/mcap/
 
-  - API: "api-docs.md"
+  - More Resources:
+      - GitHub: "https://github.com/foxglove/mcap"
+      - mcap CLI: "https://github.com/foxglove/mcap/tree/main/go/cli/mcap"
+      - Slack: "https://foxglovedev.slack.com"
+      - Library Support: "support-matrix.md"
+      - ROS 2 Storage Plugin: "https://github.com/ros-tooling/rosbag2_storage_mcap"
+      - Specification:
+          - "specification/README.md"
+          - "specification/explanatory-notes.md"
+          - "specification/appendix.md"
+      - Motivation:
+          - "motivation/evaluation-of-robotics-data-recording-file-formats.md"
 
 markdown_extensions:
   - footnotes
