@@ -1,3 +1,4 @@
+# Configuration for all pages
 site_name: "MCAP"
 theme:
   name: material
@@ -16,9 +17,18 @@ theme:
       primary: "black"
   font:
     text: Open Sans
+markdown_extensions:
+  - footnotes
+  - admonition
+  - pymdownx.highlight:
+      use_pygments: true
+  - pymdownx.superfences
+  - mdx_truly_sane_lists
 
+# links go directly to `.html` URL paths, this means we can preview the site in a GCS bucket.
 use_directory_urls: false
 
+# Site Layout
 nav:
   - Home:
       - "index.md"
@@ -59,14 +69,7 @@ nav:
       - Motivation:
           - "motivation/evaluation-of-robotics-data-recording-file-formats.md"
 
-markdown_extensions:
-  - footnotes
-  - admonition
-  - pymdownx.highlight:
-      use_pygments: true
-  - pymdownx.superfences
-  - mdx_truly_sane_lists
-
+# Header / Footer links and copy
 repo_url: https://github.com/foxglove/mcap
 
 extra:
