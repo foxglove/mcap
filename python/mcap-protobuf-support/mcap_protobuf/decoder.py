@@ -15,7 +15,7 @@ def decode_proto_messages(
     messages using the definitions in the MCAP.
 
     :param message_iterator: an iterator of Schema, Channel, and Message records.
-        `McapReader.iter_messages()` is a convenient way to get this parameter.
+        Use :py:func:`mcap.mcap0.reader.McapReader.iter_messages()` to create this.
     :param ignore_non_protobuf_messages: if True, ignores non-protobuf messages in the MCAP rather
         than raising an exception.
     :returns: an iterator of (topic, protobuf message, log_time) tuples. Timestamps are provided
