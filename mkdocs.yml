@@ -4,18 +4,16 @@ theme:
   favicon: img/favicon32.png
   logo: img/mcap.png
   palette:
-    # Palette toggle for dark mode
-    - scheme: slate
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-      primary: "black"
-    # Palette toggle for light mode
     - scheme: default
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
       primary: "white"
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+      primary: "black"
   font:
     text: Open Sans
 
