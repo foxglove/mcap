@@ -23,6 +23,7 @@ ignorePaths:
   - "*_pb2.py"
   - Pipfile*
   - mkdocs.yml
+  - fathom.html
 
 words:
   - callerid
