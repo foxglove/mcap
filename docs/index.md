@@ -1,5 +1,3 @@
-# What is MCAP?
-
 MCAP (pronounced "em-cap") is a modular container file format for heterogeneous timestamped data. It is ideal for robotics applications, as it can record multiple streams of structured and unstructured data (e.g. ROS, Protobuf, JSON Schema, etc.) in a single file.
 
 ## Benefits

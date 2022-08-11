@@ -40,7 +40,7 @@ use_directory_urls: false
 # Site Layout
 nav:
   - Home:
-      - "index.md"
+      - Introduction: "index.md"
       - "home/messages-channels-and-schemas.md"
       - "home/data-serialization-formats.md"
   - Getting Started:
