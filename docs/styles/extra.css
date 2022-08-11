@@ -2,7 +2,7 @@
     display: none;
   }
   .md-source__fact--stars::before {
-    margin-left: 0;
+    margin-left: 0 !important;
   }
   .md-source__fact::before {
     vertical-align: bottom;
