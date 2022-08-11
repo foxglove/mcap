@@ -69,7 +69,8 @@ words:
 
 languageSettings:
   - languageId: "markdown"
-  - "ignoreRegExpList": ["/^\\s*```[\\s\\S]*?^\\s*```/gm"]
+    ignoreRegExpList:
+      - "/^\\s*```[\\s\\S]*?^\\s*```/gm"
 
 overrides:
   - filename: "**/*.go"
