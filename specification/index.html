@@ -1,0 +1,2586 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      <link rel="icon" href="../img/favicon32.png">
+      <meta name="generator" content="mkdocs-1.3.1, mkdocs-material-8.3.9">
+    
+    
+      
+        <title>MCAP File Format Specification - MCAP</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.1d29e8d0.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.cbb835fc.min.css">
+        
+      
+      
+    
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=IBM+Plex+Sans:300,300i,400,400i,700,700i%7CIBM+Plex+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"IBM Plex Sans";--md-code-font:"IBM Plex Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../styles/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="">
+  
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&"object"==typeof palette.color)for(var key of Object.keys(palette.color))document.body.setAttribute("data-md-color-"+key,palette.color[key])</script>
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#mcap-file-format-specification" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="MCAP" class="md-header__button md-logo" aria-label="MCAP" data-md-component="logo">
+      
+  <img src="../img/mcap.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            MCAP
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              MCAP File Format Specification
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      <form class="md-header__option" data-md-component="palette">
+        
+          
+          
+          <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent=""  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+          
+            <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+            </label>
+          
+        
+          
+          
+          <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent=""  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_2">
+          
+            <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12c0-2.42-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+            </label>
+          
+        
+      </form>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/foxglove/mcap" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.1.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="MCAP" class="md-nav__button md-logo" aria-label="MCAP" data-md-component="logo">
+      
+  <img src="../img/mcap.png" alt="logo">
+
+    </a>
+    MCAP
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/foxglove/mcap" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.1.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_1" type="checkbox" id="__nav_1" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_1">
+          Home
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Home" data-md-level="1">
+        <label class="md-nav__title" for="__nav_1">
+          <span class="md-nav__icon md-icon"></span>
+          Home
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../index.html" class="md-nav__link">
+        Introduction
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../home/messages-channels-and-schemas.html" class="md-nav__link">
+        Messages, Channels and Schemas
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../home/data-serialization-formats.html" class="md-nav__link">
+        Data Serialization Formats
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_2" type="checkbox" id="__nav_2" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_2">
+          Getting Started
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Getting Started" data-md-level="1">
+        <label class="md-nav__title" for="__nav_2">
+          <span class="md-nav__icon md-icon"></span>
+          Getting Started
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/overview.html" class="md-nav__link">
+        Overview
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/ros-1.html" class="md-nav__link">
+        ROS 1
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/ros-2.html" class="md-nav__link">
+        ROS 2
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/protobuf.html" class="md-nav__link">
+        Protobuf
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/json.html" class="md-nav__link">
+        JSON
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/visualize-in-foxglove-studio.html" class="md-nav__link">
+        Visualizing in Foxglove Studio
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3" type="checkbox" id="__nav_3" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_3">
+          Guides
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Guides" data-md-level="1">
+        <label class="md-nav__title" for="__nav_3">
+          <span class="md-nav__icon md-icon"></span>
+          Guides
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_1" type="checkbox" id="__nav_3_1" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_3_1">
+          Python
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Python" data-md-level="2">
+        <label class="md-nav__title" for="__nav_3_1">
+          <span class="md-nav__icon md-icon"></span>
+          Python
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/python/reading-writing-ros1.html" class="md-nav__link">
+        Reading and writing ROS 1 messages
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/python/reading-writing-ros2.html" class="md-nav__link">
+        Reading and writing ROS 2 messages
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/python/writing-jsonschema.html" class="md-nav__link">
+        Writing JSON to MCAP
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/python/reading-writing-protobuf.html" class="md-nav__link">
+        Reading and writing Protobuf messages
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_2" type="checkbox" id="__nav_3_2" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_3_2">
+          C++
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="C++" data-md-level="2">
+        <label class="md-nav__title" for="__nav_3_2">
+          <span class="md-nav__icon md-icon"></span>
+          C++
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/cpp/writing-protobuf.html" class="md-nav__link">
+        Writing Protobuf to MCAP
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_4" type="checkbox" id="__nav_4" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_4">
+          API Reference
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="API Reference" data-md-level="1">
+        <label class="md-nav__title" for="__nav_4">
+          <span class="md-nav__icon md-icon"></span>
+          API Reference
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/python/index.html" class="md-nav__link">
+        Python
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/cpp/index.html" class="md-nav__link">
+        C++
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/typescript/index.html" class="md-nav__link">
+        TypeScript
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://pkg.go.dev/github.com/foxglove/mcap/go/mcap" class="md-nav__link">
+        Go
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/swift/documentation/mcap/" class="md-nav__link">
+        Swift
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5" type="checkbox" id="__nav_5" checked>
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_5">
+          More Resources
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="More Resources" data-md-level="1">
+        <label class="md-nav__title" for="__nav_5">
+          <span class="md-nav__icon md-icon"></span>
+          More Resources
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/foxglove/mcap" class="md-nav__link">
+        GitHub
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap" class="md-nav__link">
+        mcap CLI
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://foxglovedev.slack.com" class="md-nav__link">
+        Slack
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../support-matrix.html" class="md-nav__link">
+        Library Support
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/ros-tooling/rosbag2_storage_mcap" class="md-nav__link">
+        ROS 2 Storage Plugin
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+    
+  
+  
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5_6" type="checkbox" id="__nav_5_6" checked>
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_5_6">
+          Specification
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Specification" data-md-level="2">
+        <label class="md-nav__title" for="__nav_5_6">
+          <span class="md-nav__icon md-icon"></span>
+          Specification
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          MCAP File Format Specification
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="index.html" class="md-nav__link md-nav__link--active">
+        MCAP File Format Specification
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    Overview
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-structure" class="md-nav__link">
+    File Structure
+  </a>
+  
+    <nav class="md-nav" aria-label="File Structure">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#magic" class="md-nav__link">
+    Magic
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#header" class="md-nav__link">
+    Header
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#footer" class="md-nav__link">
+    Footer
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-section" class="md-nav__link">
+    Data Section
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summary-section" class="md-nav__link">
+    Summary Section
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summary-offset-section" class="md-nav__link">
+    Summary Offset Section
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records" class="md-nav__link">
+    Records
+  </a>
+  
+    <nav class="md-nav" aria-label="Records">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#header-op0x01" class="md-nav__link">
+    Header (op=0x01)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#footer-op0x02" class="md-nav__link">
+    Footer (op=0x02)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schema-op0x03" class="md-nav__link">
+    Schema (op=0x03)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#channel-op0x04" class="md-nav__link">
+    Channel (op=0x04)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#message-op0x05" class="md-nav__link">
+    Message (op=0x05)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#chunk-op0x06" class="md-nav__link">
+    Chunk (op=0x06)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#message-index-op0x07" class="md-nav__link">
+    Message Index (op=0x07)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#chunk-index-op0x08" class="md-nav__link">
+    Chunk Index (op=0x08)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#attachment-op0x09" class="md-nav__link">
+    Attachment (op=0x09)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#attachment-index-op0x0a" class="md-nav__link">
+    Attachment Index (op=0x0A)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#statistics-op0x0b" class="md-nav__link">
+    Statistics (op=0x0B)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#metadata-op0x0c" class="md-nav__link">
+    Metadata (op=0x0C)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#metadata-index-op0x0d" class="md-nav__link">
+    Metadata Index (op=0x0D)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summary-offset-op0x0e" class="md-nav__link">
+    Summary Offset (op=0x0E)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-end-op0x0f" class="md-nav__link">
+    Data End (op=0x0F)
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#serialization" class="md-nav__link">
+    Serialization
+  </a>
+  
+    <nav class="md-nav" aria-label="Serialization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed-width-types" class="md-nav__link">
+    Fixed-width types
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#string" class="md-nav__link">
+    String
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bytes" class="md-nav__link">
+    Bytes
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tuple" class="md-nav__link">
+    Tuple
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#array" class="md-nav__link">
+    Array
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#timestamp" class="md-nav__link">
+    Timestamp
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#map" class="md-nav__link">
+    Map
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diagrams" class="md-nav__link">
+    Diagrams
+  </a>
+  
+    <nav class="md-nav" aria-label="Diagrams">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#empty-file" class="md-nav__link">
+    Empty file
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#single-message" class="md-nav__link">
+    Single Message
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#single-attachment" class="md-nav__link">
+    Single Attachment
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multiple-messages" class="md-nav__link">
+    Multiple Messages
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#messages-in-chunks" class="md-nav__link">
+    Messages in Chunks
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multiple-messages-with-summary-data" class="md-nav__link">
+    Multiple Messages with Summary Data
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multiple-messages-with-chunk-indices" class="md-nav__link">
+    Multiple Messages with Chunk Indices
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#further-reading" class="md-nav__link">
+    Further Reading
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="explanatory-notes.html" class="md-nav__link">
+        Explanatory Notes
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="appendix.html" class="md-nav__link">
+        MCAP File Format Specification Appendix
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5_7" type="checkbox" id="__nav_5_7" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_5_7">
+          Motivation
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Motivation" data-md-level="2">
+        <label class="md-nav__title" for="__nav_5_7">
+          <span class="md-nav__icon md-icon"></span>
+          Motivation
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../motivation/evaluation-of-robotics-data-recording-file-formats.html" class="md-nav__link">
+        Evaluation of robotics data recording file formats
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    Overview
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-structure" class="md-nav__link">
+    File Structure
+  </a>
+  
+    <nav class="md-nav" aria-label="File Structure">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#magic" class="md-nav__link">
+    Magic
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#header" class="md-nav__link">
+    Header
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#footer" class="md-nav__link">
+    Footer
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-section" class="md-nav__link">
+    Data Section
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summary-section" class="md-nav__link">
+    Summary Section
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summary-offset-section" class="md-nav__link">
+    Summary Offset Section
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#records" class="md-nav__link">
+    Records
+  </a>
+  
+    <nav class="md-nav" aria-label="Records">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#header-op0x01" class="md-nav__link">
+    Header (op=0x01)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#footer-op0x02" class="md-nav__link">
+    Footer (op=0x02)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schema-op0x03" class="md-nav__link">
+    Schema (op=0x03)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#channel-op0x04" class="md-nav__link">
+    Channel (op=0x04)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#message-op0x05" class="md-nav__link">
+    Message (op=0x05)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#chunk-op0x06" class="md-nav__link">
+    Chunk (op=0x06)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#message-index-op0x07" class="md-nav__link">
+    Message Index (op=0x07)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#chunk-index-op0x08" class="md-nav__link">
+    Chunk Index (op=0x08)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#attachment-op0x09" class="md-nav__link">
+    Attachment (op=0x09)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#attachment-index-op0x0a" class="md-nav__link">
+    Attachment Index (op=0x0A)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#statistics-op0x0b" class="md-nav__link">
+    Statistics (op=0x0B)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#metadata-op0x0c" class="md-nav__link">
+    Metadata (op=0x0C)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#metadata-index-op0x0d" class="md-nav__link">
+    Metadata Index (op=0x0D)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summary-offset-op0x0e" class="md-nav__link">
+    Summary Offset (op=0x0E)
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#data-end-op0x0f" class="md-nav__link">
+    Data End (op=0x0F)
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#serialization" class="md-nav__link">
+    Serialization
+  </a>
+  
+    <nav class="md-nav" aria-label="Serialization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed-width-types" class="md-nav__link">
+    Fixed-width types
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#string" class="md-nav__link">
+    String
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bytes" class="md-nav__link">
+    Bytes
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tuple" class="md-nav__link">
+    Tuple
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#array" class="md-nav__link">
+    Array
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#timestamp" class="md-nav__link">
+    Timestamp
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#map" class="md-nav__link">
+    Map
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diagrams" class="md-nav__link">
+    Diagrams
+  </a>
+  
+    <nav class="md-nav" aria-label="Diagrams">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#empty-file" class="md-nav__link">
+    Empty file
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#single-message" class="md-nav__link">
+    Single Message
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#single-attachment" class="md-nav__link">
+    Single Attachment
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multiple-messages" class="md-nav__link">
+    Multiple Messages
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#messages-in-chunks" class="md-nav__link">
+    Messages in Chunks
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multiple-messages-with-summary-data" class="md-nav__link">
+    Multiple Messages with Summary Data
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multiple-messages-with-chunk-indices" class="md-nav__link">
+    Multiple Messages with Chunk Indices
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#further-reading" class="md-nav__link">
+    Further Reading
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          <div class="md-content" data-md-component="content">
+            <article class="md-content__inner md-typeset">
+              
+                
+  <a href="https://github.com/foxglove/mcap/edit/master/docs/specification/README.md" title="Edit this page" class="md-content__button md-icon">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z"/></svg>
+  </a>
+
+
+
+<h1 id="mcap-file-format-specification">MCAP File Format Specification</h1>
+<h2 id="overview">Overview</h2>
+<p>MCAP is a modular container file format for recording timestamped <a href="https://en.wikipedia.org/wiki/Publish–subscribe_pattern">pub/sub</a> messages with arbitrary serialization formats.</p>
+<p>MCAP files are designed to work well under various workloads, resource constraints, and durability requirements.</p>
+<p>A <a href="http://kaitai.io">Kaitai Struct</a> description for the MCAP format is provided at <a href="mcap.ksy">mcap.ksy</a>.</p>
+<h2 id="file-structure">File Structure</h2>
+<p>A valid MCAP file is structured as follows. The Summary and Summary Offset sections are optional.</p>
+<div class="highlight"><pre><span></span><code>&lt;Magic&gt;&lt;Header&gt;&lt;Data section&gt;[&lt;Summary section&gt;][&lt;Summary Offset section&gt;]&lt;Footer&gt;&lt;Magic&gt;
+</code></pre></div>
+<p>The Data, Summary, and Summary Offset sections are structured as sequences of <strong>records</strong>:</p>
+<div class="highlight"><pre><span></span><code>[&lt;record type&gt;&lt;record content length&gt;&lt;record&gt;&lt;record type&gt;&lt;record content length&gt;&lt;record&gt;...]
+</code></pre></div>
+<p>Files not conforming to this structure are considered malformed.</p>
+<h3 id="magic">Magic</h3>
+<p>An MCAP file must begin and end with the following <a href="https://en.wikipedia.org/wiki/File_format#Magic_number">magic bytes</a>:</p>
+<div class="highlight"><pre><span></span><code>0x89, M, C, A, P, 0x30, \r, \n
+</code></pre></div>
+<p>The byte following &ldquo;MCAP&rdquo; is the major version byte. <code>0x30</code> is the ASCII character <code>0</code>. Any changes to this specification document (i.e. adding fields to records, introducing new records) will be binary backward-compatible within the major version.</p>
+<h3 id="header">Header</h3>
+<p>The first record after the leading magic bytes is the <a href="#header-op0x01">Header</a> record.</p>
+<div class="highlight"><pre><span></span><code>&lt;0x01&gt;&lt;record content length&gt;&lt;record&gt;
+</code></pre></div>
+<h3 id="footer">Footer</h3>
+<p>The last record before the trailing magic bytes is the <a href="#footer-op0x02">Footer</a> record.</p>
+<div class="highlight"><pre><span></span><code>&lt;0x02&gt;&lt;record content length&gt;&lt;record&gt;
+</code></pre></div>
+<h3 id="data-section">Data Section</h3>
+<p>The data section contains records with message data, attachments, and supporting records.</p>
+<p>The following records are allowed to appear in the data section:</p>
+<ul>
+<li><a href="#schema-op0x03">Schema</a></li>
+<li><a href="#channel-op0x04">Channel</a></li>
+<li><a href="#message-op0x05">Message</a></li>
+<li><a href="#attachment-op0x09">Attachment</a></li>
+<li><a href="#chunk-op0x06">Chunk</a></li>
+<li><a href="#message-index-op0x07">Message Index</a></li>
+<li><a href="#metadata-op0x0C">Metadata</a></li>
+<li><a href="#data-end-op0x0F">Data End</a></li>
+</ul>
+<p>The last record in the data section MUST be the <a href="#data-end-op0x0F">Data End</a> record.</p>
+<h3 id="summary-section">Summary Section</h3>
+<p>The optional summary section contains records for fast lookup of file information or other data section records.</p>
+<p>The following records are allowed to appear in the summary section:</p>
+<ul>
+<li><a href="#schema-op0x03">Schema</a></li>
+<li><a href="#channel-op0x04">Channel</a></li>
+<li><a href="#chunk-index-op0x08">Chunk Index</a></li>
+<li><a href="#attachment-index-op0x0A">Attachment Index</a></li>
+<li><a href="#statistics-op0x0B">Statistics</a></li>
+<li><a href="#metadata-index-op0x0D">Metadata Index</a></li>
+</ul>
+<p>All records in the summary section MUST be grouped by opcode.</p>
+<blockquote>
+<p>Why? Grouping Summary records by record opcode enables more efficient indexing of the summary in the Summary Offset section.</p>
+</blockquote>
+<p>Channel records in the summary are duplicates of Channel records throughout the Data section.</p>
+<p>Schema records in the summary are duplicates of Schema records throughout the Data section.</p>
+<h3 id="summary-offset-section">Summary Offset Section</h3>
+<p>The optional summary offset section contains <a href="#summary-offset-op0x0E">Summary Offset</a> records for fast lookup of summary section records.</p>
+<p>The summary offset section aids random access reading.</p>
+<h2 id="records">Records</h2>
+<p>MCAP files may contain a variety of records. Records are identified by a single-byte <strong>opcode</strong>. Record opcodes in the range 0x01-0x7F are reserved for future MCAP format usage. 0x80-0xFF are reserved for application extensions and user proposals.</p>
+<p>All MCAP records are serialized as follows:</p>
+<div class="highlight"><pre><span></span><code>&lt;record type&gt;&lt;record content length&gt;&lt;record content&gt;
+</code></pre></div>
+<p>Record type is a single byte opcode, and record content length is a uint64 value.</p>
+<p>Records may be extended by adding new fields at the end of existing fields. Readers should ignore any unknown fields.</p>
+<blockquote>
+<p>The Footer and Message records will not be extended, since their formats do not allow for backward-compatible size changes.</p>
+</blockquote>
+<p>Each record definition below contains a <code>Type</code> column. See the <a href="#serialization">Serialization</a> section on how to serialize each type.</p>
+<h3 id="header-op0x01">Header (op=0x01)</h3>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4 + N</td>
+<td>profile</td>
+<td>String</td>
+<td>The profile is used for indicating requirements for fields throughout the file (encoding, user_data, etc). If the value matches one of the <a href="appendix.html#well-known-profiles">well-known profiles</a>, the file should conform to the profile. This field may also be supplied empty or containing a framework that is not one of those recognized.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>library</td>
+<td>String</td>
+<td>Free-form string for writer to specify its name, version, or other information for use in debugging</td>
+</tr>
+</tbody>
+</table>
+<h3 id="footer-op0x02">Footer (op=0x02)</h3>
+<p>A Footer record contains end-of-file information. It must be the last record in the file. Readers using the index to read the file will begin with by reading the footer and trailing magic.</p>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8</td>
+<td>summary_start</td>
+<td>uint64</td>
+<td>Byte offset of the start of file to the first record in the summary section. If there are no records in the summary section this should be 0.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>summary_offset_start</td>
+<td>uint64</td>
+<td>Byte offset from the start of the first record in the summary offset section. If there are no Summary Offset records this value should be 0.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>summary_crc</td>
+<td>uint32</td>
+<td>A CRC32 of all bytes from the start of the Summary section up through and including the end of the previous field (summary_offset_start) in the footer record. A value of 0 indicates the CRC32 is not available.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="schema-op0x03">Schema (op=0x03)</h3>
+<p>A Schema record defines an individual schema.</p>
+<p>Schema records are uniquely identified within a file by their schema ID. A Schema record must occur at least once in the file prior to any Channel referring to its ID. Any two schema records sharing a common ID must be identical.</p>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2</td>
+<td>id</td>
+<td>uint16</td>
+<td>A unique identifier for this schema within the file. Must not be zero</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>name</td>
+<td>String</td>
+<td>An identifier for the schema.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>encoding</td>
+<td>String</td>
+<td>Format for the schema. The <a href="appendix.html#well-known-schema-encodings">well-known schema encodings</a> are preferred. An empty string indicates no schema is available.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>data</td>
+<td>uint32 length-prefixed Bytes</td>
+<td>Must conform to the schema encoding. If <code>encoding</code> is an empty string, <code>data</code> should be 0 length.</td>
+</tr>
+</tbody>
+</table>
+<p>Schema records may be duplicated in the summary section. A Schema record with an id of zero is invalid and should be ignored by readers.</p>
+<h3 id="channel-op0x04">Channel (op=0x04)</h3>
+<p>A Channel record defines an encoded stream of messages on a topic.</p>
+<p>Channel records are uniquely identified within a file by their channel ID. A Channel record must occur at least once in the file prior to any message referring to its channel ID. Any two channel records sharing a common ID must be identical.</p>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2</td>
+<td>id</td>
+<td>uint16</td>
+<td>A unique identifier for this channel within the file.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>schema_id</td>
+<td>uint16</td>
+<td>The schema for messages on this channel. A schema_id of 0 indicates there is no schema for this channel.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>topic</td>
+<td>String</td>
+<td>The channel topic.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>message_encoding</td>
+<td>String</td>
+<td>Encoding for messages on this channel. The <a href="appendix.html#well-known-message-encodings">well-known message encodings</a> are preferred.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>metadata</td>
+<td>Map<string, string></td>
+<td>Metadata about this channel</td>
+</tr>
+</tbody>
+</table>
+<p>Channel records may be duplicated in the summary section.</p>
+<h3 id="message-op0x05">Message (op=0x05)</h3>
+<p>A message record encodes a single timestamped message on a channel.</p>
+<p>The message encoding and schema must match that of the Channel record corresponding to the message&rsquo;s channel ID.</p>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2</td>
+<td>channel_id</td>
+<td>uint16</td>
+<td>Channel ID</td>
+</tr>
+<tr>
+<td>4</td>
+<td>sequence</td>
+<td>uint32</td>
+<td>Optional message counter assigned by publisher. If not assigned by publisher, must be recorded by the recorder.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>log_time</td>
+<td>Timestamp</td>
+<td>Time at which the message was recorded.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>publish_time</td>
+<td>Timestamp</td>
+<td>Time at which the message was published. If not available, must be set to the log time.</td>
+</tr>
+<tr>
+<td>N</td>
+<td>data</td>
+<td>Bytes</td>
+<td>Message data, to be decoded according to the schema of the channel.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="chunk-op0x06">Chunk (op=0x06)</h3>
+<p>A Chunk contains a batch of Schema, Channel, and Message records. The batch of records contained in a chunk may be compressed or uncompressed.</p>
+<p>All messages in the chunk must reference channels recorded earlier in the file (in a previous chunk or earlier in the current chunk).</p>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8</td>
+<td>message_start_time</td>
+<td>Timestamp</td>
+<td>Earliest message log_time in the chunk. Zero if the chunk has no messages.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>message_end_time</td>
+<td>Timestamp</td>
+<td>Latest message log_time in the chunk. Zero if the chunk has no messages.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>uncompressed_size</td>
+<td>uint64</td>
+<td>Uncompressed size of the <code>records</code> field.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>uncompressed_crc</td>
+<td>uint32</td>
+<td>CRC32 checksum of uncompressed <code>records</code> field. A value of zero indicates that CRC validation should not be performed.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>compression</td>
+<td>String</td>
+<td>compression algorithm. i.e. <code>zstd</code>, <code>lz4</code>, <code>""</code>. An empty string indicates no compression. Refer to <a href="appendix.html#well-known-compression-formats">well-known compression formats</a>.</td>
+</tr>
+<tr>
+<td>8 + N</td>
+<td>records</td>
+<td>uint64 length-prefixed Bytes</td>
+<td>Repeating sequences of <code>&lt;record type&gt;&lt;record content length&gt;&lt;record content&gt;</code>. Compressed with the algorithm in the <code>compression</code> field.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="message-index-op0x07">Message Index (op=0x07)</h3>
+<p>A Message Index record allows readers to locate individual message records within a chunk by their timestamp.</p>
+<p>A sequence of Message Index records occurs immediately after each chunk. Exactly one Message Index record must exist in the sequence for every channel on which a message occurs inside the chunk.</p>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2</td>
+<td>channel_id</td>
+<td>uint16</td>
+<td>Channel ID.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>records</td>
+<td>Array<Tuple\<Timestamp, uint64>></td>
+<td>Array of log_time and offset for each record. Offset is relative to the start of the uncompressed chunk data.</td>
+</tr>
+</tbody>
+</table>
+<p>Messages outside of chunks cannot be indexed.</p>
+<h3 id="chunk-index-op0x08">Chunk Index (op=0x08)</h3>
+<p>A Chunk Index record contains the location of a Chunk record and its associated Message Index records.</p>
+<p>A Chunk Index record exists for every Chunk in the file.</p>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8</td>
+<td>message_start_time</td>
+<td>Timestamp</td>
+<td>Earliest message log_time in the chunk. Zero if the chunk has no messages.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>message_end_time</td>
+<td>Timestamp</td>
+<td>Latest message log_time in the chunk. Zero if the chunk has no messages.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>chunk_start_offset</td>
+<td>uint64</td>
+<td>Offset to the chunk record from the start of the file.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>chunk_length</td>
+<td>uint64</td>
+<td>Byte length of the chunk record, including opcode and length prefix.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>message_index_offsets</td>
+<td>Map<uint16, uint64></td>
+<td>Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. An empty map indicates no message indexing is available.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>message_index_length</td>
+<td>uint64</td>
+<td>Total length in bytes of the message index records after the chunk.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>compression</td>
+<td>String</td>
+<td>The compression used within the chunk. Refer to <a href="appendix.html#well-known-compression-formats">well-known compression formats</a>. This field should match the the value in the corresponding Chunk record.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>compressed_size</td>
+<td>uint64</td>
+<td>The size of the chunk <code>records</code> field.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>uncompressed_size</td>
+<td>uint64</td>
+<td>The uncompressed size of the chunk <code>records</code> field. This field should match the value in the corresponding Chunk record.</td>
+</tr>
+</tbody>
+</table>
+<p>A Schema and Channel record MUST exist in the summary section for all channels referenced by chunk index records.</p>
+<blockquote>
+<p>Why? The typical use case for file readers using an index is fast random access to a specific message timestamp. Channel is a prerequisite for decoding Message record data. Without an easy-to-access copy of the Channel records, readers would need to search for Channel records from the start of the file, degrading random access read performance.</p>
+</blockquote>
+<h3 id="attachment-op0x09">Attachment (op=0x09)</h3>
+<p>Attachment records contain auxiliary artifacts such as text, core dumps, calibration data, or other arbitrary data.</p>
+<p>Attachment records must not appear within a chunk.</p>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8</td>
+<td>log_time</td>
+<td>Timestamp</td>
+<td>Time at which the attachment was recorded.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>create_time</td>
+<td>Timestamp</td>
+<td>Time at which the attachment was created. If not available, must be set to zero.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>name</td>
+<td>String</td>
+<td>Name of the attachment, e.g &ldquo;scene1.jpg&rdquo;.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>content_type</td>
+<td>String</td>
+<td>MIME Type (e.g &ldquo;text/plain&rdquo;).</td>
+</tr>
+<tr>
+<td>8 + N</td>
+<td>data</td>
+<td>uint64 length-prefixed Bytes</td>
+<td>Attachment data.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>crc</td>
+<td>uint32</td>
+<td>CRC32 checksum of preceding fields in the record. A value of zero indicates that CRC validation should not be performed.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="attachment-index-op0x0a">Attachment Index (op=0x0A)</h3>
+<p>An Attachment Index record contains the location of an attachment in the file. An Attachment Index record exists for every Attachment record in the file.</p>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8</td>
+<td>offset</td>
+<td>uint64</td>
+<td>Byte offset from the start of the file to the attachment record.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>length</td>
+<td>uint64</td>
+<td>Byte length of the attachment record, including opcode and length prefix.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>log_time</td>
+<td>Timestamp</td>
+<td>Time at which the attachment was recorded.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>create_time</td>
+<td>Timestamp</td>
+<td>Time at which the attachment was created. If not available, must be set to zero.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>data_size</td>
+<td>uint64</td>
+<td>Size of the attachment data.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>name</td>
+<td>String</td>
+<td>Name of the attachment.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>content_type</td>
+<td>String</td>
+<td>MIME type of the attachment.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="statistics-op0x0b">Statistics (op=0x0B)</h3>
+<p>A Statistics record contains summary information about the recorded data. The statistics record is optional, but the file should contain at most one.</p>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8</td>
+<td>message_count</td>
+<td>uint64</td>
+<td>Number of Message records in the file.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>schema_count</td>
+<td>uint16</td>
+<td>Number of unique schema IDs in the file, not including zero.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>channel_count</td>
+<td>uint32</td>
+<td>Number of unique channel IDs in the file.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>attachment_count</td>
+<td>uint32</td>
+<td>Number of Attachment records in the file.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>metadata_count</td>
+<td>uint32</td>
+<td>Number of Metadata records in the file.</td>
+</tr>
+<tr>
+<td>4</td>
+<td>chunk_count</td>
+<td>uint32</td>
+<td>Number of Chunk records in the file.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>message_start_time</td>
+<td>Timestamp</td>
+<td>Earliest message log_time in the file. Zero if the file has no messages.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>message_end_time</td>
+<td>Timestamp</td>
+<td>Latest message log_time in the file. Zero if the file has no messages.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>channel_message_counts</td>
+<td>Map<uint16, uint64></td>
+<td>Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available.</td>
+</tr>
+</tbody>
+</table>
+<p>When using a Statistics record with a non-empty channel_message_counts, the Summary Data section MUST contain a copy of all Channel records. The Channel records MUST occur prior to the statistics record.</p>
+<blockquote>
+<p>Why? The typical use case for tools is to provide a listing of the types and quantities of messages stored in the file. Without an easy to access copy of the Channel records, tools would need to linearly scan the file for Channel records to display what types of messages exist in the file.</p>
+</blockquote>
+<h3 id="metadata-op0x0c">Metadata (op=0x0C)</h3>
+<p>A metadata record contains arbitrary user data in key-value pairs.</p>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4 + N</td>
+<td>name</td>
+<td>String</td>
+<td>Example: <code>map_metadata</code>.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>metadata</td>
+<td>Map<string, string></td>
+<td>Example keys: <code>robot_id</code>, <code>git_sha</code>, <code>timezone</code>, <code>run_id</code>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="metadata-index-op0x0d">Metadata Index (op=0x0D)</h3>
+<p>A metadata index record contains the location of a metadata record within the file.</p>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8</td>
+<td>offset</td>
+<td>uint64</td>
+<td>Byte offset from the start of the file to the metadata record.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>length</td>
+<td>uint64</td>
+<td>Total byte length of the record, including opcode and length prefix.</td>
+</tr>
+<tr>
+<td>4 + N</td>
+<td>name</td>
+<td>String</td>
+<td>Name of the metadata record.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="summary-offset-op0x0e">Summary Offset (op=0x0E)</h3>
+<p>A Summary Offset record contains the location of records within the summary section. Each Summary Offset record corresponds to a group of summary records with the same opcode.</p>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>group_opcode</td>
+<td>uint8</td>
+<td>The opcode of all records in the group.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>group_start</td>
+<td>uint64</td>
+<td>Byte offset from the start of the file of the first record in the group.</td>
+</tr>
+<tr>
+<td>8</td>
+<td>group_length</td>
+<td>uint64</td>
+<td>Total byte length of all records in the group.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="data-end-op0x0f">Data End (op=0x0F)</h3>
+<p>A Data End record indicates the end of the data section.</p>
+<blockquote>
+<p>Why? When reading a file from start to end, there is ambiguity when the data section ends and the summary section starts because some records (i.e. Channel) can repeat for summary data. The Data End record provides a clear delineation the data section has ended.</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>Bytes</th>
+<th>Name</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4</td>
+<td>data_section_crc</td>
+<td>uint32</td>
+<td>CRC32 of all bytes in the data section. A value of 0 indicates the CRC32 is not available.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="serialization">Serialization</h2>
+<h3 id="fixed-width-types">Fixed-width types</h3>
+<p>Multi-byte integers (<code>uint16</code>, <code>uint32</code>, <code>uint64</code>) are serialized using <a href="https://en.wikipedia.org/wiki/Endianness">little-endian byte order</a>.</p>
+<h3 id="string">String</h3>
+<p>Strings are serialized using a <code>uint32</code> byte length followed by the string data, which should be valid <a href="https://en.wikipedia.org/wiki/UTF-8">UTF-8</a>.</p>
+<div class="highlight"><pre><span></span><code>&lt;byte length&gt;&lt;utf-8 bytes&gt;
+</code></pre></div>
+<h3 id="bytes">Bytes</h3>
+<p>Bytes is sequence of bytes with no additional requirements.</p>
+<div class="highlight"><pre><span></span><code>&lt;bytes&gt;
+</code></pre></div>
+<h3 id="tuple">Tuple<first_type, second_type></h3>
+<p>Tuple represents a pair of values. The first value has type first_type and the second has type second_type.</p>
+<p>Tuple is serialized by serializing the first value and then the second value:</p>
+<div class="highlight"><pre><span></span><code>&lt;first value&gt;&lt;second value&gt;
+</code></pre></div>
+<p>A Tuple<uint8, uint32>:</p>
+<div class="highlight"><pre><span></span><code>&lt;uint8&gt;&lt;uint32&gt;
+</code></pre></div>
+<p>A Tuple<uint16, string>:</p>
+<div class="highlight"><pre><span></span><code>&lt;uint16&gt;&lt;string&gt;
+
+&lt;uint16&gt;&lt;uint32&gt;&lt;utf-8 bytes&gt;
+</code></pre></div>
+<h3 id="array">Array<array_type></h3>
+<p>Arrays are serialized using a <code>uint32</code> byte length followed by the serialized array elements.</p>
+<div class="highlight"><pre><span></span><code>&lt;byte length&gt;&lt;serialized element&gt;&lt;serialized element&gt;...
+</code></pre></div>
+<p>An array of uint64 is specified as Array<uint64> and serialized as:</p>
+<div class="highlight"><pre><span></span><code>&lt;byte length&gt;&lt;uint64&gt;&lt;uint64&gt;&lt;uint64&gt;...
+</code></pre></div>
+<blockquote>
+<p>Since arrays use a <code>uint32</code> byte length prefix, the maximum size of the serialized array elements cannot exceed 4,294,967,295 bytes.</p>
+</blockquote>
+<h3 id="timestamp">Timestamp</h3>
+<p><code>uint64</code> nanoseconds since a user-understood epoch (i.e unix epoch, robot boot time, etc.)</p>
+<h3 id="map">Map<key_type, value_type></h3>
+<p>A Map is an <a href="https://en.wikipedia.org/wiki/Associative_array">association</a> of unique keys to values.</p>
+<p>Maps are serialized using a <code>uint32</code> byte length followed by the serialized map key/value entries. The key and value entries are serialized according to their <code>key_type</code> and <code>value_type</code>.</p>
+<div class="highlight"><pre><span></span><code>&lt;byte length&gt;&lt;key&gt;&lt;value&gt;&lt;key&gt;&lt;value&gt;...
+</code></pre></div>
+<p>A <code>Map&lt;string, string&gt;</code> would be serialized as:</p>
+<div class="highlight"><pre><span></span><code>&lt;byte length&gt;&lt;uint32 key length&gt;&lt;utf-8 key bytes&gt;&lt;uint32 value length&gt;&lt;utf-8 value bytes&gt;...
+</code></pre></div>
+<p>A serialization which has duplicate keys may cause indeterminate decoding.</p>
+<h2 id="diagrams">Diagrams</h2>
+<p>The following diagrams demonstrate various valid MCAP files.</p>
+<h3 id="empty-file">Empty file</h3>
+<p>The smallest valid MCAP file, containing no data.</p>
+<div class="highlight"><pre><span></span><code>[Header]
+[Footer]
+</code></pre></div>
+<h3 id="single-message">Single Message</h3>
+<p>An MCAP file containing 1 message.</p>
+<div class="highlight"><pre><span></span><code>[Header]
+[Schema A]
+[Channel 1 (A)]
+[Message on Channel 1]
+[Footer]
+</code></pre></div>
+<h3 id="single-attachment">Single Attachment</h3>
+<p>An MCAP file containing 1 attachment</p>
+<div class="highlight"><pre><span></span><code>[Header]
+[Attachment]
+[Footer]
+</code></pre></div>
+<h3 id="multiple-messages">Multiple Messages</h3>
+<div class="highlight"><pre><span></span><code>[Header]
+[Schema A]
+[Channel 1 (A)]
+[Channel 2 (A)]
+[Message on 1]
+[Message on 1]
+[Message on 2]
+[Schema B]
+[Channel 3 (B)]
+[Attachment]
+[Message on 3]
+[Message on 1]
+[Footer]
+</code></pre></div>
+<h3 id="messages-in-chunks">Messages in Chunks</h3>
+<p>A writer may choose to put messages in Chunks to compress record data. This MCAP file does not use any index records.</p>
+<div class="highlight"><pre><span></span><code>[Header]
+[Chunk]
+  [Schema A]
+  [Channel 1 (A)]
+  [Channel 2 (A)]
+  [Message on 1]
+  [Message on 1]
+  [Message on 2]
+[Attachment]
+[Chunk]
+  [Schema B]
+  [Channel 3 (B)]
+  [Message on 3]
+  [Message on 1]
+[Footer]
+</code></pre></div>
+<h3 id="multiple-messages-with-summary-data">Multiple Messages with Summary Data</h3>
+<div class="highlight"><pre><span></span><code>[Header]
+[Schema A]
+[Channel 1 (A)]
+[Channel 2 (A)]
+[Message on 1]
+[Message on 1]
+[Message on 2]
+[Schema B]
+[Channel 3 (B)]
+[Attachment]
+[Message on 3]
+[Message on 1]
+[Data End]
+[Statistics]
+[Schema A]
+[Schema B]
+[Channel 1]
+[Channel 2]
+[Channel 3]
+[Summary Offset 0x01]
+[Footer]
+</code></pre></div>
+<h3 id="multiple-messages-with-chunk-indices">Multiple Messages with Chunk Indices</h3>
+<div class="highlight"><pre><span></span><code>[Header]
+[Chunk A]
+  [Schema A]
+  [Channel 1 (A)]
+  [Channel 2 (B)]
+  [Message on 1]
+  [Message on 1]
+  [Message on 2]
+[Message Index 1]
+[Message Index 2]
+[Attachment 1]
+[Chunk B]
+  [Schema B]
+  [Channel 3 (B)]
+  [Message on 3]
+  [Message on 1]
+[Message Index 3]
+[Message Index 1]
+[Data End]
+[Schema A]
+[Schema B]
+[Channel 1]
+[Channel 2]
+[Channel 3]
+[Chunk Index A]
+[Chunk Index B]
+[Attachment Index 1]
+[Statistics]
+[Summary Offset 0x01]
+[Summary Offset 0x05]
+[Summary Offset 0x07]
+[Summary Offset 0x08]
+[Footer]
+</code></pre></div>
+<h2 id="further-reading">Further Reading</h2>
+<ul>
+<li><a href="explanatory-notes.html#feature-explanations">Feature explanations</a>: includes usage details that may be useful to implementers of readers or writers.</li>
+</ul>
+
+              
+            </article>
+            
+          </div>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+    <nav class="md-footer__inner md-grid" aria-label="Footer" >
+      
+        
+        <a href="../support-matrix.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: Library Support" rel="prev">
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+          </div>
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              Library Support
+            </div>
+          </div>
+        </a>
+      
+      
+        
+        <a href="explanatory-notes.html" class="md-footer__link md-footer__link--next" aria-label="Next: Explanatory Notes" rel="next">
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              Explanatory Notes
+            </div>
+          </div>
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4Z"/></svg>
+          </div>
+        </a>
+      
+    </nav>
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2022 Foxglove
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    <a href="https://twitter.com/foxglovedev" target="_blank" rel="noopener" title="Twitter" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.1.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z"/></svg>
+    </a>
+  
+    
+    
+    <a href="https://foxglovedev.slack.com" target="_blank" rel="noopener" title="Slack" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.1.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M94.12 315.1c0 25.9-21.16 47.06-47.06 47.06S0 341 0 315.1c0-25.9 21.16-47.06 47.06-47.06h47.06v47.06zm23.72 0c0-25.9 21.16-47.06 47.06-47.06s47.06 21.16 47.06 47.06v117.84c0 25.9-21.16 47.06-47.06 47.06s-47.06-21.16-47.06-47.06V315.1zm47.06-188.98c-25.9 0-47.06-21.16-47.06-47.06S139 32 164.9 32s47.06 21.16 47.06 47.06v47.06H164.9zm0 23.72c25.9 0 47.06 21.16 47.06 47.06s-21.16 47.06-47.06 47.06H47.06C21.16 243.96 0 222.8 0 196.9s21.16-47.06 47.06-47.06H164.9zm188.98 47.06c0-25.9 21.16-47.06 47.06-47.06 25.9 0 47.06 21.16 47.06 47.06s-21.16 47.06-47.06 47.06h-47.06V196.9zm-23.72 0c0 25.9-21.16 47.06-47.06 47.06-25.9 0-47.06-21.16-47.06-47.06V79.06c0-25.9 21.16-47.06 47.06-47.06 25.9 0 47.06 21.16 47.06 47.06V196.9zM283.1 385.88c25.9 0 47.06 21.16 47.06 47.06 0 25.9-21.16 47.06-47.06 47.06-25.9 0-47.06-21.16-47.06-47.06v-47.06h47.06zm0-23.72c-25.9 0-47.06-21.16-47.06-47.06 0-25.9 21.16-47.06 47.06-47.06h117.84c25.9 0 47.06 21.16 47.06 47.06 0 25.9-21.16 47.06-47.06 47.06H283.1z"/></svg>
+    </a>
+  
+    
+    
+    <a href="https://github.com/foxglove/mcap" target="_blank" rel="noopener" title="GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.1.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    <script id="__config" type="application/json">{"base": "..", "features": [], "search": "../assets/javascripts/workers/search.b97dbffb.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version.title": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.6c7ad80a.min.js"></script>
+      
+    
+  </body>
+</html>

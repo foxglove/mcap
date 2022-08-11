@@ -1,0 +1,1465 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      <link rel="icon" href="../img/favicon32.png">
+      <meta name="generator" content="mkdocs-1.3.1, mkdocs-material-8.3.9">
+    
+    
+      
+        <title>Evaluation of robotics data recording file formats - MCAP</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.1d29e8d0.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.cbb835fc.min.css">
+        
+      
+      
+    
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=IBM+Plex+Sans:300,300i,400,400i,700,700i%7CIBM+Plex+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"IBM Plex Sans";--md-code-font:"IBM Plex Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../styles/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="">
+  
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&"object"==typeof palette.color)for(var key of Object.keys(palette.color))document.body.setAttribute("data-md-color-"+key,palette.color[key])</script>
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#evaluation-of-robotics-data-recording-file-formats" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="MCAP" class="md-header__button md-logo" aria-label="MCAP" data-md-component="logo">
+      
+  <img src="../img/mcap.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            MCAP
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Evaluation of robotics data recording file formats
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      <form class="md-header__option" data-md-component="palette">
+        
+          
+          
+          <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent=""  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+          
+            <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+            </label>
+          
+        
+          
+          
+          <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent=""  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_2">
+          
+            <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12c0-2.42-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+            </label>
+          
+        
+      </form>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/foxglove/mcap" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.1.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="MCAP" class="md-nav__button md-logo" aria-label="MCAP" data-md-component="logo">
+      
+  <img src="../img/mcap.png" alt="logo">
+
+    </a>
+    MCAP
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/foxglove/mcap" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.1.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_1" type="checkbox" id="__nav_1" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_1">
+          Home
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Home" data-md-level="1">
+        <label class="md-nav__title" for="__nav_1">
+          <span class="md-nav__icon md-icon"></span>
+          Home
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../index.html" class="md-nav__link">
+        Introduction
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../home/messages-channels-and-schemas.html" class="md-nav__link">
+        Messages, Channels and Schemas
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../home/data-serialization-formats.html" class="md-nav__link">
+        Data Serialization Formats
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_2" type="checkbox" id="__nav_2" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_2">
+          Getting Started
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Getting Started" data-md-level="1">
+        <label class="md-nav__title" for="__nav_2">
+          <span class="md-nav__icon md-icon"></span>
+          Getting Started
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/overview.html" class="md-nav__link">
+        Overview
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/ros-1.html" class="md-nav__link">
+        ROS 1
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/ros-2.html" class="md-nav__link">
+        ROS 2
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/protobuf.html" class="md-nav__link">
+        Protobuf
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/json.html" class="md-nav__link">
+        JSON
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/visualize-in-foxglove-studio.html" class="md-nav__link">
+        Visualizing in Foxglove Studio
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3" type="checkbox" id="__nav_3" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_3">
+          Guides
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Guides" data-md-level="1">
+        <label class="md-nav__title" for="__nav_3">
+          <span class="md-nav__icon md-icon"></span>
+          Guides
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_1" type="checkbox" id="__nav_3_1" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_3_1">
+          Python
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Python" data-md-level="2">
+        <label class="md-nav__title" for="__nav_3_1">
+          <span class="md-nav__icon md-icon"></span>
+          Python
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/python/reading-writing-ros1.html" class="md-nav__link">
+        Reading and writing ROS 1 messages
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/python/reading-writing-ros2.html" class="md-nav__link">
+        Reading and writing ROS 2 messages
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/python/writing-jsonschema.html" class="md-nav__link">
+        Writing JSON to MCAP
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/python/reading-writing-protobuf.html" class="md-nav__link">
+        Reading and writing Protobuf messages
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_2" type="checkbox" id="__nav_3_2" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_3_2">
+          C++
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="C++" data-md-level="2">
+        <label class="md-nav__title" for="__nav_3_2">
+          <span class="md-nav__icon md-icon"></span>
+          C++
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guides/cpp/writing-protobuf.html" class="md-nav__link">
+        Writing Protobuf to MCAP
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_4" type="checkbox" id="__nav_4" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_4">
+          API Reference
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="API Reference" data-md-level="1">
+        <label class="md-nav__title" for="__nav_4">
+          <span class="md-nav__icon md-icon"></span>
+          API Reference
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/python/index.html" class="md-nav__link">
+        Python
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/cpp/index.html" class="md-nav__link">
+        C++
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/typescript/index.html" class="md-nav__link">
+        TypeScript
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://pkg.go.dev/github.com/foxglove/mcap/go/mcap" class="md-nav__link">
+        Go
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/swift/documentation/mcap/" class="md-nav__link">
+        Swift
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5" type="checkbox" id="__nav_5" checked>
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_5">
+          More Resources
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="More Resources" data-md-level="1">
+        <label class="md-nav__title" for="__nav_5">
+          <span class="md-nav__icon md-icon"></span>
+          More Resources
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/foxglove/mcap" class="md-nav__link">
+        GitHub
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap" class="md-nav__link">
+        mcap CLI
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://foxglovedev.slack.com" class="md-nav__link">
+        Slack
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../support-matrix.html" class="md-nav__link">
+        Library Support
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/ros-tooling/rosbag2_storage_mcap" class="md-nav__link">
+        ROS 2 Storage Plugin
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5_6" type="checkbox" id="__nav_5_6" >
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_5_6">
+          Specification
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Specification" data-md-level="2">
+        <label class="md-nav__title" for="__nav_5_6">
+          <span class="md-nav__icon md-icon"></span>
+          Specification
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../specification/index.html" class="md-nav__link">
+        MCAP File Format Specification
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../specification/explanatory-notes.html" class="md-nav__link">
+        Explanatory Notes
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../specification/appendix.html" class="md-nav__link">
+        MCAP File Format Specification Appendix
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+    
+  
+  
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+      
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5_7" type="checkbox" id="__nav_5_7" checked>
+      
+      
+      
+      
+        <label class="md-nav__link" for="__nav_5_7">
+          Motivation
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" aria-label="Motivation" data-md-level="2">
+        <label class="md-nav__title" for="__nav_5_7">
+          <span class="md-nav__icon md-icon"></span>
+          Motivation
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Evaluation of robotics data recording file formats
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="evaluation-of-robotics-data-recording-file-formats.html" class="md-nav__link md-nav__link--active">
+        Evaluation of robotics data recording file formats
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem-statement" class="md-nav__link">
+    Problem Statement
+  </a>
+  
+    <nav class="md-nav" aria-label="Problem Statement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serialization-agnostic" class="md-nav__link">
+    Serialization Agnostic
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#determinism" class="md-nav__link">
+    Determinism
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#self-describing" class="md-nav__link">
+    Self-Describing
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#big-and-small-data" class="md-nav__link">
+    Big and Small Data
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#write-optimized" class="md-nav__link">
+    Write-Optimized
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#no-a-priori-channel-knowledge" class="md-nav__link">
+    No A Priori Channel Knowledge
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#corruption-resilient" class="md-nav__link">
+    Corruption Resilient
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#read-optimized" class="md-nav__link">
+    Read-Optimized
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#standards-compatible" class="md-nav__link">
+    Standards Compatible
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#existing-robotics-recording-formats" class="md-nav__link">
+    Existing Robotics Recording Formats
+  </a>
+  
+    <nav class="md-nav" aria-label="Existing Robotics Recording Formats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rosbag1" class="md-nav__link">
+    rosbag1
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rosbag2" class="md-nav__link">
+    rosbag2
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#length-delimited-protobuf" class="md-nav__link">
+    Length-delimited Protobuf
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apollo-cyber-rt" class="md-nav__link">
+    Apollo Cyber RT
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#existing-big-data-formats" class="md-nav__link">
+    Existing Big Data Formats
+  </a>
+  
+    <nav class="md-nav" aria-label="Existing Big Data Formats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#avro-native-types" class="md-nav__link">
+    Avro - Native Types
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#avro-opaque-bytes" class="md-nav__link">
+    Avro - Opaque Bytes
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hdf5" class="md-nav__link">
+    HDF5
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parquet" class="md-nav__link">
+    Parquet
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    Next Steps
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem-statement" class="md-nav__link">
+    Problem Statement
+  </a>
+  
+    <nav class="md-nav" aria-label="Problem Statement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#serialization-agnostic" class="md-nav__link">
+    Serialization Agnostic
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#determinism" class="md-nav__link">
+    Determinism
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#self-describing" class="md-nav__link">
+    Self-Describing
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#big-and-small-data" class="md-nav__link">
+    Big and Small Data
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#write-optimized" class="md-nav__link">
+    Write-Optimized
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#no-a-priori-channel-knowledge" class="md-nav__link">
+    No A Priori Channel Knowledge
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#corruption-resilient" class="md-nav__link">
+    Corruption Resilient
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#read-optimized" class="md-nav__link">
+    Read-Optimized
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#standards-compatible" class="md-nav__link">
+    Standards Compatible
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#existing-robotics-recording-formats" class="md-nav__link">
+    Existing Robotics Recording Formats
+  </a>
+  
+    <nav class="md-nav" aria-label="Existing Robotics Recording Formats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rosbag1" class="md-nav__link">
+    rosbag1
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rosbag2" class="md-nav__link">
+    rosbag2
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#length-delimited-protobuf" class="md-nav__link">
+    Length-delimited Protobuf
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apollo-cyber-rt" class="md-nav__link">
+    Apollo Cyber RT
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#existing-big-data-formats" class="md-nav__link">
+    Existing Big Data Formats
+  </a>
+  
+    <nav class="md-nav" aria-label="Existing Big Data Formats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#avro-native-types" class="md-nav__link">
+    Avro - Native Types
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#avro-opaque-bytes" class="md-nav__link">
+    Avro - Opaque Bytes
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hdf5" class="md-nav__link">
+    HDF5
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parquet" class="md-nav__link">
+    Parquet
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    Next Steps
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          <div class="md-content" data-md-component="content">
+            <article class="md-content__inner md-typeset">
+              
+                
+  <a href="https://github.com/foxglove/mcap/edit/master/docs/motivation/evaluation-of-robotics-data-recording-file-formats.md" title="Edit this page" class="md-content__button md-icon">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z"/></svg>
+  </a>
+
+
+
+<h1 id="evaluation-of-robotics-data-recording-file-formats">Evaluation of robotics data recording file formats</h1>
+<!-- cspell:words packetized pluggable checksumming mitigations Karsten Knese Hurliman jhurliman -->
+
+<p><em>Oct 6, 2021</em><br />
+<em>John Hurliman (<a href="https://github.com/jhurliman">@jhurliman</a>)</em><br />
+<em><a href="https://foxglove.dev">Foxglove</a></em></p>
+<p><em>Originally posted on <a href="https://discourse.ros.org/t/evaluation-of-robotics-data-recording-file-formats/22588">ROS Discourse</a></em></p>
+<p>The transition from ROS 1 to ROS 2 involves switching recording file formats from the classic “rosbag” (.bag) file format to a new serialization format. The rosbag2 recording software includes a pluggable interface to support different serialization methods, with the current default using SQLite (.db3) files. Non-ROS robotics frameworks each use their own recording format, leading to further fragmentation. This document reviews desirable properties of a robotics data recording format (including those considered during ROS 2 development) and evaluates existing and proposed solutions against those requirements.</p>
+<h2 id="problem-statement">Problem Statement</h2>
+<p>The goal of recording robotics data is to store and analyze or replay the data later to understand what environmental inputs were observed, what actions were taken, and some granularity of the internal state to understand what decisions were made and why. This goal is usually accomplished by recording multiple streams of data as packetized messages with high-resolution timestamps. Example data streams include camera images, LIDAR scans, pose estimates, planning decisions, and actuator commands. The streams of data vary significantly in size, frequency, compression, and schema complexity. The following desirable properties have been collected from Karsten Knese’s <a href="https://github.com/ros2/design/blob/658068949815a0598e535531662245c898b50833/articles/rosbags.md">rosbag2 design proposal</a> and from interviewing robotics companies using a variety of approaches to data recording and data storage.</p>
+<h3 id="serialization-agnostic">Serialization Agnostic</h3>
+<p>The robotics world has not standardized on a single message serialization format. ROS1 included its own serialization format, while ROS2 uses CDR as the default but includes a pluggable middleware layer to support other serializations. Non-ROS robots may be using Protocol Buffers (Protobuf), CBOR, JSON, or a proprietary format. A generic recording container must include support for different serialization formats to support the breadth of choices for message serialization in use today.</p>
+<h3 id="determinism">Determinism</h3>
+<p>Playing back a recording should be a deterministic process. The ordering of messages in a single stream and across streams must be well defined to enable this. This ordering is generally achieved by associating high-resolution timestamps with each message and iterating across all streams concurrently in timestamp order during playback. There are many different concepts of time in a recording: the time a message was originally published, the time when it was sent by the publisher (this can be very different for messages that are held in a queue and replayed), when the data recording process received it, or when the recorder wrote it to disk. Using a consistent definition of time is the most critical requirement while storing multiple timestamps can enable additional use cases.</p>
+<h3 id="self-describing">Self-Describing</h3>
+<p>The design of robotic systems is often evolving. Data streams are added and removed, message publishing frequencies are tuned up and down, and schemas change. For a recording file to be useful as long-term storage, it must be self-describing. That is, the decoding of the container itself must be understandable by looking at a file signature, and the serialization of individual messages must either be self-describing (such as JSON or CBOR) or described by a schema embedded in the recording for each stream. Parsing a recording should not require access to external schemas, a specific codebase revision, or any other external resources.</p>
+<h3 id="big-and-small-data">Big and Small Data</h3>
+<p>Some sensor streams can produce gigabytes of data per second. While splitting files along the time axis is always possible, the recording container should support at least hundreds of gigabytes before forcing a file split. The per-message overhead should be low enough to support small messages at 1kHz+ frequency, and large individual messages should be possible to support uncompressed video feeds.</p>
+<h3 id="write-optimized">Write-Optimized</h3>
+<p>For a file format to be suitable for recording, it must be optimized for write throughput. An append-only file format is desirable for performance, to enable streaming data as it is written, and for crash safety. It should be possible to make I/O and CPU/memory tradeoffs by either compressing data at write time or writing uncompressed data. Things to avoid: expensive index creation, expensive working memory requirements, and expensive transcoding at write time.</p>
+<h3 id="no-a-priori-channel-knowledge">No A Priori Channel Knowledge</h3>
+<p>Most robotics frameworks use a publish-subscribe (pub/sub) messaging system to send messages over channels, also known as topics. It is not always possible to know the complete list of channels that should be recorded ahead of time or the schemas for each channel before the channel starts publishing messages. For a recorder to support append-only, it must be possible to write new channel information and schemas midway through writing, after writing has already begun for other channels.</p>
+<h3 id="corruption-resilient">Corruption Resilient</h3>
+<p>Robots operate in chaotic environments. The most critical recording files are often associated with an unpredictable event such as a collision or system failure where data integrity cannot be guaranteed. Some possible mitigations are splitting the data into smaller chunks, adding chunk-level checksumming, and a documented process on how to recover partial data from a truncated or otherwise corrupted recording.</p>
+<h3 id="read-optimized">Read-Optimized</h3>
+<p>There are many kinds of read-optimization, and often there is a direct tradeoff between read-optimization and write optimization. A recording format should be optimized for write throughput first and foremost. However, the generated files should be readable without loading the entire file into memory, parsable in different environments (desktop, server, web), and support efficient random access and range requests if possible. Although it is possible to use different file formats for recording and archiving with a transcoding process, if a file format can support high write throughput and speed up these read operations, it simplifies the development ecosystem. Tooling can then converge around a single file format.</p>
+<h3 id="standards-compatible">Standards Compatible</h3>
+<p>If a universal robotics recording file format is adopted, it should be eligible to become a standard. The standard could take the form of an Internet Engineering Task Force RFC or a normalized specification through another standards body. Typical requirements include real-world usage in multiple places, complete documentation, no patent encumbrance, and at least two independent implementations.</p>
+<h2 id="existing-robotics-recording-formats">Existing Robotics Recording Formats</h2>
+<p>We can compare this set of requirements and desirable properties against existing file formats designed as robot recording containers.</p>
+<h3 id="rosbag1">rosbag1</h3>
+<p>The original ROS1 .bag file format meets several of our requirements. It is deterministic, self-describing, supports big and small data, somewhat write-optimized (although not append-only), does not require a priori channel knowledge, somewhat corruption resistant (no checksums, but data can be recovered at the chunk level and the index can be rebuilt), read-optimized via an index, and standards compatible. Its major shortcoming is that it is not serialization agnostic.</p>
+<h3 id="rosbag2">rosbag2</h3>
+<p>Whereas rosbag1 refers to both a file format definition and two reference implementations (C++ and Python), rosbag2 is a C API with a plugin interface for implementations, plus a default implementation using SQLite as the on-disk format. Since this document is focused on serialization formats, rosbag2 will be defined as the default SQLite implementation. This format is serialization agnostic, deterministic, but not (yet) self-describing, although there is <a href="https://github.com/ros2/rosbag2/issues/782">ongoing work</a> to address that. It does not require a priori channel knowledge, is <a href="https://www.sqlite.org/howtocorrupt.html">corruption resistant</a>, and is read-optimized except in the web use case. The significant shortcomings are around write-optimization (not append-only, the index is updated per row insert), lack of compression support at write time beyond the individual message level, and requiring the entire file to be read into memory in the web use case (via <a href="https://sql.js.org/">sql.js</a>). SQLite also poses challenges to standardization. The Internet Engineering Task Force, W3C, and other standards bodies require any specification to have two independent implementations to graduate to a standard. SQLite has only ever had a single implementation that is cross-compiled to different platforms, which caused the Web SQL Database proposal to <a href="https://www.w3.org/TR/webdatabase/">reach an impasse</a>.</p>
+<h3 id="length-delimited-protobuf">Length-delimited Protobuf</h3>
+<p>From interviewing various robotics companies, the most popular serialization format outside of ROS is to write protobuf messages to disk with a simple length delimiter or short message header. If timestamps are included in every message, this can be deterministic, but the initial .proto schemas must be bundled as well to meet the self-describing criteria. This approach does not require a priori channel knowledge and supports big and small data. It does not provide any explicit corruption resistance, although a truncated final message can sometimes be detected by a serialization failure. It is a write-optimized append-only approach, and compression can be supported by piping the write output through a compressor. Protobuf has been submitted as an <a href="https://datatracker.ietf.org/doc/html/draft-rfernando-protocol-buffers-00">Internet-Draft</a> (I-D) standard. The significant shortcomings are that by nature of defining around a single serialization format, it is not serialization agnostic, and that without a well-defined standard, the files produced by different implementations will be incompatible. The lack of read-optimization excludes its use in playback or analysis tools that require random seeking.</p>
+<h3 id="apollo-cyber-rt">Apollo Cyber RT</h3>
+<p>Cyber RT includes its own recording file format. However, the documentation of the format itself (opposed to the software APIs surrounding it) is scarce. It is likely similar to Length-delimited Protobuf for the purpose of this discussion.</p>
+<h2 id="existing-big-data-formats">Existing Big Data Formats</h2>
+<p>Outside of robotic recording file formats, we can evaluate common “big data” containers for suitability to this problem.</p>
+<h3 id="avro-native-types">Avro - Native Types</h3>
+<p>Avro is a row-based storage format that requires each row to follow a single schema. This requires a union type of all possible message schemas that need to be rewritten as new channels are added into a container or each channel to be written to a separate file. Support for different serialization formats requires mapping each serialization format to Avro data types, which may be a lossy process.</p>
+<h3 id="avro-opaque-bytes">Avro - Opaque Bytes</h3>
+<p>Another way of using the Avro format is to define the schema as a single field containing an opaque array of bytes, which supports different serialization formats in a common container. This approach meets many of the desired requirements, but it defeats the most commonly desired benefit of using an existing container format: the ability to ingest data into a third-party system and have that system understand the data in a typed way. A recording format built on Avro would still require standardizing how and where to store content types and per-channel information such as schemas. Regardless, Avro containers storing opaque byte messages may be one possible solution.</p>
+<h3 id="hdf5">HDF5</h3>
+<p>HDF5 predates Avro and suffers from similar limitations while also missing support for deeply nested data via schemas. Using HDF5 as strictly a wrapper around opaque byte messages would require a more complex file format for no additional gain.</p>
+<h3 id="parquet">Parquet</h3>
+<p>Parquet is a columnar data store that is not suitable for random access to messages and is not optimized for replay. While Parquet can play a valuable role in robotics for analysis and long-term storage, its lack of suitability for real-time recording and message playback excludes it from our search for a recording file format.</p>
+<h2 id="next-steps">Next Steps</h2>
+<p>By comparing existing robotics recording formats with generic big data container formats, we can see there are practical advantages to designing a recording format specific to the robotics use case. However, none of the existing recording formats meet all the requirements and desirable traits laid out in this document. Many of the proposed approaches (rosbag2 SQLite, Avro with opaque buffer) follow an anti-pattern of using an existing schema-based format but only storing opaque binary blobs, negating the promise of interoperability from using an existing format. In light of this evaluation, I would like to propose a file format tailored to the requirements of robotics recording. I will introduce this file format in a follow-up proposal. The goal is to continue collecting requirements and desirable traits and collaboratively craft an industry standard backed by multiple implementations.</p>
+
+              
+            </article>
+            
+          </div>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+    <nav class="md-footer__inner md-grid" aria-label="Footer" >
+      
+        
+        <a href="../specification/appendix.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: MCAP File Format Specification Appendix" rel="prev">
+          <div class="md-footer__button md-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+          </div>
+          <div class="md-footer__title">
+            <div class="md-ellipsis">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              MCAP File Format Specification Appendix
+            </div>
+          </div>
+        </a>
+      
+      
+    </nav>
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2022 Foxglove
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        <div class="md-social">
+  
+    
+    
+    <a href="https://twitter.com/foxglovedev" target="_blank" rel="noopener" title="Twitter" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.1.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z"/></svg>
+    </a>
+  
+    
+    
+    <a href="https://foxglovedev.slack.com" target="_blank" rel="noopener" title="Slack" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.1.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M94.12 315.1c0 25.9-21.16 47.06-47.06 47.06S0 341 0 315.1c0-25.9 21.16-47.06 47.06-47.06h47.06v47.06zm23.72 0c0-25.9 21.16-47.06 47.06-47.06s47.06 21.16 47.06 47.06v117.84c0 25.9-21.16 47.06-47.06 47.06s-47.06-21.16-47.06-47.06V315.1zm47.06-188.98c-25.9 0-47.06-21.16-47.06-47.06S139 32 164.9 32s47.06 21.16 47.06 47.06v47.06H164.9zm0 23.72c25.9 0 47.06 21.16 47.06 47.06s-21.16 47.06-47.06 47.06H47.06C21.16 243.96 0 222.8 0 196.9s21.16-47.06 47.06-47.06H164.9zm188.98 47.06c0-25.9 21.16-47.06 47.06-47.06 25.9 0 47.06 21.16 47.06 47.06s-21.16 47.06-47.06 47.06h-47.06V196.9zm-23.72 0c0 25.9-21.16 47.06-47.06 47.06-25.9 0-47.06-21.16-47.06-47.06V79.06c0-25.9 21.16-47.06 47.06-47.06 25.9 0 47.06 21.16 47.06 47.06V196.9zM283.1 385.88c25.9 0 47.06 21.16 47.06 47.06 0 25.9-21.16 47.06-47.06 47.06-25.9 0-47.06-21.16-47.06-47.06v-47.06h47.06zm0-23.72c-25.9 0-47.06-21.16-47.06-47.06 0-25.9 21.16-47.06 47.06-47.06h117.84c25.9 0 47.06 21.16 47.06 47.06 0 25.9-21.16 47.06-47.06 47.06H283.1z"/></svg>
+    </a>
+  
+    
+    
+    <a href="https://github.com/foxglove/mcap" target="_blank" rel="noopener" title="GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.1.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    <script id="__config" type="application/json">{"base": "..", "features": [], "search": "../assets/javascripts/workers/search.b97dbffb.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version.title": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.6c7ad80a.min.js"></script>
+      
+    
+  </body>
+</html>
