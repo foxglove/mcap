@@ -32,6 +32,7 @@ markdown_extensions:
       use_pygments: true
   - pymdownx.superfences
   - mdx_truly_sane_lists
+  - smarty
 
 # links go directly to `.html` URL paths, this means we can preview the site in a GCS bucket.
 use_directory_urls: false
