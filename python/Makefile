@@ -1,6 +1,6 @@
 .PHONY: pipenv
 pipenv:
-	pipenv install --dev --deploy
+	SETUPTOOLS_ENABLE_FEATURES="legacy-editable" pipenv install --dev --deploy
 
 .PHONY: build
 build: pipenv
