@@ -1,8 +1,7 @@
 from io import BytesIO
 
 from mcap_protobuf.writer import Writer
-from mcap_protobuf.decoder import decode_proto_messages
-from mcap.mcap0.reader import make_reader
+from mcap_protobuf.reader import read_protobuf_messages
 
 import pytest
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -15,13 +14,13 @@ def test_write_one():
         writer.write_message("timestamps", Timestamp(seconds=5, nanos=10), log_time=15)
     io.seek(0)
 
-    messages = list(decode_proto_messages(make_reader(io).iter_messages()))
+    messages = list(read_protobuf_messages(io))
     assert len(messages) == 1
-    topic, message, timestamp = messages[0]
-    assert message.seconds == 5
-    assert message.nanos == 10
-    assert timestamp == 15
-    assert topic == "timestamps"
+    message = messages[0]
+    assert message.proto_msg.seconds == 5
+    assert message.proto_msg.nanos == 10
+    assert message.log_time_ns == 15
+    assert message.topic == "timestamps"
 
 
 def test_write_wrong_schema():

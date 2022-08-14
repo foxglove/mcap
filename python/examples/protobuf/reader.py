@@ -1,14 +1,11 @@
 import sys
 
-from mcap.mcap0.reader import make_reader
-from mcap_protobuf.decoder import decode_proto_messages
+from mcap_protobuf.reader import read_protobuf_messages
 
 
 def main():
-    with open(sys.argv[1], "rb") as f:
-        mcap_iterator = make_reader(f).iter_messages()
-        for topic, message, timestamp in decode_proto_messages(mcap_iterator):
-            print(f"{topic} [{timestamp}]: {message}")
+    for msg in read_protobuf_messages(sys.argv[1]):
+        print(f"{msg.topic} [{msg.log_time}]: {msg.proto_msg}")
 
 
 if __name__ == "__main__":
