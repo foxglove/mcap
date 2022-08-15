@@ -8,8 +8,8 @@ The [`mcap` GitHub repo](https://github.com/foxglove/mcap/tree/main) includes th
 
 ### Guides
 
-- [Python](../guides/python/reading-writing-protobuf.md)
-- [C++](../guides/cpp/writing-protobuf.md)
+- [Python](../guides/python/protobuf.md)
+- [C++](../guides/cpp/protobuf.md)
 
 ### Examples
 

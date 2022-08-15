@@ -18,7 +18,7 @@ The [`mcap` GitHub repo](https://github.com/foxglove/mcap/tree/main) includes th
 
 ### Guides
 
-- [Python](../guides/python/reading-writing-ros1.md)
+- [Python](../guides/python/ros1.md)
 
 ### Examples
 
