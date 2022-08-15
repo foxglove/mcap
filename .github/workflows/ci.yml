@@ -223,7 +223,7 @@ jobs:
           cache: pipenv
       - uses: satackey/action-docker-layer-caching@v0.0.11
         continue-on-error: true
-      - run: pip install pipenv
+      - run: pip install pipenv==2022.7.24
       - run: make lint
       - run: make test
       - run: make examples

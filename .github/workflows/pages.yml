@@ -20,7 +20,7 @@ jobs:
           python-version: 3.7
           cache: pipenv
       - name: Install pipenv
-        run: pip install pipenv
+        run: pip install pipenv==2022.7.24
 
       - name: Install dependencies
         run: pipenv install --deploy
