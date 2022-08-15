@@ -13,7 +13,7 @@ The Swift MCAP library is experimental, and not actively developed. This means t
 |  | Python | C++ | Go | Typescript | Swift |
 | --- | --- | --- | --- | --- | --- |
 | Indexed unordered message reading | Yes | Yes | Yes | Yes | No |
-| Timestamp-ordered message reading | No | Partial [^2] | Partial [^3] | Yes | No |
+| Timestamp-ordered message reading | Yes | Partial [^2] | Partial [^3] | Yes | No |
 | Indexed metadata reading | Yes | Yes [^1] | Yes [^1] | Yes [^1] | No |
 | Indexed attachment reading | Yes | Yes [^1] | Yes [^1] | Yes [^1] | No |
 | Non-materialized attachment reading | No | Yes [^5] | No | No | No |
