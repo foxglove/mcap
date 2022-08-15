@@ -13,7 +13,7 @@ from mcap.mcap0.reader import McapReader, make_reader
 
 
 def read_ros1_messages(
-    source: Union[PathLike[Any], McapReader, IO[bytes]],
+    source: Union[str, bytes, PathLike, McapReader, IO[bytes]],
     topics: Optional[List[str]] = None,
     start_time: Optional[Union[int, datetime]] = None,
     end_time: Optional[Union[int, datetime]] = None,

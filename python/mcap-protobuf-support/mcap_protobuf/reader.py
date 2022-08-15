@@ -14,7 +14,7 @@ from mcap.mcap0.reader import McapReader, make_reader
 
 
 def read_protobuf_messages(
-    source: Union[str, bytes, PathLike[Any], McapReader, IO[bytes]],
+    source: Union[str, bytes, PathLike, McapReader, IO[bytes]],
     topics: Optional[List[str]] = None,
     start_time: Optional[Union[int, datetime]] = None,
     end_time: Optional[Union[int, datetime]] = None,
