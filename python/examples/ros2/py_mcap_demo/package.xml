@@ -8,7 +8,7 @@
   <license>Apache-2.0</license>
 
   <depend>rosbag2_py</depend>
-  <depend>rosbag2_storage_mcap_plugin</depend>
+  <depend>rosbag2_storage_mcap</depend>
   <depend>std_msgs</depend>
 
   <test_depend>python3-pytest</test_depend>
