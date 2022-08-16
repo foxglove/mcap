@@ -22,6 +22,7 @@ from .records import (
 from .stream_reader import StreamReader, breakup_chunk, MAGIC_SIZE
 from .data_stream import RecordBuilder
 from .summary import Summary
+from .message_queue import MessageQueue
 
 
 def _get_record_size(record: McapRecord):
@@ -96,6 +97,8 @@ class McapReader(ABC):
         topics: Optional[Iterable[str]] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
+        log_time_order: bool = True,
+        reverse: bool = False,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
         """iterates through the messages in an MCAP.
 
@@ -104,6 +107,10 @@ class McapReader(ABC):
             timestamp are not included.
         :param end_time: an integer nanosecond timestamp. if provided, messages logged after this
             timestamp are not included.
+        :param log_time_order: if True, messages will be yielded in ascending log time order. If
+            False, messages will be yielded in the order they appear in the MCAP file.
+        :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
+            yielded in descending log time order.
         """
         raise NotImplementedError()
 
@@ -142,6 +149,8 @@ class SeekingReader(McapReader):
         topics: Optional[Iterable[str]] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
+        log_time_order: bool = True,
+        reverse: bool = False,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
         """iterates through the messages in an MCAP.
 
@@ -150,31 +159,43 @@ class SeekingReader(McapReader):
             timestamp are not included.
         :param end_time: an integer nanosecond timestamp. if provided, messages logged after this
             timestamp are not included.
+        :param log_time_order: if True, messages will be yielded in ascending log time order. If
+            False, messages will be yielded in the order they appear in the MCAP file.
+        :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
+            yielded in descending log time order.
         """
         summary = self.get_summary()
-        assert summary is not None
-        if summary is None:
-            # no index available, use a non-seeking reader to read linearly through the stream.
+        if summary is None or len(summary.chunk_indexes) == 0:
+            # No chunk indices available, so there is no index to search for messages.
+            # use a non-seeking reader to read linearly through the stream.
             self._stream.seek(0, io.SEEK_SET)
             return NonSeekingReader(self._stream).iter_messages(
-                topics, start_time, end_time
+                topics, start_time, end_time, log_time_order
             )
+
+        message_queue = MessageQueue(log_time_order=log_time_order, reverse=reverse)
         for chunk_index in _chunks_matching_topics(
             summary, topics, start_time, end_time
         ):
-            self._stream.seek(chunk_index.chunk_start_offset + 1 + 8, io.SEEK_SET)
-            chunk = Chunk.read(ReadDataStream(self._stream))
-            for record in breakup_chunk(chunk):
-                if isinstance(record, Message):
-                    channel = summary.channels[record.channel_id]
-                    if topics is not None and channel.topic not in topics:
-                        continue
-                    if start_time is not None and record.log_time < start_time:
-                        continue
-                    if end_time is not None and record.log_time >= end_time:
-                        continue
-                    schema = summary.schemas[channel.schema_id]
-                    yield (schema, channel, record)
+            message_queue.push(chunk_index)
+        while message_queue:
+            next_item = message_queue.pop()
+            if isinstance(next_item, ChunkIndex):
+                self._stream.seek(next_item.chunk_start_offset + 1 + 8, io.SEEK_SET)
+                chunk = Chunk.read(ReadDataStream(self._stream))
+                for record in breakup_chunk(chunk):
+                    if isinstance(record, Message):
+                        channel = summary.channels[record.channel_id]
+                        if topics is not None and channel.topic not in topics:
+                            continue
+                        if start_time is not None and record.log_time < start_time:
+                            continue
+                        if end_time is not None and record.log_time >= end_time:
+                            continue
+                        schema = summary.schemas[channel.schema_id]
+                        message_queue.push((schema, channel, record))
+            else:
+                yield next_item
 
     def get_summary(self) -> Optional[Summary]:
         """Reads the (optional) summary section from the MCAP file."""
@@ -243,6 +264,8 @@ class NonSeekingReader(McapReader):
         topics: Optional[Iterable[str]] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
+        log_time_order: bool = True,
+        reverse: bool = False,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
         """Iterates through the messages in an MCAP.
 
@@ -251,7 +274,32 @@ class NonSeekingReader(McapReader):
             timestamp are not included.
         :param end_time: an integer nanosecond timestamp. if provided, messages logged after this
             timestamp are not included.
+        :param log_time_order: if True, messages will be yielded in ascending log time order. If
+            False, messages will be yielded in the order they appear in the MCAP file.
+        :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
+            yielded in descending log time order.
+
+        .. warning::
+            setting log_time_order to True on a non-seekable stream will cause the entire content
+            of the MCAP to be loaded into memory.
         """
+        if not log_time_order:
+            for t in self._iter_messages_internal(topics, start_time, end_time):
+                yield t
+        else:
+            for t in sorted(
+                self._iter_messages_internal(topics, start_time, end_time),
+                key=lambda tup: tup[2].log_time,
+                reverse=reverse,
+            ):
+                yield t
+
+    def _iter_messages_internal(
+        self,
+        topics: Optional[Iterable[str]] = None,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+    ) -> Iterator[Tuple[Schema, Channel, Message]]:
         self._check_spent()
         for record in StreamReader(self._stream).records:
             if isinstance(record, Schema):
