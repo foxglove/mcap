@@ -2,7 +2,7 @@
 capability. For more low-level control, consider using the underlying
 :py:class:`mcap_ros1.decoder.Decoder` and :py:class:`mcap.mcap0.reader.McapReader` objects directly.
 """
-from typing import IO, Union, Any, Dict, Iterator, Optional, List
+from typing import IO, Union, Any, Dict, Iterator, Optional, Iterable
 from datetime import datetime
 from os import PathLike
 
@@ -14,9 +14,11 @@ from mcap.mcap0.reader import McapReader, make_reader
 
 def read_ros1_messages(
     source: Union[str, bytes, PathLike, McapReader, IO[bytes]],
-    topics: Optional[List[str]] = None,
+    topics: Optional[Iterable[str]] = None,
     start_time: Optional[Union[int, datetime]] = None,
     end_time: Optional[Union[int, datetime]] = None,
+    log_time_order: bool = True,
+    reverse: bool = False,
 ) -> Iterator["McapROS1Message"]:
     """High-level generator that reads ROS1 messages from an MCAP file.
 
@@ -25,6 +27,10 @@ def read_ros1_messages(
     :param topics: an optional list of topics to read from the MCAP file.
     :param start_time: if not None, messages logged before this time will not be included.
     :param end_time: if not None, messages logged at this timestamp or after will not be included.
+    :param log_time_order: if True, messages will be yielded in ascending log time order. If
+        False, messages will be yielded in the order they appear in the MCAP file.
+    :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
+        yielded in descending log time order.
     :yields: an McapROS1Message instance for each ROS1 message in the MCAP file.
 
     .. note::
@@ -56,7 +62,7 @@ def read_ros1_messages(
     try:
         decoder = Decoder()
         for schema, channel, message in reader.iter_messages(
-            topics, start_time, end_time
+            topics, start_time, end_time, log_time_order, reverse
         ):
             yield McapROS1Message(
                 ros_msg=decoder.decode(schema=schema, message=message),
