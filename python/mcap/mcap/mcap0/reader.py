@@ -98,6 +98,7 @@ class McapReader(ABC):
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
         log_time_order: bool = True,
+        reverse: bool = False,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
         """iterates through the messages in an MCAP.
 
@@ -106,8 +107,10 @@ class McapReader(ABC):
             timestamp are not included.
         :param end_time: an integer nanosecond timestamp. if provided, messages logged after this
             timestamp are not included.
-        :param log_time_order: if True, messages will be yielded in order of their log times. If
+        :param log_time_order: if True, messages will be yielded in ascending log time order. If
             False, messages will be yielded in the order they appear in the MCAP file.
+        :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
+            yielded in descending log time order.
         """
         raise NotImplementedError()
 
@@ -147,6 +150,7 @@ class SeekingReader(McapReader):
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
         log_time_order: bool = True,
+        reverse: bool = False,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
         """iterates through the messages in an MCAP.
 
@@ -155,8 +159,10 @@ class SeekingReader(McapReader):
             timestamp are not included.
         :param end_time: an integer nanosecond timestamp. if provided, messages logged after this
             timestamp are not included.
-        :param log_time_order: if True, messages will be yielded in order of their log times. If
+        :param log_time_order: if True, messages will be yielded in ascending log time order. If
             False, messages will be yielded in the order they appear in the MCAP file.
+        :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
+            yielded in descending log time order.
         """
         summary = self.get_summary()
         if summary is None:
@@ -166,7 +172,7 @@ class SeekingReader(McapReader):
                 topics, start_time, end_time, log_time_order
             )
 
-        message_queue = MessageQueue(log_time_order=log_time_order)
+        message_queue = MessageQueue(log_time_order=log_time_order, reverse=reverse)
         for chunk_index in _chunks_matching_topics(
             summary, topics, start_time, end_time
         ):
@@ -258,6 +264,7 @@ class NonSeekingReader(McapReader):
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
         log_time_order: bool = True,
+        reverse: bool = False,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
         """Iterates through the messages in an MCAP.
 
@@ -266,8 +273,10 @@ class NonSeekingReader(McapReader):
             timestamp are not included.
         :param end_time: an integer nanosecond timestamp. if provided, messages logged after this
             timestamp are not included.
-        :param log_time_order: if True, messages will be yielded in order of their log times. If
+        :param log_time_order: if True, messages will be yielded in ascending log time order. If
             False, messages will be yielded in the order they appear in the MCAP file.
+        :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
+            yielded in descending log time order.
 
         .. warning::
             setting log_time_order to True on a non-seekable stream will cause the entire content
@@ -280,6 +289,7 @@ class NonSeekingReader(McapReader):
             for t in sorted(
                 self._iter_messages_internal(topics, start_time, end_time),
                 key=lambda tup: tup[2].log_time,
+                reverse=reverse,
             ):
                 yield t
 
