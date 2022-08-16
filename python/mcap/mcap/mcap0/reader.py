@@ -97,7 +97,7 @@ class McapReader(ABC):
         topics: Optional[Iterable[str]] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
-        log_time_order: bool = False,
+        log_time_order: bool = True,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
         """iterates through the messages in an MCAP.
 
@@ -146,7 +146,7 @@ class SeekingReader(McapReader):
         topics: Optional[Iterable[str]] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
-        log_time_order: bool = False,
+        log_time_order: bool = True,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
         """iterates through the messages in an MCAP.
 
@@ -257,7 +257,7 @@ class NonSeekingReader(McapReader):
         topics: Optional[Iterable[str]] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
-        log_time_order: bool = False,
+        log_time_order: bool = True,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
         """Iterates through the messages in an MCAP.
 
