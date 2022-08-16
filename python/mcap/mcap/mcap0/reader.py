@@ -165,8 +165,9 @@ class SeekingReader(McapReader):
             yielded in descending log time order.
         """
         summary = self.get_summary()
-        if summary is None:
-            # no index available, use a non-seeking reader to read linearly through the stream.
+        if summary is None or len(summary.chunk_indexes) == 0:
+            # No chunk indices available, so there is no index to search for messages.
+            # use a non-seeking reader to read linearly through the stream.
             self._stream.seek(0, io.SEEK_SET)
             return NonSeekingReader(self._stream).iter_messages(
                 topics, start_time, end_time, log_time_order
