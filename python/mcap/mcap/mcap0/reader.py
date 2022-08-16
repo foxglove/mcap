@@ -171,7 +171,7 @@ class SeekingReader(McapReader):
             summary, topics, start_time, end_time
         ):
             message_queue.push(chunk_index)
-        while message_queue.len() > 0:
+        while message_queue:
             next_item = message_queue.pop()
             if isinstance(next_item, ChunkIndex):
                 self._stream.seek(next_item.chunk_start_offset + 1 + 8, io.SEEK_SET)

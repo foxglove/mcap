@@ -14,28 +14,49 @@ class _Orderable:
         return self.log_time() < other.log_time()
 
     def log_time(self) -> int:
-        if isinstance(self.item, ChunkIndex):
-            return self.item.message_start_time
-        else:
-            return self.item[2].log_time
+        raise NotImplementedError(
+            "do not instantiate _Orderable directly, use a subclass"
+        )
+
+
+class _ChunkIndexWrapper(_Orderable):
+    def log_time(self) -> int:
+        self.item: ChunkIndex
+        return self.item.message_start_time
+
+
+class _MessageTupleWrapper(_Orderable):
+    def log_time(self) -> int:
+        self.item: Tuple[Schema, Channel, Message]
+        return self.item[2].log_time
 
 
 class MessageQueue:
-    def __init__(self, log_time_order: bool = False):
+    """A queue of MCAP messages and chunk indices.
+
+    :param log_time_order: if True, this queue acts as a priority queue, ordered by log time.
+        if False, ``pop()`` returns elements in insert order.
+    """
+
+    def __init__(self, log_time_order: bool):
         self._q: List[_Orderable] = []
         self._log_time_order = log_time_order
 
     def push(self, item: QueueItem):
-        if self._log_time_order:
-            heapq.heappush(self._q, _Orderable(item))
+        if isinstance(item, ChunkIndex):
+            orderable = _ChunkIndexWrapper(item)
         else:
-            self._q.append(_Orderable(item))
+            orderable = _MessageTupleWrapper(item)
+        if self._log_time_order:
+            heapq.heappush(self._q, orderable)
+        else:
+            self._q.append(orderable)
 
-    def pop(self) -> Union[ChunkIndex, Tuple[Schema, Channel, Message]]:
+    def pop(self) -> QueueItem:
         if self._log_time_order:
             return heapq.heappop(self._q).item
         else:
             return self._q.pop(0).item
 
-    def len(self) -> int:
+    def __len__(self) -> int:
         return len(self._q)

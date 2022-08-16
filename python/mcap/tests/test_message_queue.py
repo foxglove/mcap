@@ -50,7 +50,7 @@ def test_chunk_message_ordering():
     mq.push(dummy_message_tuple(0))
 
     results = []
-    while mq.len() > 0:
+    while mq:
         results.append(mq.pop())
 
     assert results[0][2].log_time == 0
@@ -69,7 +69,7 @@ def test_original_ordering():
     mq.push(dummy_message_tuple(0))
 
     results = []
-    while mq.len() > 0:
+    while mq:
         results.append(mq.pop())
 
     assert results[0].message_start_time == 3
