@@ -10,6 +10,7 @@ Submodules
    mcap.mcap0.chunk_builder
    mcap.mcap0.data_stream
    mcap.mcap0.exceptions
+   mcap.mcap0.message_queue
    mcap.mcap0.opcode
    mcap.mcap0.reader
    mcap.mcap0.records

@@ -56,6 +56,7 @@
 <span class="kn">from</span> <span class="nn">.stream_reader</span> <span class="kn">import</span> <span class="n">StreamReader</span><span class="p">,</span> <span class="n">breakup_chunk</span><span class="p">,</span> <span class="n">MAGIC_SIZE</span>
 <span class="kn">from</span> <span class="nn">.data_stream</span> <span class="kn">import</span> <span class="n">RecordBuilder</span>
 <span class="kn">from</span> <span class="nn">.summary</span> <span class="kn">import</span> <span class="n">Summary</span>
+<span class="kn">from</span> <span class="nn">.message_queue</span> <span class="kn">import</span> <span class="n">MessageQueue</span>
 
 
 <span class="k">def</span> <span class="nf">_get_record_size</span><span class="p">(</span><span class="n">record</span><span class="p">:</span> <span class="n">McapRecord</span><span class="p">):</span>
@@ -130,6 +131,8 @@
         <span class="n">topics</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">start_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">end_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">log_time_order</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">reverse</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Schema</span><span class="p">,</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]]:</span>
         <span class="sd">&quot;&quot;&quot;iterates through the messages in an MCAP.</span>
 
@@ -138,6 +141,10 @@
 <span class="sd">            timestamp are not included.</span>
 <span class="sd">        :param end_time: an integer nanosecond timestamp. if provided, messages logged after this</span>
 <span class="sd">            timestamp are not included.</span>
+<span class="sd">        :param log_time_order: if True, messages will be yielded in ascending log time order. If</span>
+<span class="sd">            False, messages will be yielded in the order they appear in the MCAP file.</span>
+<span class="sd">        :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be</span>
+<span class="sd">            yielded in descending log time order.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
 
@@ -176,6 +183,8 @@
         <span class="n">topics</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">start_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">end_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">log_time_order</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">reverse</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Schema</span><span class="p">,</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]]:</span>
         <span class="sd">&quot;&quot;&quot;iterates through the messages in an MCAP.</span>
 
@@ -184,31 +193,43 @@
 <span class="sd">            timestamp are not included.</span>
 <span class="sd">        :param end_time: an integer nanosecond timestamp. if provided, messages logged after this</span>
 <span class="sd">            timestamp are not included.</span>
+<span class="sd">        :param log_time_order: if True, messages will be yielded in ascending log time order. If</span>
+<span class="sd">            False, messages will be yielded in the order they appear in the MCAP file.</span>
+<span class="sd">        :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be</span>
+<span class="sd">            yielded in descending log time order.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">summary</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_summary</span><span class="p">()</span>
-        <span class="k">assert</span> <span class="n">summary</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="n">summary</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># no index available, use a non-seeking reader to read linearly through the stream.</span>
+        <span class="k">if</span> <span class="n">summary</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">summary</span><span class="o">.</span><span class="n">chunk_indexes</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># No chunk indices available, so there is no index to search for messages.</span>
+            <span class="c1"># use a non-seeking reader to read linearly through the stream.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">io</span><span class="o">.</span><span class="n">SEEK_SET</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">NonSeekingReader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span><span class="o">.</span><span class="n">iter_messages</span><span class="p">(</span>
-                <span class="n">topics</span><span class="p">,</span> <span class="n">start_time</span><span class="p">,</span> <span class="n">end_time</span>
+                <span class="n">topics</span><span class="p">,</span> <span class="n">start_time</span><span class="p">,</span> <span class="n">end_time</span><span class="p">,</span> <span class="n">log_time_order</span>
             <span class="p">)</span>
+
+        <span class="n">message_queue</span> <span class="o">=</span> <span class="n">MessageQueue</span><span class="p">(</span><span class="n">log_time_order</span><span class="o">=</span><span class="n">log_time_order</span><span class="p">,</span> <span class="n">reverse</span><span class="o">=</span><span class="n">reverse</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">chunk_index</span> <span class="ow">in</span> <span class="n">_chunks_matching_topics</span><span class="p">(</span>
             <span class="n">summary</span><span class="p">,</span> <span class="n">topics</span><span class="p">,</span> <span class="n">start_time</span><span class="p">,</span> <span class="n">end_time</span>
         <span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">chunk_index</span><span class="o">.</span><span class="n">chunk_start_offset</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">+</span> <span class="mi">8</span><span class="p">,</span> <span class="n">io</span><span class="o">.</span><span class="n">SEEK_SET</span><span class="p">)</span>
-            <span class="n">chunk</span> <span class="o">=</span> <span class="n">Chunk</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">ReadDataStream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">))</span>
-            <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">breakup_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">):</span>
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Message</span><span class="p">):</span>
-                    <span class="n">channel</span> <span class="o">=</span> <span class="n">summary</span><span class="o">.</span><span class="n">channels</span><span class="p">[</span><span class="n">record</span><span class="o">.</span><span class="n">channel_id</span><span class="p">]</span>
-                    <span class="k">if</span> <span class="n">topics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">channel</span><span class="o">.</span><span class="n">topic</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">topics</span><span class="p">:</span>
-                        <span class="k">continue</span>
-                    <span class="k">if</span> <span class="n">start_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">record</span><span class="o">.</span><span class="n">log_time</span> <span class="o">&lt;</span> <span class="n">start_time</span><span class="p">:</span>
-                        <span class="k">continue</span>
-                    <span class="k">if</span> <span class="n">end_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">record</span><span class="o">.</span><span class="n">log_time</span> <span class="o">&gt;=</span> <span class="n">end_time</span><span class="p">:</span>
-                        <span class="k">continue</span>
-                    <span class="n">schema</span> <span class="o">=</span> <span class="n">summary</span><span class="o">.</span><span class="n">schemas</span><span class="p">[</span><span class="n">channel</span><span class="o">.</span><span class="n">schema_id</span><span class="p">]</span>
-                    <span class="k">yield</span> <span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">record</span><span class="p">)</span></div>
+            <span class="n">message_queue</span><span class="o">.</span><span class="n">push</span><span class="p">(</span><span class="n">chunk_index</span><span class="p">)</span>
+        <span class="k">while</span> <span class="n">message_queue</span><span class="p">:</span>
+            <span class="n">next_item</span> <span class="o">=</span> <span class="n">message_queue</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_item</span><span class="p">,</span> <span class="n">ChunkIndex</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">next_item</span><span class="o">.</span><span class="n">chunk_start_offset</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">+</span> <span class="mi">8</span><span class="p">,</span> <span class="n">io</span><span class="o">.</span><span class="n">SEEK_SET</span><span class="p">)</span>
+                <span class="n">chunk</span> <span class="o">=</span> <span class="n">Chunk</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">ReadDataStream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">))</span>
+                <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">breakup_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Message</span><span class="p">):</span>
+                        <span class="n">channel</span> <span class="o">=</span> <span class="n">summary</span><span class="o">.</span><span class="n">channels</span><span class="p">[</span><span class="n">record</span><span class="o">.</span><span class="n">channel_id</span><span class="p">]</span>
+                        <span class="k">if</span> <span class="n">topics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">channel</span><span class="o">.</span><span class="n">topic</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">topics</span><span class="p">:</span>
+                            <span class="k">continue</span>
+                        <span class="k">if</span> <span class="n">start_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">record</span><span class="o">.</span><span class="n">log_time</span> <span class="o">&lt;</span> <span class="n">start_time</span><span class="p">:</span>
+                            <span class="k">continue</span>
+                        <span class="k">if</span> <span class="n">end_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">record</span><span class="o">.</span><span class="n">log_time</span> <span class="o">&gt;=</span> <span class="n">end_time</span><span class="p">:</span>
+                            <span class="k">continue</span>
+                        <span class="n">schema</span> <span class="o">=</span> <span class="n">summary</span><span class="o">.</span><span class="n">schemas</span><span class="p">[</span><span class="n">channel</span><span class="o">.</span><span class="n">schema_id</span><span class="p">]</span>
+                        <span class="n">message_queue</span><span class="o">.</span><span class="n">push</span><span class="p">((</span><span class="n">schema</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">record</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">next_item</span></div>
 
 <div class="viewcode-block" id="SeekingReader.get_summary"><a class="viewcode-back" href="../../../mcap-apidoc/mcap.mcap0.reader.html#mcap.mcap0.reader.SeekingReader.get_summary">[docs]</a>    <span class="k">def</span> <span class="nf">get_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Summary</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;Reads the (optional) summary section from the MCAP file.&quot;&quot;&quot;</span>
@@ -277,6 +298,8 @@
         <span class="n">topics</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">start_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">end_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">log_time_order</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">reverse</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Schema</span><span class="p">,</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]]:</span>
         <span class="sd">&quot;&quot;&quot;Iterates through the messages in an MCAP.</span>
 
@@ -285,7 +308,32 @@
 <span class="sd">            timestamp are not included.</span>
 <span class="sd">        :param end_time: an integer nanosecond timestamp. if provided, messages logged after this</span>
 <span class="sd">            timestamp are not included.</span>
+<span class="sd">        :param log_time_order: if True, messages will be yielded in ascending log time order. If</span>
+<span class="sd">            False, messages will be yielded in the order they appear in the MCAP file.</span>
+<span class="sd">        :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be</span>
+<span class="sd">            yielded in descending log time order.</span>
+
+<span class="sd">        .. warning::</span>
+<span class="sd">            setting log_time_order to True on a non-seekable stream will cause the entire content</span>
+<span class="sd">            of the MCAP to be loaded into memory.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">log_time_order</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iter_messages_internal</span><span class="p">(</span><span class="n">topics</span><span class="p">,</span> <span class="n">start_time</span><span class="p">,</span> <span class="n">end_time</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="n">t</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_iter_messages_internal</span><span class="p">(</span><span class="n">topics</span><span class="p">,</span> <span class="n">start_time</span><span class="p">,</span> <span class="n">end_time</span><span class="p">),</span>
+                <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">tup</span><span class="p">:</span> <span class="n">tup</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">log_time</span><span class="p">,</span>
+                <span class="n">reverse</span><span class="o">=</span><span class="n">reverse</span><span class="p">,</span>
+            <span class="p">):</span>
+                <span class="k">yield</span> <span class="n">t</span></div>
+
+    <span class="k">def</span> <span class="nf">_iter_messages_internal</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">topics</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">start_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">end_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Schema</span><span class="p">,</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]]:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_spent</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">StreamReader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span><span class="o">.</span><span class="n">records</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Schema</span><span class="p">):</span>
@@ -309,7 +357,7 @@
                 <span class="k">if</span> <span class="n">end_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">record</span><span class="o">.</span><span class="n">log_time</span> <span class="o">&gt;=</span> <span class="n">end_time</span><span class="p">:</span>
                     <span class="k">continue</span>
                 <span class="n">schema</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schemas</span><span class="p">[</span><span class="n">channel</span><span class="o">.</span><span class="n">schema_id</span><span class="p">]</span>
-                <span class="k">yield</span> <span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">record</span><span class="p">)</span></div>
+                <span class="k">yield</span> <span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">record</span><span class="p">)</span>
 
 <div class="viewcode-block" id="NonSeekingReader.get_summary"><a class="viewcode-back" href="../../../mcap-apidoc/mcap.mcap0.reader.html#mcap.mcap0.reader.NonSeekingReader.get_summary">[docs]</a>    <span class="k">def</span> <span class="nf">get_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Summary</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;Returns a Summary object containing records from the (optional) summary section.&quot;&quot;&quot;</span>
