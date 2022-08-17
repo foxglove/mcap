@@ -6,7 +6,7 @@ If you're starting from scratch, you can write code that allows you to **write y
 
 ### Guides
 
-- [Python](../guides/python/writing-jsonschema.md)
+- [Python](../guides/python/json.md)
 
 ### Examples
 
