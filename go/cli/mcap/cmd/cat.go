@@ -180,7 +180,7 @@ var catCmd = &cobra.Command{
 				log.Fatalf("Failed to create reader: %s", err)
 			}
 			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-			it, err := reader.Messages(catStart*1e9, catEnd*1e9, topics, false)
+			it, err := reader.Messages(catStart*1e9, catEnd*1e9, topics, false, false)
 			if err != nil {
 				log.Fatalf("Failed to read messages: %s", err)
 			}
@@ -202,7 +202,7 @@ var catCmd = &cobra.Command{
 				return fmt.Errorf("failed to create reader: %w", err)
 			}
 			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-			it, err := reader.Messages(catStart*1e9, catEnd*1e9, topics, true)
+			it, err := reader.Messages(catStart*1e9, catEnd*1e9, topics, true, false)
 			if err != nil {
 				return fmt.Errorf("failed to read messages: %w", err)
 			}

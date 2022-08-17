@@ -130,7 +130,7 @@ func buildIterator(r io.Reader) (mcap.MessageIterator, error) {
 	if err != nil {
 		return nil, err
 	}
-	iterator, err := reader.Messages(0, math.MaxInt64, nil, false)
+	iterator, err := reader.Messages(0, math.MaxInt64, nil, false, false)
 	if err != nil {
 		return nil, err
 	}

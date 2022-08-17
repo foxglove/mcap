@@ -2,10 +2,10 @@ package mcap
 
 import (
 	"bytes"
+	"container/heap"
 	"encoding/binary"
 	"fmt"
 	"io"
-	"sort"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
@@ -15,13 +15,12 @@ import (
 // seeking is required). It makes reads in alternation from the index data
 // section, the message index at the end of a chunk, and the chunk's contents.
 type indexedMessageIterator struct {
-	lexer  *Lexer
-	rs     io.ReadSeeker
-	topics map[string]bool
-	start  uint64
-	end    uint64
-
-	chunk []byte
+	lexer   *Lexer
+	rs      io.ReadSeeker
+	topics  map[string]bool
+	start   uint64
+	end     uint64
+	reverse bool
 
 	channels          map[uint16]*Channel
 	schemas           map[uint16]*Schema
@@ -29,10 +28,7 @@ type indexedMessageIterator struct {
 	chunkIndexes      []*ChunkIndex
 	attachmentIndexes []*AttachmentIndex
 
-	// current location in the index
-	activeChunkIndex int // index of the active chunk within the set
-	messageOffsets   []MessageIndexEntry
-	messageOffsetIdx int
+	indexHeap rangeIndexHeap
 }
 
 // parseIndexSection parses the index section of the file and populates the
@@ -96,11 +92,16 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			if err != nil {
 				return fmt.Errorf("failed to parse attachment index: %w", err)
 			}
+			it.chunkIndexes = append(it.chunkIndexes, idx)
 			// if the chunk overlaps with the requested parameters, load it
 			for _, channel := range it.channels {
 				if idx.MessageIndexOffsets[channel.ID] > 0 {
 					if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
-						it.chunkIndexes = append(it.chunkIndexes, idx)
+						rangeIndex := rangeIndex{
+							chunkIndex: idx,
+							reverse:    it.reverse,
+						}
+						heap.Push(&it.indexHeap, rangeIndex)
 					}
 					break
 				}
@@ -117,12 +118,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	}
 }
 
-func (it *indexedMessageIterator) loadNextChunk() error {
-	if it.activeChunkIndex >= len(it.chunkIndexes) {
-		return io.EOF
-	}
-	chunkIndex := it.chunkIndexes[it.activeChunkIndex]
-	it.activeChunkIndex++
+func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	_, err := it.rs.Seek(int64(chunkIndex.ChunkStartOffset), io.SeekStart)
 	if err != nil {
 		return err
@@ -136,10 +132,34 @@ func (it *indexedMessageIterator) loadNextChunk() error {
 	if err != nil {
 		return fmt.Errorf("failed to parse chunk: %w", err)
 	}
+	// decompress the chunk data
+	var chunkData []byte
+	switch CompressionFormat(parsedChunk.Compression) {
+	case CompressionNone:
+		chunkData = parsedChunk.Records
+	case CompressionZSTD:
+		reader, err := zstd.NewReader(bytes.NewReader(parsedChunk.Records))
+		if err != nil {
+			return fmt.Errorf("failed to read zstd chunk: %w", err)
+		}
+		defer reader.Close()
+		chunkData, err = io.ReadAll(reader)
+		if err != nil {
+			return fmt.Errorf("failed to decompress zstd chunk: %w", err)
+		}
+	case CompressionLZ4:
+		reader := lz4.NewReader(bytes.NewReader(parsedChunk.Records))
+		chunkData, err = io.ReadAll(reader)
+		if err != nil {
+			return fmt.Errorf("failed to decompress lz4 chunk: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported compression %s", parsedChunk.Compression)
+	}
+	// use the message index to find the messages we want from the chunk
 	messageIndexSection := chunk[chunkIndex.ChunkLength:]
 	var recordLen uint64
 	offset := 0
-	messageOffsets := []MessageIndexEntry{}
 	for offset < len(messageIndexSection) {
 		if op := OpCode(messageIndexSection[offset]); op != OpMessageIndex {
 			return fmt.Errorf("unexpected token %s in message index section", op)
@@ -161,46 +181,14 @@ func (it *indexedMessageIterator) loadNextChunk() error {
 		// append any message index offsets in the requested time range
 		for _, offset := range messageIndex.Records {
 			if offset.Timestamp >= it.start && offset.Timestamp < it.end {
-				messageOffsets = append(messageOffsets, offset)
+				rangeIndex := rangeIndex{
+					messageIndexEntry: &offset,
+					buf:               chunkData,
+					reverse:           it.reverse,
+				}
+				heap.Push(&it.indexHeap, rangeIndex)
 			}
 		}
-	}
-	sort.Slice(messageOffsets, func(i, j int) bool {
-		left := messageOffsets[i]
-		right := messageOffsets[j]
-		if left.Timestamp < right.Timestamp {
-			return true
-		}
-		if left.Timestamp == right.Timestamp {
-			return left.Offset < right.Offset
-		}
-		return false
-	})
-	it.messageOffsets = messageOffsets
-	it.messageOffsetIdx = 0
-
-	// decompress the chunk data
-	switch CompressionFormat(parsedChunk.Compression) {
-	case CompressionNone:
-		it.chunk = parsedChunk.Records
-	case CompressionZSTD:
-		reader, err := zstd.NewReader(bytes.NewReader(parsedChunk.Records))
-		if err != nil {
-			return fmt.Errorf("failed to read zstd chunk: %w", err)
-		}
-		defer reader.Close()
-		it.chunk, err = io.ReadAll(reader)
-		if err != nil {
-			return fmt.Errorf("failed to decompress zstd chunk: %w", err)
-		}
-	case CompressionLZ4:
-		reader := lz4.NewReader(bytes.NewReader(parsedChunk.Records))
-		it.chunk, err = io.ReadAll(reader)
-		if err != nil {
-			return fmt.Errorf("failed to decompress lz4 chunk: %w", err)
-		}
-	default:
-		return fmt.Errorf("unsupported compression %s", parsedChunk.Compression)
 	}
 	return nil
 }
@@ -212,22 +200,26 @@ func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, e
 			return nil, nil, nil, err
 		}
 	}
-	for it.messageOffsetIdx == len(it.messageOffsets) {
-		err := it.loadNextChunk()
-		if err != nil {
-			return nil, nil, nil, err
+
+	for it.indexHeap.Len() > 0 {
+		ri := heap.Pop(&it.indexHeap).(rangeIndex)
+		if ri.chunkIndex != nil {
+			err := it.loadChunk(ri.chunkIndex)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+		} else if ri.messageIndexEntry != nil {
+			chunkOffset := ri.messageIndexEntry.Offset
+			length := binary.LittleEndian.Uint64(ri.buf[chunkOffset+1:])
+			messageData := ri.buf[chunkOffset+1+8 : chunkOffset+1+8+length]
+			message, err := ParseMessage(messageData)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			channel := it.channels[message.ChannelID]
+			schema := it.schemas[channel.SchemaID]
+			return schema, channel, message, nil
 		}
 	}
-	messageOffset := it.messageOffsets[it.messageOffsetIdx]
-	it.messageOffsetIdx++
-	chunkOffset := messageOffset.Offset
-	length := binary.LittleEndian.Uint64(it.chunk[chunkOffset+1:])
-	messageData := it.chunk[chunkOffset+1+8 : chunkOffset+1+8+length]
-	message, err := ParseMessage(messageData)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	channel := it.channels[message.ChannelID]
-	schema := it.schemas[channel.SchemaID]
-	return schema, channel, message, nil
+	return nil, nil, nil, io.EOF
 }

@@ -95,7 +95,12 @@ func (r *Reader) unindexedIterator(topics []string, start uint64, end uint64) *u
 	}
 }
 
-func (r *Reader) indexedMessageIterator(topics []string, start uint64, end uint64) *indexedMessageIterator {
+func (r *Reader) indexedMessageIterator(
+	topics []string,
+	start uint64,
+	end uint64,
+	reverse bool,
+) *indexedMessageIterator {
 	topicMap := make(map[string]bool)
 	for _, topic := range topics {
 		topicMap[topic] = true
@@ -109,6 +114,7 @@ func (r *Reader) indexedMessageIterator(topics []string, start uint64, end uint6
 		topics:   topicMap,
 		start:    start,
 		end:      end,
+		reverse:  reverse,
 	}
 }
 
@@ -117,14 +123,18 @@ func (r *Reader) Messages(
 	end int64,
 	topics []string,
 	useIndex bool,
+	reverse bool,
 ) (MessageIterator, error) {
+	if reverse && !useIndex {
+		return nil, fmt.Errorf("reverse iteration only supported when using index")
+	}
 	if useIndex {
 		if rs, ok := r.r.(io.ReadSeeker); ok {
 			r.rs = rs
 		} else {
 			return nil, fmt.Errorf("indexed reader requires a seekable reader")
 		}
-		return r.indexedMessageIterator(topics, uint64(start), uint64(end)), nil
+		return r.indexedMessageIterator(topics, uint64(start), uint64(end), reverse), nil
 	}
 	return r.unindexedIterator(topics, uint64(start), uint64(end)), nil
 }
@@ -155,7 +165,7 @@ func (r *Reader) Info() (*Info, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read header: %w", err)
 	}
-	it := r.indexedMessageIterator(nil, 0, math.MaxUint64)
+	it := r.indexedMessageIterator(nil, 0, math.MaxUint64, false)
 	err = it.parseSummarySection()
 	if err != nil {
 		return nil, err

@@ -33,7 +33,7 @@ func TestCat(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			reader, err := mcap.NewReader(r)
 			assert.Nil(t, err)
-			it, err := reader.Messages(0, math.MaxInt64, []string{}, true)
+			it, err := reader.Messages(0, math.MaxInt64, []string{}, true, false)
 			assert.Nil(t, err)
 			err = printMessages(ctx, w, it, false)
 			assert.Nil(t, err)
@@ -65,7 +65,7 @@ func BenchmarkCat(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				reader, err := mcap.NewReader(r)
 				assert.Nil(b, err)
-				it, err := reader.Messages(0, math.MaxInt64, []string{}, true)
+				it, err := reader.Messages(0, math.MaxInt64, []string{}, true, false)
 				assert.Nil(b, err)
 				err = printMessages(ctx, w, it, c.formatJSON)
 				assert.Nil(b, err)

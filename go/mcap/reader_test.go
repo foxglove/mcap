@@ -63,7 +63,7 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
 	assert.Nil(t, err)
 
-	it, err := reader.Messages(0, 100, []string{}, true)
+	it, err := reader.Messages(0, 100, []string{}, true, false)
 	assert.Nil(t, err)
 	expectedTopics := []string{"/foo", "/bar"}
 	for i := 0; i < 2; i++ {
@@ -273,7 +273,7 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(0, 10000, []string{}, useIndex)
+						it, err := r.Messages(0, 10000, []string{}, useIndex, false)
 						assert.Nil(t, err)
 						c := 0
 						for {
@@ -295,7 +295,7 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(0, 10000, []string{"/test1"}, useIndex)
+						it, err := r.Messages(0, 10000, []string{"/test1"}, useIndex, false)
 						assert.Nil(t, err)
 						c := 0
 						for {
@@ -317,7 +317,7 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(0, 10000, []string{"/test1", "/test2"}, useIndex)
+						it, err := r.Messages(0, 10000, []string{"/test1", "/test2"}, useIndex, false)
 						assert.Nil(t, err)
 						c := 0
 						for {
@@ -339,7 +339,7 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(100, 200, []string{}, useIndex)
+						it, err := r.Messages(100, 200, []string{}, useIndex, false)
 						assert.Nil(t, err)
 						c := 0
 						for {
@@ -369,7 +369,7 @@ func TestReaderCounting(t *testing.T) {
 			defer f.Close()
 			r, err := NewReader(f)
 			assert.Nil(t, err)
-			it, err := r.Messages(0, time.Now().UnixNano(), []string{}, indexed)
+			it, err := r.Messages(0, time.Now().UnixNano(), []string{}, indexed, false)
 			assert.Nil(t, err)
 			c := 0
 			for {
@@ -418,7 +418,7 @@ func TestReadingDiagnostics(t *testing.T) {
 	assert.Nil(t, err)
 	r, err := NewReader(f)
 	assert.Nil(t, err)
-	it, err := r.Messages(0, time.Now().UnixNano(), []string{"/diagnostics"}, true)
+	it, err := r.Messages(0, time.Now().UnixNano(), []string{"/diagnostics"}, true, false)
 	assert.Nil(t, err)
 	c := 0
 	for {
