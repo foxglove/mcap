@@ -24,7 +24,7 @@ If you're starting from scratch, you can write code that allows you to **write y
 
 ### Guides
 
-- [Python](../guides/python/reading-writing-ros2.md)
+- [Python](../guides/python/ros2.md)
 
 ### Examples
 

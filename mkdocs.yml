@@ -50,15 +50,14 @@ nav:
       - "getting-started/ros-2.md"
       - "getting-started/protobuf.md"
       - "getting-started/json.md"
-      - "getting-started/visualize-in-foxglove-studio.md"
   - Guides:
       - Python:
-          - "guides/python/reading-writing-ros1.md"
-          - "guides/python/reading-writing-ros2.md"
-          - "guides/python/writing-jsonschema.md"
-          - "guides/python/reading-writing-protobuf.md"
+          - "guides/python/ros1.md"
+          - "guides/python/ros2.md"
+          - "guides/python/json.md"
+          - "guides/python/protobuf.md"
       - C++:
-          - "guides/cpp/writing-protobuf.md"
+          - "guides/cpp/protobuf.md"
   - API Reference:
       - Python: docs/python/index.html
       - C++: docs/cpp/index.html
