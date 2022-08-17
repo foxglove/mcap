@@ -2,7 +2,7 @@
 
 !!! info
 
-    From [Recording Robocar Data with MCAP](https://foxglove.dev/blog/recording-robocar-data-with-mcap)
+    Adapted from the original: [Recording Robocar Data with MCAP](https://foxglove.dev/blog/recording-robocar-data-with-mcap)
 
 ### Creating a writer
 
@@ -22,7 +22,7 @@ Configure your writer to your desired specifications using `McapWriterOptions`. 
 
 Before we can write messages, we need to register a schema and a channel to write our messages to.
 
-To register a schema in Protobuf, you must use the fully-qualified name of the message type (e.g. `ros.nav_msgs.Path`) and provide a serialized `google::protobuf::FileDescriptorSet` for the schema itself. Generated Protobuf messages will contain enough information to reconstruct this `FileDescriptorSet` schema at runtime.
+To register a schema in Protobuf, you must use the fully-qualified name of the message type (e.g. `foxglove.PosesInFrame`) and provide a serialized `google::protobuf::FileDescriptorSet` for the schema itself. Generated Protobuf messages will contain enough information to reconstruct this `FileDescriptorSet` schema at runtime.
 
 ```cpp
 // Recursively adds all `fd` dependencies to `fd_set`.
@@ -53,8 +53,8 @@ mcap::Schema createSchema(const google::protobuf::Descriptor* d) {
   return schema;
 }
 
-// Create a schema for the ros.nav_msgs.Path message.
-mcap::Schema path_schema = createSchema(ros::nav_msgs::Path::descriptor());
+// Create a schema for the foxglove.PosesInFrame message.
+mcap::Schema path_schema = createSchema(foxglove::PosesInFrame::descriptor());
 writer.addSchema(path_schema);  // Assigned schema id is written to path_schema.id
 ```
 
@@ -70,7 +70,7 @@ mcap.addChannel(path_channel);  // Assigned channel id written to path_channel.i
 We can now finally write messages to the channel via its id:
 
 ```cpp
-ros::nav_msgs::Path path_msg;
+foxglove::PosesInFrame path_msg;
 // Fill in path_msg.
 std::string data = path_msg.SerializeAsString();
 
@@ -109,7 +109,7 @@ The "dynamic" approach is preferred for introspecting and debugging message cont
 First, we generate our class definitions and include the relevant header:
 
 ```cpp
-#include "ros/nav_msgs/Path.pb.h"
+#include "foxglove/PosesInFrame.pb.h"
 ```
 
 We also include the MCAP reader implementation:
@@ -139,13 +139,13 @@ Then use a `mcap::MessageView` to iterate through all of the messages in the MCA
 auto messageView = reader.readMessages();
 for (auto it = messageView.begin(); it != messageView.end(); it++) {
   // skip messages that we can't use
-  if ((it->schema->encoding != "protobuf") || it->schema->name != "ros.nav_msgs.Path") {
+  if ((it->schema->encoding != "protobuf") || it->schema->name != "foxglove.PosesInFrame") {
     continue;
   }
-  ros::nav_msgs::Path path;
+  foxglove::PosesInFrame path;
   if (!path.ParseFromArray(static_cast<const void*>(it->message.data),
                                   it->message.dataSize)) {
-    std::cerr << "could not parse Path" << std::endl;
+    std::cerr << "could not parse PosesInFrame" << std::endl;
     return 1;
   }
   std::cout << "Found message: " << path.ShortDebugString() << std::endl;
@@ -264,3 +264,4 @@ reader.close();
 ## Important links
 
 - [Example code](https://github.com/foxglove/mcap/tree/main/cpp/examples/protobuf)
+- [Foxglove Schemas](https://github.com/foxglove/schemas)
