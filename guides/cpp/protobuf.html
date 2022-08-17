@@ -13,7 +13,7 @@
     
     
       
-        <title>Reading and writing ROS 2 messages - MCAP</title>
+        <title>Writing Protobuf to MCAP - MCAP</title>
       
     
     
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#reading-and-writing-ros-2-messages" class="md-skip">
+        <a href="#writing-protobuf-to-mcap" class="md-skip">
           Skip to content
         </a>
       
@@ -106,7 +106,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Reading and writing ROS 2 messages
+              Writing Protobuf to MCAP
             
           </span>
         </div>
@@ -403,20 +403,6 @@
 
             
           
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../getting-started/visualize-in-foxglove-studio.html" class="md-nav__link">
-        Visualizing in Foxglove Studio
-      </a>
-    </li>
-  
-
-            
-          
         </ul>
       </nav>
     </li>
@@ -457,14 +443,12 @@
               
   
   
-    
-  
   
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
       
-        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_1" type="checkbox" id="__nav_3_1" checked>
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_1" type="checkbox" id="__nav_3_1" >
       
       
       
@@ -487,7 +471,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reading-writing-ros1.html" class="md-nav__link">
+      <a href="../python/ros1.html" class="md-nav__link">
         Reading and writing ROS 1 messages
       </a>
     </li>
@@ -499,65 +483,11 @@
               
   
   
-    
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          Reading and writing ROS 2 messages
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="reading-writing-ros2.html" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../python/ros2.html" class="md-nav__link">
         Reading and writing ROS 2 messages
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#reading-ros-2-from-mcap" class="md-nav__link">
-    Reading ROS 2 from MCAP
-  </a>
-  
-    <nav class="md-nav" aria-label="Reading ROS 2 from MCAP">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#important-links" class="md-nav__link">
-    Important links
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -569,7 +499,7 @@
   
   
     <li class="md-nav__item">
-      <a href="writing-jsonschema.html" class="md-nav__link">
+      <a href="../python/json.html" class="md-nav__link">
         Writing JSON to MCAP
       </a>
     </li>
@@ -583,7 +513,7 @@
   
   
     <li class="md-nav__item">
-      <a href="reading-writing-protobuf.html" class="md-nav__link">
+      <a href="../python/protobuf.html" class="md-nav__link">
         Reading and writing Protobuf messages
       </a>
     </li>
@@ -602,12 +532,14 @@
               
   
   
+    
+  
   
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
       
-        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_2" type="checkbox" id="__nav_3_2" >
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_2" type="checkbox" id="__nav_3_2" checked>
       
       
       
@@ -628,11 +560,87 @@
               
   
   
+    
   
-    <li class="md-nav__item">
-      <a href="../cpp/writing-protobuf.html" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Writing Protobuf to MCAP
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="protobuf.html" class="md-nav__link md-nav__link--active">
         Writing Protobuf to MCAP
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#creating-a-writer" class="md-nav__link">
+    Creating a writer
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#register-schema" class="md-nav__link">
+    Register schema
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#register-channel" class="md-nav__link">
+    Register channel
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#write-messages" class="md-nav__link">
+    Write messages
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inspect-mcap-file" class="md-nav__link">
+    Inspect MCAP file
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#important-links" class="md-nav__link">
+    Important links
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1008,22 +1016,44 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#reading-ros-2-from-mcap" class="md-nav__link">
-    Reading ROS 2 from MCAP
-  </a>
-  
-    <nav class="md-nav" aria-label="Reading ROS 2 from MCAP">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#important-links" class="md-nav__link">
-    Important links
+  <a href="#creating-a-writer" class="md-nav__link">
+    Creating a writer
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#register-schema" class="md-nav__link">
+    Register schema
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#register-channel" class="md-nav__link">
+    Register channel
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#write-messages" class="md-nav__link">
+    Write messages
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inspect-mcap-file" class="md-nav__link">
+    Inspect MCAP file
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#important-links" class="md-nav__link">
+    Important links
+  </a>
   
 </li>
       
@@ -1039,64 +1069,90 @@
             <article class="md-content__inner md-typeset">
               
                 
-  <a href="https://github.com/foxglove/mcap/edit/master/docs/guides/python/reading-writing-ros2.md" title="Edit this page" class="md-content__button md-icon">
+  <a href="https://github.com/foxglove/mcap/edit/master/docs/guides/cpp/protobuf.md" title="Edit this page" class="md-content__button md-icon">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z"/></svg>
   </a>
 
 
 
-<h1 id="reading-and-writing-ros-2-messages">Reading and writing ROS 2 messages</h1>
-<p>To start writing Python code that reads ROS 2 data from MCAP, install the <a href="https://index.ros.org/p/rosbag2_py/"><code>rosbag2_py</code> package</a>.</p>
-<h2 id="reading-ros-2-from-mcap">Reading ROS 2 from MCAP</h2>
-<p>We’ll start with our imports:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">argparse</span>
-<span class="kn">from</span> <span class="nn">rclpy.serialization</span> <span class="kn">import</span> <span class="n">deserialize_message</span>
-<span class="kn">from</span> <span class="nn">rosidl_runtime_py.utilities</span> <span class="kn">import</span> <span class="n">get_message</span>
-<span class="kn">import</span> <span class="nn">rosbag2_py</span>
+<h1 id="writing-protobuf-to-mcap">Writing Protobuf to MCAP</h1>
+<div class="admonition info">
+<p class="admonition-title">Info</p>
+<p>From <a href="https://foxglove.dev/blog/recording-robocar-data-with-mcap">Recording Robocar Data with MCAP</a></p>
+</div>
+<h3 id="creating-a-writer">Creating a writer</h3>
+<div class="highlight"><pre><span></span><code><span class="n">mcap</span><span class="o">::</span><span class="n">McapWriter</span><span class="w"> </span><span class="n">writer</span><span class="p">;</span><span class="w"></span>
+<span class="n">mcap</span><span class="o">::</span><span class="n">McapWriterOptions</span><span class="w"> </span><span class="nf">opts</span><span class="p">(</span><span class="s">&quot;protobuf&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="k">auto</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">writer</span><span class="p">.</span><span class="n">open</span><span class="p">(</span><span class="s">&quot;output.mcap&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">s</span><span class="p">.</span><span class="n">ok</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;Failed to open mcap writer: &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">status</span><span class="p">.</span><span class="n">message</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">;</span><span class="w"></span>
+<span class="w">  </span><span class="k">throw</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="p">(</span><span class="s">&quot;could not open mcap writer&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
 </code></pre></div>
-<p>Next, we&rsquo;ll write a function for reading our ROS 2 messages from an MCAP file:</p>
-<div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">read_messages</span><span class="p">(</span><span class="n">input_bag</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-    <span class="n">reader</span> <span class="o">=</span> <span class="n">rosbag2_py</span><span class="o">.</span><span class="n">SequentialReader</span><span class="p">()</span>
-    <span class="n">reader</span><span class="o">.</span><span class="n">open</span><span class="p">(</span>
-        <span class="n">rosbag2_py</span><span class="o">.</span><span class="n">StorageOptions</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="n">input_bag</span><span class="p">,</span> <span class="n">storage_id</span><span class="o">=</span><span class="s2">&quot;mcap&quot;</span><span class="p">),</span>
-        <span class="n">rosbag2_py</span><span class="o">.</span><span class="n">ConverterOptions</span><span class="p">(</span>
-            <span class="n">input_serialization_format</span><span class="o">=</span><span class="s2">&quot;cdr&quot;</span><span class="p">,</span> <span class="n">output_serialization_format</span><span class="o">=</span><span class="s2">&quot;cdr&quot;</span>
-        <span class="p">),</span>
-    <span class="p">)</span>
+<p>Configure your writer to your desired specifications using <code>McapWriterOptions</code>. For example, <code>opts.compressionLevel = mcap::CompressionLevel::Fast</code> customizes your writer to use a faster compression level.</p>
+<h3 id="register-schema">Register schema</h3>
+<p>Before we can write messages, we need to register a schema and a channel to write our messages to.</p>
+<p>To register a schema in Protobuf, you must use the fully-qualified name of the message type (e.g. <code>ros.nav_msgs.Path</code>) and provide a serialized <code>google::protobuf::FileDescriptorSet</code> for the schema itself. Generated Protobuf messages will contain enough information to reconstruct this <code>FileDescriptorSet</code> schema at runtime.</p>
+<div class="highlight"><pre><span></span><code><span class="c1">// Recursively adds all `fd` dependencies to `fd_set`.</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">fdSetInternal</span><span class="p">(</span><span class="n">google</span><span class="o">::</span><span class="n">protobuf</span><span class="o">::</span><span class="n">FileDescriptorSet</span><span class="o">&amp;</span><span class="w"> </span><span class="n">fd_set</span><span class="p">,</span><span class="w"></span>
+<span class="w">                   </span><span class="n">std</span><span class="o">::</span><span class="n">unordered_set</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">files</span><span class="p">,</span><span class="w"></span>
+<span class="w">                   </span><span class="k">const</span><span class="w"> </span><span class="n">google</span><span class="o">::</span><span class="n">protobuf</span><span class="o">::</span><span class="n">FileDescriptor</span><span class="o">*</span><span class="w"> </span><span class="n">fd</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">  </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">fd</span><span class="o">-&gt;</span><span class="n">dependency_count</span><span class="p">();</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="o">*</span><span class="w"> </span><span class="n">dep</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fd</span><span class="o">-&gt;</span><span class="n">dependency</span><span class="p">(</span><span class="n">i</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="k">auto</span><span class="w"> </span><span class="p">[</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">inserted</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">files</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">dep</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">());</span><span class="w"></span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">inserted</span><span class="p">)</span><span class="w"> </span><span class="k">continue</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="n">fdSetInternal</span><span class="p">(</span><span class="n">fd_set</span><span class="p">,</span><span class="w"> </span><span class="n">files</span><span class="p">,</span><span class="w"> </span><span class="n">fd</span><span class="o">-&gt;</span><span class="n">dependency</span><span class="p">(</span><span class="n">i</span><span class="p">));</span><span class="w"></span>
+<span class="w">  </span><span class="p">}</span><span class="w"></span>
+<span class="w">  </span><span class="n">fd</span><span class="o">-&gt;</span><span class="n">CopyTo</span><span class="p">(</span><span class="n">fd_set</span><span class="p">.</span><span class="n">add_file</span><span class="p">());</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
 
-    <span class="n">topic_types</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">get_all_topics_and_types</span><span class="p">()</span>
+<span class="c1">// Returns a serialized google::protobuf::FileDescriptorSet containing</span>
+<span class="c1">// the necessary google::protobuf::FileDescriptor&#39;s to describe d.</span>
+<span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="nf">fdSet</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">google</span><span class="o">::</span><span class="n">protobuf</span><span class="o">::</span><span class="n">Descriptor</span><span class="o">*</span><span class="w"> </span><span class="n">d</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="n">res</span><span class="p">;</span><span class="w"></span>
+<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">unordered_set</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">files</span><span class="p">;</span><span class="w"></span>
+<span class="w">  </span><span class="n">google</span><span class="o">::</span><span class="n">protobuf</span><span class="o">::</span><span class="n">FileDescriptorSet</span><span class="w"> </span><span class="n">fd_set</span><span class="p">;</span><span class="w"></span>
+<span class="w">  </span><span class="n">fdSetInternal</span><span class="p">(</span><span class="n">fd_set</span><span class="p">,</span><span class="w"> </span><span class="n">files</span><span class="p">,</span><span class="w"> </span><span class="n">d</span><span class="o">-&gt;</span><span class="n">file</span><span class="p">());</span><span class="w"></span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="n">fd_set</span><span class="p">.</span><span class="n">SerializeAsString</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
 
-    <span class="k">def</span> <span class="nf">typename</span><span class="p">(</span><span class="n">topic_name</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">topic_type</span> <span class="ow">in</span> <span class="n">topic_types</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">topic_type</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="n">topic_name</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">topic_type</span><span class="o">.</span><span class="n">type</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;topic </span><span class="si">{</span><span class="n">topic_name</span><span class="si">}</span><span class="s2"> not in bag&quot;</span><span class="p">)</span>
+<span class="n">mcap</span><span class="o">::</span><span class="n">Schema</span><span class="w"> </span><span class="nf">createSchema</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">google</span><span class="o">::</span><span class="n">protobuf</span><span class="o">::</span><span class="n">Descriptor</span><span class="o">*</span><span class="w"> </span><span class="n">d</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">  </span><span class="n">mcap</span><span class="o">::</span><span class="n">Schema</span><span class="w"> </span><span class="n">schema</span><span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">full_name</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;protobuf&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fdSet</span><span class="p">(</span><span class="n">d</span><span class="p">));</span><span class="w"></span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="n">schema</span><span class="p">;</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
 
-    <span class="k">while</span> <span class="n">reader</span><span class="o">.</span><span class="n">has_next</span><span class="p">():</span>
-        <span class="n">topic</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">timestamp</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">read_next</span><span class="p">()</span>
-        <span class="n">msg_type</span> <span class="o">=</span> <span class="n">get_message</span><span class="p">(</span><span class="n">typename</span><span class="p">(</span><span class="n">topic</span><span class="p">))</span>
-        <span class="n">msg</span> <span class="o">=</span> <span class="n">deserialize_message</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">msg_type</span><span class="p">)</span>
-        <span class="k">yield</span> <span class="n">topic</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="n">timestamp</span>
-    <span class="k">del</span> <span class="n">reader</span>
+<span class="c1">// Create a schema for the ros.nav_msgs.Path message.</span>
+<span class="n">mcap</span><span class="o">::</span><span class="n">Schema</span><span class="w"> </span><span class="n">path_schema</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">createSchema</span><span class="p">(</span><span class="n">ros</span><span class="o">::</span><span class="n">nav_msgs</span><span class="o">::</span><span class="n">Path</span><span class="o">::</span><span class="n">descriptor</span><span class="p">());</span><span class="w"></span>
+<span class="n">writer</span><span class="p">.</span><span class="n">addSchema</span><span class="p">(</span><span class="n">path_schema</span><span class="p">);</span><span class="w">  </span><span class="c1">// Assigned schema id is written to path_schema.id</span>
 </code></pre></div>
-<p>Finally, we&rsquo;ll print out each message with its topic, data type, timestamp, and contents:</p>
-<div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
-    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="vm">__doc__</span><span class="p">)</span>
-    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
-        <span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;input bag path (folder or filepath) to read from&quot;</span>
-    <span class="p">)</span>
-
-    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
-    <span class="k">for</span> <span class="n">topic</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="n">timestamp</span> <span class="ow">in</span> <span class="n">read_messages</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">input</span><span class="p">):</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">topic</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">) [</span><span class="si">{</span><span class="n">timestamp</span><span class="si">}</span><span class="s2">]: &#39;</span><span class="si">{</span><span class="n">msg</span><span class="o">.</span><span class="n">data</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
-
-<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
-    <span class="n">main</span><span class="p">()</span>
+<h3 id="register-channel">Register channel</h3>
+<div class="highlight"><pre><span></span><code><span class="n">mcap</span><span class="o">::</span><span class="n">Channel</span><span class="w"> </span><span class="nf">path_channel</span><span class="p">(</span><span class="s">&quot;/planner/path&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;protobuf&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">path_schema</span><span class="p">.</span><span class="n">id</span><span class="p">);</span><span class="w"></span>
+<span class="n">mcap</span><span class="p">.</span><span class="n">addChannel</span><span class="p">(</span><span class="n">path_channel</span><span class="p">);</span><span class="w">  </span><span class="c1">// Assigned channel id written to path_channel.id</span>
 </code></pre></div>
-<h3 id="important-links">Important links</h3>
+<h3 id="write-messages">Write messages</h3>
+<p>We can now finally write messages to the channel via its id:</p>
+<div class="highlight"><pre><span></span><code><span class="n">ros</span><span class="o">::</span><span class="n">nav_msgs</span><span class="o">::</span><span class="n">Path</span><span class="w"> </span><span class="n">path_msg</span><span class="p">;</span><span class="w"></span>
+<span class="c1">// Fill in path_msg.</span>
+<span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="n">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">path_msg</span><span class="p">.</span><span class="n">SerializeAsString</span><span class="p">();</span><span class="w"></span>
+
+<span class="n">mcap</span><span class="o">::</span><span class="n">Message</span><span class="w"> </span><span class="n">msg</span><span class="p">;</span><span class="w"></span>
+<span class="n">msg</span><span class="p">.</span><span class="n">channelId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">path_channel</span><span class="p">.</span><span class="n">id</span><span class="p">;</span><span class="w"></span>
+<span class="n">msg</span><span class="p">.</span><span class="n">logTime</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">timestamp_ns</span><span class="p">;</span><span class="w"></span>
+<span class="n">msg</span><span class="p">.</span><span class="n">publishTime</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">msg</span><span class="p">.</span><span class="n">logTime</span><span class="p">;</span><span class="w"></span>
+<span class="n">msg</span><span class="p">.</span><span class="n">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">byte</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">());</span><span class="w"></span>
+<span class="n">msg</span><span class="p">.</span><span class="n">dataSize</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">data</span><span class="p">.</span><span class="n">size</span><span class="p">();</span><span class="w"></span>
+
+<span class="n">writer</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">msg</span><span class="p">);</span><span class="w"></span>
+</code></pre></div>
+<p>Don’t forget to close the writer when you’re done:</p>
+<div class="highlight"><pre><span></span><code><span class="n">writer</span><span class="p">.</span><span class="n">close</span><span class="p">();</span><span class="w"></span>
+</code></pre></div>
+<h3 id="inspect-mcap-file">Inspect MCAP file</h3>
+<p>Now, we can inspect our output MCAP file&rsquo;s messages. I used the <em>Data source</em> dialog in Foxglove Studio to “Open local file”.</p>
+<p>I then added a few relevant panels (<a href="/docs/studio/panels/plot">Plot</a>, <a href="/docs/studio/panels/image">Image</a>, <a href="/docs/studio/panels/raw-messages">Raw Messages</a>, <a href="/docs/studio/panels/3d">3D</a>) to visualize my robot&rsquo;s performance.</p>
+<h2 id="important-links">Important links</h2>
 <ul>
-<li><a href="https://github.com/foxglove/mcap/tree/main/python/mcap">MCAP Python library</a></li>
-<li><a href="https://github.com/foxglove/mcap/tree/main/python/examples/ros2">Example code</a></li>
+<li><a href="https://github.com/foxglove/mcap/tree/main/cpp/examples/protobuf">Example code</a></li>
 </ul>
 
               
@@ -1113,7 +1169,7 @@
     <nav class="md-footer__inner md-grid" aria-label="Footer" >
       
         
-        <a href="reading-writing-ros1.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: Reading and writing ROS 1 messages" rel="prev">
+        <a href="../python/protobuf.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: Reading and writing Protobuf messages" rel="prev">
           <div class="md-footer__button md-icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
           </div>
@@ -1122,20 +1178,20 @@
               <span class="md-footer__direction">
                 Previous
               </span>
-              Reading and writing ROS 1 messages
+              Reading and writing Protobuf messages
             </div>
           </div>
         </a>
       
       
         
-        <a href="writing-jsonschema.html" class="md-footer__link md-footer__link--next" aria-label="Next: Writing JSON to MCAP" rel="next">
+        <a href="../../support-matrix.html" class="md-footer__link md-footer__link--next" aria-label="Next: Library Support" rel="next">
           <div class="md-footer__title">
             <div class="md-ellipsis">
               <span class="md-footer__direction">
                 Next
               </span>
-              Writing JSON to MCAP
+              Library Support
             </div>
           </div>
           <div class="md-footer__button md-icon">

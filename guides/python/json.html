@@ -13,7 +13,7 @@
     
     
       
-        <title>Writing Protobuf to MCAP - MCAP</title>
+        <title>Writing JSON to MCAP - MCAP</title>
       
     
     
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#writing-protobuf-to-mcap" class="md-skip">
+        <a href="#writing-json-to-mcap" class="md-skip">
           Skip to content
         </a>
       
@@ -106,7 +106,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Writing Protobuf to MCAP
+              Writing JSON to MCAP
             
           </span>
         </div>
@@ -403,20 +403,6 @@
 
             
           
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../getting-started/visualize-in-foxglove-studio.html" class="md-nav__link">
-        Visualizing in Foxglove Studio
-      </a>
-    </li>
-  
-
-            
-          
         </ul>
       </nav>
     </li>
@@ -457,12 +443,14 @@
               
   
   
+    
+  
   
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
       
-        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_1" type="checkbox" id="__nav_3_1" >
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_1" type="checkbox" id="__nav_3_1" checked>
       
       
       
@@ -485,7 +473,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../python/reading-writing-ros1.html" class="md-nav__link">
+      <a href="ros1.html" class="md-nav__link">
         Reading and writing ROS 1 messages
       </a>
     </li>
@@ -499,7 +487,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../python/reading-writing-ros2.html" class="md-nav__link">
+      <a href="ros2.html" class="md-nav__link">
         Reading and writing ROS 2 messages
       </a>
     </li>
@@ -511,11 +499,101 @@
               
   
   
+    
   
-    <li class="md-nav__item">
-      <a href="../python/writing-jsonschema.html" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Writing JSON to MCAP
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="json.html" class="md-nav__link md-nav__link--active">
         Writing JSON to MCAP
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#decoding-csv-data" class="md-nav__link">
+    Decoding CSV data
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#encoding-the-data-into-a-foxglovepointcloud" class="md-nav__link">
+    Encoding the data into a foxglove.PointCloud
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#creating-a-writer" class="md-nav__link">
+    Creating a writer
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#register-channel" class="md-nav__link">
+    Register channel
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#write-messages" class="md-nav__link">
+    Write messages
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inspect-your-file" class="md-nav__link">
+    Inspect your file
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#visualize-your-mcap-data" class="md-nav__link">
+    Visualize your MCAP data
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#important-links" class="md-nav__link">
+    Important links
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -527,7 +605,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../python/reading-writing-protobuf.html" class="md-nav__link">
+      <a href="protobuf.html" class="md-nav__link">
         Reading and writing Protobuf messages
       </a>
     </li>
@@ -546,14 +624,12 @@
               
   
   
-    
-  
   
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
       
-        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_2" type="checkbox" id="__nav_3_2" checked>
+        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_2" type="checkbox" id="__nav_3_2" >
       
       
       
@@ -574,87 +650,11 @@
               
   
   
-    
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          Writing Protobuf to MCAP
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="writing-protobuf.html" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../cpp/protobuf.html" class="md-nav__link">
         Writing Protobuf to MCAP
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#creating-a-writer" class="md-nav__link">
-    Creating a writer
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#register-schema" class="md-nav__link">
-    Register schema
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#register-channel" class="md-nav__link">
-    Register channel
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#write-messages" class="md-nav__link">
-    Write messages
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#inspect-mcap-file" class="md-nav__link">
-    Inspect MCAP file
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#important-links" class="md-nav__link">
-    Important links
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1030,15 +1030,22 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#creating-a-writer" class="md-nav__link">
-    Creating a writer
+  <a href="#decoding-csv-data" class="md-nav__link">
+    Decoding CSV data
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#register-schema" class="md-nav__link">
-    Register schema
+  <a href="#encoding-the-data-into-a-foxglovepointcloud" class="md-nav__link">
+    Encoding the data into a foxglove.PointCloud
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#creating-a-writer" class="md-nav__link">
+    Creating a writer
   </a>
   
 </li>
@@ -1058,8 +1065,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#inspect-mcap-file" class="md-nav__link">
-    Inspect MCAP file
+  <a href="#inspect-your-file" class="md-nav__link">
+    Inspect your file
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#visualize-your-mcap-data" class="md-nav__link">
+    Visualize your MCAP data
   </a>
   
 </li>
@@ -1083,90 +1097,180 @@
             <article class="md-content__inner md-typeset">
               
                 
-  <a href="https://github.com/foxglove/mcap/edit/master/docs/guides/cpp/writing-protobuf.md" title="Edit this page" class="md-content__button md-icon">
+  <a href="https://github.com/foxglove/mcap/edit/master/docs/guides/python/json.md" title="Edit this page" class="md-content__button md-icon">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z"/></svg>
   </a>
 
 
 
-<h1 id="writing-protobuf-to-mcap">Writing Protobuf to MCAP</h1>
+<h1 id="writing-json-to-mcap">Writing JSON to MCAP</h1>
 <div class="admonition info">
 <p class="admonition-title">Info</p>
-<p>From <a href="https://foxglove.dev/blog/recording-robocar-data-with-mcap">Recording Robocar Data with MCAP</a></p>
+<p>From <a href="https://foxglove.dev/blog/recording-json-data-to-mcap-files">Recording JSON Data to MCAP Files</a>. While JSON might not be the most efficient format for storing point cloud data, it&rsquo;s easy to get started with as an MCAP beginner.</p>
 </div>
-<h3 id="creating-a-writer">Creating a writer</h3>
-<div class="highlight"><pre><span></span><code><span class="n">mcap</span><span class="o">::</span><span class="n">McapWriter</span><span class="w"> </span><span class="n">writer</span><span class="p">;</span><span class="w"></span>
-<span class="n">mcap</span><span class="o">::</span><span class="n">McapWriterOptions</span><span class="w"> </span><span class="nf">opts</span><span class="p">(</span><span class="s">&quot;protobuf&quot;</span><span class="p">);</span><span class="w"></span>
-<span class="k">auto</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">writer</span><span class="p">.</span><span class="n">open</span><span class="p">(</span><span class="s">&quot;output.mcap&quot;</span><span class="p">);</span><span class="w"></span>
-<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">s</span><span class="p">.</span><span class="n">ok</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;Failed to open mcap writer: &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">status</span><span class="p">.</span><span class="n">message</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">;</span><span class="w"></span>
-<span class="w">  </span><span class="k">throw</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="p">(</span><span class="s">&quot;could not open mcap writer&quot;</span><span class="p">);</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
+<h3 id="decoding-csv-data">Decoding CSV data</h3>
+<p>Let&rsquo;s work with some publicly available data – the &ldquo;<a href="https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml">Sydney Urban Objects Dataset</a>&rdquo;, released by the <a href="https://www.sydney.edu.au/engineering/our-research/robotics-and-intelligent-systems/australian-centre-for-field-robotics.html">Australian Centre for Field Robotics</a> – and write it as JSON to an MCAP file. <img alt="sydney" src="../../img/705a434-sydney.png" /></p>
+<p>This CSV dataset contains a variety of common urban road objects scanned with a Velodyne HDL-64E LIDAR. Each of the 600+ scanned object contains the following fields:</p>
+<ul>
+<li><code>t</code> - Timestamp</li>
+<li><code>intensity</code> - Laser return intensity</li>
+<li><code>id</code> - Laser ID</li>
+<li><code>x,y,z</code> - 3D point coordinates</li>
+<li><code>azimuth</code> - Horizontal azimuth angle</li>
+<li><code>range</code> - Range of laser return</li>
+<li><code>pid</code> - Point ID of the original scan</li>
+</ul>
+<p>Use Python&rsquo;s built-in <a href="https://docs.python.org/3/library/csv.html"><code>csv</code></a> and <a href="https://docs.python.org/3/library/datetime.html"><code>datetime</code></a> libraries to decode this CSV data:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span> <span class="nf">point_reader</span><span class="p">(</span><span class="n">csv_path</span><span class="p">:</span> <span class="n">typing</span><span class="o">.</span><span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]):</span>
+  <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">csv_path</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">timestring</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">csv</span><span class="o">.</span><span class="n">reader</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
+      <span class="n">timestamp</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">timestring</span><span class="p">,</span> <span class="s2">&quot;%Y%m</span><span class="si">%d</span><span class="s2">T%H%M%S.</span><span class="si">%f</span><span class="s2">&quot;</span><span class="p">)</span>
+      <span class="k">yield</span> <span class="p">(</span><span class="n">timestamp</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">i</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">y</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">z</span><span class="p">))</span>
 </code></pre></div>
-<p>Configure your writer to your desired specifications using <code>McapWriterOptions</code>. For example, <code>opts.compressionLevel = mcap::CompressionLevel::Fast</code> customizes your writer to use a faster compression level.</p>
-<h3 id="register-schema">Register schema</h3>
-<p>Before we can write messages, we need to register a schema and a channel to write our messages to.</p>
-<p>To register a schema in Protobuf, you must use the fully-qualified name of the message type (e.g. <code>ros.nav_msgs.Path</code>) and provide a serialized <code>google::protobuf::FileDescriptorSet</code> for the schema itself. Generated Protobuf messages will contain enough information to reconstruct this <code>FileDescriptorSet</code> schema at runtime.</p>
-<div class="highlight"><pre><span></span><code><span class="c1">// Recursively adds all `fd` dependencies to `fd_set`.</span>
-<span class="kt">void</span><span class="w"> </span><span class="nf">fdSetInternal</span><span class="p">(</span><span class="n">google</span><span class="o">::</span><span class="n">protobuf</span><span class="o">::</span><span class="n">FileDescriptorSet</span><span class="o">&amp;</span><span class="w"> </span><span class="n">fd_set</span><span class="p">,</span><span class="w"></span>
-<span class="w">                   </span><span class="n">std</span><span class="o">::</span><span class="n">unordered_set</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">files</span><span class="p">,</span><span class="w"></span>
-<span class="w">                   </span><span class="k">const</span><span class="w"> </span><span class="n">google</span><span class="o">::</span><span class="n">protobuf</span><span class="o">::</span><span class="n">FileDescriptor</span><span class="o">*</span><span class="w"> </span><span class="n">fd</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">  </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">fd</span><span class="o">-&gt;</span><span class="n">dependency_count</span><span class="p">();</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="o">*</span><span class="w"> </span><span class="n">dep</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fd</span><span class="o">-&gt;</span><span class="n">dependency</span><span class="p">(</span><span class="n">i</span><span class="p">);</span><span class="w"></span>
-<span class="w">    </span><span class="k">auto</span><span class="w"> </span><span class="p">[</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">inserted</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">files</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">dep</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">());</span><span class="w"></span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">inserted</span><span class="p">)</span><span class="w"> </span><span class="k">continue</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="n">fdSetInternal</span><span class="p">(</span><span class="n">fd_set</span><span class="p">,</span><span class="w"> </span><span class="n">files</span><span class="p">,</span><span class="w"> </span><span class="n">fd</span><span class="o">-&gt;</span><span class="n">dependency</span><span class="p">(</span><span class="n">i</span><span class="p">));</span><span class="w"></span>
-<span class="w">  </span><span class="p">}</span><span class="w"></span>
-<span class="w">  </span><span class="n">fd</span><span class="o">-&gt;</span><span class="n">CopyTo</span><span class="p">(</span><span class="n">fd_set</span><span class="p">.</span><span class="n">add_file</span><span class="p">());</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="c1">// Returns a serialized google::protobuf::FileDescriptorSet containing</span>
-<span class="c1">// the necessary google::protobuf::FileDescriptor&#39;s to describe d.</span>
-<span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="nf">fdSet</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">google</span><span class="o">::</span><span class="n">protobuf</span><span class="o">::</span><span class="n">Descriptor</span><span class="o">*</span><span class="w"> </span><span class="n">d</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="n">res</span><span class="p">;</span><span class="w"></span>
-<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">unordered_set</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">files</span><span class="p">;</span><span class="w"></span>
-<span class="w">  </span><span class="n">google</span><span class="o">::</span><span class="n">protobuf</span><span class="o">::</span><span class="n">FileDescriptorSet</span><span class="w"> </span><span class="n">fd_set</span><span class="p">;</span><span class="w"></span>
-<span class="w">  </span><span class="n">fdSetInternal</span><span class="p">(</span><span class="n">fd_set</span><span class="p">,</span><span class="w"> </span><span class="n">files</span><span class="p">,</span><span class="w"> </span><span class="n">d</span><span class="o">-&gt;</span><span class="n">file</span><span class="p">());</span><span class="w"></span>
-<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="n">fd_set</span><span class="p">.</span><span class="n">SerializeAsString</span><span class="p">();</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="n">mcap</span><span class="o">::</span><span class="n">Schema</span><span class="w"> </span><span class="nf">createSchema</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">google</span><span class="o">::</span><span class="n">protobuf</span><span class="o">::</span><span class="n">Descriptor</span><span class="o">*</span><span class="w"> </span><span class="n">d</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">  </span><span class="n">mcap</span><span class="o">::</span><span class="n">Schema</span><span class="w"> </span><span class="n">schema</span><span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">full_name</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;protobuf&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fdSet</span><span class="p">(</span><span class="n">d</span><span class="p">));</span><span class="w"></span>
-<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="n">schema</span><span class="p">;</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="c1">// Create a schema for the ros.nav_msgs.Path message.</span>
-<span class="n">mcap</span><span class="o">::</span><span class="n">Schema</span><span class="w"> </span><span class="n">path_schema</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">createSchema</span><span class="p">(</span><span class="n">ros</span><span class="o">::</span><span class="n">nav_msgs</span><span class="o">::</span><span class="n">Path</span><span class="o">::</span><span class="n">descriptor</span><span class="p">());</span><span class="w"></span>
-<span class="n">writer</span><span class="p">.</span><span class="n">addSchema</span><span class="p">(</span><span class="n">path_schema</span><span class="p">);</span><span class="w">  </span><span class="c1">// Assigned schema id is written to path_schema.id</span>
+<p>This prints out the timestamp, intensity, and coordinates for each point in the CSV file you choose to read in.</p>
+<h3 id="encoding-the-data-into-a-foxglovepointcloud">Encoding the data into a <code>foxglove.PointCloud</code></h3>
+<p>Let&rsquo;s encode this CSV data as a <a href="/docs/studio/messages/point-cloud"><code>foxglove.PointCloud</code> schema</a>, so we can later visualize this data in <a href="https://foxglove.dev/studio">Foxglove Studio</a>:</p>
+<table>
+<thead>
+<tr>
+<th>field</th>
+<th>type</th>
+<th>description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>timestamp</code></td>
+<td>time</td>
+<td>Timestamp of point cloud</td>
+</tr>
+<tr>
+<td><code>frame_id</code></td>
+<td>string</td>
+<td>Frame of reference</td>
+</tr>
+<tr>
+<td><code>pose</code></td>
+<td>Pose</td>
+<td>The origin of the point cloud relative to the frame of reference</td>
+</tr>
+<tr>
+<td><code>point_stride</code></td>
+<td>uint32</td>
+<td>Number of bytes between points in the data</td>
+</tr>
+<tr>
+<td><code>fields</code></td>
+<td>PackedElementField[]</td>
+<td>Fields in the data</td>
+</tr>
+<tr>
+<td><code>data</code></td>
+<td>bytes</td>
+<td>Point data, interpreted using fields</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>foxglove.PointCloud</code> schema expects a <code>data</code> field that contains a single base64-encoded buffer with all point data, as well as a <code>fields</code> field that contains metadata describing how to decode the <code>data</code>.</p>
+<p>Since <code>foxglove.PointCloud</code> requires a single timestamp, let&rsquo;s get it from the first point we see in our file. Then, we&rsquo;ll pack each field as a four byte single-precision little-endian float.</p>
+<p>Let&rsquo;s start by describing the layout of our data in a <code>foxglove.PointCloud</code> message:</p>
+<div class="highlight"><pre><span></span><code><span class="n">float32</span> <span class="o">=</span> <span class="mi">7</span>  <span class="c1"># as defined in the schema</span>
+<span class="n">pointcloud</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s2">&quot;point_stride&quot;</span><span class="p">:</span> <span class="p">(</span><span class="mi">4</span> <span class="o">+</span> <span class="mi">4</span> <span class="o">+</span> <span class="mi">4</span> <span class="o">+</span> <span class="mi">4</span><span class="p">),</span>  <span class="c1"># four bytes per float</span>
+  <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="s2">&quot;offset&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">float32</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;y&quot;</span><span class="p">,</span> <span class="s2">&quot;offset&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">float32</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;z&quot;</span><span class="p">,</span> <span class="s2">&quot;offset&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">float32</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="s2">&quot;offset&quot;</span><span class="p">:</span> <span class="mi">12</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="n">float32</span><span class="p">},</span>
+  <span class="p">],</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Next, let&rsquo;s pack the points using Python&rsquo;s built-in <a href="https://docs.python.org/3/library/struct.html"><code>struct</code></a> and <a href="https://docs.python.org/3/library/base64.html"><code>base64</code></a> libraries.</p>
+<div class="highlight"><pre><span></span><code><span class="n">points</span> <span class="o">=</span> <span class="nb">bytearray</span><span class="p">()</span>
+<span class="n">base_timestamp</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="k">for</span> <span class="n">point_timestamp</span><span class="p">,</span> <span class="n">intensity</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="ow">in</span> <span class="n">point_reader</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">csv</span><span class="p">):</span>
+  <span class="k">if</span> <span class="n">base_timestamp</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">base_timestamp</span> <span class="o">=</span> <span class="n">point_timestamp</span>
+  <span class="n">points</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s2">&quot;&amp;lt;ffff&quot;</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">intensity</span><span class="p">))</span>
+<span class="k">assert</span> <span class="n">base_timestamp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;found no points in input csv&quot;</span>
+<span class="n">pointcloud</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">points</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>Each 3D object must exist in its own coordinate frame. A point cloud&rsquo;s <code>frame_id</code> identifies the coordinate frame it belongs in, and its <code>pose</code> determines its relative position from that coordinate frame&rsquo;s center. Since we will only have one coordinate frame in our MCAP file, we can choose any arbitrary string as our <code>frame_id</code>, and use the identity pose to place our point cloud in its center.</p>
+<div class="highlight"><pre><span></span><code><span class="n">pointcloud</span><span class="p">[</span><span class="s2">&quot;pose&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="s2">&quot;position&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span>
+  <span class="s2">&quot;orientation&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
+<span class="p">}</span>
+<span class="n">pointcloud</span><span class="p">[</span><span class="s2">&quot;frame_id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;lidar&quot;</span>
+</code></pre></div>
+<p>We&rsquo;ll leave the timestamp field for later, when we write the messages into the MCAP file.</p>
+<h3 id="creating-a-writer">Creating a writer</h3>
+<p>We&rsquo;ll start with some imports from the Python MCAP library:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">mcap.mcap0.writer</span> <span class="kn">import</span> <span class="n">Writer</span>
+<span class="kn">from</span> <span class="nn">mcap.mcap0.well_known</span> <span class="kn">import</span> <span class="n">SchemaEncoding</span><span class="p">,</span> <span class="n">MessageEncoding</span>
+</code></pre></div>
+<p>Open a file where we&rsquo;ll output our MCAP data and write our header:</p>
+<div class="highlight"><pre><span></span><code><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">output</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+  <span class="n">writer</span> <span class="o">=</span> <span class="n">Writer</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+  <span class="n">writer</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="s2">&quot;x-jsonschema&quot;</span><span class="p">,</span> <span class="n">library</span><span class="o">=</span><span class="s2">&quot;my-excellent-library&quot;</span><span class="p">)</span> <span class="c1"># can use any name, as we are not using an MCAP profile: https://www.google.com/url?q=https://github.com/foxglove/mcap/blob/main/docs/specification/appendix.md%23well-known-profiles&amp;sa=D&amp;source=docs&amp;ust=1658261499762935&amp;usg=AOvVaw2GgwRzJbSlqWOErSFru7L_</span>
 </code></pre></div>
 <h3 id="register-channel">Register channel</h3>
-<div class="highlight"><pre><span></span><code><span class="n">mcap</span><span class="o">::</span><span class="n">Channel</span><span class="w"> </span><span class="nf">path_channel</span><span class="p">(</span><span class="s">&quot;/planner/path&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;protobuf&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">path_schema</span><span class="p">.</span><span class="n">id</span><span class="p">);</span><span class="w"></span>
-<span class="n">mcap</span><span class="p">.</span><span class="n">addChannel</span><span class="p">(</span><span class="n">path_channel</span><span class="p">);</span><span class="w">  </span><span class="c1">// Assigned channel id written to path_channel.id</span>
+<p>Let&rsquo;s create a channel of messages to contain our point cloud. The schema&rsquo;s name and content tell Foxglove Studio that it can parse and display this message as a point cloud.</p>
+<div class="highlight"><pre><span></span><code><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">&quot;PointCloud.json&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+  <span class="n">schema</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+<span class="n">schema_id</span> <span class="o">=</span> <span class="n">writer</span><span class="o">.</span><span class="n">register_schema</span><span class="p">(</span>
+  <span class="n">name</span><span class="o">=</span><span class="s2">&quot;foxglove.PointCloud&quot;</span><span class="p">,</span>
+  <span class="n">encoding</span><span class="o">=</span><span class="n">SchemaEncoding</span><span class="o">.</span><span class="n">JSONSchema</span><span class="p">,</span>
+  <span class="n">data</span><span class="o">=</span><span class="n">schema</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">channel_id</span> <span class="o">=</span> <span class="n">writer</span><span class="o">.</span><span class="n">register_channel</span><span class="p">(</span>
+  <span class="n">topic</span><span class="o">=</span><span class="s2">&quot;pointcloud&quot;</span><span class="p">,</span>
+  <span class="n">message_encoding</span><span class="o">=</span><span class="n">MessageEncoding</span><span class="o">.</span><span class="n">JSON</span><span class="p">,</span>
+  <span class="n">schema_id</span><span class="o">=</span><span class="n">schema_id</span><span class="p">,</span>
+<span class="p">)</span>
 </code></pre></div>
 <h3 id="write-messages">Write messages</h3>
-<p>We can now finally write messages to the channel via its id:</p>
-<div class="highlight"><pre><span></span><code><span class="n">ros</span><span class="o">::</span><span class="n">nav_msgs</span><span class="o">::</span><span class="n">Path</span><span class="w"> </span><span class="n">path_msg</span><span class="p">;</span><span class="w"></span>
-<span class="c1">// Fill in path_msg.</span>
-<span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="n">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">path_msg</span><span class="p">.</span><span class="n">SerializeAsString</span><span class="p">();</span><span class="w"></span>
+<p>Let&rsquo;s write a single <code>foxglove.PointCloud</code> message on the channel we just created:</p>
+<div class="highlight"><pre><span></span><code><span class="n">pointcloud</span><span class="p">[</span><span class="s2">&quot;timestamp&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;sec&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">base_timestamp</span><span class="o">.</span><span class="n">timestamp</span><span class="p">()),</span>
+    <span class="s2">&quot;nsec&quot;</span><span class="p">:</span> <span class="n">base_timestamp</span><span class="o">.</span><span class="n">microsecond</span> <span class="o">*</span> <span class="mi">1000</span><span class="p">,</span>
+<span class="p">}</span>
 
-<span class="n">mcap</span><span class="o">::</span><span class="n">Message</span><span class="w"> </span><span class="n">msg</span><span class="p">;</span><span class="w"></span>
-<span class="n">msg</span><span class="p">.</span><span class="n">channelId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">path_channel</span><span class="p">.</span><span class="n">id</span><span class="p">;</span><span class="w"></span>
-<span class="n">msg</span><span class="p">.</span><span class="n">logTime</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">timestamp_ns</span><span class="p">;</span><span class="w"></span>
-<span class="n">msg</span><span class="p">.</span><span class="n">publishTime</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">msg</span><span class="p">.</span><span class="n">logTime</span><span class="p">;</span><span class="w"></span>
-<span class="n">msg</span><span class="p">.</span><span class="n">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">byte</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">());</span><span class="w"></span>
-<span class="n">msg</span><span class="p">.</span><span class="n">dataSize</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">data</span><span class="p">.</span><span class="n">size</span><span class="p">();</span><span class="w"></span>
-
-<span class="n">writer</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">msg</span><span class="p">);</span><span class="w"></span>
+<span class="n">writer</span><span class="o">.</span><span class="n">add_message</span><span class="p">(</span>
+    <span class="n">channel_id</span><span class="p">,</span>
+    <span class="n">log_time</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">base_timestamp</span><span class="o">.</span><span class="n">timestamp</span><span class="p">()</span> <span class="o">*</span> <span class="mf">1e9</span><span class="p">),</span>
+    <span class="n">data</span><span class="o">=</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">pointcloud</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">),</span>
+    <span class="n">publish_time</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">base_timestamp</span><span class="o">.</span><span class="n">timestamp</span><span class="p">()</span> <span class="o">*</span> <span class="mf">1e9</span><span class="p">),</span>
+<span class="p">)</span>
 </code></pre></div>
-<p>Don’t forget to close the writer when you’re done:</p>
-<div class="highlight"><pre><span></span><code><span class="n">writer</span><span class="p">.</span><span class="n">close</span><span class="p">();</span><span class="w"></span>
+<p>Close the MCAP writer to include the summary and footer in your output MCAP file:</p>
+<div class="highlight"><pre><span></span><code><span class="n">writer</span><span class="o">.</span><span class="n">finish</span><span class="p">()</span>
 </code></pre></div>
-<h3 id="inspect-mcap-file">Inspect MCAP file</h3>
-<p>Now, we can inspect our output MCAP file&rsquo;s messages. I used the <em>Data source</em> dialog in Foxglove Studio to “Open local file”.</p>
-<p>I then added a few relevant panels (<a href="/docs/studio/panels/plot">Plot</a>, <a href="/docs/studio/panels/image">Image</a>, <a href="/docs/studio/panels/raw-messages">Raw Messages</a>, <a href="/docs/studio/panels/3d">3D</a>) to visualize my robot&rsquo;s performance.</p>
-<h2 id="important-links">Important links</h2>
+<p>That&rsquo;s it! We now have a valid MCAP file with a single point cloud message.</p>
+<h3 id="inspect-your-file">Inspect your file</h3>
+<p>To inspect your MCAP file, install the <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap#installing">MCAP CLI tool</a>.</p>
+<p>Run the following commands to summarize your file&rsquo;s contents and to verify that it has no issues:</p>
+<div class="highlight"><pre><span></span><code>$ mcap info output.mcap
+  library: my-excellent-library
+  profile: x-jsonschema
+  messages: <span class="m">1</span>
+  duration: 0s
+  start: <span class="m">2011</span>-11-04T01:36:05.987339008+11:00 <span class="o">(</span><span class="m">1320330965</span>.987339008<span class="o">)</span>
+  end: <span class="m">2011</span>-11-04T01:36:05.987339008+11:00 <span class="o">(</span><span class="m">1320330965</span>.987339008<span class="o">)</span>
+  compression:
+    zstd: <span class="o">[</span><span class="m">1</span>/1 chunks<span class="o">]</span> <span class="o">(</span><span class="m">48</span>.09%<span class="o">)</span>
+  channels:
+    <span class="o">(</span><span class="m">1</span><span class="o">)</span> pointcloud  <span class="m">1</span> msgs <span class="o">(</span>+Inf Hz<span class="o">)</span>   : foxglove.PointCloud <span class="o">[</span>jsonschema<span class="o">]</span>
+  attachments: <span class="m">0</span>
+$ mcap doctor output.mcap
+  Examining output.mcap
+</code></pre></div>
+<h3 id="visualize-your-mcap-data">Visualize your MCAP data</h3>
+<p>For a more visual representation of this data, let&rsquo;s use Foxglove Studio. Open either the <a href="/download">desktop</a> or <a href="https://studio.foxglove.dev">web app</a>, and add a <a href="/docs/studio/panels/raw-messages">Raw Messages</a> and our <a href="/blog/try-foxglove-studios-new-beta-3d-panel">newly added</a> <a href="/docs/studio/panels/3d-beta">3D (Beta)</a> panel to your layout.</p>
+<p>Then, simply drag and drop your output MCAP file into the app window to start playing the data. Make sure to enable the <code>pointcloud</code> topic in the 3D (Beta) panel to display the point cloud in 3D space. You can also inspect the raw data for the <code>pointcloud</code> topic in your Raw Messages panel: <img alt="pointcloud" src="../../img/0398582-hero.png" /></p>
+<h3 id="important-links">Important links</h3>
 <ul>
-<li><a href="https://github.com/foxglove/mcap/tree/main/cpp/examples/protobuf">Example code</a></li>
+<li><a href="https://github.com/foxglove/mcap/tree/main/python/mcap">MCAP Python library</a></li>
+<li><a href="https://github.com/foxglove/mcap/tree/main/python/examples/jsonschema">Example code</a></li>
 </ul>
 
               
@@ -1183,7 +1287,7 @@
     <nav class="md-footer__inner md-grid" aria-label="Footer" >
       
         
-        <a href="../python/reading-writing-protobuf.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: Reading and writing Protobuf messages" rel="prev">
+        <a href="ros2.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: Reading and writing ROS 2 messages" rel="prev">
           <div class="md-footer__button md-icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
           </div>
@@ -1192,20 +1296,20 @@
               <span class="md-footer__direction">
                 Previous
               </span>
-              Reading and writing Protobuf messages
+              Reading and writing ROS 2 messages
             </div>
           </div>
         </a>
       
       
         
-        <a href="../../support-matrix.html" class="md-footer__link md-footer__link--next" aria-label="Next: Library Support" rel="next">
+        <a href="protobuf.html" class="md-footer__link md-footer__link--next" aria-label="Next: Reading and writing Protobuf messages" rel="next">
           <div class="md-footer__title">
             <div class="md-ellipsis">
               <span class="md-footer__direction">
                 Next
               </span>
-              Library Support
+              Reading and writing Protobuf messages
             </div>
           </div>
           <div class="md-footer__button md-icon">
