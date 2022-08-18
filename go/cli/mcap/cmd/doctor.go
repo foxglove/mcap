@@ -223,7 +223,8 @@ func (doctor *mcapDoctor) Examine() {
 			if errors.Is(err, io.EOF) {
 				if dataEnd == nil {
 					doctor.error("File does not contain a DataEnd record (last record was %s)", lastToken.String())
-				} else if footer == nil {
+				}
+				if footer == nil {
 					doctor.error("File does not contain a Footer record (last record was %s)", lastToken.String())
 				}
 				break
