@@ -213,15 +213,24 @@ func (doctor *mcapDoctor) Examine() {
 	}
 
 	var lastMessageTime uint64
+	var lastToken mcap.TokenType
+	var dataEnd *mcap.DataEnd
+	var footer *mcap.Footer
 	msg := make([]byte, 1024)
 	for {
 		tokenType, data, err := lexer.Next(msg)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
+				if dataEnd == nil {
+					doctor.error("File does not contain a DataEnd record (last record was %s)", lastToken.String())
+				} else if footer == nil {
+					doctor.error("File does not contain a Footer record (last record was %s)", lastToken.String())
+				}
 				break
 			}
 			log.Fatal("Failed to read token:", err)
 		}
+		lastToken = tokenType
 		if len(data) > len(msg) {
 			msg = data
 		}
@@ -242,7 +251,7 @@ func (doctor *mcapDoctor) Examine() {
 					Only a well-known profile is allowed. Other profiles must use x- prefix`, header.Profile)
 			}
 		case mcap.TokenFooter:
-			_, err := mcap.ParseFooter(data)
+			footer, err = mcap.ParseFooter(data)
 			if err != nil {
 				doctor.error("Failed to parse footer:", err)
 			}
@@ -352,7 +361,7 @@ func (doctor *mcapDoctor) Examine() {
 				doctor.error("Failed to parse summary offset:", err)
 			}
 		case mcap.TokenDataEnd:
-			_, err := mcap.ParseDataEnd(data)
+			dataEnd, err = mcap.ParseDataEnd(data)
 			if err != nil {
 				doctor.error("Failed to parse data end:", err)
 			}
