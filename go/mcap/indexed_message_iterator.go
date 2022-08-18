@@ -15,12 +15,11 @@ import (
 // seeking is required). It makes reads in alternation from the index data
 // section, the message index at the end of a chunk, and the chunk's contents.
 type indexedMessageIterator struct {
-	lexer   *Lexer
-	rs      io.ReadSeeker
-	topics  map[string]bool
-	start   uint64
-	end     uint64
-	reverse bool
+	lexer  *Lexer
+	rs     io.ReadSeeker
+	topics map[string]bool
+	start  uint64
+	end    uint64
 
 	channels          map[uint16]*Channel
 	schemas           map[uint16]*Schema
@@ -99,7 +98,6 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 					if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
 						rangeIndex := rangeIndex{
 							chunkIndex: idx,
-							reverse:    it.reverse,
 						}
 						heap.Push(&it.indexHeap, rangeIndex)
 					}
@@ -184,7 +182,6 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 				rangeIndex := rangeIndex{
 					messageIndexEntry: &offset,
 					buf:               chunkData,
-					reverse:           it.reverse,
 				}
 				heap.Push(&it.indexHeap, rangeIndex)
 			}

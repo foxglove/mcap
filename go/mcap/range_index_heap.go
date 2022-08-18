@@ -1,15 +1,23 @@
 package mcap
 
+// rangeIndex contains either a ChunkIndex or a MessageIndexEntry to be sorted on LogTime.
 type rangeIndex struct {
 	chunkIndex        *ChunkIndex
 	messageIndexEntry *MessageIndexEntry
-	reverse           bool
-	buf               []uint8
+	buf               []uint8 // if messageIndexEntry is not nil, `buf` should point to the underlying chunk.
 }
 
-func (ri *rangeIndex) logTime() uint64 {
+// heap of rangeIndex entries, where the entries are sorted by their log time.
+type rangeIndexHeap struct {
+	indices []rangeIndex
+	reverse bool
+}
+
+// key returns the comparison key used for elements in this heap.
+func (h rangeIndexHeap) key(i int) uint64 {
+	ri := h.indices[i]
 	if ri.chunkIndex != nil {
-		if ri.reverse {
+		if h.reverse {
 			return ri.chunkIndex.MessageEndTime
 		}
 		return ri.chunkIndex.MessageStartTime
@@ -17,25 +25,30 @@ func (ri *rangeIndex) logTime() uint64 {
 	return ri.messageIndexEntry.Timestamp
 }
 
-type rangeIndexHeap []rangeIndex
+// Required for sort.Interface.
+func (h rangeIndexHeap) Len() int      { return len(h.indices) }
+func (h rangeIndexHeap) Swap(i, j int) { h.indices[i], h.indices[j] = h.indices[j], h.indices[i] }
 
-func (h rangeIndexHeap) Len() int      { return len(h) }
-func (h rangeIndexHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+// Push is required by `heap.Interface`. Note that this is not the same as `heap.Push`!
+// expected behavior by `heap` is: "add x as element len()".
 func (h *rangeIndexHeap) Push(x interface{}) {
-	*h = append(*h, x.(rangeIndex))
+	h.indices = append(h.indices, x.(rangeIndex))
 }
 
+// Pop is required by `heap.Interface`. Note that this is not the same as `heap.Pop`!
+// expected behavior by `heap` is: "remove and return element Len() - 1".
 func (h *rangeIndexHeap) Pop() interface{} {
-	old := *h
+	old := h.indices
 	n := len(old)
 	x := old[n-1]
-	*h = old[0 : n-1]
+	h.indices = old[0 : n-1]
 	return x
 }
 
+// Less is required by `heap.Interface`.
 func (h rangeIndexHeap) Less(i, j int) bool {
-	if h[i].reverse {
-		return h[i].logTime() > h[j].logTime()
+	if h.reverse {
+		return h.key(i) > h.key(j)
 	}
-	return h[i].logTime() < h[j].logTime()
+	return h.key(i) < h.key(j)
 }
