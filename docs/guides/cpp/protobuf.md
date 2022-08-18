@@ -70,10 +70,27 @@ mcap.addChannel(path_channel);  // Assigned channel id written to path_channel.i
 We can now finally write messages to the channel via its id:
 
 ```cpp
-foxglove::PosesInFrame path_msg;
+foxglove::PosesInFrame poses_msg;
 // Fill in path_msg.
-std::string data = path_msg.SerializeAsString();
+uint64_t timestamp_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                std::chrono::system_clock::now().time_since_epoch())
+                                .count();
+poses_msg.mutable_timestamp()->set_seconds(timestamp_ns / 1'000'000'000ull)
+poses_msg.mutable_timestamp()->set_nanos(timestamp_ns % 1'000'000'000ull)
+poses_msg.set_frame_id("base_link")
+// Example path in a straight line down the X axis
+for (int i = 0; i < 10; ++i) {
+  auto pose = poses_msg.add_poses();
+  pose->mutable_position()->set_x(i);
+  pose->mutable_position()->set_y(0);
+  pose->mutable_position()->set_z(0);
+  pose->mutable_orientation()->set_x(0);
+  pose->mutable_orientation()->set_y(0);
+  pose->mutable_orientation()->set_z(0);
+  pose->mutable_orientation()->set_w(1);
+}
 
+std::string data = poses_msg.SerializeAsString();
 mcap::Message msg;
 msg.channelId = path_channel.id;
 msg.logTime = timestamp_ns;
