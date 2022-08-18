@@ -122,6 +122,25 @@ jobs:
           path: docs-swift.tgz
           retention-days: 1
 
+  pages-rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          default: true
+
+      - run: mkdir __docs__
+      - name: Generate Rust documentation
+        run: cd rust && cargo doc --no-deps --target-dir ../__docs__/rust
+
+      - run: tar -czf docs-rust.tgz __docs__/rust
+      - uses: actions/upload-artifact@v3
+        with:
+          name: docs-rust
+          path: docs-rust.tgz
+
   pages-publish:
     needs:
       - pages-home
@@ -129,6 +148,7 @@ jobs:
       - pages-typescript
       - pages-python
       - pages-swift
+      - pages-rust
     permissions:
       contents: write
       statuses: write

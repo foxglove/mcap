@@ -60,6 +60,7 @@ words:
   - rosbag
   - rosmsg
   - rostime
+  - serde
   - stoull
   - struct
   - swiftformat
