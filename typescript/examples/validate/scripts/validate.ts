@@ -47,6 +47,7 @@ async function readStream(
   const startTime = performance.now();
   let readBytes = 0n;
 
+  let lastRecordType: TypedMcapRecord["type"] | undefined;
   await new Promise<void>((resolve, reject) => {
     const stream = createReadStream(filePath);
     stream.on("data", (data) => {
@@ -57,6 +58,7 @@ async function readStream(
         readBytes += BigInt(data.byteLength);
         reader.append(data);
         for (let record; (record = reader.nextRecord()); ) {
+          lastRecordType = record.type;
           processRecord(record);
         }
       } catch (error) {
@@ -69,7 +71,10 @@ async function readStream(
   });
 
   if (!reader.done()) {
-    throw new Error(`File read incomplete; ${reader.bytesRemaining()} bytes remain after parsing`);
+    throw new Error(
+      `File read incomplete; ${reader.bytesRemaining()} bytes remain after parsing` +
+        (lastRecordType != undefined ? ` (last record was ${lastRecordType})` : ""),
+    );
   }
 
   const durationMs = performance.now() - startTime;
