@@ -83,6 +83,28 @@ describe("Mcap0IndexedReader", () => {
     ).rejects.toThrow("too small to be valid MCAP");
   });
 
+  it("rejects invalid footer", async () => {
+    const readable = makeReadable(
+      new Uint8Array([
+        ...MCAP0_MAGIC,
+        ...record(Opcode.HEADER, [
+          ...string(""), // profile
+          ...string(""), // library
+        ]),
+        ...record(Opcode.FOOTER, [
+          ...uint64LE(0n), // summary offset
+          ...uint64LE(0n), // summary start offset
+          ...uint32LE(0), // summary crc
+        ]),
+        ...MCAP0_MAGIC.slice(0, MCAP0_MAGIC.length - 1),
+        0x00,
+      ]),
+    );
+    await expect(Mcap0IndexedReader.Initialize({ readable })).rejects.toThrow(
+      "Expected MCAP magic '89 4d 43 41 50 30 0d 0a', found '89 4d 43 41 50 30 0d 00' [library=]",
+    );
+  });
+
   it("rejects unindexed file", async () => {
     const readable = makeReadable(
       new Uint8Array([
