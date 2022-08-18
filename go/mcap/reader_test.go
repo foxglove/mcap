@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -430,4 +431,98 @@ func TestReadingDiagnostics(t *testing.T) {
 		c++
 	}
 	assert.Equal(t, 52, c)
+}
+
+func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
+	buf := &bytes.Buffer{}
+	// write an MCAP with two chunks, where in each chunk all messages have ascending timestamps,
+	// but their timestamp ranges overlap.
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   200,
+		Compression: CompressionLZ4,
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, writer.WriteHeader(&Header{}))
+	assert.Nil(t, writer.WriteSchema(&Schema{
+		ID:       0,
+		Name:     "",
+		Encoding: "",
+		Data:     []byte{},
+	}))
+	assert.Nil(t, writer.WriteChannel(&Channel{
+		ID:              0,
+		Topic:           "",
+		SchemaID:        0,
+		MessageEncoding: "",
+		Metadata: map[string]string{
+			"": "",
+		},
+	}))
+	msgCount := 0
+	addMsg := func(timestamp uint64) {
+		assert.Nil(t, writer.WriteMessage(&Message{
+			ChannelID:   0,
+			Sequence:    0,
+			LogTime:     timestamp,
+			PublishTime: timestamp,
+			Data:        []byte{'h', 'e', 'l', 'l', 'o'},
+		}))
+		msgCount++
+	}
+	var now uint64 = 100
+	addMsg(now)
+	for writer.compressedWriter.Size() != 0 {
+		now += 10
+		addMsg(now)
+	}
+	// ensure that the chunk contains more than one message
+	assert.Greater(t, now, uint64(110))
+	// add time discontinuity between chunks
+	now -= 55
+
+	addMsg(now)
+	for writer.compressedWriter.Size() != 0 {
+		now += 10
+		addMsg(now)
+	}
+	assert.Nil(t, writer.Close())
+
+	// start reading the MCAP back
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	assert.Nil(t, err)
+
+	it, err := reader.Messages(0, math.MaxInt64, []string{}, true, false)
+	assert.Nil(t, err)
+
+	// check that timestamps monotonically increase from the returned iterator
+	var lastSeenTimestamp uint64
+	for i := 0; i < msgCount; i++ {
+		_, _, msg, err := it.Next(nil)
+		assert.Nil(t, err)
+		if i != 0 {
+			assert.Greater(t, msg.LogTime, lastSeenTimestamp)
+		}
+		lastSeenTimestamp = msg.LogTime
+	}
+	_, _, msg, err := it.Next(nil)
+	assert.Nil(t, msg)
+	assert.Error(t, io.EOF, err)
+
+	// now try iterating in reverse
+	reverseIt, err := reader.Messages(0, math.MaxInt64, []string{}, true, true)
+	assert.Nil(t, err)
+
+	// check that timestamps monotonically decrease from the returned iterator
+	for i := 0; i < msgCount; i++ {
+		_, _, msg, err := reverseIt.Next(nil)
+		assert.Nil(t, err)
+		if i != 0 {
+			assert.Less(t, msg.LogTime, lastSeenTimestamp)
+		}
+		lastSeenTimestamp = msg.LogTime
+	}
+	_, _, msg, err = reverseIt.Next(nil)
+	assert.Nil(t, msg)
+	assert.Error(t, io.EOF, err)
 }

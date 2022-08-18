@@ -176,14 +176,14 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		if _, ok := it.channels[messageIndex.ChannelID]; !ok {
 			continue
 		}
-		// append any message index offsets in the requested time range
-		for _, offset := range messageIndex.Records {
-			if offset.Timestamp >= it.start && offset.Timestamp < it.end {
-				rangeIndex := rangeIndex{
-					messageIndexEntry: &offset,
+		// push any message index entries in the requested time range to the heap to read.
+		for i := range messageIndex.Records {
+			timestamp := messageIndex.Records[i].Timestamp
+			if timestamp >= it.start && timestamp < it.end {
+				heap.Push(&it.indexHeap, rangeIndex{
+					messageIndexEntry: &messageIndex.Records[i],
 					buf:               chunkData,
-				}
-				heap.Push(&it.indexHeap, rangeIndex)
+				})
 			}
 		}
 	}
@@ -205,7 +205,7 @@ func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, e
 			if err != nil {
 				return nil, nil, nil, err
 			}
-		} else if ri.messageIndexEntry != nil {
+		} else {
 			chunkOffset := ri.messageIndexEntry.Offset
 			length := binary.LittleEndian.Uint64(ri.buf[chunkOffset+1:])
 			messageData := ri.buf[chunkOffset+1+8 : chunkOffset+1+8+length]
