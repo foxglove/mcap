@@ -4,48 +4,15 @@ To start writing Python code that reads and writes ROS 1 data in MCAP, install t
 
 ## Reading ROS 1 from MCAP
 
-### As a stream
-
-Import a `StreamReader` from the [MCAP Python library](https://github.com/foxglove/mcap/tree/main/python/mcap) and a `Decoder` from [`mcap-ros1-support`](https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support):
+Read ROS1 messages from an MCAP file using the `mcap_ros1.reader` module:
 
 ```python
-from mcap.mcap0.stream_reader import StreamReader
-from mcap_ros1.decoder import Decoder
-```
+import sys
 
-Create a reader for your MCAP file (`my_data.mcap`), and decode its data stream:
+from mcap_ros1.reader import read_ros1_messages
 
-```python
-reader = StreamReader("my_data.mcap")
-data = Decoder(reader)
-```
-
-Finally, print out each message:
-
-```
-for topic, record, message in data.messages:
-    print(message)
-```
-
-### As raw data
-
-Import the `Decoder` from [`mcap-ros1-support`](https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support):
-
-```python
-from mcap_ros1.decoder import Decoder
-```
-
-Read the contents of your MCAP file (`my_data.mcap`):
-
-```python
-data = open("my_data.mcap", "rb").read()
-```
-
-Finally, iterate through the messages and print out each one's datatype and contents:
-
-```python
-for topic, record, message in Decoder(data).messages:
-    print(f"{topic}: ({type(message).__name__}): {message.data}")
+for msg in read_ros1_messages(sys.argv[1]):
+    print(f"{msg.topic}: {msg.ros_msg}")
 ```
 
 ## Writing ROS 1 to MCAP
