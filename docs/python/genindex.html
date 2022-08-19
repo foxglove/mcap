@@ -195,18 +195,26 @@
       </ul></li>
       <li><a href="mcap-apidoc/mcap.mcap0.opcode.html#mcap.mcap0.opcode.Opcode.DATA_END">DATA_END (mcap.mcap0.opcode.Opcode attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.DataEnd.data_section_crc">data_section_crc (mcap.mcap0.records.DataEnd attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.AttachmentIndex.data_size">data_size (mcap.mcap0.records.AttachmentIndex attribute)</a>
 </li>
       <li><a href="mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.DataEnd">DataEnd (class in mcap.mcap0.records)</a>
 </li>
-      <li><a href="mcap-protobuf-apidoc/mcap_protobuf.decoder.html#mcap_protobuf.decoder.decode_proto_messages">decode_proto_messages() (in module mcap_protobuf.decoder)</a>
+      <li><a href="mcap-protobuf-apidoc/mcap_protobuf.decoder.html#mcap_protobuf.decoder.Decoder.decode">decode() (mcap_protobuf.decoder.Decoder method)</a>
+
+      <ul>
+        <li><a href="mcap-ros1-apidoc/mcap_ros1.decoder.html#mcap_ros1.decoder.Decoder.decode">(mcap_ros1.decoder.Decoder method)</a>
 </li>
-      <li><a href="mcap-ros1-apidoc/mcap_ros1.decoder.html#mcap_ros1.decoder.decode_ros1_messages">decode_ros1_messages() (in module mcap_ros1.decoder)</a>
+      </ul></li>
+      <li><a href="mcap-protobuf-apidoc/mcap_protobuf.decoder.html#mcap_protobuf.decoder.Decoder">Decoder (class in mcap_protobuf.decoder)</a>
+
+      <ul>
+        <li><a href="mcap-ros1-apidoc/mcap_ros1.decoder.html#mcap_ros1.decoder.Decoder">(class in mcap_ros1.decoder)</a>
 </li>
+      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -355,8 +363,6 @@
       </ul></li>
       <li><a href="mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Header.library">library (mcap.mcap0.records.Header attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Attachment.log_time">log_time (mcap.mcap0.records.Attachment attribute)</a>
 
       <ul>
@@ -364,7 +370,13 @@
 </li>
         <li><a href="mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Message.log_time">(mcap.mcap0.records.Message attribute)</a>
 </li>
+        <li><a href="mcap-protobuf-apidoc/mcap_protobuf.reader.html#mcap_protobuf.reader.McapProtobufMessage.log_time">(mcap_protobuf.reader.McapProtobufMessage property)</a>
+</li>
+        <li><a href="mcap-ros1-apidoc/mcap_ros1.reader.html#mcap_ros1.reader.McapROS1Message.log_time">(mcap_ros1.reader.McapROS1Message property)</a>
+</li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="mcap-apidoc/mcap.mcap0.writer.html#mcap.mcap0.writer.CompressionType.LZ4">LZ4 (mcap.mcap0.writer.CompressionType attribute)</a>
 </li>
   </ul></td>
@@ -488,6 +500,13 @@
 </li>
       </ul></li>
       <li>
+    mcap_protobuf.reader
+
+      <ul>
+        <li><a href="mcap-protobuf-apidoc/mcap_protobuf.reader.html#module-mcap_protobuf.reader">module</a>
+</li>
+      </ul></li>
+      <li>
     mcap_protobuf.schema
 
       <ul>
@@ -516,6 +535,13 @@
 </li>
       </ul></li>
       <li>
+    mcap_ros1.reader
+
+      <ul>
+        <li><a href="mcap-ros1-apidoc/mcap_ros1.reader.html#module-mcap_ros1.reader">module</a>
+</li>
+      </ul></li>
+      <li>
     mcap_ros1.writer
 
       <ul>
@@ -524,12 +550,20 @@
       </ul></li>
       <li><a href="mcap-apidoc/mcap.mcap0.exceptions.html#mcap.mcap0.exceptions.McapError">McapError</a>
 </li>
-      <li><a href="mcap-apidoc/mcap.mcap0.reader.html#mcap.mcap0.reader.McapReader">McapReader (class in mcap.mcap0.reader)</a>
+      <li><a href="mcap-protobuf-apidoc/mcap_protobuf.decoder.html#mcap_protobuf.decoder.McapProtobufDecodeError">McapProtobufDecodeError</a>
 </li>
-      <li><a href="mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.McapRecord">McapRecord (class in mcap.mcap0.records)</a>
+      <li><a href="mcap-protobuf-apidoc/mcap_protobuf.reader.html#mcap_protobuf.reader.McapProtobufMessage">McapProtobufMessage (class in mcap_protobuf.reader)</a>
+</li>
+      <li><a href="mcap-apidoc/mcap.mcap0.reader.html#mcap.mcap0.reader.McapReader">McapReader (class in mcap.mcap0.reader)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.McapRecord">McapRecord (class in mcap.mcap0.records)</a>
+</li>
+      <li><a href="mcap-ros1-apidoc/mcap_ros1.decoder.html#mcap_ros1.decoder.McapROS1DecodeError">McapROS1DecodeError</a>
+</li>
+      <li><a href="mcap-ros1-apidoc/mcap_ros1.reader.html#mcap_ros1.reader.McapROS1Message">McapROS1Message (class in mcap_ros1.reader)</a>
+</li>
       <li><a href="mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Message">Message (class in mcap.mcap0.records)</a>
 </li>
       <li><a href="mcap-apidoc/mcap.mcap0.opcode.html#mcap.mcap0.opcode.Opcode.MESSAGE">MESSAGE (mcap.mcap0.opcode.Opcode attribute)</a>
@@ -624,6 +658,8 @@
 </li>
         <li><a href="mcap-protobuf-apidoc/mcap_protobuf.decoder.html#module-mcap_protobuf.decoder">mcap_protobuf.decoder</a>
 </li>
+        <li><a href="mcap-protobuf-apidoc/mcap_protobuf.reader.html#module-mcap_protobuf.reader">mcap_protobuf.reader</a>
+</li>
         <li><a href="mcap-protobuf-apidoc/mcap_protobuf.schema.html#module-mcap_protobuf.schema">mcap_protobuf.schema</a>
 </li>
         <li><a href="mcap-protobuf-apidoc/mcap_protobuf.writer.html#module-mcap_protobuf.writer">mcap_protobuf.writer</a>
@@ -631,6 +667,8 @@
         <li><a href="mcap-ros1-apidoc/mcap_ros1.html#module-mcap_ros1">mcap_ros1</a>
 </li>
         <li><a href="mcap-ros1-apidoc/mcap_ros1.decoder.html#module-mcap_ros1.decoder">mcap_ros1.decoder</a>
+</li>
+        <li><a href="mcap-ros1-apidoc/mcap_ros1.reader.html#module-mcap_ros1.reader">mcap_ros1.reader</a>
 </li>
         <li><a href="mcap-ros1-apidoc/mcap_ros1.writer.html#module-mcap_ros1.writer">mcap_ros1.writer</a>
 </li>
@@ -693,16 +731,22 @@
 </li>
       <li><a href="mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Header.profile">profile (mcap.mcap0.records.Header attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="mcap-apidoc/mcap.mcap0.well_known.html#mcap.mcap0.well_known.MessageEncoding.Protobuf">Protobuf (mcap.mcap0.well_known.MessageEncoding attribute)</a>
 
       <ul>
         <li><a href="mcap-apidoc/mcap.mcap0.well_known.html#mcap.mcap0.well_known.SchemaEncoding.Protobuf">(mcap.mcap0.well_known.SchemaEncoding attribute)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Message.publish_time">publish_time (mcap.mcap0.records.Message attribute)</a>
+
+      <ul>
+        <li><a href="mcap-protobuf-apidoc/mcap_protobuf.reader.html#mcap_protobuf.reader.McapProtobufMessage.publish_time">(mcap_protobuf.reader.McapProtobufMessage property)</a>
 </li>
+        <li><a href="mcap-ros1-apidoc/mcap_ros1.reader.html#mcap_ros1.reader.McapROS1Message.publish_time">(mcap_ros1.reader.McapROS1Message property)</a>
+</li>
+      </ul></li>
       <li><a href="mcap-apidoc/mcap.mcap0.message_queue.html#mcap.mcap0.message_queue.MessageQueue.push">push() (mcap.mcap0.message_queue.MessageQueue method)</a>
 </li>
   </ul></td>
@@ -747,15 +791,19 @@
       </ul></li>
       <li><a href="mcap-apidoc/mcap.mcap0.data_stream.html#mcap.mcap0.data_stream.ReadDataStream.read1">read1() (mcap.mcap0.data_stream.ReadDataStream method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="mcap-apidoc/mcap.mcap0.data_stream.html#mcap.mcap0.data_stream.ReadDataStream.read2">read2() (mcap.mcap0.data_stream.ReadDataStream method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="mcap-apidoc/mcap.mcap0.data_stream.html#mcap.mcap0.data_stream.ReadDataStream.read4">read4() (mcap.mcap0.data_stream.ReadDataStream method)</a>
 </li>
       <li><a href="mcap-apidoc/mcap.mcap0.data_stream.html#mcap.mcap0.data_stream.ReadDataStream.read8">read8() (mcap.mcap0.data_stream.ReadDataStream method)</a>
 </li>
       <li><a href="mcap-apidoc/mcap.mcap0.data_stream.html#mcap.mcap0.data_stream.ReadDataStream.read_prefixed_string">read_prefixed_string() (mcap.mcap0.data_stream.ReadDataStream method)</a>
+</li>
+      <li><a href="mcap-protobuf-apidoc/mcap_protobuf.reader.html#mcap_protobuf.reader.read_protobuf_messages">read_protobuf_messages() (in module mcap_protobuf.reader)</a>
+</li>
+      <li><a href="mcap-ros1-apidoc/mcap_ros1.reader.html#mcap_ros1.reader.read_ros1_messages">read_ros1_messages() (in module mcap_ros1.reader)</a>
 </li>
       <li><a href="mcap-apidoc/mcap.mcap0.data_stream.html#mcap.mcap0.data_stream.ReadDataStream">ReadDataStream (class in mcap.mcap0.data_stream)</a>
 </li>

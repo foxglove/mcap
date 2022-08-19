@@ -1,0 +1,7 @@
+mcap\_protobuf.reader module
+============================
+
+.. automodule:: mcap_protobuf.reader
+   :members:
+   :undoc-members:
+   :show-inheritance:

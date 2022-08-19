@@ -8,6 +8,7 @@ Submodules
    :maxdepth: 4
 
    mcap_protobuf.decoder
+   mcap_protobuf.reader
    mcap_protobuf.schema
    mcap_protobuf.writer
 

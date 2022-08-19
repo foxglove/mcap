@@ -8,6 +8,7 @@ Submodules
    :maxdepth: 4
 
    mcap_ros1.decoder
+   mcap_ros1.reader
    mcap_ros1.writer
 
 Module contents

@@ -511,26 +511,6 @@
     Reading ROS 1 from MCAP
   </a>
   
-    <nav class="md-nav" aria-label="Reading ROS 1 from MCAP">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#as-a-stream" class="md-nav__link">
-    As a stream
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#as-raw-data" class="md-nav__link">
-    As raw data
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
         <li class="md-nav__item">
@@ -1025,26 +1005,6 @@
     Reading ROS 1 from MCAP
   </a>
   
-    <nav class="md-nav" aria-label="Reading ROS 1 from MCAP">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#as-a-stream" class="md-nav__link">
-    As a stream
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#as-raw-data" class="md-nav__link">
-    As raw data
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
         <li class="md-nav__item">
@@ -1088,29 +1048,13 @@
 <h1 id="reading-and-writing-ros-1-messages">Reading and writing ROS 1 messages</h1>
 <p>To start writing Python code that reads and writes ROS 1 data in MCAP, install the <a href="https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support"><code>mcap-ros1-support</code> helper library</a>.</p>
 <h2 id="reading-ros-1-from-mcap">Reading ROS 1 from MCAP</h2>
-<h3 id="as-a-stream">As a stream</h3>
-<p>Import a <code>StreamReader</code> from the <a href="https://github.com/foxglove/mcap/tree/main/python/mcap">MCAP Python library</a> and a <code>Decoder</code> from <a href="https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support"><code>mcap-ros1-support</code></a>:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">mcap.mcap0.stream_reader</span> <span class="kn">import</span> <span class="n">StreamReader</span>
-<span class="kn">from</span> <span class="nn">mcap_ros1.decoder</span> <span class="kn">import</span> <span class="n">Decoder</span>
-</code></pre></div>
-<p>Create a reader for your MCAP file (<code>my_data.mcap</code>), and decode its data stream:</p>
-<div class="highlight"><pre><span></span><code><span class="n">reader</span> <span class="o">=</span> <span class="n">StreamReader</span><span class="p">(</span><span class="s2">&quot;my_data.mcap&quot;</span><span class="p">)</span>
-<span class="n">data</span> <span class="o">=</span> <span class="n">Decoder</span><span class="p">(</span><span class="n">reader</span><span class="p">)</span>
-</code></pre></div>
-<p>Finally, print out each message:</p>
-<div class="highlight"><pre><span></span><code>for topic, record, message in data.messages:
-    print(message)
-</code></pre></div>
-<h3 id="as-raw-data">As raw data</h3>
-<p>Import the <code>Decoder</code> from <a href="https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support"><code>mcap-ros1-support</code></a>:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">mcap_ros1.decoder</span> <span class="kn">import</span> <span class="n">Decoder</span>
-</code></pre></div>
-<p>Read the contents of your MCAP file (<code>my_data.mcap</code>):</p>
-<div class="highlight"><pre><span></span><code><span class="n">data</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;my_data.mcap&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
-</code></pre></div>
-<p>Finally, iterate through the messages and print out each one&rsquo;s datatype and contents:</p>
-<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">topic</span><span class="p">,</span> <span class="n">record</span><span class="p">,</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">Decoder</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="n">messages</span><span class="p">:</span>
-    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">topic</span><span class="si">}</span><span class="s2">: (</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">message</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">): </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">data</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<p>Read ROS1 messages from an MCAP file using the <code>mcap_ros1.reader</code> module:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">from</span> <span class="nn">mcap_ros1.reader</span> <span class="kn">import</span> <span class="n">read_ros1_messages</span>
+
+<span class="k">for</span> <span class="n">msg</span> <span class="ow">in</span> <span class="n">read_ros1_messages</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">msg</span><span class="o">.</span><span class="n">topic</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">msg</span><span class="o">.</span><span class="n">ros_msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="writing-ros-1-to-mcap">Writing ROS 1 to MCAP</h2>
 <p>Import the necessary packages from Python and a <code>Writer</code> from <a href="https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support"><code>mcap-ros1-support</code></a>:</p>
