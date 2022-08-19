@@ -7,6 +7,6 @@ mod tests {
     #[test]
     fn it_works() {
         let result = records::OpCode::Header;
-        assert_eq!(format!("{}", result), "Header");
+        assert_eq!(format!("{:?}", result), "Header");
     }
 }
