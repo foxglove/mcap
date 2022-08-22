@@ -202,6 +202,38 @@ private:
 struct LinearMessageView;
 
 /**
+ * @brief Options for reading messages out of an MCAP file.
+ */
+struct ReadMessageOptions {
+public:
+  // Only messages with log timestamps greater or equal to startTime will be included.
+  Timestamp startTime = 0;
+  // Only messages with log timestamps less than endTime will be included.
+  Timestamp endTime = MaxTime;
+  // If provided, `topicFilter` is called on all topics found in the MCAP file. If `topicFilter`
+  // returns true for a given channel, messages from that channel will be included.
+  std::function<bool(std::string_view)> topicFilter;
+  // If `useIndex` is true, the reader will attempt to read the summary and use it to speed up
+  // message retrieval. Otherwise, the summary will not be read and the reader will simply scan
+  // the entire MCAP file for messages.
+  bool useIndex = true;
+  // if readOrder == FileOrder, messages will be returned in the order they appear in the MCAP file.
+  // if readOrder == LogTimeOrder, messages will be returned in ascending log time order.
+  // if readOrder == ReverseLogTimeOrder, messages will be returned in descending log time order.
+  enum struct ReadOrder { FileOrder, LogTimeOrder, ReverseLogTimeOrder };
+  ReadOrder readOrder = ReadOrder::LogTimeOrder;
+
+  ReadMessageOptions(Timestamp _startTime, Timestamp _endTime)
+      : startTime(_startTime)
+      , endTime(_endTime) {}
+
+  ReadMessageOptions() = default;
+
+  // validate the configuration.
+  Status validate() const;
+};
+
+/**
  * @brief Provides a read interface to an MCAP file.
  */
 class McapReader final {
@@ -284,6 +316,14 @@ public:
    */
   LinearMessageView readMessages(const ProblemCallback& onProblem, Timestamp startTime = 0,
                                  Timestamp endTime = MaxTime);
+
+  /**
+   * @brief Returns an iterable view with `begin()` and `end()` methods for
+   * iterating Messages in the MCAP file.
+   * Uses the options from `options` to select the messsages that are yielded.
+   */
+  LinearMessageView readMessages(const ProblemCallback& onProblem,
+                                 const ReadMessageOptions& options);
 
   /**
    * @brief Returns starting and ending byte offsets that must be read to
@@ -532,13 +572,13 @@ struct LinearMessageView {
     friend LinearMessageView;
 
     Iterator() = default;
-    Iterator(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd, Timestamp startTime,
-             Timestamp endTime, const ProblemCallback& onProblem);
+    Iterator(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd,
+             const ReadMessageOptions& options, const ProblemCallback& onProblem);
 
     class Impl {
     public:
-      Impl(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd, Timestamp startTime,
-           Timestamp endTime, const ProblemCallback& onProblem);
+      Impl(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd,
+           const ReadMessageOptions& options, const ProblemCallback& onProblem);
 
       Impl(const Impl&) = delete;
       Impl& operator=(const Impl&) = delete;
@@ -551,8 +591,7 @@ struct LinearMessageView {
 
       McapReader& mcapReader_;
       std::optional<TypedRecordReader> recordReader_;
-      Timestamp startTime_;
-      Timestamp endTime_;
+      ReadMessageOptions readMessageOptions_;
       const ProblemCallback& onProblem_;
       Message curMessage_;
       std::optional<MessageView> curMessageView_;
@@ -577,8 +616,7 @@ private:
   McapReader& mcapReader_;
   ByteOffset dataStart_;
   ByteOffset dataEnd_;
-  Timestamp startTime_;
-  Timestamp endTime_;
+  ReadMessageOptions readMessageOptions_;
   const ProblemCallback onProblem_;
 };
 

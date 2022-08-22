@@ -1549,8 +1549,6 @@ LinearMessageView::LinearMessageView(McapReader& mcapReader, const ProblemCallba
     : mcapReader_(mcapReader)
     , dataStart_(0)
     , dataEnd_(0)
-    , startTime_(0)
-    , endTime_(0)
     , onProblem_(onProblem) {}
 
 LinearMessageView::LinearMessageView(McapReader& mcapReader, ByteOffset dataStart,
@@ -1559,16 +1557,15 @@ LinearMessageView::LinearMessageView(McapReader& mcapReader, ByteOffset dataStar
     : mcapReader_(mcapReader)
     , dataStart_(dataStart)
     , dataEnd_(dataEnd)
-    , startTime_(startTime)
-    , endTime_(endTime)
+    , readMessageOptions_(startTime, endTime)
     , onProblem_(onProblem) {}
 
 LinearMessageView::Iterator LinearMessageView::begin() {
   if (dataStart_ == dataEnd_ || !mcapReader_.dataSource()) {
     return end();
   }
-  return LinearMessageView::Iterator{mcapReader_, dataStart_, dataEnd_,
-                                     startTime_,  endTime_,   onProblem_};
+  return LinearMessageView::Iterator{mcapReader_, dataStart_, dataEnd_, readMessageOptions_,
+                                     onProblem_};
 }
 
 LinearMessageView::Iterator LinearMessageView::end() {
@@ -1578,22 +1575,27 @@ LinearMessageView::Iterator LinearMessageView::end() {
 // LinearMessageView::Iterator /////////////////////////////////////////////////
 
 LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataStart,
-                                      ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
+                                      ByteOffset dataEnd,
+                                      const ReadMessageOptions& readMessageOptions,
                                       const ProblemCallback& onProblem)
-    : impl_(std::make_unique<Impl>(mcapReader, dataStart, dataEnd, startTime, endTime, onProblem)) {
+    : impl_(std::make_unique<Impl>(mcapReader, dataStart, dataEnd, readMessageOptions, onProblem)) {
   if (!impl_->has_value()) {
     impl_ = nullptr;
   }
 }
 
 LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataStart,
-                                        ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
+                                        ByteOffset dataEnd,
+                                        const ReadMessageOptions& readMessageOptions,
                                         const ProblemCallback& onProblem)
     : mcapReader_(mcapReader)
     , recordReader_(std::in_place, *mcapReader.dataSource(), dataStart, dataEnd)
-    , startTime_(startTime)
-    , endTime_(endTime)
+    , readMessageOptions_(readMessageOptions)
     , onProblem_(onProblem) {
+  auto optionsStatus = readMessageOptions_.validate();
+  if (!optionsStatus.ok()) {
+    onProblem(optionsStatus);
+  }
   recordReader_->onSchema = [this](const SchemaPtr schema, ByteOffset, std::optional<ByteOffset>) {
     mcapReader_.schemas_.insert_or_assign(schema->id, schema);
   };
@@ -1638,7 +1640,8 @@ void LinearMessageView::Iterator::Impl::increment() {
   }
 
   // Keep iterate through records until we find a message with a logTime >= startTime_
-  while (!curMessageView_.has_value() || curMessageView_->message.logTime < startTime_) {
+  while (!curMessageView_.has_value() ||
+         curMessageView_->message.logTime < readMessageOptions_.startTime) {
     const bool found = recordReader_->next();
 
     // Surface any problem that may have occurred while reading
@@ -1654,7 +1657,7 @@ void LinearMessageView::Iterator::Impl::increment() {
   }
 
   // Check if this message is past the time range of this view
-  if (curMessageView_->message.logTime >= endTime_) {
+  if (curMessageView_->message.logTime >= readMessageOptions_.endTime) {
     recordReader_ = std::nullopt;
   }
   return;
@@ -1694,6 +1697,18 @@ bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::I
 
 bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
   return !(a == b);
+}
+
+Status ReadMessageOptions::validate() const {
+  if (startTime > endTime) {
+    return Status(StatusCode::InvalidMessageReadOptions, "start time must be before end time");
+  }
+
+  if (!useIndex && readOrder != ReadMessageOptions::ReadOrder::FileOrder) {
+    return Status(StatusCode::InvalidMessageReadOptions,
+                  "reading in timestamp order requires use of the index");
+  }
+  return Status();
 }
 
 }  // namespace mcap

@@ -25,6 +25,7 @@ enum class StatusCode {
   UnrecognizedCompression,
   OpenFailed,
   MissingStatistics,
+  InvalidMessageReadOptions,
 };
 
 /**
