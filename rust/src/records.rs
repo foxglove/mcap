@@ -20,9 +20,11 @@ pub enum OpCode {
     UserOpcode(u8),
 }
 
-impl OpCode {
-    pub fn from_u8(val: u8) -> Result<Self, ParseError> {
-        match val {
+impl TryFrom<u8> for OpCode {
+    type Error = ParseError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
             0x00 => Err(ParseError::InvalidOpcode(0x00)),
             0x01 => Ok(OpCode::Header),
             0x02 => Ok(OpCode::Footer),
@@ -41,6 +43,29 @@ impl OpCode {
             0x0F => Ok(OpCode::DataEnd),
             x if x < 0x80 => Err(ParseError::InvalidOpcode(x)),
             x => Ok(OpCode::UserOpcode(x)),
+        }
+    }
+}
+
+impl Into<u8> for OpCode {
+    fn into(self) -> u8 {
+        match self {
+            OpCode::Header => 0x01,
+            OpCode::Footer => 0x02,
+            OpCode::Schema => 0x03,
+            OpCode::Channel => 0x04,
+            OpCode::Message => 0x05,
+            OpCode::Chunk => 0x06,
+            OpCode::MessageIndex => 0x07,
+            OpCode::ChunkIndex => 0x08,
+            OpCode::Attachment => 0x09,
+            OpCode::AttachmentIndex => 0x0A,
+            OpCode::Statistics => 0x0B,
+            OpCode::Metadata => 0x0C,
+            OpCode::MetadataIndex => 0x0D,
+            OpCode::SummaryOffset => 0x0E,
+            OpCode::DataEnd => 0x0F,
+            OpCode::UserOpcode(x) => x,
         }
     }
 }

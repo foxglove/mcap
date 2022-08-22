@@ -1,8 +1,10 @@
 use std::error::Error;
 use std::io::SeekFrom;
+use std::io::{Read, Seek};
 
 #[derive(Debug)]
 pub enum ReadError {
+    IO(std::io::Error),
     UnexpectedEOF,
     SeekOutOfRange,
 }
@@ -15,12 +17,21 @@ impl std::fmt::Display for ReadError {
 
 impl Error for ReadError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
+        match self {
+            Self::IO(err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for ReadError {
+    fn from(err: std::io::Error) -> ReadError {
+        ReadError::IO(err)
     }
 }
 
 pub trait Reader<'a> {
-    fn read<'b>(&mut self, size: u64) -> Result<&'b [u8], ReadError>
+    fn read<'b>(&'a mut self, size: u64) -> Result<&'b [u8], ReadError>
     where
         'a: 'b;
     fn seek(&mut self, pos: SeekFrom) -> Result<(), ReadError>;
@@ -41,7 +52,7 @@ impl<'a> BufReader<'a> {
 }
 
 impl<'a> Reader<'a> for BufReader<'a> {
-    fn read<'b>(&mut self, size: u64) -> Result<&'b [u8], ReadError>
+    fn read<'b>(&'a mut self, size: u64) -> Result<&'b [u8], ReadError>
     where
         'a: 'b,
     {
@@ -82,5 +93,29 @@ impl<'a> Reader<'a> for BufReader<'a> {
                 }
             },
         }
+    }
+}
+
+pub struct FileReader {
+    file: std::fs::File,
+    buf: Vec<u8>,
+}
+
+impl<'a> Reader<'a> for FileReader {
+    fn read<'b>(&'a mut self, size: u64) -> Result<&'b [u8], ReadError>
+    where
+        'a: 'b,
+    {
+        self.buf.resize(size as usize, 0);
+        let n = self.file.read(&mut self.buf)?;
+        if n < size as usize {
+            return Err(ReadError::UnexpectedEOF);
+        }
+        Ok(&self.buf[0..n])
+    }
+
+    fn seek(&mut self, pos: SeekFrom) -> Result<(), ReadError> {
+        self.file.seek(pos)?;
+        Ok(())
     }
 }

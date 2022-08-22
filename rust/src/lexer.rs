@@ -66,14 +66,23 @@ where
         }
     }
 
-    fn read_next_record(&mut self) -> Result<(OpCode, &'a [u8]), LexError> {
-        let buf = self.reader.read(1 + 8)?;
-        let opcode = OpCode::from_u8(buf[0])?;
-        let (len, _) = parse_u64(&buf[1..])?;
+    fn read_next_record<'b>(&'a mut self) -> Result<(OpCode, &'b [u8]), LexError>
+    where
+        'a: 'b,
+    {
+        let (len, opcode) = {
+            let buf = self.reader.read(1 + 8)?;
+            let opcode = buf[0].try_into()?;
+            let (len, _) = parse_u64(&buf[1..])?;
+            (len, opcode)
+        };
         Ok((opcode, self.reader.read(len)?))
     }
 
-    pub fn next(&mut self) -> Option<Result<(OpCode, &'a [u8]), LexError>> {
+    pub fn next<'b>(&'a mut self) -> Option<Result<(OpCode, &'b [u8]), LexError>>
+    where
+        'a: 'b,
+    {
         match self.state {
             LexerState::Lost => {
                 return Some(Err(LexError::Lost));
