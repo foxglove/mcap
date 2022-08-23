@@ -1,6 +1,7 @@
 #pragma once
 
 #include "intervaltree.hpp"
+#include "message_index_queue.hpp"
 #include "types.hpp"
 #include <cstdio>
 #include <fstream>
@@ -8,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
@@ -550,6 +552,32 @@ private:
   bool parsingChunk_;
 };
 
+struct IndexedMessageReader {
+public:
+  IndexedMessageReader(McapReader& reader, const ReadMessageOptions& options,
+                       const ProblemCallback& onProblem);
+
+  /**
+   * @brief reads the next message out of the MCAP file into `view`.
+   *
+   * @param view the MessageView to update with the latest message content
+   * @return true if there are more messages remaining to read.
+   * @return false if there are no more messages remaining.
+   */
+  bool next(MessageView& view);
+
+private:
+  struct ChunkReaderSlot {
+    TypedChunkReader reader;
+    int unreadMessages;
+  };
+  ProblemCallback onProblem;
+  ReadMessageOptions options;
+  McapReader& reader_;
+  MessageIndexQueue queue_;
+  std::vector<ChunkReaderSlot> chunkReaderPool_;
+};
+
 /**
  * @brief An iterable view of Messages in an MCAP file.
  */
@@ -591,6 +619,7 @@ struct LinearMessageView {
 
       McapReader& mcapReader_;
       std::optional<TypedRecordReader> recordReader_;
+      std::optional<IndexedMessageReader> indexedMessageReader_;
       ReadMessageOptions readMessageOptions_;
       const ProblemCallback& onProblem_;
       Message curMessage_;
