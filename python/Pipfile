@@ -15,6 +15,8 @@ protobuf = "*"
 mcap = { editable = true, path = "mcap" }
 mcap-protobuf-support = { editable = true, path = "mcap-protobuf-support" }
 mcap-ros1-support = { editable = true, path = "mcap-ros1-support" }
+genpy = {version = "==0.6.14", index = "ros"}
+genmsg = {version = "*", index = "ros"}
 
 [dev-packages]
 black = "*"
@@ -27,8 +29,6 @@ pyright = "*"
 PyYaml = "*"
 sphinx = "*"
 std_msgs = {version = "*", index = "ros"}
-genpy = { version = "*", index = "ros"}
-genmsg = { version = "*", index = "ros"}
 typing_extensions = "*"
 
 [requires]
