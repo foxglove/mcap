@@ -45,7 +45,7 @@ lint: pipenv
 docs: pipenv
 	pipenv run sphinx-apidoc --separate --tocfile index --output-dir docs/mcap-apidoc mcap/mcap
 	pipenv run sphinx-apidoc --separate --tocfile index --output-dir docs/mcap-protobuf-apidoc mcap-protobuf-support/mcap_protobuf
-	pipenv run sphinx-apidoc --separate --tocfile index --output-dir docs/mcap-ros1-apidoc mcap-ros1-support/mcap_ros1
+	pipenv run sphinx-apidoc --separate --tocfile index --output-dir docs/mcap-ros1-apidoc mcap-ros1-support/mcap_ros1 mcap-ros1-support/mcap_ros1/vendor
 	pipenv run sphinx-build -W --keep-going docs ../__docs__/python
 	echo "Preview: file://$(abspath ../__docs__/python/index.html)"
 
