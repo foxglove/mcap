@@ -5,10 +5,31 @@ writer.
 
 ## Installation
 
-You can install directly via pip.
+You can install directly via pip. This also requires the rosbag package from the
+ROS package index.
 
 ```bash
+pip install --index-url https://rospypi.github.io/simple genpy
 pip install mcap-ros1-support
+```
+
+Or you can install via [Pipenv](https://pipenv.pypa.io/en/latest/) and a
+Pipfile. This requires specifying the source for the rosbag package like this:
+
+```
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[[source]]
+url = "https://rospypi.github.io/simple"
+verify_ssl = true
+name = "ros"
+
+[packages]
+mcap-ros1-support = "*"
+genpy = "*"
 ```
 
 ## Reading ROS1 Messages
