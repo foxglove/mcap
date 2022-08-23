@@ -1,6 +1,6 @@
 from typing import Dict, Any, Type
 
-from genpy import dynamic  # type: ignore
+from .vendor.genpy import dynamic  # type: ignore
 
 from mcap.mcap0.exceptions import McapError
 from mcap.mcap0.records import Message, Schema
