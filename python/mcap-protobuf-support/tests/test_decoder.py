@@ -17,8 +17,8 @@ def test_protobuf_decoder():
         proto_msg = decoder.decode(schema, message)
         count += 1
         if channel.topic == "/complex_message":
-            assert proto_msg.fieldA.startswith("Field A")
-            assert proto_msg.fieldB.startswith("Field B")
+            assert proto_msg.intermediate1.simple.data.startswith("Field A")
+            assert proto_msg.intermediate2.simple.data.startswith("Field B")
         elif channel.topic == "/simple_message":
             assert proto_msg.data.startswith("Hello MCAP protobuf world")
         else:

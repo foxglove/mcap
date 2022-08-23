@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import Dict, Any, Type
 
 from google.protobuf.descriptor_pb2 import FileDescriptorSet
@@ -37,6 +38,11 @@ class Decoder:
         generated = self._types.get(schema.id)
         if generated is None:
             fds = FileDescriptorSet.FromString(schema.data)
+            for name, count in Counter(fd.name for fd in fds.file).most_common(1):
+                if count > 1:
+                    raise McapError(
+                        f"FileDescriptorSet contains {count} file descriptors for {name}"
+                    )
             messages = GetMessages(fds.file)
             for name, klass in messages.items():
                 if name == schema.name:

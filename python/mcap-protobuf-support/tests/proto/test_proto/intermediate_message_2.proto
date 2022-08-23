@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+import "test_proto/simple_message.proto";
+
+package test_proto;
+
+message IntermediateMessage2 { SimpleMessage simple = 1; }
