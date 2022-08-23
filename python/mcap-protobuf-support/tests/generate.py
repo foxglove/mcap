@@ -1,9 +1,16 @@
+import os
+import sys
+
+sys.path.append(os.path.dirname(__file__))  # for test_proto imports
+
 from typing import IO, Any
 
 from mcap_protobuf.writer import Writer
 
-from .complex_message_pb2 import ComplexMessage
-from .simple_message_pb2 import SimpleMessage
+from test_proto.complex_message_pb2 import ComplexMessage
+from test_proto.intermediate_message_1_pb2 import IntermediateMessage1
+from test_proto.intermediate_message_2_pb2 import IntermediateMessage2
+from test_proto.simple_message_pb2 import SimpleMessage
 
 
 def generate_sample_data(output: IO[Any]):
@@ -17,7 +24,12 @@ def generate_sample_data(output: IO[Any]):
                 publish_time=i * 1000,
             )
             complex_message = ComplexMessage(
-                fieldA=f"Field A {i}", fieldB=f"Field B {i}"
+                intermediate1=IntermediateMessage1(
+                    simple=SimpleMessage(data=f"Field A {i}")
+                ),
+                intermediate2=IntermediateMessage2(
+                    simple=SimpleMessage(data=f"Field B {i}")
+                ),
             )
             writer.write_message(
                 topic="/complex_message",

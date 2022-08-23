@@ -1,6 +1,0 @@
-syntax = "proto3";
-
-message ComplexMessage {
-    string fieldA = 1;
-    string fieldB = 2;
-}

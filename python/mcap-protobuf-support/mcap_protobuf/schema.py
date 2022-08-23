@@ -1,5 +1,6 @@
-from typing import Any
-import google.protobuf.descriptor_pb2
+from typing import Any, Set
+from google.protobuf.descriptor import FileDescriptor
+from google.protobuf.descriptor_pb2 import FileDescriptorSet, FileDescriptorProto
 from mcap.mcap0.writer import Writer as McapWriter
 
 
@@ -13,16 +14,16 @@ def register_schema(writer: McapWriter, message_class: Any):
     )
 
 
-def build_file_descriptor_set(message_class: Any):
-    file_descriptor_set = google.protobuf.descriptor_pb2.FileDescriptorSet()
+def build_file_descriptor_set(message_class: Any) -> FileDescriptorSet:
+    file_descriptor_set = FileDescriptorSet()
+    seen_dependencies: Set[str] = set()
 
-    def append_file_descriptor(fileDescriptor: Any):
-        proto = google.protobuf.descriptor_pb2.FileDescriptorProto()
-        proto.ParseFromString(fileDescriptor.serialized_pb)
-        file_descriptor_set.file.append(proto)
-
-        for dep in fileDescriptor.dependencies:
-            append_file_descriptor(dep)
+    def append_file_descriptor(file_descriptor: FileDescriptor):
+        for dep in file_descriptor.dependencies:
+            if dep.name not in seen_dependencies:
+                seen_dependencies.add(dep.name)
+                append_file_descriptor(dep)
+        file_descriptor.CopyToProto(file_descriptor_set.file.add())
 
     append_file_descriptor(message_class.DESCRIPTOR.file)
     return file_descriptor_set
