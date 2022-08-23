@@ -3,3 +3,5 @@ max-line-length = 100
 exclude =
   examples/protobuf/*pb2.py,
   mcap-protobuf-support/tests/*pb2.py,
+  mcap-ros1-support/mcap_ros1/vendor/genpy/*.py,
+  mcap-ros1-support/mcap_ros1/vendor/genmsg/*.py,
