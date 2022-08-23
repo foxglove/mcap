@@ -32,8 +32,9 @@
           <div class="body" role="main">
             
   <h1>Source code for mcap_protobuf.schema</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
-<span class="kn">import</span> <span class="nn">google.protobuf.descriptor_pb2</span>
+<span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Set</span>
+<span class="kn">from</span> <span class="nn">google.protobuf.descriptor</span> <span class="kn">import</span> <span class="n">FileDescriptor</span>
+<span class="kn">from</span> <span class="nn">google.protobuf.descriptor_pb2</span> <span class="kn">import</span> <span class="n">FileDescriptorSet</span>
 <span class="kn">from</span> <span class="nn">mcap.mcap0.writer</span> <span class="kn">import</span> <span class="n">Writer</span> <span class="k">as</span> <span class="n">McapWriter</span>
 
 
@@ -47,16 +48,16 @@
     <span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="build_file_descriptor_set"><a class="viewcode-back" href="../../mcap-protobuf-apidoc/mcap_protobuf.schema.html#mcap_protobuf.schema.build_file_descriptor_set">[docs]</a><span class="k">def</span> <span class="nf">build_file_descriptor_set</span><span class="p">(</span><span class="n">message_class</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
-    <span class="n">file_descriptor_set</span> <span class="o">=</span> <span class="n">google</span><span class="o">.</span><span class="n">protobuf</span><span class="o">.</span><span class="n">descriptor_pb2</span><span class="o">.</span><span class="n">FileDescriptorSet</span><span class="p">()</span>
+<div class="viewcode-block" id="build_file_descriptor_set"><a class="viewcode-back" href="../../mcap-protobuf-apidoc/mcap_protobuf.schema.html#mcap_protobuf.schema.build_file_descriptor_set">[docs]</a><span class="k">def</span> <span class="nf">build_file_descriptor_set</span><span class="p">(</span><span class="n">message_class</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FileDescriptorSet</span><span class="p">:</span>
+    <span class="n">file_descriptor_set</span> <span class="o">=</span> <span class="n">FileDescriptorSet</span><span class="p">()</span>
+    <span class="n">seen_dependencies</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
 
-    <span class="k">def</span> <span class="nf">append_file_descriptor</span><span class="p">(</span><span class="n">fileDescriptor</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
-        <span class="n">proto</span> <span class="o">=</span> <span class="n">google</span><span class="o">.</span><span class="n">protobuf</span><span class="o">.</span><span class="n">descriptor_pb2</span><span class="o">.</span><span class="n">FileDescriptorProto</span><span class="p">()</span>
-        <span class="n">proto</span><span class="o">.</span><span class="n">ParseFromString</span><span class="p">(</span><span class="n">fileDescriptor</span><span class="o">.</span><span class="n">serialized_pb</span><span class="p">)</span>
-        <span class="n">file_descriptor_set</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">proto</span><span class="p">)</span>
-
-        <span class="k">for</span> <span class="n">dep</span> <span class="ow">in</span> <span class="n">fileDescriptor</span><span class="o">.</span><span class="n">dependencies</span><span class="p">:</span>
-            <span class="n">append_file_descriptor</span><span class="p">(</span><span class="n">dep</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">append_file_descriptor</span><span class="p">(</span><span class="n">file_descriptor</span><span class="p">:</span> <span class="n">FileDescriptor</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">dep</span> <span class="ow">in</span> <span class="n">file_descriptor</span><span class="o">.</span><span class="n">dependencies</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">dep</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen_dependencies</span><span class="p">:</span>
+                <span class="n">seen_dependencies</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">dep</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+                <span class="n">append_file_descriptor</span><span class="p">(</span><span class="n">dep</span><span class="p">)</span>
+        <span class="n">file_descriptor</span><span class="o">.</span><span class="n">CopyToProto</span><span class="p">(</span><span class="n">file_descriptor_set</span><span class="o">.</span><span class="n">file</span><span class="o">.</span><span class="n">add</span><span class="p">())</span>
 
     <span class="n">append_file_descriptor</span><span class="p">(</span><span class="n">message_class</span><span class="o">.</span><span class="n">DESCRIPTOR</span><span class="o">.</span><span class="n">file</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">file_descriptor_set</span></div>
