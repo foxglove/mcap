@@ -24,6 +24,7 @@ ignorePaths:
   - Pipfile*
   - mkdocs.yml
   - fathom.html
+  - vendor
 
 words:
   - callerid
