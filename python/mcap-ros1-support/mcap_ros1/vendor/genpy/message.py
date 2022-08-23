@@ -43,7 +43,8 @@ import math
 import struct
 import sys
 
-import genmsg
+from .. import genmsg
+from ..genmsg import msgs
 
 import yaml
 
@@ -497,10 +498,10 @@ def _fill_val(msg, f, v, keys, prefix):
         # determine base_type of field by looking at _slot_types
         idx = msg.__slots__.index(f)
         t = msg._slot_types[idx]
-        base_type, is_array, length = genmsg.msgs.parse_type(t)
+        base_type, is_array, length = msgs.parse_type(t)
         # - for primitives, we just directly set (we don't
         #   type-check. we rely on serialization type checker)
-        if base_type in genmsg.msgs.PRIMITIVE_TYPES:
+        if base_type in msgs.PRIMITIVE_TYPES:
             # 3785
             if length is not None and len(v) != length:
                 raise MessageException('Field [%s%s] has incorrect number of elements: %s != %s' % (prefix, f, len(v), length))

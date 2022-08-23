@@ -46,9 +46,9 @@ import shutil
 import sys
 import tempfile
 
-import genmsg
-import genmsg.msg_loader
-from genmsg import MsgContext, MsgGenerationException
+from .. import genmsg
+from ..genmsg import msg_loader
+from ..genmsg import MsgContext, MsgGenerationException
 
 from . generator import msg_generator
 
@@ -67,7 +67,7 @@ def _generate_dynamic_specs(msg_context, specs, dep_msg):
         raise MsgGenerationException("invalid input to generate_dynamic: dependent type is missing 'MSG:' type declaration header")
     dep_type = msg_line[5:].strip()
     dep_pkg, dep_base_type = genmsg.package_resource_name(dep_type)
-    dep_spec = genmsg.msg_loader.load_msg_from_string(msg_context, dep_msg[line1+1:], dep_type)
+    dep_spec = msg_loader.load_msg_from_string(msg_context, dep_msg[line1+1:], dep_type)
     return dep_type, dep_spec
 
 
@@ -135,7 +135,7 @@ def generate_dynamic(core_type, msg_cat):
     deps_msgs = splits[1:]
 
     # create MsgSpec representations of .msg text
-    specs = {core_type: genmsg.msg_loader.load_msg_from_string(msg_context, core_msg, core_type)}
+    specs = {core_type: msg_loader.load_msg_from_string(msg_context, core_msg, core_type)}
     # - dependencies
     for dep_msg in deps_msgs:
         # dependencies require more handling to determine type name
@@ -145,7 +145,7 @@ def generate_dynamic(core_type, msg_cat):
     # clear the message registration table and register loaded
     # types. The types have to be registered globally in order for
     # message generation of dependents to work correctly.
-    msg_context = genmsg.msg_loader.MsgContext.create_default()
+    msg_context = msg_loader.MsgContext.create_default()
     search_path = {}  # no ability to dynamically load
     for t, spec in specs.items():
         msg_context.register(t, spec)

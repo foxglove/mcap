@@ -38,20 +38,20 @@ import sys
 import os
 import em
 import errno
-import genmsg.command_line
-import genmsg.msgs
-import genmsg.msg_loader
-import genmsg.gentools
+from . import command_line
+from . import msgs
+from . import msg_loader
+from . import gentools
 
 # generate msg or srv files from a template file
 # template_map of the form { 'template_file':'output_file'} output_file can contain @NAME@ which will be replaced by the message/service name
 def _generate_from_spec(input_file, output_dir, template_dir, msg_context, spec, template_map, search_path):
 
-    md5sum = genmsg.gentools.compute_md5(msg_context, spec)
+    md5sum = gentools.compute_md5(msg_context, spec)
 
     # precompute msg definition once
-    if isinstance(spec, genmsg.msgs.MsgSpec):
-        msg_definition = genmsg.gentools.compute_full_text(msg_context, spec)
+    if isinstance(spec, msgs.MsgSpec):
+        msg_definition = gentools.compute_full_text(msg_context, spec)
 
     # Loop over all files to generate
     for template_file_name, output_file_name in template_map.items():
@@ -70,7 +70,7 @@ def _generate_from_spec(input_file, output_dir, template_dir, msg_context, spec,
             "search_path": search_path,
             "msg_context": msg_context
         }
-        if isinstance(spec, genmsg.msgs.MsgSpec):
+        if isinstance(spec, msgs.MsgSpec):
             g['msg_definition'] = msg_definition
 
         # todo, reuse interpreter
@@ -84,11 +84,11 @@ def _generate_from_spec(input_file, output_dir, template_dir, msg_context, spec,
 
 def _generate_msg_from_file(input_file, output_dir, template_dir, search_path, package_name, msg_template_dict):
     # Read MsgSpec from .msg file
-    msg_context = genmsg.msg_loader.MsgContext.create_default()
-    full_type_name = genmsg.gentools.compute_full_type_name(package_name, os.path.basename(input_file))
-    spec = genmsg.msg_loader.load_msg_from_file(msg_context, input_file, full_type_name)
+    msg_context = msg_loader.MsgContext.create_default()
+    full_type_name = gentools.compute_full_type_name(package_name, os.path.basename(input_file))
+    spec = msg_loader.load_msg_from_file(msg_context, input_file, full_type_name)
     # Load the dependencies
-    genmsg.msg_loader.load_depends(msg_context, spec, search_path)
+    msg_loader.load_depends(msg_context, spec, search_path)
     # Generate the language dependent msg file
     _generate_from_spec(input_file,
                             output_dir,
@@ -100,11 +100,11 @@ def _generate_msg_from_file(input_file, output_dir, template_dir, search_path, p
 
 def _generate_srv_from_file(input_file, output_dir, template_dir, search_path, package_name, srv_template_dict, msg_template_dict):
     # Read MsgSpec from .srv.file
-    msg_context = genmsg.msg_loader.MsgContext.create_default()
-    full_type_name = genmsg.gentools.compute_full_type_name(package_name, os.path.basename(input_file))
-    spec = genmsg.msg_loader.load_srv_from_file(msg_context, input_file, full_type_name)
+    msg_context = msg_loader.MsgContext.create_default()
+    full_type_name = gentools.compute_full_type_name(package_name, os.path.basename(input_file))
+    spec = msg_loader.load_srv_from_file(msg_context, input_file, full_type_name)
     # Load the dependencies
-    genmsg.msg_loader.load_depends(msg_context, spec, search_path)
+    msg_loader.load_depends(msg_context, spec, search_path)
     # Generate the language dependent srv file
     _generate_from_spec(input_file,
                         output_dir,
@@ -145,7 +145,7 @@ def generate_from_file(input_file, package_name, output_dir, template_dir, inclu
 
     # Parse include path dictionary
     if( include_path ):
-        search_path = genmsg.command_line.includepath_to_dict(include_path)
+        search_path = command_line.includepath_to_dict(include_path)
     else:
         search_path = {}
 
