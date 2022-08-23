@@ -34,7 +34,13 @@
   <h1>Source code for mcap_ros1.decoder</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Type</span>
 
-<span class="kn">from</span> <span class="nn">genpy</span> <span class="kn">import</span> <span class="n">dynamic</span>  <span class="c1"># type: ignore</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="c1"># If the user has genpy on their PATH from an existing ROS1 environment, use that.</span>
+    <span class="c1"># This ensures that `isinstance(msg, genpy.Message)` succeeds on objects returned</span>
+    <span class="c1"># by decode().</span>
+    <span class="kn">from</span> <span class="nn">genpy</span> <span class="kn">import</span> <span class="n">dynamic</span>  <span class="c1"># type: ignore</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">.vendor.genpy</span> <span class="kn">import</span> <span class="n">dynamic</span>  <span class="c1"># type: ignore</span>
 
 <span class="kn">from</span> <span class="nn">mcap.mcap0.exceptions</span> <span class="kn">import</span> <span class="n">McapError</span>
 <span class="kn">from</span> <span class="nn">mcap.mcap0.records</span> <span class="kn">import</span> <span class="n">Message</span><span class="p">,</span> <span class="n">Schema</span>
@@ -144,7 +150,7 @@
       
       
       
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.0.2</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.1.1</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
     </div>
