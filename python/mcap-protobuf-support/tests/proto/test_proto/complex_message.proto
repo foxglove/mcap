@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+import "test_proto/intermediate_message_1.proto";
+import "test_proto/intermediate_message_2.proto";
+
+package test_proto;
+
+message ComplexMessage {
+  IntermediateMessage1 intermediate1 = 1;
+  IntermediateMessage2 intermediate2 = 2;
+}
