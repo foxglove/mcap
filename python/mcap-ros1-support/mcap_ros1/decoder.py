@@ -1,6 +1,12 @@
 from typing import Dict, Any, Type
 
-from genpy import dynamic  # type: ignore
+try:
+    # If the user has genpy on their PATH from an existing ROS1 environment, use that.
+    # This ensures that `isinstance(msg, genpy.Message)` succeeds on objects returned
+    # by decode().
+    from genpy import dynamic  # type: ignore
+except ImportError:
+    from .vendor.genpy import dynamic  # type: ignore
 
 from mcap.mcap0.exceptions import McapError
 from mcap.mcap0.records import Message, Schema
