@@ -36,7 +36,7 @@ lint: pipenv
 	pipenv run python -m flake8
 	pipenv run black --check --diff --color mcap
 	pipenv run black --check --diff --color mcap-protobuf-support
-	pipenv run black --check --diff --color --extend-exclude="vendor" mcap-ros1-support
+	pipenv run black --check --diff --color mcap-ros1-support
 	cd mcap && pipenv run pyright
 	cd mcap-protobuf-support && pipenv run pyright mcap_protobuf
 	cd mcap-ros1-support && pipenv run pyright mcap_ros1
