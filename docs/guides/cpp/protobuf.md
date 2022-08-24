@@ -1,4 +1,4 @@
-# Writing Protobuf to MCAP
+# Reading and writing Protobuf messages
 
 !!! info
 
@@ -121,7 +121,7 @@ The "static" approach is best when there is existing code that uses these Protob
 
 The "dynamic" approach is preferred for introspecting and debugging message content. For example, when building a [visualization tool](https://studio.foxglove.dev), we want to provide a full view of all fields in a message as it was originally recorded. We can use Protobuf's [DynamicMessage](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.dynamic_message) mechanism to enumerate and inspect the fields of a message in this way.
 
-### Using generated class definitions
+### Use generated class definitions
 
 First, we generate our class definitions and include the relevant header:
 
@@ -176,7 +176,7 @@ Finally, we close the reader.
 reader.close();
 ```
 
-### Using `DynamicMessageFactory`
+### Use `DynamicMessageFactory`
 
 To read messages dynamically, we start by including the relevant headers:
 
@@ -206,7 +206,7 @@ mcap::McapReader reader;
 auto messageView = reader.readMessages();
 ```
 
-#### Loading schema definitions from the MCAP
+#### Load schema definitions from the MCAP
 
 We build a `DynamicMessageFactory`, using a `google::Protobuf::SimpleDescriptorDatabase` as the underlying descriptor database. By constructing this ourselves and retaining a reference to the database, we can more easily load that database with definitions from the MCAP file.
 
@@ -251,7 +251,7 @@ bool LoadSchema(const mcap::SchemaPtr schema, gp::SimpleDescriptorDatabase* prot
 }
 ```
 
-#### Printing messages
+#### Print messages
 
 Once the `FileDescriptorSet` is loaded, we can get the descriptor by name:
 
@@ -281,4 +281,4 @@ reader.close();
 ## Important links
 
 - [Example code](https://github.com/foxglove/mcap/tree/main/cpp/examples/protobuf)
-- [Foxglove Schemas](https://github.com/foxglove/schemas)
+- [Foxglove schemas](https://github.com/foxglove/schemas)
