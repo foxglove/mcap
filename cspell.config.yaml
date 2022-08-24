@@ -39,7 +39,9 @@ words:
   - flatbuffer
   - flatc
   - fwrite
+  - gendeps
   - genpy
+  - gentools
   - golangci
   - jsonschema
   - kaitai
