@@ -486,7 +486,7 @@
   
     <li class="md-nav__item">
       <a href="../python/ros2.html" class="md-nav__link">
-        Reading and writing ROS 2 messages
+        Reading ROS 2 messages
       </a>
     </li>
   
@@ -500,7 +500,7 @@
   
     <li class="md-nav__item">
       <a href="../python/json.html" class="md-nav__link">
-        Writing JSON to MCAP
+        Writing JSON messages
       </a>
     </li>
   
@@ -596,11 +596,11 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#creating-a-writer" class="md-nav__link">
-    Creating a writer
+  <a href="#writing-protobuf" class="md-nav__link">
+    Writing Protobuf
   </a>
   
-    <nav class="md-nav" aria-label="Creating a writer">
+    <nav class="md-nav" aria-label="Writing Protobuf">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -637,11 +637,11 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#creating-a-reader" class="md-nav__link">
-    Creating a reader
+  <a href="#reading-protobuf" class="md-nav__link">
+    Reading Protobuf
   </a>
   
-    <nav class="md-nav" aria-label="Creating a reader">
+    <nav class="md-nav" aria-label="Reading Protobuf">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1069,11 +1069,11 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#creating-a-writer" class="md-nav__link">
-    Creating a writer
+  <a href="#writing-protobuf" class="md-nav__link">
+    Writing Protobuf
   </a>
   
-    <nav class="md-nav" aria-label="Creating a writer">
+    <nav class="md-nav" aria-label="Writing Protobuf">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1110,11 +1110,11 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#creating-a-reader" class="md-nav__link">
-    Creating a reader
+  <a href="#reading-protobuf" class="md-nav__link">
+    Reading Protobuf
   </a>
   
-    <nav class="md-nav" aria-label="Creating a reader">
+    <nav class="md-nav" aria-label="Reading Protobuf">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1186,7 +1186,7 @@
 <p class="admonition-title">Info</p>
 <p>Adapted from the original: <a href="https://foxglove.dev/blog/recording-robocar-data-with-mcap">Recording Robocar Data with MCAP</a></p>
 </div>
-<h2 id="creating-a-writer">Creating a writer</h2>
+<h2 id="writing-protobuf">Writing Protobuf</h2>
 <div class="highlight"><pre><span></span><code><span class="n">mcap</span><span class="o">::</span><span class="n">McapWriter</span><span class="w"> </span><span class="n">writer</span><span class="p">;</span><span class="w"></span>
 <span class="n">mcap</span><span class="o">::</span><span class="n">McapWriterOptions</span><span class="w"> </span><span class="nf">opts</span><span class="p">(</span><span class="s">&quot;protobuf&quot;</span><span class="p">);</span><span class="w"></span>
 <span class="k">auto</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">writer</span><span class="p">.</span><span class="n">open</span><span class="p">(</span><span class="s">&quot;output.mcap&quot;</span><span class="p">);</span><span class="w"></span>
@@ -1273,7 +1273,7 @@
 <h3 id="inspect-mcap-file">Inspect MCAP file</h3>
 <p>Now, we can inspect our output MCAP file&rsquo;s messages. Use the <em>Data source</em> dialog in <a href="https://studio.foxglove.dev">Foxglove Studio</a> to “Open local file”.</p>
 <p>Add a few relevant panels (<a href="https://foxglove.dev/docs/studio/panels/plot">Plot</a>, <a href="https://foxglove.dev/docs/studio/panels/image">Image</a>, <a href="https://foxglove.dev/docs/studio/panels/raw-messages">Raw Messages</a>, <a href="https://foxglove.dev/docs/studio/panels/3d">3D</a>) to visualize the robot&rsquo;s performance.</p>
-<h2 id="creating-a-reader">Creating a reader</h2>
+<h2 id="reading-protobuf">Reading Protobuf</h2>
 <p>To read Protobuf messages from an MCAP file using C++, we have two options. We can use <strong>statically</strong> generated class definitions to deserialize the data, or <strong>dynamically</strong> read fields using the schema definitions from within the MCAP file. Both of these options have valid use-cases.</p>
 <p>The &ldquo;static&rdquo; approach is best when there is existing code that uses these Protobuf classes to integrate with. Take for example a simulation that drives a planning module with recorded messages. Since that module already uses generated class definitions, it makes sense to use those to deserialize the MCAP data. By doing this, we take advantage of Protobuf&rsquo;s existing <a href="https://developers.google.com/protocol-buffers/docs/cpptutorial?hl=en#extending-a-protocol-buffer">compatibility mechanisms</a>.</p>
 <p>The &ldquo;dynamic&rdquo; approach is preferred for introspecting and debugging message content. For example, when building a <a href="https://studio.foxglove.dev">visualization tool</a>, we want to provide a full view of all fields in a message as it was originally recorded. We can use Protobuf&rsquo;s <a href="https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.dynamic_message">DynamicMessage</a> mechanism to enumerate and inspect the fields of a message in this way.</p>

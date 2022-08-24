@@ -13,7 +13,7 @@
     
     
       
-        <title>Reading and writing ROS 2 messages - MCAP</title>
+        <title>Reading ROS 2 messages - MCAP</title>
       
     
     
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#reading-and-writing-ros-2-messages" class="md-skip">
+        <a href="#reading-ros-2-messages" class="md-skip">
           Skip to content
         </a>
       
@@ -106,7 +106,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Reading and writing ROS 2 messages
+              Reading ROS 2 messages
             
           </span>
         </div>
@@ -497,12 +497,12 @@
       
       
         <label class="md-nav__link md-nav__link--active" for="__toc">
-          Reading and writing ROS 2 messages
+          Reading ROS 2 messages
           <span class="md-nav__icon md-icon"></span>
         </label>
       
       <a href="ros2.html" class="md-nav__link md-nav__link--active">
-        Reading and writing ROS 2 messages
+        Reading ROS 2 messages
       </a>
       
         
@@ -521,22 +521,16 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#reading-ros-2-from-mcap" class="md-nav__link">
-    Reading ROS 2 from MCAP
-  </a>
-  
-    <nav class="md-nav" aria-label="Reading ROS 2 from MCAP">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#important-links" class="md-nav__link">
-    Important links
+  <a href="#reading-ros-2" class="md-nav__link">
+    Reading ROS 2
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#important-links" class="md-nav__link">
+    Important links
+  </a>
   
 </li>
       
@@ -556,7 +550,7 @@
   
     <li class="md-nav__item">
       <a href="json.html" class="md-nav__link">
-        Writing JSON to MCAP
+        Writing JSON messages
       </a>
     </li>
   
@@ -994,22 +988,16 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#reading-ros-2-from-mcap" class="md-nav__link">
-    Reading ROS 2 from MCAP
-  </a>
-  
-    <nav class="md-nav" aria-label="Reading ROS 2 from MCAP">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#important-links" class="md-nav__link">
-    Important links
+  <a href="#reading-ros-2" class="md-nav__link">
+    Reading ROS 2
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#important-links" class="md-nav__link">
+    Important links
+  </a>
   
 </li>
       
@@ -1031,9 +1019,9 @@
 
 
 
-<h1 id="reading-and-writing-ros-2-messages">Reading and writing ROS 2 messages</h1>
+<h1 id="reading-ros-2-messages">Reading ROS 2 messages</h1>
 <p>To start writing Python code that reads ROS 2 data from MCAP, install the <a href="https://index.ros.org/p/rosbag2_py/"><code>rosbag2_py</code> package</a>.</p>
-<h2 id="reading-ros-2-from-mcap">Reading ROS 2 from MCAP</h2>
+<h2 id="reading-ros-2">Reading ROS 2</h2>
 <p>We’ll start with our imports:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">argparse</span>
 <span class="kn">from</span> <span class="nn">rclpy.serialization</span> <span class="kn">import</span> <span class="n">deserialize_message</span>
@@ -1079,7 +1067,7 @@
 <span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
     <span class="n">main</span><span class="p">()</span>
 </code></pre></div>
-<h3 id="important-links">Important links</h3>
+<h2 id="important-links">Important links</h2>
 <ul>
 <li><a href="https://github.com/foxglove/mcap/tree/main/python/mcap">MCAP Python library</a></li>
 <li><a href="https://github.com/foxglove/mcap/tree/main/python/examples/ros2">Example code</a></li>
@@ -1115,13 +1103,13 @@
       
       
         
-        <a href="json.html" class="md-footer__link md-footer__link--next" aria-label="Next: Writing JSON to MCAP" rel="next">
+        <a href="json.html" class="md-footer__link md-footer__link--next" aria-label="Next: Writing JSON messages" rel="next">
           <div class="md-footer__title">
             <div class="md-ellipsis">
               <span class="md-footer__direction">
                 Next
               </span>
-              Writing JSON to MCAP
+              Writing JSON messages
             </div>
           </div>
           <div class="md-footer__button md-icon">

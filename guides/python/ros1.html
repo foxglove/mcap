@@ -507,29 +507,23 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#reading-ros-1-from-mcap" class="md-nav__link">
-    Reading ROS 1 from MCAP
+  <a href="#reading-ros-1" class="md-nav__link">
+    Reading ROS 1
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#writing-ros-1-to-mcap" class="md-nav__link">
-    Writing ROS 1 to MCAP
-  </a>
-  
-    <nav class="md-nav" aria-label="Writing ROS 1 to MCAP">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#important-links" class="md-nav__link">
-    Important links
+  <a href="#writing-ros-1" class="md-nav__link">
+    Writing ROS 1
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#important-links" class="md-nav__link">
+    Important links
+  </a>
   
 </li>
       
@@ -549,7 +543,7 @@
   
     <li class="md-nav__item">
       <a href="ros2.html" class="md-nav__link">
-        Reading and writing ROS 2 messages
+        Reading ROS 2 messages
       </a>
     </li>
   
@@ -563,7 +557,7 @@
   
     <li class="md-nav__item">
       <a href="json.html" class="md-nav__link">
-        Writing JSON to MCAP
+        Writing JSON messages
       </a>
     </li>
   
@@ -1001,29 +995,23 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#reading-ros-1-from-mcap" class="md-nav__link">
-    Reading ROS 1 from MCAP
+  <a href="#reading-ros-1" class="md-nav__link">
+    Reading ROS 1
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#writing-ros-1-to-mcap" class="md-nav__link">
-    Writing ROS 1 to MCAP
-  </a>
-  
-    <nav class="md-nav" aria-label="Writing ROS 1 to MCAP">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#important-links" class="md-nav__link">
-    Important links
+  <a href="#writing-ros-1" class="md-nav__link">
+    Writing ROS 1
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#important-links" class="md-nav__link">
+    Important links
+  </a>
   
 </li>
       
@@ -1047,7 +1035,7 @@
 
 <h1 id="reading-and-writing-ros-1-messages">Reading and writing ROS 1 messages</h1>
 <p>To start writing Python code that reads and writes ROS 1 data in MCAP, install the <a href="https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support"><code>mcap-ros1-support</code> helper library</a>.</p>
-<h2 id="reading-ros-1-from-mcap">Reading ROS 1 from MCAP</h2>
+<h2 id="reading-ros-1">Reading ROS 1</h2>
 <p>Read ROS1 messages from an MCAP file using the <code>mcap_ros1.reader</code> module:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">sys</span>
 
@@ -1056,7 +1044,7 @@
 <span class="k">for</span> <span class="n">msg</span> <span class="ow">in</span> <span class="n">read_ros1_messages</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
     <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">msg</span><span class="o">.</span><span class="n">topic</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">msg</span><span class="o">.</span><span class="n">ros_msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
-<h2 id="writing-ros-1-to-mcap">Writing ROS 1 to MCAP</h2>
+<h2 id="writing-ros-1">Writing ROS 1</h2>
 <p>Import the necessary packages from Python and a <code>Writer</code> from <a href="https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support"><code>mcap-ros1-support</code></a>:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">from</span> <span class="nn">std_msgs.msg</span> <span class="kn">import</span> <span class="n">String</span>
@@ -1071,7 +1059,7 @@
         <span class="n">ros_writer</span><span class="o">.</span><span class="n">write_message</span><span class="p">(</span><span class="s2">&quot;/chatter&quot;</span><span class="p">,</span> <span class="n">String</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;string message </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">))</span>
     <span class="n">ros_writer</span><span class="o">.</span><span class="n">finish</span><span class="p">()</span>
 </code></pre></div>
-<h3 id="important-links">Important links</h3>
+<h2 id="important-links">Important links</h2>
 <ul>
 <li><a href="https://github.com/foxglove/mcap/tree/main/python/mcap">MCAP Python library</a></li>
 <li><a href="https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support"><code>mcap-ros1-support</code> helper library</a></li>
@@ -1108,13 +1096,13 @@
       
       
         
-        <a href="ros2.html" class="md-footer__link md-footer__link--next" aria-label="Next: Reading and writing ROS 2 messages" rel="next">
+        <a href="ros2.html" class="md-footer__link md-footer__link--next" aria-label="Next: Reading ROS 2 messages" rel="next">
           <div class="md-footer__title">
             <div class="md-ellipsis">
               <span class="md-footer__direction">
                 Next
               </span>
-              Reading and writing ROS 2 messages
+              Reading ROS 2 messages
             </div>
           </div>
           <div class="md-footer__button md-icon">
