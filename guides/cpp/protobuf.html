@@ -13,7 +13,7 @@
     
     
       
-        <title>Writing Protobuf to MCAP - MCAP</title>
+        <title>Reading and writing Protobuf messages - MCAP</title>
       
     
     
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#writing-protobuf-to-mcap" class="md-skip">
+        <a href="#reading-and-writing-protobuf-messages" class="md-skip">
           Skip to content
         </a>
       
@@ -106,7 +106,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Writing Protobuf to MCAP
+              Reading and writing Protobuf messages
             
           </span>
         </div>
@@ -572,12 +572,12 @@
       
       
         <label class="md-nav__link md-nav__link--active" for="__toc">
-          Writing Protobuf to MCAP
+          Reading and writing Protobuf messages
           <span class="md-nav__icon md-icon"></span>
         </label>
       
       <a href="protobuf.html" class="md-nav__link md-nav__link--active">
-        Writing Protobuf to MCAP
+        Reading and writing Protobuf messages
       </a>
       
         
@@ -600,69 +600,75 @@
     Creating a writer
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
+    <nav class="md-nav" aria-label="Creating a writer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#register-schema" class="md-nav__link">
     Register schema
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#register-channel" class="md-nav__link">
     Register channel
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#write-messages" class="md-nav__link">
     Write messages
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#inspect-mcap-file" class="md-nav__link">
     Inspect MCAP file
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#reading" class="md-nav__link">
-    Reading
+  <a href="#creating-a-reader" class="md-nav__link">
+    Creating a reader
   </a>
   
-    <nav class="md-nav" aria-label="Reading">
+    <nav class="md-nav" aria-label="Creating a reader">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#using-generated-class-definitions" class="md-nav__link">
-    Using generated class definitions
+  <a href="#use-generated-class-definitions" class="md-nav__link">
+    Use generated class definitions
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#using-dynamicmessagefactory" class="md-nav__link">
-    Using DynamicMessageFactory
+  <a href="#use-dynamicmessagefactory" class="md-nav__link">
+    Use DynamicMessageFactory
   </a>
   
-    <nav class="md-nav" aria-label="Using DynamicMessageFactory">
+    <nav class="md-nav" aria-label="Use DynamicMessageFactory">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#loading-schema-definitions-from-the-mcap" class="md-nav__link">
-    Loading schema definitions from the MCAP
+  <a href="#load-schema-definitions-from-the-mcap" class="md-nav__link">
+    Load schema definitions from the MCAP
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#printing-messages" class="md-nav__link">
-    Printing messages
+  <a href="#print-messages" class="md-nav__link">
+    Print messages
   </a>
   
 </li>
@@ -1067,69 +1073,75 @@
     Creating a writer
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
+    <nav class="md-nav" aria-label="Creating a writer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
   <a href="#register-schema" class="md-nav__link">
     Register schema
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#register-channel" class="md-nav__link">
     Register channel
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#write-messages" class="md-nav__link">
     Write messages
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
+        
+          <li class="md-nav__item">
   <a href="#inspect-mcap-file" class="md-nav__link">
     Inspect MCAP file
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#reading" class="md-nav__link">
-    Reading
+  <a href="#creating-a-reader" class="md-nav__link">
+    Creating a reader
   </a>
   
-    <nav class="md-nav" aria-label="Reading">
+    <nav class="md-nav" aria-label="Creating a reader">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#using-generated-class-definitions" class="md-nav__link">
-    Using generated class definitions
+  <a href="#use-generated-class-definitions" class="md-nav__link">
+    Use generated class definitions
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#using-dynamicmessagefactory" class="md-nav__link">
-    Using DynamicMessageFactory
+  <a href="#use-dynamicmessagefactory" class="md-nav__link">
+    Use DynamicMessageFactory
   </a>
   
-    <nav class="md-nav" aria-label="Using DynamicMessageFactory">
+    <nav class="md-nav" aria-label="Use DynamicMessageFactory">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#loading-schema-definitions-from-the-mcap" class="md-nav__link">
-    Loading schema definitions from the MCAP
+  <a href="#load-schema-definitions-from-the-mcap" class="md-nav__link">
+    Load schema definitions from the MCAP
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#printing-messages" class="md-nav__link">
-    Printing messages
+  <a href="#print-messages" class="md-nav__link">
+    Print messages
   </a>
   
 </li>
@@ -1169,12 +1181,12 @@
 
 
 
-<h1 id="writing-protobuf-to-mcap">Writing Protobuf to MCAP</h1>
+<h1 id="reading-and-writing-protobuf-messages">Reading and writing Protobuf messages</h1>
 <div class="admonition info">
 <p class="admonition-title">Info</p>
 <p>Adapted from the original: <a href="https://foxglove.dev/blog/recording-robocar-data-with-mcap">Recording Robocar Data with MCAP</a></p>
 </div>
-<h3 id="creating-a-writer">Creating a writer</h3>
+<h2 id="creating-a-writer">Creating a writer</h2>
 <div class="highlight"><pre><span></span><code><span class="n">mcap</span><span class="o">::</span><span class="n">McapWriter</span><span class="w"> </span><span class="n">writer</span><span class="p">;</span><span class="w"></span>
 <span class="n">mcap</span><span class="o">::</span><span class="n">McapWriterOptions</span><span class="w"> </span><span class="nf">opts</span><span class="p">(</span><span class="s">&quot;protobuf&quot;</span><span class="p">);</span><span class="w"></span>
 <span class="k">auto</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">writer</span><span class="p">.</span><span class="n">open</span><span class="p">(</span><span class="s">&quot;output.mcap&quot;</span><span class="p">);</span><span class="w"></span>
@@ -1261,11 +1273,11 @@
 <h3 id="inspect-mcap-file">Inspect MCAP file</h3>
 <p>Now, we can inspect our output MCAP file&rsquo;s messages. Use the <em>Data source</em> dialog in <a href="https://studio.foxglove.dev">Foxglove Studio</a> to “Open local file”.</p>
 <p>Add a few relevant panels (<a href="https://foxglove.dev/docs/studio/panels/plot">Plot</a>, <a href="https://foxglove.dev/docs/studio/panels/image">Image</a>, <a href="https://foxglove.dev/docs/studio/panels/raw-messages">Raw Messages</a>, <a href="https://foxglove.dev/docs/studio/panels/3d">3D</a>) to visualize the robot&rsquo;s performance.</p>
-<h2 id="reading">Reading</h2>
+<h2 id="creating-a-reader">Creating a reader</h2>
 <p>To read Protobuf messages from an MCAP file using C++, we have two options. We can use <strong>statically</strong> generated class definitions to deserialize the data, or <strong>dynamically</strong> read fields using the schema definitions from within the MCAP file. Both of these options have valid use-cases.</p>
 <p>The &ldquo;static&rdquo; approach is best when there is existing code that uses these Protobuf classes to integrate with. Take for example a simulation that drives a planning module with recorded messages. Since that module already uses generated class definitions, it makes sense to use those to deserialize the MCAP data. By doing this, we take advantage of Protobuf&rsquo;s existing <a href="https://developers.google.com/protocol-buffers/docs/cpptutorial?hl=en#extending-a-protocol-buffer">compatibility mechanisms</a>.</p>
 <p>The &ldquo;dynamic&rdquo; approach is preferred for introspecting and debugging message content. For example, when building a <a href="https://studio.foxglove.dev">visualization tool</a>, we want to provide a full view of all fields in a message as it was originally recorded. We can use Protobuf&rsquo;s <a href="https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.dynamic_message">DynamicMessage</a> mechanism to enumerate and inspect the fields of a message in this way.</p>
-<h3 id="using-generated-class-definitions">Using generated class definitions</h3>
+<h3 id="use-generated-class-definitions">Use generated class definitions</h3>
 <p>First, we generate our class definitions and include the relevant header:</p>
 <div class="highlight"><pre><span></span><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;foxglove/PosesInFrame.pb.h&quot;</span><span class="cp"></span>
 </code></pre></div>
@@ -1304,7 +1316,7 @@
 <p>Finally, we close the reader.</p>
 <div class="highlight"><pre><span></span><code><span class="n">reader</span><span class="p">.</span><span class="n">close</span><span class="p">();</span><span class="w"></span>
 </code></pre></div>
-<h3 id="using-dynamicmessagefactory">Using <code>DynamicMessageFactory</code></h3>
+<h3 id="use-dynamicmessagefactory">Use <code>DynamicMessageFactory</code></h3>
 <p>To read messages dynamically, we start by including the relevant headers:</p>
 <div class="highlight"><pre><span></span><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;google/protobuf/descriptor.pb.h&gt;</span><span class="cp"></span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;google/protobuf/descriptor_database.h&gt;</span><span class="cp"></span>
@@ -1327,7 +1339,7 @@
 <span class="p">}</span><span class="w"></span>
 <span class="k">auto</span><span class="w"> </span><span class="n">messageView</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">reader</span><span class="p">.</span><span class="n">readMessages</span><span class="p">();</span><span class="w"></span>
 </code></pre></div>
-<h4 id="loading-schema-definitions-from-the-mcap">Loading schema definitions from the MCAP</h4>
+<h4 id="load-schema-definitions-from-the-mcap">Load schema definitions from the MCAP</h4>
 <p>We build a <code>DynamicMessageFactory</code>, using a <code>google::Protobuf::SimpleDescriptorDatabase</code> as the underlying descriptor database. By constructing this ourselves and retaining a reference to the database, we can more easily load that database with definitions from the MCAP file.</p>
 <div class="highlight"><pre><span></span><code><span class="n">gp</span><span class="o">::</span><span class="n">SimpleDescriptorDatabase</span><span class="w"> </span><span class="n">protoDb</span><span class="p">;</span><span class="w"></span>
 <span class="n">gp</span><span class="o">::</span><span class="n">DescriptorPool</span><span class="w"> </span><span class="nf">protoPool</span><span class="p">(</span><span class="o">&amp;</span><span class="n">protoDb</span><span class="p">);</span><span class="w"></span>
@@ -1362,7 +1374,7 @@
 <span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="nb">true</span><span class="p">;</span><span class="w"></span>
 <span class="p">}</span><span class="w"></span>
 </code></pre></div>
-<h4 id="printing-messages">Printing messages</h4>
+<h4 id="print-messages">Print messages</h4>
 <p>Once the <code>FileDescriptorSet</code> is loaded, we can get the descriptor by name:</p>
 <div class="highlight"><pre><span></span><code><span class="n">descriptor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">protoPool</span><span class="p">.</span><span class="n">FindMessageTypeByName</span><span class="p">(</span><span class="n">it</span><span class="o">-&gt;</span><span class="n">schema</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">);</span><span class="w"></span>
 </code></pre></div>
@@ -1382,7 +1394,7 @@
 <h2 id="important-links">Important links</h2>
 <ul>
 <li><a href="https://github.com/foxglove/mcap/tree/main/cpp/examples/protobuf">Example code</a></li>
-<li><a href="https://github.com/foxglove/schemas">Foxglove Schemas</a></li>
+<li><a href="https://github.com/foxglove/schemas">Foxglove schemas</a></li>
 </ul>
 
               
