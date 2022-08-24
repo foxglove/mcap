@@ -1,5 +1,4 @@
-use crate::io::{ReadError, Reader};
-use crate::records::{parse_u64, OpCode, ParseError};
+use crate::parse::{parse_u64, OpCode, ParseError};
 
 use std::error::Error;
 
@@ -9,126 +8,156 @@ enum LexerState {
     Start,
     Lexing,
     Lost,
-    FooterSeen,
     End,
 }
-pub struct Lexer<'a, R>
-where
-    R: Reader<'a>,
-{
-    reader: &'a mut R,
+pub struct Lexer<R> {
+    reader: R,
     state: LexerState,
+    last_opcode: Option<OpCode>,
+    records_only: bool,
 }
 
 #[derive(Debug)]
 pub enum LexError {
-    IO(ReadError),
+    IO(std::io::Error),
     ParseError(ParseError),
-    InvalidStartMagic([u8; 8]),
-    InvalidEndMagic([u8; 8]),
+    TruncatedAfterRecord(Option<OpCode>),
+    TruncatedMidRecord((OpCode, Vec<u8>)),
+    InvalidStartMagic(Vec<u8>),
+    RecordTooLargeForArchitecture(u64),
+    Exhausted,
     Lost,
 }
 impl std::fmt::Display for LexError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            Self::ParseError(err) => write!(f, "error parsing record or opcode: {}", err),
+            Self::InvalidStartMagic(magic) => {
+                write!(f, "expected magic bytes at start, got {:?}", magic)
+            }
+            Self::TruncatedAfterRecord(opcode) => {
+                write!(f, "unexpected end after last record {:?}", opcode)
+            }
+            Self::TruncatedMidRecord((opcode, bytes)) => write!(
+                f,
+                "expected more data for record {:?}, found {:?}",
+                opcode, bytes
+            ),
+            Self::RecordTooLargeForArchitecture(size) => write!(
+                f,
+                "encountered record too large for arch: {} < {}",
+                usize::MAX,
+                size
+            ),
+            Self::IO(err) => write!(f, "error reading next record: {}", err),
+            Self::Lost => write!(f, "cannot continue lexing after last error"),
+            Self::Exhausted => write!(f, "no more records to read"),
+        }
     }
 }
 
 impl Error for LexError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            LexError::IO(err) => Some(err),
             LexError::ParseError(err) => Some(err),
             _ => None,
         }
     }
 }
 
-impl From<ReadError> for LexError {
-    fn from(err: ReadError) -> Self {
-        Self::IO(err)
-    }
-}
 impl From<ParseError> for LexError {
     fn from(err: ParseError) -> Self {
         Self::ParseError(err)
     }
 }
 
-impl<'a, R> Lexer<'a, R>
-where
-    R: Reader<'a>,
-{
-    pub fn new(reader: &'a mut R) -> Self {
+impl From<std::io::Error> for LexError {
+    fn from(err: std::io::Error) -> Self {
+        Self::IO(err)
+    }
+}
+
+pub struct RawRecord {
+    pub opcode: Option<OpCode>,
+    pub buf: Vec<u8>,
+}
+
+impl RawRecord {
+    pub fn new() -> Self {
+        Self {
+            opcode: None,
+            buf: vec![],
+        }
+    }
+}
+
+impl<R: std::io::Read> Lexer<R> {
+    pub fn new(reader: R, records_only: bool) -> Self {
         Self {
             reader: reader,
+            last_opcode: None,
             state: LexerState::Start,
+            records_only: records_only,
         }
     }
 
-    fn read_next_record<'b>(&'a mut self) -> Result<(OpCode, &'b [u8]), LexError>
-    where
-        'a: 'b,
-    {
-        let (len, opcode) = {
-            let buf = self.reader.read(1 + 8)?;
-            let opcode = buf[0].try_into()?;
-            let (len, _) = parse_u64(&buf[1..])?;
-            (len, opcode)
-        };
-        Ok((opcode, self.reader.read(len)?))
-    }
-
-    pub fn next<'b>(&'a mut self) -> Option<Result<(OpCode, &'b [u8]), LexError>>
-    where
-        'a: 'b,
-    {
+    pub fn read(&mut self, record: &mut RawRecord) -> Result<bool, LexError> {
+        record.opcode = None;
         match self.state {
-            LexerState::Lost => {
-                return Some(Err(LexError::Lost));
-            }
-            LexerState::End => {
-                return None;
-            }
-            LexerState::FooterSeen => {
-                let magic_buf: [u8; 8] = match self.reader.read(8) {
-                    Ok(buf) => buf.try_into().unwrap(),
-                    Err(err) => return Some(Err(LexError::IO(err))),
-                };
-                if magic_buf == MAGIC {
-                    self.state = LexerState::End;
-                    return None;
-                } else {
-                    self.state = LexerState::Lost;
-                    return Some(Err(LexError::InvalidEndMagic(magic_buf)));
-                }
-            }
             LexerState::Start => {
-                let magic_buf: [u8; 8] = match self.reader.read(8) {
-                    Ok(buf) => buf.try_into().unwrap(),
-                    Err(err) => return Some(Err(LexError::IO(err))),
-                };
-                if magic_buf != MAGIC {
-                    return Some(Err(LexError::InvalidStartMagic(magic_buf)));
+                if self.records_only {
+                    self.state = LexerState::Lexing;
+                    return self.read(record);
+                }
+                record.buf.resize(MAGIC.len(), 0);
+                let read_len = self.reader.read(&mut record.buf[..])?;
+
+                if read_len != MAGIC.len() {
+                    self.state = LexerState::Lost;
+                    return Err(LexError::InvalidStartMagic(record.buf.clone()));
+                }
+                if record.buf != MAGIC {
+                    self.state = LexerState::Lost;
+                    return Err(LexError::InvalidStartMagic(record.buf.clone()));
                 }
                 self.state = LexerState::Lexing;
-                return Some(self.read_next_record());
+                return self.read(record);
             }
+            LexerState::End => Err(LexError::Exhausted),
             LexerState::Lexing => {
-                let res = match self.read_next_record() {
-                    Err(err) => Err(err),
-                    Ok((opcode, data)) => {
-                        match opcode {
-                            OpCode::Footer => {
-                                self.state = LexerState::FooterSeen;
-                            }
-                            _ => (),
-                        };
-                        Ok((opcode, data))
+                record.buf.resize(9, 0);
+                let read_len = self.reader.read(&mut record.buf[..])?;
+                if read_len == 0 {
+                    self.state = LexerState::Lost;
+                    return Err(LexError::TruncatedAfterRecord(self.last_opcode));
+                }
+                let opcode = OpCode::try_from(record.buf[0])?;
+                record.opcode = Some(opcode);
+                if read_len < 9 {
+                    self.state = LexerState::Lost;
+                    return Err(LexError::TruncatedMidRecord((opcode, record.buf.clone())));
+                }
+                let (len, _) = parse_u64(&record.buf[1..])?;
+                if len > usize::MAX as u64 {
+                    self.state = LexerState::Lost;
+                    return Err(LexError::RecordTooLargeForArchitecture(len));
+                }
+                record.buf.resize(len as usize, 0);
+                let read_len = self.reader.read(&mut record.buf[..])?;
+                if read_len < (len as usize) {
+                    self.state = LexerState::Lost;
+                    return Err(LexError::TruncatedMidRecord((opcode, record.buf.clone())));
+                }
+                println!("on opcode {:?}", opcode);
+                Ok(match opcode {
+                    OpCode::Footer => {
+                        self.state = LexerState::End;
+                        false
                     }
-                };
-                Some(res)
+                    _ => true,
+                })
             }
+            LexerState::Lost => Err(LexError::Lost),
         }
     }
 }

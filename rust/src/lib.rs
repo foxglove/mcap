@@ -1,11 +1,12 @@
-pub mod io;
 pub mod lexer;
-pub mod records;
+pub mod parse;
 
 #[cfg(test)]
 mod tests {
+    use crate::parse::parse_record;
+
     use super::*;
-    use records::RecordContentView;
+    use parse::RecordContentView;
     use std::io::Read;
     use std::path::PathBuf;
 
@@ -46,32 +47,39 @@ mod tests {
             },
         ];
         let mut i: usize = 0;
-        let mut reader = io::BufReader::new(&mcap_data);
-        let mut lexer = lexer::Lexer::new(&mut reader);
-        while let Some(lex_result) = lexer.next() {
-            assert!(
-                lex_result.is_ok(),
-                "MCAP failed to lex on expected record {}: {}",
-                i,
-                lex_result.err().unwrap()
-            );
-            let (opcode, record_buf) = lex_result.unwrap();
-            let parse_result = records::parse_record(opcode, record_buf);
-            assert!(
-                parse_result.is_ok(),
-                "Could not parse expected record {}: {}",
-                i,
-                parse_result.err().unwrap()
-            );
-            assert_eq!(parse_result.unwrap(), expected[i]);
-            i += 1;
+        let mut raw_record = lexer::RawRecord::new();
+        let mut lexer = lexer::Lexer::new(std::io::Cursor::new(mcap_data), false);
+        loop {
+            match lexer.read(&mut raw_record) {
+                Ok(more) => {
+                    match parse_record(raw_record.opcode.unwrap(), &raw_record.buf[..]) {
+                        Ok(view) => {
+                            assert_eq!(view, expected[i]);
+                        }
+                        Err(err) => {
+                            assert!(false, "MCAP failed to parse on record {}: {}", i, err);
+                        }
+                    }
+                    i += 1;
+                    if !more {
+                        break;
+                    }
+                }
+                Err(err) => {
+                    assert!(
+                        false,
+                        "Mcap failed to lex on expected record {}: {}",
+                        i, err
+                    );
+                }
+            };
         }
         assert_eq!(i, 3);
     }
 
     #[test]
     fn it_works() {
-        let result = records::OpCode::Header;
+        let result = parse::OpCode::Header;
         assert_eq!(format!("{:?}", result), "Header");
     }
 }
