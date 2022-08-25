@@ -240,7 +240,7 @@ mcap.addChannel(path_channel);  // Assigned channel id written to path_channel.i
 
 ### Write messages
 
-We can now finally write messages to the channel via its id:
+We can now finally write messages to the channel using its ID:
 
 ```cpp
 foxglove::PosesInFrame poses_msg;
