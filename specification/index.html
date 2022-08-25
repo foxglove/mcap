@@ -1060,15 +1060,15 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#tuple" class="md-nav__link">
-    Tuple
+  <a href="#tuplefirst_type-second_type" class="md-nav__link">
+    Tuple&lt;first_type, second_type&gt;
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#array" class="md-nav__link">
-    Array
+  <a href="#arrayarray_type" class="md-nav__link">
+    Array&lt;array_type&gt;
   </a>
   
 </li>
@@ -1081,8 +1081,8 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#map" class="md-nav__link">
-    Map
+  <a href="#mapkey_type-value_type" class="md-nav__link">
+    Map&lt;key_type, value_type&gt;
   </a>
   
 </li>
@@ -1494,15 +1494,15 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#tuple" class="md-nav__link">
-    Tuple
+  <a href="#tuplefirst_type-second_type" class="md-nav__link">
+    Tuple&lt;first_type, second_type&gt;
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#array" class="md-nav__link">
-    Array
+  <a href="#arrayarray_type" class="md-nav__link">
+    Array&lt;array_type&gt;
   </a>
   
 </li>
@@ -1515,8 +1515,8 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#map" class="md-nav__link">
-    Map
+  <a href="#mapkey_type-value_type" class="md-nav__link">
+    Map&lt;key_type, value_type&gt;
   </a>
   
 </li>
@@ -1821,7 +1821,7 @@
 <tr>
 <td>4 + N</td>
 <td>metadata</td>
-<td>Map<string, string></td>
+<td><code>Map&lt;string, string&gt;</code></td>
 <td>Metadata about this channel</td>
 </tr>
 </tbody>
@@ -1945,7 +1945,7 @@
 <tr>
 <td>4 + N</td>
 <td>records</td>
-<td>Array<Tuple\<Timestamp, uint64>></td>
+<td><code>Array&lt;Tuple&lt;Timestamp, uint64&gt;&gt;</code></td>
 <td>Array of log_time and offset for each record. Offset is relative to the start of the uncompressed chunk data.</td>
 </tr>
 </tbody>
@@ -1991,7 +1991,7 @@
 <tr>
 <td>4 + N</td>
 <td>message_index_offsets</td>
-<td>Map<uint16, uint64></td>
+<td><code>Map&lt;uint16, uint64&gt;</code></td>
 <td>Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. An empty map indicates no message indexing is available.</td>
 </tr>
 <tr>
@@ -2194,7 +2194,7 @@
 <tr>
 <td>4 + N</td>
 <td>channel_message_counts</td>
-<td>Map<uint16, uint64></td>
+<td><code>Map&lt;uint16, uint64&gt;</code></td>
 <td>Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available.</td>
 </tr>
 </tbody>
@@ -2224,7 +2224,7 @@
 <tr>
 <td>4 + N</td>
 <td>metadata</td>
-<td>Map<string, string></td>
+<td><code>Map&lt;string, string&gt;</code></td>
 <td>Example keys: <code>robot_id</code>, <code>git_sha</code>, <code>timezone</code>, <code>run_id</code>.</td>
 </tr>
 </tbody>
@@ -2327,24 +2327,24 @@
 <p>Bytes is sequence of bytes with no additional requirements.</p>
 <div class="highlight"><pre><span></span><code>&lt;bytes&gt;
 </code></pre></div>
-<h3 id="tuple">Tuple<first_type, second_type></h3>
+<h3 id="tuplefirst_type-second_type"><code>Tuple&lt;first_type, second_type&gt;</code></h3>
 <p>Tuple represents a pair of values. The first value has type first_type and the second has type second_type.</p>
 <p>Tuple is serialized by serializing the first value and then the second value:</p>
 <div class="highlight"><pre><span></span><code>&lt;first value&gt;&lt;second value&gt;
 </code></pre></div>
-<p>A Tuple<uint8, uint32>:</p>
+<p>A <code>Tuple&lt;uint8, uint32&gt;</code>:</p>
 <div class="highlight"><pre><span></span><code>&lt;uint8&gt;&lt;uint32&gt;
 </code></pre></div>
-<p>A Tuple<uint16, string>:</p>
+<p>A <code>Tuple&lt;uint16, string&gt;</code>:</p>
 <div class="highlight"><pre><span></span><code>&lt;uint16&gt;&lt;string&gt;
 
 &lt;uint16&gt;&lt;uint32&gt;&lt;utf-8 bytes&gt;
 </code></pre></div>
-<h3 id="array">Array<array_type></h3>
+<h3 id="arrayarray_type"><code>Array&lt;array_type&gt;</code></h3>
 <p>Arrays are serialized using a <code>uint32</code> byte length followed by the serialized array elements.</p>
 <div class="highlight"><pre><span></span><code>&lt;byte length&gt;&lt;serialized element&gt;&lt;serialized element&gt;...
 </code></pre></div>
-<p>An array of uint64 is specified as Array<uint64> and serialized as:</p>
+<p>An array of uint64 is specified as <code>Array&lt;uint64&gt;</code> and serialized as:</p>
 <div class="highlight"><pre><span></span><code>&lt;byte length&gt;&lt;uint64&gt;&lt;uint64&gt;&lt;uint64&gt;...
 </code></pre></div>
 <blockquote>
@@ -2352,7 +2352,7 @@
 </blockquote>
 <h3 id="timestamp">Timestamp</h3>
 <p><code>uint64</code> nanoseconds since a user-understood epoch (i.e unix epoch, robot boot time, etc.)</p>
-<h3 id="map">Map<key_type, value_type></h3>
+<h3 id="mapkey_type-value_type"><code>Map&lt;key_type, value_type&gt;</code></h3>
 <p>A Map is an <a href="https://en.wikipedia.org/wiki/Associative_array">association</a> of unique keys to values.</p>
 <p>Maps are serialized using a <code>uint32</code> byte length followed by the serialized map key/value entries. The key and value entries are serialized according to their <code>key_type</code> and <code>value_type</code>.</p>
 <div class="highlight"><pre><span></span><code>&lt;byte length&gt;&lt;key&gt;&lt;value&gt;&lt;key&gt;&lt;value&gt;...
