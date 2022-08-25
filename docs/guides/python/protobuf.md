@@ -1,8 +1,8 @@
-# Reading and writing Protobuf messages
+# Reading and writing Protobuf
 
 To start writing Python code that reads and writes Protobuf data in MCAP, install the [`mcap-protobuf-support` helper library](https://github.com/foxglove/mcap/tree/main/python/mcap-protobuf-support).
 
-## Reading Protobuf
+## Reading
 
 To read in Protobuf data from an MCAP file (`my_data.mcap`), use the high-level `reader` interface.
 
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     main()
 ```
 
-## Writing Protobuf
+## Writing
 
 ```python
 import sys

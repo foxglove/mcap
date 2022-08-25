@@ -1,8 +1,8 @@
-# Reading ROS 2 messages
+# Reading ROS 2
 
 To start writing Python code that reads ROS 2 data from MCAP, install the [`rosbag2_py` package](https://index.ros.org/p/rosbag2_py/).
 
-## Reading ROS 2
+## Reading
 
 We’ll start with our imports:
 
