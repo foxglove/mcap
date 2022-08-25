@@ -2,7 +2,7 @@
 
 !!! info
 
-    Adapted from the original: [Recording Robocar Data with MCAP](https://foxglove.dev/blog/recording-robocar-data-with-mcap)
+    "Writing" section adapted from the original: [Recording Robocar Data with MCAP](https://foxglove.dev/blog/recording-robocar-data-with-mcap)
 
 ## Reading
 
