@@ -14,7 +14,7 @@ To read Protobuf messages from an MCAP file using C++, we have two options:
 
 - **Dynamic** – Dynamically read fields using the schema definitions in the MCAP file
 
-  Preferred for inspecting and debugging message content. For example, when building a [visualization tool](https://studio.foxglove.dev), we want to provide a full view of all fields in a message as it was originally recorded. We can use Protobuf's [`DynamicMessage`](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.dynamic_message) mechanism to enumerate and inspect message fields in this way.
+  Preferred for inspecting and debugging message content. For example, when building a [visualization tool](https://studio.foxglove.dev), we want to provide a full view of all fields in a message as it was originally recorded. We can use Protobuf's [`DynamicMessage`](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.dynamic_message) class to enumerate and inspect message fields in this way.
 
 ### Statically generated class definitions
 
