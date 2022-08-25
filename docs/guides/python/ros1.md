@@ -1,8 +1,8 @@
-# Reading and writing ROS 1 messages
+# Reading and writing ROS 1
 
 To start writing Python code that reads and writes ROS 1 data in MCAP, install the [`mcap-ros1-support` helper library](https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support).
 
-## Reading ROS 1
+## Reading
 
 Read ROS1 messages from an MCAP file using the `mcap_ros1.reader` module:
 
@@ -15,7 +15,7 @@ for msg in read_ros1_messages(sys.argv[1]):
     print(f"{msg.topic}: {msg.ros_msg}")
 ```
 
-## Writing ROS 1
+## Writing
 
 Import the necessary packages from Python and a `Writer` from [`mcap-ros1-support`](https://github.com/foxglove/mcap/tree/main/python/mcap-ros1-support):
 

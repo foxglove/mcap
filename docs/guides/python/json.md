@@ -1,10 +1,10 @@
-# Writing JSON messages
+# Writing JSON
 
 !!! info
 
     From [Recording JSON Data to MCAP Files](https://foxglove.dev/blog/recording-json-data-to-mcap-files). While JSON might not be the most efficient format for storing point cloud data, it's easy to get started with as an MCAP beginner.
 
-## Writing JSON
+## Writing
 
 Let's work with some publicly available data – the "[Sydney Urban Objects Dataset](https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml)", released by the [Australian Centre for Field Robotics](https://www.sydney.edu.au/engineering/our-research/robotics-and-intelligent-systems/australian-centre-for-field-robotics.html) – and write it as JSON to an MCAP file. ![sydney](../../img/705a434-sydney.png)
 
