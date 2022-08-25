@@ -1,10 +1,10 @@
-# Reading and writing Protobuf messages
+# Reading and writing Protobuf
 
 !!! info
 
     Adapted from the original: [Recording Robocar Data with MCAP](https://foxglove.dev/blog/recording-robocar-data-with-mcap)
 
-## Writing Protobuf
+## Writing
 
 ```cpp
 mcap::McapWriter writer;
@@ -113,7 +113,7 @@ Now, we can inspect our output MCAP file's messages. Use the _Data source_ dialo
 
 Add a few relevant panels ([Plot](https://foxglove.dev/docs/studio/panels/plot), [Image](https://foxglove.dev/docs/studio/panels/image), [Raw Messages](https://foxglove.dev/docs/studio/panels/raw-messages), [3D](https://foxglove.dev/docs/studio/panels/3d)) to visualize the robot's performance.
 
-## Reading Protobuf
+## Reading
 
 To read Protobuf messages from an MCAP file using C++, we have two options. We can use **statically** generated class definitions to deserialize the data, or **dynamically** read fields using the schema definitions from within the MCAP file. Both of these options have valid use-cases.
 
