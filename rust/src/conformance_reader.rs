@@ -55,7 +55,6 @@ fn as_json<'a>(view: &Record<'a>) -> Value {
 
 pub fn main() {
     let args: Vec<String> = env::args().collect();
-    dbg!(&args);
     if args.len() < 2 {
         eprintln!("Please supply an mcap file as argument");
         process::exit(1);

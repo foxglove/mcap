@@ -242,7 +242,6 @@ pub fn parse_long_bytearray<'a>(data: &'a [u8]) -> Result<(&'a [u8], &'a [u8]), 
 
 fn parse_str<'a>(data: &'a [u8]) -> Result<(&'a str, &'a [u8]), ParseError> {
     let (str_len, data) = parse_u32(data)?;
-    println!("str len: {}", str_len);
     if data.len() < str_len as usize {
         return Err(ParseError::DataTooShort);
     }

@@ -149,7 +149,6 @@ impl<R: std::io::Read> Lexer<R> {
                     self.state = LexerState::Lost;
                     return Err(LexError::TruncatedMidRecord((opcode, record.buf.clone())));
                 }
-                println!("on opcode {:?}", opcode);
                 Ok(match opcode {
                     OpCode::Footer => {
                         self.state = LexerState::End;
