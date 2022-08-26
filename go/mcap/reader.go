@@ -12,8 +12,8 @@ type ReadOrder int
 
 const (
 	ReadOrderFile           ReadOrder = 0
-	ReadOrderLogTime                  = 1
-	ReadOrderReverseLogTime           = 2
+	ReadOrderLogTime        ReadOrder = 1
+	ReadOrderReverseLogTime ReadOrder = 2
 )
 
 func readPrefixedString(data []byte, offset int) (s string, newoffset int, err error) {

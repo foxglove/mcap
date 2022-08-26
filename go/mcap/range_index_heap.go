@@ -5,7 +5,8 @@ import (
 	"fmt"
 )
 
-// rangeIndex contains either a ChunkIndex or a MessageIndexEntry to be sorted on LogTime.
+// rangeIndex refers to either a chunk (via the ChunkIndex, with other fields nil)
+// or to a message in a chunk, in which case all fields are set.
 type rangeIndex struct {
 	chunkIndex        *ChunkIndex
 	messageIndexEntry *MessageIndexEntry
@@ -74,13 +75,16 @@ func (h *rangeIndexHeap) Pop() interface{} {
 
 // Less is required by `heap.Interface`.
 func (h *rangeIndexHeap) Less(i, j int) bool {
-	if h.order == ReadOrderLogTime {
-		return h.timestamp(i) < h.timestamp(j)
-	} else if h.order == ReadOrderReverseLogTime {
-		return h.timestamp(i) > h.timestamp(j)
-	} else {
+	switch h.order {
+	case ReadOrderFile:
 		return h.filePositionLess(i, j)
+	case ReadOrderLogTime:
+		return h.timestamp(i) < h.timestamp(j)
+	case ReadOrderReverseLogTime:
+		return h.timestamp(i) > h.timestamp(j)
 	}
+	h.lastErr = fmt.Errorf("ReadOrder case not handled: %v", h.order)
+	return false
 }
 
 func (h *rangeIndexHeap) HeapPush(ri rangeIndex) error {

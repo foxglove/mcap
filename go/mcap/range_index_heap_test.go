@@ -71,11 +71,11 @@ func TestMessageOrdering(t *testing.T) {
 			assert.Equal(t, h.Len(), len(rangeIndexHeapTestItems))
 			i := 0
 			for h.Len() > 0 {
-				popped_item, err := h.HeapPop()
+				poppedItem, err := h.HeapPop()
 				assert.Nil(t, err)
 				found := false
 				for index, item := range rangeIndexHeapTestItems {
-					if reflect.DeepEqual(item, *popped_item) {
+					if reflect.DeepEqual(item, *poppedItem) {
 						assert.Equal(t, c.expectedIndexOrder[i], index)
 						found = true
 					}
