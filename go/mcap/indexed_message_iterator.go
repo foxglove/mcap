@@ -181,6 +181,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 			timestamp := messageIndex.Records[i].Timestamp
 			if timestamp >= it.start && timestamp < it.end {
 				heap.Push(&it.indexHeap, rangeIndex{
+					chunkIndex:        chunkIndex,
 					messageIndexEntry: &messageIndex.Records[i],
 					buf:               chunkData,
 				})
@@ -200,7 +201,7 @@ func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, e
 
 	for it.indexHeap.Len() > 0 {
 		ri := heap.Pop(&it.indexHeap).(rangeIndex)
-		if ri.chunkIndex != nil {
+		if ri.messageIndexEntry == nil {
 			err := it.loadChunk(ri.chunkIndex)
 			if err != nil {
 				return nil, nil, nil, err

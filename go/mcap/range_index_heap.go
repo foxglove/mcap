@@ -10,19 +10,28 @@ type rangeIndex struct {
 // heap of rangeIndex entries, where the entries are sorted by their log time.
 type rangeIndexHeap struct {
 	indices []rangeIndex
-	reverse bool
+	order   ReadOrder
 }
 
 // key returns the comparison key used for elements in this heap.
 func (h rangeIndexHeap) key(i int) uint64 {
 	ri := h.indices[i]
-	if ri.chunkIndex != nil {
-		if h.reverse {
+	if ri.messageIndexEntry == nil {
+		if h.order == ReadOrderFile {
+			return ri.chunkIndex.ChunkStartOffset
+		} else if h.order == ReadOrderLogTime {
+			return ri.chunkIndex.MessageStartTime
+		} else {
+			// reverse log time
 			return ri.chunkIndex.MessageEndTime
 		}
-		return ri.chunkIndex.MessageStartTime
+	} else {
+		if h.order == ReadOrderFile {
+			return ri.chunkIndex.ChunkStartOffset
+		} else {
+			return ri.messageIndexEntry.Timestamp
+		}
 	}
-	return ri.messageIndexEntry.Timestamp
 }
 
 // Required for sort.Interface.
@@ -47,7 +56,7 @@ func (h *rangeIndexHeap) Pop() interface{} {
 
 // Less is required by `heap.Interface`.
 func (h rangeIndexHeap) Less(i, j int) bool {
-	if h.reverse {
+	if h.order == ReadOrderReverseLogTime {
 		return h.key(i) > h.key(j)
 	}
 	return h.key(i) < h.key(j)

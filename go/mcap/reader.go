@@ -8,6 +8,14 @@ import (
 	"math"
 )
 
+type ReadOrder int
+
+const (
+	ReadOrderFile           ReadOrder = 0
+	ReadOrderLogTime                  = 1
+	ReadOrderReverseLogTime           = 2
+)
+
 func readPrefixedString(data []byte, offset int) (s string, newoffset int, err error) {
 	if len(data[offset:]) < 4 {
 		return "", 0, io.ErrShortBuffer
@@ -99,7 +107,7 @@ func (r *Reader) indexedMessageIterator(
 	topics []string,
 	start uint64,
 	end uint64,
-	reverse bool,
+	order ReadOrder,
 ) *indexedMessageIterator {
 	topicMap := make(map[string]bool)
 	for _, topic := range topics {
@@ -114,19 +122,86 @@ func (r *Reader) indexedMessageIterator(
 		topics:    topicMap,
 		start:     start,
 		end:       end,
-		indexHeap: rangeIndexHeap{reverse: reverse},
+		indexHeap: rangeIndexHeap{order: order},
+	}
+}
+
+type readOptions struct {
+	start    int64
+	end      int64
+	topics   []string
+	useIndex bool
+	order    ReadOrder
+}
+
+func defaultReadOptions() readOptions {
+	return readOptions{
+		start:    0,
+		end:      0,
+		topics:   nil,
+		useIndex: false,
+		order:    ReadOrderFile,
+	}
+}
+
+type ReadOpt func(*readOptions) error
+
+func ReadMessagesAfter(start int64) ReadOpt {
+	return func(ro *readOptions) error {
+		if ro.end != 0 && ro.end < start {
+			return fmt.Errorf("end cannot come before start")
+		}
+		ro.start = start
+		return nil
+	}
+}
+
+func ReadMessagesBefore(end int64) ReadOpt {
+	return func(ro *readOptions) error {
+		if ro.start != 0 && end < ro.start {
+			return fmt.Errorf("end cannot come before start")
+		}
+		ro.end = end
+		return nil
+	}
+}
+
+func ReadMessagesWithTopic(topics []string) ReadOpt {
+	return func(ro *readOptions) error {
+		ro.topics = topics
+		return nil
+	}
+}
+
+func ReadMessagesInOrder(order ReadOrder) ReadOpt {
+	return func(ro *readOptions) error {
+		if !ro.useIndex && order != ReadOrderFile {
+			return fmt.Errorf("only file-order reads are supported when not using index")
+		}
+		ro.order = order
+		return nil
+	}
+}
+
+func ReadMessagesUsingIndex(useIndex bool) ReadOpt {
+	return func(ro *readOptions) error {
+		if ro.order != ReadOrderFile && !useIndex {
+			return fmt.Errorf("only file-order reads are supported when not using index")
+		}
+		ro.useIndex = useIndex
+		return nil
 	}
 }
 
 func (r *Reader) Messages(
-	start int64,
-	end int64,
-	topics []string,
-	useIndex bool,
-	reverse bool,
+	opts ...ReadOpt,
 ) (MessageIterator, error) {
-	if reverse && !useIndex {
-		return nil, fmt.Errorf("reverse iteration only supported when using index")
+	var ro readOptions
+	for _, opt := range opts {
+		err := opt(&ro)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if useIndex {
 		if rs, ok := r.r.(io.ReadSeeker); ok {
@@ -134,9 +209,9 @@ func (r *Reader) Messages(
 		} else {
 			return nil, fmt.Errorf("indexed reader requires a seekable reader")
 		}
-		return r.indexedMessageIterator(topics, uint64(start), uint64(end), reverse), nil
+		return r.indexedMessageIterator(ro.topics, uint64(ro.start), uint64(ro.end), ro.order), nil
 	}
-	return r.unindexedIterator(topics, uint64(start), uint64(end)), nil
+	return r.unindexedIterator(ro.topics, uint64(ro.start), uint64(ro.end)), nil
 }
 
 func (r *Reader) readHeader() (*Header, error) {
