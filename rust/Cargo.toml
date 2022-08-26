@@ -7,6 +7,12 @@ edition = "2021"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-
-[dev-dependencies]
 serde_json = { version = "1" }
+
+[lib]
+name = "mcap"
+path = "src/lib.rs"
+
+[[bin]]
+name = "conformance_reader"
+path = "src/conformance_reader.rs"

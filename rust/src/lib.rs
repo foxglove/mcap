@@ -1,4 +1,3 @@
-mod conformance;
 pub mod lexer;
 pub mod parse;
 
@@ -7,7 +6,7 @@ mod tests {
     use crate::parse::parse_record;
 
     use super::*;
-    use parse::RecordContentView;
+    use parse::Record;
     use std::io::Read;
     use std::path::PathBuf;
 
@@ -33,16 +32,16 @@ mod tests {
     #[test]
     fn no_data_read() {
         let mcap_data = read_test_asset("NoData/NoData.mcap");
-        let expected: [RecordContentView; 3] = [
-            RecordContentView::Header {
+        let expected: [Record; 3] = [
+            Record::Header {
                 library: "",
                 profile: "",
             },
-            RecordContentView::DataEnd {
+            Record::DataEnd {
                 data_section_crc: 0,
             },
-            RecordContentView::Footer {
-                crc: 1875167664,
+            Record::Footer {
+                summary_crc: 1875167664,
                 summary_offset_start: 0,
                 summary_start: 0,
             },
@@ -51,7 +50,7 @@ mod tests {
         let mut raw_record = lexer::RawRecord::new();
         let mut lexer = lexer::Lexer::new(std::io::Cursor::new(mcap_data), false);
         loop {
-            match lexer.read(&mut raw_record) {
+            match lexer.read_next(&mut raw_record) {
                 Ok(more) => {
                     match parse_record(raw_record.opcode.unwrap(), &raw_record.buf[..]) {
                         Ok(view) => {

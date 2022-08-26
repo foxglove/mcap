@@ -1,7 +1,8 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::error::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OpCode {
     Header,
     Footer,
@@ -73,8 +74,8 @@ impl Into<u8> for OpCode {
 
 type Timestamp = u64;
 
-#[derive(PartialEq, Debug, Deserialize)]
-pub enum RecordContentView<'a> {
+#[derive(PartialEq, Debug, Serialize, Deserialize)]
+pub enum Record<'a> {
     Header {
         library: &'a str,
         profile: &'a str,
@@ -82,7 +83,7 @@ pub enum RecordContentView<'a> {
     Footer {
         summary_start: u64,
         summary_offset_start: u64,
-        crc: u32,
+        summary_crc: u32,
     },
     Schema {
         id: u16,
@@ -95,7 +96,7 @@ pub enum RecordContentView<'a> {
         schema_id: u16,
         topic: &'a str,
         message_encoding: &'a str,
-        metadata: Vec<(&'a str, &'a str)>,
+        metadata: BTreeMap<&'a str, &'a str>,
     },
     Message {
         channel_id: u16,
@@ -121,7 +122,7 @@ pub enum RecordContentView<'a> {
         message_end_time: Timestamp,
         chunk_start_offset: u64,
         chunk_length: u64,
-        message_index_offsets: Vec<(u16, u64)>,
+        message_index_offsets: BTreeMap<u16, u64>,
         message_index_length: u64,
         compression: &'a str,
         compressed_size: u64,
@@ -153,11 +154,11 @@ pub enum RecordContentView<'a> {
         chunk_count: u32,
         message_start_time: Timestamp,
         message_end_time: Timestamp,
-        channel_message_counts: Vec<(u16, u64)>,
+        channel_message_counts: BTreeMap<u16, u64>,
     },
     Metadata {
         name: &'a str,
-        metadata: Vec<(&'a str, &'a str)>,
+        metadata: BTreeMap<&'a str, &'a str>,
     },
     MetadataIndex {
         offset: u64,
@@ -249,49 +250,49 @@ fn parse_str<'a>(data: &'a [u8]) -> Result<(&'a str, &'a [u8]), ParseError> {
     return Ok((std::str::from_utf8(str_bytes)?, data));
 }
 
-fn parse_str_map<'a>(data: &'a [u8]) -> Result<(Vec<(&'a str, &'a str)>, &'a [u8]), ParseError> {
+fn parse_str_map<'a>(data: &'a [u8]) -> Result<(BTreeMap<&'a str, &'a str>, &'a [u8]), ParseError> {
     let (map_len, data) = parse_u32(data)?;
     let (map_data, remainder) = data.split_at(map_len as usize);
-    let mut result: Vec<(&'a str, &'a str)> = Vec::new();
+    let mut result: BTreeMap<&'a str, &'a str> = BTreeMap::new();
     let mut unparsed_map_data = map_data;
     {
         while unparsed_map_data.len() > 0 {
             let (key, data) = parse_str(unparsed_map_data)?;
             let (val, data) = parse_str(data)?;
             unparsed_map_data = data;
-            result.push((key, val));
+            result.insert(key, val);
         }
     }
     Ok((result, remainder))
 }
 
-fn parse_header<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_header<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (profile, data) = parse_str(data)?;
     let (library, data) = parse_str(data)?;
     if data.len() > 0 {
         return Err(ParseError::RecordTooLong(data.into()));
     }
-    Ok(RecordContentView::Header {
+    Ok(Record::Header {
         profile: profile,
         library: library,
     })
 }
 
-fn parse_footer<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_footer<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (summary_start, data) = parse_u64(data)?;
     let (summary_offset_start, data) = parse_u64(data)?;
     let (crc, data) = parse_u32(data)?;
     if data.len() > 0 {
         return Err(ParseError::RecordTooLong(data.into()));
     }
-    Ok(RecordContentView::Footer {
+    Ok(Record::Footer {
         summary_start: summary_start,
         summary_offset_start: summary_offset_start,
-        crc: crc,
+        summary_crc: crc,
     })
 }
 
-fn parse_schema<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_schema<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (id, data) = parse_u16(data)?;
     let (name, data) = parse_str(data)?;
     let (encoding, data) = parse_str(data)?;
@@ -299,7 +300,7 @@ fn parse_schema<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError>
     if data.len() > 0 {
         return Err(ParseError::RecordTooLong(data.into()));
     }
-    Ok(RecordContentView::Schema {
+    Ok(Record::Schema {
         id: id,
         name: name,
         encoding: encoding,
@@ -307,7 +308,7 @@ fn parse_schema<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError>
     })
 }
 
-fn parse_channel<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_channel<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (id, data) = parse_u16(data)?;
     let (schema_id, data) = parse_u16(data)?;
     let (topic, data) = parse_str(data)?;
@@ -317,7 +318,7 @@ fn parse_channel<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError
         return Err(ParseError::RecordTooLong(data.into()));
     }
 
-    Ok(RecordContentView::Channel {
+    Ok(Record::Channel {
         id: id,
         schema_id: schema_id,
         topic: topic,
@@ -326,12 +327,12 @@ fn parse_channel<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError
     })
 }
 
-fn parse_message<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_message<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (channel_id, data) = parse_u16(data)?;
     let (sequence, data) = parse_u32(data)?;
     let (log_time, data) = parse_u64(data)?;
     let (publish_time, data) = parse_u64(data)?;
-    Ok(RecordContentView::Message {
+    Ok(Record::Message {
         channel_id: channel_id,
         sequence: sequence,
         log_time: log_time,
@@ -340,7 +341,7 @@ fn parse_message<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError
     })
 }
 
-fn parse_chunk<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_chunk<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (message_start_time, data) = parse_u64(data)?;
     let (message_end_time, data) = parse_u64(data)?;
     let (uncompressed_size, data) = parse_u64(data)?;
@@ -350,7 +351,7 @@ fn parse_chunk<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> 
     if data.len() != 0 {
         return Err(ParseError::RecordTooLong(data.into()));
     }
-    Ok(RecordContentView::Chunk {
+    Ok(Record::Chunk {
         message_start_time: message_start_time,
         message_end_time: message_end_time,
         uncompressed_size: uncompressed_size,
@@ -360,7 +361,7 @@ fn parse_chunk<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> 
     })
 }
 
-fn parse_message_index<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_message_index<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (channel_id, data) = parse_u16(data)?;
     let (array_data_len, data) = parse_u32(data)?;
     let (array_data, data) = data.split_at(array_data_len as usize);
@@ -375,13 +376,13 @@ fn parse_message_index<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, Pars
         remaining_array_data = more;
         records.push((timestamp, offset));
     }
-    Ok(RecordContentView::MessageIndex {
+    Ok(Record::MessageIndex {
         channel_id: channel_id,
         records: records,
     })
 }
 
-fn parse_chunk_index<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_chunk_index<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (message_start_time, data) = parse_u64(data)?;
     let (message_end_time, data) = parse_u64(data)?;
     let (chunk_start_offset, data) = parse_u64(data)?;
@@ -389,12 +390,12 @@ fn parse_chunk_index<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseE
     let (message_index_offsets_len, data) = parse_u32(data)?;
     let (message_index_offset_data, data) = data.split_at(message_index_offsets_len as usize);
     let mut remaining_message_index_offset_data = message_index_offset_data;
-    let mut message_index_offsets: Vec<(u16, u64)> = vec![];
+    let mut message_index_offsets: BTreeMap<u16, u64> = BTreeMap::new();
     while remaining_message_index_offset_data.len() > 0 {
         let (channel_id, more) = parse_u16(remaining_message_index_offset_data)?;
         let (offset, more) = parse_u64(more)?;
         remaining_message_index_offset_data = more;
-        message_index_offsets.push((channel_id, offset));
+        message_index_offsets.insert(channel_id, offset);
     }
     let (message_index_length, data) = parse_u64(data)?;
     let (compression, data) = parse_str(data)?;
@@ -403,7 +404,7 @@ fn parse_chunk_index<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseE
     if data.len() > 0 {
         return Err(ParseError::RecordTooLong(data.into()));
     }
-    Ok(RecordContentView::ChunkIndex {
+    Ok(Record::ChunkIndex {
         message_start_time: message_start_time,
         message_end_time: message_end_time,
         chunk_start_offset: chunk_start_offset,
@@ -416,7 +417,7 @@ fn parse_chunk_index<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseE
     })
 }
 
-fn parse_attachment<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_attachment<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (log_time, data) = parse_u64(data)?;
     let (create_time, data) = parse_u64(data)?;
     let (name, data) = parse_str(data)?;
@@ -426,7 +427,7 @@ fn parse_attachment<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseEr
     if data.len() > 0 {
         return Err(ParseError::RecordTooLong(data.into()));
     }
-    Ok(RecordContentView::Attachment {
+    Ok(Record::Attachment {
         log_time: log_time,
         create_time: create_time,
         name: name,
@@ -436,7 +437,7 @@ fn parse_attachment<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseEr
     })
 }
 
-fn parse_attachment_index<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_attachment_index<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (offset, data) = parse_u64(data)?;
     let (length, data) = parse_u64(data)?;
     let (log_time, data) = parse_u64(data)?;
@@ -447,7 +448,7 @@ fn parse_attachment_index<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, P
     if data.len() > 0 {
         return Err(ParseError::RecordTooLong(data.into()));
     }
-    Ok(RecordContentView::AttachmentIndex {
+    Ok(Record::AttachmentIndex {
         offset: offset,
         length: length,
         log_time: log_time,
@@ -458,7 +459,7 @@ fn parse_attachment_index<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, P
     })
 }
 
-fn parse_statistics<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_statistics<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (message_count, data) = parse_u64(data)?;
     let (schema_count, data) = parse_u16(data)?;
     let (channel_count, data) = parse_u32(data)?;
@@ -477,15 +478,15 @@ fn parse_statistics<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseEr
         return Err(ParseError::RecordTooLong(data.into()));
     }
     let mut remaining = channel_message_counts_data;
-    let mut channel_message_counts: Vec<(u16, u64)> = Vec::new();
+    let mut channel_message_counts: BTreeMap<u16, u64> = BTreeMap::new();
     while remaining.len() > 0 {
         let (channel_id, more) = parse_u16(remaining)?;
         let (count, more) = parse_u64(more)?;
-        channel_message_counts.push((channel_id, count));
+        channel_message_counts.insert(channel_id, count);
         remaining = more;
     }
 
-    Ok(RecordContentView::Statistics {
+    Ok(Record::Statistics {
         message_count: message_count,
         schema_count: schema_count,
         channel_count: channel_count,
@@ -498,33 +499,33 @@ fn parse_statistics<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseEr
     })
 }
 
-fn parse_metadata<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_metadata<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (name, data) = parse_str(data)?;
     let (metadata, data) = parse_str_map(data)?;
     if data.len() > 0 {
         return Err(ParseError::RecordTooLong(data.into()));
     }
-    Ok(RecordContentView::Metadata {
+    Ok(Record::Metadata {
         name: name,
         metadata: metadata,
     })
 }
 
-fn parse_metadata_index<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_metadata_index<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (offset, data) = parse_u64(data)?;
     let (length, data) = parse_u64(data)?;
     let (name, data) = parse_str(data)?;
     if data.len() > 0 {
         return Err(ParseError::RecordTooLong(data.into()));
     }
-    Ok(RecordContentView::MetadataIndex {
+    Ok(Record::MetadataIndex {
         offset: offset,
         length: length,
         name: name,
     })
 }
 
-fn parse_summary_offset<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_summary_offset<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     if data.len() < 1 {
         return Err(ParseError::DataTooShort);
     }
@@ -534,24 +535,21 @@ fn parse_summary_offset<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, Par
     if data.len() > 0 {
         return Err(ParseError::RecordTooLong(data.into()));
     }
-    Ok(RecordContentView::SummaryOffset {
+    Ok(Record::SummaryOffset {
         group_opcode: opcode,
         group_start: group_start,
         group_length: group_length,
     })
 }
 
-fn parse_data_end<'a>(data: &'a [u8]) -> Result<RecordContentView<'a>, ParseError> {
+fn parse_data_end<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (data_section_crc, _) = parse_u32(data)?;
-    Ok(RecordContentView::DataEnd {
+    Ok(Record::DataEnd {
         data_section_crc: data_section_crc,
     })
 }
 
-pub fn parse_record<'a>(
-    opcode: OpCode,
-    data: &'a [u8],
-) -> Result<RecordContentView<'a>, ParseError> {
+pub fn parse_record<'a>(opcode: OpCode, data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     match opcode {
         OpCode::Header => parse_header(data),
         OpCode::Footer => parse_footer(data),
