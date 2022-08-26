@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
@@ -130,7 +129,7 @@ func buildIterator(r io.Reader) (mcap.MessageIterator, error) {
 	if err != nil {
 		return nil, err
 	}
-	iterator, err := reader.Messages(0, math.MaxInt64, nil, false, false)
+	iterator, err := reader.Messages(mcap.ReadMessagesUsingIndex(false))
 	if err != nil {
 		return nil, err
 	}

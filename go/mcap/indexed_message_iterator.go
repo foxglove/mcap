@@ -99,7 +99,9 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 						rangeIndex := rangeIndex{
 							chunkIndex: idx,
 						}
-						heap.Push(&it.indexHeap, rangeIndex)
+						if err := it.indexHeap.HeapPush(rangeIndex); err != nil {
+							return err
+						}
 					}
 					break
 				}
@@ -200,7 +202,10 @@ func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, e
 	}
 
 	for it.indexHeap.Len() > 0 {
-		ri := heap.Pop(&it.indexHeap).(rangeIndex)
+		ri, err := it.indexHeap.HeapPop()
+		if err != nil {
+			return nil, nil, nil, err
+		}
 		if ri.messageIndexEntry == nil {
 			err := it.loadChunk(ri.chunkIndex)
 			if err != nil {

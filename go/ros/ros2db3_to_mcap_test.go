@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"io"
-	"math"
 	"strings"
 	"testing"
 
@@ -39,7 +38,7 @@ func TestDB3MCAPConversion(t *testing.T) {
 	assert.Equal(t, 1, len(info.Channels))
 	assert.Equal(t, "/chatter", info.Channels[1].Topic)
 	messageCount := 0
-	it, err := reader.Messages(0, math.MaxInt64, []string{"/chatter"}, true, false)
+	it, err := reader.Messages(mcap.ReadMessagesWithTopics([]string{"/chatter"}))
 	assert.Nil(t, err)
 	for {
 		schema, channel, message, err := it.Next(nil)

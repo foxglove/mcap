@@ -1,5 +1,10 @@
 package mcap
 
+import (
+	"container/heap"
+	"fmt"
+)
+
 // rangeIndex contains either a ChunkIndex or a MessageIndexEntry to be sorted on LogTime.
 type rangeIndex struct {
 	chunkIndex        *ChunkIndex
@@ -11,27 +16,40 @@ type rangeIndex struct {
 type rangeIndexHeap struct {
 	indices []rangeIndex
 	order   ReadOrder
+	lastErr error
 }
 
 // key returns the comparison key used for elements in this heap.
-func (h rangeIndexHeap) key(i int) uint64 {
+func (h rangeIndexHeap) timestamp(i int) uint64 {
 	ri := h.indices[i]
 	if ri.messageIndexEntry == nil {
-		if h.order == ReadOrderFile {
-			return ri.chunkIndex.ChunkStartOffset
-		} else if h.order == ReadOrderLogTime {
-			return ri.chunkIndex.MessageStartTime
-		} else {
-			// reverse log time
+		if h.order == ReadOrderReverseLogTime {
 			return ri.chunkIndex.MessageEndTime
 		}
-	} else {
-		if h.order == ReadOrderFile {
-			return ri.chunkIndex.ChunkStartOffset
-		} else {
-			return ri.messageIndexEntry.Timestamp
-		}
+		return ri.chunkIndex.MessageStartTime
 	}
+	return ri.messageIndexEntry.Timestamp
+}
+
+func (h *rangeIndexHeap) filePositionLess(i, j int) bool {
+	a := h.indices[i]
+	b := h.indices[j]
+
+	// if comparing two chunks, whichever chunk comes earlier wins.
+	// if comparing messages in two different chunks, the message in the earlier chunk wins.
+	// if comparing a message in one chunk to another chunk, whichever chunk is earlier wins.
+	if a.chunkIndex.ChunkStartOffset != b.chunkIndex.ChunkStartOffset {
+		return a.chunkIndex.ChunkStartOffset < b.chunkIndex.ChunkStartOffset
+	}
+	// If comparing two messages in the same chunk, the earlier message in the chunk wins.
+	if a.messageIndexEntry != nil && b.messageIndexEntry != nil {
+		return a.messageIndexEntry.Offset < b.messageIndexEntry.Offset
+	}
+	// If we came this far, we're comparing a message in a chunk against the same chunk!
+	// this is a problem, because when the chunk reaches the top of the heap it will be expanded,
+	// and the same message will be pushed into the heap twice.
+	h.lastErr = fmt.Errorf("detected duplicate data: a: %v, b: %v", a, b)
+	return false
 }
 
 // Required for sort.Interface.
@@ -55,9 +73,25 @@ func (h *rangeIndexHeap) Pop() interface{} {
 }
 
 // Less is required by `heap.Interface`.
-func (h rangeIndexHeap) Less(i, j int) bool {
-	if h.order == ReadOrderReverseLogTime {
-		return h.key(i) > h.key(j)
+func (h *rangeIndexHeap) Less(i, j int) bool {
+	if h.order == ReadOrderLogTime {
+		return h.timestamp(i) < h.timestamp(j)
+	} else if h.order == ReadOrderReverseLogTime {
+		return h.timestamp(i) > h.timestamp(j)
+	} else {
+		return h.filePositionLess(i, j)
 	}
-	return h.key(i) < h.key(j)
+}
+
+func (h *rangeIndexHeap) HeapPush(ri rangeIndex) error {
+	heap.Push(h, ri)
+	return h.lastErr
+}
+
+func (h *rangeIndexHeap) HeapPop() (*rangeIndex, error) {
+	result := heap.Pop(h).(rangeIndex)
+	if h.lastErr != nil {
+		return nil, h.lastErr
+	}
+	return &result, nil
 }

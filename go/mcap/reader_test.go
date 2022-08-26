@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -64,7 +62,7 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
 	assert.Nil(t, err)
 
-	it, err := reader.Messages(0, 100, []string{}, true, false)
+	it, err := reader.Messages(ReadMessagesUsingIndex(true))
 	assert.Nil(t, err)
 	expectedTopics := []string{"/foo", "/bar"}
 	for i := 0; i < 2; i++ {
@@ -274,7 +272,7 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(0, 10000, []string{}, useIndex, false)
+						it, err := r.Messages(ReadMessagesUsingIndex(useIndex))
 						assert.Nil(t, err)
 						c := 0
 						for {
@@ -296,7 +294,10 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(0, 10000, []string{"/test1"}, useIndex, false)
+						it, err := r.Messages(
+							ReadMessagesWithTopics([]string{"/test1"}),
+							ReadMessagesUsingIndex(useIndex),
+						)
 						assert.Nil(t, err)
 						c := 0
 						for {
@@ -318,7 +319,10 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(0, 10000, []string{"/test1", "/test2"}, useIndex, false)
+						it, err := r.Messages(
+							ReadMessagesWithTopics([]string{"/test1", "/test2"}),
+							ReadMessagesUsingIndex(useIndex),
+						)
 						assert.Nil(t, err)
 						c := 0
 						for {
@@ -340,7 +344,11 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(100, 200, []string{}, useIndex, false)
+						it, err := r.Messages(
+							ReadMessagesAfter(100),
+							ReadMessagesBefore(200),
+							ReadMessagesUsingIndex(useIndex),
+						)
 						assert.Nil(t, err)
 						c := 0
 						for {
@@ -370,7 +378,7 @@ func TestReaderCounting(t *testing.T) {
 			defer f.Close()
 			r, err := NewReader(f)
 			assert.Nil(t, err)
-			it, err := r.Messages(0, time.Now().UnixNano(), []string{}, indexed, false)
+			it, err := r.Messages(ReadMessagesUsingIndex(indexed))
 			assert.Nil(t, err)
 			c := 0
 			for {
@@ -419,7 +427,7 @@ func TestReadingDiagnostics(t *testing.T) {
 	assert.Nil(t, err)
 	r, err := NewReader(f)
 	assert.Nil(t, err)
-	it, err := r.Messages(0, time.Now().UnixNano(), []string{"/diagnostics"}, true, false)
+	it, err := r.Messages(ReadMessagesWithTopics([]string{"/diagnostics"}))
 	assert.Nil(t, err)
 	c := 0
 	for {
@@ -492,7 +500,10 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
 	assert.Nil(t, err)
 
-	it, err := reader.Messages(0, math.MaxInt64, []string{}, true, false)
+	it, err := reader.Messages(
+		ReadMessagesUsingIndex(true),
+		ReadMessagesInOrder(ReadOrderLogTime),
+	)
 	assert.Nil(t, err)
 
 	// check that timestamps monotonically increase from the returned iterator
@@ -510,7 +521,10 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	assert.Error(t, io.EOF, err)
 
 	// now try iterating in reverse
-	reverseIt, err := reader.Messages(0, math.MaxInt64, []string{}, true, true)
+	reverseIt, err := reader.Messages(
+		ReadMessagesUsingIndex(true),
+		ReadMessagesInOrder(ReadOrderReverseLogTime),
+	)
 	assert.Nil(t, err)
 
 	// check that timestamps monotonically decrease from the returned iterator

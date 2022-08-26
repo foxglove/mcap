@@ -137,9 +137,9 @@ type readOptions struct {
 func defaultReadOptions() readOptions {
 	return readOptions{
 		start:    0,
-		end:      0,
+		end:      math.MaxInt64,
 		topics:   nil,
-		useIndex: false,
+		useIndex: true,
 		order:    ReadOrderFile,
 	}
 }
@@ -148,7 +148,7 @@ type ReadOpt func(*readOptions) error
 
 func ReadMessagesAfter(start int64) ReadOpt {
 	return func(ro *readOptions) error {
-		if ro.end != 0 && ro.end < start {
+		if ro.end < start {
 			return fmt.Errorf("end cannot come before start")
 		}
 		ro.start = start
@@ -158,7 +158,7 @@ func ReadMessagesAfter(start int64) ReadOpt {
 
 func ReadMessagesBefore(end int64) ReadOpt {
 	return func(ro *readOptions) error {
-		if ro.start != 0 && end < ro.start {
+		if end < ro.start {
 			return fmt.Errorf("end cannot come before start")
 		}
 		ro.end = end
@@ -166,7 +166,7 @@ func ReadMessagesBefore(end int64) ReadOpt {
 	}
 }
 
-func ReadMessagesWithTopic(topics []string) ReadOpt {
+func ReadMessagesWithTopics(topics []string) ReadOpt {
 	return func(ro *readOptions) error {
 		ro.topics = topics
 		return nil
@@ -196,14 +196,14 @@ func ReadMessagesUsingIndex(useIndex bool) ReadOpt {
 func (r *Reader) Messages(
 	opts ...ReadOpt,
 ) (MessageIterator, error) {
-	var ro readOptions
+	ro := defaultReadOptions()
 	for _, opt := range opts {
 		err := opt(&ro)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if useIndex {
+	if ro.useIndex {
 		if rs, ok := r.r.(io.ReadSeeker); ok {
 			r.rs = rs
 		} else {
@@ -240,7 +240,7 @@ func (r *Reader) Info() (*Info, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read header: %w", err)
 	}
-	it := r.indexedMessageIterator(nil, 0, math.MaxUint64, false)
+	it := r.indexedMessageIterator(nil, 0, math.MaxUint64, ReadOrderFile)
 	err = it.parseSummarySection()
 	if err != nil {
 		return nil, err

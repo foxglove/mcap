@@ -8,7 +8,7 @@ import (
 )
 
 func TestForwardOrdering(t *testing.T) {
-	h := &rangeIndexHeap{}
+	h := &rangeIndexHeap{order: ReadOrderLogTime}
 	heap.Push(h, rangeIndex{chunkIndex: &ChunkIndex{MessageStartTime: 0}})
 	heap.Push(h, rangeIndex{messageIndexEntry: &MessageIndexEntry{Timestamp: 1}})
 	heap.Push(h, rangeIndex{chunkIndex: &ChunkIndex{MessageStartTime: 3}})
@@ -25,7 +25,7 @@ func TestForwardOrdering(t *testing.T) {
 }
 
 func TestReverseOrdering(t *testing.T) {
-	h := &rangeIndexHeap{reverse: true}
+	h := &rangeIndexHeap{order: ReadOrderReverseLogTime}
 	heap.Push(h, rangeIndex{chunkIndex: &ChunkIndex{MessageEndTime: 0}})
 	heap.Push(h, rangeIndex{messageIndexEntry: &MessageIndexEntry{Timestamp: 1}})
 	heap.Push(h, rangeIndex{chunkIndex: &ChunkIndex{MessageEndTime: 3}})
