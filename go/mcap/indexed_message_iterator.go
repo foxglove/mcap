@@ -28,6 +28,9 @@ type indexedMessageIterator struct {
 	attachmentIndexes []*AttachmentIndex
 
 	indexHeap rangeIndexHeap
+
+	zstdDecoder *zstd.Decoder
+	lz4Reader   *lz4.Reader
 }
 
 // parseIndexSection parses the index section of the file and populates the
@@ -138,18 +141,26 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	case CompressionNone:
 		chunkData = parsedChunk.Records
 	case CompressionZSTD:
-		reader, err := zstd.NewReader(bytes.NewReader(parsedChunk.Records))
+		var err error
+		if it.zstdDecoder == nil {
+			it.zstdDecoder, err = zstd.NewReader(bytes.NewReader(parsedChunk.Records))
+		} else {
+			err = it.zstdDecoder.Reset(bytes.NewReader(parsedChunk.Records))
+		}
 		if err != nil {
 			return fmt.Errorf("failed to read zstd chunk: %w", err)
 		}
-		defer reader.Close()
-		chunkData, err = io.ReadAll(reader)
+		chunkData, err = io.ReadAll(it.zstdDecoder)
 		if err != nil {
 			return fmt.Errorf("failed to decompress zstd chunk: %w", err)
 		}
 	case CompressionLZ4:
-		reader := lz4.NewReader(bytes.NewReader(parsedChunk.Records))
-		chunkData, err = io.ReadAll(reader)
+		if it.lz4Reader == nil {
+			it.lz4Reader = lz4.NewReader(bytes.NewReader(parsedChunk.Records))
+		} else {
+			it.lz4Reader.Reset(bytes.NewReader(parsedChunk.Records))
+		}
+		chunkData, err = io.ReadAll(it.lz4Reader)
 		if err != nil {
 			return fmt.Errorf("failed to decompress lz4 chunk: %w", err)
 		}
