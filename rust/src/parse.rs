@@ -405,6 +405,7 @@ fn parse_attachment<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
         name: name,
         content_type: content_type,
         data: attachment_data,
+        // TODO: why do we not parse the crc field?
     })
 }
 

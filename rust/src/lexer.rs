@@ -10,7 +10,7 @@ enum LexerState {
     Lost,
     End,
 }
-pub struct Lexer<R> {
+pub struct Lexer<R: std::io::Read> {
     reader: R,
     state: LexerState,
     last_opcode: Option<OpCode>,

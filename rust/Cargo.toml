@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
+lz4_flex = { version = "0.9" }
 
 [lib]
 name = "mcap"

@@ -1,3 +1,4 @@
+use mcap::lexer::LexError;
 use mcap::lexer::Lexer;
 use mcap::lexer::RawRecord;
 use mcap::parse::Record;
@@ -61,16 +62,73 @@ pub fn main() {
     }
     let mut file = std::fs::File::open(&args[1]).expect("file wouldn't open");
     let mut lexer = Lexer::new(&mut file, false);
+    let mut decompressed_chunk: Vec<u8> = vec![];
+    let mut maybe_chunk_lexer: Option<Lexer<std::io::Cursor<&mut [u8]>>> = None;
     let mut raw_record = RawRecord::new();
     let mut json_records: Vec<Value> = vec![];
     loop {
+        if let Some(mut chunk_lexer) = maybe_chunk_lexer.take() {
+            match chunk_lexer.read_next(&mut raw_record) {
+                Ok(_) => match parse_record(raw_record.opcode.unwrap(), &raw_record.buf) {
+                    Ok(view) => {
+                        json_records.push(as_json(&view));
+                        maybe_chunk_lexer = Some(chunk_lexer);
+                    }
+                    Err(err) => {
+                        eprintln!("failed to parse {:?}: {}", raw_record.opcode, err);
+                        process::exit(1);
+                    }
+                },
+                Err(err) => match err {
+                    LexError::TruncatedAfterRecord(_) => {
+                        maybe_chunk_lexer = None;
+                        continue;
+                    }
+                    _ => {}
+                },
+            }
+            continue;
+        };
         match lexer.read_next(&mut raw_record) {
             Ok(more) => {
                 match parse_record(raw_record.opcode.unwrap(), &raw_record.buf) {
-                    Ok(view) => json_records.push(as_json(&view)),
+                    Ok(view) => match view {
+                        Record::Chunk {
+                            compression: "lz4",
+                            uncompressed_size: u,
+                            records: r,
+                            ..
+                        } => {
+                            decompressed_chunk.resize(u as usize, 0);
+                            let res = lz4_flex::decompress_into(r, &mut decompressed_chunk[..]);
+                            if let Err(err) = res {
+                                eprintln!("failed to decompress: {}", err);
+                                process::exit(1);
+                            }
+                            maybe_chunk_lexer = Some(Lexer::new(
+                                std::io::Cursor::new(&mut decompressed_chunk),
+                                true,
+                            ));
+                        }
+                        Record::Chunk {
+                            compression: "",
+                            records: r,
+                            ..
+                        } => {
+                            decompressed_chunk.resize(r.len(), 0);
+                            decompressed_chunk.copy_from_slice(r);
+                            maybe_chunk_lexer = Some(Lexer::new(
+                                std::io::Cursor::new(&mut decompressed_chunk),
+                                true,
+                            ));
+                        }
+                        // TODO: why do we not emit MessageIndex records for conformance tests?
+                        Record::MessageIndex { .. } => {}
+                        _ => json_records.push(as_json(&view)),
+                    },
                     Err(err) => {
                         eprintln!("failed to parse {:?}: {}", raw_record.opcode, err);
-                        process::exit(1)
+                        process::exit(1);
                     }
                 }
                 if !more {
