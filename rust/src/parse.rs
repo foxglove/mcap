@@ -526,6 +526,3 @@ pub fn parse_record<'a>(opcode: OpCode, data: &'a [u8]) -> Result<Record<'a>, Pa
         OpCode::UserOpcode(_) => Err(ParseError::OpCodeNotImplemented(opcode)),
     }
 }
-
-#[cfg(test)]
-mod tests {}
