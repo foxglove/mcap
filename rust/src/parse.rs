@@ -228,12 +228,12 @@ pub fn parse_u64<'a>(data: &'a [u8]) -> Result<(u64, &'a [u8]), ParseError> {
     return Ok((u64::from_le_bytes(int_bytes.try_into().unwrap()), data));
 }
 
-pub fn parse_bytearray<'a>(data: &'a [u8]) -> Result<(&'a [u8], &'a [u8]), ParseError> {
+pub fn parse_byte_array<'a>(data: &'a [u8]) -> Result<(&'a [u8], &'a [u8]), ParseError> {
     let (len, data) = parse_u32(data)?;
     Ok(data.split_at(len as usize))
 }
 
-pub fn parse_long_bytearray<'a>(data: &'a [u8]) -> Result<(&'a [u8], &'a [u8]), ParseError> {
+pub fn parse_long_byte_array<'a>(data: &'a [u8]) -> Result<(&'a [u8], &'a [u8]), ParseError> {
     let (len, data) = parse_u64(data)?;
     Ok(data.split_at(len as usize))
 }
@@ -287,7 +287,7 @@ fn parse_schema<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (id, data) = parse_u16(data)?;
     let (name, data) = parse_str(data)?;
     let (encoding, data) = parse_str(data)?;
-    let (schema_data, _) = parse_bytearray(data)?;
+    let (schema_data, _) = parse_byte_array(data)?;
     Ok(Record::Schema {
         id: id,
         name: name,
@@ -332,7 +332,7 @@ fn parse_chunk<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (uncompressed_size, data) = parse_u64(data)?;
     let (uncompressed_crc, data) = parse_u32(data)?;
     let (compression, data) = parse_str(data)?;
-    let (records, _) = parse_long_bytearray(data)?;
+    let (records, _) = parse_long_byte_array(data)?;
     Ok(Record::Chunk {
         message_start_time: message_start_time,
         message_end_time: message_end_time,
@@ -398,7 +398,7 @@ fn parse_attachment<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (create_time, data) = parse_u64(data)?;
     let (name, data) = parse_str(data)?;
     let (content_type, data) = parse_str(data)?;
-    let (attachment_data, _) = parse_long_bytearray(data)?;
+    let (attachment_data, _) = parse_long_byte_array(data)?;
     Ok(Record::Attachment {
         log_time: log_time,
         create_time: create_time,

@@ -10,7 +10,7 @@ use std::process;
 
 fn transform_record_field(value: &Value) -> Value {
     match value {
-        Value::Bool(_) => panic!("did not expect any bools in record fields"),
+        Value::Bool(_) => panic!("did not expect any booleans in record fields"),
         Value::Null => panic!("did not expect any nulls in record fields"),
         Value::Number(n) => Value::String(n.to_string()),
         Value::String(_) => value.to_owned(),
