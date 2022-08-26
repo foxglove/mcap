@@ -1,6 +1,6 @@
 use crate::parse::{parse_u64, OpCode, ParseError};
 
-use std::error::Error;
+use std::{error::Error, io::SeekFrom};
 
 const MAGIC: [u8; 8] = [0x89, b'M', b'C', b'A', b'P', 0x30, b'\r', b'\n'];
 
@@ -101,13 +101,13 @@ impl<R: std::io::Read> Lexer<R> {
         }
     }
 
-    pub fn read(&mut self, record: &mut RawRecord) -> Result<bool, LexError> {
+    pub fn read_next(&mut self, record: &mut RawRecord) -> Result<bool, LexError> {
         record.opcode = None;
         match self.state {
             LexerState::Start => {
                 if self.records_only {
                     self.state = LexerState::Lexing;
-                    return self.read(record);
+                    return self.read_next(record);
                 }
                 record.buf.resize(MAGIC.len(), 0);
                 let read_len = self.reader.read(&mut record.buf[..])?;
@@ -121,11 +121,11 @@ impl<R: std::io::Read> Lexer<R> {
                     return Err(LexError::InvalidStartMagic(record.buf.clone()));
                 }
                 self.state = LexerState::Lexing;
-                return self.read(record);
+                return self.read_next(record);
             }
             LexerState::End => Err(LexError::Exhausted),
             LexerState::Lexing => {
-                record.buf.resize(9, 0);
+                record.buf.resize(1 + MAGIC.len(), 0);
                 let read_len = self.reader.read(&mut record.buf[..])?;
                 if read_len == 0 {
                     self.state = LexerState::Lost;
@@ -133,7 +133,8 @@ impl<R: std::io::Read> Lexer<R> {
                 }
                 let opcode = OpCode::try_from(record.buf[0])?;
                 record.opcode = Some(opcode);
-                if read_len < 9 {
+                self.last_opcode = Some(opcode);
+                if read_len < 1 + MAGIC.len() {
                     self.state = LexerState::Lost;
                     return Err(LexError::TruncatedMidRecord((opcode, record.buf.clone())));
                 }
@@ -159,5 +160,22 @@ impl<R: std::io::Read> Lexer<R> {
             }
             LexerState::Lost => Err(LexError::Lost),
         }
+    }
+}
+
+impl<R: std::io::Read + std::io::Seek> Lexer<R> {
+    pub fn read_next_at(
+        &mut self,
+        record: &mut RawRecord,
+        from: SeekFrom,
+    ) -> Result<bool, LexError> {
+        let new_pos = self.reader.seek(from)?;
+        // determine the lexer state from the new position.
+        if new_pos == 0 && !self.records_only {
+            self.state = LexerState::Start;
+        } else {
+            self.state = LexerState::Lexing;
+        }
+        return self.read_next(record);
     }
 }

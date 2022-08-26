@@ -1,6 +1,7 @@
-use std::{array, collections::BTreeMap, error::Error};
+use serde::Deserialize;
+use std::error::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub enum OpCode {
     Header,
     Footer,
@@ -72,7 +73,7 @@ impl Into<u8> for OpCode {
 
 type Timestamp = u64;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Deserialize)]
 pub enum RecordContentView<'a> {
     Header {
         library: &'a str,
