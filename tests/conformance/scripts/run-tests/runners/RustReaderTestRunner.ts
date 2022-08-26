@@ -1,7 +1,7 @@
 import { exec } from "child_process";
 import { join } from "path";
 import { promisify } from "util";
-import { TestVariant } from "variants/types";
+import { TestFeatures, TestVariant } from "variants/types";
 
 import { ReadTestRunner } from "./TestRunner";
 
@@ -16,7 +16,10 @@ export default class RustReaderTestRunner extends ReadTestRunner {
     return stdout.trim();
   }
 
-  supportsVariant(_variant: TestVariant): boolean {
+  supportsVariant(variant: TestVariant): boolean {
+    if (variant.features.has(TestFeatures.UseChunks)) {
+      return false;
+    }
     return true;
   }
 }
