@@ -1,4 +1,3 @@
-use mcap::lexer::LexError;
 use mcap::lexer::Lexer;
 use mcap::lexer::RawRecord;
 use mcap::parse::Record;
@@ -6,6 +5,7 @@ use mcap::parse::Record;
 use mcap::parse::parse_record;
 use serde_json::{json, Value};
 use std::env;
+use std::io::Read;
 use std::process;
 
 fn transform_record_field(value: &Value) -> Value {
@@ -61,15 +61,35 @@ pub fn main() {
         process::exit(1);
     }
     let mut file = std::fs::File::open(&args[1]).expect("file wouldn't open");
-    let mut lexer = Lexer::new(&mut file, false);
-    let mut decompressed_chunk: Vec<u8> = vec![];
-    let mut maybe_chunk_lexer: Option<Lexer<std::io::Cursor<&mut [u8]>>> = None;
+    let mut lexer = Lexer::new(&mut file).with_attachment_content_handler(Box::new(
+        |attachment_header, reader| {
+            eprintln!(
+                "found attachment with name: {}, content_type: {}",
+                attachment_header.name, attachment_header.content_type
+            );
+            let mut content_buf: Vec<u8> = vec![0; attachment_header.data_len as usize];
+            if let Err(err) = reader.read_exact(&mut content_buf[..]) {
+                return Err(Box::new(err));
+            };
+            eprintln!("content is: {:?}", content_buf);
+            let mut crc_buf: Vec<u8> = vec![0; 4];
+            if let Err(err) = reader.read_exact(&mut crc_buf) {
+                return Err(Box::new(err));
+            };
+            eprintln!("crc is: {:x?}", crc_buf);
+            Ok(true)
+        },
+    ));
+    let mut maybe_chunk_lexer: Option<Lexer<std::io::Cursor<Vec<u8>>>> = None;
     let mut raw_record = RawRecord::new();
     let mut json_records: Vec<Value> = vec![];
     loop {
         if let Some(mut chunk_lexer) = maybe_chunk_lexer.take() {
             match chunk_lexer.read_next(&mut raw_record) {
-                Ok(_) => match parse_record(raw_record.opcode.unwrap(), &raw_record.buf) {
+                Ok(false) => {
+                    maybe_chunk_lexer = None;
+                }
+                Ok(true) => match parse_record(raw_record.opcode.unwrap(), &raw_record.buf) {
                     Ok(view) => {
                         json_records.push(as_json(&view));
                         maybe_chunk_lexer = Some(chunk_lexer);
@@ -79,48 +99,29 @@ pub fn main() {
                         process::exit(1);
                     }
                 },
-                Err(err) => match err {
-                    LexError::TruncatedAfterRecord(_) => {
-                        maybe_chunk_lexer = None;
-                        continue;
-                    }
-                    _ => {}
-                },
+                Err(err) => {
+                    eprintln!("failed to lex within chunk: {}", err);
+                    process::exit(1);
+                }
             }
             continue;
         };
         match lexer.read_next(&mut raw_record) {
-            Ok(more) => {
+            Ok(false) => {
+                break;
+            }
+            Ok(true) => {
                 match parse_record(raw_record.opcode.unwrap(), &raw_record.buf) {
                     Ok(view) => match view {
-                        Record::Chunk {
-                            compression: "lz4",
-                            uncompressed_size: u,
-                            records: r,
-                            ..
-                        } => {
-                            decompressed_chunk.resize(u as usize, 0);
-                            let res = lz4_flex::decompress_into(r, &mut decompressed_chunk[..]);
-                            if let Err(err) = res {
-                                eprintln!("failed to decompress: {}", err);
-                                process::exit(1);
-                            }
-                            maybe_chunk_lexer = Some(Lexer::new(
-                                std::io::Cursor::new(&mut decompressed_chunk),
-                                true,
-                            ));
-                        }
                         Record::Chunk {
                             compression: "",
                             records: r,
                             ..
                         } => {
-                            decompressed_chunk.resize(r.len(), 0);
-                            decompressed_chunk.copy_from_slice(r);
-                            maybe_chunk_lexer = Some(Lexer::new(
-                                std::io::Cursor::new(&mut decompressed_chunk),
-                                true,
-                            ));
+                            let chunk: Vec<u8> = r.into();
+                            maybe_chunk_lexer = Some(
+                                Lexer::new(std::io::Cursor::new(chunk)).expect_start_magic(false),
+                            );
                         }
                         // TODO: why do we not emit MessageIndex records for conformance tests?
                         Record::MessageIndex { .. } => {}
@@ -130,9 +131,6 @@ pub fn main() {
                         eprintln!("failed to parse {:?}: {}", raw_record.opcode, err);
                         process::exit(1);
                     }
-                }
-                if !more {
-                    break;
                 }
             }
             Err(err) => {

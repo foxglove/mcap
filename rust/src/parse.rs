@@ -72,7 +72,7 @@ impl Into<u8> for OpCode {
     }
 }
 
-type Timestamp = u64;
+pub type Timestamp = u64;
 
 #[derive(PartialEq, Debug, Serialize, Deserialize)]
 pub enum Record<'a> {
@@ -134,6 +134,8 @@ pub enum Record<'a> {
         name: &'a str,
         content_type: &'a str,
         data: &'a [u8],
+        #[serde(skip_serializing)]
+        crc: u32,
     },
     AttachmentIndex {
         offset: u64,
@@ -212,7 +214,7 @@ fn parse_u16<'a>(data: &'a [u8]) -> Result<(u16, &'a [u8]), ParseError> {
     return Ok((u16::from_le_bytes(int_bytes.try_into().unwrap()), data));
 }
 
-fn parse_u32<'a>(data: &'a [u8]) -> Result<(u32, &'a [u8]), ParseError> {
+pub fn parse_u32<'a>(data: &'a [u8]) -> Result<(u32, &'a [u8]), ParseError> {
     if data.len() < std::mem::size_of::<u32>() {
         return Err(ParseError::DataTooShort);
     }
@@ -398,14 +400,15 @@ fn parse_attachment<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (create_time, data) = parse_u64(data)?;
     let (name, data) = parse_str(data)?;
     let (content_type, data) = parse_str(data)?;
-    let (attachment_data, _) = parse_long_byte_array(data)?;
+    let (attachment_data, data) = parse_long_byte_array(data)?;
+    let (crc, _) = parse_u32(data)?;
     Ok(Record::Attachment {
         log_time: log_time,
         create_time: create_time,
         name: name,
         content_type: content_type,
         data: attachment_data,
-        // TODO: why do we not parse the crc field?
+        crc: crc,
     })
 }
 
@@ -525,4 +528,26 @@ pub fn parse_record<'a>(opcode: OpCode, data: &'a [u8]) -> Result<Record<'a>, Pa
         OpCode::DataEnd => parse_data_end(data),
         OpCode::UserOpcode(_) => Err(ParseError::OpCodeNotImplemented(opcode)),
     }
+}
+pub struct AttachmentHeader<'a> {
+    pub log_time: Timestamp,
+    pub create_time: Timestamp,
+    pub name: &'a str,
+    pub content_type: &'a str,
+    pub data_len: u64,
+}
+
+pub fn parse_attachment_header<'a>(data: &'a [u8]) -> Result<AttachmentHeader<'a>, ParseError> {
+    let (log_time, data) = parse_u64(data)?;
+    let (create_time, data) = parse_u64(data)?;
+    let (name, data) = parse_str(data)?;
+    let (content_type, data) = parse_str(data)?;
+    let (data_len, _) = parse_u64(data)?;
+    Ok(AttachmentHeader {
+        log_time: log_time,
+        create_time: create_time,
+        name: name,
+        content_type: content_type,
+        data_len: data_len,
+    })
 }
