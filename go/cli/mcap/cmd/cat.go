@@ -172,7 +172,8 @@ var catCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		readingStdin := stat.Mode()&os.ModeCharDevice == 0
+		// read stdin if no filename has been provided and data is available on stdin.
+		readingStdin := (stat.Mode()&os.ModeCharDevice == 0 && len(args) == 0)
 		// stdin is a special case, since we can't seek
 		if readingStdin {
 			reader, err := mcap.NewReader(os.Stdin)
