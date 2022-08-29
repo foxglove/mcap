@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::error::Error;
 
@@ -77,8 +78,8 @@ pub type Timestamp = u64;
 #[derive(PartialEq, Debug, Serialize, Deserialize)]
 pub enum Record<'a> {
     Header {
-        library: &'a str,
-        profile: &'a str,
+        library: Cow<'a, str>,
+        profile: Cow<'a, str>,
     },
     Footer {
         summary_start: u64,
@@ -89,29 +90,29 @@ pub enum Record<'a> {
         id: u16,
         name: &'a str,
         encoding: &'a str,
-        data: &'a [u8],
+        data: Cow<'a, [u8]>,
     },
     Channel {
         id: u16,
         schema_id: u16,
         topic: &'a str,
         message_encoding: &'a str,
-        metadata: BTreeMap<&'a str, &'a str>,
+        metadata: BTreeMap<Cow<'a, str>, Cow<'a, str>>,
     },
     Message {
         channel_id: u16,
         sequence: u32,
         log_time: Timestamp,
         publish_time: Timestamp,
-        data: &'a [u8],
+        data: Cow<'a, [u8]>,
     },
     Chunk {
         message_start_time: Timestamp,
         message_end_time: Timestamp,
         uncompressed_size: u64,
         uncompressed_crc: u32,
-        compression: &'a str,
-        records: &'a [u8],
+        compression: Cow<'a, str>,
+        records: Cow<'a, [u8]>,
     },
     MessageIndex {
         channel_id: u16,
@@ -124,16 +125,16 @@ pub enum Record<'a> {
         chunk_length: u64,
         message_index_offsets: BTreeMap<u16, u64>,
         message_index_length: u64,
-        compression: &'a str,
+        compression: Cow<'a, str>,
         compressed_size: u64,
         uncompressed_size: u64,
     },
     Attachment {
         log_time: Timestamp,
         create_time: Timestamp,
-        name: &'a str,
-        content_type: &'a str,
-        data: &'a [u8],
+        name: Cow<'a, str>,
+        content_type: Cow<'a, str>,
+        data: Cow<'a, [u8]>,
         #[serde(skip_serializing)]
         crc: u32,
     },
@@ -143,8 +144,8 @@ pub enum Record<'a> {
         log_time: Timestamp,
         create_time: Timestamp,
         data_size: u64,
-        name: &'a str,
-        content_type: &'a str,
+        name: Cow<'a, str>,
+        content_type: Cow<'a, str>,
     },
     Statistics {
         message_count: u64,
@@ -158,13 +159,13 @@ pub enum Record<'a> {
         channel_message_counts: BTreeMap<u16, u64>,
     },
     Metadata {
-        name: &'a str,
-        metadata: BTreeMap<&'a str, &'a str>,
+        name: Cow<'a, str>,
+        metadata: BTreeMap<Cow<'a, str>, Cow<'a, str>>,
     },
     MetadataIndex {
         offset: u64,
         length: u64,
-        name: &'a str,
+        name: Cow<'a, str>,
     },
     SummaryOffset {
         group_opcode: u8,
@@ -178,7 +179,6 @@ pub enum Record<'a> {
 
 #[derive(Debug)]
 pub enum ParseError {
-    BadMagic,
     InvalidOpcode(u8),
     StringEncoding(std::str::Utf8Error),
     OpCodeNotImplemented(OpCode),
@@ -187,7 +187,12 @@ pub enum ParseError {
 
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            Self::InvalidOpcode(value) => write!(f, "opcode {:x?} not recognized", value),
+            Self::DataTooShort => write!(f, "data ended unexpectedly before end of record"),
+            Self::OpCodeNotImplemented(opcode) => write!(f, "opcode {:?} not supported", opcode),
+            Self::StringEncoding(err) => write!(f, "string field not valid utf-8: {}", err),
+        }
     }
 }
 
@@ -249,17 +254,19 @@ fn parse_str<'a>(data: &'a [u8]) -> Result<(&'a str, &'a [u8]), ParseError> {
     return Ok((std::str::from_utf8(str_bytes)?, data));
 }
 
-fn parse_str_map<'a>(data: &'a [u8]) -> Result<(BTreeMap<&'a str, &'a str>, &'a [u8]), ParseError> {
+fn parse_str_map<'a>(
+    data: &'a [u8],
+) -> Result<(BTreeMap<Cow<'a, str>, Cow<'a, str>>, &'a [u8]), ParseError> {
     let (map_len, data) = parse_u32(data)?;
     let (map_data, remainder) = data.split_at(map_len as usize);
-    let mut result: BTreeMap<&'a str, &'a str> = BTreeMap::new();
+    let mut result: BTreeMap<Cow<'a, str>, Cow<'a, str>> = BTreeMap::new();
     let mut unparsed_map_data = map_data;
     {
         while unparsed_map_data.len() > 0 {
             let (key, data) = parse_str(unparsed_map_data)?;
             let (val, data) = parse_str(data)?;
             unparsed_map_data = data;
-            result.insert(key, val);
+            result.insert(key.into(), val.into());
         }
     }
     Ok((result, remainder))
@@ -269,8 +276,8 @@ fn parse_header<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (profile, data) = parse_str(data)?;
     let (library, _) = parse_str(data)?;
     Ok(Record::Header {
-        profile: profile,
-        library: library,
+        profile: profile.into(),
+        library: library.into(),
     })
 }
 
@@ -294,7 +301,7 @@ fn parse_schema<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
         id: id,
         name: name,
         encoding: encoding,
-        data: schema_data,
+        data: schema_data.into(),
     })
 }
 
@@ -324,7 +331,7 @@ fn parse_message<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
         sequence: sequence,
         log_time: log_time,
         publish_time: publish_time,
-        data: data,
+        data: data.into(),
     })
 }
 
@@ -340,8 +347,8 @@ fn parse_chunk<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
         message_end_time: message_end_time,
         uncompressed_size: uncompressed_size,
         uncompressed_crc: uncompressed_crc,
-        compression: compression,
-        records: records,
+        compression: compression.into(),
+        records: records.into(),
     })
 }
 
@@ -389,7 +396,7 @@ fn parse_chunk_index<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
         chunk_length: chunk_length,
         message_index_offsets: message_index_offsets,
         message_index_length: message_index_length,
-        compression: compression,
+        compression: compression.into(),
         compressed_size: compressed_size,
         uncompressed_size: uncompressed_size,
     })
@@ -405,9 +412,9 @@ fn parse_attachment<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     Ok(Record::Attachment {
         log_time: log_time,
         create_time: create_time,
-        name: name,
-        content_type: content_type,
-        data: attachment_data,
+        name: name.into(),
+        content_type: content_type.into(),
+        data: attachment_data.into(),
         crc: crc,
     })
 }
@@ -426,8 +433,8 @@ fn parse_attachment_index<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> 
         log_time: log_time,
         create_time: create_time,
         data_size: data_size,
-        name: name,
-        content_type: content_type,
+        name: name.into(),
+        content_type: content_type.into(),
     })
 }
 
@@ -471,7 +478,7 @@ fn parse_metadata<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     let (name, data) = parse_str(data)?;
     let (metadata, _) = parse_str_map(data)?;
     Ok(Record::Metadata {
-        name: name,
+        name: name.into(),
         metadata: metadata,
     })
 }
@@ -483,7 +490,7 @@ fn parse_metadata_index<'a>(data: &'a [u8]) -> Result<Record<'a>, ParseError> {
     Ok(Record::MetadataIndex {
         offset: offset,
         length: length,
-        name: name,
+        name: name.into(),
     })
 }
 
@@ -532,8 +539,8 @@ pub fn parse_record<'a>(opcode: OpCode, data: &'a [u8]) -> Result<Record<'a>, Pa
 pub struct AttachmentHeader<'a> {
     pub log_time: Timestamp,
     pub create_time: Timestamp,
-    pub name: &'a str,
-    pub content_type: &'a str,
+    pub name: Cow<'a, str>,
+    pub content_type: Cow<'a, str>,
     pub data_len: u64,
 }
 
@@ -546,8 +553,8 @@ pub fn parse_attachment_header<'a>(data: &'a [u8]) -> Result<AttachmentHeader<'a
     Ok(AttachmentHeader {
         log_time: log_time,
         create_time: create_time,
-        name: name,
-        content_type: content_type,
+        name: name.into(),
+        content_type: content_type.into(),
         data_len: data_len,
     })
 }

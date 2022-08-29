@@ -7,6 +7,7 @@ mod tests {
 
     use super::*;
     use parse::Record;
+    use std::borrow::Cow;
     use std::io::Read;
     use std::path::PathBuf;
 
@@ -34,8 +35,8 @@ mod tests {
         let mcap_data = read_test_asset("NoData/NoData.mcap");
         let expected: [Record; 3] = [
             Record::Header {
-                library: "",
-                profile: "",
+                library: "".into(),
+                profile: "".into(),
             },
             Record::DataEnd {
                 data_section_crc: 0,

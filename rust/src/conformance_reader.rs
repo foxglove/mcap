@@ -4,6 +4,7 @@ use mcap::parse::Record;
 
 use mcap::parse::parse_record;
 use serde_json::{json, Value};
+use std::borrow::Cow;
 use std::env;
 use std::process;
 
@@ -95,7 +96,7 @@ pub fn main() {
                 match parse_record(raw_record.opcode.unwrap(), &raw_record.buf) {
                     Ok(view) => match view {
                         Record::Chunk {
-                            compression: "",
+                            compression: Cow::Borrowed(""),
                             records: r,
                             ..
                         } => {
