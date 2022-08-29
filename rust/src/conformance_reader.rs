@@ -5,7 +5,6 @@ use mcap::parse::Record;
 use mcap::parse::parse_record;
 use serde_json::{json, Value};
 use std::env;
-use std::io::Read;
 use std::process;
 
 fn transform_record_field(value: &Value) -> Value {
@@ -61,25 +60,7 @@ pub fn main() {
         process::exit(1);
     }
     let mut file = std::fs::File::open(&args[1]).expect("file wouldn't open");
-    let mut lexer = Lexer::new(&mut file).with_attachment_content_handler(Box::new(
-        |attachment_header, reader| {
-            eprintln!(
-                "found attachment with name: {}, content_type: {}",
-                attachment_header.name, attachment_header.content_type
-            );
-            let mut content_buf: Vec<u8> = vec![0; attachment_header.data_len as usize];
-            if let Err(err) = reader.read_exact(&mut content_buf[..]) {
-                return Err(Box::new(err));
-            };
-            eprintln!("content is: {:?}", content_buf);
-            let mut crc_buf: Vec<u8> = vec![0; 4];
-            if let Err(err) = reader.read_exact(&mut crc_buf) {
-                return Err(Box::new(err));
-            };
-            eprintln!("crc is: {:x?}", crc_buf);
-            Ok(true)
-        },
-    ));
+    let mut lexer = Lexer::new(&mut file);
     let mut maybe_chunk_lexer: Option<Lexer<std::io::Cursor<Vec<u8>>>> = None;
     let mut raw_record = RawRecord::new();
     let mut json_records: Vec<Value> = vec![];

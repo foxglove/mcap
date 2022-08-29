@@ -48,10 +48,13 @@ mod tests {
         ];
         let mut i: usize = 0;
         let mut raw_record = lexer::RawRecord::new();
-        let mut lexer = lexer::Lexer::new(std::io::Cursor::new(mcap_data), false);
+        let mut lexer = lexer::Lexer::new(std::io::Cursor::new(mcap_data));
         loop {
             match lexer.read_next(&mut raw_record) {
-                Ok(more) => {
+                Ok(false) => {
+                    break;
+                }
+                Ok(true) => {
                     match parse_record(raw_record.opcode.unwrap(), &raw_record.buf[..]) {
                         Ok(view) => {
                             assert_eq!(view, expected[i]);
@@ -61,9 +64,6 @@ mod tests {
                         }
                     }
                     i += 1;
-                    if !more {
-                        break;
-                    }
                 }
                 Err(err) => {
                     assert!(
