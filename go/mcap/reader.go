@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"math"
+
+	"github.com/foxglove/mcap/go/mcap/readopts"
 )
 
 func readPrefixedString(data []byte, offset int) (s string, newoffset int, err error) {
@@ -95,38 +97,48 @@ func (r *Reader) unindexedIterator(topics []string, start uint64, end uint64) *u
 	}
 }
 
-func (r *Reader) indexedMessageIterator(topics []string, start uint64, end uint64) *indexedMessageIterator {
+func (r *Reader) indexedMessageIterator(
+	topics []string,
+	start uint64,
+	end uint64,
+	order readopts.ReadOrder,
+) *indexedMessageIterator {
 	topicMap := make(map[string]bool)
 	for _, topic := range topics {
 		topicMap[topic] = true
 	}
 	r.l.emitChunks = true
 	return &indexedMessageIterator{
-		lexer:    r.l,
-		rs:       r.rs,
-		channels: make(map[uint16]*Channel),
-		schemas:  make(map[uint16]*Schema),
-		topics:   topicMap,
-		start:    start,
-		end:      end,
+		lexer:     r.l,
+		rs:        r.rs,
+		channels:  make(map[uint16]*Channel),
+		schemas:   make(map[uint16]*Schema),
+		topics:    topicMap,
+		start:     start,
+		end:       end,
+		indexHeap: rangeIndexHeap{order: order},
 	}
 }
 
 func (r *Reader) Messages(
-	start int64,
-	end int64,
-	topics []string,
-	useIndex bool,
+	opts ...readopts.ReadOpt,
 ) (MessageIterator, error) {
-	if useIndex {
+	ro := readopts.Default()
+	for _, opt := range opts {
+		err := opt(&ro)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if ro.UseIndex {
 		if rs, ok := r.r.(io.ReadSeeker); ok {
 			r.rs = rs
 		} else {
 			return nil, fmt.Errorf("indexed reader requires a seekable reader")
 		}
-		return r.indexedMessageIterator(topics, uint64(start), uint64(end)), nil
+		return r.indexedMessageIterator(ro.Topics, uint64(ro.Start), uint64(ro.End), ro.Order), nil
 	}
-	return r.unindexedIterator(topics, uint64(start), uint64(end)), nil
+	return r.unindexedIterator(ro.Topics, uint64(ro.Start), uint64(ro.End)), nil
 }
 
 func (r *Reader) readHeader() (*Header, error) {
@@ -155,7 +167,7 @@ func (r *Reader) Info() (*Info, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read header: %w", err)
 	}
-	it := r.indexedMessageIterator(nil, 0, math.MaxUint64)
+	it := r.indexedMessageIterator(nil, 0, math.MaxUint64, readopts.FileOrder)
 	err = it.parseSummarySection()
 	if err != nil {
 		return nil, err

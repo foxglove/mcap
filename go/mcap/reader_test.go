@@ -7,8 +7,8 @@ import (
 	"io"
 	"os"
 	"testing"
-	"time"
 
+	"github.com/foxglove/mcap/go/mcap/readopts"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -63,7 +63,7 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
 	assert.Nil(t, err)
 
-	it, err := reader.Messages(0, 100, []string{}, true)
+	it, err := reader.Messages(readopts.UsingIndex(true))
 	assert.Nil(t, err)
 	expectedTopics := []string{"/foo", "/bar"}
 	for i := 0; i < 2; i++ {
@@ -273,7 +273,7 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(0, 10000, []string{}, useIndex)
+						it, err := r.Messages(readopts.UsingIndex(useIndex))
 						assert.Nil(t, err)
 						c := 0
 						for {
@@ -295,7 +295,10 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(0, 10000, []string{"/test1"}, useIndex)
+						it, err := r.Messages(
+							readopts.WithTopics([]string{"/test1"}),
+							readopts.UsingIndex(useIndex),
+						)
 						assert.Nil(t, err)
 						c := 0
 						for {
@@ -317,7 +320,10 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(0, 10000, []string{"/test1", "/test2"}, useIndex)
+						it, err := r.Messages(
+							readopts.WithTopics([]string{"/test1", "/test2"}),
+							readopts.UsingIndex(useIndex),
+						)
 						assert.Nil(t, err)
 						c := 0
 						for {
@@ -339,7 +345,11 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(100, 200, []string{}, useIndex)
+						it, err := r.Messages(
+							readopts.After(100),
+							readopts.Before(200),
+							readopts.UsingIndex(useIndex),
+						)
 						assert.Nil(t, err)
 						c := 0
 						for {
@@ -369,7 +379,7 @@ func TestReaderCounting(t *testing.T) {
 			defer f.Close()
 			r, err := NewReader(f)
 			assert.Nil(t, err)
-			it, err := r.Messages(0, time.Now().UnixNano(), []string{}, indexed)
+			it, err := r.Messages(readopts.UsingIndex(indexed))
 			assert.Nil(t, err)
 			c := 0
 			for {
@@ -418,7 +428,7 @@ func TestReadingDiagnostics(t *testing.T) {
 	assert.Nil(t, err)
 	r, err := NewReader(f)
 	assert.Nil(t, err)
-	it, err := r.Messages(0, time.Now().UnixNano(), []string{"/diagnostics"}, true)
+	it, err := r.Messages(readopts.WithTopics([]string{"/diagnostics"}))
 	assert.Nil(t, err)
 	c := 0
 	for {
@@ -430,4 +440,104 @@ func TestReadingDiagnostics(t *testing.T) {
 		c++
 	}
 	assert.Equal(t, 52, c)
+}
+
+func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
+	buf := &bytes.Buffer{}
+	// write an MCAP with two chunks, where in each chunk all messages have ascending timestamps,
+	// but their timestamp ranges overlap.
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   200,
+		Compression: CompressionLZ4,
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, writer.WriteHeader(&Header{}))
+	assert.Nil(t, writer.WriteSchema(&Schema{
+		ID:       0,
+		Name:     "",
+		Encoding: "",
+		Data:     []byte{},
+	}))
+	assert.Nil(t, writer.WriteChannel(&Channel{
+		ID:              0,
+		Topic:           "",
+		SchemaID:        0,
+		MessageEncoding: "",
+		Metadata: map[string]string{
+			"": "",
+		},
+	}))
+	msgCount := 0
+	addMsg := func(timestamp uint64) {
+		assert.Nil(t, writer.WriteMessage(&Message{
+			ChannelID:   0,
+			Sequence:    0,
+			LogTime:     timestamp,
+			PublishTime: timestamp,
+			Data:        []byte{'h', 'e', 'l', 'l', 'o'},
+		}))
+		msgCount++
+	}
+	var now uint64 = 100
+	addMsg(now)
+	for writer.compressedWriter.Size() != 0 {
+		now += 10
+		addMsg(now)
+	}
+	// ensure that the chunk contains more than one message
+	assert.Greater(t, now, uint64(110))
+	// add time discontinuity between chunks
+	now -= 55
+
+	addMsg(now)
+	for writer.compressedWriter.Size() != 0 {
+		now += 10
+		addMsg(now)
+	}
+	assert.Nil(t, writer.Close())
+
+	// start reading the MCAP back
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	assert.Nil(t, err)
+
+	it, err := reader.Messages(
+		readopts.UsingIndex(true),
+		readopts.InOrder(readopts.LogTimeOrder),
+	)
+	assert.Nil(t, err)
+
+	// check that timestamps monotonically increase from the returned iterator
+	var lastSeenTimestamp uint64
+	for i := 0; i < msgCount; i++ {
+		_, _, msg, err := it.Next(nil)
+		assert.Nil(t, err)
+		if i != 0 {
+			assert.Greater(t, msg.LogTime, lastSeenTimestamp)
+		}
+		lastSeenTimestamp = msg.LogTime
+	}
+	_, _, msg, err := it.Next(nil)
+	assert.Nil(t, msg)
+	assert.Error(t, io.EOF, err)
+
+	// now try iterating in reverse
+	reverseIt, err := reader.Messages(
+		readopts.UsingIndex(true),
+		readopts.InOrder(readopts.ReverseLogTimeOrder),
+	)
+	assert.Nil(t, err)
+
+	// check that timestamps monotonically decrease from the returned iterator
+	for i := 0; i < msgCount; i++ {
+		_, _, msg, err := reverseIt.Next(nil)
+		assert.Nil(t, err)
+		if i != 0 {
+			assert.Less(t, msg.LogTime, lastSeenTimestamp)
+		}
+		lastSeenTimestamp = msg.LogTime
+	}
+	_, _, msg, err = reverseIt.Next(nil)
+	assert.Nil(t, msg)
+	assert.Error(t, io.EOF, err)
 }

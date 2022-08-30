@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"io"
-	"math"
 	"strings"
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
+	"github.com/foxglove/mcap/go/mcap/readopts"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 )
@@ -39,7 +39,7 @@ func TestDB3MCAPConversion(t *testing.T) {
 	assert.Equal(t, 1, len(info.Channels))
 	assert.Equal(t, "/chatter", info.Channels[1].Topic)
 	messageCount := 0
-	it, err := reader.Messages(0, math.MaxInt64, []string{"/chatter"}, true)
+	it, err := reader.Messages(readopts.WithTopics([]string{"/chatter"}))
 	assert.Nil(t, err)
 	for {
 		schema, channel, message, err := it.Next(nil)

@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
+	"github.com/foxglove/mcap/go/mcap/readopts"
 	"github.com/spf13/cobra"
 )
 
@@ -130,7 +130,7 @@ func buildIterator(r io.Reader) (mcap.MessageIterator, error) {
 	if err != nil {
 		return nil, err
 	}
-	iterator, err := reader.Messages(0, math.MaxInt64, nil, false)
+	iterator, err := reader.Messages(readopts.UsingIndex(false))
 	if err != nil {
 		return nil, err
 	}
