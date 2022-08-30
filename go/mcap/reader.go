@@ -6,14 +6,8 @@ import (
 	"fmt"
 	"io"
 	"math"
-)
 
-type ReadOrder int
-
-const (
-	ReadOrderFile           ReadOrder = 0
-	ReadOrderLogTime        ReadOrder = 1
-	ReadOrderReverseLogTime ReadOrder = 2
+	"github.com/foxglove/mcap/go/mcap/readopts"
 )
 
 func readPrefixedString(data []byte, offset int) (s string, newoffset int, err error) {
@@ -107,7 +101,7 @@ func (r *Reader) indexedMessageIterator(
 	topics []string,
 	start uint64,
 	end uint64,
-	order ReadOrder,
+	order readopts.ReadOrder,
 ) *indexedMessageIterator {
 	topicMap := make(map[string]bool)
 	for _, topic := range topics {
@@ -126,92 +120,25 @@ func (r *Reader) indexedMessageIterator(
 	}
 }
 
-type readOptions struct {
-	start    int64
-	end      int64
-	topics   []string
-	useIndex bool
-	order    ReadOrder
-}
-
-func defaultReadOptions() readOptions {
-	return readOptions{
-		start:    0,
-		end:      math.MaxInt64,
-		topics:   nil,
-		useIndex: true,
-		order:    ReadOrderFile,
-	}
-}
-
-type ReadOpt func(*readOptions) error
-
-func ReadMessagesAfter(start int64) ReadOpt {
-	return func(ro *readOptions) error {
-		if ro.end < start {
-			return fmt.Errorf("end cannot come before start")
-		}
-		ro.start = start
-		return nil
-	}
-}
-
-func ReadMessagesBefore(end int64) ReadOpt {
-	return func(ro *readOptions) error {
-		if end < ro.start {
-			return fmt.Errorf("end cannot come before start")
-		}
-		ro.end = end
-		return nil
-	}
-}
-
-func ReadMessagesWithTopics(topics []string) ReadOpt {
-	return func(ro *readOptions) error {
-		ro.topics = topics
-		return nil
-	}
-}
-
-func ReadMessagesInOrder(order ReadOrder) ReadOpt {
-	return func(ro *readOptions) error {
-		if !ro.useIndex && order != ReadOrderFile {
-			return fmt.Errorf("only file-order reads are supported when not using index")
-		}
-		ro.order = order
-		return nil
-	}
-}
-
-func ReadMessagesUsingIndex(useIndex bool) ReadOpt {
-	return func(ro *readOptions) error {
-		if ro.order != ReadOrderFile && !useIndex {
-			return fmt.Errorf("only file-order reads are supported when not using index")
-		}
-		ro.useIndex = useIndex
-		return nil
-	}
-}
-
 func (r *Reader) Messages(
-	opts ...ReadOpt,
+	opts ...readopts.ReadOpt,
 ) (MessageIterator, error) {
-	ro := defaultReadOptions()
+	ro := readopts.Default()
 	for _, opt := range opts {
 		err := opt(&ro)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if ro.useIndex {
+	if ro.UseIndex {
 		if rs, ok := r.r.(io.ReadSeeker); ok {
 			r.rs = rs
 		} else {
 			return nil, fmt.Errorf("indexed reader requires a seekable reader")
 		}
-		return r.indexedMessageIterator(ro.topics, uint64(ro.start), uint64(ro.end), ro.order), nil
+		return r.indexedMessageIterator(ro.Topics, uint64(ro.Start), uint64(ro.End), ro.Order), nil
 	}
-	return r.unindexedIterator(ro.topics, uint64(ro.start), uint64(ro.end)), nil
+	return r.unindexedIterator(ro.Topics, uint64(ro.Start), uint64(ro.End)), nil
 }
 
 func (r *Reader) readHeader() (*Header, error) {
@@ -240,7 +167,7 @@ func (r *Reader) Info() (*Info, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read header: %w", err)
 	}
-	it := r.indexedMessageIterator(nil, 0, math.MaxUint64, ReadOrderFile)
+	it := r.indexedMessageIterator(nil, 0, math.MaxUint64, readopts.FileOrder)
 	err = it.parseSummarySection()
 	if err != nil {
 		return nil, err

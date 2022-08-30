@@ -16,6 +16,7 @@ import (
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/cli/mcap/utils/ros"
 	"github.com/foxglove/mcap/go/mcap"
+	"github.com/foxglove/mcap/go/mcap/readopts"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -181,10 +182,10 @@ var catCmd = &cobra.Command{
 			}
 			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
 			it, err := reader.Messages(
-				mcap.ReadMessagesAfter(catStart*1e9),
-				mcap.ReadMessagesBefore(catEnd*1e9),
-				mcap.ReadMessagesWithTopics(topics),
-				mcap.ReadMessagesUsingIndex(false),
+				readopts.After(catStart*1e9),
+				readopts.Before(catEnd*1e9),
+				readopts.WithTopics(topics),
+				readopts.UsingIndex(false),
 			)
 			if err != nil {
 				log.Fatalf("Failed to read messages: %s", err)
@@ -208,9 +209,9 @@ var catCmd = &cobra.Command{
 			}
 			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
 			it, err := reader.Messages(
-				mcap.ReadMessagesAfter(catStart*1e9),
-				mcap.ReadMessagesBefore(catEnd*1e9),
-				mcap.ReadMessagesWithTopics(topics),
+				readopts.After(catStart*1e9),
+				readopts.Before(catEnd*1e9),
+				readopts.WithTopics(topics),
 			)
 			if err != nil {
 				return fmt.Errorf("failed to read messages: %w", err)

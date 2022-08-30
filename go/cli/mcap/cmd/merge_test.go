@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
+	"github.com/foxglove/mcap/go/mcap/readopts"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -50,7 +51,7 @@ func TestMCAPMerging(t *testing.T) {
 		// output should now be a well-formed mcap
 		reader, err := mcap.NewReader(output)
 		assert.Nil(t, err)
-		it, err := reader.Messages(mcap.ReadMessagesUsingIndex(false))
+		it, err := reader.Messages(readopts.UsingIndex(false))
 		assert.Nil(t, err)
 
 		messages := make(map[string]int)
@@ -79,7 +80,7 @@ func TestMultiChannelInput(t *testing.T) {
 	assert.Nil(t, merger.mergeInputs(output, []io.Reader{multiChannelInput, buf3}))
 	reader, err := mcap.NewReader(output)
 	assert.Nil(t, err)
-	it, err := reader.Messages(mcap.ReadMessagesUsingIndex(false))
+	it, err := reader.Messages(readopts.UsingIndex(false))
 	assert.Nil(t, err)
 	messages := make(map[string]int)
 	err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {

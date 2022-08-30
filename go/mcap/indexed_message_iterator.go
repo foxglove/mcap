@@ -222,18 +222,18 @@ func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, e
 			if err != nil {
 				return nil, nil, nil, err
 			}
-		} else {
-			chunkOffset := ri.messageIndexEntry.Offset
-			length := binary.LittleEndian.Uint64(ri.buf[chunkOffset+1:])
-			messageData := ri.buf[chunkOffset+1+8 : chunkOffset+1+8+length]
-			message, err := ParseMessage(messageData)
-			if err != nil {
-				return nil, nil, nil, err
-			}
-			channel := it.channels[message.ChannelID]
-			schema := it.schemas[channel.SchemaID]
-			return schema, channel, message, nil
+			continue
 		}
+		chunkOffset := ri.messageIndexEntry.Offset
+		length := binary.LittleEndian.Uint64(ri.buf[chunkOffset+1:])
+		messageData := ri.buf[chunkOffset+1+8 : chunkOffset+1+8+length]
+		message, err := ParseMessage(messageData)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		channel := it.channels[message.ChannelID]
+		schema := it.schemas[channel.SchemaID]
+		return schema, channel, message, nil
 	}
 	return nil, nil, nil, io.EOF
 }
