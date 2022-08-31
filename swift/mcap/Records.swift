@@ -8,13 +8,14 @@ public typealias Timestamp = UInt64
 // swiftlint:disable:next identifier_name
 public let MCAP0_MAGIC = Data([137, 77, 67, 65, 80, 48, 13, 10])
 
-public enum MCAPReadError: Error {
-  case invalidMagic
+public enum MCAPReadError: Error, Equatable {
+  case invalidMagic(actual: [UInt8])
   case readBeyondBounds
   case stringLengthBeyondBounds
   case dataLengthBeyondBounds
-  case invalidCRC
+  case invalidCRC(expected: UInt32, actual: UInt32)
   case extraneousDataInChunk
+  case unsupportedCompression(String)
 }
 
 public enum Opcode: UInt8 {
@@ -41,7 +42,7 @@ public protocol Record {
   func serializeFields(to data: inout Data)
 }
 
-extension Record {
+public extension Record {
   func serialize(to data: inout Data) {
     data.append(Self.opcode.rawValue)
     data.append(littleEndian: UInt64(0)) // placeholder
@@ -547,7 +548,7 @@ public struct Attachment: Record {
       var crc = CRC32()
       crc.update(buffer[..<crcEndOffset])
       if expectedCRC != crc.final {
-        throw MCAPReadError.invalidCRC
+        throw MCAPReadError.invalidCRC(expected: expectedCRC, actual: crc.final)
       }
     }
   }
