@@ -15,6 +15,7 @@ public enum MCAPReadError: Error, Equatable {
   case dataLengthBeyondBounds
   case invalidCRC(expected: UInt32, actual: UInt32)
   case extraneousDataInChunk
+  case unsupportedCompression(String)
 }
 
 public enum Opcode: UInt8 {
@@ -41,7 +42,7 @@ public protocol Record {
   func serializeFields(to data: inout Data)
 }
 
-extension Record {
+public extension Record {
   func serialize(to data: inout Data) {
     data.append(Self.opcode.rawValue)
     data.append(littleEndian: UInt64(0)) // placeholder
