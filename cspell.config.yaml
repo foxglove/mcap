@@ -48,6 +48,7 @@ words:
   - nanos
   - nsec
   - nsecs
+  - parseable
   - pipenv
   - pointcloud
   - proto
