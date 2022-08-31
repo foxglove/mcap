@@ -223,7 +223,7 @@ public:
   // if readOrder == LogTimeOrder, messages will be returned in ascending log time order.
   // if readOrder == ReverseLogTimeOrder, messages will be returned in descending log time order.
   enum struct ReadOrder { FileOrder, LogTimeOrder, ReverseLogTimeOrder };
-  ReadOrder readOrder = ReadOrder::LogTimeOrder;
+  ReadOrder readOrder = ReadOrder::FileOrder;
 
   ReadMessageOptions(Timestamp _startTime, Timestamp _endTime)
       : startTime(_startTime)
@@ -624,6 +624,9 @@ struct LinearMessageView {
       const ProblemCallback& onProblem_;
       Message curMessage_;
       std::optional<MessageView> curMessageView_;
+
+    private:
+      void onMessage_(const Message& message);
     };
 
     std::unique_ptr<Impl> impl_;

@@ -1596,71 +1596,72 @@ LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataS
   if (!optionsStatus.ok()) {
     onProblem(optionsStatus);
   }
-  recordReader_->onSchema = [this](const SchemaPtr schema, ByteOffset, std::optional<ByteOffset>) {
-    mcapReader_.schemas_.insert_or_assign(schema->id, schema);
-  };
-  recordReader_->onChannel = [this](const ChannelPtr channel, ByteOffset,
-                                    std::optional<ByteOffset>) {
-    mcapReader_.channels_.insert_or_assign(channel->id, channel);
-  };
-  recordReader_->onMessage = [this](const Message& message, ByteOffset, std::optional<ByteOffset>) {
-    auto maybeChannel = mcapReader_.channel(message.channelId);
-    if (!maybeChannel) {
-      onProblem_(
-        Status{StatusCode::InvalidChannelId,
-               internal::StrCat("message at log_time ", message.logTime, " (seq ", message.sequence,
-                                ") references missing channel id ", message.channelId)});
-      return;
-    }
+  if (readMessageOptions_.readOrder == ReadMessageOptions::ReadOrder::FileOrder) {
+    recordReader_.emplace(*mcapReader.dataSource(), dataStart, dataEnd);
 
-    auto& channel = *maybeChannel;
-    SchemaPtr maybeSchema;
-    if (channel.schemaId != 0) {
-      maybeSchema = mcapReader_.schema(channel.schemaId);
-      if (!maybeSchema) {
-        onProblem_(Status{StatusCode::InvalidSchemaId,
-                          internal::StrCat("channel ", channel.id, " (", channel.topic,
-                                           ") references missing schema id ", channel.schemaId)});
-        return;
-      }
-    }
-
-    curMessage_ = message;  // copy message, which may be a reference to a temporary
-    curMessageView_.emplace(curMessage_, maybeChannel, maybeSchema);
-  };
+    recordReader_->onSchema = [this](const SchemaPtr schema, ByteOffset,
+                                     std::optional<ByteOffset>) {
+      mcapReader_.schemas_.insert_or_assign(schema->id, schema);
+    };
+    recordReader_->onChannel = [this](const ChannelPtr channel, ByteOffset,
+                                      std::optional<ByteOffset>) {
+      mcapReader_.channels_.insert_or_assign(channel->id, channel);
+    };
+    recordReader_->onMessage =
+      std::bind(&LinearMessageView::Iterator::Impl::onMessage_, this, std::placeholders::_1);
+  } else {
+  }
 
   increment();
+}
+
+void LinearMessageView::Iterator::Impl::onMessage_(const Message& message) {
+  auto maybeChannel = mcapReader_.channel(message.channelId);
+  if (!maybeChannel) {
+    onProblem_(
+      Status{StatusCode::InvalidChannelId,
+             internal::StrCat("message at log_time ", message.logTime, " (seq ", message.sequence,
+                              ") references missing channel id ", message.channelId)});
+    return;
+  }
+
+  auto& channel = *maybeChannel;
+  SchemaPtr maybeSchema;
+  if (channel.schemaId != 0) {
+    maybeSchema = mcapReader_.schema(channel.schemaId);
+    if (!maybeSchema) {
+      onProblem_(Status{StatusCode::InvalidSchemaId,
+                        internal::StrCat("channel ", channel.id, " (", channel.topic,
+                                         ") references missing schema id ", channel.schemaId)});
+      return;
+    }
+  }
+
+  curMessage_ = message;  // copy message, which may be a reference to a temporary
+  curMessageView_.emplace(curMessage_, maybeChannel, maybeSchema);
 }
 
 void LinearMessageView::Iterator::Impl::increment() {
   curMessageView_ = std::nullopt;
 
-  if (!recordReader_.has_value()) {
-    return;
-  }
+  while (!curMessageView_.has_value()) {
+    if (recordReader_.has_value()) {
+      // Keep iterate through records until we find a message with a logTime >= startTime_
+      const bool found = recordReader_->next();
 
-  // Keep iterate through records until we find a message with a logTime >= startTime_
-  while (!curMessageView_.has_value() ||
-         curMessageView_->message.logTime < readMessageOptions_.startTime) {
-    const bool found = recordReader_->next();
+      // Surface any problem that may have occurred while reading
+      auto& status = recordReader_->status();
+      if (!status.ok()) {
+        onProblem_(status);
+      }
 
-    // Surface any problem that may have occurred while reading
-    auto& status = recordReader_->status();
-    if (!status.ok()) {
-      onProblem_(status);
-    }
-
-    if (!found) {
-      recordReader_ = std::nullopt;
-      return;
+      if (!found) {
+        recordReader_ = std::nullopt;
+        return;
+      }
+    } else if (indexedMessageReader_.has_value()) {
     }
   }
-
-  // Check if this message is past the time range of this view
-  if (curMessageView_->message.logTime >= readMessageOptions_.endTime) {
-    recordReader_ = std::nullopt;
-  }
-  return;
 }
 
 LinearMessageView::Iterator::reference LinearMessageView::Iterator::Impl::dereference() const {

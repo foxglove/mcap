@@ -532,4 +532,71 @@ TEST_CASE("LZ4 compression", "[reader][writer]") {
 
     reader.close();
   }
+
+  SECTION("Roundtrip 2msgs") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("test");
+    opts.compression = mcap::Compression::Lz4;
+    opts.forceCompression = true;
+    writer.open(buffer, opts);
+    mcap::Schema schema1("schema1", "schemaEncoding", "ab");
+    writer.addSchema(schema1);
+    mcap::Channel channel1("topic1", "messageEncoding", schema1.id);
+    writer.addChannel(channel1);
+
+    mcap::Message msg1;
+    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    msg1.channelId = channel1.id;
+    msg1.sequence = 0;
+    msg1.logTime = 2;
+    msg1.publishTime = 1;
+    msg1.data = data.data();
+    msg1.dataSize = data.size();
+
+    requireOk(writer.write(msg1));
+
+    mcap::Schema schema2("schema2", "schemaEncoding", "ab");
+    writer.addSchema(schema2);
+    mcap::Channel channel2("topic2", "messageEncoding", schema2.id);
+    writer.addChannel(channel2);
+
+    mcap::Message msg2;
+    msg2.channelId = channel2.id;
+    msg2.sequence = 1;
+    msg2.logTime = 2;
+    msg2.publishTime = 1;
+    msg2.data = data.data();
+    msg2.dataSize = data.size();
+    requireOk(writer.write(msg2));
+
+    writer.close();
+
+    mcap::McapReader reader;
+    auto status = reader.open(buffer);
+    requireOk(status);
+
+    size_t messageCount = 0;
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+    for (const auto& msgView : reader.readMessages(onProblem)) {
+      REQUIRE(msgView.message.sequence == messageCount);
+      if (msgView.message.sequence == 0) {
+        REQUIRE(msgView.message.channelId == channel1.id);
+      } else {
+        REQUIRE(msgView.message.channelId == channel2.id);
+      }
+      REQUIRE(msgView.message.logTime == 2);
+      REQUIRE(msgView.message.publishTime == 1);
+      REQUIRE(msgView.message.dataSize == data.size());
+      REQUIRE(std::vector(msgView.message.data, msgView.message.data + msgView.message.dataSize) ==
+              data);
+      ++messageCount;
+    }
+    REQUIRE(messageCount == 2);
+
+    reader.close();
+  }
 }
