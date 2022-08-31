@@ -112,7 +112,7 @@ jobs:
             --output-path __docs__/swift \
             --disable-indexing \
             --transform-for-static-hosting \
-            --hosting-base-path ${{ !github.event.pull_request.head.repo.fork && github.ref != 'refs/heads/main' && "foxglove-mcap-dev-preview/${{ github.sha }}/docs/swift" || "docs/swift" }}
+            --hosting-base-path ${{ !github.event.pull_request.head.repo.fork && github.ref != 'refs/heads/main' && format('foxglove-mcap-dev-preview/{0}/docs/swift', github.sha) || 'docs/swift' }}
 
       # https://github.com/actions/upload-artifact/issues/85
       - run: tar -czf docs-swift.tgz __docs__/swift
