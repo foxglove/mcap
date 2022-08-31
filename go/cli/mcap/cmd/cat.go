@@ -16,6 +16,7 @@ import (
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/cli/mcap/utils/ros"
 	"github.com/foxglove/mcap/go/mcap"
+	"github.com/foxglove/mcap/go/mcap/readopts"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -172,7 +173,8 @@ var catCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		readingStdin := stat.Mode()&os.ModeCharDevice == 0
+		// read stdin if no filename has been provided and data is available on stdin.
+		readingStdin := (stat.Mode()&os.ModeCharDevice == 0 && len(args) == 0)
 		// stdin is a special case, since we can't seek
 		if readingStdin {
 			reader, err := mcap.NewReader(os.Stdin)
@@ -180,7 +182,12 @@ var catCmd = &cobra.Command{
 				log.Fatalf("Failed to create reader: %s", err)
 			}
 			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-			it, err := reader.Messages(catStart*1e9, catEnd*1e9, topics, false)
+			it, err := reader.Messages(
+				readopts.After(catStart*1e9),
+				readopts.Before(catEnd*1e9),
+				readopts.WithTopics(topics),
+				readopts.UsingIndex(false),
+			)
 			if err != nil {
 				log.Fatalf("Failed to read messages: %s", err)
 			}
@@ -202,7 +209,11 @@ var catCmd = &cobra.Command{
 				return fmt.Errorf("failed to create reader: %w", err)
 			}
 			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-			it, err := reader.Messages(catStart*1e9, catEnd*1e9, topics, true)
+			it, err := reader.Messages(
+				readopts.After(catStart*1e9),
+				readopts.Before(catEnd*1e9),
+				readopts.WithTopics(topics),
+			)
 			if err != nil {
 				return fmt.Errorf("failed to read messages: %w", err)
 			}

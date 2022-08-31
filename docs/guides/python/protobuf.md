@@ -1,29 +1,25 @@
-# Reading and writing Protobuf messages
+# Reading and writing Protobuf
 
 To start writing Python code that reads and writes Protobuf data in MCAP, install the [`mcap-protobuf-support` helper library](https://github.com/foxglove/mcap/tree/main/python/mcap-protobuf-support).
 
-## Reading Protobuf from MCAP
+## Reading
 
-To read in Protobuf data from an MCAP file (`my_data.mcap`) as a **stream**:
+To read in Protobuf data from an MCAP file (`my_data.mcap`), use the high-level `reader` interface.
 
 ```python
 import sys
 
-from mcap.mcap0.stream_reader import StreamReader
-from mcap_protobuf.decoder import Decoder
+from mcap_protobuf.reader import read_protobuf_messages
 
 def main():
-    reader = StreamReader(sys.argv[1])
-    decoder = Decoder(reader)
-    for topic, message in decoder.messages:
-        print(f"{topic}: {message}")
-
+    for msg in read_protobuf_messages("my_data.mcap"):
+        print(f"{msg.topic}: {msg.proto_msg}")
 
 if __name__ == "__main__":
     main()
 ```
 
-## Writing Protobuf to MCAP
+## Writing
 
 ```python
 import sys
@@ -57,7 +53,7 @@ if __name__ == "__main__":
     main()
 ```
 
-### Important links
+## Important links
 
 - [MCAP Python library](https://github.com/foxglove/mcap/tree/main/python/mcap)
 - [`mcap-protobuf-support` helper library](https://github.com/foxglove/mcap/tree/main/python/mcap-protobuf-support)

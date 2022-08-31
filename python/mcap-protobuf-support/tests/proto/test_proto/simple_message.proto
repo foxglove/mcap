@@ -1,0 +1,5 @@
+syntax = "proto3";
+
+package test_proto;
+
+message SimpleMessage { string data = 1; }

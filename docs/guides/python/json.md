@@ -1,10 +1,10 @@
-# Writing JSON to MCAP
+# Writing JSON
 
 !!! info
 
     From [Recording JSON Data to MCAP Files](https://foxglove.dev/blog/recording-json-data-to-mcap-files). While JSON might not be the most efficient format for storing point cloud data, it's easy to get started with as an MCAP beginner.
 
-### Decoding CSV data
+## Writing
 
 Let's work with some publicly available data – the "[Sydney Urban Objects Dataset](https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml)", released by the [Australian Centre for Field Robotics](https://www.sydney.edu.au/engineering/our-research/robotics-and-intelligent-systems/australian-centre-for-field-robotics.html) – and write it as JSON to an MCAP file. ![sydney](../../img/705a434-sydney.png)
 
@@ -18,6 +18,8 @@ This CSV dataset contains a variety of common urban road objects scanned with a 
 - `range` - Range of laser return
 - `pid` - Point ID of the original scan
 
+### Decode CSV data
+
 Use Python's built-in [`csv`](https://docs.python.org/3/library/csv.html) and [`datetime`](https://docs.python.org/3/library/datetime.html) libraries to decode this CSV data:
 
 ```python
@@ -30,7 +32,7 @@ def point_reader(csv_path: typing.Union[str, Path]):
 
 This prints out the timestamp, intensity, and coordinates for each point in the CSV file you choose to read in.
 
-### Encoding the data into a `foxglove.PointCloud`
+### Encode data as a `foxglove.PointCloud`
 
 Let's encode this CSV data as a [`foxglove.PointCloud` schema](/docs/studio/messages/point-cloud), so we can later visualize this data in [Foxglove Studio](https://foxglove.dev/studio):
 
@@ -87,7 +89,7 @@ pointcloud["frame_id"] = "lidar"
 
 We'll leave the timestamp field for later, when we write the messages into the MCAP file.
 
-### Creating a writer
+### Create a writer
 
 We'll start with some imports from the Python MCAP library:
 
@@ -172,13 +174,13 @@ $ mcap doctor output.mcap
   Examining output.mcap
 ```
 
-### Visualize your MCAP data
+### Visualize data
 
 For a more visual representation of this data, let's use Foxglove Studio. Open either the [desktop](/download) or [web app](https://studio.foxglove.dev), and add a [Raw Messages](/docs/studio/panels/raw-messages) and our [newly added](/blog/try-foxglove-studios-new-beta-3d-panel) [3D (Beta)](/docs/studio/panels/3d-beta) panel to your layout.
 
 Then, simply drag and drop your output MCAP file into the app window to start playing the data. Make sure to enable the `pointcloud` topic in the 3D (Beta) panel to display the point cloud in 3D space. You can also inspect the raw data for the `pointcloud` topic in your Raw Messages panel: ![pointcloud](../../img/0398582-hero.png)
 
-### Important links
+## Important links
 
 - [MCAP Python library](https://github.com/foxglove/mcap/tree/main/python/mcap)
 - [Example code](https://github.com/foxglove/mcap/tree/main/python/examples/jsonschema)

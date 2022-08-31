@@ -19,7 +19,10 @@ export function parseMagic(
       `Expected MCAP magic '${MCAP0_MAGIC.map((val) => val.toString(16).padStart(2, "0")).join(
         " ",
       )}', found '${Array.from(MCAP0_MAGIC, (_, i) =>
-        view.getUint8(i).toString(16).padStart(2, "0"),
+        view
+          .getUint8(startOffset + i)
+          .toString(16)
+          .padStart(2, "0"),
       ).join(" ")}'`,
     );
   }
