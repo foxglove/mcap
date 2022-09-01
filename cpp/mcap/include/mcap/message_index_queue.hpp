@@ -55,9 +55,9 @@ public:
 
   void push(Timestamp messageTimestamp, ByteOffset messageByteOffset, size_t chunkReaderIndex) {
     heap_.push_back(MessageIndexEntry{
-      chunkReaderIndex,
-      messageByteOffset,
       messageTimestamp,
+      messageByteOffset,
+      chunkReaderIndex,
     });
     if (!reverse_) {
       std::push_heap(heap_.begin(), heap_.end(), compareForward);

@@ -613,6 +613,16 @@ TEST_CASE("Read Order", "[reader][writer]") {
     }
     REQUIRE(messageCount == 3);
 
+    options.readOrder = mcap::ReadMessageOptions::ReadOrder::ReverseLogTimeOrder;
+    messageCount = 0;
+    for (const auto& msgView : reader.readMessages(onProblem, options)) {
+      REQUIRE(msgView.message.sequence == (2 - messageCount));
+      REQUIRE(msgView.message.logTime == (2 - messageCount));
+      REQUIRE(msgView.message.publishTime == (2 - messageCount));
+      ++messageCount;
+    }
+    REQUIRE(messageCount == 3);
+
     reader.close();
   }
 }

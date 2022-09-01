@@ -1796,7 +1796,7 @@ bool IndexedMessageReader::next() {
         }
       }
       if (!found) {
-        chunkReaderSlots_.emplace_back(IndexedMessageReader::ChunkReaderSlot());
+        chunkReaderSlots_.emplace_back();
         chunkReaderIndex = chunkReaderSlots_.size() - 1;
       }
       auto& chunkReaderSlot = chunkReaderSlots_[chunkReaderIndex];
@@ -1853,10 +1853,8 @@ bool IndexedMessageReader::next() {
                   queue_.push(timestamp, byteOffset, chunkReaderIndex);
                   chunkReaderSlot.unreadMessages++;
                 }
-                break;
               }
             }
-
           } break;
           default:
             break;
@@ -1865,6 +1863,7 @@ bool IndexedMessageReader::next() {
     } else if (std::holds_alternative<MessageIndexEntry>(nextItem)) {
       auto messageIndexEntry = std::get<MessageIndexEntry>(nextItem);
       auto& chunkReaderSlot = chunkReaderSlots_[messageIndexEntry.chunkReaderIndex];
+      assert(chunkReaderSlot.unreadMessages > 0);
       chunkReaderSlot.unreadMessages--;
       BufferReader reader;
       reader.reset(chunkReaderSlot.decompressedChunk.data(),
@@ -1878,7 +1877,9 @@ bool IndexedMessageReader::next() {
         return false;
       }
       if (!(record->opcode == OpCode::Message)) {
-        status_ = Status(StatusCode::InvalidRecord, "expected a message record");
+        status_ =
+          Status(StatusCode::InvalidRecord,
+                 internal::StrCat("expected a message record, got ", OpCodeString(record->opcode)));
         return false;
       }
       Message message;
