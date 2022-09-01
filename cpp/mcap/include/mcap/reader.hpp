@@ -214,9 +214,13 @@ public:
   Timestamp startTime = 0;
   // Only messages with log timestamps less than endTime will be included.
   Timestamp endTime = MaxTime;
+
+  static bool allTopics(std::string_view) {
+    return true;
+  }
   // If provided, `topicFilter` is called on all topics found in the MCAP file. If `topicFilter`
   // returns true for a given channel, messages from that channel will be included.
-  std::function<bool(std::string_view)> topicFilter;
+  std::function<bool(std::string_view)> topicFilter = ReadMessageOptions::allTopics;
   // If `useIndex` is true, the reader will attempt to read the summary and use it to speed up
   // message retrieval. Otherwise, the summary will not be read and the reader will simply scan
   // the entire MCAP file for messages.
@@ -642,6 +646,8 @@ struct LinearMessageView {
   LinearMessageView(McapReader& mcapReader, const ProblemCallback& onProblem);
   LinearMessageView(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd,
                     Timestamp startTime, Timestamp endTime, const ProblemCallback& onProblem);
+  LinearMessageView(McapReader& mcapReader, const ReadMessageOptions& options, ByteOffset dataStart,
+                    ByteOffset dataEnd, const ProblemCallback& onProblem);
 
   LinearMessageView(const LinearMessageView&) = delete;
   LinearMessageView& operator=(const LinearMessageView&) = delete;

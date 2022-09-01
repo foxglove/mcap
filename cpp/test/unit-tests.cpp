@@ -521,7 +521,7 @@ TEST_CASE("LZ4 compression", "[reader][writer]") {
     reader.close();
   }
 
-  SECTION("Roundtrip 2msgs") {
+  SECTION("Roundtrip two topics") {
     Buffer buffer;
 
     mcap::McapWriter writer;
@@ -567,6 +567,49 @@ TEST_CASE("LZ4 compression", "[reader][writer]") {
       ++messageCount;
     }
     REQUIRE(messageCount == 2);
+
+    reader.close();
+  }
+
+  SECTION("Roundtrip unordered") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("test");
+    opts.compression = mcap::Compression::Lz4;
+    opts.forceCompression = true;
+    writer.open(buffer, opts);
+    mcap::Schema schema("schema", "schemaEncoding", "ab");
+    writer.addSchema(schema);
+    mcap::Channel channel("topic", "messageEncoding", schema.id);
+    writer.addChannel(channel);
+
+    mcap::Message msg;
+    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    writeMsg(writer, channel.id, 0, 0, 0, data);
+    writeMsg(writer, channel.id, 2, 2, 2, data);
+    writeMsg(writer, channel.id, 1, 1, 1, data);
+
+    writer.close();
+
+    mcap::McapReader reader;
+    auto status = reader.open(buffer);
+    requireOk(status);
+
+    size_t messageCount = 0;
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+
+    mcap::ReadMessageOptions options;
+    options.readOrder = mcap::ReadMessageOptions::ReadOrder::LogTimeOrder;
+    for (const auto& msgView : reader.readMessages(onProblem, options)) {
+      REQUIRE(msgView.message.sequence == messageCount);
+      REQUIRE(msgView.message.logTime == messageCount);
+      REQUIRE(msgView.message.publishTime == messageCount);
+      ++messageCount;
+    }
+    REQUIRE(messageCount == 3);
 
     reader.close();
   }

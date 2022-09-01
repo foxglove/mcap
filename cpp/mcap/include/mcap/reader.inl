@@ -562,14 +562,22 @@ LinearMessageView McapReader::readMessages(Timestamp startTime, Timestamp endTim
 
 LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem, Timestamp startTime,
                                            Timestamp endTime) {
+  ReadMessageOptions options;
+  options.startTime = startTime;
+  options.endTime = endTime;
+  return readMessages(onProblem, options);
+}
+
+LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem,
+                                           const ReadMessageOptions& options) {
   // Check that open() has been successfully called
   if (!dataSource() || dataStart_ == 0) {
     onProblem(StatusCode::NotOpen);
     return LinearMessageView{*this, onProblem};
   }
 
-  const auto [startOffset, endOffset] = byteRange(startTime, endTime);
-  return LinearMessageView{*this, startOffset, endOffset, startTime, endTime, onProblem};
+  const auto [startOffset, endOffset] = byteRange(options.startTime, options.endTime);
+  return LinearMessageView{*this, options, startOffset, endOffset, onProblem};
 }
 
 std::pair<ByteOffset, ByteOffset> McapReader::byteRange(Timestamp startTime,
@@ -1560,6 +1568,15 @@ LinearMessageView::LinearMessageView(McapReader& mcapReader, ByteOffset dataStar
     , dataStart_(dataStart)
     , dataEnd_(dataEnd)
     , readMessageOptions_(startTime, endTime)
+    , onProblem_(onProblem) {}
+
+LinearMessageView::LinearMessageView(McapReader& mcapReader, const ReadMessageOptions& options,
+                                     ByteOffset dataStart, ByteOffset dataEnd,
+                                     const ProblemCallback& onProblem)
+    : mcapReader_(mcapReader)
+    , dataStart_(dataStart)
+    , dataEnd_(dataEnd)
+    , readMessageOptions_(options)
     , onProblem_(onProblem) {}
 
 LinearMessageView::Iterator LinearMessageView::begin() {
