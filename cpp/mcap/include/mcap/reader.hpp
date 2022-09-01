@@ -11,6 +11,7 @@
 #include <string>
 #include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace mcap {
@@ -160,6 +161,8 @@ public:
   uint64_t size() const override;
   Status status() const override;
 
+  static Status DecompressAll(const std::byte* data, uint64_t compressedSize,
+                              uint64_t uncompressedSize, ByteArray* output);
   ZStdReader() = default;
   ZStdReader(const ZStdReader&) = delete;
   ZStdReader& operator=(const ZStdReader&) = delete;
@@ -168,10 +171,7 @@ public:
 
 private:
   Status status_;
-  const std::byte* compressedData_;
   ByteArray uncompressedData_;
-  uint64_t compressedSize_;
-  uint64_t uncompressedSize_;
 };
 
 /**
@@ -185,6 +185,8 @@ public:
   uint64_t size() const override;
   Status status() const override;
 
+  Status decompressAll(const std::byte* data, uint64_t size, uint64_t uncompressedSize,
+                       ByteArray* output);
   LZ4Reader();
   LZ4Reader(const LZ4Reader&) = delete;
   LZ4Reader& operator=(const LZ4Reader&) = delete;
@@ -443,8 +445,6 @@ private:
   std::multimap<std::string, MetadataIndex> metadataIndexes_;
   std::unordered_map<SchemaId, SchemaPtr> schemas_;
   std::unordered_map<ChannelId, ChannelPtr> channels_;
-  // Used for uncompressed messages
-  std::unordered_map<ChannelId, std::map<Timestamp, ByteOffset>> messageIndex_;
   ByteOffset dataStart_ = 0;
   ByteOffset dataEnd_ = EndOffset;
   Timestamp startTime_ = 0;
@@ -555,7 +555,7 @@ private:
 struct IndexedMessageReader {
 public:
   IndexedMessageReader(McapReader& reader, const ReadMessageOptions& options,
-                       const ProblemCallback& onProblem);
+                       const std::function<void(const Message&)> onMessage);
 
   /**
    * @brief reads the next message out of the MCAP file into `view`.
@@ -564,18 +564,25 @@ public:
    * @return true if there are more messages remaining to read.
    * @return false if there are no more messages remaining.
    */
-  bool next(MessageView& view);
+
+  bool next();
+
+  Status status() const;
 
 private:
   struct ChunkReaderSlot {
-    TypedChunkReader reader;
-    int unreadMessages;
+    std::vector<std::byte> decompressedChunk;
+    int unreadMessages = 0;
   };
-  ProblemCallback onProblem;
-  ReadMessageOptions options;
-  McapReader& reader_;
+  Status status_;
+  McapReader& mcapReader_;
+  RecordReader recordReader_;
+  LZ4Reader lz4Reader_;
+  ReadMessageOptions options_;
+  std::unordered_set<ChannelId> selectedChannels_;
+  std::function<void(const Message&)> onMessage_;
   MessageIndexQueue queue_;
-  std::vector<ChunkReaderSlot> chunkReaderPool_;
+  std::vector<ChunkReaderSlot> chunkReaderSlots_;
 };
 
 /**

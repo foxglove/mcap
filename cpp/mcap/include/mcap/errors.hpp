@@ -26,6 +26,7 @@ enum class StatusCode {
   OpenFailed,
   MissingStatistics,
   InvalidMessageReadOptions,
+  NoMessageIndexesAvailable,
 };
 
 /**
