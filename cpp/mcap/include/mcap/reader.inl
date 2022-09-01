@@ -1608,7 +1608,6 @@ LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataS
                                         const ReadMessageOptions& readMessageOptions,
                                         const ProblemCallback& onProblem)
     : mcapReader_(mcapReader)
-    , recordReader_(std::in_place, *mcapReader.dataSource(), dataStart, dataEnd)
     , readMessageOptions_(readMessageOptions)
     , onProblem_(onProblem) {
   auto optionsStatus = readMessageOptions_.validate();
@@ -1868,7 +1867,8 @@ bool IndexedMessageReader::next() {
       auto& chunkReaderSlot = chunkReaderSlots_[messageIndexEntry.chunkReaderIndex];
       chunkReaderSlot.unreadMessages--;
       BufferReader reader;
-      reader.reset(chunkReaderSlot.decompressedChunk.data(), messageIndexEntry.offset,
+      reader.reset(chunkReaderSlot.decompressedChunk.data(),
+                   chunkReaderSlot.decompressedChunk.size(),
                    chunkReaderSlot.decompressedChunk.size());
       recordReader_.reset(reader, messageIndexEntry.offset,
                           chunkReaderSlot.decompressedChunk.size());

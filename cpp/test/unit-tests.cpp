@@ -570,7 +570,9 @@ TEST_CASE("LZ4 compression", "[reader][writer]") {
 
     reader.close();
   }
+}
 
+TEST_CASE("Read Order", "[reader][writer]") {
   SECTION("Roundtrip unordered") {
     Buffer buffer;
 
