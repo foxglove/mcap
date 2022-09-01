@@ -1774,7 +1774,13 @@ IndexedMessageReader::IndexedMessageReader(McapReader& reader, const ReadMessage
       if (chunkIndex.messageIndexOffsets.find(channelId) != chunkIndex.messageIndexOffsets.end() &&
           chunkIndex.messageStartTime <= options_.endTime &&
           chunkIndex.messageEndTime > options_.startTime) {
-        queue_.push(chunkIndex);
+        queue_.push(DecompressChunkJob{
+          .chunkStartOffset = chunkIndex.chunkStartOffset,
+          .messageIndexEndOffset =
+            chunkIndex.chunkStartOffset + chunkIndex.chunkLength + chunkIndex.messageIndexLength,
+          .messageStartTime = chunkIndex.messageStartTime,
+          .messageEndTime = chunkIndex.messageEndTime,
+        });
         break;
       }
     }
@@ -1784,8 +1790,8 @@ IndexedMessageReader::IndexedMessageReader(McapReader& reader, const ReadMessage
 bool IndexedMessageReader::next() {
   while (queue_.len() != 0) {
     auto nextItem = queue_.pop();
-    if (std::holds_alternative<ChunkIndex>(nextItem)) {
-      auto chunkIndex = std::get<ChunkIndex>(nextItem);
+    if (nextItem.tag == ReadJob::Tag::DecompressChunk) {
+      const auto& decompressChunkJob = nextItem.decompressChunk;
       // If there is a free chunk reader slot, use that, otherwise allocate a new one.
       bool found = false;
       size_t chunkReaderIndex = 0;
@@ -1801,9 +1807,8 @@ bool IndexedMessageReader::next() {
       }
       auto& chunkReaderSlot = chunkReaderSlots_[chunkReaderIndex];
 
-      auto messageIndexEnd =
-        chunkIndex.chunkStartOffset + chunkIndex.chunkLength + chunkIndex.messageIndexLength;
-      recordReader_.reset(*mcapReader_.dataSource(), chunkIndex.chunkStartOffset, messageIndexEnd);
+      recordReader_.reset(*mcapReader_.dataSource(), decompressChunkJob.chunkStartOffset,
+                          decompressChunkJob.messageIndexEndOffset);
       for (auto record = recordReader_.next(); record != std::nullopt;
            record = recordReader_.next()) {
         switch (record->opcode) {
@@ -1850,7 +1855,11 @@ bool IndexedMessageReader::next() {
             if (selectedChannels_.find(messageIndex.channelId) != selectedChannels_.end()) {
               for (const auto& [timestamp, byteOffset] : messageIndex.records) {
                 if (timestamp >= options_.startTime && timestamp < options_.endTime) {
-                  queue_.push(timestamp, byteOffset, chunkReaderIndex);
+                  ReadMessageJob job;
+                  job.chunkReaderIndex = chunkReaderIndex;
+                  job.offset = byteOffset;
+                  job.timestamp = timestamp;
+                  queue_.push(std::move(job));
                   chunkReaderSlot.unreadMessages++;
                 }
               }
@@ -1860,17 +1869,16 @@ bool IndexedMessageReader::next() {
             break;
         }
       }
-    } else if (std::holds_alternative<MessageIndexEntry>(nextItem)) {
-      auto messageIndexEntry = std::get<MessageIndexEntry>(nextItem);
-      auto& chunkReaderSlot = chunkReaderSlots_[messageIndexEntry.chunkReaderIndex];
+    } else if (nextItem.tag == ReadJob::Tag::ReadMessage) {
+      const auto& readMessageJob = nextItem.readMessage;
+      auto& chunkReaderSlot = chunkReaderSlots_[readMessageJob.chunkReaderIndex];
       assert(chunkReaderSlot.unreadMessages > 0);
       chunkReaderSlot.unreadMessages--;
       BufferReader reader;
       reader.reset(chunkReaderSlot.decompressedChunk.data(),
                    chunkReaderSlot.decompressedChunk.size(),
                    chunkReaderSlot.decompressedChunk.size());
-      recordReader_.reset(reader, messageIndexEntry.offset,
-                          chunkReaderSlot.decompressedChunk.size());
+      recordReader_.reset(reader, readMessageJob.offset, chunkReaderSlot.decompressedChunk.size());
       auto record = recordReader_.next();
       status_ = recordReader_.status();
       if (!status_.ok()) {

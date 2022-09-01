@@ -1,7 +1,7 @@
 #pragma once
 
 #include "intervaltree.hpp"
-#include "message_index_queue.hpp"
+#include "read_job_queue.hpp"
 #include "types.hpp"
 #include <cstdio>
 #include <fstream>
@@ -585,7 +585,7 @@ private:
   ReadMessageOptions options_;
   std::unordered_set<ChannelId> selectedChannels_;
   std::function<void(const Message&)> onMessage_;
-  MessageIndexQueue queue_;
+  ReadJobQueue queue_;
   std::vector<ChunkReaderSlot> chunkReaderSlots_;
 };
 
