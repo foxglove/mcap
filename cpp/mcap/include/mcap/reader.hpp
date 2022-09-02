@@ -161,6 +161,16 @@ public:
   uint64_t size() const override;
   Status status() const override;
 
+  /**
+   * @brief Decompresses an entire Zstd-compressed chunk into `output`.
+   *
+   * @param data The Zstd-compressed input chunk.
+   * @param size The size of thelc Zstd-compressed input.
+   * @param uncompressedSize The size of the data once uncompressed.
+   * @param output The output vector. This will be resized to `uncompressedSize` to fit the data,
+   * or 0 if the decompression encountered an error.
+   * @return Status
+   */
   static Status DecompressAll(const std::byte* data, uint64_t compressedSize,
                               uint64_t uncompressedSize, ByteArray* output);
   ZStdReader() = default;
@@ -185,6 +195,16 @@ public:
   uint64_t size() const override;
   Status status() const override;
 
+  /**
+   * @brief Decompresses an entire LZ4-encoded chunk into `output`.
+   *
+   * @param data The LZ4-compressed input chunk.
+   * @param size The size of the LZ4-compressed input.
+   * @param uncompressedSize The size of the data once uncompressed.
+   * @param output The output vector. This will be resized to `uncompressedSize` to fit the data,
+   * or 0 if the decompression encountered an error.
+   * @return Status
+   */
   Status decompressAll(const std::byte* data, uint64_t size, uint64_t uncompressedSize,
                        ByteArray* output);
   LZ4Reader();
@@ -218,17 +238,18 @@ public:
   static bool allTopics(std::string_view) {
     return true;
   }
-  // If provided, `topicFilter` is called on all topics found in the MCAP file. If `topicFilter`
-  // returns true for a given channel, messages from that channel will be included.
+  /**
+   * @brief If provided, `topicFilter` is called on all topics found in the MCAP file. If
+   * `topicFilter` returns true for a given channel, messages from that channel will be included.
+   */
   std::function<bool(std::string_view)> topicFilter = ReadMessageOptions::allTopics;
-  // If `useIndex` is true, the reader will attempt to read the summary and use it to speed up
-  // message retrieval. Otherwise, the summary will not be read and the reader will simply scan
-  // the entire MCAP file for messages.
-  bool useIndex = true;
-  // if readOrder == FileOrder, messages will be returned in the order they appear in the MCAP file.
-  // if readOrder == LogTimeOrder, messages will be returned in ascending log time order.
-  // if readOrder == ReverseLogTimeOrder, messages will be returned in descending log time order.
   enum struct ReadOrder { FileOrder, LogTimeOrder, ReverseLogTimeOrder };
+  /**
+   * @brief Set the expected order that messages should be returned in.
+   * if readOrder == FileOrder, messages will be returned in the order they appear in the MCAP file.
+   * if readOrder == LogTimeOrder, messages will be returned in ascending log time order.
+   * if readOrder == ReverseLogTimeOrder, messages will be returned in descending log time order.
+   */
   ReadOrder readOrder = ReadOrder::FileOrder;
 
   ReadMessageOptions(Timestamp _startTime, Timestamp _endTime)
@@ -237,7 +258,9 @@ public:
 
   ReadMessageOptions() = default;
 
-  // validate the configuration.
+  /**
+   * @brief validate the configuration.
+   */
   Status validate() const;
 };
 
@@ -556,28 +579,42 @@ private:
   bool parsingChunk_;
 };
 
+/**
+ * @brief Uses message indices to read messages out of an MCAP in log time order.
+ * The underlying MCAP must be chunked, with a summary section and message indexes.
+ * The required McapWriterOptions are:
+ *  - noChunking: false
+ *  - noMessageIndex: false
+ *  - noSummary: false
+ */
 struct IndexedMessageReader {
 public:
   IndexedMessageReader(McapReader& reader, const ReadMessageOptions& options,
                        const std::function<void(const Message&)> onMessage);
 
   /**
-   * @brief reads the next message out of the MCAP file into `view`.
+   * @brief reads the next message out of the MCAP.
    *
-   * @param view the MessageView to update with the latest message content
-   * @return true if there are more messages remaining to read.
-   * @return false if there are no more messages remaining.
+   * @return true if a message was found.
+   * @return false if no more messages are to be read. If there was some error reading the MCAP,
+   * `status()` will return a non-Success status.
    */
-
   bool next();
 
+  /**
+   * @brief gets the status of the reader.
+   *
+   * @return Status
+   */
   Status status() const;
 
 private:
-  struct ChunkReaderSlot {
-    std::vector<std::byte> decompressedChunk;
+  struct ChunkSlot {
+    ByteArray decompressedChunk;
     int unreadMessages = 0;
   };
+  size_t findFreeChunkSlot();
+  void decompressChunk(const Chunk& chunk, ChunkSlot& slot);
   Status status_;
   McapReader& mcapReader_;
   RecordReader recordReader_;
@@ -586,7 +623,7 @@ private:
   std::unordered_set<ChannelId> selectedChannels_;
   std::function<void(const Message&)> onMessage_;
   ReadJobQueue queue_;
-  std::vector<ChunkReaderSlot> chunkReaderSlots_;
+  std::vector<ChunkSlot> chunkSlots_;
 };
 
 /**
@@ -637,7 +674,7 @@ struct LinearMessageView {
       std::optional<MessageView> curMessageView_;
 
     private:
-      void onMessage_(const Message& message);
+      void onMessage(const Message& message);
     };
 
     std::unique_ptr<Impl> impl_;

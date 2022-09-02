@@ -1626,17 +1626,21 @@ LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataS
       mcapReader_.channels_.insert_or_assign(channel->id, channel);
     };
     recordReader_->onMessage =
-      std::bind(&LinearMessageView::Iterator::Impl::onMessage_, this, std::placeholders::_1);
+      std::bind(&LinearMessageView::Iterator::Impl::onMessage, this, std::placeholders::_1);
   } else {
     indexedMessageReader_.emplace(
       mcapReader, readMessageOptions_,
-      std::bind(&LinearMessageView::Iterator::Impl::onMessage_, this, std::placeholders::_1));
+      std::bind(&LinearMessageView::Iterator::Impl::onMessage, this, std::placeholders::_1));
   }
 
   increment();
 }
 
-void LinearMessageView::Iterator::Impl::onMessage_(const Message& message) {
+/**
+ * @brief Receives a message from either the linear TypedRecordReader or IndexedMessageReader.
+ * Sets `curMessageView` with the message along with its associated Channel and Schema.
+ */
+void LinearMessageView::Iterator::Impl::onMessage(const Message& message) {
   auto maybeChannel = mcapReader_.channel(message.channelId);
   if (!maybeChannel) {
     onProblem_(
@@ -1665,9 +1669,9 @@ void LinearMessageView::Iterator::Impl::onMessage_(const Message& message) {
 void LinearMessageView::Iterator::Impl::increment() {
   curMessageView_ = std::nullopt;
 
-  while (!curMessageView_.has_value()) {
-    if (recordReader_.has_value()) {
-      // Keep iterate through records until we find a message with a logTime >= startTime_
+  if (recordReader_.has_value()) {
+    while (!curMessageView_.has_value()) {
+      // Iterate through records until curMessageView_ gets filled with a value.
       const bool found = recordReader_->next();
 
       // Surface any problem that may have occurred while reading
@@ -1680,14 +1684,17 @@ void LinearMessageView::Iterator::Impl::increment() {
         recordReader_ = std::nullopt;
         return;
       }
-    } else if (indexedMessageReader_.has_value()) {
-      const bool found = indexedMessageReader_->next();
-      auto status = indexedMessageReader_->status();
-      if (!status.ok()) {
-        onProblem_(status);
-      }
-
-      if (!found) {
+    }
+  } else if (indexedMessageReader_.has_value()) {
+    while (!curMessageView_.has_value()) {
+      // Iterate through records until curMessageView_ gets filled with a value.
+      if (!indexedMessageReader_->next()) {
+        // No message was found on last iteration - if this was because of an error,
+        // alert with onProblem_.
+        auto status = indexedMessageReader_->status();
+        if (!status.ok()) {
+          onProblem_(status);
+        }
         indexedMessageReader_ = std::nullopt;
         return;
       }
@@ -1735,11 +1742,6 @@ Status ReadMessageOptions::validate() const {
   if (startTime > endTime) {
     return Status(StatusCode::InvalidMessageReadOptions, "start time must be before end time");
   }
-
-  if (!useIndex && readOrder != ReadMessageOptions::ReadOrder::FileOrder) {
-    return Status(StatusCode::InvalidMessageReadOptions,
-                  "reading in timestamp order requires use of the index");
-  }
   return Status();
 }
 
@@ -1769,6 +1771,7 @@ IndexedMessageReader::IndexedMessageReader(McapReader& reader, const ReadMessage
       selectedChannels_.insert(channelId);
     }
   }
+  // Initialize the read job queue by finding all of the chunks that need to be read from.
   for (const auto& chunkIndex : mcapReader_.chunkIndexes()) {
     for (const auto& channelId : selectedChannels_) {
       if (chunkIndex.messageIndexOffsets.find(channelId) != chunkIndex.messageIndexOffsets.end() &&
@@ -1787,26 +1790,54 @@ IndexedMessageReader::IndexedMessageReader(McapReader& reader, const ReadMessage
   }
 }
 
+size_t IndexedMessageReader::findFreeChunkSlot() {
+  size_t chunkReaderIndex = 0;
+  for (; chunkReaderIndex < chunkSlots_.size(); chunkReaderIndex++) {
+    if (chunkSlots_[chunkReaderIndex].unreadMessages == 0) {
+      return chunkReaderIndex;
+    }
+  }
+  chunkSlots_.emplace_back();
+  return chunkSlots_.size() - 1;
+}
+
+void IndexedMessageReader::decompressChunk(const Chunk& chunk,
+                                           IndexedMessageReader::ChunkSlot& slot) {
+  auto compression = McapReader::ParseCompression(chunk.compression);
+  if (!compression.has_value()) {
+    status_ = Status(StatusCode::UnrecognizedCompression,
+                     internal::StrCat("unrecognized compression: ", chunk.compression));
+    return;
+  }
+  slot.decompressedChunk.clear();
+  if (*compression == Compression::None) {
+    slot.decompressedChunk.insert(slot.decompressedChunk.end(), &chunk.records[0],
+                                  &chunk.records[chunk.uncompressedSize]);
+  } else if (*compression == Compression::Lz4) {
+    status_ = lz4Reader_.decompressAll(chunk.records, chunk.compressedSize, chunk.uncompressedSize,
+                                       &slot.decompressedChunk);
+  } else if (*compression == Compression::Zstd) {
+    status_ = ZStdReader::DecompressAll(chunk.records, chunk.compressedSize, chunk.uncompressedSize,
+                                        &slot.decompressedChunk);
+  } else {
+    status_ = Status(StatusCode::UnrecognizedCompression,
+                     internal::StrCat("unhandled compression: ", chunk.compression));
+  }
+}
+
 bool IndexedMessageReader::next() {
   while (queue_.len() != 0) {
     auto nextItem = queue_.pop();
     if (nextItem.tag == ReadJob::Tag::DecompressChunk) {
       const auto& decompressChunkJob = nextItem.decompressChunk;
-      // If there is a free chunk reader slot, use that, otherwise allocate a new one.
-      bool found = false;
-      size_t chunkReaderIndex = 0;
-      for (; chunkReaderIndex < chunkReaderSlots_.size(); chunkReaderIndex++) {
-        if (chunkReaderSlots_[chunkReaderIndex].unreadMessages == 0) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        chunkReaderSlots_.emplace_back();
-        chunkReaderIndex = chunkReaderSlots_.size() - 1;
-      }
-      auto& chunkReaderSlot = chunkReaderSlots_[chunkReaderIndex];
+      // The job here is to decompress the chunk into a slot, then use the message
+      // indices after the chunk to push ReadMessageJobs onto the quue for every message
+      // in that chunk that needs to be read.
 
+      // First, find a chunk slot to decompress this chunk into.
+      size_t chunkReaderIndex = findFreeChunkSlot();
+      auto& chunkSlot = chunkSlots_[chunkReaderIndex];
+      // Point the record reader at the chunk and message indices after it.
       recordReader_.reset(*mcapReader_.dataSource(), decompressChunkJob.chunkStartOffset,
                           decompressChunkJob.messageIndexEndOffset);
       for (auto record = recordReader_.next(); record != std::nullopt;
@@ -1818,30 +1849,7 @@ bool IndexedMessageReader::next() {
             if (!status_.ok()) {
               return false;
             }
-            // decompress chunk data into slot buffer.
-            // set the bufferReader to cover the entire buffer.
-            auto compression = McapReader::ParseCompression(chunk.compression);
-            chunkReaderSlot.decompressedChunk.clear();
-            if (!compression.has_value()) {
-              status_ = Status(StatusCode::UnrecognizedCompression,
-                               internal::StrCat("unrecognized compression: ", chunk.compression));
-            } else if (*compression == Compression::None) {
-              chunkReaderSlot.decompressedChunk.clear();
-              chunkReaderSlot.decompressedChunk.insert(chunkReaderSlot.decompressedChunk.end(),
-                                                       &chunk.records[0],
-                                                       &chunk.records[chunk.uncompressedSize]);
-            } else if (*compression == Compression::Lz4) {
-              status_ = lz4Reader_.decompressAll(chunk.records, chunk.compressedSize,
-                                                 chunk.uncompressedSize,
-                                                 &chunkReaderSlot.decompressedChunk);
-            } else if (*compression == Compression::Zstd) {
-              status_ = ZStdReader::DecompressAll(chunk.records, chunk.compressedSize,
-                                                  chunk.uncompressedSize,
-                                                  &chunkReaderSlot.decompressedChunk);
-            } else {
-              status_ = Status(StatusCode::UnrecognizedCompression,
-                               internal::StrCat("unrecognized compression: ", chunk.compression));
-            }
+            decompressChunk(chunk, chunkSlot);
             if (!status_.ok()) {
               return false;
             }
@@ -1860,31 +1868,34 @@ bool IndexedMessageReader::next() {
                   job.offset = byteOffset;
                   job.timestamp = timestamp;
                   queue_.push(std::move(job));
-                  chunkReaderSlot.unreadMessages++;
+                  chunkSlot.unreadMessages++;
                 }
               }
             }
           } break;
           default:
-            break;
+            status_ = Status(StatusCode::InvalidRecord,
+                             internal::StrCat("expected only chunks and message indices, found ",
+                                              OpCodeString(record->opcode)));
+            return false;
         }
       }
     } else if (nextItem.tag == ReadJob::Tag::ReadMessage) {
+      // Read the message out of the already-decompressed chunk.
       const auto& readMessageJob = nextItem.readMessage;
-      auto& chunkReaderSlot = chunkReaderSlots_[readMessageJob.chunkReaderIndex];
-      assert(chunkReaderSlot.unreadMessages > 0);
-      chunkReaderSlot.unreadMessages--;
+      auto& chunkSlot = chunkSlots_[readMessageJob.chunkReaderIndex];
+      assert(chunkSlot.unreadMessages > 0);
+      chunkSlot.unreadMessages--;
       BufferReader reader;
-      reader.reset(chunkReaderSlot.decompressedChunk.data(),
-                   chunkReaderSlot.decompressedChunk.size(),
-                   chunkReaderSlot.decompressedChunk.size());
-      recordReader_.reset(reader, readMessageJob.offset, chunkReaderSlot.decompressedChunk.size());
+      reader.reset(chunkSlot.decompressedChunk.data(), chunkSlot.decompressedChunk.size(),
+                   chunkSlot.decompressedChunk.size());
+      recordReader_.reset(reader, readMessageJob.offset, chunkSlot.decompressedChunk.size());
       auto record = recordReader_.next();
       status_ = recordReader_.status();
       if (!status_.ok()) {
         return false;
       }
-      if (!(record->opcode == OpCode::Message)) {
+      if (record->opcode != OpCode::Message) {
         status_ =
           Status(StatusCode::InvalidRecord,
                  internal::StrCat("expected a message record, got ", OpCodeString(record->opcode)));
@@ -1901,6 +1912,7 @@ bool IndexedMessageReader::next() {
   }
   return false;
 }
+
 Status IndexedMessageReader::status() const {
   return status_;
 }
