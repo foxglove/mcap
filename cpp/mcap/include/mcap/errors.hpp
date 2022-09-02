@@ -92,6 +92,12 @@ struct [[nodiscard]] Status {
       case StatusCode::MissingStatistics:
         message = "missing statistics";
         break;
+      case StatusCode::InvalidMessageReadOptions:
+        message = "message read options conflict";
+        break;
+      case StatusCode::NoMessageIndexesAvailable:
+        message = "MCAP file has no message indices";
+        break;
       default:
         message = "unknown";
         break;
