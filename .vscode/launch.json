@@ -23,7 +23,7 @@
       "request": "launch",
       "name": "C++ unit tests",
       "program": "${workspaceFolder}/cpp/test/build/Debug/bin/unit-tests",
-      "args": ["Read Order"],
+      "args": [],
       "cwd": "${workspaceFolder}"
     }
   ]
