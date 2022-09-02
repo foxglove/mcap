@@ -1774,13 +1774,13 @@ IndexedMessageReader::IndexedMessageReader(McapReader& reader, const ReadMessage
       if (chunkIndex.messageIndexOffsets.find(channelId) != chunkIndex.messageIndexOffsets.end() &&
           chunkIndex.messageStartTime <= options_.endTime &&
           chunkIndex.messageEndTime > options_.startTime) {
-        queue_.push(DecompressChunkJob{
-          .chunkStartOffset = chunkIndex.chunkStartOffset,
-          .messageIndexEndOffset =
-            chunkIndex.chunkStartOffset + chunkIndex.chunkLength + chunkIndex.messageIndexLength,
-          .messageStartTime = chunkIndex.messageStartTime,
-          .messageEndTime = chunkIndex.messageEndTime,
-        });
+        DecompressChunkJob job;
+        job.chunkStartOffset = chunkIndex.chunkStartOffset;
+        job.messageIndexEndOffset =
+          chunkIndex.chunkStartOffset + chunkIndex.chunkLength + chunkIndex.messageIndexLength;
+        job.messageStartTime = chunkIndex.messageStartTime;
+        job.messageEndTime = chunkIndex.messageEndTime;
+        queue_.push(std::move(job));
         break;
       }
     }
