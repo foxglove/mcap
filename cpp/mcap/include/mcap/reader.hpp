@@ -165,7 +165,7 @@ public:
    * @brief Decompresses an entire Zstd-compressed chunk into `output`.
    *
    * @param data The Zstd-compressed input chunk.
-   * @param size The size of thelc Zstd-compressed input.
+   * @param size The size of the Zstd-compressed input.
    * @param uncompressedSize The size of the data once uncompressed.
    * @param output The output vector. This will be resized to `uncompressedSize` to fit the data,
    * or 0 if the decompression encountered an error.

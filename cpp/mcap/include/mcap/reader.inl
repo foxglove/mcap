@@ -1641,6 +1641,13 @@ LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataS
  * Sets `curMessageView` with the message along with its associated Channel and Schema.
  */
 void LinearMessageView::Iterator::Impl::onMessage(const Message& message) {
+  // make sure the message is within the expected time range
+  if (message.logTime < readMessageOptions_.startTime) {
+    return;
+  }
+  if (message.logTime >= readMessageOptions_.endTime) {
+    return;
+  }
   auto maybeChannel = mcapReader_.channel(message.channelId);
   if (!maybeChannel) {
     onProblem_(
@@ -1651,6 +1658,10 @@ void LinearMessageView::Iterator::Impl::onMessage(const Message& message) {
   }
 
   auto& channel = *maybeChannel;
+  // make sure the message is on the right topic
+  if (!readMessageOptions_.topicFilter(channel.topic)) {
+    return;
+  }
   SchemaPtr maybeSchema;
   if (channel.schemaId != 0) {
     maybeSchema = mcapReader_.schema(channel.schemaId);
@@ -1831,7 +1842,7 @@ bool IndexedMessageReader::next() {
     if (nextItem.tag == ReadJob::Tag::DecompressChunk) {
       const auto& decompressChunkJob = nextItem.decompressChunk;
       // The job here is to decompress the chunk into a slot, then use the message
-      // indices after the chunk to push ReadMessageJobs onto the quue for every message
+      // indices after the chunk to push ReadMessageJobs onto the queue for every message
       // in that chunk that needs to be read.
 
       // First, find a chunk slot to decompress this chunk into.
