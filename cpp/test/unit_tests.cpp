@@ -40,7 +40,7 @@ void requireOk(const mcap::Status& status) {
   REQUIRE(status.ok());
 }
 
-static void writeMsg(mcap::McapWriter& writer, mcap::ChannelId channelId, uint32_t sequence,
+static void WriteMsg(mcap::McapWriter& writer, mcap::ChannelId channelId, uint32_t sequence,
                      mcap::Timestamp logTime, mcap::Timestamp publishTime,
                      const std::vector<std::byte>& data) {
   mcap::Message msg;
@@ -68,7 +68,7 @@ static void writeExampleFile(Buffer& buffer) {
   mcap::Channel channel("example", "a", schema.id, {{"foo", "bar"}});
   writer.addChannel(channel);
   std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
-  writeMsg(writer, channel.id, 10, 2, 1, data);
+  WriteMsg(writer, channel.id, 10, 2, 1, data);
   writer.close();
 }
 
@@ -422,8 +422,8 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
     mcap::Channel channel("topic", "messageEncoding", schema.id);
     writer.addChannel(channel);
     std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
-    writeMsg(writer, channel.id, 0, 2, 1, data);
-    writeMsg(writer, channel.id, 1, 4, 3, data);
+    WriteMsg(writer, channel.id, 0, 2, 1, data);
+    WriteMsg(writer, channel.id, 1, 4, 3, data);
     writer.close();
 
     mcap::McapReader reader;
@@ -494,7 +494,7 @@ TEST_CASE("LZ4 compression", "[reader][writer]") {
 
     mcap::Message msg;
     std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
-    writeMsg(writer, channel.id, 0, 2, 1, data);
+    WriteMsg(writer, channel.id, 0, 2, 1, data);
 
     writer.close();
 
@@ -534,13 +534,13 @@ TEST_CASE("LZ4 compression", "[reader][writer]") {
     mcap::Channel channel1("topic1", "messageEncoding", schema1.id);
     writer.addChannel(channel1);
     std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
-    writeMsg(writer, channel1.id, 0, 2, 1, data);
+    WriteMsg(writer, channel1.id, 0, 2, 1, data);
 
     mcap::Schema schema2("schema2", "schemaEncoding", "ab");
     writer.addSchema(schema2);
     mcap::Channel channel2("topic1", "messageEncoding", schema2.id);
     writer.addChannel(channel2);
-    writeMsg(writer, channel2.id, 1, 2, 1, data);
+    WriteMsg(writer, channel2.id, 1, 2, 1, data);
 
     writer.close();
 
@@ -588,9 +588,9 @@ TEST_CASE("Read Order", "[reader][writer]") {
 
     mcap::Message msg;
     std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
-    writeMsg(writer, channel.id, 0, 0, 0, data);
-    writeMsg(writer, channel.id, 2, 2, 2, data);
-    writeMsg(writer, channel.id, 1, 1, 1, data);
+    WriteMsg(writer, channel.id, 0, 0, 0, data);
+    WriteMsg(writer, channel.id, 2, 2, 2, data);
+    WriteMsg(writer, channel.id, 1, 1, 1, data);
 
     writer.close();
 
