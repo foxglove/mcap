@@ -48,7 +48,7 @@ private:
   /**
    * @brief return the timestamp key that should be used to compare jobs.
    */
-  static Timestamp comparisonKey(const ReadJob& job, bool reverse) {
+  static Timestamp ComparisonKey(const ReadJob& job, bool reverse) {
     Timestamp result = 0;
     std::visit(
       [&](auto&& arg) {
@@ -69,12 +69,12 @@ private:
     return result;
   }
 
-  static bool compareForward(const ReadJob& a, const ReadJob& b) {
-    return comparisonKey(a, false) > comparisonKey(b, false);
+  static bool CompareForward(const ReadJob& a, const ReadJob& b) {
+    return ComparisonKey(a, false) > ComparisonKey(b, false);
   }
 
-  static bool compareReverse(const ReadJob& a, const ReadJob& b) {
-    return comparisonKey(a, true) < comparisonKey(b, true);
+  static bool CompareReverse(const ReadJob& a, const ReadJob& b) {
+    return ComparisonKey(a, true) < ComparisonKey(b, true);
   }
 
 public:
@@ -83,26 +83,26 @@ public:
   void push(DecompressChunkJob&& decompressChunkJob) {
     heap_.emplace_back(std::move(decompressChunkJob));
     if (!reverse_) {
-      std::push_heap(heap_.begin(), heap_.end(), compareForward);
+      std::push_heap(heap_.begin(), heap_.end(), CompareForward);
     } else {
-      std::push_heap(heap_.begin(), heap_.end(), compareReverse);
+      std::push_heap(heap_.begin(), heap_.end(), CompareReverse);
     }
   }
 
   void push(ReadMessageJob&& readMessageJob) {
     heap_.emplace_back(std::move(readMessageJob));
     if (!reverse_) {
-      std::push_heap(heap_.begin(), heap_.end(), compareForward);
+      std::push_heap(heap_.begin(), heap_.end(), CompareForward);
     } else {
-      std::push_heap(heap_.begin(), heap_.end(), compareReverse);
+      std::push_heap(heap_.begin(), heap_.end(), CompareReverse);
     }
   }
 
   ReadJob pop() {
     if (!reverse_) {
-      std::pop_heap(heap_.begin(), heap_.end(), compareForward);
+      std::pop_heap(heap_.begin(), heap_.end(), CompareForward);
     } else {
-      std::pop_heap(heap_.begin(), heap_.end(), compareReverse);
+      std::pop_heap(heap_.begin(), heap_.end(), CompareReverse);
     }
     auto popped = heap_.back();
     heap_.pop_back();
