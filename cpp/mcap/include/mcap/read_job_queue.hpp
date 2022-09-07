@@ -5,6 +5,10 @@
 
 namespace mcap {
 
+// Helper for writing compile-time exhaustive variant visitors.
+template <class>
+inline constexpr bool always_false_v = false;
+
 /**
  * @brief A job to read a specific message at offset `offset` from the decompressed chunk
  * stored in `chunkReaderIndex`. A timestamp is provided to order this job relative to other jobs.
@@ -28,57 +32,9 @@ struct DecompressChunkJob {
 };
 
 /**
- * @brief A tagged union of jobs that an indexed MCAP reader executes.
+ * @brief A union of jobs that an indexed MCAP reader executes.
  */
-struct ReadJob {
-  enum struct Tag {
-    ReadMessage,
-    DecompressChunk,
-  };
-  Tag tag;
-  union {
-    ReadMessageJob readMessage;
-    DecompressChunkJob decompressChunk;
-  };
-
-  explicit ReadJob(ReadMessageJob&& readMessageJob) {
-    tag = Tag::ReadMessage;
-    readMessage = readMessageJob;
-  }
-
-  explicit ReadJob(DecompressChunkJob&& decompressChunkJob) {
-    tag = Tag::DecompressChunk;
-    decompressChunk = decompressChunkJob;
-  }
-
-  /**
-   * @brief returns the comparison key that should be used when ordering these jobs forward in time.
-   */
-  Timestamp forwardComparisonKey() const {
-    switch (tag) {
-      case ReadJob::Tag::ReadMessage:
-        return readMessage.timestamp;
-      case ReadJob::Tag::DecompressChunk:
-        return decompressChunk.messageStartTime;
-      default:
-        assert(false && "unreachable");
-    }
-  }
-  /**
-   * @brief returns the comparison key that should be used when ordering these jobs in reverse
-   * time order.
-   */
-  Timestamp reverseComparisonKey() const {
-    switch (tag) {
-      case ReadJob::Tag::ReadMessage:
-        return readMessage.timestamp;
-      case ReadJob::Tag::DecompressChunk:
-        return decompressChunk.messageEndTime;
-      default:
-        assert(false && "unreachable");
-    }
-  }
-};
+using ReadJob = std::variant<ReadMessageJob, DecompressChunkJob>;
 
 /**
  * @brief A priority queue of jobs for an indexed MCAP reader to execute.
@@ -88,12 +44,36 @@ private:
   bool reverse_ = false;
   std::vector<ReadJob> heap_;
 
+  /**
+   * @brief return the timestamp key that should be used to compare jobs.
+   */
+  static Timestamp comparisonKey(const ReadJob& job, bool reverse) {
+    Timestamp result = 0;
+    std::visit(
+      [&](auto&& arg) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, ReadMessageJob>) {
+          result = arg.timestamp;
+        } else if constexpr (std::is_same_v<T, DecompressChunkJob>) {
+          if (reverse) {
+            result = arg.messageEndTime;
+          } else {
+            result = arg.messageStartTime;
+          }
+        } else {
+          static_assert(always_false_v<T>, "non-exhaustive visitor!");
+        }
+      },
+      job);
+    return result;
+  }
+
   static bool compareForward(const ReadJob& a, const ReadJob& b) {
-    return a.forwardComparisonKey() > b.forwardComparisonKey();
+    return comparisonKey(a, false) > comparisonKey(b, false);
   }
 
   static bool compareReverse(const ReadJob& a, const ReadJob& b) {
-    return a.reverseComparisonKey() < b.reverseComparisonKey();
+    return comparisonKey(a, true) < comparisonKey(b, true);
   }
 
 public:
@@ -128,9 +108,9 @@ public:
     return popped;
   }
 
-  size_t len() {
+  size_t len() const {
     return heap_.size();
-  };
+  }
 };
 
 }  // namespace mcap

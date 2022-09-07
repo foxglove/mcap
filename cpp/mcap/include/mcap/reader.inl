@@ -1839,8 +1839,8 @@ void IndexedMessageReader::decompressChunk(const Chunk& chunk,
 bool IndexedMessageReader::next() {
   while (queue_.len() != 0) {
     auto nextItem = queue_.pop();
-    if (nextItem.tag == ReadJob::Tag::DecompressChunk) {
-      const auto& decompressChunkJob = nextItem.decompressChunk;
+    if (std::holds_alternative<DecompressChunkJob>(nextItem)) {
+      const auto& decompressChunkJob = std::get<DecompressChunkJob>(nextItem);
       // The job here is to decompress the chunk into a slot, then use the message
       // indices after the chunk to push ReadMessageJobs onto the queue for every message
       // in that chunk that needs to be read.
@@ -1891,9 +1891,9 @@ bool IndexedMessageReader::next() {
             return false;
         }
       }
-    } else if (nextItem.tag == ReadJob::Tag::ReadMessage) {
+    } else if (std::holds_alternative<ReadMessageJob>(nextItem)) {
       // Read the message out of the already-decompressed chunk.
-      const auto& readMessageJob = nextItem.readMessage;
+      const auto& readMessageJob = std::get<ReadMessageJob>(nextItem);
       auto& chunkSlot = chunkSlots_[readMessageJob.chunkReaderIndex];
       assert(chunkSlot.unreadMessages > 0);
       chunkSlot.unreadMessages--;
