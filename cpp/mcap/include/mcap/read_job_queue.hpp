@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include <algorithm>
+#include <variant>
 
 namespace mcap {
 

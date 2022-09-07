@@ -1659,7 +1659,7 @@ void LinearMessageView::Iterator::Impl::onMessage(const Message& message) {
 
   auto& channel = *maybeChannel;
   // make sure the message is on the right topic
-  if (!readMessageOptions_.topicFilter(channel.topic)) {
+  if (readMessageOptions_.topicFilter && !readMessageOptions_.topicFilter(channel.topic)) {
     return;
   }
   SchemaPtr maybeSchema;
@@ -1778,7 +1778,7 @@ IndexedMessageReader::IndexedMessageReader(McapReader& reader, const ReadMessage
     return;
   }
   for (const auto& [channelId, channel] : mcapReader_.channels()) {
-    if (options_.topicFilter(channel->topic)) {
+    if (!options_.topicFilter || options_.topicFilter(channel->topic)) {
       selectedChannels_.insert(channelId);
     }
   }
@@ -1802,8 +1802,7 @@ IndexedMessageReader::IndexedMessageReader(McapReader& reader, const ReadMessage
 }
 
 size_t IndexedMessageReader::findFreeChunkSlot() {
-  size_t chunkReaderIndex = 0;
-  for (; chunkReaderIndex < chunkSlots_.size(); chunkReaderIndex++) {
+  for (size_t chunkReaderIndex = 0; chunkReaderIndex < chunkSlots_.size(); chunkReaderIndex++) {
     if (chunkSlots_[chunkReaderIndex].unreadMessages == 0) {
       return chunkReaderIndex;
     }

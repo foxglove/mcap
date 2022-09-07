@@ -164,7 +164,7 @@ public:
    * @brief Decompresses an entire Zstd-compressed chunk into `output`.
    *
    * @param data The Zstd-compressed input chunk.
-   * @param size The size of the Zstd-compressed input.
+   * @param compressedSize The size of the Zstd-compressed input.
    * @param uncompressedSize The size of the data once uncompressed.
    * @param output The output vector. This will be resized to `uncompressedSize` to fit the data,
    * or 0 if the decompression encountered an error.
@@ -233,15 +233,12 @@ public:
   Timestamp startTime = 0;
   // Only messages with log timestamps less than endTime will be included.
   Timestamp endTime = MaxTime;
-
-  static bool allTopics(std::string_view) {
-    return true;
-  }
   /**
    * @brief If provided, `topicFilter` is called on all topics found in the MCAP file. If
    * `topicFilter` returns true for a given channel, messages from that channel will be included.
+   * if not provided, messages from all channels are provided.
    */
-  std::function<bool(std::string_view)> topicFilter = ReadMessageOptions::allTopics;
+  std::function<bool(std::string_view)> topicFilter;
   enum struct ReadOrder { FileOrder, LogTimeOrder, ReverseLogTimeOrder };
   /**
    * @brief Set the expected order that messages should be returned in.
@@ -251,9 +248,9 @@ public:
    */
   ReadOrder readOrder = ReadOrder::FileOrder;
 
-  ReadMessageOptions(Timestamp _startTime, Timestamp _endTime)
-      : startTime(_startTime)
-      , endTime(_endTime) {}
+  ReadMessageOptions(Timestamp start, Timestamp end)
+      : startTime(start)
+      , endTime(end) {}
 
   ReadMessageOptions() = default;
 
