@@ -96,7 +96,7 @@ struct [[nodiscard]] Status {
         message = "message read options conflict";
         break;
       case StatusCode::NoMessageIndexesAvailable:
-        message = "MCAP file has no message indices";
+        message = "file has no message indices";
         break;
       default:
         message = "unknown";
