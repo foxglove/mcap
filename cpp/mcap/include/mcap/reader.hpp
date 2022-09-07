@@ -229,9 +229,13 @@ struct LinearMessageView;
  */
 struct ReadMessageOptions {
 public:
-  // Only messages with log timestamps greater or equal to startTime will be included.
+  /**
+   * @brief Only messages with log timestamps greater or equal to startTime will be included.
+   */
   Timestamp startTime = 0;
-  // Only messages with log timestamps less than endTime will be included.
+  /**
+   * @brief Only messages with log timestamps less than endTime will be included.
+   */
   Timestamp endTime = MaxTime;
   /**
    * @brief If provided, `topicFilter` is called on all topics found in the MCAP file. If
