@@ -4,7 +4,7 @@ set -e
 
 conan config init
 
-conan editable add ./mcap mcap/0.1.2
+conan editable add ./mcap mcap/0.2.0
 conan install bench --install-folder bench/build/Release \
   -s compiler.cppstd=17 -s build_type=Release --build missing
 conan install examples --install-folder examples/build/Release \

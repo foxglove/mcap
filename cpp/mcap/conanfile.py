@@ -3,7 +3,7 @@ from conans import ConanFile, tools
 
 class McapConan(ConanFile):
     name = "mcap"
-    version = "0.1.2"
+    version = "0.2.0"
     url = "https://github.com/foxglove/mcap"
     homepage = "https://github.com/foxglove/mcap"
     description = "A C++ implementation of the MCAP file format"

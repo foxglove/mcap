@@ -40,6 +40,19 @@ void requireOk(const mcap::Status& status) {
   REQUIRE(status.ok());
 }
 
+static void WriteMsg(mcap::McapWriter& writer, mcap::ChannelId channelId, uint32_t sequence,
+                     mcap::Timestamp logTime, mcap::Timestamp publishTime,
+                     const std::vector<std::byte>& data) {
+  mcap::Message msg;
+  msg.channelId = channelId;
+  msg.sequence = sequence;
+  msg.logTime = logTime;
+  msg.publishTime = publishTime;
+  msg.data = data.data();
+  msg.dataSize = data.size();
+  requireOk(writer.write(msg));
+}
+
 static void writeExampleFile(Buffer& buffer) {
   mcap::McapWriter writer;
   mcap::McapWriterOptions opts("");
@@ -54,15 +67,8 @@ static void writeExampleFile(Buffer& buffer) {
   writer.addSchema(schema);
   mcap::Channel channel("example", "a", schema.id, {{"foo", "bar"}});
   writer.addChannel(channel);
-  mcap::Message msg;
   std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
-  msg.channelId = channel.id;
-  msg.sequence = 10;
-  msg.logTime = 2;
-  msg.publishTime = 1;
-  msg.data = data.data();
-  msg.dataSize = data.size();
-  requireOk(writer.write(msg));
+  WriteMsg(writer, channel.id, 10, 2, 1, data);
   writer.close();
 }
 
@@ -415,21 +421,9 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
     writer.addSchema(schema);
     mcap::Channel channel("topic", "messageEncoding", schema.id);
     writer.addChannel(channel);
-    mcap::Message msg;
     std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
-    msg.channelId = channel.id;
-    msg.sequence = 0;
-    msg.logTime = 2;
-    msg.publishTime = 1;
-    msg.data = data.data();
-    msg.dataSize = data.size();
-    requireOk(writer.write(msg));
-    msg.sequence = 1;
-    msg.logTime = 4;
-    msg.publishTime = 3;
-    msg.data = data.data();
-    msg.dataSize = data.size();
-    requireOk(writer.write(msg));
+    WriteMsg(writer, channel.id, 0, 2, 1, data);
+    WriteMsg(writer, channel.id, 1, 4, 3, data);
     writer.close();
 
     mcap::McapReader reader;
@@ -444,7 +438,7 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
       REQUIRE(it->message.channelId == channel.id);
       REQUIRE(it->message.logTime == 2);
       REQUIRE(it->message.publishTime == 1);
-      REQUIRE(it->message.dataSize == msg.dataSize);
+      REQUIRE(it->message.dataSize == data.size());
       REQUIRE(std::vector(it->message.data, it->message.data + it->message.dataSize) == data);
 
       // ensure iterator still works after move
@@ -455,7 +449,7 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
       REQUIRE(other->message.channelId == channel.id);
       REQUIRE(other->message.logTime == 2);
       REQUIRE(other->message.publishTime == 1);
-      REQUIRE(other->message.dataSize == msg.dataSize);
+      REQUIRE(other->message.dataSize == data.size());
       REQUIRE(std::vector(other->message.data, other->message.data + other->message.dataSize) ==
               data);
     }
@@ -467,7 +461,7 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
       REQUIRE(it->message.channelId == channel.id);
       REQUIRE(it->message.logTime == 4);
       REQUIRE(it->message.publishTime == 3);
-      REQUIRE(it->message.dataSize == msg.dataSize);
+      REQUIRE(it->message.dataSize == data.size());
       REQUIRE(std::vector(it->message.data, it->message.data + it->message.dataSize) == data);
     }
 
@@ -500,13 +494,7 @@ TEST_CASE("LZ4 compression", "[reader][writer]") {
 
     mcap::Message msg;
     std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
-    msg.channelId = channel.id;
-    msg.sequence = 0;
-    msg.logTime = 2;
-    msg.publishTime = 1;
-    msg.data = data.data();
-    msg.dataSize = data.size();
-    requireOk(writer.write(msg));
+    WriteMsg(writer, channel.id, 0, 2, 1, data);
 
     writer.close();
 
@@ -524,11 +512,116 @@ TEST_CASE("LZ4 compression", "[reader][writer]") {
       REQUIRE(msgView.message.channelId == channel.id);
       REQUIRE(msgView.message.logTime == 2);
       REQUIRE(msgView.message.publishTime == 1);
-      REQUIRE(msgView.message.dataSize == msg.dataSize);
+      REQUIRE(msgView.message.dataSize == data.size());
       REQUIRE(std::vector(msgView.message.data, msgView.message.data + msgView.message.dataSize) ==
               data);
     }
     REQUIRE(messageCount == 1);
+
+    reader.close();
+  }
+
+  SECTION("Roundtrip two topics") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("test");
+    opts.compression = mcap::Compression::Lz4;
+    opts.forceCompression = true;
+    writer.open(buffer, opts);
+    mcap::Schema schema1("schema1", "schemaEncoding", "ab");
+    writer.addSchema(schema1);
+    mcap::Channel channel1("topic1", "messageEncoding", schema1.id);
+    writer.addChannel(channel1);
+    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    WriteMsg(writer, channel1.id, 0, 2, 1, data);
+
+    mcap::Schema schema2("schema2", "schemaEncoding", "ab");
+    writer.addSchema(schema2);
+    mcap::Channel channel2("topic1", "messageEncoding", schema2.id);
+    writer.addChannel(channel2);
+    WriteMsg(writer, channel2.id, 1, 2, 1, data);
+
+    writer.close();
+
+    mcap::McapReader reader;
+    auto status = reader.open(buffer);
+    requireOk(status);
+
+    size_t messageCount = 0;
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+    for (const auto& msgView : reader.readMessages(onProblem)) {
+      REQUIRE(msgView.message.sequence == messageCount);
+      if (msgView.message.sequence == 0) {
+        REQUIRE(msgView.message.channelId == channel1.id);
+      } else {
+        REQUIRE(msgView.message.channelId == channel2.id);
+      }
+      REQUIRE(msgView.message.logTime == 2);
+      REQUIRE(msgView.message.publishTime == 1);
+      REQUIRE(msgView.message.dataSize == data.size());
+      REQUIRE(std::vector(msgView.message.data, msgView.message.data + msgView.message.dataSize) ==
+              data);
+      ++messageCount;
+    }
+    REQUIRE(messageCount == 2);
+
+    reader.close();
+  }
+}
+
+TEST_CASE("Read Order", "[reader][writer]") {
+  SECTION("Roundtrip unordered") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("test");
+    opts.compression = mcap::Compression::Lz4;
+    opts.forceCompression = true;
+    writer.open(buffer, opts);
+    mcap::Schema schema("schema", "schemaEncoding", "ab");
+    writer.addSchema(schema);
+    mcap::Channel channel("topic", "messageEncoding", schema.id);
+    writer.addChannel(channel);
+
+    mcap::Message msg;
+    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    WriteMsg(writer, channel.id, 0, 0, 0, data);
+    WriteMsg(writer, channel.id, 2, 2, 2, data);
+    WriteMsg(writer, channel.id, 1, 1, 1, data);
+
+    writer.close();
+
+    mcap::McapReader reader;
+    auto status = reader.open(buffer);
+    requireOk(status);
+
+    size_t messageCount = 0;
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+
+    mcap::ReadMessageOptions options;
+    options.readOrder = mcap::ReadMessageOptions::ReadOrder::LogTimeOrder;
+    for (const auto& msgView : reader.readMessages(onProblem, options)) {
+      REQUIRE(msgView.message.sequence == messageCount);
+      REQUIRE(msgView.message.logTime == messageCount);
+      REQUIRE(msgView.message.publishTime == messageCount);
+      ++messageCount;
+    }
+    REQUIRE(messageCount == 3);
+
+    options.readOrder = mcap::ReadMessageOptions::ReadOrder::ReverseLogTimeOrder;
+    messageCount = 0;
+    for (const auto& msgView : reader.readMessages(onProblem, options)) {
+      REQUIRE(msgView.message.sequence == (2 - messageCount));
+      REQUIRE(msgView.message.logTime == (2 - messageCount));
+      REQUIRE(msgView.message.publishTime == (2 - messageCount));
+      ++messageCount;
+    }
+    REQUIRE(messageCount == 3);
 
     reader.close();
   }
