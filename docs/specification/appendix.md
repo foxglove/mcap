@@ -65,15 +65,43 @@ Schema `encoding` may only be omitted for self-describing message encodings such
 
 ### ros1msg
 
-- `name`: A valid [package resource name](http://wiki.ros.org/Names#Package_Resource_Names), e.g. `sensor_msgs/PointCloud2`
+- `name`: A valid [package resource name](http://wiki.ros.org/Names#Package_Resource_Names), e.g. `sensor_msgs/PointCloud2`.
 - `encoding`: `ros1msg`
-- `data`: Concatenated ROS1 .msg files
+- `data`: Delimited concatenated ROS1 .msg files.
+
+#### ros1msg Data Format
+
+the `data` field contains the concatenated `.msg` file content that is sent in the ROS subscription connection header for this message type.
+
+The top-level message definition is present first, with no delimiter. All dependent `.msg` definitions are preceded by a two-line delimiter:
+
+- One line containing exactly 80 `=` characters
+- One line containing `MSG: <package resource name>` for that type. The space between `MSG:` and the package resource name is mandatory. The package resource name does not include a file extension.
+
+This format can be reproduced using [gendeps --cat](http://wiki.ros.org/roslib/gentools).
 
 ### ros2msg
 
-- `name`: A valid [package resource name](http://wiki.ros.org/Names#Package_Resource_Names), e.g. `sensor_msgs/msg/PointCloud2`
+- `name`: A valid [package resource name](http://wiki.ros.org/Names#Package_Resource_Names), e.g. `sensor_msgs/msg/PointCloud2`.
 - `encoding`: `ros2msg`
-- `data`: Concatenated ROS2 .msg files
+- `data`: Delimited concatenated ROS2 .msg files
+
+#### ros2msg Data Format
+
+The `.msg` definition is stored alongside its dependencies in the same format as [ros1msg](#ros1msg-data-format).
+
+### ros2idl
+
+- `name`: A valid [package resource name](http://wiki.ros.org/Names#Package_Resource_Names), e.g. `sensor_msgs/msg/PointCloud2`
+- `encoding`: `ros2idl`
+- `data`: Delimited concatenated ROS2 .idl files
+
+#### ros2idl Data Format
+
+The IDL definition of the type specified by `name` along with all dependent types are stored together. The IDL definitions can be stored in any order. Every definition is preceded by a two-line delimiter:
+
+- a line containing exactly 80 `=` characters, then
+- A line containing only `IDL: <package resource name>` for that definition. The space between `IDL:` and the package resource name is mandatory. The package resource name does not include a file extension.
 
 ### jsonschema
 
@@ -118,4 +146,4 @@ The `ros2` profile describes how to create MCAP files for [ROS 2](https://docs.r
 
 #### Schema
 
-- `encoding`: MUST contain `ros2msg`
+- `encoding`: MUST contain either `ros2msg` or `ros2idl`
