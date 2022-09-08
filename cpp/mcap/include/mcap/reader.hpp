@@ -1,6 +1,7 @@
 #pragma once
 
 #include "intervaltree.hpp"
+#include "read_job_queue.hpp"
 #include "types.hpp"
 #include <cstdio>
 #include <fstream>
@@ -9,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace mcap {
@@ -158,6 +160,18 @@ public:
   uint64_t size() const override;
   Status status() const override;
 
+  /**
+   * @brief Decompresses an entire Zstd-compressed chunk into `output`.
+   *
+   * @param data The Zstd-compressed input chunk.
+   * @param compressedSize The size of the Zstd-compressed input.
+   * @param uncompressedSize The size of the data once uncompressed.
+   * @param output The output vector. This will be resized to `uncompressedSize` to fit the data,
+   * or 0 if the decompression encountered an error.
+   * @return Status
+   */
+  static Status DecompressAll(const std::byte* data, uint64_t compressedSize,
+                              uint64_t uncompressedSize, ByteArray* output);
   ZStdReader() = default;
   ZStdReader(const ZStdReader&) = delete;
   ZStdReader& operator=(const ZStdReader&) = delete;
@@ -166,10 +180,7 @@ public:
 
 private:
   Status status_;
-  const std::byte* compressedData_;
   ByteArray uncompressedData_;
-  uint64_t compressedSize_;
-  uint64_t uncompressedSize_;
 };
 
 /**
@@ -183,6 +194,18 @@ public:
   uint64_t size() const override;
   Status status() const override;
 
+  /**
+   * @brief Decompresses an entire LZ4-encoded chunk into `output`.
+   *
+   * @param data The LZ4-compressed input chunk.
+   * @param size The size of the LZ4-compressed input.
+   * @param uncompressedSize The size of the data once uncompressed.
+   * @param output The output vector. This will be resized to `uncompressedSize` to fit the data,
+   * or 0 if the decompression encountered an error.
+   * @return Status
+   */
+  Status decompressAll(const std::byte* data, uint64_t size, uint64_t uncompressedSize,
+                       ByteArray* output);
   LZ4Reader();
   LZ4Reader(const LZ4Reader&) = delete;
   LZ4Reader& operator=(const LZ4Reader&) = delete;
@@ -200,6 +223,46 @@ private:
 };
 
 struct LinearMessageView;
+
+/**
+ * @brief Options for reading messages out of an MCAP file.
+ */
+struct ReadMessageOptions {
+public:
+  /**
+   * @brief Only messages with log timestamps greater or equal to startTime will be included.
+   */
+  Timestamp startTime = 0;
+  /**
+   * @brief Only messages with log timestamps less than endTime will be included.
+   */
+  Timestamp endTime = MaxTime;
+  /**
+   * @brief If provided, `topicFilter` is called on all topics found in the MCAP file. If
+   * `topicFilter` returns true for a given channel, messages from that channel will be included.
+   * if not provided, messages from all channels are provided.
+   */
+  std::function<bool(std::string_view)> topicFilter;
+  enum struct ReadOrder { FileOrder, LogTimeOrder, ReverseLogTimeOrder };
+  /**
+   * @brief Set the expected order that messages should be returned in.
+   * if readOrder == FileOrder, messages will be returned in the order they appear in the MCAP file.
+   * if readOrder == LogTimeOrder, messages will be returned in ascending log time order.
+   * if readOrder == ReverseLogTimeOrder, messages will be returned in descending log time order.
+   */
+  ReadOrder readOrder = ReadOrder::FileOrder;
+
+  ReadMessageOptions(Timestamp start, Timestamp end)
+      : startTime(start)
+      , endTime(end) {}
+
+  ReadMessageOptions() = default;
+
+  /**
+   * @brief validate the configuration.
+   */
+  Status validate() const;
+};
 
 /**
  * @brief Provides a read interface to an MCAP file.
@@ -284,6 +347,14 @@ public:
    */
   LinearMessageView readMessages(const ProblemCallback& onProblem, Timestamp startTime = 0,
                                  Timestamp endTime = MaxTime);
+
+  /**
+   * @brief Returns an iterable view with `begin()` and `end()` methods for
+   * iterating Messages in the MCAP file.
+   * Uses the options from `options` to select the messsages that are yielded.
+   */
+  LinearMessageView readMessages(const ProblemCallback& onProblem,
+                                 const ReadMessageOptions& options);
 
   /**
    * @brief Returns starting and ending byte offsets that must be read to
@@ -401,8 +472,6 @@ private:
   std::multimap<std::string, MetadataIndex> metadataIndexes_;
   std::unordered_map<SchemaId, SchemaPtr> schemas_;
   std::unordered_map<ChannelId, ChannelPtr> channels_;
-  // Used for uncompressed messages
-  std::unordered_map<ChannelId, std::map<Timestamp, ByteOffset>> messageIndex_;
   ByteOffset dataStart_ = 0;
   ByteOffset dataEnd_ = EndOffset;
   Timestamp startTime_ = 0;
@@ -511,6 +580,53 @@ private:
 };
 
 /**
+ * @brief Uses message indices to read messages out of an MCAP in log time order.
+ * The underlying MCAP must be chunked, with a summary section and message indexes.
+ * The required McapWriterOptions are:
+ *  - noChunking: false
+ *  - noMessageIndex: false
+ *  - noSummary: false
+ */
+struct IndexedMessageReader {
+public:
+  IndexedMessageReader(McapReader& reader, const ReadMessageOptions& options,
+                       const std::function<void(const Message&)> onMessage);
+
+  /**
+   * @brief reads the next message out of the MCAP.
+   *
+   * @return true if a message was found.
+   * @return false if no more messages are to be read. If there was some error reading the MCAP,
+   * `status()` will return a non-Success status.
+   */
+  bool next();
+
+  /**
+   * @brief gets the status of the reader.
+   *
+   * @return Status
+   */
+  Status status() const;
+
+private:
+  struct ChunkSlot {
+    ByteArray decompressedChunk;
+    int unreadMessages = 0;
+  };
+  size_t findFreeChunkSlot();
+  void decompressChunk(const Chunk& chunk, ChunkSlot& slot);
+  Status status_;
+  McapReader& mcapReader_;
+  RecordReader recordReader_;
+  LZ4Reader lz4Reader_;
+  ReadMessageOptions options_;
+  std::unordered_set<ChannelId> selectedChannels_;
+  std::function<void(const Message&)> onMessage_;
+  ReadJobQueue queue_;
+  std::vector<ChunkSlot> chunkSlots_;
+};
+
+/**
  * @brief An iterable view of Messages in an MCAP file.
  */
 struct LinearMessageView {
@@ -532,13 +648,13 @@ struct LinearMessageView {
     friend LinearMessageView;
 
     Iterator() = default;
-    Iterator(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd, Timestamp startTime,
-             Timestamp endTime, const ProblemCallback& onProblem);
+    Iterator(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd,
+             const ReadMessageOptions& options, const ProblemCallback& onProblem);
 
     class Impl {
     public:
-      Impl(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd, Timestamp startTime,
-           Timestamp endTime, const ProblemCallback& onProblem);
+      Impl(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd,
+           const ReadMessageOptions& options, const ProblemCallback& onProblem);
 
       Impl(const Impl&) = delete;
       Impl& operator=(const Impl&) = delete;
@@ -551,11 +667,14 @@ struct LinearMessageView {
 
       McapReader& mcapReader_;
       std::optional<TypedRecordReader> recordReader_;
-      Timestamp startTime_;
-      Timestamp endTime_;
+      std::optional<IndexedMessageReader> indexedMessageReader_;
+      ReadMessageOptions readMessageOptions_;
       const ProblemCallback& onProblem_;
       Message curMessage_;
       std::optional<MessageView> curMessageView_;
+
+    private:
+      void onMessage(const Message& message);
     };
 
     std::unique_ptr<Impl> impl_;
@@ -564,6 +683,8 @@ struct LinearMessageView {
   LinearMessageView(McapReader& mcapReader, const ProblemCallback& onProblem);
   LinearMessageView(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd,
                     Timestamp startTime, Timestamp endTime, const ProblemCallback& onProblem);
+  LinearMessageView(McapReader& mcapReader, const ReadMessageOptions& options, ByteOffset dataStart,
+                    ByteOffset dataEnd, const ProblemCallback& onProblem);
 
   LinearMessageView(const LinearMessageView&) = delete;
   LinearMessageView& operator=(const LinearMessageView&) = delete;
@@ -577,8 +698,7 @@ private:
   McapReader& mcapReader_;
   ByteOffset dataStart_;
   ByteOffset dataEnd_;
-  Timestamp startTime_;
-  Timestamp endTime_;
+  ReadMessageOptions readMessageOptions_;
   const ProblemCallback onProblem_;
 };
 

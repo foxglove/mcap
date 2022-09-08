@@ -142,50 +142,10 @@ void LZ4Reader::reset(const std::byte* data, uint64_t size, uint64_t uncompresse
   if (!decompressionContext_) {
     return;
   }
-  status_ = StatusCode::Success;
   compressedData_ = data;
   compressedSize_ = size;
-  uncompressedSize_ = uncompressedSize;
-
-  // Allocate a buffer for the uncompressed data
-  uncompressedData_.resize(uncompressedSize_);
-
-  size_t dstSize = uncompressedSize_;
-  size_t srcSize = compressedSize_;
-  LZ4F_resetDecompressionContext((LZ4F_dctx*)decompressionContext_);
-  const auto status = LZ4F_decompress((LZ4F_dctx*)decompressionContext_, uncompressedData_.data(),
-                                      &dstSize, compressedData_, &srcSize, nullptr);
-  if (status != 0) {
-    if (LZ4F_isError(status)) {
-      const auto msg = internal::StrCat("lz4 decompression of ", compressedSize_, " bytes into ",
-                                        uncompressedSize_, " output bytes failed with error ",
-                                        (int)status, " (", LZ4F_getErrorName(status), ")");
-      status_ = Status{StatusCode::DecompressionFailed, msg};
-    } else {
-      const auto msg =
-        internal::StrCat("lz4 decompression of ", compressedSize_, " bytes into ",
-                         uncompressedSize_, " incomplete: consumed ", srcSize, " and produced ",
-                         dstSize, " bytes so far, expect ", status, " more input bytes");
-      status_ = Status{StatusCode::DecompressionSizeMismatch, msg};
-    }
-
-    uncompressedSize_ = 0;
-    uncompressedData_.clear();
-  } else if (srcSize != compressedSize_) {
-    const auto msg =
-      internal::StrCat("lz4 decompression of ", compressedSize_, " bytes into ", uncompressedSize_,
-                       " output bytes only consumed ", srcSize, " bytes");
-    status_ = Status{StatusCode::DecompressionSizeMismatch, msg};
-    uncompressedSize_ = 0;
-    uncompressedData_.clear();
-  } else if (dstSize != uncompressedSize_) {
-    const auto msg =
-      internal::StrCat("lz4 decompression of ", compressedSize_, " bytes into ", uncompressedSize_,
-                       " output bytes only produced ", dstSize, " bytes");
-    status_ = Status{StatusCode::DecompressionSizeMismatch, msg};
-    uncompressedSize_ = 0;
-    uncompressedData_.clear();
-  }
+  status_ = decompressAll(data, size, uncompressedSize, &uncompressedData_);
+  uncompressedSize_ = uncompressedData_.size();
 }
 
 uint64_t LZ4Reader::read(std::byte** output, uint64_t offset, uint64_t size) {
@@ -205,54 +165,97 @@ uint64_t LZ4Reader::size() const {
 Status LZ4Reader::status() const {
   return status_;
 }
+Status LZ4Reader::decompressAll(const std::byte* data, uint64_t compressedSize,
+                                uint64_t uncompressedSize, ByteArray* output) {
+  if (!decompressionContext_) {
+    return status_;
+  }
+  auto result = Status();
+  // Allocate space for the uncompressed data
+  output->resize(uncompressedSize);
+
+  size_t dstSize = uncompressedSize;
+  size_t srcSize = compressedSize;
+  LZ4F_resetDecompressionContext((LZ4F_dctx*)decompressionContext_);
+  const auto status = LZ4F_decompress((LZ4F_dctx*)decompressionContext_, output->data(), &dstSize,
+                                      data, &srcSize, nullptr);
+  if (status != 0) {
+    if (LZ4F_isError(status)) {
+      const auto msg = internal::StrCat("lz4 decompression of ", compressedSize, " bytes into ",
+                                        uncompressedSize, " output bytes failed with error ",
+                                        (int)status, " (", LZ4F_getErrorName(status), ")");
+      result = Status{StatusCode::DecompressionFailed, msg};
+    } else {
+      const auto msg =
+        internal::StrCat("lz4 decompression of ", compressedSize, " bytes into ", uncompressedSize,
+                         " incomplete: consumed ", srcSize, " and produced ", dstSize,
+                         " bytes so far, expect ", status, " more input bytes");
+      result = Status{StatusCode::DecompressionSizeMismatch, msg};
+    }
+    output->clear();
+  } else if (srcSize != compressedSize) {
+    const auto msg =
+      internal::StrCat("lz4 decompression of ", compressedSize, " bytes into ", uncompressedSize,
+                       " output bytes only consumed ", srcSize, " bytes");
+    result = Status{StatusCode::DecompressionSizeMismatch, msg};
+    output->clear();
+  } else if (dstSize != uncompressedSize) {
+    const auto msg =
+      internal::StrCat("lz4 decompression of ", compressedSize, " bytes into ", uncompressedSize,
+                       " output bytes only produced ", dstSize, " bytes");
+    result = Status{StatusCode::DecompressionSizeMismatch, msg};
+    output->clear();
+  }
+  return result;
+}
 
 // ZStdReader //////////////////////////////////////////////////////////////////
 
 void ZStdReader::reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) {
-  status_ = StatusCode::Success;
-  compressedData_ = data;
-  compressedSize_ = size;
-  uncompressedSize_ = uncompressedSize;
-
-  // Allocate a buffer for the uncompressed data
-  uncompressedData_.resize(uncompressedSize_);
-
-  const auto status =
-    ZSTD_decompress(uncompressedData_.data(), uncompressedSize_, compressedData_, compressedSize_);
-  if (status != uncompressedSize_) {
-    if (ZSTD_isError(status)) {
-      const auto msg = internal::StrCat("zstd decompression of ", compressedSize_, " bytes into ",
-                                        uncompressedSize_, " output bytes failed with error ",
-                                        ZSTD_getErrorName(status));
-      status_ = Status{StatusCode::DecompressionFailed, msg};
-    } else {
-      const auto msg =
-        internal::StrCat("zstd decompression of ", compressedSize_, " bytes into ",
-                         uncompressedSize_, " output bytes only produced ", status, " bytes");
-      status_ = StatusCode::DecompressionSizeMismatch;
-    }
-
-    uncompressedSize_ = 0;
-    uncompressedData_.clear();
-  }
+  status_ = DecompressAll(data, size, uncompressedSize, &uncompressedData_);
 }
 
 uint64_t ZStdReader::read(std::byte** output, uint64_t offset, uint64_t size) {
-  if (offset >= uncompressedSize_) {
+  if (offset >= uncompressedData_.size()) {
     return 0;
   }
 
-  const auto available = uncompressedSize_ - offset;
+  const auto available = uncompressedData_.size() - offset;
   *output = uncompressedData_.data() + offset;
   return std::min(size, available);
 }
 
 uint64_t ZStdReader::size() const {
-  return uncompressedSize_;
+  return uncompressedData_.size();
 }
 
 Status ZStdReader::status() const {
   return status_;
+}
+
+Status ZStdReader::DecompressAll(const std::byte* data, uint64_t compressedSize,
+                                 uint64_t uncompressedSize, ByteArray* output) {
+  auto result = Status();
+
+  // Allocate space for the decompressed data
+  output->resize(uncompressedSize);
+
+  const auto status = ZSTD_decompress(output->data(), uncompressedSize, data, compressedSize);
+  if (status != uncompressedSize) {
+    if (ZSTD_isError(status)) {
+      const auto msg =
+        internal::StrCat("zstd decompression of ", compressedSize, " bytes into ", uncompressedSize,
+                         " output bytes failed with error ", ZSTD_getErrorName(status));
+      result = Status{StatusCode::DecompressionFailed, msg};
+    } else {
+      const auto msg =
+        internal::StrCat("zstd decompression of ", compressedSize, " bytes into ", uncompressedSize,
+                         " output bytes only produced ", status, " bytes");
+      result = Status{StatusCode::DecompressionSizeMismatch, msg};
+    }
+    output->clear();
+  }
+  return result;
 }
 
 // McapReader //////////////////////////////////////////////////////////////////
@@ -352,7 +355,6 @@ void McapReader::reset_() {
   attachmentIndexes_.clear();
   schemas_.clear();
   channels_.clear();
-  messageIndex_.clear();
   dataStart_ = 0;
   dataEnd_ = EndOffset;
   startTime_ = 0;
@@ -560,14 +562,22 @@ LinearMessageView McapReader::readMessages(Timestamp startTime, Timestamp endTim
 
 LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem, Timestamp startTime,
                                            Timestamp endTime) {
+  ReadMessageOptions options;
+  options.startTime = startTime;
+  options.endTime = endTime;
+  return readMessages(onProblem, options);
+}
+
+LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem,
+                                           const ReadMessageOptions& options) {
   // Check that open() has been successfully called
   if (!dataSource() || dataStart_ == 0) {
     onProblem(StatusCode::NotOpen);
     return LinearMessageView{*this, onProblem};
   }
 
-  const auto [startOffset, endOffset] = byteRange(startTime, endTime);
-  return LinearMessageView{*this, startOffset, endOffset, startTime, endTime, onProblem};
+  const auto [startOffset, endOffset] = byteRange(options.startTime, options.endTime);
+  return LinearMessageView{*this, options, startOffset, endOffset, onProblem};
 }
 
 std::pair<ByteOffset, ByteOffset> McapReader::byteRange(Timestamp startTime,
@@ -1549,8 +1559,6 @@ LinearMessageView::LinearMessageView(McapReader& mcapReader, const ProblemCallba
     : mcapReader_(mcapReader)
     , dataStart_(0)
     , dataEnd_(0)
-    , startTime_(0)
-    , endTime_(0)
     , onProblem_(onProblem) {}
 
 LinearMessageView::LinearMessageView(McapReader& mcapReader, ByteOffset dataStart,
@@ -1559,16 +1567,24 @@ LinearMessageView::LinearMessageView(McapReader& mcapReader, ByteOffset dataStar
     : mcapReader_(mcapReader)
     , dataStart_(dataStart)
     , dataEnd_(dataEnd)
-    , startTime_(startTime)
-    , endTime_(endTime)
+    , readMessageOptions_(startTime, endTime)
+    , onProblem_(onProblem) {}
+
+LinearMessageView::LinearMessageView(McapReader& mcapReader, const ReadMessageOptions& options,
+                                     ByteOffset dataStart, ByteOffset dataEnd,
+                                     const ProblemCallback& onProblem)
+    : mcapReader_(mcapReader)
+    , dataStart_(dataStart)
+    , dataEnd_(dataEnd)
+    , readMessageOptions_(options)
     , onProblem_(onProblem) {}
 
 LinearMessageView::Iterator LinearMessageView::begin() {
   if (dataStart_ == dataEnd_ || !mcapReader_.dataSource()) {
     return end();
   }
-  return LinearMessageView::Iterator{mcapReader_, dataStart_, dataEnd_,
-                                     startTime_,  endTime_,   onProblem_};
+  return LinearMessageView::Iterator{mcapReader_, dataStart_, dataEnd_, readMessageOptions_,
+                                     onProblem_};
 }
 
 LinearMessageView::Iterator LinearMessageView::end() {
@@ -1578,86 +1594,123 @@ LinearMessageView::Iterator LinearMessageView::end() {
 // LinearMessageView::Iterator /////////////////////////////////////////////////
 
 LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataStart,
-                                      ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
+                                      ByteOffset dataEnd,
+                                      const ReadMessageOptions& readMessageOptions,
                                       const ProblemCallback& onProblem)
-    : impl_(std::make_unique<Impl>(mcapReader, dataStart, dataEnd, startTime, endTime, onProblem)) {
+    : impl_(std::make_unique<Impl>(mcapReader, dataStart, dataEnd, readMessageOptions, onProblem)) {
   if (!impl_->has_value()) {
     impl_ = nullptr;
   }
 }
 
 LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataStart,
-                                        ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
+                                        ByteOffset dataEnd,
+                                        const ReadMessageOptions& readMessageOptions,
                                         const ProblemCallback& onProblem)
     : mcapReader_(mcapReader)
-    , recordReader_(std::in_place, *mcapReader.dataSource(), dataStart, dataEnd)
-    , startTime_(startTime)
-    , endTime_(endTime)
+    , readMessageOptions_(readMessageOptions)
     , onProblem_(onProblem) {
-  recordReader_->onSchema = [this](const SchemaPtr schema, ByteOffset, std::optional<ByteOffset>) {
-    mcapReader_.schemas_.insert_or_assign(schema->id, schema);
-  };
-  recordReader_->onChannel = [this](const ChannelPtr channel, ByteOffset,
-                                    std::optional<ByteOffset>) {
-    mcapReader_.channels_.insert_or_assign(channel->id, channel);
-  };
-  recordReader_->onMessage = [this](const Message& message, ByteOffset, std::optional<ByteOffset>) {
-    auto maybeChannel = mcapReader_.channel(message.channelId);
-    if (!maybeChannel) {
-      onProblem_(
-        Status{StatusCode::InvalidChannelId,
-               internal::StrCat("message at log_time ", message.logTime, " (seq ", message.sequence,
-                                ") references missing channel id ", message.channelId)});
-      return;
-    }
+  auto optionsStatus = readMessageOptions_.validate();
+  if (!optionsStatus.ok()) {
+    onProblem(optionsStatus);
+  }
+  if (readMessageOptions_.readOrder == ReadMessageOptions::ReadOrder::FileOrder) {
+    recordReader_.emplace(*mcapReader.dataSource(), dataStart, dataEnd);
 
-    auto& channel = *maybeChannel;
-    SchemaPtr maybeSchema;
-    if (channel.schemaId != 0) {
-      maybeSchema = mcapReader_.schema(channel.schemaId);
-      if (!maybeSchema) {
-        onProblem_(Status{StatusCode::InvalidSchemaId,
-                          internal::StrCat("channel ", channel.id, " (", channel.topic,
-                                           ") references missing schema id ", channel.schemaId)});
-        return;
-      }
-    }
-
-    curMessage_ = message;  // copy message, which may be a reference to a temporary
-    curMessageView_.emplace(curMessage_, maybeChannel, maybeSchema);
-  };
+    recordReader_->onSchema = [this](const SchemaPtr schema, ByteOffset,
+                                     std::optional<ByteOffset>) {
+      mcapReader_.schemas_.insert_or_assign(schema->id, schema);
+    };
+    recordReader_->onChannel = [this](const ChannelPtr channel, ByteOffset,
+                                      std::optional<ByteOffset>) {
+      mcapReader_.channels_.insert_or_assign(channel->id, channel);
+    };
+    recordReader_->onMessage =
+      std::bind(&LinearMessageView::Iterator::Impl::onMessage, this, std::placeholders::_1);
+  } else {
+    indexedMessageReader_.emplace(
+      mcapReader, readMessageOptions_,
+      std::bind(&LinearMessageView::Iterator::Impl::onMessage, this, std::placeholders::_1));
+  }
 
   increment();
+}
+
+/**
+ * @brief Receives a message from either the linear TypedRecordReader or IndexedMessageReader.
+ * Sets `curMessageView` with the message along with its associated Channel and Schema.
+ */
+void LinearMessageView::Iterator::Impl::onMessage(const Message& message) {
+  // make sure the message is within the expected time range
+  if (message.logTime < readMessageOptions_.startTime) {
+    return;
+  }
+  if (message.logTime >= readMessageOptions_.endTime) {
+    return;
+  }
+  auto maybeChannel = mcapReader_.channel(message.channelId);
+  if (!maybeChannel) {
+    onProblem_(
+      Status{StatusCode::InvalidChannelId,
+             internal::StrCat("message at log_time ", message.logTime, " (seq ", message.sequence,
+                              ") references missing channel id ", message.channelId)});
+    return;
+  }
+
+  auto& channel = *maybeChannel;
+  // make sure the message is on the right topic
+  if (readMessageOptions_.topicFilter && !readMessageOptions_.topicFilter(channel.topic)) {
+    return;
+  }
+  SchemaPtr maybeSchema;
+  if (channel.schemaId != 0) {
+    maybeSchema = mcapReader_.schema(channel.schemaId);
+    if (!maybeSchema) {
+      onProblem_(Status{StatusCode::InvalidSchemaId,
+                        internal::StrCat("channel ", channel.id, " (", channel.topic,
+                                         ") references missing schema id ", channel.schemaId)});
+      return;
+    }
+  }
+
+  curMessage_ = message;  // copy message, which may be a reference to a temporary
+  curMessageView_.emplace(curMessage_, maybeChannel, maybeSchema);
 }
 
 void LinearMessageView::Iterator::Impl::increment() {
   curMessageView_ = std::nullopt;
 
-  if (!recordReader_.has_value()) {
-    return;
-  }
+  if (recordReader_.has_value()) {
+    while (!curMessageView_.has_value()) {
+      // Iterate through records until curMessageView_ gets filled with a value.
+      const bool found = recordReader_->next();
 
-  // Keep iterate through records until we find a message with a logTime >= startTime_
-  while (!curMessageView_.has_value() || curMessageView_->message.logTime < startTime_) {
-    const bool found = recordReader_->next();
+      // Surface any problem that may have occurred while reading
+      auto& status = recordReader_->status();
+      if (!status.ok()) {
+        onProblem_(status);
+      }
 
-    // Surface any problem that may have occurred while reading
-    auto& status = recordReader_->status();
-    if (!status.ok()) {
-      onProblem_(status);
+      if (!found) {
+        recordReader_ = std::nullopt;
+        return;
+      }
     }
-
-    if (!found) {
-      recordReader_ = std::nullopt;
-      return;
+  } else if (indexedMessageReader_.has_value()) {
+    while (!curMessageView_.has_value()) {
+      // Iterate through records until curMessageView_ gets filled with a value.
+      if (!indexedMessageReader_->next()) {
+        // No message was found on last iteration - if this was because of an error,
+        // alert with onProblem_.
+        auto status = indexedMessageReader_->status();
+        if (!status.ok()) {
+          onProblem_(status);
+        }
+        indexedMessageReader_ = std::nullopt;
+        return;
+      }
     }
   }
-
-  // Check if this message is past the time range of this view
-  if (curMessageView_->message.logTime >= endTime_) {
-    recordReader_ = std::nullopt;
-  }
-  return;
 }
 
 LinearMessageView::Iterator::reference LinearMessageView::Iterator::Impl::dereference() const {
@@ -1694,6 +1747,184 @@ bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::I
 
 bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
   return !(a == b);
+}
+
+Status ReadMessageOptions::validate() const {
+  if (startTime > endTime) {
+    return Status(StatusCode::InvalidMessageReadOptions, "start time must be before end time");
+  }
+  return Status();
+}
+
+// IndexedMessageReader ///////////////////////////////////////////////////////////
+IndexedMessageReader::IndexedMessageReader(McapReader& reader, const ReadMessageOptions& options,
+                                           const std::function<void(const Message&)> onMessage)
+    : mcapReader_(reader)
+    , recordReader_(*mcapReader_.dataSource(), 0, 0)
+    , options_(options)
+    , onMessage_(onMessage)
+    , queue_(options_.readOrder == ReadMessageOptions::ReadOrder::ReverseLogTimeOrder) {
+  auto chunkIndexes = mcapReader_.chunkIndexes();
+  if (chunkIndexes.size() == 0) {
+    status_ = mcapReader_.readSummary(ReadSummaryMethod::AllowFallbackScan);
+    if (!status_.ok()) {
+      return;
+    }
+    chunkIndexes = mcapReader_.chunkIndexes();
+  }
+  if (chunkIndexes.size() == 0 || chunkIndexes[0].messageIndexLength == 0) {
+    status_ = Status(StatusCode::NoMessageIndexesAvailable,
+                     "cannot read MCAP in time order with no message indexes");
+    return;
+  }
+  for (const auto& [channelId, channel] : mcapReader_.channels()) {
+    if (!options_.topicFilter || options_.topicFilter(channel->topic)) {
+      selectedChannels_.insert(channelId);
+    }
+  }
+  // Initialize the read job queue by finding all of the chunks that need to be read from.
+  for (const auto& chunkIndex : mcapReader_.chunkIndexes()) {
+    for (const auto& channelId : selectedChannels_) {
+      if (chunkIndex.messageIndexOffsets.find(channelId) != chunkIndex.messageIndexOffsets.end() &&
+          chunkIndex.messageStartTime <= options_.endTime &&
+          chunkIndex.messageEndTime > options_.startTime) {
+        DecompressChunkJob job;
+        job.chunkStartOffset = chunkIndex.chunkStartOffset;
+        job.messageIndexEndOffset =
+          chunkIndex.chunkStartOffset + chunkIndex.chunkLength + chunkIndex.messageIndexLength;
+        job.messageStartTime = chunkIndex.messageStartTime;
+        job.messageEndTime = chunkIndex.messageEndTime;
+        queue_.push(std::move(job));
+        break;
+      }
+    }
+  }
+}
+
+size_t IndexedMessageReader::findFreeChunkSlot() {
+  for (size_t chunkReaderIndex = 0; chunkReaderIndex < chunkSlots_.size(); chunkReaderIndex++) {
+    if (chunkSlots_[chunkReaderIndex].unreadMessages == 0) {
+      return chunkReaderIndex;
+    }
+  }
+  chunkSlots_.emplace_back();
+  return chunkSlots_.size() - 1;
+}
+
+void IndexedMessageReader::decompressChunk(const Chunk& chunk,
+                                           IndexedMessageReader::ChunkSlot& slot) {
+  auto compression = McapReader::ParseCompression(chunk.compression);
+  if (!compression.has_value()) {
+    status_ = Status(StatusCode::UnrecognizedCompression,
+                     internal::StrCat("unrecognized compression: ", chunk.compression));
+    return;
+  }
+  slot.decompressedChunk.clear();
+  if (*compression == Compression::None) {
+    slot.decompressedChunk.insert(slot.decompressedChunk.end(), &chunk.records[0],
+                                  &chunk.records[chunk.uncompressedSize]);
+  } else if (*compression == Compression::Lz4) {
+    status_ = lz4Reader_.decompressAll(chunk.records, chunk.compressedSize, chunk.uncompressedSize,
+                                       &slot.decompressedChunk);
+  } else if (*compression == Compression::Zstd) {
+    status_ = ZStdReader::DecompressAll(chunk.records, chunk.compressedSize, chunk.uncompressedSize,
+                                        &slot.decompressedChunk);
+  } else {
+    status_ = Status(StatusCode::UnrecognizedCompression,
+                     internal::StrCat("unhandled compression: ", chunk.compression));
+  }
+}
+
+bool IndexedMessageReader::next() {
+  while (queue_.len() != 0) {
+    auto nextItem = queue_.pop();
+    if (std::holds_alternative<DecompressChunkJob>(nextItem)) {
+      const auto& decompressChunkJob = std::get<DecompressChunkJob>(nextItem);
+      // The job here is to decompress the chunk into a slot, then use the message
+      // indices after the chunk to push ReadMessageJobs onto the queue for every message
+      // in that chunk that needs to be read.
+
+      // First, find a chunk slot to decompress this chunk into.
+      size_t chunkReaderIndex = findFreeChunkSlot();
+      auto& chunkSlot = chunkSlots_[chunkReaderIndex];
+      // Point the record reader at the chunk and message indices after it.
+      recordReader_.reset(*mcapReader_.dataSource(), decompressChunkJob.chunkStartOffset,
+                          decompressChunkJob.messageIndexEndOffset);
+      for (auto record = recordReader_.next(); record != std::nullopt;
+           record = recordReader_.next()) {
+        switch (record->opcode) {
+          case OpCode::Chunk: {
+            Chunk chunk;
+            status_ = McapReader::ParseChunk(*record, &chunk);
+            if (!status_.ok()) {
+              return false;
+            }
+            decompressChunk(chunk, chunkSlot);
+            if (!status_.ok()) {
+              return false;
+            }
+          } break;
+          case OpCode::MessageIndex: {
+            MessageIndex messageIndex;
+            status_ = McapReader::ParseMessageIndex(*record, &messageIndex);
+            if (!status_.ok()) {
+              return false;
+            }
+            if (selectedChannels_.find(messageIndex.channelId) != selectedChannels_.end()) {
+              for (const auto& [timestamp, byteOffset] : messageIndex.records) {
+                if (timestamp >= options_.startTime && timestamp < options_.endTime) {
+                  ReadMessageJob job;
+                  job.chunkReaderIndex = chunkReaderIndex;
+                  job.offset = byteOffset;
+                  job.timestamp = timestamp;
+                  queue_.push(std::move(job));
+                  chunkSlot.unreadMessages++;
+                }
+              }
+            }
+          } break;
+          default:
+            status_ = Status(StatusCode::InvalidRecord,
+                             internal::StrCat("expected only chunks and message indices, found ",
+                                              OpCodeString(record->opcode)));
+            return false;
+        }
+      }
+    } else if (std::holds_alternative<ReadMessageJob>(nextItem)) {
+      // Read the message out of the already-decompressed chunk.
+      const auto& readMessageJob = std::get<ReadMessageJob>(nextItem);
+      auto& chunkSlot = chunkSlots_[readMessageJob.chunkReaderIndex];
+      assert(chunkSlot.unreadMessages > 0);
+      chunkSlot.unreadMessages--;
+      BufferReader reader;
+      reader.reset(chunkSlot.decompressedChunk.data(), chunkSlot.decompressedChunk.size(),
+                   chunkSlot.decompressedChunk.size());
+      recordReader_.reset(reader, readMessageJob.offset, chunkSlot.decompressedChunk.size());
+      auto record = recordReader_.next();
+      status_ = recordReader_.status();
+      if (!status_.ok()) {
+        return false;
+      }
+      if (record->opcode != OpCode::Message) {
+        status_ =
+          Status(StatusCode::InvalidRecord,
+                 internal::StrCat("expected a message record, got ", OpCodeString(record->opcode)));
+        return false;
+      }
+      Message message;
+      status_ = McapReader::ParseMessage(*record, &message);
+      if (!status_.ok()) {
+        return false;
+      }
+      onMessage_(message);
+      return true;
+    }
+  }
+  return false;
+}
+
+Status IndexedMessageReader::status() const {
+  return status_;
 }
 
 }  // namespace mcap

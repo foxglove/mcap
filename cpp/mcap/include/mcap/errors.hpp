@@ -25,6 +25,8 @@ enum class StatusCode {
   UnrecognizedCompression,
   OpenFailed,
   MissingStatistics,
+  InvalidMessageReadOptions,
+  NoMessageIndexesAvailable,
 };
 
 /**
@@ -89,6 +91,12 @@ struct [[nodiscard]] Status {
         break;
       case StatusCode::MissingStatistics:
         message = "missing statistics";
+        break;
+      case StatusCode::InvalidMessageReadOptions:
+        message = "message read options conflict";
+        break;
+      case StatusCode::NoMessageIndexesAvailable:
+        message = "file has no message indices";
         break;
       default:
         message = "unknown";
