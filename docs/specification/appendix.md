@@ -65,7 +65,7 @@ Schema `encoding` may only be omitted for self-describing message encodings such
 
 ### ros1msg
 
-- `name`: A valid [package resource name](http://wiki.ros.org/Names#Package_Resource_Names), e.g. `sensor_msgs/PointCloud2`. The package resource name does not include the file extension.
+- `name`: A valid [package resource name](http://wiki.ros.org/Names#Package_Resource_Names), e.g. `sensor_msgs/PointCloud2`.
 - `encoding`: `ros1msg`
 - `data`: Delimited concatenated ROS1 .msg files.
 
@@ -76,7 +76,7 @@ the `data` field contains the concatenated `.msg` file content that is sent in t
 The top-level message definition is present first, with no delimiter. All dependent `.msg` definitions are preceded by a two-line delimiter:
 
 - One line containing exactly 80 `=` characters
-- One line containing `MSG: <package resource name>` for that type.
+- One line containing `MSG: <package resource name>` for that type. The space between `MSG:` and the package resource name is mandatory. The package resource name does not include a file extension.
 
 This format can be reproduced using [gendeps --cat](http://wiki.ros.org/roslib/gentools).
 
@@ -101,7 +101,7 @@ The `.msg` definition is stored alongside its dependencies in the same format as
 The IDL definition of the type specified by `name` along with all dependent types are stored together. The IDL definitions can be stored in any order. Every definition is preceded by a two-line delimiter:
 
 - a line containing exactly 80 `=` characters, then
-- A line containing only `IDL: <package resource name>` for that definition. The space between `IDL:` and the package resource name is mandatory.
+- A line containing only `IDL: <package resource name>` for that definition. The space between `IDL:` and the package resource name is mandatory. The package resource name does not include a file extension.
 
 ### jsonschema
 
