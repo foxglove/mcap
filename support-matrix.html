@@ -1046,7 +1046,7 @@
 <tr>
 <td>Timestamp-ordered message reading</td>
 <td>Yes</td>
-<td>Partial <sup id="fnref:1"><a class="footnote-ref" href="#fn:1">1</a></sup></td>
+<td>Yes</td>
 <td>Yes</td>
 <td>Yes</td>
 <td>No</td>
@@ -1054,23 +1054,23 @@
 <tr>
 <td>Indexed metadata reading</td>
 <td>Yes</td>
-<td>Yes <sup id="fnref4:2"><a class="footnote-ref" href="#fn:2">2</a></sup></td>
-<td>Yes <sup id="fnref5:2"><a class="footnote-ref" href="#fn:2">2</a></sup></td>
-<td>Yes <sup id="fnref6:2"><a class="footnote-ref" href="#fn:2">2</a></sup></td>
+<td>Yes <sup id="fnref4:1"><a class="footnote-ref" href="#fn:1">1</a></sup></td>
+<td>Yes <sup id="fnref5:1"><a class="footnote-ref" href="#fn:1">1</a></sup></td>
+<td>Yes <sup id="fnref6:1"><a class="footnote-ref" href="#fn:1">1</a></sup></td>
 <td>No</td>
 </tr>
 <tr>
 <td>Indexed attachment reading</td>
 <td>Yes</td>
-<td>Yes <sup id="fnref:2"><a class="footnote-ref" href="#fn:2">2</a></sup></td>
-<td>Yes <sup id="fnref2:2"><a class="footnote-ref" href="#fn:2">2</a></sup></td>
-<td>Yes <sup id="fnref3:2"><a class="footnote-ref" href="#fn:2">2</a></sup></td>
+<td>Yes <sup id="fnref:1"><a class="footnote-ref" href="#fn:1">1</a></sup></td>
+<td>Yes <sup id="fnref2:1"><a class="footnote-ref" href="#fn:1">1</a></sup></td>
+<td>Yes <sup id="fnref3:1"><a class="footnote-ref" href="#fn:1">1</a></sup></td>
 <td>No</td>
 </tr>
 <tr>
 <td>Non-materialized attachment reading</td>
 <td>No</td>
-<td>Yes <sup id="fnref:3"><a class="footnote-ref" href="#fn:3">3</a></sup></td>
+<td>Yes <sup id="fnref:2"><a class="footnote-ref" href="#fn:2">2</a></sup></td>
 <td>No</td>
 <td>No</td>
 <td>No</td>
@@ -1101,8 +1101,8 @@
 </tr>
 <tr>
 <td>ROS2 wrapper</td>
-<td>Yes <sup id="fnref:4"><a class="footnote-ref" href="#fn:4">4</a></sup></td>
-<td>Yes <sup id="fnref2:4"><a class="footnote-ref" href="#fn:4">4</a></sup></td>
+<td>Yes <sup id="fnref:3"><a class="footnote-ref" href="#fn:3">3</a></sup></td>
+<td>Yes <sup id="fnref2:3"><a class="footnote-ref" href="#fn:3">3</a></sup></td>
 <td>No</td>
 <td>No</td>
 <td>No</td>
@@ -1133,11 +1133,11 @@
 </tr>
 <tr>
 <td>Automatic summary writing</td>
-<td>Yes <sup id="fnref:5"><a class="footnote-ref" href="#fn:5">5</a></sup></td>
-<td>Yes <sup id="fnref2:5"><a class="footnote-ref" href="#fn:5">5</a></sup></td>
-<td>Yes <sup id="fnref3:5"><a class="footnote-ref" href="#fn:5">5</a></sup></td>
-<td>Yes <sup id="fnref4:5"><a class="footnote-ref" href="#fn:5">5</a></sup></td>
-<td>Yes <sup id="fnref5:5"><a class="footnote-ref" href="#fn:5">5</a></sup></td>
+<td>Yes <sup id="fnref:4"><a class="footnote-ref" href="#fn:4">4</a></sup></td>
+<td>Yes <sup id="fnref2:4"><a class="footnote-ref" href="#fn:4">4</a></sup></td>
+<td>Yes <sup id="fnref3:4"><a class="footnote-ref" href="#fn:4">4</a></sup></td>
+<td>Yes <sup id="fnref4:4"><a class="footnote-ref" href="#fn:4">4</a></sup></td>
+<td>Yes <sup id="fnref5:4"><a class="footnote-ref" href="#fn:4">4</a></sup></td>
 </tr>
 </tbody>
 </table>
@@ -1145,19 +1145,16 @@
 <hr />
 <ol>
 <li id="fn:1">
-<p>The C++ reader does not assume chunk indices are in order, but assumes all messages in a chunk are in order and chunk time ranges do not overlap.&#160;<a class="footnote-backref" href="#fnref:1" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+<p>These readers don’t have a single call to read an attachment or metadata record by name, but do allow you to read the summary, seek to that location, read a record and parse it.&#160;<a class="footnote-backref" href="#fnref:1" title="Jump back to footnote 1 in the text">&#8617;</a><a class="footnote-backref" href="#fnref2:1" title="Jump back to footnote 1 in the text">&#8617;</a><a class="footnote-backref" href="#fnref3:1" title="Jump back to footnote 1 in the text">&#8617;</a><a class="footnote-backref" href="#fnref4:1" title="Jump back to footnote 1 in the text">&#8617;</a><a class="footnote-backref" href="#fnref5:1" title="Jump back to footnote 1 in the text">&#8617;</a><a class="footnote-backref" href="#fnref6:1" title="Jump back to footnote 1 in the text">&#8617;</a></p>
 </li>
 <li id="fn:2">
-<p>These readers don’t have a single call to read an attachment or metadata record by name, but do allow you to read the summary, seek to that location, read a record and parse it.&#160;<a class="footnote-backref" href="#fnref:2" title="Jump back to footnote 2 in the text">&#8617;</a><a class="footnote-backref" href="#fnref2:2" title="Jump back to footnote 2 in the text">&#8617;</a><a class="footnote-backref" href="#fnref3:2" title="Jump back to footnote 2 in the text">&#8617;</a><a class="footnote-backref" href="#fnref4:2" title="Jump back to footnote 2 in the text">&#8617;</a><a class="footnote-backref" href="#fnref5:2" title="Jump back to footnote 2 in the text">&#8617;</a><a class="footnote-backref" href="#fnref6:2" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+<p>Using the <a href="https://github.com/ros-tooling/rosbag2_storage_mcap">MCAP Rosbag2 storage plugin</a>.&#160;<a class="footnote-backref" href="#fnref:2" title="Jump back to footnote 2 in the text">&#8617;</a></p>
 </li>
 <li id="fn:3">
-<p>Using the <a href="https://github.com/ros-tooling/rosbag2_storage_mcap">MCAP Rosbag2 storage plugin</a>.&#160;<a class="footnote-backref" href="#fnref:3" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+<p>The C++ reader interface does not preclude one from backing it with a memory-mapped file. This could be used to implement message and attachment parsing without copying data into memory.&#160;<a class="footnote-backref" href="#fnref:3" title="Jump back to footnote 3 in the text">&#8617;</a><a class="footnote-backref" href="#fnref2:3" title="Jump back to footnote 3 in the text">&#8617;</a></p>
 </li>
 <li id="fn:4">
-<p>The C++ reader interface does not preclude one from backing it with a memory-mapped file. This could be used to implement message and attachment parsing without copying data into memory.&#160;<a class="footnote-backref" href="#fnref:4" title="Jump back to footnote 4 in the text">&#8617;</a><a class="footnote-backref" href="#fnref2:4" title="Jump back to footnote 4 in the text">&#8617;</a></p>
-</li>
-<li id="fn:5">
-<p>All writers currently do not compute a CRC for the DataEnd record.&#160;<a class="footnote-backref" href="#fnref:5" title="Jump back to footnote 5 in the text">&#8617;</a><a class="footnote-backref" href="#fnref2:5" title="Jump back to footnote 5 in the text">&#8617;</a><a class="footnote-backref" href="#fnref3:5" title="Jump back to footnote 5 in the text">&#8617;</a><a class="footnote-backref" href="#fnref4:5" title="Jump back to footnote 5 in the text">&#8617;</a><a class="footnote-backref" href="#fnref5:5" title="Jump back to footnote 5 in the text">&#8617;</a></p>
+<p>All writers currently do not compute a CRC for the DataEnd record.&#160;<a class="footnote-backref" href="#fnref:4" title="Jump back to footnote 4 in the text">&#8617;</a><a class="footnote-backref" href="#fnref2:4" title="Jump back to footnote 4 in the text">&#8617;</a><a class="footnote-backref" href="#fnref3:4" title="Jump back to footnote 4 in the text">&#8617;</a><a class="footnote-backref" href="#fnref4:4" title="Jump back to footnote 4 in the text">&#8617;</a><a class="footnote-backref" href="#fnref5:4" title="Jump back to footnote 4 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>
