@@ -974,12 +974,58 @@
     ros1msg
   </a>
   
+    <nav class="md-nav" aria-label="ros1msg">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ros1msg-data-format" class="md-nav__link">
+    ros1msg Data Format
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
   <a href="#ros2msg" class="md-nav__link">
     ros2msg
   </a>
+  
+    <nav class="md-nav" aria-label="ros2msg">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ros2msg-data-format" class="md-nav__link">
+    ros2msg Data Format
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ros2idl" class="md-nav__link">
+    ros2idl
+  </a>
+  
+    <nav class="md-nav" aria-label="ros2idl">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ros2idl-data-format" class="md-nav__link">
+    ros2idl Data Format
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -1267,12 +1313,58 @@
     ros1msg
   </a>
   
+    <nav class="md-nav" aria-label="ros1msg">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ros1msg-data-format" class="md-nav__link">
+    ros1msg Data Format
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
   <a href="#ros2msg" class="md-nav__link">
     ros2msg
   </a>
+  
+    <nav class="md-nav" aria-label="ros2msg">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ros2msg-data-format" class="md-nav__link">
+    ros2msg Data Format
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ros2idl" class="md-nav__link">
+    ros2idl
+  </a>
+  
+    <nav class="md-nav" aria-label="ros2idl">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ros2idl-data-format" class="md-nav__link">
+    ros2idl Data Format
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
         
@@ -1445,15 +1537,37 @@
 </ul>
 <h3 id="ros1msg">ros1msg</h3>
 <ul>
-<li><code>name</code>: A valid <a href="http://wiki.ros.org/Names#Package_Resource_Names">package resource name</a>, e.g. <code>sensor_msgs/PointCloud2</code></li>
+<li><code>name</code>: A valid <a href="http://wiki.ros.org/Names#Package_Resource_Names">package resource name</a>, e.g. <code>sensor_msgs/PointCloud2</code>.</li>
 <li><code>encoding</code>: <code>ros1msg</code></li>
-<li><code>data</code>: Concatenated ROS1 .msg files</li>
+<li><code>data</code>: Delimited concatenated ROS1 .msg files.</li>
 </ul>
+<h4 id="ros1msg-data-format">ros1msg Data Format</h4>
+<p>the <code>data</code> field contains the concatenated <code>.msg</code> file content that is sent in the ROS subscription connection header for this message type.</p>
+<p>The top-level message definition is present first, with no delimiter. All dependent <code>.msg</code> definitions are preceded by a two-line delimiter:</p>
+<ul>
+<li>One line containing exactly 80 <code>=</code> characters</li>
+<li>One line containing <code>MSG: &lt;package resource name&gt;</code> for that type. The space between <code>MSG:</code> and the package resource name is mandatory. The package resource name does not include a file extension.</li>
+</ul>
+<p>This format can be reproduced using <a href="http://wiki.ros.org/roslib/gentools">gendeps &ndash;cat</a>.</p>
 <h3 id="ros2msg">ros2msg</h3>
 <ul>
-<li><code>name</code>: A valid <a href="http://wiki.ros.org/Names#Package_Resource_Names">package resource name</a>, e.g. <code>sensor_msgs/msg/PointCloud2</code></li>
+<li><code>name</code>: A valid <a href="http://wiki.ros.org/Names#Package_Resource_Names">package resource name</a>, e.g. <code>sensor_msgs/msg/PointCloud2</code>.</li>
 <li><code>encoding</code>: <code>ros2msg</code></li>
-<li><code>data</code>: Concatenated ROS2 .msg files</li>
+<li><code>data</code>: Delimited concatenated ROS2 .msg files</li>
+</ul>
+<h4 id="ros2msg-data-format">ros2msg Data Format</h4>
+<p>The <code>.msg</code> definition is stored alongside its dependencies in the same format as <a href="#ros1msg-data-format">ros1msg</a>.</p>
+<h3 id="ros2idl">ros2idl</h3>
+<ul>
+<li><code>name</code>: A valid <a href="http://wiki.ros.org/Names#Package_Resource_Names">package resource name</a>, e.g. <code>sensor_msgs/msg/PointCloud2</code></li>
+<li><code>encoding</code>: <code>ros2idl</code></li>
+<li><code>data</code>: Delimited concatenated ROS2 .idl files</li>
+</ul>
+<h4 id="ros2idl-data-format">ros2idl Data Format</h4>
+<p>The IDL definition of the type specified by <code>name</code> along with all dependent types are stored together. The IDL definitions can be stored in any order. Every definition is preceded by a two-line delimiter:</p>
+<ul>
+<li>a line containing exactly 80 <code>=</code> characters, then</li>
+<li>A line containing only <code>IDL: &lt;package resource name&gt;</code> for that definition. The space between <code>IDL:</code> and the package resource name is mandatory. The package resource name does not include a file extension.</li>
 </ul>
 <h3 id="jsonschema">jsonschema</h3>
 <ul>
@@ -1497,7 +1611,7 @@
 </ul>
 <h4 id="schema_1">Schema</h4>
 <ul>
-<li><code>encoding</code>: MUST contain <code>ros2msg</code></li>
+<li><code>encoding</code>: MUST contain either <code>ros2msg</code> or <code>ros2idl</code></li>
 </ul>
 
               
