@@ -224,18 +224,6 @@ func transformMessages(db *sql.DB, f func(*sql.Rows) error) error {
 }
 
 func DB3ToMCAP(w io.Writer, db *sql.DB, opts *mcap.WriterOptions, searchdirs []string) error {
-	writer, err := mcap.NewWriter(w, opts)
-	if err != nil {
-		return err
-	}
-	defer writer.Close()
-	err = writer.WriteHeader(&mcap.Header{
-		Profile: "ros2",
-	})
-	if err != nil {
-		return err
-	}
-
 	topics, err := getTopics(db)
 	if err != nil {
 		return err
@@ -245,6 +233,18 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, opts *mcap.WriterOptions, searchdirs []s
 		types[i] = topics[i].typ
 	}
 	schemas, err := getSchemas("msg", searchdirs, types)
+	if err != nil {
+		return err
+	}
+
+	writer, err := mcap.NewWriter(w, opts)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+	err = writer.WriteHeader(&mcap.Header{
+		Profile: "ros2",
+	})
 	if err != nil {
 		return err
 	}
