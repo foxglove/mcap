@@ -168,13 +168,35 @@ type topicsRecord struct {
 	name                string
 	typ                 string
 	serializationFormat string
-	offeredQOSProfiles  string
+	offeredQOSProfiles  *string
+}
+
+func checkHasQOSProfiles(db *sql.DB) (bool, error) {
+	var count int
+	err := db.QueryRow(
+		`select count(*) from pragma_table_info('topics') where name = 'offered_qos_profiles'`,
+	).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func getTopics(db *sql.DB) ([]topicsRecord, error) {
-	rows, err := db.Query(
-		`select id, name, type, serialization_format, offered_qos_profiles from topics`,
-	)
+	hasQOSProfiles, err := checkHasQOSProfiles(db)
+	if err != nil {
+		return nil, err
+	}
+	var rows *sql.Rows
+	if hasQOSProfiles {
+		rows, err = db.Query(
+			`select id, name, type, serialization_format, offered_qos_profiles from topics`,
+		)
+	} else {
+		rows, err = db.Query(
+			`select id, name, type, serialization_format from topics`,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -182,13 +204,22 @@ func getTopics(db *sql.DB) ([]topicsRecord, error) {
 	topics := []topicsRecord{}
 	for rows.Next() {
 		record := topicsRecord{}
-		err := rows.Scan(
-			&record.id,
-			&record.name,
-			&record.typ,
-			&record.serializationFormat,
-			&record.offeredQOSProfiles,
-		)
+		if hasQOSProfiles {
+			err = rows.Scan(
+				&record.id,
+				&record.name,
+				&record.typ,
+				&record.serializationFormat,
+				&record.offeredQOSProfiles,
+			)
+		} else {
+			err = rows.Scan(
+				&record.id,
+				&record.name,
+				&record.typ,
+				&record.serializationFormat,
+			)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -248,7 +279,6 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, opts *mcap.WriterOptions, searchdirs []s
 	if err != nil {
 		return err
 	}
-
 	// for each topic, write a schema and channel info to the output.
 	for i, t := range topics {
 		schemaID := uint16(i + 1)
@@ -265,14 +295,16 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, opts *mcap.WriterOptions, searchdirs []s
 		if err != nil {
 			return fmt.Errorf("failed to write schema: %w", err)
 		}
+		metadata := make(map[string]string)
+		if t.offeredQOSProfiles != nil {
+			metadata["offered_qos_profiles"] = *t.offeredQOSProfiles
+		}
 		err = writer.WriteChannel(&mcap.Channel{
 			ID:              t.id,
 			Topic:           t.name,
 			MessageEncoding: t.serializationFormat,
 			SchemaID:        schemaID,
-			Metadata: map[string]string{
-				"offered_qos_profiles": t.offeredQOSProfiles,
-			},
+			Metadata:        metadata,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to write channel info: %w", err)
