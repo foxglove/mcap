@@ -92,7 +92,6 @@ pub type AttachmentContentHandler<'a, R> =
 pub struct Lexer<'a, R: std::io::Read> {
     reader: Option<R>,
     state: LexerState,
-    last_opcode: Option<OpCode>,
     expect_start_magic: bool,
     attachment_content_handler: Option<AttachmentContentHandler<'a, R>>,
 }
@@ -102,7 +101,6 @@ impl<'a, R: std::io::Read> Lexer<'a, R> {
     pub fn new(reader: R) -> Self {
         Self {
             reader: Some(reader),
-            last_opcode: None,
             state: LexerState::Start,
             expect_start_magic: true,
             attachment_content_handler: None,
@@ -162,7 +160,6 @@ impl<'a, R: std::io::Read> Lexer<'a, R> {
                     return Ok(None);
                 }
                 let opcode = OpCode::try_from(opcode_and_length_buf[0])?;
-                self.last_opcode = Some(opcode);
                 if read_len < opcode_and_length_buf.len() {
                     self.state = LexerState::Lost;
                     return Err(LexError::TruncatedMidRecord(
@@ -184,12 +181,14 @@ impl<'a, R: std::io::Read> Lexer<'a, R> {
                         let mut limited_reader = self
                             .reader
                             .take()
-                            .unwrap()
+                            .expect("reader should be Some if get_reader succeeded above")
                             .take(len - (attachment_header_buf.len() as u64));
                         // the handler's return value tells us whether to continue iterating through
                         // the MCAP.
                         if !cb(attachment_header, &mut limited_reader) {
                             self.state = LexerState::End;
+                            self.attachment_content_handler = Some(cb);
+                            self.reader = Some(limited_reader.into_inner());
                             return Ok(None);
                         }
                         // The handler may not have read to the end of the attachment, so dump

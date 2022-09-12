@@ -42,7 +42,10 @@ fn parse_u16(data: &[u8]) -> Result<(u16, &[u8]), ParseError> {
         return Err(ParseError::DataTooShort);
     }
     let (int_bytes, data) = data.split_at(std::mem::size_of::<u16>());
-    Ok((u16::from_le_bytes(int_bytes.try_into().unwrap()), data))
+    Ok((
+        u16::from_le_bytes(int_bytes.try_into().expect("expected 2 bytes")),
+        data,
+    ))
 }
 
 fn parse_u32(data: &[u8]) -> Result<(u32, &[u8]), ParseError> {
@@ -50,7 +53,10 @@ fn parse_u32(data: &[u8]) -> Result<(u32, &[u8]), ParseError> {
         return Err(ParseError::DataTooShort);
     }
     let (int_bytes, data) = data.split_at(std::mem::size_of::<u32>());
-    Ok((u32::from_le_bytes(int_bytes.try_into().unwrap()), data))
+    Ok((
+        u32::from_le_bytes(int_bytes.try_into().expect("expected 4 bytes")),
+        data,
+    ))
 }
 
 pub(crate) fn parse_u64(data: &[u8]) -> Result<(u64, &[u8]), ParseError> {
@@ -58,7 +64,10 @@ pub(crate) fn parse_u64(data: &[u8]) -> Result<(u64, &[u8]), ParseError> {
         return Err(ParseError::DataTooShort);
     }
     let (int_bytes, data) = data.split_at(std::mem::size_of::<u64>());
-    Ok((u64::from_le_bytes(int_bytes.try_into().unwrap()), data))
+    Ok((
+        u64::from_le_bytes(int_bytes.try_into().expect("expected 8 bytes")),
+        data,
+    ))
 }
 
 pub(crate) fn parse_byte_array(data: &[u8]) -> Result<(&[u8], &[u8]), ParseError> {
