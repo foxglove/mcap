@@ -16,7 +16,7 @@ The Swift MCAP library is experimental, and not actively developed. This means t
 | Timestamp-ordered message reading | Yes | Yes | Yes | Yes | No | No |
 | Indexed metadata reading | Yes | Yes [^1] | Yes [^1] | Yes [^1] | No | No |
 | Indexed attachment reading | Yes | Yes [^1] | Yes [^1] | Yes [^1] | No | No |
-| Non-materialized attachment reading | No | Yes [^2] | No | No | No | No |
+| Non-materialized attachment reading | No | Yes [^2] | No | No | No | Yes |
 | Non-indexed reading | Yes | Yes | Yes | Yes | Yes | Yes |
 | CRC validation | No | No | Yes | Yes | Yes | No |
 | ROS1 wrapper | Yes | No | No | No | No | No |
