@@ -91,10 +91,10 @@ fn parse_str(data: &[u8]) -> Result<(&str, &[u8]), ParseError> {
 
 type StrMap<'a> = BTreeMap<Cow<'a, str>, Cow<'a, str>>;
 
-fn parse_str_map(data: &[u8]) -> Result<(StrMap<'_>, &[u8]), ParseError> {
+fn parse_str_map(data: &[u8]) -> Result<(StrMap, &[u8]), ParseError> {
     let (map_len, data) = parse_u32(data)?;
     let (map_data, remainder) = data.split_at(map_len as usize);
-    let mut result: BTreeMap<Cow<'_, str>, Cow<'_, str>> = BTreeMap::new();
+    let mut result: StrMap = BTreeMap::new();
     let mut unparsed_map_data = map_data;
     {
         while !unparsed_map_data.is_empty() {
@@ -309,7 +309,7 @@ fn parse_statistics(data: &[u8]) -> Result<Statistics, ParseError> {
     })
 }
 
-fn parse_metadata(data: &[u8]) -> Result<Metadata<'_>, ParseError> {
+fn parse_metadata(data: &[u8]) -> Result<Metadata, ParseError> {
     let (name, data) = parse_str(data)?;
     let (metadata, _) = parse_str_map(data)?;
     Ok(Metadata {
@@ -318,7 +318,7 @@ fn parse_metadata(data: &[u8]) -> Result<Metadata<'_>, ParseError> {
     })
 }
 
-fn parse_metadata_index(data: &[u8]) -> Result<MetadataIndex<'_>, ParseError> {
+fn parse_metadata_index(data: &[u8]) -> Result<MetadataIndex, ParseError> {
     let (offset, data) = parse_u64(data)?;
     let (length, data) = parse_u64(data)?;
     let (name, _) = parse_str(data)?;
@@ -352,7 +352,7 @@ fn parse_data_end(data: &[u8]) -> Result<DataEnd, ParseError> {
 /// Parses the content of an MCAP record from a buffer, without copying any string
 /// or array fields. use the [`lifetime::IntoStatic`] implementation to create
 /// an owned copy of the resulting parsed Record.
-pub fn parse_record(opcode: OpCode, data: &[u8]) -> Result<Record<'_>, ParseError> {
+pub fn parse_record(opcode: OpCode, data: &[u8]) -> Result<Record, ParseError> {
     match opcode {
         OpCode::Header => Ok(Record::Header(parse_header(data)?)),
         OpCode::Footer => Ok(Record::Footer(parse_footer(data)?)),
@@ -376,7 +376,7 @@ pub fn parse_record(opcode: OpCode, data: &[u8]) -> Result<Record<'_>, ParseErro
 /// Parses only the first fields of an Attachment record, before the `data` field. This
 /// allows a reader to read and parse only the header of an attachment before deciding whether
 /// to use the rest of the attachment.
-pub fn parse_attachment_header(data: &'_ [u8]) -> Result<AttachmentHeader<'_>, ParseError> {
+pub fn parse_attachment_header(data: &[u8]) -> Result<AttachmentHeader, ParseError> {
     let (log_time, data) = parse_u64(data)?;
     let (create_time, data) = parse_u64(data)?;
     let (name, data) = parse_str(data)?;
