@@ -69,6 +69,18 @@ type Message struct {
 	Data        json.RawMessage `json:"data"`
 }
 
+func getReadOpts(useIndex bool) []readopts.ReadOpt {
+	topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
+	opts := []readopts.ReadOpt{readopts.UsingIndex(useIndex), readopts.WithTopics(topics)}
+	if catStart != 0 {
+		opts = append(opts, readopts.After(catStart*1e9))
+	}
+	if catEnd != math.MaxInt64 {
+		opts = append(opts, readopts.Before(catEnd*1e9))
+	}
+	return opts
+}
+
 func printMessages(
 	ctx context.Context,
 	w io.Writer,
@@ -181,13 +193,7 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("Failed to create reader: %s", err)
 			}
-			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-			it, err := reader.Messages(
-				readopts.After(catStart*1e9),
-				readopts.Before(catEnd*1e9),
-				readopts.WithTopics(topics),
-				readopts.UsingIndex(false),
-			)
+			it, err := reader.Messages(getReadOpts(false)...)
 			if err != nil {
 				log.Fatalf("Failed to read messages: %s", err)
 			}
@@ -208,12 +214,7 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to create reader: %w", err)
 			}
-			topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-			it, err := reader.Messages(
-				readopts.After(catStart*1e9),
-				readopts.Before(catEnd*1e9),
-				readopts.WithTopics(topics),
-			)
+			it, err := reader.Messages(getReadOpts(true)...)
 			if err != nil {
 				return fmt.Errorf("failed to read messages: %w", err)
 			}
