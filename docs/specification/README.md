@@ -304,7 +304,7 @@ A Data End record indicates the end of the data section.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 4 | data_section_crc | uint32 | CRC32 of all bytes in the data section. A value of 0 indicates the CRC32 is not available. |
+| 4 | data_section_crc | uint32 | CRC32 of all bytes from the beginning of the file up to the DataEnd record. A value of 0 indicates the CRC32 is not available. |
 
 ## Serialization
 
