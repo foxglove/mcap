@@ -55,10 +55,10 @@ needed.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>topic</strong> – The topic of the message.</p></li>
 <li><p><strong>message</strong> – The message to write.</p></li>
-<li><p><strong>log_time</strong> – The time at which the message was logged.
+<li><p><strong>log_time</strong> – The time at which the message was logged as a nanosecond UNIX timestamp.
 Will default to the current time if not specified.</p></li>
-<li><p><strong>publish_time</strong> – The time at which the message was published.
-Will default to the current time if not specified.</p></li>
+<li><p><strong>publish_time</strong> – The time at which the message was published as a nanosecond UNIX
+timestamp. Will default to <code class="docutils literal notranslate"><span class="pre">log_time</span></code> if not specified.</p></li>
 <li><p><strong>sequence</strong> – An optional sequence number.</p></li>
 </ul>
 </dd>

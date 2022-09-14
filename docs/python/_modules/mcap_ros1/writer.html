@@ -76,10 +76,10 @@
 
 <span class="sd">        :param topic: The topic of the message.</span>
 <span class="sd">        :param message: The message to write.</span>
-<span class="sd">        :param log_time: The time at which the message was logged.</span>
+<span class="sd">        :param log_time: The time at which the message was logged as a nanosecond UNIX timestamp.</span>
 <span class="sd">            Will default to the current time if not specified.</span>
-<span class="sd">        :param publish_time: The time at which the message was published.</span>
-<span class="sd">            Will default to the current time if not specified.</span>
+<span class="sd">        :param publish_time: The time at which the message was published as a nanosecond UNIX</span>
+<span class="sd">            timestamp. Will default to ``log_time`` if not specified.</span>
 <span class="sd">        :param sequence: An optional sequence number.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="n">message</span><span class="o">.</span><span class="n">_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">__schema_ids</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
