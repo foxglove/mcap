@@ -33,6 +33,8 @@ type mcapDoctor struct {
 	minLogTime   uint64
 	maxLogTime   uint64
 	statistics   *mcap.Statistics
+
+	errorCount uint32
 }
 
 func (doctor *mcapDoctor) warn(format string, v ...any) {
@@ -41,6 +43,7 @@ func (doctor *mcapDoctor) warn(format string, v ...any) {
 
 func (doctor *mcapDoctor) error(format string, v ...any) {
 	color.Red(format, v...)
+	doctor.errorCount += 1
 }
 
 func (doctor *mcapDoctor) fatal(v ...any) {
@@ -202,7 +205,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 	}
 }
 
-func (doctor *mcapDoctor) Examine() {
+func (doctor *mcapDoctor) Examine() error {
 	lexer, err := mcap.NewLexer(doctor.reader, &mcap.LexerOptions{
 		SkipMagic:   false,
 		ValidateCRC: true,
@@ -421,6 +424,11 @@ func (doctor *mcapDoctor) Examine() {
 			doctor.error("Statistics has message count %d, but actual number of messages is %d", doctor.statistics.MessageCount, doctor.messageCount)
 		}
 	}
+	if doctor.errorCount == 0 {
+		return nil
+	} else {
+		return fmt.Errorf("Encountered %d errors", doctor.errorCount)
+	}
 }
 
 func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
@@ -446,8 +454,7 @@ func main(cmd *cobra.Command, args []string) {
 			doctor.warn("Will read full remote file")
 		}
 		fmt.Printf("Examining %s\n", args[0])
-		doctor.Examine()
-		return nil
+		return doctor.Examine()
 	})
 	if err != nil {
 		log.Fatalf("Doctor command failed: %s", err)
