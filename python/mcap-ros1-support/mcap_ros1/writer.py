@@ -42,10 +42,10 @@ class Writer:
 
         :param topic: The topic of the message.
         :param message: The message to write.
-        :param log_time: The time at which the message was logged.
+        :param log_time: The time at which the message was logged as a nanosecond UNIX timestamp.
             Will default to the current time if not specified.
-        :param publish_time: The time at which the message was published.
-            Will default to the current time if not specified.
+        :param publish_time: The time at which the message was published as a nanosecond UNIX
+            timestamp. Will default to ``log_time`` if not specified.
         :param sequence: An optional sequence number.
         """
         if message._type not in self.__schema_ids.keys():
