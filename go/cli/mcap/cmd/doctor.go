@@ -20,10 +20,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	doctorFailLevel string
-)
-
 type mcapDoctor struct {
 	reader io.ReadSeeker
 
@@ -38,56 +34,28 @@ type mcapDoctor struct {
 	maxLogTime   uint64
 	statistics   *mcap.Statistics
 
-	warnCount  uint32
 	errorCount uint32
 }
 
-func (doctor *mcapDoctor) info(format string, v ...any) {
-	fmt.Print(color.YellowString("INFO: "))
-	color.Yellow(format, v...)
-}
-
 func (doctor *mcapDoctor) warn(format string, v ...any) {
-	fmt.Print(color.YellowString("WARN: "))
 	color.Yellow(format, v...)
-	doctor.warnCount += 1
 }
 
 func (doctor *mcapDoctor) error(format string, v ...any) {
-	fmt.Print(color.RedString("ERROR: "))
 	color.Red(format, v...)
 	doctor.errorCount += 1
 }
 
 func (doctor *mcapDoctor) fatal(v ...any) {
 	color.Set(color.FgRed)
-	fmt.Print("FATAL: ")
 	fmt.Println(v...)
 	color.Unset()
 	os.Exit(1)
 }
 
 func (doctor *mcapDoctor) fatalf(format string, v ...any) {
-	color.RedString("FATAL: ")
 	color.Red(format, v...)
 	os.Exit(1)
-}
-
-func (doctor *mcapDoctor) exit(failLevel string) {
-	if doctor.errorCount == 0 && doctor.warnCount == 0 {
-		os.Exit(0)
-	}
-	out := fmt.Sprintf("Encountered %d warnings and %d errors", doctor.warnCount, doctor.errorCount)
-	if failLevel == "warn" && (doctor.warnCount != 0 || doctor.errorCount != 0) {
-		color.Red(out)
-		os.Exit(1)
-	}
-	if failLevel == "error" && doctor.errorCount != 0 {
-		color.Red(out)
-		os.Exit(1)
-	}
-	color.Yellow(out)
-	os.Exit(0)
 }
 
 func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
@@ -237,7 +205,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 	}
 }
 
-func (doctor *mcapDoctor) Examine() {
+func (doctor *mcapDoctor) Examine() error {
 	lexer, err := mcap.NewLexer(doctor.reader, &mcap.LexerOptions{
 		SkipMagic:   false,
 		ValidateCRC: true,
@@ -456,6 +424,11 @@ func (doctor *mcapDoctor) Examine() {
 			doctor.error("Statistics has message count %d, but actual number of messages is %d", doctor.statistics.MessageCount, doctor.messageCount)
 		}
 	}
+	if doctor.errorCount == 0 {
+		return nil
+	} else {
+		return fmt.Errorf("Encountered %d errors", doctor.errorCount)
+	}
 }
 
 func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
@@ -474,20 +447,14 @@ func main(cmd *cobra.Command, args []string) {
 		fmt.Println("An mcap file argument is required.")
 		os.Exit(1)
 	}
-	if doctorFailLevel != "warn" && doctorFailLevel != "error" {
-		fmt.Println("invalid fail level (possible values: warn, error)")
-		os.Exit(1)
-	}
 	filename := args[0]
 	err := utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
 		doctor := newMcapDoctor(rs)
 		if remote {
-			doctor.info("Will read full remote file")
+			doctor.warn("Will read full remote file")
 		}
 		fmt.Printf("Examining %s\n", args[0])
-		doctor.Examine()
-		doctor.exit(doctorFailLevel)
-		return nil
+		return doctor.Examine()
 	})
 	if err != nil {
 		log.Fatalf("Doctor command failed: %s", err)
@@ -502,11 +469,4 @@ var doctorCommand = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(doctorCommand)
-	doctorCommand.PersistentFlags().StringVarP(
-		&doctorFailLevel,
-		"fail",
-		"f",
-		"error",
-		"exit non-zero if any errors occur at or above this level (possible values: warn, error)",
-	)
 }
