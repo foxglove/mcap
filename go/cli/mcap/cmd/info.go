@@ -87,7 +87,10 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	}
 	for _, chanID := range chanIDs {
 		channel := info.Channels[chanID]
-		schema := info.Schemas[channel.SchemaID]
+		var schema *mcap.Schema
+		if channel.SchemaID != 0 {
+			schema = info.Schemas[channel.SchemaID]
+		}
 		channelMessageCount := info.Statistics.ChannelMessageCounts[chanID]
 		frequency := 1e9 * float64(channelMessageCount) / float64(end-start)
 		row := []string{
@@ -96,7 +99,11 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		if info.Statistics != nil {
 			row = append(row, fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency))
 		}
-		row = append(row, fmt.Sprintf(" : %s [%s]", schema.Name, schema.Encoding))
+		if schema != nil {
+			row = append(row, fmt.Sprintf(" : %s [%s]", schema.Name, schema.Encoding))
+		} else {
+			row = append(row, " : <no schema>")
+		}
 		rows = append(rows, row)
 	}
 	tw := tablewriter.NewWriter(buf)
