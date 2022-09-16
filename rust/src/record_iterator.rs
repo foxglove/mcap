@@ -1,8 +1,7 @@
 //! Ergonomic wrapper for reading and parsing records from a [`std::io::Read`] implementation.
 use crate::{
     lexer::{LexError, Lexer},
-    parse::parse_record,
-    records::{Chunk, Record},
+    records::{parse_record, Chunk, Record},
 };
 use lifetime::IntoStatic;
 use std::io::Read;

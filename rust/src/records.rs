@@ -1,4 +1,5 @@
 //! Struct definitions for all [MCAP Records](https://mcap.dev/specification/index.html#records).
+use crate::parse::{ParseError, Parser};
 use lifetime::IntoStatic;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -56,10 +57,23 @@ impl TryFrom<u8> for OpCode {
     }
 }
 
+pub type CowStr<'a> = Cow<'a, str>;
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, IntoStatic)]
 pub struct Header<'a> {
-    pub library: Cow<'a, str>,
-    pub profile: Cow<'a, str>,
+    pub library: CowStr<'a>,
+    pub profile: CowStr<'a>,
+}
+
+impl<'a> TryFrom<&'a [u8]> for Header<'a> {
+    type Error = ParseError;
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            library: p.get()?,
+            profile: p.get()?,
+        })
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, IntoStatic)]
@@ -68,22 +82,60 @@ pub struct Footer {
     pub summary_offset_start: u64,
     pub summary_crc: u32,
 }
+impl TryFrom<&[u8]> for Footer {
+    type Error = ParseError;
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            summary_start: p.get()?,
+            summary_offset_start: p.get()?,
+            summary_crc: p.get()?,
+        })
+    }
+}
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, IntoStatic)]
 pub struct Schema<'a> {
     pub id: u16,
-    pub name: Cow<'a, str>,
-    pub encoding: Cow<'a, str>,
+    pub name: CowStr<'a>,
+    pub encoding: CowStr<'a>,
     pub data: Cow<'a, [u8]>,
+}
+
+impl<'a> TryFrom<&'a [u8]> for Schema<'a> {
+    type Error = ParseError;
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            id: p.get()?,
+            name: p.get()?,
+            encoding: p.get()?,
+            data: p.get_byte_array()?,
+        })
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct Channel<'a> {
     pub id: u16,
     pub schema_id: u16,
-    pub topic: Cow<'a, str>,
-    pub message_encoding: Cow<'a, str>,
-    pub metadata: BTreeMap<Cow<'a, str>, Cow<'a, str>>,
+    pub topic: CowStr<'a>,
+    pub message_encoding: CowStr<'a>,
+    pub metadata: BTreeMap<CowStr<'a>, CowStr<'a>>,
+}
+
+impl<'a> TryFrom<&'a [u8]> for Channel<'a> {
+    type Error = ParseError;
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            id: p.get()?,
+            schema_id: p.get()?,
+            topic: p.get()?,
+            message_encoding: p.get()?,
+            metadata: p.get()?,
+        })
+    }
 }
 
 impl<'a> IntoStatic for Channel<'a> {
@@ -113,20 +165,60 @@ pub struct Message<'a> {
     pub data: Cow<'a, [u8]>,
 }
 
+impl<'a> TryFrom<&'a [u8]> for Message<'a> {
+    type Error = ParseError;
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            channel_id: p.get()?,
+            sequence: p.get()?,
+            log_time: p.get()?,
+            publish_time: p.get()?,
+            data: Cow::Borrowed(p.into_inner()),
+        })
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, IntoStatic)]
 pub struct Chunk<'a> {
     pub message_start_time: Timestamp,
     pub message_end_time: Timestamp,
     pub uncompressed_size: u64,
     pub uncompressed_crc: u32,
-    pub compression: Cow<'a, str>,
+    pub compression: CowStr<'a>,
     pub records: Cow<'a, [u8]>,
+}
+
+impl<'a> TryFrom<&'a [u8]> for Chunk<'a> {
+    type Error = ParseError;
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            message_start_time: p.get()?,
+            message_end_time: p.get()?,
+            uncompressed_size: p.get()?,
+            uncompressed_crc: p.get()?,
+            compression: p.get()?,
+            records: p.get_long_byte_array()?,
+        })
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, IntoStatic)]
 pub struct MessageIndex {
     pub channel_id: u16,
     pub records: Vec<(Timestamp, u64)>,
+}
+
+impl TryFrom<&[u8]> for MessageIndex {
+    type Error = ParseError;
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            channel_id: p.get()?,
+            records: p.get()?,
+        })
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, IntoStatic)]
@@ -137,20 +229,53 @@ pub struct ChunkIndex<'a> {
     pub chunk_length: u64,
     pub message_index_offsets: BTreeMap<u16, u64>,
     pub message_index_length: u64,
-    pub compression: Cow<'a, str>,
+    pub compression: CowStr<'a>,
     pub compressed_size: u64,
     pub uncompressed_size: u64,
+}
+
+impl<'a> TryFrom<&'a [u8]> for ChunkIndex<'a> {
+    type Error = ParseError;
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            message_start_time: p.get()?,
+            message_end_time: p.get()?,
+            chunk_start_offset: p.get()?,
+            chunk_length: p.get()?,
+            message_index_offsets: p.get()?,
+            message_index_length: p.get()?,
+            compression: p.get()?,
+            compressed_size: p.get()?,
+            uncompressed_size: p.get()?,
+        })
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, IntoStatic)]
 pub struct Attachment<'a> {
     pub log_time: Timestamp,
     pub create_time: Timestamp,
-    pub name: Cow<'a, str>,
-    pub content_type: Cow<'a, str>,
+    pub name: CowStr<'a>,
+    pub content_type: CowStr<'a>,
     pub data: Cow<'a, [u8]>,
     #[serde(skip_serializing)]
     pub crc: u32,
+}
+
+impl<'a> TryFrom<&'a [u8]> for Attachment<'a> {
+    type Error = ParseError;
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            log_time: p.get()?,
+            create_time: p.get()?,
+            name: p.get()?,
+            content_type: p.get()?,
+            data: p.get_long_byte_array()?,
+            crc: p.get()?,
+        })
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, IntoStatic)]
@@ -160,8 +285,24 @@ pub struct AttachmentIndex<'a> {
     pub log_time: Timestamp,
     pub create_time: Timestamp,
     pub data_size: u64,
-    pub name: Cow<'a, str>,
-    pub content_type: Cow<'a, str>,
+    pub name: CowStr<'a>,
+    pub content_type: CowStr<'a>,
+}
+
+impl<'a> TryFrom<&'a [u8]> for AttachmentIndex<'a> {
+    type Error = ParseError;
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            offset: p.get()?,
+            length: p.get()?,
+            log_time: p.get()?,
+            create_time: p.get()?,
+            data_size: p.get()?,
+            name: p.get()?,
+            content_type: p.get()?,
+        })
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, IntoStatic)]
@@ -176,11 +317,39 @@ pub struct Statistics {
     pub message_end_time: Timestamp,
     pub channel_message_counts: BTreeMap<u16, u64>,
 }
+impl TryFrom<&[u8]> for Statistics {
+    type Error = ParseError;
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            message_count: p.get()?,
+            schema_count: p.get()?,
+            channel_count: p.get()?,
+            attachment_count: p.get()?,
+            metadata_count: p.get()?,
+            chunk_count: p.get()?,
+            message_start_time: p.get()?,
+            message_end_time: p.get()?,
+            channel_message_counts: p.get()?,
+        })
+    }
+}
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone)]
 pub struct Metadata<'a> {
-    pub name: Cow<'a, str>,
-    pub metadata: BTreeMap<Cow<'a, str>, Cow<'a, str>>,
+    pub name: CowStr<'a>,
+    pub metadata: BTreeMap<CowStr<'a>, CowStr<'a>>,
+}
+
+impl<'a> TryFrom<&'a [u8]> for Metadata<'a> {
+    type Error = ParseError;
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            name: p.get()?,
+            metadata: p.get()?,
+        })
+    }
 }
 
 impl<'a> IntoStatic for Metadata<'a> {
@@ -201,7 +370,19 @@ impl<'a> IntoStatic for Metadata<'a> {
 pub struct MetadataIndex<'a> {
     pub offset: u64,
     pub length: u64,
-    pub name: Cow<'a, str>,
+    pub name: CowStr<'a>,
+}
+
+impl<'a> TryFrom<&'a [u8]> for MetadataIndex<'a> {
+    type Error = ParseError;
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            offset: p.get()?,
+            length: p.get()?,
+            name: p.get()?,
+        })
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, IntoStatic)]
@@ -211,18 +392,54 @@ pub struct SummaryOffset {
     pub group_length: u64,
 }
 
+impl TryFrom<&[u8]> for SummaryOffset {
+    type Error = ParseError;
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            group_opcode: p.get()?,
+            group_start: p.get()?,
+            group_length: p.get()?,
+        })
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, IntoStatic)]
 pub struct DataEnd {
     pub data_section_crc: u32,
+}
+
+impl TryFrom<&[u8]> for DataEnd {
+    type Error = ParseError;
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            data_section_crc: p.get()?,
+        })
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, IntoStatic)]
 pub struct AttachmentHeader<'a> {
     pub log_time: Timestamp,
     pub create_time: Timestamp,
-    pub name: Cow<'a, str>,
-    pub content_type: Cow<'a, str>,
+    pub name: CowStr<'a>,
+    pub content_type: CowStr<'a>,
     pub data_len: u64,
+}
+
+impl<'a> TryFrom<&'a [u8]> for AttachmentHeader<'a> {
+    type Error = ParseError;
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let mut p = Parser::new(value);
+        Ok(Self {
+            log_time: p.get()?,
+            create_time: p.get()?,
+            name: p.get()?,
+            content_type: p.get()?,
+            data_len: p.get()?,
+        })
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize, Clone, IntoStatic)]
@@ -242,6 +459,27 @@ pub enum Record<'a> {
     MetadataIndex(MetadataIndex<'a>),
     SummaryOffset(SummaryOffset),
     DataEnd(DataEnd),
+}
+
+pub fn parse_record(opcode: OpCode, buf: &[u8]) -> Result<Record, ParseError> {
+    match opcode {
+        OpCode::Header => Ok(Record::Header(Header::try_from(buf)?)),
+        OpCode::Footer => Ok(Record::Footer(Footer::try_from(buf)?)),
+        OpCode::Schema => Ok(Record::Schema(Schema::try_from(buf)?)),
+        OpCode::Channel => Ok(Record::Channel(Channel::try_from(buf)?)),
+        OpCode::Message => Ok(Record::Message(Message::try_from(buf)?)),
+        OpCode::Chunk => Ok(Record::Chunk(Chunk::try_from(buf)?)),
+        OpCode::MessageIndex => Ok(Record::MessageIndex(MessageIndex::try_from(buf)?)),
+        OpCode::ChunkIndex => Ok(Record::ChunkIndex(ChunkIndex::try_from(buf)?)),
+        OpCode::Attachment => Ok(Record::Attachment(Attachment::try_from(buf)?)),
+        OpCode::AttachmentIndex => Ok(Record::AttachmentIndex(AttachmentIndex::try_from(buf)?)),
+        OpCode::Statistics => Ok(Record::Statistics(Statistics::try_from(buf)?)),
+        OpCode::Metadata => Ok(Record::Metadata(Metadata::try_from(buf)?)),
+        OpCode::MetadataIndex => Ok(Record::MetadataIndex(MetadataIndex::try_from(buf)?)),
+        OpCode::SummaryOffset => Ok(Record::SummaryOffset(SummaryOffset::try_from(buf)?)),
+        OpCode::DataEnd => Ok(Record::DataEnd(DataEnd::try_from(buf)?)),
+        OpCode::UserOpcode(val) => Err(ParseError::OpCodeNotImplemented(val)),
+    }
 }
 
 impl<'a> Record<'a> {

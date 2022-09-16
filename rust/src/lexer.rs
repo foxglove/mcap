@@ -1,5 +1,5 @@
 //! Includes functionality for reading MCAP records out of a [`std::io::Read`] implementation.
-use crate::parse::{parse_attachment_header, parse_u64, ParseError};
+use crate::parse::{ParseError, Parser};
 use crate::records::{AttachmentHeader, InvalidOpcode, OpCode};
 use std::error::Error;
 
@@ -127,7 +127,7 @@ impl<'a, R: std::io::Read> Lexer<'a, R> {
     }
 
     /// Reads the data for the next record from an MCAP into `data`.
-    /// This is most commonly used with [`crate::parse::parse_record`] to access the fields
+    /// This is most commonly used with [`crate::records::parse_record`] to access the fields
     /// of the record.
     ///
     /// # Return
@@ -159,7 +159,9 @@ impl<'a, R: std::io::Read> Lexer<'a, R> {
                     self.state = LexerState::End;
                     return Ok(None);
                 }
-                let opcode = OpCode::try_from(opcode_and_length_buf[0])?;
+                let mut p = Parser::new(&opcode_and_length_buf[..]);
+                let opcode_byte: u8 = p.get()?;
+                let opcode = OpCode::try_from(opcode_byte)?;
                 if read_len < opcode_and_length_buf.len() {
                     self.state = LexerState::Lost;
                     return Err(LexError::TruncatedMidRecord(
@@ -167,7 +169,7 @@ impl<'a, R: std::io::Read> Lexer<'a, R> {
                         opcode_and_length_buf[..read_len].into(),
                     ));
                 }
-                let (len, _) = parse_u64(&opcode_and_length_buf[1..])?;
+                let len: u64 = p.get()?;
                 // Attachments are a special case, because they may be too large to fit into
                 // memory. The user can specify a content handler callback, which can incrementally
                 // read the attachment content out of the reader.
@@ -175,7 +177,7 @@ impl<'a, R: std::io::Read> Lexer<'a, R> {
                     if let Some(mut cb) = self.attachment_content_handler.take() {
                         let attachment_header_buf = read_attachment_header(self.get_reader()?)?;
                         let attachment_header =
-                            parse_attachment_header(&attachment_header_buf[..])?;
+                            AttachmentHeader::try_from(&attachment_header_buf[..])?;
                         // hand the user a limited reader which reaches EOF at the beginning of
                         // the next record.
                         let mut limited_reader = self
