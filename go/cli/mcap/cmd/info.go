@@ -101,6 +101,8 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		}
 		if schema != nil {
 			row = append(row, fmt.Sprintf(" : %s [%s]", schema.Name, schema.Encoding))
+		} else if channel.SchemaID != 0 {
+			row = append(row, fmt.Sprintf(" : <missing schema %d>", channel.SchemaID))
 		} else {
 			row = append(row, " : <no schema>")
 		}
