@@ -87,10 +87,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	}
 	for _, chanID := range chanIDs {
 		channel := info.Channels[chanID]
-		var schema *mcap.Schema
-		if channel.SchemaID != 0 {
-			schema = info.Schemas[channel.SchemaID]
-		}
+		schema := info.Schemas[channel.SchemaID]
 		channelMessageCount := info.Statistics.ChannelMessageCounts[chanID]
 		frequency := 1e9 * float64(channelMessageCount) / float64(end-start)
 		row := []string{
