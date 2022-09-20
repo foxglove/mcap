@@ -301,7 +301,7 @@ jobs:
         with:
           lfs: true
       - name: install golangci-lint
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.44.2
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.49.0
       - run: make lint
       - run: make test
 
