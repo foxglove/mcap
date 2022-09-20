@@ -26,6 +26,7 @@ type indexedMessageIterator struct {
 	statistics        *Statistics
 	chunkIndexes      []*ChunkIndex
 	attachmentIndexes []*AttachmentIndex
+	metadataIndexes   []*MetadataIndex
 
 	indexHeap rangeIndexHeap
 
@@ -89,6 +90,12 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 				return fmt.Errorf("failed to parse attachment index: %w", err)
 			}
 			it.attachmentIndexes = append(it.attachmentIndexes, idx)
+		case TokenMetadataIndex:
+			idx, err := ParseMetadataIndex(record)
+			if err != nil {
+				return fmt.Errorf("failed to parse metadata index: %w", err)
+			}
+			it.metadataIndexes = append(it.metadataIndexes, idx)
 		case TokenChunkIndex:
 			idx, err := ParseChunkIndex(record)
 			if err != nil {
@@ -211,7 +218,6 @@ func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, e
 			return nil, nil, nil, err
 		}
 	}
-
 	for it.indexHeap.Len() > 0 {
 		ri, err := it.indexHeap.HeapPop()
 		if err != nil {

@@ -396,29 +396,160 @@ func TestReaderCounting(t *testing.T) {
 }
 
 func TestMCAPInfo(t *testing.T) {
-	f, err := os.Open("../../testdata/mcap/demo.mcap")
-	assert.Nil(t, err)
-	defer f.Close()
-	assert.Nil(t, err)
-	r, err := NewReader(f)
-	assert.Nil(t, err)
-	info, err := r.Info()
-	assert.Nil(t, err)
-	assert.Equal(t, uint64(1606), info.Statistics.MessageCount)
-	assert.Equal(t, uint32(7), info.Statistics.ChannelCount)
-	assert.Equal(t, 14, int(info.Statistics.ChunkCount))
-	expectedCounts := map[string]uint64{
-		"/radar/points":           156,
-		"/radar/tracks":           156,
-		"/radar/range":            156,
-		"/velodyne_points":        78,
-		"/diagnostics":            52,
-		"/tf":                     774,
-		"/image_color/compressed": 234,
+	cases := []struct {
+		assertion   string
+		schemas     []*Schema
+		channels    []*Channel
+		messages    []*Message
+		metadata    []*Metadata
+		attachments []*Attachment
+	}{
+		{
+			"no metadata or attachments",
+			[]*Schema{
+				{
+					ID: 1,
+				},
+				{
+					ID: 2,
+				},
+			},
+			[]*Channel{
+				{
+					ID:       1,
+					SchemaID: 1,
+					Topic:    "/foo",
+				},
+				{
+					ID:       2,
+					SchemaID: 2,
+					Topic:    "/bar",
+				},
+			},
+			[]*Message{
+				{
+					ChannelID: 1,
+				},
+				{
+					ChannelID: 2,
+				},
+			},
+			[]*Metadata{},
+			[]*Attachment{},
+		},
+		{
+			"no metadata or attachments",
+			[]*Schema{
+				{
+					ID: 1,
+				},
+				{
+					ID: 2,
+				},
+			},
+			[]*Channel{
+				{
+					ID:       1,
+					SchemaID: 1,
+					Topic:    "/foo",
+				},
+				{
+					ID:       2,
+					SchemaID: 2,
+					Topic:    "/bar",
+				},
+			},
+			[]*Message{
+				{
+					ChannelID: 1,
+				},
+				{
+					ChannelID: 2,
+				},
+			},
+			[]*Metadata{
+				{
+					Name: "metadata1",
+					Metadata: map[string]string{
+						"foo": "bar",
+					},
+				},
+				{
+					Name: "metadata2",
+					Metadata: map[string]string{
+						"foo": "bar",
+					},
+				},
+			},
+			[]*Attachment{
+				{
+					Name: "my attachment",
+				},
+			},
+		},
 	}
-	for k, v := range info.ChannelCounts() {
-		assert.Equal(t, expectedCounts[k], v, "mismatch on %s - got %d", k, v)
+	for _, c := range cases {
+		t.Run(c.assertion, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			w, err := NewWriter(buf, &WriterOptions{
+				Chunked:     true,
+				ChunkSize:   1024,
+				Compression: CompressionLZ4,
+			})
+			assert.Nil(t, err)
+			assert.Nil(t, w.WriteHeader(&Header{}))
+			for _, schema := range c.schemas {
+				assert.Nil(t, w.WriteSchema(schema))
+			}
+			for _, channel := range c.channels {
+				assert.Nil(t, w.WriteChannel(channel))
+			}
+			for _, message := range c.messages {
+				assert.Nil(t, w.WriteMessage(message))
+			}
+			for _, metadata := range c.metadata {
+				assert.Nil(t, w.WriteMetadata(metadata))
+			}
+			for _, attachment := range c.attachments {
+				assert.Nil(t, w.WriteAttachment(attachment))
+			}
+			assert.Nil(t, w.Close())
+
+			reader := bytes.NewReader(buf.Bytes())
+			r, err := NewReader(reader)
+			assert.Nil(t, err)
+			info, err := r.Info()
+			assert.Nil(t, err)
+			assert.Equal(t, uint64(len(c.messages)), info.Statistics.MessageCount, "unexpected message count")
+			assert.Equal(t, uint32(len(c.channels)), info.Statistics.ChannelCount, "unexpected channel count")
+			assert.Equal(t, uint32(len(c.metadata)), info.Statistics.MetadataCount, "unexpected metadata count")
+			assert.Equal(
+				t,
+				uint32(len(c.attachments)),
+				info.Statistics.AttachmentCount,
+				"unexpected attachment count",
+			)
+			expectedTopicCounts := make(map[string]uint64)
+			for _, message := range c.messages {
+				channel, err := find(c.channels, func(channel *Channel) bool {
+					return channel.ID == message.ChannelID
+				})
+				assert.Nil(t, err)
+				expectedTopicCounts[channel.Topic] = expectedTopicCounts[channel.Topic] + 1
+			}
+			assert.Equal(t, expectedTopicCounts, info.ChannelCounts())
+		})
 	}
+}
+
+// find returns the first element in items that satisfies the given predicate.
+func find[T any](items []T, f func(T) bool) (val T, err error) {
+	for _, v := range items {
+		if f(v) {
+			return v, nil
+		}
+	}
+	return val, fmt.Errorf("not found")
 }
 
 func TestReadingDiagnostics(t *testing.T) {

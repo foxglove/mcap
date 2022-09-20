@@ -291,6 +291,7 @@ type Info struct {
 	Channels          map[uint16]*Channel
 	Schemas           map[uint16]*Schema
 	ChunkIndexes      []*ChunkIndex
+	MetadataIndexes   []*MetadataIndex
 	AttachmentIndexes []*AttachmentIndex
 	Header            *Header
 }
