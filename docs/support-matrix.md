@@ -2,7 +2,7 @@
 
 ## Library Support
 
-The Python, C++, Go, and Typescript MCAP libraries are actively developed. This means that Foxglove actively pursues bug fixes and ensures conformance with the MCAP specification.
+The Python, C++, Go, and TypeScript MCAP libraries are actively developed. This means that Foxglove actively pursues bug fixes and ensures conformance with the MCAP specification.
 
 **Note**: This does not mean that their APIs are stable.
 
@@ -10,7 +10,7 @@ The Swift MCAP library is experimental, and not actively developed. This means t
 
 ## Feature Matrix
 
-|  | Python | C++ | Go | Typescript | Swift |
+|  | Python | C++ | Go | TypeScript | Swift |
 | --- | --- | --- | --- | --- | --- |
 | Indexed unordered message reading | Yes | Yes | Yes | Yes | No |
 | Timestamp-ordered message reading | Yes | Yes | Yes | Yes | No |
