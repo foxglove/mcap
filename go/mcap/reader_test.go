@@ -535,7 +535,7 @@ func TestMCAPInfo(t *testing.T) {
 					return channel.ID == message.ChannelID
 				})
 				assert.Nil(t, err)
-				expectedTopicCounts[channel.Topic] = expectedTopicCounts[channel.Topic] + 1
+				expectedTopicCounts[channel.Topic]++
 			}
 			assert.Equal(t, expectedTopicCounts, info.ChannelCounts())
 		})
