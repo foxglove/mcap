@@ -134,6 +134,8 @@ github.com/foxglove/mcap/go/mcap v0.0.0-20220328132551-ffb9c0b0ebdc h1:v4dm5b/Z4
 github.com/foxglove/mcap/go/mcap v0.0.0-20220328132551-ffb9c0b0ebdc/go.mod h1:gQrB8PzccHW69xedSZ0uVDQVgDd3h1qX+otbS6fjSkE=
 github.com/foxglove/mcap/go/mcap v0.0.0-20220630160308-e6a1f32d08fa h1:i1tnYfkVXzpEsCY8ypT3l2V4cXodYUHmTppcsd8fnkI=
 github.com/foxglove/mcap/go/mcap v0.0.0-20220630160308-e6a1f32d08fa/go.mod h1:gQrB8PzccHW69xedSZ0uVDQVgDd3h1qX+otbS6fjSkE=
+github.com/foxglove/mcap/go/mcap v0.0.0-20220920234926-92cb87d8b8bb h1:coUPtEVqMoSaoyqf2MkuHgO3OcakVuMhyC1a0RG/fmE=
+github.com/foxglove/mcap/go/mcap v0.0.0-20220920234926-92cb87d8b8bb/go.mod h1:LMCS7BVPyHRb7xRXqYuKfM7dUq+MSE7H0dvaYsAQXnc=
 github.com/foxglove/mcap/go/ros v0.0.0-20220328132551-ffb9c0b0ebdc h1:1Nct2T544wwXnElBQEq7sN8sy6exMGeeRFrY8ifMnEg=
 github.com/foxglove/mcap/go/ros v0.0.0-20220328132551-ffb9c0b0ebdc/go.mod h1:6cXLmjzfxXCScF9sye1jzpvGtWY86np5HC33JlOT0so=
 github.com/foxglove/mcap/go/ros v0.0.0-20220630160308-e6a1f32d08fa h1:HQouvCv0GPRIgoVvg680+m33yVXPN6n3jA3r8Kq4gok=
@@ -297,6 +299,8 @@ github.com/klauspost/compress v1.15.1 h1:y9FcTHGyrebwfP0ZZqFiaxTaiDnUrGkJkI+f583
 github.com/klauspost/compress v1.15.1/go.mod h1:/3/Vjq9QcHkK5uEr5lBEmyoZ1iFhe47etQ6QUkpK6sk=
 github.com/klauspost/compress v1.15.7 h1:7cgTQxJCU/vy+oP/E3B9RGbQTgbiVzIJWIKOLoAsPok=
 github.com/klauspost/compress v1.15.7/go.mod h1:PhcZ0MbTNciWF3rruxRgKxI5NkcHHrHUDtV4Yw2GlzU=
+github.com/klauspost/compress v1.15.10 h1:Ai8UzuomSCDw90e1qNMtb15msBXsNpH6gzkkENQNcJo=
+github.com/klauspost/compress v1.15.10/go.mod h1:QPwzmACJjUTFsnSHH934V6woptycfrDDJnH7hvFVbGM=
 github.com/konsorten/go-windows-terminal-sequences v1.0.1/go.mod h1:T0+1ngSBFLxvqU3pZ+m/2kptfBszLMUkC4ZK/EgS/cQ=
 github.com/kr/fs v0.1.0/go.mod h1:FFnZGqtBN9Gxj7eW1uZ42v5BccTP0vu6NEaFoC2HwRg=
 github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515/go.mod h1:+0opPa2QZZtGFBFZlji/RkVcI2GknAs/DXo4wKdlNEc=
@@ -365,6 +369,8 @@ github.com/pierrec/lz4/v4 v4.1.14 h1:+fL8AQEZtz/ijeNnpduH0bROTu0O3NZAlPjQxGn8LwE
 github.com/pierrec/lz4/v4 v4.1.14/go.mod h1:gZWDp/Ze/IJXGXf23ltt2EXimqmTUXEy0GFuRQyBid4=
 github.com/pierrec/lz4/v4 v4.1.15 h1:MO0/ucJhngq7299dKLwIMtgTfbkoSPF6AoMYDd8Q4q0=
 github.com/pierrec/lz4/v4 v4.1.15/go.mod h1:gZWDp/Ze/IJXGXf23ltt2EXimqmTUXEy0GFuRQyBid4=
+github.com/pierrec/lz4/v4 v4.1.16 h1:kQPfno+wyx6C5572ABwV+Uo3pDFzQ7yhyGchSyRda0c=
+github.com/pierrec/lz4/v4 v4.1.16/go.mod h1:gZWDp/Ze/IJXGXf23ltt2EXimqmTUXEy0GFuRQyBid4=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=

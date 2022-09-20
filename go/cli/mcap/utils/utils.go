@@ -98,3 +98,11 @@ func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.
 	defer rs.Close()
 	return f(remote, rs)
 }
+
+func Keys[T any](m map[string]T) []string {
+	keys := []string{}
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}

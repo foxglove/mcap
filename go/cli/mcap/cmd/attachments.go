@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
@@ -48,7 +47,7 @@ var attachmentsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
-			log.Fatal("Unexpected number of args")
+			die("Unexpected number of args")
 		}
 		filename := args[0]
 		err := utils.WithReader(ctx, filename, func(matched bool, rs io.ReadSeeker) error {
@@ -64,7 +63,7 @@ var attachmentsCmd = &cobra.Command{
 			return nil
 		})
 		if err != nil {
-			log.Fatal("Failed to list attachments: %w", err)
+			die("Failed to list attachments: %s", err)
 		}
 	},
 }

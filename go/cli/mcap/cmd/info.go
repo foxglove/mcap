@@ -113,11 +113,13 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	tw.AppendBulk(rows)
 	tw.Render()
 
-	var attachmentCount uint32
+	var attachmentCount, metadataCount uint32
 	if info.Statistics != nil {
 		attachmentCount = info.Statistics.AttachmentCount
+		metadataCount = info.Statistics.MetadataCount
 	}
 	fmt.Fprintf(buf, "attachments: %d\n", attachmentCount)
+	fmt.Fprintf(buf, "metadata: %d\n", metadataCount)
 	_, err := buf.WriteTo(w)
 	return err
 }
