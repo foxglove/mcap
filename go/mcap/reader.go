@@ -178,6 +178,7 @@ func (r *Reader) Info() (*Info, error) {
 		Channels:          it.channels,
 		ChunkIndexes:      it.chunkIndexes,
 		AttachmentIndexes: it.attachmentIndexes,
+		MetadataIndexes:   it.metadataIndexes,
 		Schemas:           it.schemas,
 		Header:            header,
 	}, nil
