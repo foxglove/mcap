@@ -230,7 +230,7 @@ jobs:
       - run: make build
       - name: Publish mcap to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: ${{ !github.event.pull_request.head.repo.fork }}
+        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
         with:
           user: __token__
           password: ${{ secrets.TESTPYPI_API_TOKEN }}
@@ -240,7 +240,7 @@ jobs:
 
       - name: Publish mcap-protobuf-support to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: ${{ !github.event.pull_request.head.repo.fork }}
+        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
         with:
           user: __token__
           password: ${{ secrets.TESTPYPI_API_TOKEN }}
@@ -250,7 +250,7 @@ jobs:
 
       - name: Publish mcap-ros1-support to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: ${{ !github.event.pull_request.head.repo.fork }}
+        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
         with:
           user: __token__
           password: ${{ secrets.TESTPYPI_API_TOKEN }}
