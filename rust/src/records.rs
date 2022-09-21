@@ -1,4 +1,6 @@
 //! Struct definitions for all [MCAP Records](https://mcap.dev/specification/index.html#records).
+//!
+//! TODO: the `TryFrom<&[u8]>` implementations in this file could be derived with a custom macro.
 use crate::parse::{ParseError, Parser};
 use lifetime::IntoStatic;
 use serde::{Deserialize, Serialize};

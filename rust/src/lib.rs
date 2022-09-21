@@ -1,3 +1,4 @@
+#![doc = include_str!("../README.md")]
 pub mod lexer;
 pub mod parse;
 pub mod record_iterator;

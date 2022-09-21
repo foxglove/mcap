@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::error::Error;
 
-/// Returned from [`parse_record`] when parsing fails.
+/// Encompasses errors parsing MCAP records from raw bytes.
 #[derive(Debug)]
 pub enum ParseError {
     StringEncoding(std::str::Utf8Error),
