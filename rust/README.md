@@ -5,7 +5,7 @@ A library for parsing [MCAP](https://mcap.dev) files in Rust.
 ## Work in Progress!
 
 This library is a work in progress, and currently only limited record reading is supported.
-Check the [../docs/support-matrix.md] for a feature support comparison.
+Check the [../docs/support-matrix.md](library support matrix) for a feature support comparison.
 
 ### Usage example
 
