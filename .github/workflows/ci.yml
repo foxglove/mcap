@@ -140,6 +140,25 @@ jobs:
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner swift-
 
+  conformance-rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          lfs: true
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+          cache: yarn
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          default: true
+      - run: cd rust && cargo build
+      - run: yarn install --frozen-lockfile
+      - run: yarn test:conformance:generate-inputs --verify
+      - run: yarn test:conformance --runner rust-
+
   docs:
     runs-on: ubuntu-latest
     steps:
@@ -407,3 +426,27 @@ jobs:
       - run: ./swiftformat_linux --lint .
       - run: swift build
       - run: swift test
+
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          lfs: true
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          default: true
+          components: "rustfmt, clippy"
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy
+      - run: cargo build
+      - run: cargo test
+      - name: "publish to crates.io"
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/rust/v')
+        uses: katyo/publish-crates@v1
+        with:
+          registry-token: ${{ secrets.RUST_CRATES_IO_TOKEN }}

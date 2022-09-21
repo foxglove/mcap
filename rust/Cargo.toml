@@ -1,0 +1,20 @@
+[package]
+name = "mcap"
+description = "A library for reading and writing MCAP files"
+homepage = "https://mcap.dev"
+repository = "https://github.com/foxglove/mcap"
+documentation = "https://mcap.dev/docs/rust/doc/mcap/index.html"
+readme = "README.md"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+lz4 = { version = "1" }
+zstd = { version = "0.11" }
+crc = { version = "3" }
+lifetime = { version = "0.1", features = ["macros"] }

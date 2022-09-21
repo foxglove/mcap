@@ -17,6 +17,7 @@ We provide MCAP readers and writers in the following languages, for any of our s
 - [Go](https://github.com/foxglove/mcap/tree/main/go)
 - [Swift](https://github.com/foxglove/mcap/tree/main/swift)
 - [TypeScript](https://github.com/foxglove/mcap/tree/main/typescript)
+- [Rust](https://github.com/foxglove/mcap/tree/main/rust)
 
 ## Inspect and visualize MCAP
 
