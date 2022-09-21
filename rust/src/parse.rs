@@ -36,18 +36,24 @@ impl From<std::str::Utf8Error> for ParseError {
     }
 }
 
+/// Parses individual serialized values (not entire records) from a buffer of MCAP data.
 pub struct Parser<'a>(&'a [u8]);
 
 impl<'a> Parser<'a> {
     pub fn new(data: &'a [u8]) -> Self {
         Self(data)
     }
+    /// Parses a Parseable type from the front of the internal buffer, returning that type
+    /// and shortening the internal buffer.
     pub fn get<T: Parseable<'a>>(&mut self) -> Result<T, ParseError> {
         let (res, remainder) = T::parse_from_front(self.0)?;
         self.0 = remainder;
         Ok(res)
     }
 
+    /// Parses a byte array that uses a 32-bit length.
+    /// Since byte arrays with 32-bit and 64-bit lengths are represented with the same type
+    /// in Rust, we don't use the generic [`Parser::get`] method to parse those.
     pub fn get_byte_array(&mut self) -> Result<Cow<'a, [u8]>, ParseError> {
         let len: u32 = self.get()?;
         let (content, remainder) = split_checked(self.0, len as usize)?;
@@ -55,6 +61,9 @@ impl<'a> Parser<'a> {
         Ok(Cow::Borrowed(content))
     }
 
+    /// Parses a byte array that uses a 64-bit length.
+    /// Since byte arrays with 32-bit and 64-bit lengths are represented with the same type
+    /// in Rust, we don't use the generic [`Parser::get`] method to parse those.
     pub fn get_long_byte_array(&mut self) -> Result<Cow<'a, [u8]>, ParseError> {
         let len: u64 = self.get()?;
         let (content, remainder) = split_checked(self.0, len as usize)?;
@@ -62,6 +71,7 @@ impl<'a> Parser<'a> {
         Ok(Cow::Borrowed(content))
     }
 
+    /// Returns a slice of length `len` from the front of the internal buffer.
     fn get_front_bytes(&mut self, len: usize) -> Result<&'a [u8], ParseError> {
         let (result, remainder) = split_checked(self.0, len)?;
         self.0 = remainder;
@@ -84,6 +94,7 @@ where
     fn parse_from_front(value: &'a [u8]) -> Result<(Self, &'a [u8]), ParseError>;
 }
 
+/// a wrapper around `slice.split_at` that returns a ParseError instead of panicking.
 fn split_checked(value: &[u8], len: usize) -> Result<(&[u8], &[u8]), ParseError> {
     if len > value.len() {
         Err(ParseError::DataTooShort)
@@ -92,6 +103,8 @@ fn split_checked(value: &[u8], len: usize) -> Result<(&[u8], &[u8]), ParseError>
     }
 }
 
+/// Returns a const-length array from the front of a slice, or an error if incoming slice is not
+/// long enough.
 fn split_const_checked<const N: usize>(value: &[u8]) -> Result<(&[u8; N], &[u8]), ParseError> {
     let (first, remainder) = split_checked(value, N)?;
     Ok((
