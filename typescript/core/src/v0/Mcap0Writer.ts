@@ -136,7 +136,6 @@ export class Mcap0Writer {
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
 
-    // Re-enable when tests are updated to include data section CRC
     this.recordWriter.writeDataEnd({ dataSectionCrc: crc32Final(this.dataSectionCrc) });
     await this.writable.write(this.recordWriter.buffer);
     this.recordWriter.reset();
