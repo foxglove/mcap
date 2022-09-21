@@ -10,7 +10,7 @@ The Swift MCAP library is experimental, and not actively developed. This means t
 
 ## Feature Matrix
 
-|  | Python | C++ | Go | Typescript | Swift | Rust |
+|  | Python | C++ | Go | TypeScript | Swift | Rust |
 | --- | --- | --- | --- | --- | --- | --- |
 | Indexed unordered message reading | Yes | Yes | Yes | Yes | No | No |
 | Timestamp-ordered message reading | Yes | Yes | Yes | Yes | No | No |
