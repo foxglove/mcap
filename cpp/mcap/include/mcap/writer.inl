@@ -331,6 +331,7 @@ void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
       chunkWriter->resetCrc();
     }
   }
+  writer.crcEnabled = compression_ == Compression::None && !options.noCRC;
   output_ = &writer;
   writeMagic(writer);
   write(writer, Header{options.profile, options.library});
@@ -365,8 +366,7 @@ void McapWriter::close() {
   }
 
   // Write the Data End record
-  uint32_t dataSectionCrc = 0;
-  write(fileOutput, DataEnd{dataSectionCrc});
+  write(fileOutput, DataEnd{fileOutput.crc()});
   if (!options_.noCRC) {
     output_->crcEnabled = true;
     output_->resetCrc();
