@@ -13,13 +13,15 @@ Check the [library support matrix](../docs/support-matrix.md) for a feature supp
 use mcap::records::Record;
 use mcap::record_iterator::RecordIterator;
 
-let mut file = std::fs::File::open("my.mcap").expect("file not found");
+let mut file = std::fs::File::open("../tests/conformance/data/OneMessage/OneMessage.mcap")
+    .expect("file not found");
 for rec in RecordIterator::new(&mut file) {
     match rec {
         Ok(rec) => match rec {
             Record::Header(header) => println!("Found a header: {:?}", header),
-            Record::Message(message) => println!("Found a message: {:?}", header),
+            Record::Message(message) => println!("Found a message: {:?}", message),
             Record::Footer(_) => println!("Found the footer, expect no more records"),
+            _ => println!("Found another record: {:?}", rec),
         },
         Err(err) => {
             eprintln!("failed to read next record: {}", err);
