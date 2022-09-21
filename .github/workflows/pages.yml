@@ -171,17 +171,17 @@ jobs:
           fi
 
       - name: "Preview: copy to staging dir"
-        if: "!github.event.pull_request.head.repo.fork && github.ref != 'refs/heads/main'"
+        if: "!github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && github.ref != 'refs/heads/main'"
         run: cp -r . /tmp/preview-files && rm -rf /tmp/preview-files/.git
 
       - name: "Preview: auth to GCS"
-        if: "!github.event.pull_request.head.repo.fork && github.ref != 'refs/heads/main'"
+        if: "!github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && github.ref != 'refs/heads/main'"
         uses: "google-github-actions/auth@v0"
         with:
           credentials_json: "${{ secrets.GCS_PREVIEW_KEY_JSON }}"
 
       - name: "Preview: push to preview bucket"
-        if: "!github.event.pull_request.head.repo.fork && github.ref != 'refs/heads/main'"
+        if: "!github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && github.ref != 'refs/heads/main'"
         uses: "google-github-actions/upload-cloud-storage@v0"
         with:
           path: "/tmp/preview-files"
@@ -189,7 +189,7 @@ jobs:
           destination: "foxglove-mcap-dev-preview/${{ github.sha }}"
 
       - name: "Preview: display URL"
-        if: "!github.event.pull_request.head.repo.fork && github.ref != 'refs/heads/main'"
+        if: "!github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && github.ref != 'refs/heads/main'"
         uses: Sibz/github-status-action@v1
         with:
           authToken: ${{secrets.GITHUB_TOKEN}}
