@@ -1,10 +1,15 @@
 import { crc32 } from "@foxglove/crc";
-import { isEqual } from "lodash";
 
 import StreamBuffer from "../common/StreamBuffer";
 import { MCAP0_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
-import { DecompressHandlers, McapStreamReader, TypedMcapRecord, TypedMcapRecords } from "./types";
+import {
+  Channel,
+  DecompressHandlers,
+  McapStreamReader,
+  TypedMcapRecord,
+  TypedMcapRecords,
+} from "./types";
 
 type McapReaderOptions = {
   /**
@@ -99,7 +104,7 @@ export default class Mcap0StreamReader implements McapStreamReader {
     if (result.value?.type === "Channel") {
       const existing = this.channelsById.get(result.value.id);
       this.channelsById.set(result.value.id, result.value);
-      if (existing && !isEqual(existing, result.value)) {
+      if (existing && !isChannelEqual(existing, result.value)) {
         throw new Error(
           `Channel record for id ${result.value.id} (topic: ${result.value.topic}) differs from previous channel record of the same id.`,
         );
@@ -257,4 +262,25 @@ export default class Mcap0StreamReader implements McapStreamReader {
       }
     }
   }
+}
+
+function isChannelEqual(a: Channel, b: Channel): boolean {
+  if (
+    !(
+      a.id === b.id &&
+      a.messageEncoding === b.messageEncoding &&
+      a.schemaId === b.schemaId &&
+      a.topic === b.topic &&
+      a.metadata.size === b.metadata.size
+    )
+  ) {
+    return false;
+  }
+  for (const [keyA, valueA] of a.metadata.entries()) {
+    const valueB = b.metadata.get(keyA);
+    if (valueA !== valueB) {
+      return false;
+    }
+  }
+  return true;
 }

@@ -1,5 +1,4 @@
 import Heap from "heap-js";
-import { sortedIndexBy } from "lodash";
 
 import { parseRecord } from "./parse";
 import { IReadable, TypedMcapRecords } from "./types";
@@ -245,7 +244,7 @@ export class ChunkCursor {
           startIndex = sortedIndexBy(
             result.record.records,
             [this.startTime],
-            ([logTime]) => logTime,
+            ([logTime]) => logTime!,
           );
         }
       }
@@ -291,4 +290,29 @@ export class ChunkCursor {
 
     return cursor.records[cursor.index]![0];
   }
+}
+
+// Binary search based on lodash's sortedIndexBy()
+function sortedIndexBy<T>(array: T[], value: T, iteratee: (value: T) => number | bigint): number {
+  let low = 0;
+  let high = array == null ? 0 : array.length;
+  if (high === 0) {
+    return 0;
+  }
+
+  const valueNumber = iteratee(value);
+  const valIsNaN = valueNumber !== valueNumber;
+
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const computed = iteratee(array[mid]!);
+    const othIsReflexive = computed === computed;
+
+    if (valIsNaN ? othIsReflexive : computed < valueNumber) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return high;
 }

@@ -1,5 +1,3 @@
-import { isEqual } from "lodash";
-
 import { getBigUint64 } from "../common/getBigUint64";
 import { MCAP_MAGIC, RecordType } from "./constants";
 import { McapMagic, McapRecord, ChannelInfo } from "./types";
@@ -122,7 +120,7 @@ export function parseRecord(
       channelInfosSeenInThisChunk.add(id);
       const existingInfo = channelInfosById.get(id);
       if (existingInfo) {
-        if (!isEqual(existingInfo, record)) {
+        if (!isChannelInfoEqual(existingInfo, record)) {
           throw new Error(`differing channel infos for ${record.id}`);
         }
         return {
@@ -190,4 +188,15 @@ export function parseRecord(
     case RecordType.CHUNK_INFO:
       throw new Error("Not yet implemented");
   }
+}
+
+function isChannelInfoEqual(a: ChannelInfo, b: ChannelInfo): boolean {
+  return (
+    a.data.byteLength === b.data.byteLength &&
+    a.encoding === b.encoding &&
+    a.id === b.id &&
+    a.schema === b.schema &&
+    a.schemaName === b.schemaName &&
+    a.topic === b.topic
+  );
 }
