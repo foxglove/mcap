@@ -168,3 +168,53 @@ func TestFiltering(t *testing.T) {
 		})
 	}
 }
+
+func TestRecover(t *testing.T) {
+	t.Run("recover data from truncated file", func(t *testing.T) {
+		writeBuf := bytes.Buffer{}
+		readBuf := bytes.Buffer{}
+		writeFilterTestInput(t, &readBuf)
+		readBuf.Truncate(readBuf.Len() / 2)
+
+		assert.Nil(t, filter(&readBuf, &writeBuf, &filterOpts{
+			end:                1000,
+			recover:            true,
+			includeAttachments: true,
+			includeMetadata:    true,
+		}))
+
+		lexer, err := mcap.NewLexer(&writeBuf)
+		assert.Nil(t, err)
+		messageCounter := map[uint16]int{
+			1: 0,
+			2: 0,
+			3: 0,
+		}
+		attachmentCounter := 0
+		metadataCounter := 0
+		for {
+			token, record, err := lexer.Next(nil)
+			if err != nil {
+				assert.ErrorIs(t, err, io.EOF)
+				break
+			}
+			switch token {
+			case mcap.TokenMessage:
+				message, err := mcap.ParseMessage(record)
+				assert.Nil(t, err)
+				messageCounter[message.ChannelID]++
+			case mcap.TokenAttachment:
+				attachmentCounter++
+			case mcap.TokenMetadata:
+				metadataCounter++
+			}
+		}
+		assert.Equal(t, 1, attachmentCounter)
+		assert.Equal(t, 1, metadataCounter)
+		assert.InDeltaMapValues(t, map[uint16]int{
+			1: 78,
+			2: 78,
+			3: 77,
+		}, messageCounter, 0.0)
+	})
+}
