@@ -1,7 +1,7 @@
 import Heap from "heap-js";
-import { sortedIndexBy } from "lodash";
 
 import { parseRecord } from "./parse";
+import { sortedIndexBy } from "./sortedIndexBy";
 import { IReadable, TypedMcapRecords } from "./types";
 
 type ChunkCursorParams = {
@@ -234,19 +234,11 @@ export class ChunkCursor {
       let startIndex = 0;
       if (reverse) {
         if (this.endTime != undefined) {
-          startIndex = sortedIndexBy(
-            result.record.records,
-            [this.endTime],
-            ([logTime]) => -logTime!,
-          );
+          startIndex = sortedIndexBy(result.record.records, this.endTime, (logTime) => -logTime);
         }
       } else {
         if (this.startTime != undefined) {
-          startIndex = sortedIndexBy(
-            result.record.records,
-            [this.startTime],
-            ([logTime]) => logTime,
-          );
+          startIndex = sortedIndexBy(result.record.records, this.startTime, (logTime) => logTime);
         }
       }
 

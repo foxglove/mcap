@@ -58,12 +58,17 @@ nav:
           - "guides/python/protobuf.md"
       - C++:
           - "guides/cpp/protobuf.md"
+  - Specification:
+      - "specification/README.md"
+      - "specification/explanatory-notes.md"
+      - "specification/appendix.md"
   - API Reference:
       - Python: docs/python/index.html
       - C++: docs/cpp/index.html
       - TypeScript: docs/typescript/index.html
       - Go: https://pkg.go.dev/github.com/foxglove/mcap/go/mcap
       - Swift: docs/swift/documentation/mcap/
+      - Rust: docs/rust/doc/mcap/index.html
 
   - More Resources:
       - GitHub: "https://github.com/foxglove/mcap"
@@ -71,10 +76,6 @@ nav:
       - Slack: "https://foxglovedev.slack.com"
       - Library Support: "support-matrix.md"
       - ROS 2 Storage Plugin: "https://github.com/ros-tooling/rosbag2_storage_mcap"
-      - Specification:
-          - "specification/README.md"
-          - "specification/explanatory-notes.md"
-          - "specification/appendix.md"
       - Motivation:
           - "motivation/evaluation-of-robotics-data-recording-file-formats.md"
 

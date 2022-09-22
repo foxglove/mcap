@@ -10,21 +10,21 @@ The Swift MCAP library is experimental, and not actively developed. This means t
 
 ## Feature Matrix
 
-|  | Python | C++ | Go | TypeScript | Swift |
-| --- | --- | --- | --- | --- | --- |
-| Indexed unordered message reading | Yes | Yes | Yes | Yes | No |
-| Timestamp-ordered message reading | Yes | Yes | Yes | Yes | No |
-| Indexed metadata reading | Yes | Yes [^1] | Yes [^1] | Yes [^1] | No |
-| Indexed attachment reading | Yes | Yes [^1] | Yes [^1] | Yes [^1] | No |
-| Non-materialized attachment reading | No | Yes [^2] | No | No | No |
-| Non-indexed reading | Yes | Yes | Yes | Yes | Yes |
-| CRC validation | No | No | Yes | Yes | Yes |
-| ROS1 wrapper | Yes | No | No | No | No |
-| ROS2 wrapper | Yes [^3] | Yes [^3] | No | No | No |
-| Protobuf wrapper | Yes | No | No | No | No |
-| Record writing | Yes | Yes | Yes | Yes | Yes |
-| Easy chunked writing | Yes | Yes | Yes | Yes | Yes |
-| Automatic summary writing | Yes [^4] | Yes [^4] | Yes [^4] | Yes [^4] | Yes [^4] |
+|  | Python | C++ | Go | TypeScript | Swift | Rust |
+| --- | --- | --- | --- | --- | --- | --- |
+| Indexed unordered message reading | Yes | Yes | Yes | Yes | No | No |
+| Timestamp-ordered message reading | Yes | Yes | Yes | Yes | No | No |
+| Indexed metadata reading | Yes | Yes [^1] | Yes [^1] | Yes [^1] | No | No |
+| Indexed attachment reading | Yes | Yes [^1] | Yes [^1] | Yes [^1] | No | No |
+| Non-materialized attachment reading | No | Yes [^2] | No | No | No | Yes |
+| Non-indexed reading | Yes | Yes | Yes | Yes | Yes | Yes |
+| CRC validation | No | No | Yes | Yes | Yes | No |
+| ROS1 wrapper | Yes | No | No | No | No | No |
+| ROS2 wrapper | Yes [^3] | Yes [^3] | No | No | No | No |
+| Protobuf wrapper | Yes | No | No | No | No | No |
+| Record writing | Yes | Yes | Yes | Yes | Yes | No |
+| Easy chunked writing | Yes | Yes | Yes | Yes | Yes | No |
+| Automatic summary writing | Yes [^4] | Yes [^4] | Yes [^4] | Yes [^4] | Yes [^4] | No |
 
 [^1]: These readers don’t have a single call to read an attachment or metadata record by name, but do allow you to read the summary, seek to that location, read a record and parse it.
 [^2]: Using the [MCAP Rosbag2 storage plugin](https://github.com/ros-tooling/rosbag2_storage_mcap).
