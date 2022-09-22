@@ -45,6 +45,117 @@ func TestParseHeader(t *testing.T) {
 	}
 }
 
+func TestParseMetadata(t *testing.T) {
+	cases := []struct {
+		assertion string
+		input     []byte
+		output    *Metadata
+		err       error
+	}{
+		{
+			"empty input",
+			[]byte{},
+			nil,
+			io.ErrShortBuffer,
+		},
+		{
+			"missing metadata",
+			prefixedString("metadata"),
+			nil,
+			io.ErrShortBuffer,
+		},
+		{
+			"empty metadata",
+			flatten(prefixedString("metadata"), makePrefixedMap(map[string]string{})),
+			&Metadata{
+				Name:     "metadata",
+				Metadata: make(map[string]string),
+			},
+			nil,
+		},
+		{
+			"one value",
+			flatten(prefixedString("metadata"), makePrefixedMap(map[string]string{
+				"foo": "bar",
+			})),
+			&Metadata{
+				Name: "metadata",
+				Metadata: map[string]string{
+					"foo": "bar",
+				},
+			},
+			nil,
+		},
+		{
+			"two values",
+			flatten(prefixedString("metadata"), makePrefixedMap(map[string]string{
+				"foo":  "bar",
+				"spam": "eggs",
+			})),
+			&Metadata{
+				Name: "metadata",
+				Metadata: map[string]string{
+					"foo":  "bar",
+					"spam": "eggs",
+				},
+			},
+			nil,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.assertion, func(t *testing.T) {
+			output, err := ParseMetadata(c.input)
+			assert.ErrorIs(t, err, c.err)
+			assert.Equal(t, output, c.output)
+		})
+	}
+}
+
+func TestParseMetadataIndex(t *testing.T) {
+	cases := []struct {
+		assertion string
+		input     []byte
+		output    *MetadataIndex
+		err       error
+	}{
+		{
+			"empty input",
+			[]byte{},
+			nil,
+			io.ErrShortBuffer,
+		},
+		{
+			"offset only",
+			encodedUint64(100),
+			nil,
+			io.ErrShortBuffer,
+		},
+		{
+			"missing name",
+			flatten(encodedUint64(100), encodedUint64(1000)),
+			nil,
+			io.ErrShortBuffer,
+		},
+		{
+			"well-formed index",
+			flatten(encodedUint64(100), encodedUint64(1000), prefixedString("metadata")),
+			&MetadataIndex{
+				Name:   "metadata",
+				Offset: 100,
+				Length: 1000,
+			},
+			nil,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.assertion, func(t *testing.T) {
+			output, err := ParseMetadataIndex(c.input)
+			assert.ErrorIs(t, err, c.err)
+			assert.Equal(t, output, c.output)
+		})
+	}
+}
+
 func TestParseFooter(t *testing.T) {
 	cases := []struct {
 		assertion string
