@@ -191,12 +191,24 @@ export function parseRecord(
 }
 
 function isChannelInfoEqual(a: ChannelInfo, b: ChannelInfo): boolean {
-  return (
-    a.data.byteLength === b.data.byteLength &&
-    a.encoding === b.encoding &&
-    a.id === b.id &&
-    a.schema === b.schema &&
-    a.schemaName === b.schemaName &&
-    a.topic === b.topic
-  );
+  if (
+    a.data.byteLength !== b.data.byteLength ||
+    a.encoding !== b.encoding ||
+    a.id !== b.id ||
+    a.schema !== b.schema ||
+    a.schemaName !== b.schemaName ||
+    a.topic !== b.topic
+  ) {
+    return false;
+  }
+
+  const aData = new Uint8Array(a.data);
+  const bData = new Uint8Array(b.data);
+  for (let i = 0; i < aData.length; i++) {
+    if (aData[i] !== bData[i]) {
+      return false;
+    }
+  }
+
+  return true;
 }
