@@ -5,7 +5,7 @@ homepage = "https://mcap.dev"
 repository = "https://github.com/foxglove/mcap"
 documentation = "https://mcap.dev/docs/rust/doc/mcap/index.html"
 readme = "README.md"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "Apache-2.0"
 
