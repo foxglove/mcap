@@ -1,7 +1,3 @@
-export { default as McapPre0Reader } from "./pre0/McapPre0Reader";
-export { default as McapPre0Writer } from "./pre0/McapPre0Writer";
-export * as McapPre0Types from "./pre0/types";
-
 export { Mcap0IndexedReader } from "./v0/Mcap0IndexedReader";
 export { default as Mcap0StreamReader } from "./v0/Mcap0StreamReader";
 export { Mcap0Writer } from "./v0/Mcap0Writer";

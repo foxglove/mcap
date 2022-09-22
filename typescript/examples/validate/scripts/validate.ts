@@ -250,9 +250,6 @@ async function validate(
   }
 
   switch (mcapVersion) {
-    case "pre0":
-      throw new Error("MCAP pre-v0 files are not supported");
-
     case "0":
       if (!stream) {
         const handle = await fs.open(filePath, "r");
