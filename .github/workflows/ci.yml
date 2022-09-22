@@ -446,5 +446,5 @@ jobs:
       - run: cargo build
       - run: cargo test
       - name: "publish to crates.io"
-        # if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/rust/v')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/rust/v')
         run: cargo publish --token ${{ secrets.RUST_CRATES_IO_TOKEN }}
