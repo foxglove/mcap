@@ -331,7 +331,7 @@ void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
       chunkWriter->resetCrc();
     }
   }
-  writer.crcEnabled = compression_ == Compression::None && !options.noCRC;
+  writer.crcEnabled = !options.noCRC;
   output_ = &writer;
   writeMagic(writer);
   write(writer, Header{options.profile, options.library});
