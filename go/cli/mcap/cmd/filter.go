@@ -168,7 +168,7 @@ func filter(
 	w io.Writer,
 	opts *filterOpts,
 ) error {
-	lexer, err := mcap.NewLexer(r)
+	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{ValidateCRC: true, EmitInvalidChunks: opts.recover})
 	if err != nil {
 		return err
 	}
@@ -207,6 +207,12 @@ func filter(
 			if opts.recover && errors.Is(err, io.ErrUnexpectedEOF) {
 				fmt.Println("Input file was truncated.")
 				return nil
+			}
+			if opts.recover && token == mcap.TokenInvalidChunk {
+				fmt.Printf("Invalid chunk encountered, skipping: %s\n", err)
+				token, data, err = lexer.Next(buf)
+				fmt.Printf("NEXT ERR: %s\n", err)
+				continue
 			}
 			return err
 		}
