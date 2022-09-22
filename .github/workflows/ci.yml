@@ -447,6 +447,4 @@ jobs:
       - run: cargo test
       - name: "publish to crates.io"
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/rust/v')
-        uses: katyo/publish-crates@v1
-        with:
-          registry-token: ${{ secrets.RUST_CRATES_IO_TOKEN }}
+        run: cargo publish --token ${{ secrets.RUST_CRATES_IO_TOKEN }}
