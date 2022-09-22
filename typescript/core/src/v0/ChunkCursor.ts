@@ -1,6 +1,7 @@
 import Heap from "heap-js";
 
 import { parseRecord } from "./parse";
+import { sortedIndexBy } from "./sortedIndexBy";
 import { IReadable, TypedMcapRecords } from "./types";
 
 type ChunkCursorParams = {
@@ -233,19 +234,11 @@ export class ChunkCursor {
       let startIndex = 0;
       if (reverse) {
         if (this.endTime != undefined) {
-          startIndex = sortedIndexBy(
-            result.record.records,
-            [this.endTime],
-            ([logTime]) => -logTime!,
-          );
+          startIndex = sortedIndexBy(result.record.records, this.endTime, (logTime) => -logTime);
         }
       } else {
         if (this.startTime != undefined) {
-          startIndex = sortedIndexBy(
-            result.record.records,
-            [this.startTime],
-            ([logTime]) => logTime!,
-          );
+          startIndex = sortedIndexBy(result.record.records, this.startTime, (logTime) => logTime);
         }
       }
 
@@ -290,29 +283,4 @@ export class ChunkCursor {
 
     return cursor.records[cursor.index]![0];
   }
-}
-
-// Binary search based on lodash's sortedIndexBy()
-function sortedIndexBy<T>(array: T[], value: T, iteratee: (value: T) => number | bigint): number {
-  let low = 0;
-  let high = array == null ? 0 : array.length;
-  if (high === 0) {
-    return 0;
-  }
-
-  const valueNumber = iteratee(value);
-  const valIsNaN = valueNumber !== valueNumber;
-
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2);
-    const computed = iteratee(array[mid]!);
-    const othIsReflexive = computed === computed;
-
-    if (valIsNaN ? othIsReflexive : computed < valueNumber) {
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
-  }
-  return high;
 }
