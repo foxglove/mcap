@@ -1,9 +1,9 @@
 import crc
 import struct Foundation.Data
 
-public protocol IReadable {
+public protocol IRandomAccessReadable {
   func size() -> UInt64
-  func read(offset: UInt64, length: UInt64) -> Data
+  func read(offset: UInt64, length: UInt64) -> Data?
 }
 
 /**
@@ -26,7 +26,7 @@ public protocol IReadable {
  ```
  */
 public class MCAPRandomAccessReader {
-  private let readable: IReadable
+  private let readable: IRandomAccessReadable
   private let recordReader = RecordReader()
   private var chunkReader: RecordReader?
   private var readHeaderMagic = false
@@ -34,18 +34,46 @@ public class MCAPRandomAccessReader {
 
   /**
    Create a random access reader.
-   - Parameter readable: A data source from which to read MCAP file.
+   - Parameter readable: A data source from which to read an MCAP file.
    - Parameter decompressHandlers: A user-specified collection of functions to be used to decompress
      chunks in the MCAP file. When a chunk is encountered, its `compression` field is used as the
      key to select one of the functions in `decompressHandlers`. If a decompress handler is not
      available for the chunk's `compression`, a `MCAPReadError.unsupportedCompression` will be
      thrown.
    */
-  public init(_ readable: IReadable, decompressHandlers: DecompressHandlers = [:]) throws {
+  public init(_ readable: IRandomAccessReadable, decompressHandlers: DecompressHandlers = [:]) throws {
     self.readable = readable
     self.decompressHandlers = decompressHandlers
 
-    readable.read(offset: <#T##UInt64#>, length: <#T##UInt64#>)
+//    let headerPrefix = try self._checkedRead(offset: 0, length: UInt64(MCAP0_MAGIC.count) + 1 /* header opcode */ + 8 /* header record length */)
+//    let headerMagic = headerPrefix.prefix(MCAP0_MAGIC.count)
+//    if !headerMagic.elementsEqual(MCAP0_MAGIC) {
+//      throw MCAPReadError.invalidMagic(actual: Array(headerMagic))
+//    }
+//    if headerPrefix[MCAP0_MAGIC.count] != Opcode.header.rawValue {
+//      throw MCAPReadError.missingHeader(actualOpcode: headerPrefix[MCAP0_MAGIC.count])
+//    }
+//    var offset = MCAP0_MAGIC.count + 1
+//    let headerLength = try headerPrefix.withUnsafeBytes {
+//      try $0.read(littleEndian: UInt64.self, from: &offset)
+//    }
+//
+//    let headerData = try self._checkedRead(offset: UInt64(offset), length: headerLength)
+//    try Header.deserializingFields(from: headerData)
+  }
+
+  private func _checkedRead(offset: UInt64, length: UInt64) throws -> Data {
+    guard let data = self.readable.read(offset: offset, length: length) else {
+      throw MCAPReadError.readBeyondBounds(offset: offset, length: length)
+    }
+    if UInt64(data.count) != length {
+      throw MCAPReadError.readFailed(offset: offset, expectedLength: length, actualLength: UInt64(data.count))
+    }
+    return data
+  }
+
+  public func readMessages() -> AnySequence {
+    return AnySequence(
   }
 
   public func nextRecord() throws -> Record? {
