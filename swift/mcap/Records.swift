@@ -14,10 +14,12 @@ public enum MCAPReadError: Error, Equatable {
   case stringLengthBeyondBounds
   case dataLengthBeyondBounds
   case invalidCRC(expected: UInt32, actual: UInt32)
-  case extraneousDataInChunk
+  case extraneousDataInChunk(length: Int)
+  case extraneousDataInSummary(length: Int)
   case unsupportedCompression(String)
   case readFailed(offset: UInt64, expectedLength: UInt64, actualLength: UInt64)
   case missingHeader(actualOpcode: UInt8)
+  case duplicateStatistics
 }
 
 public enum Opcode: UInt8 {
@@ -61,7 +63,7 @@ public extension Record {
 
   static func deserializingFields(from data: Data) throws -> Self {
     try data.withUnsafeBytes {
-      try Self.init(deserializingFieldsFrom: $0)
+      try Self(deserializingFieldsFrom: $0)
     }
   }
 }

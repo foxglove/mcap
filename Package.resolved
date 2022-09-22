@@ -2,6 +2,15 @@
   "object": {
     "pins": [
       {
+        "package": "swift-collections",
+        "repositoryURL": "https://github.com/apple/swift-collections",
+        "state": {
+          "branch": null,
+          "revision": "418378107c87a4b312e29a51f773ce0e4e12e199",
+          "version": null
+        }
+      },
+      {
         "package": "SwiftDocCPlugin",
         "repositoryURL": "https://github.com/apple/swift-docc-plugin",
         "state": {

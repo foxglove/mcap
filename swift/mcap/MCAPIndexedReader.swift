@@ -1,9 +1,22 @@
+import Collections
 import crc
 import struct Foundation.Data
 
 public protocol IRandomAccessReadable {
   func size() -> UInt64
   func read(offset: UInt64, length: UInt64) -> Data?
+}
+
+private extension IRandomAccessReadable {
+  func checkedRead(offset: UInt64, length: UInt64) throws -> Data {
+    guard let data = self.read(offset: offset, length: length) else {
+      throw MCAPReadError.readBeyondBounds(offset: offset, length: length)
+    }
+    if UInt64(data.count) != length {
+      throw MCAPReadError.readFailed(offset: offset, expectedLength: length, actualLength: UInt64(data.count))
+    }
+    return data
+  }
 }
 
 /**
@@ -26,6 +39,16 @@ public protocol IRandomAccessReadable {
  ```
  */
 public class MCAPRandomAccessReader {
+  public let header: Header
+  public let footer: Footer
+  public let chunkIndexes: [ChunkIndex]
+  public let attachmentIndexes: [AttachmentIndex]
+  public let metadataIndexes: [MetadataIndex]
+  public let channelsById: [ChannelID: Channel]
+  public let schemasById: [SchemaID: Schema]
+  public let statistics: Statistics?
+  public let summaryOffsetsByOpcode: [Opcode.RawValue: SummaryOffset]
+
   private let readable: IRandomAccessReadable
   private let recordReader = RecordReader()
   private var chunkReader: RecordReader?
@@ -45,68 +68,110 @@ public class MCAPRandomAccessReader {
     self.readable = readable
     self.decompressHandlers = decompressHandlers
 
-//    let headerPrefix = try self._checkedRead(offset: 0, length: UInt64(MCAP0_MAGIC.count) + 1 /* header opcode */ + 8 /* header record length */)
-//    let headerMagic = headerPrefix.prefix(MCAP0_MAGIC.count)
-//    if !headerMagic.elementsEqual(MCAP0_MAGIC) {
-//      throw MCAPReadError.invalidMagic(actual: Array(headerMagic))
-//    }
-//    if headerPrefix[MCAP0_MAGIC.count] != Opcode.header.rawValue {
-//      throw MCAPReadError.missingHeader(actualOpcode: headerPrefix[MCAP0_MAGIC.count])
-//    }
-//    var offset = MCAP0_MAGIC.count + 1
-//    let headerLength = try headerPrefix.withUnsafeBytes {
-//      try $0.read(littleEndian: UInt64.self, from: &offset)
-//    }
-//
-//    let headerData = try self._checkedRead(offset: UInt64(offset), length: headerLength)
-//    try Header.deserializingFields(from: headerData)
-  }
+    let readableSize = readable.size()
 
-  private func _checkedRead(offset: UInt64, length: UInt64) throws -> Data {
-    guard let data = self.readable.read(offset: offset, length: length) else {
-      throw MCAPReadError.readBeyondBounds(offset: offset, length: length)
-    }
-    if UInt64(data.count) != length {
-      throw MCAPReadError.readFailed(offset: offset, expectedLength: length, actualLength: UInt64(data.count))
-    }
-    return data
-  }
+    var chunkIndexes: [ChunkIndex] = []
+    var attachmentIndexes: [AttachmentIndex] = []
+    var metadataIndexes: [MetadataIndex] = []
+    var channelsById: [ChannelID: Channel] = [:]
+    var schemasById: [SchemaID: Schema] = [:]
+    var summaryOffsetsByOpcode: [Opcode.RawValue: SummaryOffset] = [:]
 
-  public func readMessages() -> AnySequence {
-    return AnySequence(
-  }
-
-  public func nextRecord() throws -> Record? {
-    if !readHeaderMagic {
-      if try !recordReader.readMagic() {
-        return nil
+    // Read leading magic and header
+    let magicAndHeaderLength: UInt64
+    do {
+      let magicAndHeader = try readable.checkedRead(
+        offset: 0,
+        length: UInt64(MCAP0_MAGIC.count) + 1 /* header opcode */ + 8 /* header record length */
+      )
+      let magic = magicAndHeader.prefix(MCAP0_MAGIC.count)
+      if !magic.elementsEqual(MCAP0_MAGIC) {
+        throw MCAPReadError.invalidMagic(actual: Array(magic))
       }
-      readHeaderMagic = true
+      if magicAndHeader[MCAP0_MAGIC.count] != Opcode.header.rawValue {
+        throw MCAPReadError.missingHeader(actualOpcode: magicAndHeader[MCAP0_MAGIC.count])
+      }
+      var offset = MCAP0_MAGIC.count + 1
+      let headerLength = try magicAndHeader.withUnsafeBytes {
+        try $0.read(littleEndian: UInt64.self, from: &offset)
+      }
+      magicAndHeaderLength = UInt64(offset) + headerLength
+      let headerData = try readable.checkedRead(offset: UInt64(offset), length: headerLength)
+      self.header = try Header.deserializingFields(from: headerData)
     }
 
-    if chunkReader == nil {
-      let record = try recordReader.nextRecord()
+    // Read trailing magic and footer
+    let recordPrefixLength = 1 /* opcode */ + 8 /* record length */
+    let footerLengthWithoutCRC = 8 /* summaryStart */ + 8 /* summaryOffsetStart */ + 4 /* crc */
+    let footerLength = footerLengthWithoutCRC + 4 /* crc */
+    let footerAndMagic: Data
+    let footerOffset: UInt64
+    do {
+      let footerAndMagicLength = UInt64(recordPrefixLength + footerLength + MCAP0_MAGIC.count)
+      if readableSize < magicAndHeaderLength + footerAndMagicLength {
+        throw MCAPReadError.readBeyondBounds(offset: magicAndHeaderLength, length: footerAndMagicLength)
+      }
+
+      footerOffset = readableSize - footerAndMagicLength
+      footerAndMagic = try readable.checkedRead(
+        offset: footerOffset,
+        length: footerAndMagicLength
+      )
+      let magic = footerAndMagic.suffix(MCAP0_MAGIC.count)
+      if !magic.elementsEqual(MCAP0_MAGIC) {
+        throw MCAPReadError.invalidMagic(actual: Array(magic))
+      }
+
+      self.footer = try footerAndMagic.withUnsafeBytes { buf in
+        try Footer(deserializingFieldsFrom: UnsafeRawBufferPointer(rebasing: buf[recordPrefixLength ..<
+            recordPrefixLength + footerLength]))
+      }
+    }
+
+    // Read summary
+    let summaryData = try readable.checkedRead(offset: footer.summaryStart, length: footerOffset - footer.summaryStart)
+    if footer.summaryCRC != 0 {
+      var crc = CRC32()
+      crc.update(summaryData)
+      crc.update(footerAndMagic.prefix(recordPrefixLength + footerLengthWithoutCRC))
+      if footer.summaryCRC != crc.final {
+        throw MCAPReadError.invalidCRC(expected: footer.summaryCRC, actual: crc.final)
+      }
+    }
+
+    let reader = RecordReader(summaryData)
+    var statistics: Statistics?
+    while let record = try reader.nextRecord() {
       switch record {
-      case let chunk as Chunk:
-        chunkReader = RecordReader(try _decompress(chunk))
+      case let record as Schema:
+        schemasById[record.id] = record
+      case let record as Channel:
+        channelsById[record.id] = record
+      case let record as ChunkIndex:
+        chunkIndexes.append(record)
+      case let record as AttachmentIndex:
+        attachmentIndexes.append(record)
+      case let record as MetadataIndex:
+        metadataIndexes.append(record)
+      case let record as Statistics:
+        statistics = record
+      case let summaryOffset as SummaryOffset:
+        summaryOffsetsByOpcode[summaryOffset.groupOpcode] = summaryOffset
       default:
-        return record
+        break
       }
     }
-
-    if let chunkReader = chunkReader {
-      defer {
-        if chunkReader.isDone {
-          self.chunkReader = nil
-        }
-      }
-      if let record = try chunkReader.nextRecord() {
-        return record
-      }
-      throw MCAPReadError.extraneousDataInChunk
+    if !reader.isDone {
+      throw MCAPReadError.extraneousDataInSummary(length: reader.bytesRemaining)
     }
 
-    return nil
+    self.statistics = statistics
+    self.chunkIndexes = chunkIndexes
+    self.attachmentIndexes = attachmentIndexes
+    self.metadataIndexes = metadataIndexes
+    self.channelsById = channelsById
+    self.schemasById = schemasById
+    self.summaryOffsetsByOpcode = summaryOffsetsByOpcode
   }
 
   private func _decompress(_ chunk: Chunk) throws -> Data {
@@ -129,95 +194,26 @@ public class MCAPRandomAccessReader {
 
     return decompressedData
   }
-}
 
-private class RecordReader {
-  private var buffer: Data
-  private var offset = 0
-
-  init(_ data: Data = Data()) {
-    buffer = data
-  }
-
-  func append(_ data: Data) {
-    _trim()
-    buffer.append(data)
-  }
-
-  var isDone: Bool {
-    offset == buffer.count
-  }
-
-  private func _trim() {
-    buffer.removeSubrange(..<offset)
-    offset = 0
-  }
-
-  public func readMagic() throws -> Bool {
-    if offset + 8 < buffer.count {
-      let prefix = buffer[offset ..< offset + 8]
-      if !MCAP0_MAGIC.elementsEqual(prefix) {
-        throw MCAPReadError.invalidMagic(actual: Array(prefix))
-      }
-      offset += 8
-      return true
+  func readMessages(topics _: [String]? = nil, startTime _: UInt64? = nil,
+                    endTime _: UInt64? = nil) -> AnyIterator<Message>
+  {
+    struct MessageIndexCursor {
+      let channelID: ChannelID
+      let index: Int
+      let records: [(logTime: Timestamp, offset: UInt64)]
     }
-    return false
-  }
+    struct ChunkCursor: Comparable {
+      let chunkIndex: ChunkIndex
+      let messageIndexCursors: Heap<MessageIndexCursor>
 
-  public func nextRecord() throws -> Record? {
-    try buffer.withUnsafeBytes { buf in
-      while offset + 9 < buf.count {
-        let op = buf[offset]
-        var recordLength: UInt64 = 0
-        withUnsafeMutableBytes(of: &recordLength) { rawLength in
-          _ = buf.copyBytes(to: rawLength, from: offset + 1 ..< offset + 9)
-        }
-        recordLength = UInt64(littleEndian: recordLength)
-        guard offset + 9 + Int(recordLength) <= buf.count else {
-          return nil
-        }
-        offset += 9
-        defer {
-          offset += Int(recordLength)
-        }
-        guard let op = Opcode(rawValue: op) else {
-          continue
-        }
-        let recordBuffer = UnsafeRawBufferPointer(rebasing: buf[offset ..< offset + Int(recordLength)])
-        switch op {
-        case .header:
-          return try Header(deserializingFieldsFrom: recordBuffer)
-        case .footer:
-          return try Footer(deserializingFieldsFrom: recordBuffer)
-        case .schema:
-          return try Schema(deserializingFieldsFrom: recordBuffer)
-        case .channel:
-          return try Channel(deserializingFieldsFrom: recordBuffer)
-        case .message:
-          return try Message(deserializingFieldsFrom: recordBuffer)
-        case .chunk:
-          return try Chunk(deserializingFieldsFrom: recordBuffer)
-        case .messageIndex:
-          return try MessageIndex(deserializingFieldsFrom: recordBuffer)
-        case .chunkIndex:
-          return try ChunkIndex(deserializingFieldsFrom: recordBuffer)
-        case .attachment:
-          return try Attachment(deserializingFieldsFrom: recordBuffer)
-        case .attachmentIndex:
-          return try AttachmentIndex(deserializingFieldsFrom: recordBuffer)
-        case .statistics:
-          return try Statistics(deserializingFieldsFrom: recordBuffer)
-        case .metadata:
-          return try Metadata(deserializingFieldsFrom: recordBuffer)
-        case .metadataIndex:
-          return try MetadataIndex(deserializingFieldsFrom: recordBuffer)
-        case .summaryOffset:
-          return try SummaryOffset(deserializingFieldsFrom: recordBuffer)
-        case .dataEnd:
-          return try DataEnd(deserializingFieldsFrom: recordBuffer)
-        }
-      }
+      static func == (_: ChunkCursor, _: ChunkCursor) -> Bool {}
+
+      static func < (_: ChunkCursor, _: ChunkCursor) -> Bool {}
+    }
+    var chunkCursors = Heap<ChunkCursor>()
+
+    return AnyIterator {
       return nil
     }
   }
