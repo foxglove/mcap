@@ -60,8 +60,36 @@ private func toJson(_ record: Record) -> [String: Any] {
   ]
 }
 
+extension FileHandle: IRandomAccessReadable {
+  public func size() -> UInt64 {
+    if #available(macOS 10.15.4, *) {
+      return try! seekToEnd()
+    } else {
+      return seekToEndOfFile()
+    }
+  }
+
+  public func read(offset: UInt64, length: UInt64) -> Data? {
+    do {
+      if #available(macOS 10.15.4, *) {
+        try seek(toOffset: offset)
+      } else {
+        seek(toFileOffset: offset)
+      }
+      return readData(ofLength: Int(length))
+    } catch {
+      return nil
+    }
+  }
+}
+
 enum ReadConformanceRunner {
-  static func main() async throws {
+  enum Mode {
+    case streamed
+    case indexed
+  }
+
+  static func main(mode: Mode) async throws {
     if CommandLine.arguments.count < 3 {
       fatalError("Usage: conformance read [test-data.mcap]")
     }
@@ -69,14 +97,37 @@ enum ReadConformanceRunner {
     let file = try FileHandle(forReadingFrom: URL(fileURLWithPath: filename))
 
     var records: [Record] = []
-    let reader = MCAPStreamedReader()
-    while case let data = file.readData(ofLength: 4 * 1024), data.count != 0 {
-      reader.append(data)
-      while let record = try reader.nextRecord() {
-        if !(record is MessageIndex) {
-          records.append(record)
+    switch mode {
+    case .streamed:
+      let reader = MCAPStreamedReader()
+      while case let data = file.readData(ofLength: 4 * 1024), data.count != 0 {
+        reader.append(data)
+        while let record = try reader.nextRecord() {
+          if !(record is MessageIndex) {
+            records.append(record)
+          }
         }
       }
+    case .indexed:
+      let reader = try MCAPRandomAccessReader(file)
+      records.append(reader.header)
+      records.append(contentsOf: reader.schemasById.values.map { $0 })
+      records.append(contentsOf: reader.channelsById.values.map { $0 })
+      let iterator = reader.messageIterator()
+      while let message = try iterator.next() {
+        records.append(message)
+      }
+      records.append(DataEnd(dataSectionCRC: 0))
+      records.append(contentsOf: reader.schemasById.values.map { $0 })
+      records.append(contentsOf: reader.channelsById.values.map { $0 })
+      if let statistics = reader.statistics {
+        records.append(statistics)
+      }
+      records.append(contentsOf: reader.chunkIndexes)
+      records.append(contentsOf: reader.attachmentIndexes)
+      records.append(contentsOf: reader.metadataIndexes)
+      records.append(contentsOf: reader.summaryOffsetsByOpcode.values.sorted { $0.groupStart < $1.groupStart })
+      records.append(reader.footer)
     }
 
     let data = try JSONSerialization.data(withJSONObject: ["records": records.map(toJson)], options: .prettyPrinted)
