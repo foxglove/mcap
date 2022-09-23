@@ -326,12 +326,12 @@ void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
   }
   auto* chunkWriter = getChunkWriter();
   if (chunkWriter) {
-    chunkWriter->crcEnabled = !options.noCRC;
+    chunkWriter->crcEnabled = !options.noChunkCRC;
     if (chunkWriter->crcEnabled) {
       chunkWriter->resetCrc();
     }
   }
-  writer.crcEnabled = !options.noCRC;
+  writer.crcEnabled = options.enableDataCRC;
   output_ = &writer;
   writeMagic(writer);
   write(writer, Header{options.profile, options.library});
@@ -367,7 +367,7 @@ void McapWriter::close() {
 
   // Write the Data End record
   write(fileOutput, DataEnd{fileOutput.crc()});
-  if (!options_.noCRC) {
+  if (!options_.noSummaryCRC) {
     output_->crcEnabled = true;
     output_->resetCrc();
   }
@@ -458,7 +458,7 @@ void McapWriter::close() {
   }
 
   // Write the footer and trailing magic
-  write(fileOutput, Footer{summaryStart, summaryOffsetStart}, !options_.noCRC);
+  write(fileOutput, Footer{summaryStart, summaryOffsetStart}, !options_.noSummaryCRC);
   writeMagic(fileOutput);
 
   // Flush output
@@ -590,7 +590,7 @@ Status McapWriter::write(Attachment& attachment) {
     writeChunk(fileOutput, *chunkWriter);
   }
 
-  if (!options_.noCRC) {
+  if (!options_.noAttachmentCRC) {
     // Calculate the CRC32 of the attachment
     uint32_t sizePrefix = 0;
     uint32_t crc = internal::CRC32_INIT;
