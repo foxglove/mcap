@@ -27,3 +27,22 @@ MCAP works well under various workloads, resource constraints, and durability re
 
 - Embed all message schemas in the file
 - No extra dependencies needed for decoding
+
+## Adding MCAP as a dependency
+
+In `Package.swift`, add a dependency on this repo, and include the `"MCAP"` library as a dependency for your target:
+
+```swift
+Package(
+  dependencies: [
+    .package(url: "https://github.com/foxglove/mcap", from: "0.1.0"),
+  ],
+  targets: [
+    .target(name: "<target>", dependencies: [
+      .product(name: "MCAP", package: "mcap"),
+    ]),
+  ]
+)
+```
+
+Import the library using `import MCAP`.
