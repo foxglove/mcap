@@ -252,6 +252,7 @@ async function validate(
     return;
   }
 
+  let processed = false;
   if (!stream) {
     const handle = await fs.open(filePath, "r");
     try {
@@ -289,21 +290,25 @@ async function validate(
       for await (const record of reader.readMessages()) {
         processRecord(record);
       }
+      processed = true;
     } catch (error) {
       log("Unable to read file as indexed; falling back to streaming:", error);
     } finally {
       await handle.close();
     }
   }
-  await readStream(
-    filePath,
-    new Mcap0StreamReader({
-      includeChunks: true,
-      decompressHandlers,
-      validateCrcs: true,
-    }),
-    processRecord,
-  );
+
+  if (!processed) {
+    await readStream(
+      filePath,
+      new Mcap0StreamReader({
+        includeChunks: true,
+        decompressHandlers,
+        validateCrcs: true,
+      }),
+      processRecord,
+    );
+  }
 
   log("Record counts:");
   for (const [type, count] of recordCounts) {
