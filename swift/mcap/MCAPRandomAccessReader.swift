@@ -140,9 +140,9 @@ class ChunkCursor: Comparable {
 }
 
 /**
- A reader that parses MCAP data from a random-access data source. This reader uses the summary
- and index data to seek in the file and read messages in log-time order, and requires the entire file to be accessible via
- byte ranges.
+ A reader that parses MCAP data from a random-access data source. This reader uses the summary and
+ index data to seek in the file and read messages in log-time order, and requires the entire file to
+ be accessible via byte ranges.
 
  ```swift
  let readable = // readable
@@ -318,8 +318,10 @@ public class MCAPRandomAccessReader {
   /**
    Create an iterator to read messages matching the given parameters.
    - Parameter topics: Topic names to include. If `nil` (the default), all topics will be read.
-   - Parameter startTime: Lower bound on ``Message/logTime`` (inclusive). If `nil`, messages will be read with no lower time bound.
-   - Parameter endTime: Upper bound on ``Message/logTime`` (inclusive). If `nil`, messages will be read with no upper time bound.
+   - Parameter startTime: Lower bound on ``Message/logTime`` (inclusive). If `nil`, messages will be
+     read with no lower time bound.
+   - Parameter endTime: Upper bound on ``Message/logTime`` (inclusive). If `nil`, messages will be
+     read with no upper time bound.
    */
   public func messageIterator(
     topics: [String]? = nil,
