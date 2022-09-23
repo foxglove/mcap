@@ -31,4 +31,4 @@ A CLI tool for interacting with the format is available [here](./go/cli/mcap).
 
 ## License
 
-Licensed under the [Apache License, Version 2.0](/LICENSE). Contributors are required to accept the [Contributor License Agreement](https://github.com/foxglove/cla).
+[MIT License](/LICENSE). Contributors are required to accept the [Contributor License Agreement](https://github.com/foxglove/cla).

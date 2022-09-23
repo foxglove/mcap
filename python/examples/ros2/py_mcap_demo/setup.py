@@ -15,7 +15,7 @@ setup(
     maintainer="James Smith",
     maintainer_email="james@foxglove.dev",
     description="Example demonstrating rosbag2 python API with mcap",
-    license="Apache-2.0",
+    license="MIT",
     tests_require=["pytest", "mcap"],
     entry_points={
         "console_scripts": [
