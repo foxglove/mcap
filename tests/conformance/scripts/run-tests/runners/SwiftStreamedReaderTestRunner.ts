@@ -10,9 +10,12 @@ export default class SwiftStreamedReaderTestRunner extends ReadTestRunner {
   readonly readsDataEnd = true;
 
   async runReadTest(filePath: string): Promise<string> {
-    const { stdout } = await promisify(exec)(`./.build/debug/conformance read ${filePath}`, {
-      cwd: path.join(__dirname, "../../../../.."),
-    });
+    const { stdout } = await promisify(exec)(
+      `./.build/debug/conformance read-streamed ${filePath}`,
+      {
+        cwd: path.join(__dirname, "../../../../.."),
+      },
+    );
 
     return stdout;
   }

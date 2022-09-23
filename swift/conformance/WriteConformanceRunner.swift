@@ -1,5 +1,5 @@
 import Foundation
-import mcap
+import MCAP
 
 class Buffer: IWritable {
   var data = Data()

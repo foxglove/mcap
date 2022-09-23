@@ -1,4 +1,4 @@
-import crc
+import CRC
 import XCTest
 
 final class CRC32Tests: XCTestCase {
