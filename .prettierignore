@@ -1,0 +1,2 @@
+# Prettier converts `` to ` in Markdown, which breaks Swift-DocC
+**/*.docc/**/*.md
