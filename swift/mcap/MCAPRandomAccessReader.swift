@@ -149,7 +149,7 @@ class ChunkCursor: Comparable {
  let reader = try MCAPRandomAccessReader(readable)
  let iterator = reader.messageIterator(topics: ["foo", "bar"])
  while let message = try iterator.next() {
- // process a message...
+   // process a message...
  }
  ```
  */
