@@ -2,20 +2,8 @@
 
 import XCTest
 
-import crc
-import mcap
-
-class Buffer: IWritable {
-  var data = Data()
-
-  func position() -> UInt64 {
-    UInt64(data.count)
-  }
-
-  func write(_ other: Data) async {
-    data.append(other)
-  }
-}
+import CRC
+import MCAP
 
 final class MCAPTests: XCTestCase {
   func testEmpty() async throws {

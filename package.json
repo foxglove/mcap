@@ -11,6 +11,7 @@
   "scripts": {
     "docs:lint": "prettier '**/*.md' --check",
     "docs:build": "tailwindcss --config docs/website/tailwind.config.js -i docs/website/style.css -o docs/website/dist/bundle.css",
+    "docs:swift:start": "swift package --disable-sandbox preview-documentation --target MCAP",
     "typedoc": "typedoc --out __docs__/typescript typescript/core/src/index.ts --tsconfig typescript/core/tsconfig.json",
     "spellcheck": "cspell --relative '**'",
     "test:conformance:generate-inputs": "yarn workspace @foxglove/mcap-conformance generate-inputs --data-dir \"$(pwd)/tests/conformance/data\"",

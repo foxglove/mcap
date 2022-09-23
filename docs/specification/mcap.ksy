@@ -6,7 +6,7 @@ meta:
   id: mcap
   title: MCAP
   file-extension: mcap
-  license: Apache-2.0
+  license: MIT
   endian: le
 doc: |
   MCAP is a modular container format and logging library for pub/sub messages with
