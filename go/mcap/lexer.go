@@ -156,7 +156,8 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			err := loadChunk(l)
 			if err != nil {
 				if l.emitInvalidChunks {
-					if _, ok := err.(*errInvalidChunkCrc); ok {
+					var invalidCrc *errInvalidChunkCrc
+					if errors.As(err, &invalidCrc) {
 						return TokenInvalidChunk, nil, err
 					}
 				}
