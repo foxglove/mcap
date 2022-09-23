@@ -228,11 +228,11 @@ async function validate(
   {
     const handle = await fs.open(filePath, "r");
     try {
-      const buffer = new Uint8Array(Mcap0Constants.DETECT_VERSION_BYTES_REQUIRED);
+      const buffer = new Uint8Array(Mcap0Constants.MCAP0_MAGIC.length);
       const readResult = await handle.read({
         buffer,
         offset: 0,
-        length: Mcap0Constants.DETECT_VERSION_BYTES_REQUIRED,
+        length: Mcap0Constants.MCAP0_MAGIC.length,
       });
       isValidMcap = hasMcapPrefix(new DataView(buffer.buffer, 0, readResult.bytesRead));
       if (!isValidMcap) {

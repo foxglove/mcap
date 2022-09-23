@@ -1,8 +1,6 @@
 /** Array.from("\x89MCAP0\r\n", (c) => c.charCodeAt(0)) */
 export const MCAP0_MAGIC = Object.freeze([137, 77, 67, 65, 80, 48, 13, 10]);
 
-export const DETECT_VERSION_BYTES_REQUIRED = MCAP0_MAGIC.length;
-
 export enum Opcode {
   MIN = 0x01,
   HEADER = 0x01,
