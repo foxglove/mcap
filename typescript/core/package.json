@@ -2,7 +2,7 @@
   "name": "@mcap/core",
   "version": "0.2.2",
   "description": "MCAP file support in TypeScript",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/foxglove/mcap.git"
