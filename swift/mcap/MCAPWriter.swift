@@ -19,6 +19,9 @@ private extension Statistics {
   }
 }
 
+/**
+ A writer that produces MCAP files, with options to enable compression for smaller files and indexes for more efficient reading.œ
+ */
 public final class MCAPWriter {
   public struct Options {
     let useStatistics: Bool
