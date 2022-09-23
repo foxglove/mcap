@@ -420,8 +420,8 @@ jobs:
       - uses: swift-actions/setup-swift@v1
         with:
           swift-version: "5.6"
-      - run: curl -LO https://github.com/realm/SwiftLint/releases/download/0.46.5/swiftlint_linux.zip && unzip swiftlint_linux.zip swiftlint
-      - run: curl -LO https://github.com/nicklockwood/SwiftFormat/releases/download/0.49.5/swiftformat_linux.zip && unzip swiftformat_linux.zip && chmod +x swiftformat_linux
+      - run: curl -LO https://github.com/realm/SwiftLint/releases/download/0.49.1/swiftlint_linux.zip && unzip swiftlint_linux.zip swiftlint
+      - run: curl -LO https://github.com/nicklockwood/SwiftFormat/releases/download/0.49.18/swiftformat_linux.zip && unzip swiftformat_linux.zip && chmod +x swiftformat_linux
       - run: ./swiftlint
       - run: cat .swiftformat && ./swiftformat_linux --lint .
       - run: swift build
