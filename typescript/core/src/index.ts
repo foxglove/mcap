@@ -8,4 +8,4 @@ export * as Mcap0Types from "./v0/types";
 export * as Mcap0Constants from "./v0/constants";
 export type { IWritable } from "./common/IWritable";
 
-export * from "./common/detectVersion";
+export * from "./common/hasMcapPrefix";

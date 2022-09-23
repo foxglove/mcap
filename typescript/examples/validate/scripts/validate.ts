@@ -2,9 +2,8 @@ import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import { LazyMessageReader as ROS1LazyMessageReader } from "@foxglove/rosmsg-serialization";
 import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
 import {
-  detectVersion,
-  DETECT_VERSION_BYTES_REQUIRED,
-  McapVersion,
+  hasMcapPrefix,
+  Mcap0Constants,
   Mcap0IndexedReader,
   Mcap0StreamReader,
   Mcap0Types,
@@ -225,91 +224,86 @@ async function validate(
 
   log("Reading", filePath);
 
-  let mcapVersion: McapVersion | undefined;
+  let isValidMcap = false;
   {
     const handle = await fs.open(filePath, "r");
     try {
-      const buffer = new Uint8Array(DETECT_VERSION_BYTES_REQUIRED);
+      const buffer = new Uint8Array(Mcap0Constants.DETECT_VERSION_BYTES_REQUIRED);
       const readResult = await handle.read({
         buffer,
         offset: 0,
-        length: DETECT_VERSION_BYTES_REQUIRED,
+        length: Mcap0Constants.DETECT_VERSION_BYTES_REQUIRED,
       });
-      mcapVersion = detectVersion(new DataView(buffer.buffer, 0, readResult.bytesRead));
-      if (mcapVersion == undefined) {
+      isValidMcap = hasMcapPrefix(new DataView(buffer.buffer, 0, readResult.bytesRead));
+      if (!isValidMcap) {
         throw new Error(
-          `Not a valid MCAP file: unable to detect version with file header ${Array.from(buffer)
+          `Not a valid MCAP file: prefix not detected in <${Array.from(buffer)
             .map((val) => val.toString(16).padStart(2, "0"))
-            .join(" ")}`,
+            .join(" ")}>`,
         );
       }
-      log("Detected MCAP version:", mcapVersion);
+      log("MCAP prefix detected");
     } finally {
       await handle.close();
     }
   }
 
-  switch (mcapVersion) {
-    case "0":
-      if (!stream) {
-        const handle = await fs.open(filePath, "r");
-        try {
-          let buffer = new ArrayBuffer(4096);
-          const reader = await Mcap0IndexedReader.Initialize({
-            readable: {
-              size: async () => BigInt((await handle.stat()).size),
-              read: async (offset, length) => {
-                if (offset > Number.MAX_SAFE_INTEGER || length > Number.MAX_SAFE_INTEGER) {
-                  throw new Error(`Read too large: offset ${offset}, length ${length}`);
-                }
-                if (length > buffer.byteLength) {
-                  buffer = new ArrayBuffer(Number(length * 2n));
-                }
-                const result = await handle.read({
-                  buffer: new DataView(buffer, 0, Number(length)),
-                  position: Number(offset),
-                });
-                if (result.bytesRead !== Number(length)) {
-                  throw new Error(
-                    `Read only ${result.bytesRead} bytes from offset ${offset}, expected ${length}`,
-                  );
-                }
-                return new Uint8Array(
-                  result.buffer.buffer,
-                  result.buffer.byteOffset,
-                  result.bytesRead,
-                );
-              },
-            },
-            decompressHandlers,
-          });
-          for (const record of reader.schemasById.values()) {
-            processRecord(record);
-          }
-          for (const record of reader.channelsById.values()) {
-            processRecord(record);
-          }
-          for await (const record of reader.readMessages()) {
-            processRecord(record);
-          }
-          break;
-        } catch (error) {
-          log("Unable to read file as indexed; falling back to streaming:", error);
-        } finally {
-          await handle.close();
-        }
-      }
-      await readStream(
-        filePath,
-        new Mcap0StreamReader({
-          includeChunks: true,
-          decompressHandlers,
-          validateCrcs: true,
-        }),
-        processRecord,
-      );
-      break;
+  if (!isValidMcap) {
+    return;
   }
+
+  if (!stream) {
+    const handle = await fs.open(filePath, "r");
+    try {
+      let buffer = new ArrayBuffer(4096);
+      const reader = await Mcap0IndexedReader.Initialize({
+        readable: {
+          size: async () => BigInt((await handle.stat()).size),
+          read: async (offset, length) => {
+            if (offset > Number.MAX_SAFE_INTEGER || length > Number.MAX_SAFE_INTEGER) {
+              throw new Error(`Read too large: offset ${offset}, length ${length}`);
+            }
+            if (length > buffer.byteLength) {
+              buffer = new ArrayBuffer(Number(length * 2n));
+            }
+            const result = await handle.read({
+              buffer: new DataView(buffer, 0, Number(length)),
+              position: Number(offset),
+            });
+            if (result.bytesRead !== Number(length)) {
+              throw new Error(
+                `Read only ${result.bytesRead} bytes from offset ${offset}, expected ${length}`,
+              );
+            }
+            return new Uint8Array(result.buffer.buffer, result.buffer.byteOffset, result.bytesRead);
+          },
+        },
+        decompressHandlers,
+      });
+      for (const record of reader.schemasById.values()) {
+        processRecord(record);
+      }
+      for (const record of reader.channelsById.values()) {
+        processRecord(record);
+      }
+      for await (const record of reader.readMessages()) {
+        processRecord(record);
+      }
+    } catch (error) {
+      log("Unable to read file as indexed; falling back to streaming:", error);
+    } finally {
+      await handle.close();
+    }
+  }
+  await readStream(
+    filePath,
+    new Mcap0StreamReader({
+      includeChunks: true,
+      decompressHandlers,
+      validateCrcs: true,
+    }),
+    processRecord,
+  );
 
   log("Record counts:");
   for (const [type, count] of recordCounts) {
