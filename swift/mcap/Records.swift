@@ -1,4 +1,4 @@
-import crc
+import CRC
 import struct Foundation.Data
 
 public typealias SchemaID = UInt16
@@ -20,6 +20,9 @@ public enum MCAPReadError: Error, Equatable {
   case readFailed(offset: UInt64, expectedLength: UInt64, actualLength: UInt64)
   case missingHeader(actualOpcode: UInt8)
   case duplicateStatistics
+  case invalidMessageIndexEntry(offset: UInt64, chunkStartOffset: UInt64, chunkLength: UInt64)
+  case incorrectOpcode(expected: Opcode, actual: Opcode.RawValue)
+  case missingSummary
 }
 
 public enum Opcode: UInt8 {
@@ -58,6 +61,18 @@ public extension Record {
         fieldsStartOffset - MemoryLayout<UInt64>.size ..< fieldsStartOffset,
         with: $0
       )
+    }
+  }
+
+  static func deserializing(from data: Data, at startOffset: Int = 0) throws -> Self {
+    try data.withUnsafeBytes {
+      var offset = startOffset
+      if $0[offset] != Self.opcode.rawValue {
+        throw MCAPReadError.incorrectOpcode(expected: Self.opcode, actual: $0[offset])
+      }
+      offset += 1
+      let length = try $0.read(littleEndian: UInt64.self, from: &offset)
+      return try Self(deserializingFieldsFrom: UnsafeRawBufferPointer(rebasing: $0[offset ..< offset + Int(length)]))
     }
   }
 

@@ -1,4 +1,4 @@
-import crc
+import CRC
 import struct Foundation.Data
 
 public protocol IWritable {

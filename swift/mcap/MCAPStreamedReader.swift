@@ -1,4 +1,4 @@
-import crc
+import CRC
 import struct Foundation.Data
 
 public typealias DecompressHandlers =
@@ -42,10 +42,18 @@ public class MCAPStreamedReader {
     self.decompressHandlers = decompressHandlers
   }
 
+  /**
+    Add data to the reader's internal buffer.
+   */
   public func append(_ data: Data) {
     recordReader.append(data)
   }
 
+  /**
+   Retrieve the next record from the reader, if possible
+   - Returns: The next record, or `nil` if not enough data was available to parse a record.
+   - Throws: Any error encountered during reading, decompression, or parsing.
+   */
   public func nextRecord() throws -> Record? {
     if !readHeaderMagic {
       if try !recordReader.readMagic() {

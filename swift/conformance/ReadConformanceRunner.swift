@@ -1,5 +1,5 @@
 import Foundation
-import mcap
+import MCAP
 
 private extension String {
   func camelToSnake() -> String {
