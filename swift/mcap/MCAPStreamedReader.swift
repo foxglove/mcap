@@ -13,7 +13,7 @@ public typealias DecompressHandlers =
  Call ``append(_:)`` when new data is available to add it to the reader's internal buffer. Then,
  call ``nextRecord()`` repeatedly to consume records that are fully parseable.
 
- ```
+ ```swift
  let reader = MCAPStreamedReader()
  while let data = readSomeData() {
    reader.append(data)

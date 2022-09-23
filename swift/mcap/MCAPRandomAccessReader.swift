@@ -4,7 +4,14 @@ import CRC
 import struct Foundation.Data
 
 public protocol IRandomAccessReadable {
+  /**
+   - Returns: The total length of the MCAP data.
+   */
   func size() -> UInt64
+
+  /**
+   - Returns: The data in the range `offset ..< offset + length`, or `nil` if the requested range is not readable.
+   */
   func read(offset: UInt64, length: UInt64) -> Data?
 }
 
@@ -137,7 +144,7 @@ class ChunkCursor: Comparable {
  and index data to seek in the file and read messages in log-time order, and requires the entire file to be accessible via
  byte ranges.
 
- ```
+ ```swift
  let readable = // readable
  let reader = try MCAPRandomAccessReader(readable)
  let iterator = reader.messageIterator(topics: ["foo", "bar"])

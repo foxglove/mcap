@@ -108,7 +108,7 @@ jobs:
           set -x
           swift package \
             --allow-writing-to-directory __docs__ \
-            generate-documentation --target mcap \
+            generate-documentation --target MCAP \
             --output-path __docs__/swift \
             --disable-indexing \
             --transform-for-static-hosting \
