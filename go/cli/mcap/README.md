@@ -1,7 +1,5 @@
 ## `mcap` CLI
 
-> Note: this tool is experimental and may change without warning between versions.
-
 A command line tool to demonstrate the MCAP file format. See `mcap -h` for
 details.
 
@@ -162,3 +160,21 @@ The `mcap list` command can be used with chunks or attachments:
 To ensure the resulting binary is statically linked, build with `make`:
 
     make build
+
+### API Evolution Policy
+
+This tool uses [semantic versioning](https://semver.org) to indicate the scope of an update to
+users. In addition, we try to follow these guidelines when updating the functionality of the tool.
+
+Here "option" refers to either a subcommand (such as `mcap convert`) or a command-line argument
+(such as `mcap --help`).
+
+- When a option needs to be removed, it is first marked as deprecated. Once deprecated,
+  it will remain functional for at least two releases or one month,
+  whichever is longer. Deprecated options will print a warning to stderr when used.
+  After the deprecation period, it will be removed in the next major release.
+- When an option needs to be renamed, we duplicate the functionality under the new name and
+  deprecate the old name. The deprecation warning for the old name should indicate the new name
+  for this functionality.
+- If some option that you use is deprecated without a clear migration path, please
+  file a [Github issue](https://github.com/foxglove/mcap/issues) explaining your use-case.
