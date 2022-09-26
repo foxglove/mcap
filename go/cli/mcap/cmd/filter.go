@@ -210,8 +210,6 @@ func filter(
 			}
 			if opts.recover && token == mcap.TokenInvalidChunk {
 				fmt.Printf("Invalid chunk encountered, skipping: %s\n", err)
-				token, data, err = lexer.Next(buf)
-				fmt.Printf("NEXT ERR: %s\n", err)
 				continue
 			}
 			return err
