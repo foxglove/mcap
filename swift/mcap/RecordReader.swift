@@ -29,7 +29,7 @@ class RecordReader {
   public func readMagic() throws -> Bool {
     if offset + 8 < buffer.count {
       let prefix = buffer[offset ..< offset + 8]
-      if !MCAP0_MAGIC.elementsEqual(prefix) {
+      if !mcapMagic.elementsEqual(prefix) {
         throw MCAPReadError.invalidMagic(actual: Array(prefix))
       }
       offset += 8

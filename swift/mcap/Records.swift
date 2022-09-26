@@ -5,8 +5,8 @@ public typealias SchemaID = UInt16
 public typealias ChannelID = UInt16
 public typealias Timestamp = UInt64
 
-// swiftlint:disable:next identifier_name
-public let MCAP0_MAGIC = Data([137, 77, 67, 65, 80, 48, 13, 10])
+/// Magic bytes that appear at the beginning and end of every valid MCAP file: `"\u{89}MCAP0\r\n"`.
+public let mcapMagic = Data([137, 77, 67, 65, 80, 48, 13, 10])
 
 public enum MCAPReadError: Error, Equatable {
   case invalidMagic(actual: [UInt8])
