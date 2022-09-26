@@ -1,11 +1,11 @@
 import { crc32 } from "@foxglove/crc";
 
 import { ChunkBuilder } from "./ChunkBuilder";
-import { Mcap0IndexedReader } from "./Mcap0IndexedReader";
-import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
-import { Mcap0Writer } from "./Mcap0Writer";
+import { McapIndexedReader } from "./McapIndexedReader";
+import { McapRecordBuilder } from "./McapRecordBuilder";
+import { McapWriter } from "./McapWriter";
 import { TempBuffer } from "./TempBuffer";
-import { MCAP0_MAGIC, Opcode } from "./constants";
+import { MCAP_MAGIC, Opcode } from "./constants";
 import {
   record,
   uint64LE,
@@ -49,34 +49,34 @@ function makeReadable(data: Uint8Array) {
   };
 }
 
-describe("Mcap0IndexedReader", () => {
+describe("McapIndexedReader", () => {
   it("rejects files that are too small", async () => {
     await expect(
-      Mcap0IndexedReader.Initialize({
+      McapIndexedReader.Initialize({
         readable: makeReadable(
           new Uint8Array([
-            ...MCAP0_MAGIC,
+            ...MCAP_MAGIC,
             ...record(Opcode.FOOTER, [
               ...uint64LE(0n), // summary offset
               ...uint64LE(0n), // summary start offset
               ...uint32LE(0), // summary crc
             ]),
-            ...MCAP0_MAGIC,
+            ...MCAP_MAGIC,
           ]),
         ),
       }),
     ).rejects.toThrow("Unable to read header at beginning of file; found Footer");
 
     await expect(
-      Mcap0IndexedReader.Initialize({
+      McapIndexedReader.Initialize({
         readable: makeReadable(
           new Uint8Array([
-            ...MCAP0_MAGIC,
+            ...MCAP_MAGIC,
             ...record(Opcode.HEADER, [
               ...string(""), // profile
               ...string(""), // library
             ]),
-            ...MCAP0_MAGIC,
+            ...MCAP_MAGIC,
           ]),
         ),
       }),
@@ -86,7 +86,7 @@ describe("Mcap0IndexedReader", () => {
   it("rejects unindexed file", async () => {
     const readable = makeReadable(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
         ...record(Opcode.HEADER, [
           ...string(""), // profile
           ...string(""), // library
@@ -96,18 +96,16 @@ describe("Mcap0IndexedReader", () => {
           ...uint64LE(0n), // summary start offset
           ...uint32LE(0), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
       ]),
     );
-    await expect(Mcap0IndexedReader.Initialize({ readable })).rejects.toThrow(
-      "File is not indexed",
-    );
+    await expect(McapIndexedReader.Initialize({ readable })).rejects.toThrow("File is not indexed");
   });
 
   it("includes library in error messages", async () => {
     const readable = makeReadable(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
         ...record(Opcode.HEADER, [
           ...string(""), // profile
           ...string("lib"), // library
@@ -117,17 +115,17 @@ describe("Mcap0IndexedReader", () => {
           ...uint64LE(0n), // summary start offset
           ...uint32LE(0), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
       ]),
     );
-    await expect(Mcap0IndexedReader.Initialize({ readable })).rejects.toThrow(
+    await expect(McapIndexedReader.Initialize({ readable })).rejects.toThrow(
       "File is not indexed [library=lib]",
     );
   });
 
   it("rejects invalid index crc", async () => {
     const data = [
-      ...MCAP0_MAGIC,
+      ...MCAP_MAGIC,
       ...record(Opcode.HEADER, [
         ...string(""), // profile
         ...string(""), // library
@@ -148,17 +146,17 @@ describe("Mcap0IndexedReader", () => {
         ...uint64LE(0n), // summary start offset
         ...uint32LE(crc32(new Uint8Array([42]))), // summary crc
       ]),
-      ...MCAP0_MAGIC,
+      ...MCAP_MAGIC,
     );
     const readable = makeReadable(new Uint8Array(data));
-    await expect(Mcap0IndexedReader.Initialize({ readable })).rejects.toThrow(
+    await expect(McapIndexedReader.Initialize({ readable })).rejects.toThrow(
       "Incorrect summary CRC 491514153 (expected 163128923)",
     );
   });
 
   it("parses index with schema and channel", async () => {
     const data = [
-      ...MCAP0_MAGIC,
+      ...MCAP_MAGIC,
       ...record(Opcode.HEADER, [
         ...string(""), // profile
         ...string(""), // library
@@ -184,10 +182,10 @@ describe("Mcap0IndexedReader", () => {
         ...uint64LE(0n), // summary start offset
         ...uint32LE(crc32(new Uint8Array(0))), // summary crc
       ]),
-      ...MCAP0_MAGIC,
+      ...MCAP_MAGIC,
     );
     const readable = makeReadable(new Uint8Array(data));
-    const reader = await Mcap0IndexedReader.Initialize({ readable });
+    const reader = await McapIndexedReader.Initialize({ readable });
     await expect(collect(reader.readMessages())).resolves.toEqual([]);
     expect(reader.channelsById).toEqual(
       new Map<number, TypedMcapRecords["Channel"]>([
@@ -295,7 +293,7 @@ describe("Mcap0IndexedReader", () => {
         chunkContents.push(...message3Data);
 
         const data = [
-          ...MCAP0_MAGIC,
+          ...MCAP_MAGIC,
           ...record(Opcode.HEADER, [
             ...string(""), // profile
             ...string(""), // library
@@ -345,12 +343,12 @@ describe("Mcap0IndexedReader", () => {
             ...uint64LE(0n), // summary start offset
             ...uint32LE(crc32(new Uint8Array(0))), // summary crc
           ]),
-          ...MCAP0_MAGIC,
+          ...MCAP_MAGIC,
         );
 
         {
           const readable = makeReadable(new Uint8Array(data));
-          const reader = await Mcap0IndexedReader.Initialize({ readable });
+          const reader = await McapIndexedReader.Initialize({ readable });
           const collected = await collect(reader.readMessages({ startTime, endTime }));
           expect(collected).toEqual(expected);
           expect(readable.readCalls).toBe(6);
@@ -358,7 +356,7 @@ describe("Mcap0IndexedReader", () => {
 
         {
           const readable = makeReadable(new Uint8Array(data));
-          const reader = await Mcap0IndexedReader.Initialize({ readable });
+          const reader = await McapIndexedReader.Initialize({ readable });
           const collected = await collect(
             reader.readMessages({ startTime, endTime, reverse: true }),
           );
@@ -397,7 +395,7 @@ describe("Mcap0IndexedReader", () => {
       "fetches chunk data and reads requested messages between $startTime and $endTime",
       async ({ startTime, endTime, expectedIndices }) => {
         const tempBuffer = new TempBuffer();
-        const writer = new Mcap0Writer({ writable: tempBuffer });
+        const writer = new McapWriter({ writable: tempBuffer });
         await writer.start({ library: "", profile: "" });
         const channelId1 = await writer.registerChannel({
           topic: "test1",
@@ -417,7 +415,7 @@ describe("Mcap0IndexedReader", () => {
         await writer.end();
 
         {
-          const reader = await Mcap0IndexedReader.Initialize({ readable: tempBuffer });
+          const reader = await McapIndexedReader.Initialize({ readable: tempBuffer });
           const collected = await collect(reader.readMessages({ startTime, endTime }));
           expect(collected).toEqual(
             expectedIndices.map((i) => ({ channelId: channelIds[i]!, ...messages[i]! })),
@@ -425,7 +423,7 @@ describe("Mcap0IndexedReader", () => {
         }
 
         {
-          const reader = await Mcap0IndexedReader.Initialize({ readable: tempBuffer });
+          const reader = await McapIndexedReader.Initialize({ readable: tempBuffer });
           const collected = await collect(
             reader.readMessages({ startTime, endTime, reverse: true }),
           );
@@ -481,7 +479,7 @@ describe("Mcap0IndexedReader", () => {
     chunk4.addChannel(channel1);
     chunk4.addMessage(message1);
 
-    const builder = new Mcap0RecordBuilder();
+    const builder = new McapRecordBuilder();
     builder.writeMagic();
     builder.writeHeader({ profile: "", library: "" });
 
@@ -538,7 +536,7 @@ describe("Mcap0IndexedReader", () => {
     builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
     builder.writeMagic();
 
-    const reader = await Mcap0IndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
+    const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
     await expect(collect(reader.readMessages())).resolves.toEqual([
       message1,
       message2,
@@ -593,7 +591,7 @@ describe("Mcap0IndexedReader", () => {
     chunk3.addChannel(channel1);
     chunk3.addMessage(message5);
 
-    const builder = new Mcap0RecordBuilder();
+    const builder = new McapRecordBuilder();
     builder.writeMagic();
     builder.writeHeader({ profile: "", library: "" });
 
@@ -656,7 +654,7 @@ describe("Mcap0IndexedReader", () => {
       }
 
       const readable = makeReadable(builder.buffer);
-      const reader = await Mcap0IndexedReader.Initialize({ readable });
+      const reader = await McapIndexedReader.Initialize({ readable });
       expect(readable.readCalls).toEqual(4);
 
       const messageIter = reader.readMessages({ reverse });
@@ -719,7 +717,7 @@ describe("Mcap0IndexedReader", () => {
     chunk2.addChannel(channelB);
     chunk2.addMessage(messageB1);
 
-    const builder = new Mcap0RecordBuilder();
+    const builder = new McapRecordBuilder();
     builder.writeMagic();
     builder.writeHeader({ profile: "", library: "" });
 
@@ -779,7 +777,7 @@ describe("Mcap0IndexedReader", () => {
 
     {
       const readable = makeReadable(builder.buffer);
-      const reader = await Mcap0IndexedReader.Initialize({ readable });
+      const reader = await McapIndexedReader.Initialize({ readable });
       expect(readable.readCalls).toEqual(4);
 
       const messageIter = reader.readMessages({ topics: [channelB.topic] });
@@ -797,7 +795,7 @@ describe("Mcap0IndexedReader", () => {
 
     {
       const readable = makeReadable(builder.buffer);
-      const reader = await Mcap0IndexedReader.Initialize({ readable });
+      const reader = await McapIndexedReader.Initialize({ readable });
       expect(readable.readCalls).toEqual(4);
 
       const messageIter = reader.readMessages({ topics: [channelB.topic], reverse: true });

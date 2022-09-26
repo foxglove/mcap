@@ -1,4 +1,4 @@
-import { Mcap0StreamReader, Mcap0Types } from "@mcap/core";
+import { McapStreamReader, McapTypes } from "@mcap/core";
 import colors from "colors";
 import { program } from "commander";
 import * as Diff from "diff";
@@ -141,9 +141,9 @@ async function runWriterTest(
       console.error(colors.red("fail       "), path.basename(filePath));
       try {
         const expectedOutputJson = await fs.readFile(filePath, { encoding: "utf-8" });
-        const reader = new Mcap0StreamReader({ validateCrcs: true });
+        const reader = new McapStreamReader({ validateCrcs: true });
         reader.append(output);
-        const records: Mcap0Types.TypedMcapRecord[] = [];
+        const records: McapTypes.TypedMcapRecord[] = [];
         for (let record; (record = reader.nextRecord()); ) {
           records.push(record);
         }

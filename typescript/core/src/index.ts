@@ -1,11 +1,11 @@
-export { Mcap0IndexedReader } from "./v0/Mcap0IndexedReader";
-export { default as Mcap0StreamReader } from "./v0/Mcap0StreamReader";
-export { Mcap0Writer } from "./v0/Mcap0Writer";
-export type { Mcap0WriterOptions } from "./v0/Mcap0Writer";
-export { Mcap0RecordBuilder } from "./v0/Mcap0RecordBuilder";
-export { ChunkBuilder as Mcap0ChunkBuilder } from "./v0/ChunkBuilder";
-export * as Mcap0Types from "./v0/types";
-export * as Mcap0Constants from "./v0/constants";
-export type { IWritable } from "./common/IWritable";
+export { McapIndexedReader } from "./McapIndexedReader";
+export { default as McapStreamReader } from "./McapStreamReader";
+export { McapWriter } from "./McapWriter";
+export type { McapWriterOptions } from "./McapWriter";
+export { McapRecordBuilder } from "./McapRecordBuilder";
+export { ChunkBuilder as McapChunkBuilder } from "./ChunkBuilder";
+export * as McapTypes from "./types";
+export * as McapConstants from "./constants";
+export type { IWritable } from "./IWritable";
 
-export * from "./common/hasMcapPrefix";
+export * from "./hasMcapPrefix";

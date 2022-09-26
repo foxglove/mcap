@@ -2,11 +2,11 @@ import { crc32, crc32Final, crc32Init, crc32Update } from "@foxglove/crc";
 import Heap from "heap-js";
 
 import { ChunkCursor } from "./ChunkCursor";
-import { MCAP0_MAGIC } from "./constants";
+import { MCAP_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
 import { DecompressHandlers, IReadable, TypedMcapRecords } from "./types";
 
-type Mcap0IndexedReaderArgs = {
+type McapIndexedReaderArgs = {
   readable: IReadable;
   chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
   attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
@@ -20,7 +20,7 @@ type Mcap0IndexedReaderArgs = {
   footer: TypedMcapRecords["Footer"];
 };
 
-export class Mcap0IndexedReader {
+export class McapIndexedReader {
   readonly chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
   readonly attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
   readonly metadataIndexes: readonly TypedMcapRecords["MetadataIndex"][] = [];
@@ -37,7 +37,7 @@ export class Mcap0IndexedReader {
   private startTime: bigint | undefined;
   private endTime: bigint | undefined;
 
-  private constructor(args: Mcap0IndexedReaderArgs) {
+  private constructor(args: McapIndexedReaderArgs) {
     this.readable = args.readable;
     this.chunkIndexes = args.chunkIndexes;
     this.attachmentIndexes = args.attachmentIndexes;
@@ -75,14 +75,14 @@ export class Mcap0IndexedReader {
      * compression will be called to decompress the chunk data.
      */
     decompressHandlers?: DecompressHandlers;
-  }): Promise<Mcap0IndexedReader> {
+  }): Promise<McapIndexedReader> {
     const size = await readable.size();
 
     let header: TypedMcapRecords["Header"];
     {
       const headerPrefix = await readable.read(
         0n,
-        BigInt(MCAP0_MAGIC.length + /* Opcode.HEADER */ 1 + /* record content length */ 8),
+        BigInt(MCAP_MAGIC.length + /* Opcode.HEADER */ 1 + /* record content length */ 8),
       );
       const headerPrefixView = new DataView(
         headerPrefix.buffer,
@@ -91,12 +91,12 @@ export class Mcap0IndexedReader {
       );
       void parseMagic(headerPrefixView, 0);
       const headerLength = headerPrefixView.getBigUint64(
-        MCAP0_MAGIC.length + /* Opcode.HEADER */ 1,
+        MCAP_MAGIC.length + /* Opcode.HEADER */ 1,
         true,
       );
 
       const headerRecord = await readable.read(
-        BigInt(MCAP0_MAGIC.length),
+        BigInt(MCAP_MAGIC.length),
         /* Opcode.HEADER */ 1n + /* record content length */ 8n + headerLength,
       );
       const headerResult = parseRecord({
@@ -129,7 +129,7 @@ export class Mcap0IndexedReader {
     let footerAndMagicView: DataView;
     {
       const headerLengthLowerBound = BigInt(
-        MCAP0_MAGIC.length +
+        MCAP_MAGIC.length +
           /* Opcode.HEADER */ 1 +
           /* record content length */ 8 +
           /* profile length */ 4 +
@@ -141,7 +141,7 @@ export class Mcap0IndexedReader {
           /* summaryStart */ 8 +
           /* summaryOffsetStart */ 8 +
           /* crc */ 4 +
-          MCAP0_MAGIC.length,
+          MCAP_MAGIC.length,
       );
       if (size < headerLengthLowerBound + footerAndMagicReadLength) {
         throw errorWithLibrary(`File size (${size}) is too small to be valid MCAP`);
@@ -157,7 +157,7 @@ export class Mcap0IndexedReader {
     }
 
     try {
-      void parseMagic(footerAndMagicView, footerAndMagicView.byteLength - MCAP0_MAGIC.length);
+      void parseMagic(footerAndMagicView, footerAndMagicView.byteLength - MCAP_MAGIC.length);
     } catch (error) {
       throw errorWithLibrary((error as Error).message);
     }
@@ -176,10 +176,10 @@ export class Mcap0IndexedReader {
           }`,
         );
       }
-      if (footerResult.usedBytes !== footerAndMagicView.byteLength - MCAP0_MAGIC.length) {
+      if (footerResult.usedBytes !== footerAndMagicView.byteLength - MCAP_MAGIC.length) {
         throw errorWithLibrary(
           `${
-            footerAndMagicView.byteLength - MCAP0_MAGIC.length - footerResult.usedBytes
+            footerAndMagicView.byteLength - MCAP_MAGIC.length - footerResult.usedBytes
           } bytes remaining after parsing footer`,
         );
       }
@@ -284,7 +284,7 @@ export class Mcap0IndexedReader {
       throw errorWithLibrary(`${indexView.byteLength - offset} bytes remaining in index section`);
     }
 
-    return new Mcap0IndexedReader({
+    return new McapIndexedReader({
       readable,
       chunkIndexes,
       attachmentIndexes,
