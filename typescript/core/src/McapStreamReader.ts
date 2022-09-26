@@ -3,13 +3,7 @@ import { crc32 } from "@foxglove/crc";
 import StreamBuffer from "./common/StreamBuffer";
 import { MCAP_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
-import {
-  Channel,
-  DecompressHandlers,
-  IMcapStreamReader,
-  TypedMcapRecord,
-  TypedMcapRecords,
-} from "./types";
+import { Channel, DecompressHandlers, TypedMcapRecord, TypedMcapRecords } from "./types";
 
 type McapReaderOptions = {
   /**
@@ -48,7 +42,7 @@ type McapReaderOptions = {
  * });
  * ```
  */
-export default class McapStreamReader implements IMcapStreamReader {
+export default class McapStreamReader {
   private buffer = new StreamBuffer(MCAP_MAGIC.length * 2);
   private decompressHandlers;
   private includeChunks;

@@ -20,7 +20,6 @@ import { ZstdCodec, ZstdModule, ZstdStreaming } from "zstd-codec";
 
 type Channel = McapTypes.Channel;
 type DecompressHandlers = McapTypes.DecompressHandlers;
-type IMcapStreamReader = McapTypes.IMcapStreamReader;
 type TypedMcapRecord = McapTypes.TypedMcapRecord;
 
 function log(...data: unknown[]) {
@@ -40,7 +39,7 @@ function formatBytes(totalBytes: number) {
 
 async function readStream(
   filePath: string,
-  reader: IMcapStreamReader,
+  reader: McapStreamReader,
   processRecord: (record: TypedMcapRecord) => void,
 ) {
   const startTime = performance.now();
