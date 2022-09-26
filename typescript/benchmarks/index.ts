@@ -1,4 +1,4 @@
-import { Mcap0Writer } from "@mcap/core";
+import { McapWriter } from "@mcap/core";
 import { add, complete, cycle, suite } from "benny";
 
 /**
@@ -48,7 +48,7 @@ function addWriteBenchmark({
       const writable = new FakeMemoryWritable(2 * chunkSize);
       return async () => {
         writable.reset();
-        const writer = new Mcap0Writer({ writable, chunkSize });
+        const writer = new McapWriter({ writable, chunkSize });
         await writer.start({ library: "", profile: "" });
         const channelId = await writer.registerChannel({
           schemaId: 0,
@@ -73,7 +73,7 @@ function addWriteBenchmark({
 
 async function benchmarkWriter() {
   await suite(
-    Mcap0Writer.name,
+    McapWriter.name,
     addWriteBenchmark({ numMessages: 1_000_000, messageSize: 1, chunkSize: 1024 * 1024 }),
     addWriteBenchmark({ numMessages: 100_000, messageSize: 1000, chunkSize: 1024 * 1024 }),
     addWriteBenchmark({ numMessages: 100, messageSize: 1_000_000, chunkSize: 1024 * 1024 }),

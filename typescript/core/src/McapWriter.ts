@@ -1,8 +1,8 @@
 import { crc32Init, crc32Update, crc32Final, crc32 } from "@foxglove/crc";
 
-import { IWritable } from "../common/IWritable";
 import { ChunkBuilder } from "./ChunkBuilder";
-import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
+import { McapRecordBuilder } from "./McapRecordBuilder";
+import { IWritable } from "./common/IWritable";
 import { Opcode } from "./constants";
 import {
   Schema,
@@ -20,7 +20,7 @@ import {
   Statistics,
 } from "./types";
 
-export type Mcap0WriterOptions = {
+export type McapWriterOptions = {
   writable: IWritable;
   useStatistics?: boolean;
   useSummaryOffsets?: boolean;
@@ -37,17 +37,17 @@ export type Mcap0WriterOptions = {
 };
 
 /**
- * Mcap0Writer provides an interface for writing messages to MCAP files.
+ * McapWriter provides an interface for writing messages to MCAP files.
  *
  * NOTE: callers must wait on any method call to complete before calling another
  * method. Calling a method before another has completed will result in a corrupt
  * MCAP file.
  */
-export class Mcap0Writer {
+export class McapWriter {
   private nextChannelId = 0;
   private nextSchemaId = 1;
   private writable: IWritable;
-  private recordWriter = new Mcap0RecordBuilder();
+  private recordWriter = new McapRecordBuilder();
   private schemas = new Map<number, Schema>();
   private channels = new Map<number, Channel>();
   private writtenSchemaIds = new Set<number>();
@@ -69,7 +69,7 @@ export class Mcap0Writer {
   private attachmentIndices: AttachmentIndex[] | undefined;
   private metadataIndices: MetadataIndex[] | undefined;
 
-  constructor(options: Mcap0WriterOptions) {
+  constructor(options: McapWriterOptions) {
     const {
       writable,
       useStatistics = true,
@@ -327,7 +327,7 @@ export class Mcap0Writer {
       const channel = this.channels.get(message.channelId);
       if (!channel) {
         throw new Error(
-          `Mcap0Writer#addMessage failed: missing channel for id ${message.channelId}`,
+          `McapWriter#addMessage failed: missing channel for id ${message.channelId}`,
         );
       }
 
@@ -335,7 +335,7 @@ export class Mcap0Writer {
         const schema = this.schemas.get(channel.schemaId);
         if (!schema) {
           throw new Error(
-            `Mcap0Writer#addMessage failed: missing schema for id ${channel.schemaId}`,
+            `McapWriter#addMessage failed: missing schema for id ${channel.schemaId}`,
           );
         }
         if (this.chunkBuilder) {

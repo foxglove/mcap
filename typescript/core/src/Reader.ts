@@ -1,4 +1,4 @@
-import { getBigUint64 } from "../common/getBigUint64";
+import { getBigUint64 } from "./common/getBigUint64";
 
 export default class Reader {
   private view: DataView;

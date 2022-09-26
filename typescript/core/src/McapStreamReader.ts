@@ -1,12 +1,12 @@
 import { crc32 } from "@foxglove/crc";
 
-import StreamBuffer from "../common/StreamBuffer";
-import { MCAP0_MAGIC } from "./constants";
+import StreamBuffer from "./common/StreamBuffer";
+import { MCAP_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
 import {
   Channel,
   DecompressHandlers,
-  McapStreamReader,
+  IMcapStreamReader,
   TypedMcapRecord,
   TypedMcapRecords,
 } from "./types";
@@ -35,7 +35,7 @@ type McapReaderOptions = {
  *
  * Usage example:
  * ```
- * const reader = new Mcap0StreamReader();
+ * const reader = new McapStreamReader();
  * stream.on("data", (data) => {
  *   try {
  *     reader.append(data);
@@ -48,8 +48,8 @@ type McapReaderOptions = {
  * });
  * ```
  */
-export default class Mcap0StreamReader implements McapStreamReader {
-  private buffer = new StreamBuffer(MCAP0_MAGIC.length * 2);
+export default class McapStreamReader implements IMcapStreamReader {
+  private buffer = new StreamBuffer(MCAP_MAGIC.length * 2);
   private decompressHandlers;
   private includeChunks;
   private validateCrcs;

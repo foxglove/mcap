@@ -129,7 +129,7 @@ type Values<T> = T[keyof T];
 export type TypedMcapRecord = Values<TypedMcapRecords>;
 export type McapRecord = Values<McapRecords>;
 
-export interface McapStreamReader {
+export interface IMcapStreamReader {
   done(): boolean;
   bytesRemaining(): number;
   append(data: Uint8Array): void;

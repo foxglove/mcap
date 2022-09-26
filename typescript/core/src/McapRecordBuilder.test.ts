@@ -1,16 +1,16 @@
 import { BufferBuilder } from "./BufferBuilder";
-import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
+import { McapRecordBuilder } from "./McapRecordBuilder";
 
-describe("Mcap0RecordBuilder", () => {
+describe("McapRecordBuilder", () => {
   it("writes magic", () => {
-    const writer = new Mcap0RecordBuilder();
+    const writer = new McapRecordBuilder();
 
     writer.writeMagic();
     expect(writer.buffer).toEqual(new Uint8Array([137, 77, 67, 65, 80, 48, 13, 10]));
   });
 
   it("writes header", () => {
-    const writer = new Mcap0RecordBuilder();
+    const writer = new McapRecordBuilder();
 
     const written = writer.writeHeader({
       profile: "foo",
@@ -29,7 +29,7 @@ describe("Mcap0RecordBuilder", () => {
   });
 
   it("writes footer", () => {
-    const writer = new Mcap0RecordBuilder();
+    const writer = new McapRecordBuilder();
 
     writer.writeFooter({
       summaryStart: 0n,
@@ -49,7 +49,7 @@ describe("Mcap0RecordBuilder", () => {
   });
 
   it("writes schema", () => {
-    const writer = new Mcap0RecordBuilder();
+    const writer = new McapRecordBuilder();
 
     const written = writer.writeSchema({
       id: 1,
@@ -73,7 +73,7 @@ describe("Mcap0RecordBuilder", () => {
   });
 
   it("writes channel", () => {
-    const writer = new Mcap0RecordBuilder();
+    const writer = new McapRecordBuilder();
 
     const written = writer.writeChannel({
       id: 1,
@@ -98,7 +98,7 @@ describe("Mcap0RecordBuilder", () => {
   });
 
   it("writes messages", () => {
-    const writer = new Mcap0RecordBuilder();
+    const writer = new McapRecordBuilder();
 
     writer.writeMessage({
       channelId: 1,
@@ -122,7 +122,7 @@ describe("Mcap0RecordBuilder", () => {
   });
 
   it("writes metadata", () => {
-    const writer = new Mcap0RecordBuilder();
+    const writer = new McapRecordBuilder();
 
     const written = writer.writeMetadata({
       name: "name",
