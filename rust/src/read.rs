@@ -147,7 +147,6 @@ fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
         ($b:ident) => {{
             let mut cur = Cursor::new($b);
             let res = cur.read_le()?;
-            assert_eq!($b.len() as u64, cur.position());
             res
         }};
     }
@@ -158,14 +157,18 @@ fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
         op::SCHEMA => {
             let mut c = Cursor::new(body);
             let header: records::SchemaHeader = c.read_le()?;
-            let data = Cow::Borrowed(&body[c.position() as usize..]);
-            if header.data_len != data.len() as u32 {
-                warn!(
-                    "Schema {}'s data length doesn't match the total schema length",
-                    header.name
-                );
+            let mut data = &body[c.position() as usize..];
+            if header.data_len > data.len() as u32 {
+                return Err(McapError::BadSchemaLength {
+                    header: header.data_len,
+                    available: data.len() as u32,
+                });
             }
-            Record::Schema { header, data }
+            data = &data[..header.data_len as usize];
+            Record::Schema {
+                header,
+                data: Cow::Borrowed(data),
+            }
         }
         op::CHANNEL => Record::Channel(record!(body)),
         op::MESSAGE => {
@@ -177,10 +180,14 @@ fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
         op::CHUNK => {
             let mut c = Cursor::new(body);
             let header: records::ChunkHeader = c.read_le()?;
-            let data = &body[c.position() as usize..];
-            if header.compressed_size != data.len() as u64 {
-                warn!("Chunk's compressed length doesn't match its header");
+            let mut data = &body[c.position() as usize..];
+            if header.compressed_size > data.len() as u64 {
+                return Err(McapError::BadChunkLength {
+                    header: header.compressed_size,
+                    available: data.len() as u64,
+                });
             }
+            data = &data[..header.compressed_size as usize];
             Record::Chunk { header, data }
         }
         op::MESSAGE_INDEX => Record::MessageIndex(record!(body)),
@@ -188,14 +195,17 @@ fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
         op::ATTACHMENT => {
             let mut c = Cursor::new(body);
             let header: records::AttachmentHeader = c.read_le()?;
-            let data = &body[c.position() as usize..body.len() - 4];
-            if header.data_len != data.len() as u64 {
-                warn!(
-                    "Attachment {}'s data length doesn't match the total schema length",
-                    header.name
-                );
+            let header_len = c.position() as usize;
+
+            let mut data = &body[header_len..body.len() - 4];
+            if header.data_len > data.len() as u64 {
+                return Err(McapError::BadAttachmentLength {
+                    header: header.data_len,
+                    available: data.len() as u64,
+                });
             }
-            let crc = Cursor::new(&body[body.len() - 4..]).read_le()?;
+            data = &data[..header.data_len as usize];
+            let crc: u32 = Cursor::new(&body[header_len + data.len()..]).read_le()?;
 
             // We usually leave CRCs to higher-level readers -
             // (ChunkReader, read_summary(), etc.) - but
@@ -207,7 +217,7 @@ fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
             //    much sense to have users check it.
             //    (What would they do? lol reserialize the header?)
             if crc != 0 {
-                let calculated = crc32(&body[..body.len() - 4]);
+                let calculated = crc32(&body[..header_len + data.len()]);
                 if crc != calculated {
                     return Err(McapError::BadAttachmentCrc {
                         saved: crc,

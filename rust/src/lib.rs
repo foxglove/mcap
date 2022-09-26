@@ -99,6 +99,12 @@ pub enum McapError {
     BadSummaryCrc { saved: u32, calculated: u32 },
     #[error("Index offset and length didn't point to the expected record type")]
     BadIndex,
+    #[error("Attachment length ({header}) exceeds space in record ({available})")]
+    BadAttachmentLength { header: u64, available: u64 },
+    #[error("Chunk length ({header}) exceeds space in record ({available})")]
+    BadChunkLength { header: u64, available: u64 },
+    #[error("Schema length ({header}) exceeds space in record ({available})")]
+    BadSchemaLength { header: u32, available: u32 },
     #[error("Channel `{0}` has mulitple records that don't match.")]
     ConflictingChannels(String),
     #[error("Schema `{0}` has mulitple records that don't match.")]
