@@ -30,7 +30,7 @@ MCAP works well under various workloads, resource constraints, and durability re
 
 Many robotics companies spend valuable in-house resources to develop custom file formats, only to create future work and complicate third-party tool integrations. We built MCAP to allow teams to focus on their core robotics problems and avoid wasting precious time making commodity tools.
 
-Before MCAP, the format that robotics teams used to store their log data depended mainly on their framework. Those using ROS 1 defaulted to the “bag file” format; those on ROS 2 defaulted to a SQLite-based format. Companies that don’t use ROS often employ a custom in-house binary format, such as length-delimited Protobuf, or store their messages as opaque bytes inside existing file formats such as HDF5.
+Before MCAP, the format that robotics teams used to store their log data depended mainly on their framework. Those using ROS 1 defaulted to the [“bag file”](http://wiki.ros.org/Bags/Format/2.0) format; those on ROS 2 defaulted to a SQLite-based format. Companies that don’t use ROS often employed a custom in-house binary format, such as length-delimited Protobuf, or stored their messages as opaque bytes inside existing file formats such as HDF5.
 
 These existing storage options have several shortcomings. Custom in-house formats lack interoperability and require developing corresponding libraries in multiple languages to read and write files. The ROS 1 bag format is challenging to work with outside of the ROS ecosystem, while the ROS 2 SQLite format is [not fully self-contained](https://github.com/ros2/rosbag2/issues/782), making it difficult for third-party tools to read.
 
