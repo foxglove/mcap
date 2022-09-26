@@ -11,12 +11,10 @@ import (
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
-	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
 
 func printMetadata(w io.Writer, r io.ReadSeeker, info *mcap.Info) error {
-	tw := tablewriter.NewWriter(w)
 	rows := make([][]string, 0, len(info.MetadataIndexes))
 	rows = append(rows, []string{
 		"name",
@@ -60,13 +58,7 @@ func printMetadata(w io.Writer, r io.ReadSeeker, info *mcap.Info) error {
 			indented.String(),
 		})
 	}
-	tw.SetBorder(false)
-	tw.SetAutoWrapText(false)
-	tw.SetAlignment(tablewriter.ALIGN_LEFT)
-	tw.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-	tw.SetColumnSeparator("")
-	tw.AppendBulk(rows)
-	tw.Render()
+	utils.FormatTable(w, rows)
 	return nil
 }
 

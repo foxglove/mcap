@@ -8,12 +8,10 @@ import (
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
-	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
 
 func printAttachments(w io.Writer, attachmentIndexes []*mcap.AttachmentIndex) {
-	tw := tablewriter.NewWriter(w)
 	rows := make([][]string, 0, len(attachmentIndexes))
 	rows = append(rows, []string{
 		"log time",
@@ -32,13 +30,7 @@ func printAttachments(w io.Writer, attachmentIndexes []*mcap.AttachmentIndex) {
 		}
 		rows = append(rows, row)
 	}
-	tw.SetBorder(false)
-	tw.SetAutoWrapText(false)
-	tw.SetAlignment(tablewriter.ALIGN_LEFT)
-	tw.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-	tw.SetColumnSeparator("")
-	tw.AppendBulk(rows)
-	tw.Render()
+	utils.FormatTable(w, rows)
 }
 
 var attachmentsCmd = &cobra.Command{
