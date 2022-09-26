@@ -1,8 +1,7 @@
 import { crc32 } from "@foxglove/crc";
 
-import { TypedMcapRecords } from ".";
-import Mcap0StreamReader from "./Mcap0StreamReader";
-import { MCAP0_MAGIC, Opcode } from "./constants";
+import McapStreamReader from "./McapStreamReader";
+import { MCAP_MAGIC, Opcode } from "./constants";
 import {
   record,
   uint64LE,
@@ -13,12 +12,13 @@ import {
   crcSuffix,
   uint64PrefixedBytes,
 } from "./testUtils";
+import { TypedMcapRecords } from "./types";
 
-describe("Mcap0StreamReader", () => {
+describe("McapStreamReader", () => {
   it("rejects invalid header", () => {
-    for (let i = 0; i < MCAP0_MAGIC.length - 1; i++) {
-      const reader = new Mcap0StreamReader();
-      const badMagic = MCAP0_MAGIC.slice();
+    for (let i = 0; i < MCAP_MAGIC.length - 1; i++) {
+      const reader = new McapStreamReader();
+      const badMagic = MCAP_MAGIC.slice();
       badMagic[i] = 0x00;
       reader.append(new Uint8Array([...badMagic]));
       expect(() => reader.nextRecord()).toThrow("Expected MCAP magic");
@@ -26,16 +26,16 @@ describe("Mcap0StreamReader", () => {
   });
 
   it("rejects invalid footer magic", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
         ...record(Opcode.FOOTER, [
           ...uint64LE(0x0123456789abcdefn), // summary start
           ...uint64LE(0x0123456789abcdefn), // summary offset start
           ...uint32LE(0x01234567), // summary crc
         ]),
-        ...MCAP0_MAGIC.slice(0, MCAP0_MAGIC.length - 1),
+        ...MCAP_MAGIC.slice(0, MCAP_MAGIC.length - 1),
         0x00,
       ]),
     );
@@ -43,10 +43,10 @@ describe("Mcap0StreamReader", () => {
   });
 
   it("includes library in error messages", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
         ...record(Opcode.HEADER, [...string("prof"), ...string("lib")]),
         ...record(Opcode.FOOTER, [
           ...uint64LE(0x0123456789abcdefn), // summary start
@@ -61,10 +61,10 @@ describe("Mcap0StreamReader", () => {
   });
 
   it("includes 'no header' in error messages if there is no header", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
         ...record(Opcode.FOOTER, [
           ...uint64LE(0x0123456789abcdefn), // summary start
           ...uint64LE(0x0123456789abcdefn), // summary offset start
@@ -77,16 +77,16 @@ describe("Mcap0StreamReader", () => {
   });
 
   it("parses empty file", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
         ...record(Opcode.FOOTER, [
           ...uint64LE(0x0123456789abcdefn), // summary start
           ...uint64LE(0x0123456789abcdefn), // summary offset start
           ...uint32LE(0x01234567), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
       ]),
     );
     expect(reader.nextRecord()).toEqual({
@@ -99,10 +99,10 @@ describe("Mcap0StreamReader", () => {
   });
 
   it("accepts empty chunks", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
         ...record(Opcode.CHUNK, [
           ...uint64LE(0n), // start_time
           ...uint64LE(0n), // end_time
@@ -120,7 +120,7 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
       ]),
     );
     expect(reader.nextRecord()).toEqual({
@@ -137,15 +137,15 @@ describe("Mcap0StreamReader", () => {
   });
 
   it("waits patiently to parse one byte at a time, and rejects new data after read completed", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     const data = new Uint8Array([
-      ...MCAP0_MAGIC,
+      ...MCAP_MAGIC,
       ...record(Opcode.FOOTER, [
         ...uint64LE(0x0123456789abcdefn), // summary start
         ...uint64LE(0x0123456789abcdefn), // summary offset start
         ...uint32LE(0x01234567), // summary crc
       ]),
-      ...MCAP0_MAGIC,
+      ...MCAP_MAGIC,
     ]);
     for (let i = 0; i < data.length - 1; i++) {
       reader.append(new Uint8Array(data.buffer, i, 1));
@@ -164,16 +164,16 @@ describe("Mcap0StreamReader", () => {
   });
 
   it("rejects extraneous data at end of file", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
         ...record(Opcode.FOOTER, [
           ...uint64LE(0x0123456789abcdefn), // summary start
           ...uint64LE(0x0123456789abcdefn), // summary offset start
           ...uint32LE(0x01234567), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
         42,
       ]),
     );
@@ -181,10 +181,10 @@ describe("Mcap0StreamReader", () => {
   });
 
   it("parses file with empty chunk", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
 
         ...record(Opcode.CHUNK, [
           ...uint64LE(0n), // start_time
@@ -201,7 +201,7 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
       ]),
     );
     expect(reader.nextRecord()).toEqual({
@@ -214,10 +214,10 @@ describe("Mcap0StreamReader", () => {
   });
 
   it("rejects chunk with incomplete record", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
 
         ...record(Opcode.CHUNK, [
           ...uint64LE(0n), // start_time
@@ -234,17 +234,17 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
       ]),
     );
     expect(() => reader.nextRecord()).toThrow("bytes remaining in chunk");
   });
 
   it("rejects message at top level with no prior channel", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
 
         ...record(Opcode.MESSAGE, [
           ...uint16LE(42), // channel id
@@ -258,7 +258,7 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
       ]),
     );
     expect(() => reader.nextRecord()).toThrow(
@@ -273,10 +273,10 @@ describe("Mcap0StreamReader", () => {
       ...uint64LE(0n), // log time
       ...uint64LE(0n), // publish time
     ]);
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
 
         ...record(Opcode.CHUNK, [
           ...uint64LE(0n), // start_time
@@ -293,7 +293,7 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
       ]),
     );
     expect(() => reader.nextRecord()).toThrow(
@@ -302,10 +302,10 @@ describe("Mcap0StreamReader", () => {
   });
 
   it("rejects schema data with incorrect length prefix", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
         ...record(Opcode.SCHEMA, [
           ...uint16LE(42), // id
           ...string("name"), // name
@@ -319,17 +319,17 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
       ]),
     );
     expect(() => reader.nextRecord()).toThrow("Schema data length 3 exceeds bounds of record");
   });
 
   it("rejects attachment data with incorrect length prefix", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
         ...record(
           Opcode.ATTACHMENT,
           crcSuffix([
@@ -347,17 +347,17 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
       ]),
     );
     expect(() => reader.nextRecord()).toThrow("Attachment data length 3 exceeds bounds of record");
   });
 
   it("parses channel at top level", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
 
         ...record(Opcode.CHANNEL, [
           ...uint16LE(1), // channel id
@@ -372,7 +372,7 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
       ]),
     );
     expect(reader.nextRecord()).toEqual({
@@ -401,12 +401,12 @@ describe("Mcap0StreamReader", () => {
       ...keyValues(string, string, [["foo", "bar"]]), // user data
     ]);
     const decompressHandlers = { xyz: () => channel };
-    const reader = new Mcap0StreamReader(compressed ? { decompressHandlers } : undefined);
+    const reader = new McapStreamReader(compressed ? { decompressHandlers } : undefined);
 
     const payload = compressed ? new TextEncoder().encode("compressed bytes") : channel;
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
 
         ...record(Opcode.CHUNK, [
           ...uint64LE(0n), // start_time
@@ -423,7 +423,7 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
       ]),
     );
     expect(reader.nextRecord()).toEqual({
@@ -485,10 +485,10 @@ describe("Mcap0StreamReader", () => {
           ...string("utf12"), // message encoding
           ...keyValues(string, string, [["foo", "bar"]]), // user data
         ]);
-        const reader = new Mcap0StreamReader();
+        const reader = new McapStreamReader();
         reader.append(
           new Uint8Array([
-            ...MCAP0_MAGIC,
+            ...MCAP_MAGIC,
 
             ...(testType === "unchunked file"
               ? [...channel, ...channel2]
@@ -531,7 +531,7 @@ describe("Mcap0StreamReader", () => {
               ...uint64LE(0n), // summary offset start
               ...uint32LE(0), // summary crc
             ]),
-            ...MCAP0_MAGIC,
+            ...MCAP_MAGIC,
           ]),
         );
         expect(reader.nextRecord()).toEqual({
@@ -550,10 +550,10 @@ describe("Mcap0StreamReader", () => {
   );
 
   it("validates attachment crc", () => {
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(
       new Uint8Array([
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
         ...record(
           Opcode.ATTACHMENT,
           crcSuffix([
@@ -569,7 +569,7 @@ describe("Mcap0StreamReader", () => {
           ...uint64LE(0n), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
-        ...MCAP0_MAGIC,
+        ...MCAP_MAGIC,
       ]),
     );
     expect(reader.nextRecord()).toEqual({

@@ -1,4 +1,4 @@
-import { Mcap0Writer, Mcap0Types } from "@mcap/core";
+import { McapWriter, McapTypes } from "@mcap/core";
 import fs from "fs/promises";
 import { camelCase } from "lodash";
 import { TestFeatures, TestVariant } from "variants/types";
@@ -15,20 +15,20 @@ type JsonValue<T> = T extends number | bigint | string
     : never
   : never;
 
-type JsonRecord<R extends keyof Mcap0Types.McapRecords> = {
+type JsonRecord<R extends keyof McapTypes.McapRecords> = {
   type: R;
   fields: {
-    [K in keyof Mcap0Types.McapRecords[R]]: JsonValue<Mcap0Types.McapRecords[R][K]>;
+    [K in keyof McapTypes.McapRecords[R]]: JsonValue<McapTypes.McapRecords[R][K]>;
   };
 };
 
 type JsonRecords = {
-  [R in keyof Mcap0Types.McapRecords]: JsonRecord<R>;
+  [R in keyof McapTypes.McapRecords]: JsonRecord<R>;
 };
 
 function parseJsonRecord(record: {
   fields: Array<[string, unknown]>;
-}): Mcap0Types.TypedMcapRecord | undefined {
+}): McapTypes.TypedMcapRecord | undefined {
   const jsonRecord = {
     ...record,
     fields: Object.fromEntries(record.fields.map(([k, v]) => [camelCase(k), v])),
@@ -138,7 +138,7 @@ export default class TypescriptWriterTestRunner extends WriteTestRunner {
         usedBytes += input.byteLength;
       },
     };
-    const writer = new Mcap0Writer({
+    const writer = new McapWriter({
       writable,
       startChannelId: 1,
       useStatistics: variant.features.has(TestFeatures.UseStatistics),

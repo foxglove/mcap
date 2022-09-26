@@ -1,8 +1,7 @@
 import { crc32 } from "@foxglove/crc";
 
-import { Statistics, SummaryOffset } from ".";
 import { BufferBuilder } from "./BufferBuilder";
-import { MCAP0_MAGIC, Opcode } from "./constants";
+import { MCAP_MAGIC, Opcode } from "./constants";
 import {
   Attachment,
   AttachmentIndex,
@@ -17,6 +16,8 @@ import {
   Metadata,
   MetadataIndex,
   Schema,
+  Statistics,
+  SummaryOffset,
 } from "./types";
 
 type Options = {
@@ -25,7 +26,7 @@ type Options = {
 };
 
 /**
- * Mcap0RecordBuilder provides methods to serialize mcap records to a buffer in memory.
+ * McapRecordBuilder provides methods to serialize mcap records to a buffer in memory.
  *
  * It makes no effort to ensure spec compatibility on the order of records, this is the responsibility
  * of the caller.
@@ -33,7 +34,7 @@ type Options = {
  * You'll likely want to use one of the higher level writer interfaces unless you are building your
  * own higher level writing interface.
  */
-export class Mcap0RecordBuilder {
+export class McapRecordBuilder {
   private bufferBuilder = new BufferBuilder();
 
   constructor(private options?: Options) {}
@@ -51,7 +52,7 @@ export class Mcap0RecordBuilder {
   }
 
   writeMagic(): void {
-    this.bufferBuilder.bytes(new Uint8Array(MCAP0_MAGIC));
+    this.bufferBuilder.bytes(new Uint8Array(MCAP_MAGIC));
   }
 
   writeHeader(header: Header): bigint {

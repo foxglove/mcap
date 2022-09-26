@@ -1,11 +1,11 @@
-import { Mcap0RecordBuilder } from "./Mcap0RecordBuilder";
+import { McapRecordBuilder } from "./McapRecordBuilder";
 import { Channel, Message, MessageIndex, Schema } from "./types";
 
 type ChunkBuilderOptions = {
   useMessageIndex?: boolean;
 };
 class ChunkBuilder {
-  private recordWriter = new Mcap0RecordBuilder();
+  private recordWriter = new McapRecordBuilder();
   private messageIndices: Map<number, MessageIndex> | undefined;
   private totalMessageCount = 0;
 

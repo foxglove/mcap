@@ -1,4 +1,4 @@
-import { Mcap0IndexedReader, Mcap0Types } from "@mcap/core";
+import { McapIndexedReader, McapTypes } from "@mcap/core";
 import fs from "fs/promises";
 import { TestFeatures, TestVariant } from "variants/types";
 
@@ -41,7 +41,7 @@ export default class TypescriptIndexedReaderTestRunner extends ReadTestRunner {
   }
 
   private async _run(fileHandle: fs.FileHandle, variant: TestVariant): Promise<string> {
-    const testResult: Mcap0Types.TypedMcapRecord[] = [];
+    const testResult: McapTypes.TypedMcapRecord[] = [];
     let buffer = new ArrayBuffer(4096);
     const readable = {
       size: async () => BigInt((await fileHandle.stat()).size),
@@ -65,7 +65,7 @@ export default class TypescriptIndexedReaderTestRunner extends ReadTestRunner {
       },
     };
 
-    const reader = await Mcap0IndexedReader.Initialize({ readable });
+    const reader = await McapIndexedReader.Initialize({ readable });
     if (reader.chunkIndexes.length === 0) {
       throw new Error("No chunk indexes");
     }

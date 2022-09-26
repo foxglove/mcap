@@ -1,18 +1,18 @@
 import { crc32 } from "@foxglove/crc";
 
-import { Mcap0IndexedReader } from "./Mcap0IndexedReader";
-import Mcap0StreamReader from "./Mcap0StreamReader";
-import { Mcap0Writer } from "./Mcap0Writer";
+import { McapIndexedReader } from "./McapIndexedReader";
+import McapStreamReader from "./McapStreamReader";
+import { McapWriter } from "./McapWriter";
 import { TempBuffer } from "./TempBuffer";
 import { Opcode } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
 import { collect, keyValues, record, string, uint16LE, uint32LE, uint64LE } from "./testUtils";
 import { TypedMcapRecord } from "./types";
 
-describe("Mcap0Writer", () => {
+describe("McapWriter", () => {
   it("supports messages with logTime 0", async () => {
     const tempBuffer = new TempBuffer();
-    const writer = new Mcap0Writer({ writable: tempBuffer });
+    const writer = new McapWriter({ writable: tempBuffer });
 
     await writer.start({ library: "", profile: "" });
     const channelId = await writer.registerChannel({
@@ -37,7 +37,7 @@ describe("Mcap0Writer", () => {
     });
     await writer.end();
 
-    const reader = await Mcap0IndexedReader.Initialize({ readable: tempBuffer });
+    const reader = await McapIndexedReader.Initialize({ readable: tempBuffer });
 
     expect(reader.chunkIndexes).toMatchObject([{ messageStartTime: 0n, messageEndTime: 1n }]);
 
@@ -83,7 +83,7 @@ describe("Mcap0Writer", () => {
 
   it("supports multiple chunks", async () => {
     const tempBuffer = new TempBuffer();
-    const writer = new Mcap0Writer({ writable: tempBuffer, chunkSize: 0 });
+    const writer = new McapWriter({ writable: tempBuffer, chunkSize: 0 });
 
     await writer.start({ library: "", profile: "" });
     const channelId = await writer.registerChannel({
@@ -108,7 +108,7 @@ describe("Mcap0Writer", () => {
     });
     await writer.end();
 
-    const reader = new Mcap0StreamReader();
+    const reader = new McapStreamReader();
     reader.append(tempBuffer.get());
     const records: TypedMcapRecord[] = [];
     for (let rec; (rec = reader.nextRecord()); ) {
@@ -239,7 +239,7 @@ describe("Mcap0Writer", () => {
     }
 
     const tempBuffer = new TempBuffer();
-    const writer = new Mcap0Writer({
+    const writer = new McapWriter({
       writable: tempBuffer,
       useStatistics: false,
       useSummaryOffsets: false,

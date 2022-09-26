@@ -129,13 +129,6 @@ type Values<T> = T[keyof T];
 export type TypedMcapRecord = Values<TypedMcapRecords>;
 export type McapRecord = Values<McapRecords>;
 
-export interface McapStreamReader {
-  done(): boolean;
-  bytesRemaining(): number;
-  append(data: Uint8Array): void;
-  nextRecord(): TypedMcapRecord | undefined;
-}
-
 export type DecompressHandlers = {
   [compression: string]: (buffer: Uint8Array, decompressedSize: bigint) => Uint8Array;
 };
