@@ -10,7 +10,7 @@ import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import { Time } from "@foxglove/rosmsg-serialization";
 import { toNanoSec } from "@foxglove/rostime";
 import Bzip2 from "@foxglove/wasm-bz2";
-import { Mcap0Writer, IWritable, Mcap0Types } from "@mcap/core";
+import { McapWriter, IWritable, McapTypes } from "@mcap/core";
 import { program } from "commander";
 import { open, FileHandle } from "fs/promises";
 import protobufjs from "protobufjs";
@@ -225,7 +225,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
   const fileHandle = await open(mcapFilePath, "w");
   const fileHandleWritable = new FileHandleWritable(fileHandle);
 
-  const mcapFile = new Mcap0Writer({
+  const mcapFile = new McapWriter({
     writable: fileHandleWritable,
     useStatistics: true,
     useChunks: options.indexed,
@@ -261,7 +261,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
       data: descriptorMsgEncoded,
     });
 
-    const channelInfo: Omit<Mcap0Types.Channel, "id"> = {
+    const channelInfo: Omit<McapTypes.Channel, "id"> = {
       schemaId,
       topic: connection.topic,
       messageEncoding: "protobuf",

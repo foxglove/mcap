@@ -22,6 +22,9 @@ ignorePaths:
   - package.xml
   - "*_pb2.py"
   - Pipfile*
+  - mkdocs.yml
+  - fathom.html
+  - vendor
 
 words:
   - callerid
@@ -36,7 +39,9 @@ words:
   - flatbuffer
   - flatc
   - fwrite
+  - gendeps
   - genpy
+  - gentools
   - golangci
   - jsonschema
   - kaitai
@@ -45,14 +50,17 @@ words:
   - nanos
   - nsec
   - nsecs
+  - parseable
   - pipenv
   - pointcloud
   - proto
   - protobuf
   - protoc
+  - robocar
   - rosbag
   - rosmsg
   - rostime
+  - serde
   - stoull
   - struct
   - swiftformat
@@ -64,6 +72,11 @@ words:
   - velodyne
   - zstandard
   - zstd
+
+languageSettings:
+  - languageId: "markdown"
+    ignoreRegExpList:
+      - "/^\\s*```[\\s\\S]*?^\\s*```/gm"
 
 overrides:
   - filename: "**/*.go"

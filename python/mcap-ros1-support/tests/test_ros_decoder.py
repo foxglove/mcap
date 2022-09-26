@@ -1,21 +1,16 @@
-from io import RawIOBase
-from typing import cast
-from mcap.mcap0.stream_reader import StreamReader
+from mcap.mcap0.reader import make_reader
 from mcap_ros1.decoder import Decoder
 
 from .generate import generate_sample_data
 
 
-def test_ros_decoder_from_stream():
+def test_ros_decoder():
     with generate_sample_data() as m:
-        stream_reader = StreamReader(cast(RawIOBase, m))
-        ros_reader = Decoder(stream_reader)
-        messages = [m for m in ros_reader.messages]
-        assert len(messages) == 10
-
-
-def test_ros_decoder_from_bytes():
-    with generate_sample_data() as m:
-        data = m.read()
-        messages = [m for m in Decoder(data).messages]
-        assert len(messages) == 10
+        reader = make_reader(m)
+        decoder = Decoder()
+        count = 0
+        for index, (schema, _, message) in enumerate(reader.iter_messages()):
+            ros_msg = decoder.decode(schema, message)
+            assert ros_msg.data == f"string message {index}"
+            count += 1
+        assert count == 10

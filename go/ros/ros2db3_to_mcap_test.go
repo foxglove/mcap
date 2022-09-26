@@ -5,56 +5,83 @@ import (
 	"database/sql"
 	"errors"
 	"io"
-	"math"
 	"strings"
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
+	"github.com/foxglove/mcap/go/mcap/readopts"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestDB3MCAPConversion(t *testing.T) {
-	db3file := "../../testdata/db3/chatter.db3"
-	buf := &bytes.Buffer{}
-	db, err := sql.Open("sqlite3", db3file)
-	assert.Nil(t, err)
-
-	opts := &mcap.WriterOptions{
-		IncludeCRC:  true,
-		Chunked:     true,
-		ChunkSize:   1024,
-		Compression: "lz4",
+	cases := []struct {
+		assertion            string
+		inputFile            string
+		searchDir            string
+		expectedTopic        string
+		expectedSchemaName   string
+		expectedMessageCount int
+	}{
+		{
+			"galactic bag",
+			"../../testdata/db3/chatter.db3",
+			"./testdata/galactic",
+			"/chatter",
+			"std_msgs/msg/String",
+			7,
+		},
+		{
+			"eloquent bag",
+			"../../testdata/db3/eloquent-twist.db3",
+			"./testdata/eloquent",
+			"/turtle1/cmd_vel",
+			"geometry_msgs/msg/Twist",
+			4,
+		},
 	}
-
-	err = DB3ToMCAP(buf, db, opts, []string{"./testdata/galactic"})
-	assert.Nil(t, err)
-
-	reader, err := mcap.NewReader(bytes.NewReader(buf.Bytes()))
-	assert.Nil(t, err)
-
-	info, err := reader.Info()
-	assert.Nil(t, err)
-	assert.Equal(t, uint64(7), info.Statistics.MessageCount)
-	assert.Equal(t, 1, len(info.Channels))
-	assert.Equal(t, "/chatter", info.Channels[1].Topic)
-	messageCount := 0
-	it, err := reader.Messages(0, math.MaxInt64, []string{"/chatter"}, true)
-	assert.Nil(t, err)
-	for {
-		schema, channel, message, err := it.Next(nil)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
+	for _, c := range cases {
+		t.Run(c.assertion, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			db, err := sql.Open("sqlite3", c.inputFile)
+			assert.Nil(t, err)
+			opts := &mcap.WriterOptions{
+				IncludeCRC:  true,
+				Chunked:     true,
+				ChunkSize:   1024,
+				Compression: "lz4",
 			}
-			t.Errorf("failed to pull message from serialized file: %s", err)
-		}
-		assert.NotEmpty(t, message.Data)
-		assert.Equal(t, channel.Topic, "/chatter")
-		assert.Equal(t, schema.Name, "std_msgs/msg/String")
-		messageCount++
+
+			err = DB3ToMCAP(buf, db, opts, []string{c.searchDir})
+			assert.Nil(t, err)
+
+			reader, err := mcap.NewReader(bytes.NewReader(buf.Bytes()))
+			assert.Nil(t, err)
+
+			info, err := reader.Info()
+			assert.Nil(t, err)
+			assert.Equal(t, uint64(c.expectedMessageCount), info.Statistics.MessageCount)
+			assert.Equal(t, 1, len(info.Channels))
+			assert.Equal(t, c.expectedTopic, info.Channels[1].Topic)
+			messageCount := 0
+			it, err := reader.Messages(readopts.WithTopics([]string{c.expectedTopic}))
+			assert.Nil(t, err)
+			for {
+				schema, channel, message, err := it.Next(nil)
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						break
+					}
+					t.Errorf("failed to pull message from serialized file: %s", err)
+				}
+				assert.NotEmpty(t, message.Data)
+				assert.Equal(t, channel.Topic, c.expectedTopic)
+				assert.Equal(t, schema.Name, c.expectedSchemaName)
+				messageCount++
+			}
+			assert.Equal(t, c.expectedMessageCount, messageCount)
+		})
 	}
-	assert.Equal(t, 7, messageCount)
 }
 
 func TestMergesNonNewlineDelimitedSchemas(t *testing.T) {

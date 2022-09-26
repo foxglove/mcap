@@ -13,11 +13,11 @@ endif()
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
 
-add_executable(streamed-reader-conformance streamed-reader-conformance.cpp)
+add_executable(streamed-reader-conformance streamed_reader_conformance.cpp)
 target_link_libraries(streamed-reader-conformance ${CONAN_LIBS})
 
-add_executable(streamed-writer-conformance streamed-writer-conformance.cpp)
+add_executable(streamed-writer-conformance streamed_writer_conformance.cpp)
 target_link_libraries(streamed-writer-conformance ${CONAN_LIBS})
 
-add_executable(unit-tests unit-tests.cpp)
+add_executable(unit-tests unit_tests.cpp)
 target_link_libraries(unit-tests ${CONAN_LIBS})

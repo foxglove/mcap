@@ -32,6 +32,8 @@ type mcapDoctor struct {
 	minLogTime   uint64
 	maxLogTime   uint64
 	statistics   *mcap.Statistics
+
+	errorCount uint32
 }
 
 func (doctor *mcapDoctor) warn(format string, v ...any) {
@@ -40,6 +42,7 @@ func (doctor *mcapDoctor) warn(format string, v ...any) {
 
 func (doctor *mcapDoctor) error(format string, v ...any) {
 	color.Red(format, v...)
+	doctor.errorCount += 1
 }
 
 func (doctor *mcapDoctor) fatal(v ...any) {
@@ -201,7 +204,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 	}
 }
 
-func (doctor *mcapDoctor) Examine() {
+func (doctor *mcapDoctor) Examine() error {
 	lexer, err := mcap.NewLexer(doctor.reader, &mcap.LexerOptions{
 		SkipMagic:   false,
 		ValidateCRC: true,
@@ -212,15 +215,25 @@ func (doctor *mcapDoctor) Examine() {
 	}
 
 	var lastMessageTime uint64
+	var lastToken mcap.TokenType
+	var dataEnd *mcap.DataEnd
+	var footer *mcap.Footer
 	msg := make([]byte, 1024)
 	for {
 		tokenType, data, err := lexer.Next(msg)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
+				if dataEnd == nil {
+					doctor.error("File does not contain a DataEnd record (last record was %s)", lastToken.String())
+				}
+				if footer == nil {
+					doctor.error("File does not contain a Footer record (last record was %s)", lastToken.String())
+				}
 				break
 			}
 			log.Fatal("Failed to read token:", err)
 		}
+		lastToken = tokenType
 		if len(data) > len(msg) {
 			msg = data
 		}
@@ -239,7 +252,7 @@ func (doctor *mcapDoctor) Examine() {
 				doctor.warn(`Header.profile field "%s" is not a well-known profile.`, header.Profile)
 			}
 		case mcap.TokenFooter:
-			_, err := mcap.ParseFooter(data)
+			footer, err = mcap.ParseFooter(data)
 			if err != nil {
 				doctor.error("Failed to parse footer:", err)
 			}
@@ -349,7 +362,7 @@ func (doctor *mcapDoctor) Examine() {
 				doctor.error("Failed to parse summary offset:", err)
 			}
 		case mcap.TokenDataEnd:
-			_, err := mcap.ParseDataEnd(data)
+			dataEnd, err = mcap.ParseDataEnd(data)
 			if err != nil {
 				doctor.error("Failed to parse data end:", err)
 			}
@@ -408,6 +421,11 @@ func (doctor *mcapDoctor) Examine() {
 			doctor.error("Statistics has message count %d, but actual number of messages is %d", doctor.statistics.MessageCount, doctor.messageCount)
 		}
 	}
+	if doctor.errorCount == 0 {
+		return nil
+	} else {
+		return fmt.Errorf("Encountered %d errors", doctor.errorCount)
+	}
 }
 
 func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
@@ -433,8 +451,7 @@ func main(cmd *cobra.Command, args []string) {
 			doctor.warn("Will read full remote file")
 		}
 		fmt.Printf("Examining %s\n", args[0])
-		doctor.Examine()
-		return nil
+		return doctor.Examine()
 	})
 	if err != nil {
 		log.Fatalf("Doctor command failed: %s", err)

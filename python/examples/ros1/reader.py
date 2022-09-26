@@ -1,8 +1,14 @@
 import sys
 
-from mcap_ros1.decoder import Decoder
+from mcap_ros1.reader import read_ros1_messages
 
-with open(sys.argv[1], "rb") as f:
-    ros_reader = Decoder(f)
-    for topic, underlying_record, message in ros_reader.messages:
-        print(f"{topic}: ({type(message).__name__}): {message.data}")
+
+def main():
+    for msg in read_ros1_messages(sys.argv[1]):
+        print(
+            f"{msg.topic} [{msg.log_time}] ({type(msg.ros_msg).__name__}): {msg.ros_msg.data}"
+        )
+
+
+if __name__ == "__main__":
+    main()

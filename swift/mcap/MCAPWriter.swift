@@ -1,4 +1,4 @@
-import crc
+import CRC
 import struct Foundation.Data
 
 public protocol IWritable {
@@ -19,6 +19,10 @@ private extension Statistics {
   }
 }
 
+/**
+ A writer that produces MCAP files, with options to enable compression for smaller files and indexes
+ for more efficient reading.
+ */
 public final class MCAPWriter {
   public struct Options {
     let useStatistics: Bool
@@ -103,7 +107,7 @@ public final class MCAPWriter {
   }
 
   public func start(library: String, profile: String) async {
-    buffer.append(MCAP0_MAGIC)
+    buffer.append(mcapMagic)
     Header(profile: profile, library: library).serialize(to: &buffer)
   }
 
@@ -325,7 +329,7 @@ public final class MCAPWriter {
     )
     footer.summaryCRC = runningCRC.final
     footer.serialize(to: &buffer)
-    buffer.append(MCAP0_MAGIC)
+    buffer.append(mcapMagic)
     await _flush()
   }
 }

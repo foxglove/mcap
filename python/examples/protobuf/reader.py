@@ -1,14 +1,11 @@
 import sys
 
-from mcap.mcap0.stream_reader import StreamReader
-from mcap_protobuf.decoder import Decoder
+from mcap_protobuf.reader import read_protobuf_messages
 
 
 def main():
-    reader = StreamReader(sys.argv[1])
-    decoder = Decoder(reader)
-    for topic, message in decoder.messages:
-        print(f"{topic}: {message}")
+    for msg in read_protobuf_messages(sys.argv[1]):
+        print(f"{msg.topic} [{msg.log_time}]: {msg.proto_msg}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
-import { Mcap0Types } from "@mcap/core";
+import { McapTypes } from "@mcap/core";
 
-export type TestDataRecord = Mcap0Types.TypedMcapRecords[
+export type TestDataRecord = McapTypes.TypedMcapRecords[
   | "Message"
   | "Schema"
   | "Channel"

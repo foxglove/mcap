@@ -14,29 +14,6 @@ MCAP files are designed to work well under various workloads, resource constrain
 
 A [Kaitai Struct](http://kaitai.io) description for the MCAP format is provided at [mcap.ksy](mcap.ksy).
 
-- [Structure](#file-structure)
-  - [Header](#header)
-  - [Footer](#footer)
-  - [Data Section](#data-section)
-  - [Summary Section](#summary-section)
-- [Records](#records)
-  - [Header](#header-op0x01)
-  - [Footer](#footer-op0x02)
-  - [Schema](#schema-op0x03)
-  - [Channel](#channel-op0x04)
-  - [Message](#message-op0x05)
-  - [Chunk](#chunk-op0x06)
-  - [Message Index](#message-index-op0x07)
-  - [Chunk Index](#chunk-index-op0x08)
-  - [Attachment](#attachment-op0x09)
-  - [Attachment Index](#attachment-index-op0x0A)
-  - [Statistics](#statistics-op0x0B)
-  - [Metadata](#metadata-op0x0C)
-  - [Metadata Index](#metadata-index-op0x0D)
-  - [Summary Offset](#summary-offset-op0x0E)
-  - [Data End](#data-end-op0x0F)
-- [Serialization](#serialization)
-
 ## File Structure
 
 A valid MCAP file is structured as follows. The Summary and Summary Offset sections are optional.
@@ -173,7 +150,7 @@ Channel records are uniquely identified within a file by their channel ID. A Cha
 | 2 | schema_id | uint16 | The schema for messages on this channel. A schema_id of 0 indicates there is no schema for this channel. |
 | 4 + N | topic | String | The channel topic. |
 | 4 + N | message_encoding | String | Encoding for messages on this channel. The [well-known message encodings][message_encodings] are preferred. |
-| 4 + N | metadata | Map<string, string> | Metadata about this channel |
+| 4 + N | metadata | `Map<string, string>` | Metadata about this channel |
 
 Channel records may be duplicated in the summary section.
 
@@ -215,7 +192,7 @@ A sequence of Message Index records occurs immediately after each chunk. Exactly
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 2 | channel_id | uint16 | Channel ID. |
-| 4 + N | records | Array<Tuple<Timestamp, uint64>> | Array of log_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
+| 4 + N | records | `Array<Tuple<Timestamp, uint64>>` | Array of log_time and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
 
 Messages outside of chunks cannot be indexed.
 
@@ -231,7 +208,7 @@ A Chunk Index record exists for every Chunk in the file.
 | 8 | message_end_time | Timestamp | Latest message log_time in the chunk. Zero if the chunk has no messages. |
 | 8 | chunk_start_offset | uint64 | Offset to the chunk record from the start of the file. |
 | 8 | chunk_length | uint64 | Byte length of the chunk record, including opcode and length prefix. |
-| 4 + N | message_index_offsets | Map<uint16, uint64> | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. An empty map indicates no message indexing is available. |
+| 4 + N | message_index_offsets | `Map<uint16, uint64>` | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. An empty map indicates no message indexing is available. |
 | 8 | message_index_length | uint64 | Total length in bytes of the message index records after the chunk. |
 | 4 + N | compression | String | The compression used within the chunk. Refer to [well-known compression formats][compression_formats]. This field should match the the value in the corresponding Chunk record. |
 | 8 | compressed_size | uint64 | The size of the chunk `records` field. |
@@ -284,7 +261,7 @@ A Statistics record contains summary information about the recorded data. The st
 | 4 | chunk_count | uint32 | Number of Chunk records in the file. |
 | 8 | message_start_time | Timestamp | Earliest message log_time in the file. Zero if the file has no messages. |
 | 8 | message_end_time | Timestamp | Latest message log_time in the file. Zero if the file has no messages. |
-| 4 + N | channel_message_counts | Map<uint16, uint64> | Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available. |
+| 4 + N | channel_message_counts | `Map<uint16, uint64>` | Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available. |
 
 When using a Statistics record with a non-empty channel_message_counts, the Summary Data section MUST contain a copy of all Channel records. The Channel records MUST occur prior to the statistics record.
 
@@ -297,7 +274,7 @@ A metadata record contains arbitrary user data in key-value pairs.
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 4 + N | name | String | Example: `map_metadata`. |
-| 4 + N | metadata | Map<string, string> | Example keys: `robot_id`, `git_sha`, `timezone`, `run_id`. |
+| 4 + N | metadata | `Map<string, string>` | Example keys: `robot_id`, `git_sha`, `timezone`, `run_id`. |
 
 ### Metadata Index (op=0x0D)
 
@@ -327,7 +304,7 @@ A Data End record indicates the end of the data section.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 4 | data_section_crc | uint32 | CRC32 of all bytes in the data section. A value of 0 indicates the CRC32 is not available. |
+| 4 | data_section_crc | uint32 | CRC32 of all bytes from the beginning of the file up to the DataEnd record. A value of 0 indicates the CRC32 is not available. |
 
 ## Serialization
 
@@ -347,7 +324,7 @@ Bytes is sequence of bytes with no additional requirements.
 
     <bytes>
 
-### Tuple<first_type, second_type>
+### `Tuple<first_type, second_type>`
 
 Tuple represents a pair of values. The first value has type first_type and the second has type second_type.
 
@@ -355,23 +332,23 @@ Tuple is serialized by serializing the first value and then the second value:
 
     <first value><second value>
 
-A Tuple<uint8, uint32>:
+A `Tuple<uint8, uint32>`:
 
     <uint8><uint32>
 
-A Tuple<uint16, string>:
+A `Tuple<uint16, string>`:
 
     <uint16><string>
 
     <uint16><uint32><utf-8 bytes>
 
-### Array<array_type>
+### `Array<array_type>`
 
 Arrays are serialized using a `uint32` byte length followed by the serialized array elements.
 
     <byte length><serialized element><serialized element>...
 
-An array of uint64 is specified as Array<uint64> and serialized as:
+An array of uint64 is specified as `Array<uint64>` and serialized as:
 
     <byte length><uint64><uint64><uint64>...
 
@@ -381,7 +358,7 @@ An array of uint64 is specified as Array<uint64> and serialized as:
 
 `uint64` nanoseconds since a user-understood epoch (i.e unix epoch, robot boot time, etc.)
 
-### Map<key_type, value_type>
+### `Map<key_type, value_type>`
 
 A Map is an [association](https://en.wikipedia.org/wiki/Associative_array) of unique keys to values.
 

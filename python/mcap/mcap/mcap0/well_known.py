@@ -22,6 +22,7 @@ class SchemaEncoding:
     Flatbuffer = "flatbuffer"
     ROS1 = "ros1msg"
     ROS2 = "ros2msg"
+    ROS2IDL = "ros2idl"
     JSONSchema = "jsonschema"
 
 
