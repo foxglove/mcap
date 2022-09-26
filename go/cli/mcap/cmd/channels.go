@@ -11,12 +11,10 @@ import (
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
-	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
 
 func printChannels(w io.Writer, channels []*mcap.Channel) error {
-	tw := tablewriter.NewWriter(w)
 	rows := make([][]string, 0, len(channels))
 	rows = append(rows, []string{
 		"id",
@@ -39,13 +37,7 @@ func printChannels(w io.Writer, channels []*mcap.Channel) error {
 		}
 		rows = append(rows, row)
 	}
-	tw.SetBorder(false)
-	tw.SetAutoWrapText(false)
-	tw.SetAlignment(tablewriter.ALIGN_LEFT)
-	tw.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-	tw.SetColumnSeparator("")
-	tw.AppendBulk(rows)
-	tw.Render()
+	utils.FormatTable(w, rows)
 	return nil
 }
 
