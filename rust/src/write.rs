@@ -87,7 +87,7 @@ fn write_record<W: Write>(w: &mut W, r: &Record) -> io::Result<()> {
         Record::Metadata(m) => record!(op::METADATA, m),
         Record::MetadataIndex(mi) => record!(op::METADATA_INDEX, mi),
         Record::SummaryOffset(so) => record!(op::SUMMARY_OFFSET, so),
-        Record::EndOfData(eod) => record!(op::END_OF_DATA, eod),
+        Record::DataEnd(eod) => record!(op::DATA_END, eod),
         _ => todo!(),
     };
     Ok(())
@@ -417,7 +417,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         let writer = &mut writer;
 
         // We're done with the data secton!
-        write_record(writer, &Record::EndOfData(records::EndOfData::default()))?;
+        write_record(writer, &Record::DataEnd(records::DataEnd::default()))?;
 
         // Take all the data we need, swapping in empty containers.
         // Without this, we get yelled at for moving things out of a mutable ref

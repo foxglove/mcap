@@ -36,7 +36,7 @@ pub mod op {
     pub const METADATA: u8 = 0x0C;
     pub const METADATA_INDEX: u8 = 0x0D;
     pub const SUMMARY_OFFSET: u8 = 0x0E;
-    pub const END_OF_DATA: u8 = 0x0F;
+    pub const DATA_END: u8 = 0x0F;
 }
 
 /// A raw record from an MCAP file.
@@ -49,21 +49,25 @@ pub enum Record<'a> {
     Header(Header),
     Footer(Footer),
     Schema {
+        #[serde(flatten)]
         header: SchemaHeader,
         data: Cow<'a, [u8]>,
     },
     Channel(Channel),
     Message {
+        #[serde(flatten)]
         header: MessageHeader,
         data: Cow<'a, [u8]>,
     },
     Chunk {
+        #[serde(flatten)]
         header: ChunkHeader,
         data: &'a [u8],
     },
     MessageIndex(MessageIndex),
     ChunkIndex(ChunkIndex),
     Attachment {
+        #[serde(flatten)]
         header: AttachmentHeader,
         data: &'a [u8],
     },
@@ -72,7 +76,7 @@ pub enum Record<'a> {
     Metadata(Metadata),
     MetadataIndex(MetadataIndex),
     SummaryOffset(SummaryOffset),
-    EndOfData(EndOfData),
+    DataEnd(DataEnd),
     /// A record of unknown type
     Unknown {
         opcode: u8,
@@ -97,7 +101,7 @@ impl Record<'_> {
             Record::Metadata(_) => op::METADATA,
             Record::MetadataIndex(_) => op::METADATA_INDEX,
             Record::SummaryOffset(_) => op::SUMMARY_OFFSET,
-            Record::EndOfData(_) => op::END_OF_DATA,
+            Record::DataEnd(_) => op::DATA_END,
             Record::Unknown { opcode, .. } => *opcode,
         }
     }
@@ -197,6 +201,7 @@ pub struct SchemaHeader {
     #[bw(write_with = write_string)]
     pub encoding: String,
 
+    #[serde(skip)]
     pub data_len: u32,
 }
 
@@ -412,6 +417,7 @@ pub struct AttachmentHeader {
     #[bw(write_with = write_string)]
     pub content_type: String,
 
+    #[serde(skip)]
     pub data_len: u64,
 }
 
@@ -484,7 +490,7 @@ pub struct SummaryOffset {
 }
 
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
-pub struct EndOfData {
+pub struct DataEnd {
     pub data_section_crc: u32,
 }
 

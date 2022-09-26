@@ -223,7 +223,7 @@ fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
         op::METADATA => Record::Metadata(record!(body)),
         op::METADATA_INDEX => Record::MetadataIndex(record!(body)),
         op::SUMMARY_OFFSET => Record::SummaryOffset(record!(body)),
-        op::END_OF_DATA => Record::EndOfData(record!(body)),
+        op::DATA_END => Record::DataEnd(record!(body)),
         opcode => Record::Unknown {
             opcode,
             data: Cow::Borrowed(body),
@@ -635,7 +635,7 @@ impl<'a> Iterator for MessageStream<'a> {
                 }
 
                 // If it's EOD, do unholy things to calculate the CRC.
-                Record::EndOfData(end) => {
+                Record::DataEnd(end) => {
                     if end.data_section_crc != 0 {
                         // This is terrible. Less math with less magic numbers, please.
                         let data_section_len = (self.full_file.len() - MAGIC.len() * 2) // Actual working area
