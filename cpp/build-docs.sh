@@ -4,7 +4,7 @@ set -e
 
 conan config init
 
-conan editable add ./mcap mcap/0.2.0
+conan editable add ./mcap mcap/0.3.0
 conan install docs --install-folder docs/build/Release \
   -s compiler.cppstd=17 -s build_type=Release --build missing
 
