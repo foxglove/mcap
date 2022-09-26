@@ -198,16 +198,16 @@ public class MCAPRandomAccessReader {
     do {
       let magicAndHeader = try readable.checkedRead(
         offset: 0,
-        length: UInt64(MCAP0_MAGIC.count) + 1 /* header opcode */ + 8 /* header record length */
+        length: UInt64(mcapMagic.count) + 1 /* header opcode */ + 8 /* header record length */
       )
-      let magic = magicAndHeader.prefix(MCAP0_MAGIC.count)
-      if !magic.elementsEqual(MCAP0_MAGIC) {
+      let magic = magicAndHeader.prefix(mcapMagic.count)
+      if !magic.elementsEqual(mcapMagic) {
         throw MCAPReadError.invalidMagic(actual: Array(magic))
       }
-      if magicAndHeader[MCAP0_MAGIC.count] != Opcode.header.rawValue {
-        throw MCAPReadError.missingHeader(actualOpcode: magicAndHeader[MCAP0_MAGIC.count])
+      if magicAndHeader[mcapMagic.count] != Opcode.header.rawValue {
+        throw MCAPReadError.missingHeader(actualOpcode: magicAndHeader[mcapMagic.count])
       }
-      var offset = MCAP0_MAGIC.count + 1
+      var offset = mcapMagic.count + 1
       let headerLength = try magicAndHeader.withUnsafeBytes {
         try $0.read(littleEndian: UInt64.self, from: &offset)
       }
@@ -223,7 +223,7 @@ public class MCAPRandomAccessReader {
     let footerAndMagic: Data
     let footerOffset: UInt64
     do {
-      let footerAndMagicLength = UInt64(recordPrefixLength + footerLength + MCAP0_MAGIC.count)
+      let footerAndMagicLength = UInt64(recordPrefixLength + footerLength + mcapMagic.count)
       if readableSize < magicAndHeaderLength + footerAndMagicLength {
         throw MCAPReadError.readBeyondBounds(offset: magicAndHeaderLength, length: footerAndMagicLength)
       }
@@ -233,8 +233,8 @@ public class MCAPRandomAccessReader {
         offset: footerOffset,
         length: footerAndMagicLength
       )
-      let magic = footerAndMagic.suffix(MCAP0_MAGIC.count)
-      if !magic.elementsEqual(MCAP0_MAGIC) {
+      let magic = footerAndMagic.suffix(mcapMagic.count)
+      if !magic.elementsEqual(mcapMagic) {
         throw MCAPReadError.invalidMagic(actual: Array(magic))
       }
 

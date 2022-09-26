@@ -16,7 +16,7 @@ final class MCAPTests: XCTestCase {
 
   func testValidatesChunkCRC() async throws {
     var buffer = Data()
-    buffer.append(MCAP0_MAGIC)
+    buffer.append(mcapMagic)
     Header(profile: "", library: "").serialize(to: &buffer)
     Chunk(
       messageStartTime: 0,
