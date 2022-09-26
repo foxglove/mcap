@@ -1,4 +1,4 @@
-import { IWritable } from "./common/IWritable";
+import { IWritable } from "./IWritable";
 import { IReadable } from "./types";
 
 export class TempBuffer implements IReadable, IWritable {

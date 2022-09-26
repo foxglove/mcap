@@ -6,6 +6,6 @@ export { McapRecordBuilder } from "./McapRecordBuilder";
 export { ChunkBuilder as McapChunkBuilder } from "./ChunkBuilder";
 export * as McapTypes from "./types";
 export * as McapConstants from "./constants";
-export type { IWritable } from "./common/IWritable";
+export type { IWritable } from "./IWritable";
 
-export * from "./common/hasMcapPrefix";
+export * from "./hasMcapPrefix";
