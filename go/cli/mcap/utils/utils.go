@@ -8,6 +8,7 @@ import (
 	"regexp"
 
 	"cloud.google.com/go/storage"
+	"github.com/olekukonko/tablewriter"
 )
 
 var (
@@ -97,4 +98,23 @@ func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.
 	}
 	defer rs.Close()
 	return f(remote, rs)
+}
+
+func FormatTable(w io.Writer, rows [][]string) {
+	tw := tablewriter.NewWriter(w)
+	tw.SetBorder(false)
+	tw.SetAutoWrapText(false)
+	tw.SetAlignment(tablewriter.ALIGN_LEFT)
+	tw.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
+	tw.SetColumnSeparator("")
+	tw.AppendBulk(rows)
+	tw.Render()
+}
+
+func Keys[T any](m map[string]T) []string {
+	keys := []string{}
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

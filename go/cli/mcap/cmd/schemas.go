@@ -12,7 +12,6 @@ import (
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
-	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb" // cspell:words descriptorpb
@@ -59,7 +58,6 @@ func printDescriptor(w io.Writer, desc *descriptorpb.FileDescriptorSet) error {
 }
 
 func printSchemas(w io.Writer, schemas []*mcap.Schema) {
-	tw := tablewriter.NewWriter(w)
 	rows := make([][]string, 0, len(schemas))
 	rows = append(rows, []string{
 		"id",
@@ -96,13 +94,7 @@ func printSchemas(w io.Writer, schemas []*mcap.Schema) {
 		}
 		rows = append(rows, row)
 	}
-	tw.SetBorder(false)
-	tw.SetAutoWrapText(false)
-	tw.SetAlignment(tablewriter.ALIGN_LEFT)
-	tw.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-	tw.SetColumnSeparator("")
-	tw.AppendBulk(rows)
-	tw.Render()
+	utils.FormatTable(w, rows)
 }
 
 // schemasCmd represents the schemas command
