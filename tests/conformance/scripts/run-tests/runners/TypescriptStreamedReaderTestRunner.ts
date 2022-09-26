@@ -1,4 +1,4 @@
-import { Mcap0StreamReader } from "@mcap/core";
+import { McapStreamReader } from "@mcap/core";
 import fs from "fs/promises";
 import { TestVariant } from "variants/types";
 
@@ -15,7 +15,7 @@ export default class TypescriptStreamedReaderTestRunner extends ReadTestRunner {
 
   async runReadTest(filePath: string, variant: TestVariant): Promise<string> {
     const result = [];
-    const reader = new Mcap0StreamReader({ validateCrcs: true });
+    const reader = new McapStreamReader({ validateCrcs: true });
     reader.append(await fs.readFile(filePath));
     let record;
     while ((record = reader.nextRecord())) {

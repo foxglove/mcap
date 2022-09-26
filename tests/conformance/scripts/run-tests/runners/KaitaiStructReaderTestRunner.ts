@@ -1,4 +1,4 @@
-import { Mcap0Constants, Mcap0Types } from "@mcap/core";
+import { McapConstants, McapTypes } from "@mcap/core";
 import fs from "fs/promises";
 import YAML from "js-yaml";
 import { KaitaiStream } from "kaitai-struct";
@@ -11,15 +11,15 @@ import { stringifyRecords } from "./stringifyRecords";
 
 type ParsedRecord =
   | {
-      op: Mcap0Constants.Opcode.HEADER;
+      op: McapConstants.Opcode.HEADER;
       body: { profile: { str: string }; library: { str: string } };
     }
   | {
-      op: Mcap0Constants.Opcode.FOOTER;
+      op: McapConstants.Opcode.FOOTER;
       body: { ofsSummarySection: bigint; ofsSummaryOffsetSection: bigint; summaryCrc32: number };
     }
   | {
-      op: Mcap0Constants.Opcode.SCHEMA;
+      op: McapConstants.Opcode.SCHEMA;
       body: {
         id: number;
         name: { str: string };
@@ -29,7 +29,7 @@ type ParsedRecord =
       };
     }
   | {
-      op: Mcap0Constants.Opcode.CHANNEL;
+      op: McapConstants.Opcode.CHANNEL;
       body: {
         id: number;
         schemaId: number;
@@ -39,7 +39,7 @@ type ParsedRecord =
       };
     }
   | {
-      op: Mcap0Constants.Opcode.MESSAGE;
+      op: McapConstants.Opcode.MESSAGE;
       body: {
         channelId: number;
         sequence: number;
@@ -49,15 +49,15 @@ type ParsedRecord =
       };
     }
   | {
-      op: Mcap0Constants.Opcode.CHUNK;
+      op: McapConstants.Opcode.CHUNK;
       body: { compression: { str: string }; records?: { records: ParsedRecord[] } };
     }
   | {
-      op: Mcap0Constants.Opcode.MESSAGE_INDEX;
+      op: McapConstants.Opcode.MESSAGE_INDEX;
       body: { channelId: number; records: { entries: Array<{ id: number; offset: number }> } };
     }
   | {
-      op: Mcap0Constants.Opcode.CHUNK_INDEX;
+      op: McapConstants.Opcode.CHUNK_INDEX;
       body: {
         messageStartTime: bigint;
         messageEndTime: bigint;
@@ -71,7 +71,7 @@ type ParsedRecord =
       };
     }
   | {
-      op: Mcap0Constants.Opcode.ATTACHMENT;
+      op: McapConstants.Opcode.ATTACHMENT;
       body: {
         logTime: bigint;
         createTime: bigint;
@@ -82,7 +82,7 @@ type ParsedRecord =
       };
     }
   | {
-      op: Mcap0Constants.Opcode.ATTACHMENT_INDEX;
+      op: McapConstants.Opcode.ATTACHMENT_INDEX;
       body: {
         ofsAttachment: bigint;
         lenAttachment: bigint;
@@ -94,7 +94,7 @@ type ParsedRecord =
       };
     }
   | {
-      op: Mcap0Constants.Opcode.STATISTICS;
+      op: McapConstants.Opcode.STATISTICS;
       body: {
         messageCount: bigint;
         schemaCount: number;
@@ -108,21 +108,21 @@ type ParsedRecord =
       };
     }
   | {
-      op: Mcap0Constants.Opcode.METADATA;
+      op: McapConstants.Opcode.METADATA;
       body: {
         name: { str: string };
         metadata: { entries: { entries: Array<{ key: { str: string }; value: { str: string } }> } };
       };
     }
   | {
-      op: Mcap0Constants.Opcode.METADATA_INDEX;
+      op: McapConstants.Opcode.METADATA_INDEX;
       body: { ofsMetadata: bigint; lenMetadata: bigint; name: { str: string } };
     }
   | {
-      op: Mcap0Constants.Opcode.SUMMARY_OFFSET;
+      op: McapConstants.Opcode.SUMMARY_OFFSET;
       body: { groupOpcode: number; ofsGroup: bigint; lenGroup: bigint };
     }
-  | { op: Mcap0Constants.Opcode.DATA_END; body: { dataSectionCrc32: number } };
+  | { op: McapConstants.Opcode.DATA_END; body: { dataSectionCrc32: number } };
 
 type Mcap = {
   new (_: KaitaiStream): Mcap;
@@ -173,22 +173,22 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
     const Mcap = await compileMcapClass();
     const mcap = new Mcap(new KaitaiStream((await fs.readFile(filePath)).buffer));
 
-    const result: Mcap0Types.TypedMcapRecord[] = [];
+    const result: McapTypes.TypedMcapRecord[] = [];
 
     function addRecord(record: ParsedRecord) {
       switch (record.op) {
-        case Mcap0Constants.Opcode.MESSAGE_INDEX:
+        case McapConstants.Opcode.MESSAGE_INDEX:
         default:
           break;
 
-        case Mcap0Constants.Opcode.HEADER:
+        case McapConstants.Opcode.HEADER:
           result.push({
             type: "Header",
             profile: record.body.profile.str,
             library: record.body.library.str,
           });
           break;
-        case Mcap0Constants.Opcode.FOOTER:
+        case McapConstants.Opcode.FOOTER:
           result.push({
             type: "Footer",
             summaryStart: record.body.ofsSummarySection,
@@ -196,7 +196,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
             summaryCrc: record.body.summaryCrc32,
           });
           break;
-        case Mcap0Constants.Opcode.SCHEMA:
+        case McapConstants.Opcode.SCHEMA:
           result.push({
             type: "Schema",
             id: record.body.id,
@@ -205,7 +205,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
             data: record.body.data,
           });
           break;
-        case Mcap0Constants.Opcode.CHANNEL:
+        case McapConstants.Opcode.CHANNEL:
           result.push({
             type: "Channel",
             id: record.body.id,
@@ -217,7 +217,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
             ),
           });
           break;
-        case Mcap0Constants.Opcode.MESSAGE:
+        case McapConstants.Opcode.MESSAGE:
           result.push({
             type: "Message",
             channelId: record.body.channelId,
@@ -227,7 +227,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
             data: record.body.data,
           });
           break;
-        case Mcap0Constants.Opcode.CHUNK:
+        case McapConstants.Opcode.CHUNK:
           if (record.body.records) {
             for (const rec of record.body.records.records) {
               addRecord(rec);
@@ -236,7 +236,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
             throw new Error(`Unsupported compression: ${record.body.compression.str}`);
           }
           break;
-        case Mcap0Constants.Opcode.CHUNK_INDEX:
+        case McapConstants.Opcode.CHUNK_INDEX:
           result.push({
             type: "ChunkIndex",
             chunkStartOffset: record.body.ofsChunk,
@@ -255,7 +255,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
             messageStartTime: record.body.messageStartTime,
           });
           break;
-        case Mcap0Constants.Opcode.ATTACHMENT:
+        case McapConstants.Opcode.ATTACHMENT:
           result.push({
             type: "Attachment",
             name: record.body.name.str,
@@ -265,7 +265,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
             data: record.body.data,
           });
           break;
-        case Mcap0Constants.Opcode.ATTACHMENT_INDEX:
+        case McapConstants.Opcode.ATTACHMENT_INDEX:
           result.push({
             type: "AttachmentIndex",
             offset: record.body.ofsAttachment,
@@ -277,7 +277,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
             dataSize: record.body.dataSize,
           });
           break;
-        case Mcap0Constants.Opcode.STATISTICS:
+        case McapConstants.Opcode.STATISTICS:
           result.push({
             type: "Statistics",
             attachmentCount: record.body.attachmentCount,
@@ -296,7 +296,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
             schemaCount: record.body.schemaCount,
           });
           break;
-        case Mcap0Constants.Opcode.METADATA:
+        case McapConstants.Opcode.METADATA:
           result.push({
             type: "Metadata",
             name: record.body.name.str,
@@ -305,7 +305,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
             ),
           });
           break;
-        case Mcap0Constants.Opcode.METADATA_INDEX:
+        case McapConstants.Opcode.METADATA_INDEX:
           result.push({
             type: "MetadataIndex",
             offset: record.body.ofsMetadata,
@@ -313,7 +313,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
             name: record.body.name.str,
           });
           break;
-        case Mcap0Constants.Opcode.SUMMARY_OFFSET:
+        case McapConstants.Opcode.SUMMARY_OFFSET:
           result.push({
             type: "SummaryOffset",
             groupOpcode: record.body.groupOpcode,
@@ -321,7 +321,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
             groupLength: record.body.lenGroup,
           });
           break;
-        case Mcap0Constants.Opcode.DATA_END:
+        case McapConstants.Opcode.DATA_END:
           result.push({
             type: "DataEnd",
             dataSectionCrc: record.body.dataSectionCrc32,
