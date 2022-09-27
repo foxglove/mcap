@@ -14,17 +14,19 @@ import (
 func printAttachments(w io.Writer, attachmentIndexes []*mcap.AttachmentIndex) {
 	rows := make([][]string, 0, len(attachmentIndexes))
 	rows = append(rows, []string{
-		"log time",
 		"name",
 		"media type",
+		"log time",
+		"creation time",
 		"content length",
 		"offset",
 	})
 	for _, idx := range attachmentIndexes {
 		row := []string{
-			fmt.Sprintf("%d", idx.LogTime),
 			idx.Name,
 			idx.MediaType,
+			fmt.Sprintf("%d", idx.LogTime),
+			fmt.Sprintf("%d", idx.CreateTime),
 			fmt.Sprintf("%d", idx.DataSize),
 			fmt.Sprintf("%d", idx.Offset),
 		}
@@ -51,7 +53,7 @@ var attachmentsCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to get info: %w", err)
 			}
-			printChunks(os.Stdout, info.ChunkIndexes)
+			printAttachments(os.Stdout, info.AttachmentIndexes)
 			return nil
 		})
 		if err != nil {
