@@ -3,11 +3,11 @@ from conans import ConanFile, tools
 
 class McapConan(ConanFile):
     name = "mcap"
-    version = "0.2.0"
+    version = "0.4.0"
     url = "https://github.com/foxglove/mcap"
     homepage = "https://github.com/foxglove/mcap"
     description = "A C++ implementation of the MCAP file format"
-    license = "Apache-2.0"
+    license = "MIT"
     topics = ("mcap", "serialization", "deserialization", "recording")
 
     settings = ("os", "compiler", "build_type", "arch")

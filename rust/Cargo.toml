@@ -7,7 +7,7 @@ documentation = "https://mcap.dev/docs/rust/doc/mcap/index.html"
 readme = "README.md"
 version = "0.2.0"
 edition = "2021"
-license = "Apache-2.0"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

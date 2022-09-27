@@ -17,10 +17,21 @@ namespace mcap {
  */
 struct McapWriterOptions {
   /**
-   * @brief Disable CRC calculations for Chunks, Attachments, and the Data and
-   * Summary sections.
+   * @brief Disable CRC calculations for Chunks.
    */
-  bool noCRC = false;
+  bool noChunkCRC = false;
+  /**
+   * @brief Disable CRC calculations for Attachments.
+   */
+  bool noAttachmentCRC = false;
+  /**
+   * @brief Enable CRC calculations for all records in the data section.
+   */
+  bool enableDataCRC = false;
+  /**
+   * @brief Disable CRC calculations for the summary section.
+   */
+  bool noSummaryCRC = false;
   /**
    * @brief Do not write Chunks to the file, instead writing Schema, Channel,
    * and Message records directly into the Data section.

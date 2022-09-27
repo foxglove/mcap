@@ -5,7 +5,7 @@
   <version>0.0.1</version>
   <description>Example ROS2 scripts for reading and writing MCAP files</description>
   <maintainer email="james@foxglove.dev">James Smith</maintainer>
-  <license>Apache-2.0</license>
+  <license>MIT</license>
 
   <depend>rosbag2_py</depend>
   <depend>rosbag2_storage_mcap</depend>

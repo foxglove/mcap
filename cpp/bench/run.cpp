@@ -183,7 +183,7 @@ static void BM_McapWriterBufferWriterChunkedNoCRC(benchmark::State& state) {
   // Create a chunked writer using the ros1 profile
   mcap::McapWriter writer;
   auto options = mcap::McapWriterOptions("ros1");
-  options.noCRC = true;
+  options.noChunkCRC = true;
   options.chunkSize = uint64_t(state.range(0));
 
   // Open an output memory buffer and write the file header
@@ -365,7 +365,7 @@ static void BM_McapWriterBufferWriterZStdNoCRC(benchmark::State& state) {
   // Create a chunked writer using the ros1 profile
   mcap::McapWriter writer;
   auto options = mcap::McapWriterOptions("ros1");
-  options.noCRC = true;
+  options.noChunkCRC = true;
   options.chunkSize = uint64_t(state.range(0));
   options.compression = mcap::Compression::Zstd;
   options.compressionLevel = mcap::CompressionLevel(state.range(1));

@@ -1,4 +1,4 @@
-import { Mcap0Types } from "@mcap/core";
+import { McapTypes } from "@mcap/core";
 import stringify from "json-stringify-pretty-compact";
 import { chain, snakeCase } from "lodash";
 import { TestVariant } from "variants/types";
@@ -19,7 +19,7 @@ function replacer(_key: string, value: unknown): unknown {
   return value;
 }
 
-function normalizeRecord(record: Mcap0Types.TypedMcapRecord) {
+function normalizeRecord(record: McapTypes.TypedMcapRecord) {
   return chain(record)
     .toPairs()
     .filter(([k]) => k !== "type")
@@ -30,7 +30,7 @@ function normalizeRecord(record: Mcap0Types.TypedMcapRecord) {
 }
 
 export function stringifyRecords(
-  records: Mcap0Types.TypedMcapRecord[],
+  records: McapTypes.TypedMcapRecord[],
   variant: TestVariant,
 ): string {
   const normalizedRecords = records.map(normalizeRecord);

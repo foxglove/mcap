@@ -2,20 +2,8 @@
 
 import XCTest
 
-import crc
-import mcap
-
-class Buffer: IWritable {
-  var data = Data()
-
-  func position() -> UInt64 {
-    UInt64(data.count)
-  }
-
-  func write(_ other: Data) async {
-    data.append(other)
-  }
-}
+import CRC
+import MCAP
 
 final class MCAPTests: XCTestCase {
   func testEmpty() async throws {
@@ -28,7 +16,7 @@ final class MCAPTests: XCTestCase {
 
   func testValidatesChunkCRC() async throws {
     var buffer = Data()
-    buffer.append(MCAP0_MAGIC)
+    buffer.append(mcapMagic)
     Header(profile: "", library: "").serialize(to: &buffer)
     Chunk(
       messageStartTime: 0,

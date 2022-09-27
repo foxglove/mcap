@@ -106,6 +106,7 @@ class Writer:
         self.__summary_offsets: List[SummaryOffset] = []
         self.__use_statistics = use_statistics
         self.__use_summary_offsets = use_summary_offsets
+        self.__data_section_crc = 0
 
     def add_attachment(
         self, create_time: int, log_time: int, name: str, content_type: str, data: bytes
@@ -214,7 +215,7 @@ class Writer:
         """
         self.__finalize_chunk()
 
-        DataEnd(0).write(self.__record_builder)
+        DataEnd(self.__data_section_crc).write(self.__record_builder)
         self.__flush()
 
         summary_start = self.__stream.tell()
@@ -334,12 +335,11 @@ class Writer:
         """
         Registers a new message channel. Returns the numeric id of the new channel.
 
-        :param schema_id: The schema for messages on this channel. A schema_id of 0 indicates
-            there is no schema for this channel.
+        :param schema_id: The schema for messages on this channel. A schema_id of 0 indicates there
+            is no schema for this channel.
         :param topic: The channel topic.
-        :param message_encoding: Encoding for messages on this channel. The value should be one
-            of the well-known message encodings.
-            Custom values should use the `x-` prefix.
+        :param message_encoding: Encoding for messages on this channel. See the list of well-known
+            message encodings for common values.
         :param metadata: Metadata about this channel.
         """
         channel_id = len(self.__channels) + 1
@@ -364,9 +364,8 @@ class Writer:
         Registers a new message schema. Returns the new integer schema id.
 
         :param name: An identifier for the schema.
-        :param encoding: Format for the schema. The value should be one of the well-known schema
-            encodings. Custom values should use the `x-` prefix. An empty string indicates no schema
-            is available.
+        :param encoding: Format for the schema. See the list of well-known schema encodings for
+            common values. An empty string indicates no schema is available.
         :param data: Schema data. Must conform to the schema encoding. If `encoding` is an empty
             string, `data` should be 0 length.
         """
@@ -391,11 +390,14 @@ class Writer:
             information for use in debugging.
         """
         self.__stream.write(MCAP0_MAGIC)
+        self.__data_section_crc = zlib.crc32(MCAP0_MAGIC, self.__data_section_crc)
         Header(profile, library).write(self.__record_builder)
         self.__flush()
 
     def __flush(self):
-        self.__stream.write(self.__record_builder.end())
+        data = self.__record_builder.end()
+        self.__data_section_crc = zlib.crc32(data, self.__data_section_crc)
+        self.__stream.write(data)
 
     def __finalize_chunk(self):
         if not self.__chunk_builder:

@@ -17,7 +17,7 @@ from mcap.mcap0.stream_reader import StreamReader
 def generate_sample_data(compression: CompressionType):
     file = TemporaryFile("w+b")
     writer = Writer(file, compression=compression)
-    writer.start(profile="x-json", library="test")
+    writer.start(library="test")
     schema_id = writer.register_schema(
         name="sample",
         encoding="jsonschema",
@@ -75,7 +75,7 @@ def test_lz4_chunks():
 
 
 @pytest.mark.parametrize(
-    "compression_type,length", [(CompressionType.ZSTD, 747), (CompressionType.LZ4, 785)]
+    "compression_type,length", [(CompressionType.ZSTD, 741), (CompressionType.LZ4, 779)]
 )
 def test_decode_read(compression_type, length):
     """tests that chunk compression is happening when writing."""
@@ -87,7 +87,7 @@ def test_decode_read(compression_type, length):
 def test_out_of_order_messages():
     io = BytesIO()
     writer = Writer(io, compression=CompressionType.ZSTD)
-    writer.start(profile="x-json", library="test")
+    writer.start(library="test")
     schema_id = writer.register_schema("schema", "unknown", b"")
     channel_id = writer.register_channel("topic", "enc", schema_id)
     writer.add_message(channel_id, 100, b"a", 100)

@@ -1,21 +1,28 @@
-import crc
+import CRC
 import struct Foundation.Data
 
 public typealias SchemaID = UInt16
 public typealias ChannelID = UInt16
 public typealias Timestamp = UInt64
 
-// swiftlint:disable:next identifier_name
-public let MCAP0_MAGIC = Data([137, 77, 67, 65, 80, 48, 13, 10])
+/// Magic bytes that appear at the beginning and end of every valid MCAP file: `"\u{89}MCAP0\r\n"`.
+public let mcapMagic = Data([137, 77, 67, 65, 80, 48, 13, 10])
 
 public enum MCAPReadError: Error, Equatable {
   case invalidMagic(actual: [UInt8])
-  case readBeyondBounds
+  case readBeyondBounds(offset: UInt64, length: UInt64)
   case stringLengthBeyondBounds
   case dataLengthBeyondBounds
   case invalidCRC(expected: UInt32, actual: UInt32)
-  case extraneousDataInChunk
+  case extraneousDataInChunk(length: Int)
+  case extraneousDataInSummary(length: Int)
   case unsupportedCompression(String)
+  case readFailed(offset: UInt64, expectedLength: UInt64, actualLength: UInt64)
+  case missingHeader(actualOpcode: UInt8)
+  case duplicateStatistics
+  case invalidMessageIndexEntry(offset: UInt64, chunkStartOffset: UInt64, chunkLength: UInt64)
+  case incorrectOpcode(expected: Opcode, actual: Opcode.RawValue)
+  case missingSummary
 }
 
 public enum Opcode: UInt8 {
@@ -54,6 +61,24 @@ public extension Record {
         fieldsStartOffset - MemoryLayout<UInt64>.size ..< fieldsStartOffset,
         with: $0
       )
+    }
+  }
+
+  static func deserializing(from data: Data, at startOffset: Int = 0) throws -> Self {
+    try data.withUnsafeBytes {
+      var offset = startOffset
+      if $0[offset] != Self.opcode.rawValue {
+        throw MCAPReadError.incorrectOpcode(expected: Self.opcode, actual: $0[offset])
+      }
+      offset += 1
+      let length = try $0.read(littleEndian: UInt64.self, from: &offset)
+      return try Self(deserializingFieldsFrom: UnsafeRawBufferPointer(rebasing: $0[offset ..< offset + Int(length)]))
+    }
+  }
+
+  static func deserializingFields(from data: Data) throws -> Self {
+    try data.withUnsafeBytes {
+      try Self(deserializingFieldsFrom: $0)
     }
   }
 }
@@ -145,10 +170,10 @@ private extension Data {
   }
 }
 
-private extension UnsafeRawBufferPointer {
+internal extension UnsafeRawBufferPointer {
   func read<T: FixedWidthInteger & UnsignedInteger>(littleEndian _: T.Type, from offset: inout Int) throws -> T {
     if offset + MemoryLayout<T>.size > self.count {
-      throw MCAPReadError.readBeyondBounds
+      throw MCAPReadError.readBeyondBounds(offset: UInt64(offset), length: UInt64(MemoryLayout<T>.size))
     }
     defer { offset += MemoryLayout<T>.size }
     var rawValue: T = 0
