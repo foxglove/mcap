@@ -766,7 +766,7 @@
     <span class="kw">pub</span> <span class="ident">log_time</span>: <span class="ident">Timestamp</span>,
     <span class="kw">pub</span> <span class="ident">create_time</span>: <span class="ident">Timestamp</span>,
     <span class="kw">pub</span> <span class="ident">name</span>: <span class="ident">CowStr</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>,
-    <span class="kw">pub</span> <span class="ident">content_type</span>: <span class="ident">CowStr</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>,
+    <span class="kw">pub</span> <span class="ident">media_type</span>: <span class="ident">CowStr</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>,
     <span class="kw">pub</span> <span class="ident">data</span>: <span class="ident">Cow</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, [<span class="ident">u8</span>]<span class="op">&gt;</span>,
     <span class="attribute">#[<span class="ident">serde</span>(<span class="ident">skip_serializing</span>)]</span>
     <span class="kw">pub</span> <span class="ident">crc</span>: <span class="ident">u32</span>,
@@ -780,7 +780,7 @@
             <span class="ident">log_time</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
             <span class="ident">create_time</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
             <span class="ident">name</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
-            <span class="ident">content_type</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
+            <span class="ident">media_type</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
             <span class="ident">data</span>: <span class="ident">p</span>.<span class="ident">get_long_byte_array</span>()<span class="question-mark">?</span>,
             <span class="ident">crc</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
         })
@@ -795,7 +795,7 @@
     <span class="kw">pub</span> <span class="ident">create_time</span>: <span class="ident">Timestamp</span>,
     <span class="kw">pub</span> <span class="ident">data_size</span>: <span class="ident">u64</span>,
     <span class="kw">pub</span> <span class="ident">name</span>: <span class="ident">CowStr</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>,
-    <span class="kw">pub</span> <span class="ident">content_type</span>: <span class="ident">CowStr</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>,
+    <span class="kw">pub</span> <span class="ident">media_type</span>: <span class="ident">CowStr</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>,
 }
 
 <span class="kw">impl</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> <span class="ident">TryFrom</span><span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> [<span class="ident">u8</span>]<span class="op">&gt;</span> <span class="kw">for</span> <span class="ident">AttachmentIndex</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
@@ -809,7 +809,7 @@
             <span class="ident">create_time</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
             <span class="ident">data_size</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
             <span class="ident">name</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
-            <span class="ident">content_type</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
+            <span class="ident">media_type</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
         })
     }
 }
@@ -933,7 +933,7 @@
     <span class="kw">pub</span> <span class="ident">log_time</span>: <span class="ident">Timestamp</span>,
     <span class="kw">pub</span> <span class="ident">create_time</span>: <span class="ident">Timestamp</span>,
     <span class="kw">pub</span> <span class="ident">name</span>: <span class="ident">CowStr</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>,
-    <span class="kw">pub</span> <span class="ident">content_type</span>: <span class="ident">CowStr</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>,
+    <span class="kw">pub</span> <span class="ident">media_type</span>: <span class="ident">CowStr</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>,
     <span class="kw">pub</span> <span class="ident">data_len</span>: <span class="ident">u64</span>,
 }
 
@@ -945,7 +945,7 @@
             <span class="ident">log_time</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
             <span class="ident">create_time</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
             <span class="ident">name</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
-            <span class="ident">content_type</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
+            <span class="ident">media_type</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
             <span class="ident">data_len</span>: <span class="ident">p</span>.<span class="ident">get</span>()<span class="question-mark">?</span>,
         })
     }

@@ -51,7 +51,7 @@
     <span class="n">create_time</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">log_time</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">content_type</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">media_type</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span>
 
 <div class="viewcode-block" id="Attachment.write"><a class="viewcode-back" href="../../../mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Attachment.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
@@ -60,7 +60,7 @@
         <span class="n">builder</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_time</span><span class="p">)</span>
         <span class="n">builder</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">create_time</span><span class="p">)</span>
         <span class="n">builder</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-        <span class="n">builder</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content_type</span><span class="p">)</span>
+        <span class="n">builder</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">media_type</span><span class="p">)</span>
         <span class="n">builder</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">))</span>
         <span class="n">builder</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
         <span class="n">builder</span><span class="o">.</span><span class="n">write4</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># crc</span>
@@ -74,7 +74,7 @@
         <span class="n">log_time</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
         <span class="n">create_time</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
         <span class="n">name</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read_prefixed_string</span><span class="p">()</span>
-        <span class="n">content_type</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read_prefixed_string</span><span class="p">()</span>
+        <span class="n">media_type</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read_prefixed_string</span><span class="p">()</span>
         <span class="n">data_length</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
         <span class="n">data</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">data_length</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">read4</span><span class="p">()</span>  <span class="c1"># skip crc</span>
@@ -82,7 +82,7 @@
             <span class="n">create_time</span><span class="o">=</span><span class="n">create_time</span><span class="p">,</span>
             <span class="n">log_time</span><span class="o">=</span><span class="n">log_time</span><span class="p">,</span>
             <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
-            <span class="n">content_type</span><span class="o">=</span><span class="n">content_type</span><span class="p">,</span>
+            <span class="n">media_type</span><span class="o">=</span><span class="n">media_type</span><span class="p">,</span>
             <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
         <span class="p">)</span></div></div>
 
@@ -95,7 +95,7 @@
     <span class="n">create_time</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">data_size</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">content_type</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">media_type</span><span class="p">:</span> <span class="nb">str</span>
 
 <div class="viewcode-block" id="AttachmentIndex.write"><a class="viewcode-back" href="../../../mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.AttachmentIndex.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">RecordBuilder</span><span class="p">):</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">start_record</span><span class="p">(</span><span class="n">Opcode</span><span class="o">.</span><span class="n">ATTACHMENT_INDEX</span><span class="p">)</span>
@@ -105,7 +105,7 @@
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">create_time</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write8</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_size</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-        <span class="n">stream</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">content_type</span><span class="p">)</span>
+        <span class="n">stream</span><span class="o">.</span><span class="n">write_prefixed_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">media_type</span><span class="p">)</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">finish_record</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="AttachmentIndex.read"><a class="viewcode-back" href="../../../mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.AttachmentIndex.read">[docs]</a>    <span class="nd">@staticmethod</span>
@@ -116,7 +116,7 @@
         <span class="n">create_time</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
         <span class="n">data_size</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
         <span class="n">name</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read_prefixed_string</span><span class="p">()</span>
-        <span class="n">content_type</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read_prefixed_string</span><span class="p">()</span>
+        <span class="n">media_type</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read_prefixed_string</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">AttachmentIndex</span><span class="p">(</span>
             <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span>
             <span class="n">length</span><span class="o">=</span><span class="n">length</span><span class="p">,</span>
@@ -124,7 +124,7 @@
             <span class="n">create_time</span><span class="o">=</span><span class="n">create_time</span><span class="p">,</span>
             <span class="n">data_size</span><span class="o">=</span><span class="n">data_size</span><span class="p">,</span>
             <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
-            <span class="n">content_type</span><span class="o">=</span><span class="n">content_type</span><span class="p">,</span>
+            <span class="n">media_type</span><span class="o">=</span><span class="n">media_type</span><span class="p">,</span>
         <span class="p">)</span></div></div>
 
 
