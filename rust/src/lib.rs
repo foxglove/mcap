@@ -42,7 +42,7 @@ mod tests {
                 profile: "".into(),
             }),
             Record::DataEnd(DataEnd {
-                data_section_crc: 0,
+                data_section_crc: 3959079795,
             }),
             Record::Footer(Footer {
                 summary_crc: 1875167664,

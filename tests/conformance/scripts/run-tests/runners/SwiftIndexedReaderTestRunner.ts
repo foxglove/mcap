@@ -7,7 +7,7 @@ import { ReadTestRunner } from "./TestRunner";
 
 export default class SwiftIndexedReaderTestRunner extends ReadTestRunner {
   readonly name = "swift-indexed-reader";
-  readonly readsDataEnd = true;
+  readonly readsDataEnd = false;
 
   async runReadTest(filePath: string): Promise<string> {
     const { stdout } = await promisify(exec)(
