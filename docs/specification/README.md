@@ -229,7 +229,7 @@ Attachment records must not appear within a chunk.
 | 8 | log_time | Timestamp | Time at which the attachment was recorded. |
 | 8 | create_time | Timestamp | Time at which the attachment was created. If not available, must be set to zero. |
 | 4 + N | name | String | Name of the attachment, e.g "scene1.jpg". |
-| 4 + N | content_type | String | MIME Type (e.g "text/plain"). |
+| 4 + N | media_type | String | [Media Type](https://en.wikipedia.org/wiki/Media_type) (e.g "text/plain"). |
 | 8 + N | data | uint64 length-prefixed Bytes | Attachment data. |
 | 4 | crc | uint32 | CRC32 checksum of preceding fields in the record. A value of zero indicates that CRC validation should not be performed. |
 
@@ -245,7 +245,7 @@ An Attachment Index record contains the location of an attachment in the file. A
 | 8 | create_time | Timestamp | Time at which the attachment was created. If not available, must be set to zero. |
 | 8 | data_size | uint64 | Size of the attachment data. |
 | 4 + N | name | String | Name of the attachment. |
-| 4 + N | content_type | String | MIME type of the attachment. |
+| 4 + N | media_type | String | [Media type](https://en.wikipedia.org/wiki/Media_type) of the attachment (e.g "text/plain"). |
 
 ### Statistics (op=0x0B)
 

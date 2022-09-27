@@ -246,14 +246,14 @@ struct ChunkIndex {
 
 /**
  * @brief An Attachment is an arbitrary file embedded in an MCAP file, including
- * a name, content-type, timestamps, and optional CRC. Attachment records are
+ * a name, media type, timestamps, and optional CRC. Attachment records are
  * written in the Data section, outside of Chunks.
  */
 struct Attachment {
   Timestamp logTime;
   Timestamp createTime;
   std::string name;
-  std::string contentType;
+  std::string mediaType;
   uint64_t dataSize;
   const std::byte* data = nullptr;
   uint32_t crc;
@@ -270,7 +270,7 @@ struct AttachmentIndex {
   Timestamp createTime;
   uint64_t dataSize;
   std::string name;
-  std::string contentType;
+  std::string mediaType;
 
   AttachmentIndex() = default;
   AttachmentIndex(const Attachment& attachment, ByteOffset fileOffset)
@@ -279,14 +279,14 @@ struct AttachmentIndex {
                /* name */ 4 + attachment.name.size() +
                /* log_time */ 8 +
                /* create_time */ 8 +
-               /* content_type */ 4 + attachment.contentType.size() +
+               /* media_type */ 4 + attachment.mediaType.size() +
                /* data */ 8 + attachment.dataSize +
                /* crc */ 4)
       , logTime(attachment.logTime)
       , createTime(attachment.createTime)
       , dataSize(attachment.dataSize)
       , name(attachment.name)
-      , contentType(attachment.contentType) {}
+      , mediaType(attachment.mediaType) {}
 };
 
 /**

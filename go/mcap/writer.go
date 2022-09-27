@@ -249,12 +249,12 @@ func (w *Writer) WriteMessageIndex(idx *MessageIndex) error {
 // contain auxiliary artifacts such as text, core dumps, calibration data, or
 // other arbitrary data. Attachment records must not appear within a chunk.
 func (w *Writer) WriteAttachment(a *Attachment) error {
-	msglen := 4 + len(a.Name) + 8 + 8 + 4 + len(a.ContentType) + 8 + len(a.Data) + 4
+	msglen := 4 + len(a.Name) + 8 + 8 + 4 + len(a.MediaType) + 8 + len(a.Data) + 4
 	w.ensureSized(msglen)
 	offset := putUint64(w.msg, a.LogTime)
 	offset += putUint64(w.msg[offset:], a.CreateTime)
 	offset += putPrefixedString(w.msg[offset:], a.Name)
-	offset += putPrefixedString(w.msg[offset:], a.ContentType)
+	offset += putPrefixedString(w.msg[offset:], a.MediaType)
 	offset += putUint64(w.msg[offset:], uint64(len(a.Data)))
 	offset += copy(w.msg[offset:], a.Data)
 	crc := crc32.ChecksumIEEE(w.msg[:offset])
@@ -265,13 +265,13 @@ func (w *Writer) WriteAttachment(a *Attachment) error {
 		return err
 	}
 	w.AttachmentIndexes = append(w.AttachmentIndexes, &AttachmentIndex{
-		Offset:      attachmentOffset,
-		Length:      uint64(c),
-		LogTime:     a.LogTime,
-		CreateTime:  a.CreateTime,
-		DataSize:    uint64(len(a.Data)),
-		Name:        a.Name,
-		ContentType: a.ContentType,
+		Offset:     attachmentOffset,
+		Length:     uint64(c),
+		LogTime:    a.LogTime,
+		CreateTime: a.CreateTime,
+		DataSize:   uint64(len(a.Data)),
+		Name:       a.Name,
+		MediaType:  a.MediaType,
 	})
 	w.Statistics.AttachmentCount++
 	return nil
@@ -284,7 +284,7 @@ func (w *Writer) WriteAttachmentIndex(idx *AttachmentIndex) error {
 	if w.opts.SkipAttachmentIndex {
 		return nil
 	}
-	msglen := 8 + 8 + 8 + 8 + 8 + 4 + len(idx.Name) + 4 + len(idx.ContentType)
+	msglen := 8 + 8 + 8 + 8 + 8 + 4 + len(idx.Name) + 4 + len(idx.MediaType)
 	w.ensureSized(msglen)
 	offset := putUint64(w.msg, idx.Offset)
 	offset += putUint64(w.msg[offset:], idx.Length)
@@ -292,7 +292,7 @@ func (w *Writer) WriteAttachmentIndex(idx *AttachmentIndex) error {
 	offset += putUint64(w.msg[offset:], idx.CreateTime)
 	offset += putUint64(w.msg[offset:], idx.DataSize)
 	offset += putPrefixedString(w.msg[offset:], idx.Name)
-	offset += putPrefixedString(w.msg[offset:], idx.ContentType)
+	offset += putPrefixedString(w.msg[offset:], idx.MediaType)
 	_, err := w.writeRecord(w.w, OpAttachmentIndex, w.msg[:offset])
 	return err
 }

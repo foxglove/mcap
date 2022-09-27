@@ -600,10 +600,10 @@ Status McapWriter::write(Attachment& attachment) {
     crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&sizePrefix), 4);
     crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(attachment.name.data()),
                                 sizePrefix);
-    sizePrefix = uint32_t(attachment.contentType.size());
+    sizePrefix = uint32_t(attachment.mediaType.size());
     crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&sizePrefix), 4);
     crc = internal::crc32Update(
-      crc, reinterpret_cast<const std::byte*>(attachment.contentType.data()), sizePrefix);
+      crc, reinterpret_cast<const std::byte*>(attachment.mediaType.data()), sizePrefix);
     crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&attachment.dataSize), 8);
     crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(attachment.data),
                                 attachment.dataSize);
@@ -858,15 +858,15 @@ uint64_t McapWriter::write(IWritable& output, const Message& message) {
 }
 
 uint64_t McapWriter::write(IWritable& output, const Attachment& attachment) {
-  const uint64_t recordSize = 4 + attachment.name.size() + 8 + 8 + 4 +
-                              attachment.contentType.size() + 8 + attachment.dataSize + 4;
+  const uint64_t recordSize = 4 + attachment.name.size() + 8 + 8 + 4 + attachment.mediaType.size() +
+                              8 + attachment.dataSize + 4;
 
   write(output, OpCode::Attachment);
   write(output, recordSize);
   write(output, attachment.logTime);
   write(output, attachment.createTime);
   write(output, attachment.name);
-  write(output, attachment.contentType);
+  write(output, attachment.mediaType);
   write(output, attachment.dataSize);
   write(output, attachment.data, attachment.dataSize);
   write(output, attachment.crc);
@@ -960,7 +960,7 @@ uint64_t McapWriter::write(IWritable& output, const AttachmentIndex& index) {
                               /* create_time */ 8 +
                               /* data_size */ 8 +
                               /* name */ 4 + index.name.size() +
-                              /* content_type */ 4 + index.contentType.size();
+                              /* media_type */ 4 + index.mediaType.size();
 
   write(output, OpCode::AttachmentIndex);
   write(output, recordSize);
@@ -970,7 +970,7 @@ uint64_t McapWriter::write(IWritable& output, const AttachmentIndex& index) {
   write(output, index.createTime);
   write(output, index.dataSize);
   write(output, index.name);
-  write(output, index.contentType);
+  write(output, index.mediaType);
 
   return 9 + recordSize;
 }

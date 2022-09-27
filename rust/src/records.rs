@@ -259,7 +259,7 @@ pub struct Attachment<'a> {
     pub log_time: Timestamp,
     pub create_time: Timestamp,
     pub name: CowStr<'a>,
-    pub content_type: CowStr<'a>,
+    pub media_type: CowStr<'a>,
     pub data: Cow<'a, [u8]>,
     #[serde(skip_serializing)]
     pub crc: u32,
@@ -273,7 +273,7 @@ impl<'a> TryFrom<&'a [u8]> for Attachment<'a> {
             log_time: p.get()?,
             create_time: p.get()?,
             name: p.get()?,
-            content_type: p.get()?,
+            media_type: p.get()?,
             data: p.get_long_byte_array()?,
             crc: p.get()?,
         })
@@ -288,7 +288,7 @@ pub struct AttachmentIndex<'a> {
     pub create_time: Timestamp,
     pub data_size: u64,
     pub name: CowStr<'a>,
-    pub content_type: CowStr<'a>,
+    pub media_type: CowStr<'a>,
 }
 
 impl<'a> TryFrom<&'a [u8]> for AttachmentIndex<'a> {
@@ -302,7 +302,7 @@ impl<'a> TryFrom<&'a [u8]> for AttachmentIndex<'a> {
             create_time: p.get()?,
             data_size: p.get()?,
             name: p.get()?,
-            content_type: p.get()?,
+            media_type: p.get()?,
         })
     }
 }
@@ -426,7 +426,7 @@ pub struct AttachmentHeader<'a> {
     pub log_time: Timestamp,
     pub create_time: Timestamp,
     pub name: CowStr<'a>,
-    pub content_type: CowStr<'a>,
+    pub media_type: CowStr<'a>,
     pub data_len: u64,
 }
 
@@ -438,7 +438,7 @@ impl<'a> TryFrom<&'a [u8]> for AttachmentHeader<'a> {
             log_time: p.get()?,
             create_time: p.get()?,
             name: p.get()?,
-            content_type: p.get()?,
+            media_type: p.get()?,
             data_len: p.get()?,
         })
     }

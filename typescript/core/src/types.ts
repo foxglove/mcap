@@ -57,7 +57,7 @@ export type Attachment = {
   name: string;
   logTime: bigint;
   createTime: bigint;
-  contentType: string;
+  mediaType: string;
   data: Uint8Array;
 };
 export type AttachmentIndex = {
@@ -67,7 +67,7 @@ export type AttachmentIndex = {
   createTime: bigint;
   dataSize: bigint;
   name: string;
-  contentType: string;
+  mediaType: string;
 };
 export type Statistics = {
   messageCount: bigint;

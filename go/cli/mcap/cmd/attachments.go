@@ -16,7 +16,7 @@ func printAttachments(w io.Writer, attachmentIndexes []*mcap.AttachmentIndex) {
 	rows = append(rows, []string{
 		"log time",
 		"name",
-		"content type",
+		"media type",
 		"content length",
 		"offset",
 	})
@@ -24,7 +24,7 @@ func printAttachments(w io.Writer, attachmentIndexes []*mcap.AttachmentIndex) {
 		row := []string{
 			fmt.Sprintf("%d", idx.LogTime),
 			idx.Name,
-			idx.ContentType,
+			idx.MediaType,
 			fmt.Sprintf("%d", idx.DataSize),
 			fmt.Sprintf("%d", idx.Offset),
 		}

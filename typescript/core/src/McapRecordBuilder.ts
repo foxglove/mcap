@@ -167,7 +167,7 @@ export class McapRecordBuilder {
       .uint64(attachment.logTime)
       .uint64(attachment.createTime)
       .string(attachment.name)
-      .string(attachment.contentType)
+      .string(attachment.mediaType)
       .uint64(BigInt(attachment.data.byteLength))
       .bytes(attachment.data);
     this.bufferBuilder.uint32(
@@ -203,7 +203,7 @@ export class McapRecordBuilder {
       .uint64(attachmentIndex.createTime)
       .uint64(attachmentIndex.dataSize)
       .string(attachmentIndex.name)
-      .string(attachmentIndex.contentType);
+      .string(attachmentIndex.mediaType);
     if (this.options?.padRecords === true) {
       this.bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
     }
