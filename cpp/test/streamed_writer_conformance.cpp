@@ -169,20 +169,20 @@ mcap::Attachment ReadAttachment(const json& attachmentJson, mcap::ByteArray& buf
   // {
   //   "type": "Attachment",
   //   "fields": [
-  //     ["media_type", "application/octet-stream"],
   //     ["create_time", "1"],
   //     ["data", ["1", "2", "3"]],
   //     ["log_time", "2"],
+  //     ["media_type", "application/octet-stream"],
   //     ["name", "myFile"]
   //   ]
   // },
   mcap::Attachment attachment;
-  attachment.mediaType = attachmentJson["fields"][0][1];
   attachment.createTime = ReadUInt<uint64_t>(attachmentJson["fields"][1][1]);
   ReadBytes(attachmentJson["fields"][2][1], buffer);
   attachment.data = buffer.data();
   attachment.dataSize = buffer.size();
   attachment.logTime = ReadUInt<uint64_t>(attachmentJson["fields"][3][1]);
+  attachment.mediaType = attachmentJson["fields"][0][1];
   attachment.name = attachmentJson["fields"][4][1];
   return attachment;
 }

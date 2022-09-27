@@ -143,10 +143,10 @@ int main(int argc, char** argv) {
     recordsJson.push_back(json::object({
       {"type", "Attachment"},
       {"fields", json::array({
-                   {"media_type", attachment.mediaType},
                    {"create_time", std::to_string(attachment.createTime)},
                    {"data", ToJson(attachment.data, attachment.dataSize)},
                    {"log_time", std::to_string(attachment.logTime)},
+                   {"media_type", attachment.mediaType},
                    {"name", attachment.name},
                  })},
     }));
@@ -156,11 +156,11 @@ int main(int argc, char** argv) {
     recordsJson.push_back(json::object({
       {"type", "AttachmentIndex"},
       {"fields", json::array({
-                   {"media_type", attachmentIndex.mediaType},
                    {"create_time", std::to_string(attachmentIndex.createTime)},
                    {"data_size", std::to_string(attachmentIndex.dataSize)},
                    {"length", std::to_string(attachmentIndex.length)},
                    {"log_time", std::to_string(attachmentIndex.logTime)},
+                   {"media_type", attachmentIndex.mediaType},
                    {"name", attachmentIndex.name},
                    {"offset", std::to_string(attachmentIndex.offset)},
                  })},
