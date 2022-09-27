@@ -140,6 +140,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">__summary_offsets</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">SummaryOffset</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__use_statistics</span> <span class="o">=</span> <span class="n">use_statistics</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__use_summary_offsets</span> <span class="o">=</span> <span class="n">use_summary_offsets</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__data_section_crc</span> <span class="o">=</span> <span class="mi">0</span>
 
 <div class="viewcode-block" id="Writer.add_attachment"><a class="viewcode-back" href="../../../mcap-apidoc/mcap.mcap0.writer.html#mcap.mcap0.writer.Writer.add_attachment">[docs]</a>    <span class="k">def</span> <span class="nf">add_attachment</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">create_time</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">log_time</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">content_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span>
@@ -248,7 +249,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__finalize_chunk</span><span class="p">()</span>
 
-        <span class="n">DataEnd</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
+        <span class="n">DataEnd</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__data_section_crc</span><span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span>
 
         <span class="n">summary_start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">tell</span><span class="p">()</span>
@@ -423,11 +424,14 @@
 <span class="sd">            information for use in debugging.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">MCAP0_MAGIC</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__data_section_crc</span> <span class="o">=</span> <span class="n">zlib</span><span class="o">.</span><span class="n">crc32</span><span class="p">(</span><span class="n">MCAP0_MAGIC</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">__data_section_crc</span><span class="p">)</span>
         <span class="n">Header</span><span class="p">(</span><span class="n">profile</span><span class="p">,</span> <span class="n">library</span><span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span></div>
 
     <span class="k">def</span> <span class="nf">__flush</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="o">.</span><span class="n">end</span><span class="p">())</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="o">.</span><span class="n">end</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__data_section_crc</span> <span class="o">=</span> <span class="n">zlib</span><span class="o">.</span><span class="n">crc32</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">__data_section_crc</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">__finalize_chunk</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">__chunk_builder</span><span class="p">:</span>
