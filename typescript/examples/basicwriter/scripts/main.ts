@@ -1,4 +1,4 @@
-import { Mcap0Writer, IWritable } from "@mcap/core";
+import { McapWriter, IWritable } from "@mcap/core";
 import { open, FileHandle } from "fs/promises";
 
 // Mcap IWritable interface for nodejs FileHandle
@@ -25,7 +25,7 @@ async function main() {
   const fileHandle = await open(mcapFilePath, "w");
   const fileHandleWritable = new FileHandleWritable(fileHandle);
 
-  const mcapFile = new Mcap0Writer({
+  const mcapFile = new McapWriter({
     writable: fileHandleWritable,
     useStatistics: true,
     useChunks: true,

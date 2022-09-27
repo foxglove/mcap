@@ -1,7 +1,7 @@
 import { crc32 } from "@foxglove/crc";
 
 import Reader from "./Reader";
-import { isKnownOpcode, MCAP0_MAGIC, Opcode } from "./constants";
+import { isKnownOpcode, MCAP_MAGIC, Opcode } from "./constants";
 import { McapMagic, TypedMcapRecord } from "./types";
 
 /**
@@ -11,14 +11,14 @@ export function parseMagic(
   view: DataView,
   startOffset: number,
 ): { magic: McapMagic; usedBytes: number } | { magic?: undefined; usedBytes: 0 } {
-  if (startOffset + MCAP0_MAGIC.length > view.byteLength) {
+  if (startOffset + MCAP_MAGIC.length > view.byteLength) {
     return { usedBytes: 0 };
   }
-  if (!MCAP0_MAGIC.every((val, i) => val === view.getUint8(startOffset + i))) {
+  if (!MCAP_MAGIC.every((val, i) => val === view.getUint8(startOffset + i))) {
     throw new Error(
-      `Expected MCAP magic '${MCAP0_MAGIC.map((val) => val.toString(16).padStart(2, "0")).join(
+      `Expected MCAP magic '${MCAP_MAGIC.map((val) => val.toString(16).padStart(2, "0")).join(
         " ",
-      )}', found '${Array.from(MCAP0_MAGIC, (_, i) =>
+      )}', found '${Array.from(MCAP_MAGIC, (_, i) =>
         view
           .getUint8(startOffset + i)
           .toString(16)
@@ -28,7 +28,7 @@ export function parseMagic(
   }
   return {
     magic: { specVersion: "0" },
-    usedBytes: MCAP0_MAGIC.length,
+    usedBytes: MCAP_MAGIC.length,
   };
 }
 

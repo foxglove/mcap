@@ -1,5 +1,5 @@
 import { crc32, crc32Init, crc32Update, crc32Final } from "@foxglove/crc";
-import { Mcap0Types, Mcap0Constants, Mcap0RecordBuilder, Mcap0ChunkBuilder } from "@mcap/core";
+import { McapTypes, McapConstants, McapRecordBuilder, McapChunkBuilder } from "@mcap/core";
 import { program } from "commander";
 import fs from "fs/promises";
 import path from "path";
@@ -9,19 +9,19 @@ import { collect } from "../util/collect";
 import listDirRecursive from "../util/listDirRecursive";
 import { TestDataRecord, TestFeatures } from "../variants/types";
 
-type MetadataIndex = Mcap0Types.MetadataIndex;
-type ChunkIndex = Mcap0Types.ChunkIndex;
-type AttachmentIndex = Mcap0Types.AttachmentIndex;
+type MetadataIndex = McapTypes.MetadataIndex;
+type ChunkIndex = McapTypes.ChunkIndex;
+type AttachmentIndex = McapTypes.AttachmentIndex;
 
 function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
-  const builder = new Mcap0RecordBuilder({
+  const builder = new McapRecordBuilder({
     padRecords: features.has(TestFeatures.AddExtraDataToRecords),
   });
   builder.writeMagic();
   builder.writeHeader({ profile: "", library: "" });
 
   const chunk = features.has(TestFeatures.UseChunks)
-    ? new Mcap0ChunkBuilder({ useMessageIndex: features.has(TestFeatures.UseMessageIndex) })
+    ? new McapChunkBuilder({ useMessageIndex: features.has(TestFeatures.UseMessageIndex) })
     : undefined;
   const chunkCount = chunk ? 1 : 0;
 
@@ -204,42 +204,42 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
     summaryOffsetStart = BigInt(builder.length);
     if (repeatedSchemasLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: Mcap0Constants.Opcode.SCHEMA,
+        groupOpcode: McapConstants.Opcode.SCHEMA,
         groupStart: repeatedSchemasStart,
         groupLength: repeatedSchemasLength,
       });
     }
     if (repeatedChannelInfosLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: Mcap0Constants.Opcode.CHANNEL,
+        groupOpcode: McapConstants.Opcode.CHANNEL,
         groupStart: repeatedChannelInfosStart,
         groupLength: repeatedChannelInfosLength,
       });
     }
     if (statisticsLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: Mcap0Constants.Opcode.STATISTICS,
+        groupOpcode: McapConstants.Opcode.STATISTICS,
         groupStart: statisticsStart,
         groupLength: statisticsLength,
       });
     }
     if (metadataIndexLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: Mcap0Constants.Opcode.METADATA_INDEX,
+        groupOpcode: McapConstants.Opcode.METADATA_INDEX,
         groupStart: metadataIndexStart,
         groupLength: metadataIndexLength,
       });
     }
     if (attachmentIndexLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: Mcap0Constants.Opcode.ATTACHMENT_INDEX,
+        groupOpcode: McapConstants.Opcode.ATTACHMENT_INDEX,
         groupStart: attachmentIndexStart,
         groupLength: attachmentIndexLength,
       });
     }
     if (chunkIndexLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: Mcap0Constants.Opcode.CHUNK_INDEX,
+        groupOpcode: McapConstants.Opcode.CHUNK_INDEX,
         groupStart: chunkIndexStart,
         groupLength: chunkIndexLength,
       });
@@ -255,7 +255,7 @@ function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
   );
   summaryCrc = crc32Update(summaryCrc, summaryData);
   const tempBuffer = new DataView(new ArrayBuffer(1 + 8 + 8 + 8));
-  tempBuffer.setUint8(0, Mcap0Constants.Opcode.FOOTER);
+  tempBuffer.setUint8(0, McapConstants.Opcode.FOOTER);
   tempBuffer.setBigUint64(1, 8n + 8n + 4n, true);
   tempBuffer.setBigUint64(1 + 8, hasSummary ? summaryStart : 0n, true);
   tempBuffer.setBigUint64(1 + 8 + 8, summaryOffsetStart, true);

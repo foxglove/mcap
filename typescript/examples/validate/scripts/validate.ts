@@ -3,10 +3,10 @@ import { LazyMessageReader as ROS1LazyMessageReader } from "@foxglove/rosmsg-ser
 import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
 import {
   hasMcapPrefix,
-  Mcap0Constants,
-  Mcap0IndexedReader,
-  Mcap0StreamReader,
-  Mcap0Types,
+  McapConstants,
+  McapIndexedReader,
+  McapStreamReader,
+  McapTypes,
 } from "@mcap/core";
 import { program } from "commander";
 import { createReadStream } from "fs";
@@ -18,10 +18,9 @@ import { FileDescriptorSet } from "protobufjs/ext/descriptor";
 import decompressLZ4 from "wasm-lz4";
 import { ZstdCodec, ZstdModule, ZstdStreaming } from "zstd-codec";
 
-type Channel = Mcap0Types.Channel;
-type DecompressHandlers = Mcap0Types.DecompressHandlers;
-type McapStreamReader = Mcap0Types.McapStreamReader;
-type TypedMcapRecord = Mcap0Types.TypedMcapRecord;
+type Channel = McapTypes.Channel;
+type DecompressHandlers = McapTypes.DecompressHandlers;
+type TypedMcapRecord = McapTypes.TypedMcapRecord;
 
 function log(...data: unknown[]) {
   console.log(...data);
@@ -121,7 +120,7 @@ async function validate(
   };
 
   const recordCounts = new Map<TypedMcapRecord["type"], number>();
-  const schemasById = new Map<number, Mcap0Types.TypedMcapRecords["Schema"]>();
+  const schemasById = new Map<number, McapTypes.TypedMcapRecords["Schema"]>();
   const channelInfoById = new Map<
     number,
     {
@@ -228,11 +227,11 @@ async function validate(
   {
     const handle = await fs.open(filePath, "r");
     try {
-      const buffer = new Uint8Array(Mcap0Constants.MCAP0_MAGIC.length);
+      const buffer = new Uint8Array(McapConstants.MCAP_MAGIC.length);
       const readResult = await handle.read({
         buffer,
         offset: 0,
-        length: Mcap0Constants.MCAP0_MAGIC.length,
+        length: McapConstants.MCAP_MAGIC.length,
       });
       isValidMcap = hasMcapPrefix(new DataView(buffer.buffer, 0, readResult.bytesRead));
       if (!isValidMcap) {
@@ -257,7 +256,7 @@ async function validate(
     const handle = await fs.open(filePath, "r");
     try {
       let buffer = new ArrayBuffer(4096);
-      const reader = await Mcap0IndexedReader.Initialize({
+      const reader = await McapIndexedReader.Initialize({
         readable: {
           size: async () => BigInt((await handle.stat()).size),
           read: async (offset, length) => {
@@ -301,7 +300,7 @@ async function validate(
   if (!processed) {
     await readStream(
       filePath,
-      new Mcap0StreamReader({
+      new McapStreamReader({
         includeChunks: true,
         decompressHandlers,
         validateCrcs: true,

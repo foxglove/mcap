@@ -12,7 +12,6 @@ import (
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
-	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
 
@@ -105,19 +104,14 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		}
 		rows = append(rows, row)
 	}
-	tw := tablewriter.NewWriter(buf)
-	tw.SetBorder(false)
-	tw.SetAutoWrapText(false)
-	tw.SetAlignment(tablewriter.ALIGN_LEFT)
-	tw.SetColumnSeparator("")
-	tw.AppendBulk(rows)
-	tw.Render()
-
-	var attachmentCount uint32
+	utils.FormatTable(buf, rows)
+	var attachmentCount, metadataCount uint32
 	if info.Statistics != nil {
 		attachmentCount = info.Statistics.AttachmentCount
+		metadataCount = info.Statistics.MetadataCount
 	}
 	fmt.Fprintf(buf, "attachments: %d\n", attachmentCount)
+	fmt.Fprintf(buf, "metadata: %d\n", metadataCount)
 	_, err := buf.WriteTo(w)
 	return err
 }

@@ -107,7 +107,7 @@ public final class MCAPWriter {
   }
 
   public func start(library: String, profile: String) async {
-    buffer.append(MCAP0_MAGIC)
+    buffer.append(mcapMagic)
     Header(profile: profile, library: library).serialize(to: &buffer)
   }
 
@@ -327,7 +327,7 @@ public final class MCAPWriter {
     )
     footer.summaryCRC = runningCRC.final
     footer.serialize(to: &buffer)
-    buffer.append(MCAP0_MAGIC)
+    buffer.append(mcapMagic)
     await _flush()
   }
 }

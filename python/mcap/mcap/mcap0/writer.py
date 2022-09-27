@@ -335,12 +335,11 @@ class Writer:
         """
         Registers a new message channel. Returns the numeric id of the new channel.
 
-        :param schema_id: The schema for messages on this channel. A schema_id of 0 indicates
-            there is no schema for this channel.
+        :param schema_id: The schema for messages on this channel. A schema_id of 0 indicates there
+            is no schema for this channel.
         :param topic: The channel topic.
-        :param message_encoding: Encoding for messages on this channel. The value should be one
-            of the well-known message encodings.
-            Custom values should use the `x-` prefix.
+        :param message_encoding: Encoding for messages on this channel. See the list of well-known
+            message encodings for common values.
         :param metadata: Metadata about this channel.
         """
         channel_id = len(self.__channels) + 1
@@ -365,9 +364,8 @@ class Writer:
         Registers a new message schema. Returns the new integer schema id.
 
         :param name: An identifier for the schema.
-        :param encoding: Format for the schema. The value should be one of the well-known schema
-            encodings. Custom values should use the `x-` prefix. An empty string indicates no schema
-            is available.
+        :param encoding: Format for the schema. See the list of well-known schema encodings for
+            common values. An empty string indicates no schema is available.
         :param data: Schema data. Must conform to the schema encoding. If `encoding` is an empty
             string, `data` should be 0 length.
         """

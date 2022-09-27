@@ -13,11 +13,11 @@ usage:
 import argparse
 import base64
 import csv
-import json
-import typing
-import struct
-from pathlib import Path
 import datetime
+import json
+import struct
+import typing
+from pathlib import Path
 
 # tutorial-mcap-imports-start
 from mcap.mcap0.writer import Writer
@@ -79,7 +79,7 @@ def main():
     # tutorial-write-header-start
     with open(args.output, "wb") as f:
         writer = Writer(f)
-        writer.start("x-jsonschema", library="my-excellent-library")
+        writer.start()
         # tutorial-write-header-end
 
         # tutorial-write-channel-start
