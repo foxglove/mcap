@@ -4,10 +4,10 @@
     {
       "type": "Attachment",
       "fields": [
-        ["media_type", "application/octet-stream"],
         ["create_time", "1"],
         ["data", ["1", "2", "3"]],
         ["log_time", "2"],
+        ["media_type", "application/octet-stream"],
         ["name", "myFile"]
       ]
     },
