@@ -106,6 +106,7 @@ class Writer:
         self.__summary_offsets: List[SummaryOffset] = []
         self.__use_statistics = use_statistics
         self.__use_summary_offsets = use_summary_offsets
+        self.__data_section_crc = 0
 
     def add_attachment(
         self, create_time: int, log_time: int, name: str, content_type: str, data: bytes
@@ -214,7 +215,7 @@ class Writer:
         """
         self.__finalize_chunk()
 
-        DataEnd(0).write(self.__record_builder)
+        DataEnd(self.__data_section_crc).write(self.__record_builder)
         self.__flush()
 
         summary_start = self.__stream.tell()
@@ -389,11 +390,14 @@ class Writer:
             information for use in debugging.
         """
         self.__stream.write(MCAP0_MAGIC)
+        self.__data_section_crc = zlib.crc32(MCAP0_MAGIC, self.__data_section_crc)
         Header(profile, library).write(self.__record_builder)
         self.__flush()
 
     def __flush(self):
-        self.__stream.write(self.__record_builder.end())
+        data = self.__record_builder.end()
+        self.__data_section_crc = zlib.crc32(data, self.__data_section_crc)
+        self.__stream.write(data)
 
     def __finalize_chunk(self):
         if not self.__chunk_builder:
