@@ -17,7 +17,7 @@ class Attachment(McapRecord):
     create_time: int
     log_time: int
     name: str
-    content_type: str
+    media_type: str
     data: bytes
 
     def write(self, stream: RecordBuilder):
@@ -26,7 +26,7 @@ class Attachment(McapRecord):
         builder.write8(self.log_time)
         builder.write8(self.create_time)
         builder.write_prefixed_string(self.name)
-        builder.write_prefixed_string(self.content_type)
+        builder.write_prefixed_string(self.media_type)
         builder.write8(len(self.data))
         builder.write(self.data)
         builder.write4(0)  # crc
@@ -40,7 +40,7 @@ class Attachment(McapRecord):
         log_time = stream.read8()
         create_time = stream.read8()
         name = stream.read_prefixed_string()
-        content_type = stream.read_prefixed_string()
+        media_type = stream.read_prefixed_string()
         data_length = stream.read8()
         data = stream.read(data_length)
         stream.read4()  # skip crc
@@ -48,7 +48,7 @@ class Attachment(McapRecord):
             create_time=create_time,
             log_time=log_time,
             name=name,
-            content_type=content_type,
+            media_type=media_type,
             data=data,
         )
 
@@ -61,7 +61,7 @@ class AttachmentIndex(McapRecord):
     create_time: int
     data_size: int
     name: str
-    content_type: str
+    media_type: str
 
     def write(self, stream: RecordBuilder):
         stream.start_record(Opcode.ATTACHMENT_INDEX)
@@ -71,7 +71,7 @@ class AttachmentIndex(McapRecord):
         stream.write8(self.create_time)
         stream.write8(self.data_size)
         stream.write_prefixed_string(self.name)
-        stream.write_prefixed_string(self.content_type)
+        stream.write_prefixed_string(self.media_type)
         stream.finish_record()
 
     @staticmethod
@@ -82,7 +82,7 @@ class AttachmentIndex(McapRecord):
         create_time = stream.read8()
         data_size = stream.read8()
         name = stream.read_prefixed_string()
-        content_type = stream.read_prefixed_string()
+        media_type = stream.read_prefixed_string()
         return AttachmentIndex(
             offset=offset,
             length=length,
@@ -90,7 +90,7 @@ class AttachmentIndex(McapRecord):
             create_time=create_time,
             data_size=data_size,
             name=name,
-            content_type=content_type,
+            media_type=media_type,
         )
 
 

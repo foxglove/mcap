@@ -72,7 +72,7 @@ def write_file(features: List[str], expected_records: List[Dict[str, Any]]) -> b
                 create_time=record.create_time,
                 log_time=record.log_time,
                 name=record.name,
-                content_type=record.content_type,
+                media_type=record.media_type,
                 data=record.data,
             )
         if isinstance(record, Channel):

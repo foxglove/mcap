@@ -543,20 +543,20 @@ public struct Attachment: Record {
   public var logTime: Timestamp
   public var createTime: Timestamp
   public var name: String
-  public var contentType: String
+  public var mediaType: String
   public var data: Data
 
   public init(
     logTime: Timestamp,
     createTime: Timestamp,
     name: String,
-    contentType: String,
+    mediaType: String,
     data: Data
   ) {
     self.logTime = logTime
     self.createTime = createTime
     self.name = name
-    self.contentType = contentType
+    self.mediaType = mediaType
     self.data = data
   }
 
@@ -565,7 +565,7 @@ public struct Attachment: Record {
     logTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
     createTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
     name = try buffer.readPrefixedString(from: &offset)
-    contentType = try buffer.readPrefixedString(from: &offset)
+    mediaType = try buffer.readPrefixedString(from: &offset)
     data = try buffer.readUInt64PrefixedData(from: &offset)
     let crcEndOffset = offset
     let expectedCRC = try buffer.read(littleEndian: UInt32.self, from: &offset)
@@ -583,7 +583,7 @@ public struct Attachment: Record {
     data.append(littleEndian: logTime)
     data.append(littleEndian: createTime)
     data.appendPrefixedString(name)
-    data.appendPrefixedString(contentType)
+    data.appendPrefixedString(mediaType)
     data.appendUInt64PrefixedData(self.data)
     var crc = CRC32()
     crc.update(data[fieldsStartOffset ..< data.count])
@@ -599,7 +599,7 @@ public struct AttachmentIndex: Record {
   public var createTime: Timestamp
   public var dataSize: UInt64
   public var name: String
-  public var contentType: String
+  public var mediaType: String
 
   public init(
     offset: UInt64,
@@ -608,7 +608,7 @@ public struct AttachmentIndex: Record {
     createTime: Timestamp,
     dataSize: UInt64,
     name: String,
-    contentType: String
+    mediaType: String
   ) {
     self.offset = offset
     self.length = length
@@ -616,7 +616,7 @@ public struct AttachmentIndex: Record {
     self.createTime = createTime
     self.dataSize = dataSize
     self.name = name
-    self.contentType = contentType
+    self.mediaType = mediaType
   }
 
   public init(deserializingFieldsFrom buffer: UnsafeRawBufferPointer) throws {
@@ -627,7 +627,7 @@ public struct AttachmentIndex: Record {
     createTime = try buffer.read(littleEndian: Timestamp.self, from: &offset)
     dataSize = try buffer.read(littleEndian: UInt64.self, from: &offset)
     name = try buffer.readPrefixedString(from: &offset)
-    contentType = try buffer.readPrefixedString(from: &offset)
+    mediaType = try buffer.readPrefixedString(from: &offset)
   }
 
   public func serializeFields(to data: inout Data) {
@@ -637,7 +637,7 @@ public struct AttachmentIndex: Record {
     data.append(littleEndian: createTime)
     data.append(littleEndian: dataSize)
     data.appendPrefixedString(name)
-    data.appendPrefixedString(contentType)
+    data.appendPrefixedString(mediaType)
   }
 }
 

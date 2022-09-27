@@ -4,10 +4,10 @@
     {
       "type": "Attachment",
       "fields": [
-        ["content_type", "application/octet-stream"],
         ["create_time", "1"],
         ["data", ["1", "2", "3"]],
         ["log_time", "2"],
+        ["media_type", "application/octet-stream"],
         ["name", "myFile"]
       ]
     },
@@ -29,11 +29,11 @@
     {
       "type": "AttachmentIndex",
       "fields": [
-        ["content_type", "application/octet-stream"],
         ["create_time", "1"],
         ["data_size", "3"],
         ["length", "81"],
         ["log_time", "2"],
+        ["media_type", "application/octet-stream"],
         ["name", "myFile"],
         ["offset", "28"]
       ]

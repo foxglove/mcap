@@ -177,7 +177,7 @@ public final class MCAPWriter {
         createTime: attachment.createTime,
         dataSize: UInt64(attachment.data.count),
         name: attachment.name,
-        contentType: attachment.contentType
+        mediaType: attachment.mediaType
       )
     )
   }

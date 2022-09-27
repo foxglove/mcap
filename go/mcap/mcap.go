@@ -223,24 +223,24 @@ type ChunkIndex struct {
 // calibration data, or other arbitrary data. Attachment records must not appear
 // within a chunk.
 type Attachment struct {
-	LogTime     uint64
-	CreateTime  uint64
-	Name        string
-	ContentType string
-	Data        []byte
-	CRC         uint32
+	LogTime    uint64
+	CreateTime uint64
+	Name       string
+	MediaType  string
+	Data       []byte
+	CRC        uint32
 }
 
 // AttachmentIndex records contain the location of attachments in the file. An
 // AttachmentIndex record exists for every Attachment in the file.
 type AttachmentIndex struct {
-	Offset      uint64
-	Length      uint64
-	LogTime     uint64
-	CreateTime  uint64
-	DataSize    uint64
-	Name        string
-	ContentType string
+	Offset     uint64
+	Length     uint64
+	LogTime    uint64
+	CreateTime uint64
+	DataSize   uint64
+	Name       string
+	MediaType  string
 }
 
 // Statistics records contain summary information about recorded data. The

@@ -248,9 +248,9 @@ fn read_attachment_header<R: std::io::Read>(reader: &mut R) -> Result<Vec<u8>, L
     let old_len = buf.len();
     buf.resize(buf.len() + (name_len as usize) + 4, 0);
     reader.read_exact(&mut buf[old_len..])?;
-    let content_type_len = u32::from_le_bytes(buf[(buf.len() - 4)..].try_into().unwrap());
+    let media_type_len = u32::from_le_bytes(buf[(buf.len() - 4)..].try_into().unwrap());
     let old_len = buf.len();
-    buf.resize(buf.len() + (content_type_len as usize) + 8, 0);
+    buf.resize(buf.len() + (media_type_len as usize) + 8, 0);
     reader.read_exact(&mut buf[old_len..])?;
     Ok(buf)
 }

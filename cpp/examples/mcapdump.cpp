@@ -132,7 +132,7 @@ std::string ToString(const mcap::ChunkIndex& chunkIndex) {
 std::string ToString(const mcap::Attachment& attachment) {
   return StrCat("[Attachment] log_time=", attachment.logTime,
                 ", create_time=", attachment.createTime, ", name=", attachment.name,
-                ", content_type=", attachment.contentType, ", data=<", attachment.dataSize,
+                ", media_type=", attachment.mediaType, ", data=<", attachment.dataSize,
                 " bytes>, crc=", attachment.crc);
 }
 
@@ -141,7 +141,7 @@ std::string ToString(const mcap::AttachmentIndex& attachmentIndex) {
                 ", length=", attachmentIndex.length, ", log_time=", attachmentIndex.logTime,
                 ", create_time=", attachmentIndex.createTime,
                 ", data_size=", attachmentIndex.dataSize, ", name=", attachmentIndex.name,
-                ", content_type=", attachmentIndex.contentType);
+                ", media_type=", attachmentIndex.mediaType);
 }
 
 std::string ToString(const mcap::Statistics& statistics) {

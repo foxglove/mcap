@@ -76,7 +76,7 @@ type ParsedRecord =
         logTime: bigint;
         createTime: bigint;
         name: { str: string };
-        contentType: { str: string };
+        mediaType: { str: string };
         data: Uint8Array;
         crc32: number;
       };
@@ -90,7 +90,7 @@ type ParsedRecord =
         createTime: bigint;
         dataSize: bigint;
         name: { str: string };
-        contentType: { str: string };
+        mediaType: { str: string };
       };
     }
   | {
@@ -259,7 +259,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
           result.push({
             type: "Attachment",
             name: record.body.name.str,
-            contentType: record.body.contentType.str,
+            mediaType: record.body.mediaType.str,
             logTime: record.body.logTime,
             createTime: record.body.createTime,
             data: record.body.data,
@@ -271,7 +271,7 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
             offset: record.body.ofsAttachment,
             length: record.body.lenAttachment,
             name: record.body.name.str,
-            contentType: record.body.contentType.str,
+            mediaType: record.body.mediaType.str,
             logTime: record.body.logTime,
             createTime: record.body.createTime,
             dataSize: record.body.dataSize,
