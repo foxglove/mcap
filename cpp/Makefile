@@ -58,7 +58,7 @@ run-examples-host:
 	./run_examples.sh
 
 .PHONY: ci-image
-ci-image:
+ci-image: hdoc-build
 	docker build -t mcap_cpp_ci -f ci.Dockerfile --build-arg IMAGE=ubuntu:focal --build-arg CC=clang-13 --build-arg CXX=clang++-13 .
 
 .PHONY: ci
@@ -66,10 +66,10 @@ ci: ci-image
 	docker run -t --rm -v $(CURDIR):/mcap/cpp mcap_cpp_ci ./build.sh
 
 .PHONY: ci-docs
-ci-docs: hdoc-build ci-image
+ci-docs: ci-image
 	docker build -t mcap_cpp_ci_jammy -f ci.Dockerfile .
 	docker run -t --rm -v $(CURDIR):/mcap/cpp -v $(CURDIR)/../__docs__/cpp:/hdoc-output mcap_cpp_ci_jammy ./build-docs.sh
 
 .PHONY: ci-format-check
-ci-format-check: hdoc-build ci-image
+ci-format-check: ci-image
 	docker run -t --rm -v $(CURDIR):/mcap/cpp mcap_cpp_ci python3 scripts/format.py .
