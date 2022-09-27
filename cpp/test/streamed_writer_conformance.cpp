@@ -23,6 +23,7 @@ mcap::McapWriterOptions ReadOptions(const json& featuresJson) {
   // ["ch", "mx", "st", "rsh", "rch", "chx", "sum", "pad"]
   mcap::McapWriterOptions options{""};
   options.compression = mcap::Compression::None;
+  options.enableDataCRC = true;
   options.noChunking = true;
   options.noMessageIndex = true;
   options.noSummary = true;

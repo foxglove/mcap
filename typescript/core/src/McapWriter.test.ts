@@ -157,7 +157,7 @@ describe("McapWriter", () => {
       },
       {
         type: "DataEnd",
-        dataSectionCrc: 0,
+        dataSectionCrc: 4132032003,
       },
       {
         type: "Channel",
@@ -314,7 +314,7 @@ describe("McapWriter", () => {
       },
       {
         type: "DataEnd",
-        dataSectionCrc: 0,
+        dataSectionCrc: 475180730,
       },
       {
         type: "Channel",

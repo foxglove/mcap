@@ -632,7 +632,7 @@ func (w *Writer) Close() error {
 	}
 	w.closed = true
 	err := w.WriteDataEnd(&DataEnd{
-		DataSectionCRC: 0,
+		DataSectionCRC: w.w.Checksum(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to write data end: %w", err)

@@ -250,9 +250,7 @@ public final class MCAPWriter {
   public func end() async {
     await _closeChunk()
     await _flush()
-    DataEnd(dataSectionCRC: 0).serialize(to: &buffer)
-    // Re-enable when tests are updated to include data section CRC
-    //    DataEnd(dataSectionCRC: runningCRC.final).serialize(to: &buffer)
+    DataEnd(dataSectionCRC: runningCRC.final).serialize(to: &buffer)
 
     await _flush()
     runningCRC.reset()

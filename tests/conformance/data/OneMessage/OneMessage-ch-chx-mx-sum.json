@@ -30,7 +30,7 @@
         ["sequence", "10"]
       ]
     },
-    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
+    {"type": "DataEnd", "fields": [["data_section_crc", "1703938896"]]},
     {
       "type": "ChunkIndex",
       "fields": [

@@ -5,7 +5,7 @@
       "type": "Metadata",
       "fields": [["metadata", {"foo": "bar"}], ["name", "myMetadata"]]
     },
-    {"type": "DataEnd", "fields": [["data_section_crc", "0"]]},
+    {"type": "DataEnd", "fields": [["data_section_crc", "3118667413"]]},
     {
       "type": "MetadataIndex",
       "fields": [["length", "44"], ["name", "myMetadata"], ["offset", "28"]]
