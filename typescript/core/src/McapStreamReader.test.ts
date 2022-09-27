@@ -336,7 +336,7 @@ describe("McapStreamReader", () => {
             ...uint64LE(2n), // log time
             ...uint64LE(1n), // create time
             ...string("myFile"), // name
-            ...string("text/plain"), // content type
+            ...string("text/plain"), // media type
             ...uint64LE(3n), // data length
             10,
             11,
@@ -560,7 +560,7 @@ describe("McapStreamReader", () => {
             ...uint64LE(2n), // log time
             ...uint64LE(1n), // create time
             ...string("myFile"), // name
-            ...string("text/plain"), // content type
+            ...string("text/plain"), // media type
             ...uint64PrefixedBytes(new TextEncoder().encode("hello")), // data
           ]),
         ),
@@ -577,7 +577,7 @@ describe("McapStreamReader", () => {
       name: "myFile",
       logTime: 2n,
       createTime: 1n,
-      contentType: "text/plain",
+      mediaType: "text/plain",
       data: new TextEncoder().encode("hello"),
     } as TypedMcapRecords["Attachment"]);
     expect(reader.nextRecord()).toEqual({

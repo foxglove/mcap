@@ -36,7 +36,7 @@ const inputs: TestInput[] = [
       {
         type: "Attachment",
         name: "myFile",
-        contentType: "application/octet-stream",
+        mediaType: "application/octet-stream",
         logTime: 2n,
         createTime: 1n,
         data: new Uint8Array([1, 2, 3]),

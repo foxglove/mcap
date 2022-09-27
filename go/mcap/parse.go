@@ -278,9 +278,9 @@ func ParseAttachment(buf []byte) (*Attachment, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read attachment name: %w", err)
 	}
-	contentType, offset, err := readPrefixedString(buf, offset)
+	mediaType, offset, err := readPrefixedString(buf, offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read content type: %w", err)
+		return nil, fmt.Errorf("failed to read media type: %w", err)
 	}
 	dataSize, offset, err := getUint64(buf, offset)
 	if err != nil {
@@ -293,12 +293,12 @@ func ParseAttachment(buf []byte) (*Attachment, error) {
 		return nil, fmt.Errorf("failed to read CRC: %w", err)
 	}
 	return &Attachment{
-		LogTime:     logTime,
-		CreateTime:  createTime,
-		Name:        name,
-		ContentType: contentType,
-		Data:        data,
-		CRC:         crc,
+		LogTime:    logTime,
+		CreateTime: createTime,
+		Name:       name,
+		MediaType:  mediaType,
+		Data:       data,
+		CRC:        crc,
 	}, nil
 }
 
@@ -328,18 +328,18 @@ func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read attachment name: %w", err)
 	}
-	contentType, _, err := readPrefixedString(buf, offset)
+	mediaType, _, err := readPrefixedString(buf, offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read content type: %w", err)
+		return nil, fmt.Errorf("failed to read media type: %w", err)
 	}
 	return &AttachmentIndex{
-		Offset:      attachmentOffset,
-		Length:      length,
-		LogTime:     logTime,
-		CreateTime:  createTime,
-		DataSize:    dataSize,
-		Name:        name,
-		ContentType: contentType,
+		Offset:     attachmentOffset,
+		Length:     length,
+		LogTime:    logTime,
+		CreateTime: createTime,
+		DataSize:   dataSize,
+		Name:       name,
+		MediaType:  mediaType,
 	}, nil
 }
 
