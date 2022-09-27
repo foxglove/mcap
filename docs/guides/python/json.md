@@ -103,7 +103,7 @@ Open a file where we'll output our MCAP data and write our header:
 ```python
 with open(args.output, "wb") as f:
   writer = Writer(f)
-  writer.start("x-jsonschema", library="my-excellent-library") # can use any name, as we are not using an MCAP profile: https://www.google.com/url?q=https://github.com/foxglove/mcap/blob/main/docs/specification/appendix.md%23well-known-profiles&sa=D&source=docs&ust=1658261499762935&usg=AOvVaw2GgwRzJbSlqWOErSFru7L_
+  writer.start()
 ```
 
 ### Register channel
@@ -160,7 +160,7 @@ Run the following commands to summarize your file's contents and to verify that 
 ```bash
 $ mcap info output.mcap
   library: my-excellent-library
-  profile: x-jsonschema
+  profile:
   messages: 1
   duration: 0s
   start: 2011-11-04T01:36:05.987339008+11:00 (1320330965.987339008)
