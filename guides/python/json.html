@@ -1253,7 +1253,7 @@
 <p>Open a file where we&rsquo;ll output our MCAP data and write our header:</p>
 <div class="highlight"><pre><span></span><code><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">output</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
   <span class="n">writer</span> <span class="o">=</span> <span class="n">Writer</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
-  <span class="n">writer</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="s2">&quot;x-jsonschema&quot;</span><span class="p">,</span> <span class="n">library</span><span class="o">=</span><span class="s2">&quot;my-excellent-library&quot;</span><span class="p">)</span> <span class="c1"># can use any name, as we are not using an MCAP profile: https://www.google.com/url?q=https://github.com/foxglove/mcap/blob/main/docs/specification/appendix.md%23well-known-profiles&amp;sa=D&amp;source=docs&amp;ust=1658261499762935&amp;usg=AOvVaw2GgwRzJbSlqWOErSFru7L_</span>
+  <span class="n">writer</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 </code></pre></div>
 <h3 id="register-channel">Register channel</h3>
 <p>Let&rsquo;s create a channel of messages to contain our point cloud. The schema&rsquo;s name and content tell Foxglove Studio that it can parse and display this message as a point cloud.</p>
@@ -1293,7 +1293,7 @@
 <p>Run the following commands to summarize your file&rsquo;s contents and to verify that it has no issues:</p>
 <div class="highlight"><pre><span></span><code>$ mcap info output.mcap
   library: my-excellent-library
-  profile: x-jsonschema
+  profile:
   messages: <span class="m">1</span>
   duration: 0s
   start: <span class="m">2011</span>-11-04T01:36:05.987339008+11:00 <span class="o">(</span><span class="m">1320330965</span>.987339008<span class="o">)</span>

@@ -165,12 +165,11 @@ not close the underlying output stream.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>schema_id</strong> – The schema for messages on this channel. A schema_id of 0 indicates
-there is no schema for this channel.</p></li>
+<li><p><strong>schema_id</strong> – The schema for messages on this channel. A schema_id of 0 indicates there
+is no schema for this channel.</p></li>
 <li><p><strong>topic</strong> – The channel topic.</p></li>
-<li><p><strong>message_encoding</strong> – Encoding for messages on this channel. The value should be one
-of the well-known message encodings.
-Custom values should use the <cite>x-</cite> prefix.</p></li>
+<li><p><strong>message_encoding</strong> – Encoding for messages on this channel. See the list of well-known
+message encodings for common values.</p></li>
 <li><p><strong>metadata</strong> – Metadata about this channel.</p></li>
 </ul>
 </dd>
@@ -185,9 +184,8 @@ Custom values should use the <cite>x-</cite> prefix.</p></li>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>name</strong> – An identifier for the schema.</p></li>
-<li><p><strong>encoding</strong> – Format for the schema. The value should be one of the well-known schema
-encodings. Custom values should use the <cite>x-</cite> prefix. An empty string indicates no schema
-is available.</p></li>
+<li><p><strong>encoding</strong> – Format for the schema. See the list of well-known schema encodings for
+common values. An empty string indicates no schema is available.</p></li>
 <li><p><strong>data</strong> – Schema data. Must conform to the schema encoding. If <cite>encoding</cite> is an empty
 string, <cite>data</cite> should be 0 length.</p></li>
 </ul>

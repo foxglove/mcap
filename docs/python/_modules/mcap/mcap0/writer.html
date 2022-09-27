@@ -368,12 +368,11 @@
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Registers a new message channel. Returns the numeric id of the new channel.</span>
 
-<span class="sd">        :param schema_id: The schema for messages on this channel. A schema_id of 0 indicates</span>
-<span class="sd">            there is no schema for this channel.</span>
+<span class="sd">        :param schema_id: The schema for messages on this channel. A schema_id of 0 indicates there</span>
+<span class="sd">            is no schema for this channel.</span>
 <span class="sd">        :param topic: The channel topic.</span>
-<span class="sd">        :param message_encoding: Encoding for messages on this channel. The value should be one</span>
-<span class="sd">            of the well-known message encodings.</span>
-<span class="sd">            Custom values should use the `x-` prefix.</span>
+<span class="sd">        :param message_encoding: Encoding for messages on this channel. See the list of well-known</span>
+<span class="sd">            message encodings for common values.</span>
 <span class="sd">        :param metadata: Metadata about this channel.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">channel_id</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__channels</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
@@ -398,9 +397,8 @@
 <span class="sd">        Registers a new message schema. Returns the new integer schema id.</span>
 
 <span class="sd">        :param name: An identifier for the schema.</span>
-<span class="sd">        :param encoding: Format for the schema. The value should be one of the well-known schema</span>
-<span class="sd">            encodings. Custom values should use the `x-` prefix. An empty string indicates no schema</span>
-<span class="sd">            is available.</span>
+<span class="sd">        :param encoding: Format for the schema. See the list of well-known schema encodings for</span>
+<span class="sd">            common values. An empty string indicates no schema is available.</span>
 <span class="sd">        :param data: Schema data. Must conform to the schema encoding. If `encoding` is an empty</span>
 <span class="sd">            string, `data` should be 0 length.</span>
 <span class="sd">        &quot;&quot;&quot;</span>

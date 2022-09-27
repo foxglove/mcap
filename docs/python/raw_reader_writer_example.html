@@ -60,8 +60,7 @@
 <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">stream</span><span class="p">:</span>
     <span class="n">writer</span> <span class="o">=</span> <span class="n">Writer</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
 
-    <span class="c1"># The library argument helps identify what tool wrote the file.</span>
-    <span class="n">writer</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="n">profile</span><span class="o">=</span><span class="s2">&quot;x-custom&quot;</span><span class="p">,</span> <span class="n">library</span><span class="o">=</span><span class="s2">&quot;my-writer-v1&quot;</span><span class="p">)</span>
+    <span class="n">writer</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 
     <span class="n">schema_id</span> <span class="o">=</span> <span class="n">writer</span><span class="o">.</span><span class="n">register_schema</span><span class="p">(</span>
         <span class="n">name</span><span class="o">=</span><span class="s2">&quot;sample&quot;</span><span class="p">,</span>
