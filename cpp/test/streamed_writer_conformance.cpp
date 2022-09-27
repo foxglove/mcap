@@ -177,12 +177,12 @@ mcap::Attachment ReadAttachment(const json& attachmentJson, mcap::ByteArray& buf
   //   ]
   // },
   mcap::Attachment attachment;
-  attachment.createTime = ReadUInt<uint64_t>(attachmentJson["fields"][1][1]);
-  ReadBytes(attachmentJson["fields"][2][1], buffer);
+  attachment.createTime = ReadUInt<uint64_t>(attachmentJson["fields"][0][1]);
+  ReadBytes(attachmentJson["fields"][1][1], buffer);
   attachment.data = buffer.data();
   attachment.dataSize = buffer.size();
-  attachment.logTime = ReadUInt<uint64_t>(attachmentJson["fields"][3][1]);
-  attachment.mediaType = attachmentJson["fields"][0][1];
+  attachment.logTime = ReadUInt<uint64_t>(attachmentJson["fields"][2][1]);
+  attachment.mediaType = attachmentJson["fields"][3][1];
   attachment.name = attachmentJson["fields"][4][1];
   return attachment;
 }
