@@ -305,7 +305,7 @@ func TestChunkCRCValidation(t *testing.T) {
 		}
 		_, _, err = lexer.Next(nil)
 		assert.NotNil(t, err)
-		assert.True(t, strings.Contains(err.Error(), "invalid CRC"))
+		assert.True(t, strings.Contains(err.Error(), "invalid chunk CRC"))
 	})
 }
 
