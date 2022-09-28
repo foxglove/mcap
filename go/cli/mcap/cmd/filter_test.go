@@ -12,7 +12,8 @@ import (
 
 func writeFilterTestInput(t *testing.T, w io.Writer) {
 	writer, err := mcap.NewWriter(w, &mcap.WriterOptions{
-		Chunked: true,
+		Chunked:   true,
+		ChunkSize: 10,
 	})
 	assert.Nil(t, err)
 
@@ -167,4 +168,102 @@ func TestFiltering(t *testing.T) {
 			assert.InDeltaMapValues(t, c.expectedMessageCount, messageCounter, 0.0)
 		})
 	}
+}
+
+func TestRecover(t *testing.T) {
+	t.Run("recover data from truncated file", func(t *testing.T) {
+		writeBuf := bytes.Buffer{}
+		readBuf := bytes.Buffer{}
+		writeFilterTestInput(t, &readBuf)
+		readBuf.Truncate(readBuf.Len() / 2)
+
+		assert.Nil(t, filter(&readBuf, &writeBuf, &filterOpts{
+			end:                1000,
+			recover:            true,
+			includeAttachments: true,
+			includeMetadata:    true,
+		}))
+
+		lexer, err := mcap.NewLexer(&writeBuf)
+		assert.Nil(t, err)
+		messageCounter := map[uint16]int{
+			1: 0,
+			2: 0,
+			3: 0,
+		}
+		attachmentCounter := 0
+		metadataCounter := 0
+		for {
+			token, record, err := lexer.Next(nil)
+			if err != nil {
+				assert.ErrorIs(t, err, io.EOF)
+				break
+			}
+			switch token {
+			case mcap.TokenMessage:
+				message, err := mcap.ParseMessage(record)
+				assert.Nil(t, err)
+				messageCounter[message.ChannelID]++
+			case mcap.TokenAttachment:
+				attachmentCounter++
+			case mcap.TokenMetadata:
+				metadataCounter++
+			}
+		}
+		assert.Equal(t, 0, attachmentCounter)
+		assert.Equal(t, 0, metadataCounter)
+		assert.InDeltaMapValues(t, map[uint16]int{
+			1: 87,
+			2: 87,
+			3: 87,
+		}, messageCounter, 0.0)
+	})
+
+	t.Run("recover data from chunk with invalid crc", func(t *testing.T) {
+		writeBuf := bytes.Buffer{}
+		readBuf := bytes.Buffer{}
+		writeFilterTestInput(t, &readBuf)
+		readBuf.Bytes()[0x12b] = 1 // overwrite crc
+
+		assert.Nil(t, filter(&readBuf, &writeBuf, &filterOpts{
+			end:                1000,
+			recover:            true,
+			includeAttachments: true,
+			includeMetadata:    true,
+		}))
+
+		lexer, err := mcap.NewLexer(&writeBuf)
+		assert.Nil(t, err)
+		messageCounter := map[uint16]int{
+			1: 0,
+			2: 0,
+			3: 0,
+		}
+		attachmentCounter := 0
+		metadataCounter := 0
+		for {
+			token, record, err := lexer.Next(nil)
+			if err != nil {
+				assert.ErrorIs(t, err, io.EOF)
+				break
+			}
+			switch token {
+			case mcap.TokenMessage:
+				message, err := mcap.ParseMessage(record)
+				assert.Nil(t, err)
+				messageCounter[message.ChannelID]++
+			case mcap.TokenAttachment:
+				attachmentCounter++
+			case mcap.TokenMetadata:
+				metadataCounter++
+			}
+		}
+		assert.Equal(t, 1, attachmentCounter)
+		assert.Equal(t, 1, metadataCounter)
+		assert.InDeltaMapValues(t, map[uint16]int{
+			1: 100,
+			2: 99,
+			3: 100,
+		}, messageCounter, 0.0)
+	})
 }

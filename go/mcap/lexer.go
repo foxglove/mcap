@@ -17,6 +17,15 @@ var ErrNestedChunk = errors.New("detected nested chunk")
 var ErrChunkTooLarge = errors.New("chunk exceeds configured maximum size")
 var ErrRecordTooLarge = errors.New("record exceeds configured maximum size")
 
+type errInvalidChunkCrc struct {
+	expected uint32
+	actual   uint32
+}
+
+func (e *errInvalidChunkCrc) Error() string {
+	return fmt.Sprintf("invalid chunk CRC: %x != %x", e.actual, e.expected)
+}
+
 // ErrBadMagic indicates the lexer has detected invalid magic bytes.
 var ErrBadMagic = errors.New("not an mcap file")
 
@@ -53,6 +62,8 @@ const (
 	TokenDataEnd
 	// TokenError represents an error token.
 	TokenError
+	// TokenInvalidChunk represents a chunk token that failed CRC validation.
+	TokenInvalidChunk
 )
 
 // TokenType encodes a type of token from the lexer.
@@ -91,6 +102,8 @@ func (t TokenType) String() string {
 		return "data end"
 	case TokenError:
 		return "error"
+	case TokenInvalidChunk:
+		return "invalid chunk"
 	default:
 		return "unknown"
 	}
@@ -109,6 +122,7 @@ type Lexer struct {
 	buf                      []byte
 	uncompressedChunk        []byte
 	validateCRC              bool
+	emitInvalidChunks        bool
 	maxRecordSize            int
 	maxDecompressedChunkSize int
 }
@@ -141,6 +155,12 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 		if opcode == OpChunk && !l.emitChunks {
 			err := loadChunk(l)
 			if err != nil {
+				if l.emitInvalidChunks {
+					var invalidCrc *errInvalidChunkCrc
+					if errors.As(err, &invalidCrc) {
+						return TokenInvalidChunk, nil, err
+					}
+				}
 				return TokenError, nil, err
 			}
 			continue
@@ -305,6 +325,7 @@ func loadChunk(l *Lexer) error {
 	default:
 		return fmt.Errorf("unsupported compression: %s", string(compression))
 	}
+	l.inChunk = true
 
 	// if we are validating the CRC, we need to fully decompress the chunk right
 	// here, then rewrap the decompressed data in a compatible reader after
@@ -334,7 +355,7 @@ func loadChunk(l *Lexer) error {
 		if compression == CompressionLZ4 {
 			extraBytes, err := io.ReadAll(l.reader)
 			if err != nil {
-				return fmt.Errorf("failed to reaGd extra bytes: %w", err)
+				return fmt.Errorf("failed to read extra bytes: %w", err)
 			}
 			if len(extraBytes) > 0 {
 				return fmt.Errorf("encountered unexpected bytes after chunk: %q", extraBytes)
@@ -343,11 +364,10 @@ func loadChunk(l *Lexer) error {
 
 		crc := crc32.ChecksumIEEE(l.uncompressedChunk[:uncompressedSize])
 		if uncompressedCRC > 0 && crc != uncompressedCRC {
-			return fmt.Errorf("invalid CRC: %x != %x", crc, uncompressedCRC)
+			return &errInvalidChunkCrc{expected: uncompressedCRC, actual: crc}
 		}
 		l.setNoneDecoder(l.uncompressedChunk[:uncompressedSize])
 	}
-	l.inChunk = true
 	return nil
 }
 
@@ -360,6 +380,9 @@ type LexerOptions struct {
 	// EmitChunks instructs the lexer to emit chunk records without de-chunking.
 	// It is incompatible with ValidateCRC.
 	EmitChunks bool
+	// EmitChunks instructs the lexer to emit TokenInvalidChunk rather than TokenError when CRC
+	// validation fails.
+	EmitInvalidChunks bool
 	// MaxDecompressedChunkSize defines the maximum size chunk the lexer will
 	// decompress. Chunks larger than this will result in an error.
 	MaxDecompressedChunkSize int
@@ -371,10 +394,11 @@ type LexerOptions struct {
 // NewLexer returns a new lexer for the given reader.
 func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 	var maxRecordSize, maxDecompressedChunkSize int
-	var validateCRC, emitChunks, skipMagic bool
+	var validateCRC, emitChunks, emitInvalidChunks, skipMagic bool
 	if len(opts) > 0 {
 		validateCRC = opts[0].ValidateCRC
 		emitChunks = opts[0].EmitChunks
+		emitInvalidChunks = opts[0].EmitInvalidChunks
 		skipMagic = opts[0].SkipMagic
 		maxRecordSize = opts[0].MaxRecordSize
 		maxDecompressedChunkSize = opts[0].MaxDecompressedChunkSize
@@ -391,6 +415,7 @@ func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 		buf:                      make([]byte, 32),
 		validateCRC:              validateCRC,
 		emitChunks:               emitChunks,
+		emitInvalidChunks:        emitInvalidChunks,
 		maxRecordSize:            maxRecordSize,
 		maxDecompressedChunkSize: maxDecompressedChunkSize,
 	}, nil
