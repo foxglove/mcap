@@ -662,8 +662,9 @@ impl<'a> Iterator for MessageStream<'a> {
                 }
 
                 // If it's EOD, do unholy things to calculate the CRC.
-                // This will be much easier once we read from a seekable Read instead of a buffer.
-                // (In hindsight, the former doesn't preclude memory-mapped reads - pass a cursor!)
+                // This would be much easier reading from a seekable Read instead of a buffer.
+                // (But that would also force us to make copies of schema, message, and attachment
+                // data! Should we have two APIs?)
                 Record::DataEnd(end) => {
                     if end.data_section_crc != 0 {
                         //  op, length, CRC
