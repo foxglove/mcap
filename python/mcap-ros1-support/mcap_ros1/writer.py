@@ -79,3 +79,9 @@ class Writer:
             sequence=sequence,
             data=buffer.getvalue(),
         )
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_, exc_type_, tb_):
+        self.finish()
