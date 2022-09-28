@@ -28,7 +28,7 @@ fn smoke() -> Result<()> {
     };
 
     assert_eq!(attachments[0].0, expected_header);
-    assert_eq!(attachments[0].1, &[1, 2, 3]);
+    assert_eq!(&*attachments[0].1, &[1, 2, 3]);
 
     Ok(())
 }
@@ -51,7 +51,7 @@ fn round_trip() -> Result<()> {
             create_time: h.create_time,
             media_type: h.media_type,
             name: h.name,
-            data: Cow::Borrowed(d),
+            data: Cow::Borrowed(&d),
         };
         writer.attach(&a)?;
     }

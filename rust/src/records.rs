@@ -62,14 +62,14 @@ pub enum Record<'a> {
     Chunk {
         #[serde(flatten)]
         header: ChunkHeader,
-        data: &'a [u8],
+        data: Cow<'a, [u8]>,
     },
     MessageIndex(MessageIndex),
     ChunkIndex(ChunkIndex),
     Attachment {
         #[serde(flatten)]
         header: AttachmentHeader,
-        data: &'a [u8],
+        data: Cow<'a, [u8]>,
     },
     AttachmentIndex(AttachmentIndex),
     Statistics(Statistics),

@@ -192,7 +192,10 @@ fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
                 });
             }
             data = &data[..header.compressed_size as usize];
-            Record::Chunk { header, data }
+            Record::Chunk {
+                header,
+                data: Cow::Borrowed(data),
+            }
         }
         op::MESSAGE_INDEX => Record::MessageIndex(record!(body)),
         op::CHUNK_INDEX => Record::ChunkIndex(record!(body)),
@@ -231,7 +234,10 @@ fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
                 }
             }
 
-            Record::Attachment { header, data }
+            Record::Attachment {
+                header,
+                data: Cow::Borrowed(data),
+            }
         }
         op::ATTACHMENT_INDEX => Record::AttachmentIndex(record!(body)),
         op::STATISTICS => Record::Statistics(record!(body)),
@@ -474,6 +480,14 @@ impl<'a> Iterator for ChunkFlattener<'a> {
             match self.top_level.next() {
                 // If it's a chunk, get a new chunk reader going...
                 Some(Ok(Record::Chunk { header, data })) => {
+                    // Chunks from the LinearReader will always borrow from the file.
+                    // (Getting a normal reference to the underlying data back
+                    // frees us from returning things that reference this local Cow.)
+                    let data: &'a [u8] = match data {
+                        Cow::Borrowed(b) => b,
+                        Cow::Owned(_) => unreachable!(),
+                    };
+
                     self.dechunk = match ChunkReader::new(header, data) {
                         Ok(d) => Some(d),
                         Err(e) => break Some(Err(e)),
@@ -813,6 +827,13 @@ impl<'a> Summary<'a> {
             Ok(_other_record) => return Err(McapError::BadIndex),
             Err(e) => return Err(e),
         };
+        // Chunks from the LinearReader will always borrow from the file.
+        // (Getting a normal reference to the underlying data back
+        // frees us from returning things that reference this local Cow.)
+        let d: &'a [u8] = match d {
+            Cow::Borrowed(b) => b,
+            Cow::Owned(_) => unreachable!(),
+        };
 
         if reader.next().is_some() {
             // Wut - multiple records in the given slice?
@@ -935,6 +956,13 @@ impl<'a> Summary<'a> {
             Ok(_other_record) => return Err(McapError::BadIndex),
             Err(e) => return Err(e),
         };
+        // Chunks from the LinearReader will always borrow from the file.
+        // (Getting a normal reference to the underlying data back
+        // frees us from returning things that reference this local Cow.)
+        let d: &'a [u8] = match d {
+            Cow::Borrowed(b) => b,
+            Cow::Owned(_) => unreachable!(),
+        };
 
         if reader.next().is_some() {
             // Wut - multiple records in the given slice?
@@ -1025,7 +1053,7 @@ pub fn attachment<'a>(
         create_time: h.create_time,
         name: h.name,
         media_type: h.media_type,
-        data: Cow::Borrowed(d),
+        data: d,
     })
 }
 

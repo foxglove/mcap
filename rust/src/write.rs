@@ -58,7 +58,7 @@ fn write_record<W: Write>(w: &mut W, r: &Record) -> io::Result<()> {
             )?;
             w.write_all(&header_buf)?;
             w.write_u32::<LE>(data.len() as u32)?;
-            w.write_all(&data)?;
+            w.write_all(data)?;
         }
         Record::Channel(c) => record!(op::CHANNEL, c),
         Record::Message { header, data } => {
@@ -67,7 +67,7 @@ fn write_record<W: Write>(w: &mut W, r: &Record) -> io::Result<()> {
 
             op_and_len(w, op::MESSAGE, header_buf.len() + data.len())?;
             w.write_all(&header_buf)?;
-            w.write_all(&data)?;
+            w.write_all(data)?;
         }
         Record::Chunk { .. } => {
             unreachable!("Chunks handle their own serialization due to seeking shenanigans")
@@ -297,7 +297,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             w,
             &Record::Attachment {
                 header,
-                data: &attachment.data,
+                data: Cow::Borrowed(&attachment.data),
             },
         )?;
 
