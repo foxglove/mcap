@@ -68,7 +68,7 @@ nav:
       - TypeScript: docs/typescript/index.html
       - Go: https://pkg.go.dev/github.com/foxglove/mcap/go/mcap
       - Swift: docs/swift/documentation/mcap/
-      - Rust: docs/rust/doc/mcap/index.html
+      - Rust: docs/rust/mcap/index.html
 
   - More Resources:
       - GitHub: "https://github.com/foxglove/mcap"

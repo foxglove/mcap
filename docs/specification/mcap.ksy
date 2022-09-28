@@ -306,7 +306,7 @@ types:
         type: u8
       - id: name
         type: prefixed_str
-      - id: content_type
+      - id: media_type
         type: prefixed_str
       - id: len_data
         type: u8
@@ -346,7 +346,7 @@ types:
         type: u8
       - id: name
         type: prefixed_str
-      - id: content_type
+      - id: media_type
         type: prefixed_str
     instances:
       attachment:

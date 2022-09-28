@@ -112,7 +112,7 @@ func run(filterOptions *filterOpts, args []string) {
 	var writer io.Writer
 	if filterOptions.output == "" {
 		if !utils.StdoutRedirected() {
-			die("Binary output can screw up your terminal. Supply -o or redirect to a file or pipe")
+			die(PleaseRedirect)
 		}
 		writer = os.Stdout
 	} else {

@@ -272,8 +272,8 @@ func parseAttachment(fields []InputField) (*mcap.Attachment, error) {
 			attachment.CreateTime = createTime
 		case "name":
 			attachment.Name = field.Value.(string)
-		case "content_type":
-			attachment.ContentType = field.Value.(string)
+		case "media_type":
+			attachment.MediaType = field.Value.(string)
 		case "data":
 			data, err := parseBytes(field.Value.([]any))
 			if err != nil {

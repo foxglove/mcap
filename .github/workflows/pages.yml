@@ -133,7 +133,8 @@ jobs:
 
       - run: mkdir __docs__
       - name: Generate Rust documentation
-        run: cd rust && cargo doc --no-deps --target-dir ../__docs__/rust
+        run: cd rust && cargo doc --no-deps
+      - run: cp -r rust/target/doc __docs__/rust
 
       - run: tar -czf docs-rust.tgz __docs__/rust
       - uses: actions/upload-artifact@v3

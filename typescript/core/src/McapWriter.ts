@@ -375,7 +375,7 @@ export class McapWriter {
         logTime: attachment.logTime,
         createTime: attachment.createTime,
         name: attachment.name,
-        contentType: attachment.contentType,
+        mediaType: attachment.mediaType,
         offset,
         dataSize: BigInt(attachment.data.byteLength),
         length,

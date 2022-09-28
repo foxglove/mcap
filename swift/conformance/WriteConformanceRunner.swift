@@ -81,7 +81,7 @@ enum WriteConformanceRunner {
             logTime: Timestamp(fieldsByName["log_time"] as! String)!,
             createTime: Timestamp(fieldsByName["create_time"] as! String)!,
             name: fieldsByName["name"] as! String,
-            contentType: fieldsByName["content_type"] as! String,
+            mediaType: fieldsByName["media_type"] as! String,
             data: Data((fieldsByName["data"] as! [String]).map { UInt8($0)! })
           )
         )

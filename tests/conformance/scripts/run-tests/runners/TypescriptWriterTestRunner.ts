@@ -89,7 +89,7 @@ function parseJsonRecord(record: {
         name: jsonRecord.fields.name,
         logTime: BigInt(jsonRecord.fields.logTime),
         createTime: BigInt(jsonRecord.fields.createTime),
-        contentType: jsonRecord.fields.contentType,
+        mediaType: jsonRecord.fields.mediaType,
         data: Uint8Array.from(jsonRecord.fields.data),
       };
     case "MessageIndex":

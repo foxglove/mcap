@@ -979,7 +979,7 @@ Status McapReader::ParseAttachment(const Record& record, Attachment* attachment)
   constexpr uint64_t MinSize = /* log_time */ 8 +
                                /* create_time */ 8 +
                                /* name */ 4 +
-                               /* content_type */ 4 +
+                               /* media_type */ 4 +
                                /* data_size */ 8 +
                                /* crc */ 4;
 
@@ -1011,13 +1011,13 @@ Status McapReader::ParseAttachment(const Record& record, Attachment* attachment)
     return status;
   }
   offset += 4 + attachment->name.size();
-  // content_type
+  // media_type
   if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
-                                          &attachment->contentType);
+                                          &attachment->mediaType);
       !status.ok()) {
     return status;
   }
-  offset += 4 + attachment->contentType.size();
+  offset += 4 + attachment->mediaType.size();
   // data_size
   if (auto status = internal::ParseUint64(record.data + offset, record.dataSize - offset,
                                           &attachment->dataSize);
@@ -1066,9 +1066,9 @@ Status McapReader::ParseAttachmentIndex(const Record& record, AttachmentIndex* a
     return status;
   }
   offset += 4 + attachmentIndex->name.size();
-  // content_type
+  // media_type
   if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
-                                          &attachmentIndex->contentType);
+                                          &attachmentIndex->mediaType);
       !status.ok()) {
     return status;
   }

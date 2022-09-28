@@ -244,7 +244,7 @@ export function parseRecord({
       const logTime = reader.uint64();
       const createTime = reader.uint64();
       const name = reader.string();
-      const contentType = reader.string();
+      const mediaType = reader.string();
       const dataLen = reader.uint64();
       if (BigInt(recordView.byteOffset + reader.offset) + dataLen > Number.MAX_SAFE_INTEGER) {
         throw new Error(`Attachment too large: ${dataLen}`);
@@ -275,7 +275,7 @@ export function parseRecord({
         logTime,
         createTime,
         name,
-        contentType,
+        mediaType,
         data,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
@@ -287,7 +287,7 @@ export function parseRecord({
       const createTime = reader.uint64();
       const dataSize = reader.uint64();
       const name = reader.string();
-      const contentType = reader.string();
+      const mediaType = reader.string();
 
       const record: TypedMcapRecord = {
         type: "AttachmentIndex",
@@ -297,7 +297,7 @@ export function parseRecord({
         createTime,
         dataSize,
         name,
-        contentType,
+        mediaType,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }

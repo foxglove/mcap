@@ -109,7 +109,7 @@ class Writer:
         self.__data_section_crc = 0
 
     def add_attachment(
-        self, create_time: int, log_time: int, name: str, content_type: str, data: bytes
+        self, create_time: int, log_time: int, name: str, media_type: str, data: bytes
     ):
         """
         Adds an attachment to the file.
@@ -118,7 +118,7 @@ class Writer:
         :param create_time: Time at which the attachment was created. If not available,
             must be set to zero.
         :param name: Name of the attachment, e.g "scene1.jpg".
-        :param content_type: MIME Type (e.g "text/plain").
+        :param media_type: Media Type (e.g "text/plain").
         :param data: Attachment data.
         """
         self.__flush()
@@ -128,7 +128,7 @@ class Writer:
             create_time=create_time,
             log_time=log_time,
             name=name,
-            content_type=content_type,
+            media_type=media_type,
             data=data,
         )
         attachment.write(self.__record_builder)
@@ -140,7 +140,7 @@ class Writer:
                 log_time=attachment.log_time,
                 data_size=len(attachment.data),
                 name=attachment.name,
-                content_type=attachment.content_type,
+                media_type=attachment.media_type,
             )
             self.__attachment_indexes.append(index)
         self.__flush()
