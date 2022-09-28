@@ -12,6 +12,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     fmt,
     io::{self, prelude::*, Cursor},
+    mem::size_of,
     sync::Arc,
 };
 
@@ -343,7 +344,6 @@ impl<'a> Iterator for ChunkReader<'a> {
 
 /// Like [read_record_from_slice], but for a decompression stream
 fn read_record_from_chunk_stream<'a, R: Read>(r: &mut R) -> McapResult<records::Record<'a>> {
-
     let op = r.read_u8()?;
     let len = r.read_u64::<LE>()?;
 
@@ -648,14 +648,20 @@ impl<'a> Iterator for MessageStream<'a> {
                 }
 
                 // If it's EOD, do unholy things to calculate the CRC.
+                // This will be much easier once we read from a seekable Read instead of a buffer.
+                // (In hindsight, the former doesn't preclude memory-mapped reads - pass a cursor!)
                 Record::DataEnd(end) => {
                     if end.data_section_crc != 0 {
-                        // This is terrible. Less math with less magic numbers, please.
-                        let data_section_len = (self.full_file.len() - MAGIC.len() * 2) // Actual working area
-                            - self.records.bytes_remaining();
+                        //  op, length, CRC
+                        const DATA_END_SIZE: usize =
+                            size_of::<u8>() + size_of::<u64>() + size_of::<u32>();
 
-                        let data_section =
-                            &self.full_file[MAGIC.len()..MAGIC.len() + data_section_len];
+                        let start_of_data_end = self.full_file.len()
+                            - self.records.bytes_remaining() // sans MAGIC!
+                            - MAGIC.len() // MORE MAGIC
+                            - DATA_END_SIZE;
+                        let data_section = &self.full_file[..start_of_data_end];
+
                         let calculated = crc32(data_section);
                         if end.data_section_crc != calculated {
                             break Some(Err(McapError::BadDataCrc {
@@ -1056,7 +1062,7 @@ macro_rules! reader {
         paste::paste! {
             #[inline]
             fn [<read_ $type>](block: &mut &[u8]) -> $type {
-                const SIZE: usize = std::mem::size_of::<$type>();
+                const SIZE: usize = size_of::<$type>();
                 let res = $type::from_le_bytes(
                     block[0..SIZE].try_into().unwrap()
                 );
