@@ -15,6 +15,8 @@ var rootCmd = &cobra.Command{
 	Short: "\U0001F52A Officially the top-rated CLI tool for slicing and dicing MCAP files.",
 }
 
+var PleaseRedirect = "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe"
+
 func Execute() {
 	cobra.CheckErr(rootCmd.Execute())
 }

@@ -240,7 +240,7 @@ var mergeCmd = &cobra.Command{
 	Short: "Merge a selection of mcap files by record timestamp",
 	Run: func(cmd *cobra.Command, args []string) {
 		if mergeOutputFile == "" && !utils.StdoutRedirected() {
-			die("Binary output can screw up your terminal. Supply -o or redirect to a file or pipe.")
+			die(PleaseRedirect)
 		}
 		var readers []io.Reader
 		for _, arg := range args {
