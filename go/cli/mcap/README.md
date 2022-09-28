@@ -163,18 +163,15 @@ To ensure the resulting binary is statically linked, build with `make`:
 
 ### API Evolution Policy
 
-This tool uses [semantic versioning](https://semver.org) to indicate the scope of an update to
-users. In addition, we try to follow these guidelines when updating the functionality of the tool.
+This tool uses [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) to indicate the scope of an update to users. In addition, we try to follow these guidelines when updating the functionality of the tool.
 
 Here "option" refers to either a subcommand (such as `mcap convert`) or a command-line argument
 (such as `mcap --help`).
 
 - When a option needs to be removed, it is first marked as deprecated. Once deprecated,
-  it will remain functional for at least two releases or one month,
-  whichever is longer. Deprecated options will print a warning to stderr when used.
+  it will remain functional for at least one month. Deprecated options will print a warning to stderr when used.
   After the deprecation period, it will be removed in the next major release.
 - When an option needs to be renamed, we duplicate the functionality under the new name and
-  deprecate the old name. The deprecation warning for the old name should indicate the new name
-  for this functionality.
-- If some option that you use is deprecated without a clear migration path, please
+  deprecate the old name. The deprecation warning for the old name should point users to the new name.
+- If an option that you use is deprecated without a clear migration path, please
   file a [GitHub issue](https://github.com/foxglove/mcap/issues) explaining your use case.
