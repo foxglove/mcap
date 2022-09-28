@@ -24,7 +24,7 @@ fn smoke() -> Result<()> {
         log_time: 2,
         create_time: 1,
         name: String::from("myFile"),
-        content_type: String::from("application/octet-stream"),
+        media_type: String::from("application/octet-stream"),
     };
 
     assert_eq!(attachments[0].0, expected_header);
@@ -49,7 +49,7 @@ fn round_trip() -> Result<()> {
         let a = mcap::Attachment {
             log_time: h.log_time,
             create_time: h.create_time,
-            content_type: h.content_type,
+            media_type: h.media_type,
             name: h.name,
             data: Cow::Borrowed(d),
         };
@@ -72,7 +72,7 @@ fn round_trip() -> Result<()> {
             create_time: 1,
             data_size: 3,
             name: String::from("myFile"),
-            content_type: String::from("application/octet-stream"),
+            media_type: String::from("application/octet-stream"),
         }],
         ..Default::default()
     });
@@ -82,7 +82,7 @@ fn round_trip() -> Result<()> {
         log_time: 2,
         create_time: 1,
         name: String::from("myFile"),
-        content_type: String::from("application/octet-stream"),
+        media_type: String::from("application/octet-stream"),
         data: Cow::Borrowed(&[1, 2, 3]),
     };
 

@@ -412,7 +412,7 @@ pub struct AttachmentHeader {
 
     #[br(map = |s: McapString| s.inner )]
     #[bw(write_with = write_string)]
-    pub content_type: String,
+    pub media_type: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
@@ -433,7 +433,7 @@ pub struct AttachmentIndex {
 
     #[br(map = |s: McapString| s.inner )]
     #[bw(write_with = write_string)]
-    pub content_type: String,
+    pub media_type: String,
 }
 
 #[derive(Debug, Default, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]

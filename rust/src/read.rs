@@ -1024,7 +1024,7 @@ pub fn attachment<'a>(
         log_time: h.log_time,
         create_time: h.create_time,
         name: h.name,
-        content_type: h.content_type,
+        media_type: h.media_type,
         data: Cow::Borrowed(d),
     })
 }

@@ -191,7 +191,7 @@ pub struct Attachment<'a> {
     pub log_time: u64,
     pub create_time: u64,
     pub name: String,
-    pub content_type: String,
+    pub media_type: String,
     pub data: Cow<'a, [u8]>,
 }
 

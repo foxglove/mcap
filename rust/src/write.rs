@@ -285,7 +285,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             log_time: attachment.log_time,
             create_time: attachment.create_time,
             name: attachment.name.clone(),
-            content_type: attachment.content_type.clone(),
+            media_type: attachment.media_type.clone(),
         };
 
         // Attachments don't live in chunks.
@@ -309,7 +309,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             create_time: attachment.create_time,
             data_size: attachment.data.len() as u64,
             name: attachment.name.clone(),
-            content_type: attachment.content_type.clone(),
+            media_type: attachment.media_type.clone(),
         });
 
         Ok(())
