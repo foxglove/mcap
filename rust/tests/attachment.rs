@@ -25,7 +25,6 @@ fn smoke() -> Result<()> {
         create_time: 1,
         name: String::from("myFile"),
         content_type: String::from("application/octet-stream"),
-        data_len: 3,
     };
 
     assert_eq!(attachments[0].0, expected_header);

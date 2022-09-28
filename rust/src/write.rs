@@ -4,6 +4,7 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
     io::{self, prelude::*, Cursor, SeekFrom},
+    mem::size_of,
 };
 
 use binrw::prelude::*;
@@ -41,25 +42,33 @@ fn write_record<W: Write>(w: &mut W, r: &Record) -> io::Result<()> {
         }};
     }
 
-    macro_rules! header_and_data {
-        ($op:expr, $header:ident, $data:ident) => {{
-            let mut header_buf = Vec::new();
-            Cursor::new(&mut header_buf).write_le($header).unwrap();
-
-            op_and_len(w, $op, header_buf.len() + $data.len())?;
-            w.write_all(&header_buf)?;
-            w.write_all($data)?;
-        }};
-    }
-
     match r {
         Record::Header(h) => record!(op::HEADER, h),
         Record::Footer(_) => {
             unreachable!("Footer handles its own serialization because its CRC is self-referencing")
         }
-        Record::Schema { header, data } => header_and_data!(op::SCHEMA, header, data),
+        Record::Schema { header, data } => {
+            let mut header_buf = Vec::new();
+            Cursor::new(&mut header_buf).write_le(header).unwrap();
+
+            op_and_len(
+                w,
+                op::SCHEMA,
+                header_buf.len() + size_of::<u32>() + data.len(),
+            )?;
+            w.write_all(&header_buf)?;
+            w.write_u32::<LE>(data.len() as u32)?;
+            w.write_all(&data)?;
+        }
         Record::Channel(c) => record!(op::CHANNEL, c),
-        Record::Message { header, data } => header_and_data!(op::MESSAGE, header, data),
+        Record::Message { header, data } => {
+            let mut header_buf = Vec::new();
+            Cursor::new(&mut header_buf).write_le(header).unwrap();
+
+            op_and_len(w, op::MESSAGE, header_buf.len() + data.len())?;
+            w.write_all(&header_buf)?;
+            w.write_all(&data)?;
+        }
         Record::Chunk { .. } => {
             unreachable!("Chunks handle their own serialization due to seeking shenanigans")
         }
@@ -68,16 +77,17 @@ fn write_record<W: Write>(w: &mut W, r: &Record) -> io::Result<()> {
         }
         Record::ChunkIndex(c) => record!(op::CHUNK_INDEX, c),
         Record::Attachment { header, data } => {
-            assert_eq!(header.data_len, data.len() as u64);
-
-            // Can't use header_and_data since we need to checksum those,
-            // but not the op and len
             let mut header_buf = Vec::new();
             Cursor::new(&mut header_buf).write_le(header).unwrap();
-            op_and_len(w, op::ATTACHMENT, header_buf.len() + data.len() + 4)?; // 4 for crc
+            op_and_len(
+                w,
+                op::ATTACHMENT,
+                header_buf.len() + size_of::<u64>() + data.len() + size_of::<u32>(), /* crc */
+            )?;
 
             let mut checksummer = CountingCrcWriter::new(w);
             checksummer.write_all(&header_buf)?;
+            checksummer.write_u64::<LE>(data.len() as u64)?;
             checksummer.write_all(data)?;
             let (w, crc) = checksummer.finalize();
             w.write_u32::<LE>(crc)?;
@@ -276,7 +286,6 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             create_time: attachment.create_time,
             name: attachment.name.clone(),
             content_type: attachment.content_type.clone(),
-            data_len: attachment.data.len() as u64,
         };
 
         // Attachments don't live in chunks.
@@ -483,7 +492,6 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
                 id,
                 name: schema.name,
                 encoding: schema.encoding,
-                data_len: schema.data.len() as u32,
             };
             let data = schema.data;
 
@@ -695,7 +703,6 @@ impl<W: Write + Seek> ChunkWriter<W> {
             id,
             name: schema.name.clone(),
             encoding: schema.encoding.clone(),
-            data_len: schema.data.len() as u32,
         };
         write_record(
             &mut self.compressor,

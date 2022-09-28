@@ -200,9 +200,6 @@ pub struct SchemaHeader {
     #[br(map = |s: McapString| s.inner )]
     #[bw(write_with = write_string)]
     pub encoding: String,
-
-    #[serde(skip)]
-    pub data_len: u32,
 }
 
 fn parse_string_map<R: Read + Seek>(
@@ -416,9 +413,6 @@ pub struct AttachmentHeader {
     #[br(map = |s: McapString| s.inner )]
     #[bw(write_with = write_string)]
     pub content_type: String,
-
-    #[serde(skip)]
-    pub data_len: u64,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]

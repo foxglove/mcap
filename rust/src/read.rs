@@ -16,6 +16,7 @@ use std::{
 };
 
 use binrw::prelude::*;
+use byteorder::{ReadBytesExt, LE};
 use crc32fast::hash as crc32;
 use enumset::{enum_set, EnumSet, EnumSetType};
 use log::*;
@@ -157,14 +158,16 @@ fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
         op::SCHEMA => {
             let mut c = Cursor::new(body);
             let header: records::SchemaHeader = c.read_le()?;
+            let data_len = c.read_u32::<LE>()?;
             let mut data = &body[c.position() as usize..];
-            if header.data_len > data.len() as u32 {
+
+            if data_len > data.len() as u32 {
                 return Err(McapError::BadSchemaLength {
-                    header: header.data_len,
+                    header: data_len,
                     available: data.len() as u32,
                 });
             }
-            data = &data[..header.data_len as usize];
+            data = &data[..data_len as usize];
             Record::Schema {
                 header,
                 data: Cow::Borrowed(data),
@@ -195,16 +198,17 @@ fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
         op::ATTACHMENT => {
             let mut c = Cursor::new(body);
             let header: records::AttachmentHeader = c.read_le()?;
+            let data_len = c.read_u64::<LE>()?;
             let header_len = c.position() as usize;
 
             let mut data = &body[header_len..body.len() - 4];
-            if header.data_len > data.len() as u64 {
+            if data_len > data.len() as u64 {
                 return Err(McapError::BadAttachmentLength {
-                    header: header.data_len,
+                    header: data_len,
                     available: data.len() as u64,
                 });
             }
-            data = &data[..header.data_len as usize];
+            data = &data[..data_len as usize];
             let crc: u32 = Cursor::new(&body[header_len + data.len()..]).read_le()?;
 
             // We usually leave CRCs to higher-level readers -
@@ -339,9 +343,6 @@ impl<'a> Iterator for ChunkReader<'a> {
 
 /// Like [read_record_from_slice], but for a decompression stream
 fn read_record_from_chunk_stream<'a, R: Read>(r: &mut R) -> McapResult<records::Record<'a>> {
-    // We can't use binrw because compressions streams aren't seekable.
-    // byteorder time!
-    use byteorder::{ReadBytesExt, LE};
 
     let op = r.read_u8()?;
     let len = r.read_u64::<LE>()?;
@@ -357,18 +358,20 @@ fn read_record_from_chunk_stream<'a, R: Read>(r: &mut R) -> McapResult<records::
 
             let mut c = Cursor::new(&record);
             let header: records::SchemaHeader = c.read_le()?;
+            let data_len = c.read_u32::<LE>()?;
 
             let header_end = c.position();
 
             // Should we rotate and shrink instead?
-            let data = record.split_off(header_end as usize);
+            let mut data = record.split_off(header_end as usize);
 
-            if header.data_len as usize != data.len() {
-                warn!(
-                    "Schema {}'s data length doesn't match the total schema length",
-                    header.name
-                );
+            if data_len > data.len() as u32 {
+                return Err(McapError::BadSchemaLength {
+                    header: data_len,
+                    available: data.len() as u32,
+                });
             }
+            data.truncate(data_len as usize);
             Record::Schema {
                 header,
                 data: Cow::Owned(data),
