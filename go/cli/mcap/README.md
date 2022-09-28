@@ -177,4 +177,4 @@ Here "option" refers to either a subcommand (such as `mcap convert`) or a comman
   deprecate the old name. The deprecation warning for the old name should indicate the new name
   for this functionality.
 - If some option that you use is deprecated without a clear migration path, please
-  file a [Github issue](https://github.com/foxglove/mcap/issues) explaining your use-case.
+  file a [GitHub issue](https://github.com/foxglove/mcap/issues) explaining your use case.
