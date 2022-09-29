@@ -6,6 +6,7 @@ var getCmd = &cobra.Command{
 	Use:   "get",
 	Short: "get a record from an mcap file",
 	Run: func(cmd *cobra.Command, args []string) {
+		cmd.Help()
 	},
 }
 
