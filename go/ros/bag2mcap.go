@@ -2,6 +2,7 @@ package ros
 
 import (
 	"bytes"
+	"compress/bzip2"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -199,6 +200,12 @@ func processBag(
 			case "lz4":
 				if chunkReader == nil {
 					chunkReader = lz4.NewReader(r)
+				} else {
+					chunkReader.Reset(r)
+				}
+			case "bz2":
+				if chunkReader == nil {
+					chunkReader = &resettableByteReader{bzip2.NewReader(r)}
 				} else {
 					chunkReader.Reset(r)
 				}
