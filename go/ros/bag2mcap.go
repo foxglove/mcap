@@ -205,7 +205,7 @@ func processBag(
 				}
 			case "bz2":
 				if chunkReader == nil {
-					chunkReader = bzip2.NewReader(r)
+					chunkReader = &resettableByteReader{bzip2.NewReader(r)}
 				} else {
 					chunkReader.Reset(r)
 				}
