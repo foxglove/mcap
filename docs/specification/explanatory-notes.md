@@ -1,6 +1,7 @@
 ---
 description: The following notes may be useful for users of the MCAP format, including implementers of readers and writers.
 ---
+
 # Explanatory Notes
 
 The following notes may be useful for users of the MCAP format, including implementers of readers and writers.

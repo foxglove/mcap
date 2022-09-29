@@ -1,6 +1,7 @@
 ---
 description: Read MCAP files with ROS 2 message data in Python.
 ---
+
 # Reading ROS 2
 
 To start writing Python code that reads ROS 2 data from MCAP, install the [`rosbag2_py` package](https://index.ros.org/p/rosbag2_py/).

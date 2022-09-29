@@ -1,6 +1,7 @@
 ---
 description: Write MCAP files with JSON-encoded messages in Python.
 ---
+
 # Writing JSON
 
 !!! info
