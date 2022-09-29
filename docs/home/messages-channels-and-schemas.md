@@ -1,3 +1,6 @@
+---
+description: MCAP organizes its data via messages, channels, and schemas.
+---
 # Messages, Channels and Schemas
 
 MCAP organizes its data via messages, channels, and schemas.

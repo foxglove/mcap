@@ -1,3 +1,6 @@
+---
+description: Read, write, and visualize MCAP files containing ROS 2 data.
+---
 # ROS 2
 
 ## Convert to MCAP

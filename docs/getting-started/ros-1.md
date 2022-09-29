@@ -1,3 +1,6 @@
+---
+description: Read, write, and visualize MCAP files containing ROS 1 data.
+---
 # ROS 1
 
 ## Convert to MCAP

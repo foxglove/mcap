@@ -1,3 +1,6 @@
+---
+description: Read, write, and visualize MCAP files containing JSON data.
+---
 # JSON
 
 ## Read and write MCAP

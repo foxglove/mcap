@@ -1,5 +1,9 @@
 # Configuration for all pages
 site_name: "MCAP"
+site_url: https://mcap.dev/
+site_description: >-
+  MCAP is a modular, performant, and serialization-agnostic container file format for pub/sub
+  messages, primarily intended for use in robotics applications.
 theme:
   name: material
   custom_dir: "docs/theme"
@@ -23,6 +27,9 @@ theme:
   font:
     text: IBM Plex Sans
     code: IBM Plex Mono
+
+plugins:
+  - social
 
 extra_css: [styles/extra.css]
 

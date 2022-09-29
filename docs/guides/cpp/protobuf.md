@@ -1,3 +1,6 @@
+---
+description: Read and write MCAP files with Protobuf-encoded messages in C++.
+---
 # Reading and writing Protobuf
 
 !!! info
