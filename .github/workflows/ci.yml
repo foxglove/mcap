@@ -408,6 +408,8 @@ jobs:
             {{formulaName}} ${{ steps.extract-version.outputs.version-number }}
 
             Created by https://github.com/mislav/bump-homebrew-formula-action
+
+            cc @foxglove/mcap-cli-maintainers
         env:
           COMMITTER_TOKEN: ${{ secrets.HOMEBREW_GITHUB_TOKEN }}
 
