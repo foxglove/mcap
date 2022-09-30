@@ -71,7 +71,7 @@ func printMetadata(w io.Writer, r io.ReadSeeker, info *mcap.Info) error {
 
 var listMetadataCmd = &cobra.Command{
 	Use:   "metadata",
-	Short: "List metadata in an mcap file",
+	Short: "List metadata in an MCAP file",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
@@ -97,7 +97,7 @@ var listMetadataCmd = &cobra.Command{
 
 var addMetadataCmd = &cobra.Command{
 	Use:   "metadata",
-	Short: "Add metadata to an mcap file",
+	Short: "Add metadata to an MCAP file",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
@@ -121,7 +121,7 @@ var addMetadataCmd = &cobra.Command{
 		}
 		err = utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
 			if remote {
-				die("not supported on remote mcap files")
+				die("not supported on remote MCAP files")
 			}
 			return utils.RewriteMCAP(tmpfile, rs, func(w *mcap.Writer) error {
 				return w.WriteMetadata(&mcap.Metadata{

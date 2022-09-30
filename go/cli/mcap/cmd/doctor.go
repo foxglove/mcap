@@ -441,7 +441,7 @@ func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
 func main(cmd *cobra.Command, args []string) {
 	ctx := context.Background()
 	if len(args) != 1 {
-		fmt.Println("An mcap file argument is required.")
+		fmt.Println("An MCAP file argument is required.")
 		os.Exit(1)
 	}
 	filename := args[0]
@@ -460,7 +460,7 @@ func main(cmd *cobra.Command, args []string) {
 
 var doctorCommand = &cobra.Command{
 	Use:   "doctor <file>",
-	Short: "Check an mcap file structure",
+	Short: "Check an MCAP file structure",
 	Run:   main,
 }
 

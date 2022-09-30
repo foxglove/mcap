@@ -37,7 +37,7 @@ func printAttachments(w io.Writer, attachmentIndexes []*mcap.AttachmentIndex) {
 
 var attachmentsCmd = &cobra.Command{
 	Use:   "attachments",
-	Short: "List attachments in an mcap file",
+	Short: "List attachments in an MCAP file",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {

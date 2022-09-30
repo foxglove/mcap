@@ -316,7 +316,7 @@ async function validate(
 }
 
 program
-  .argument("<file...>", "path to mcap file(s)")
+  .argument("<file...>", "path to MCAP file(s)")
   .option("--deserialize", "deserialize message contents", false)
   .option("--dump", "dump message contents to stdout", false)
   .option("--stream", "if a file is indexed, ignore the index and read it as a stream", false)
