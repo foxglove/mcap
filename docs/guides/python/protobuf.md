@@ -1,3 +1,7 @@
+---
+description: Read and write MCAP files with Protobuf-encoded messages in Python.
+---
+
 # Reading and writing Protobuf
 
 To start writing Python code that reads and writes Protobuf data in MCAP, install the [`mcap-protobuf-support` helper library](https://github.com/foxglove/mcap/tree/main/python/mcap-protobuf-support).
