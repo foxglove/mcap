@@ -22,6 +22,7 @@ worker.onmessage = function(e) {
 
     // Reveal input and display message once loading is complete
     input.style.display = "block";
+    document.getElementById('loader').remove();
     info.innerText = 'Loading index complete.';
 }
 
@@ -59,7 +60,7 @@ function updateSearchResults() {
     const searchOptions = {
         prefix: true,
         fuzzy: 0.2,
-        boost: { name: 2}
+        boost: { name: 2 }
     }
     const res = miniSearch.search(input.value, searchOptions).slice(0, 90);
 

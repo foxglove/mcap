@@ -1,4 +1,4 @@
-importScripts('https://cdn.jsdelivr.net/npm/minisearch@2.4.1/dist/umd/index.min.js');
+importScripts('index.min.js');
 
 fetch('index.json').then(function (res) {
     return res.json();
@@ -9,5 +9,5 @@ fetch('index.json').then(function (res) {
         storeFields: ['decl', 'type', 'sid'] // fields to return with search results
     })
     miniSearch.addAll(data);
-    postMessage(JSON.stringify(miniSearch.toJSON()));
+    postMessage(JSON.stringify(miniSearch));
 });
