@@ -122,7 +122,7 @@ var getAttachmentCmd = &cobra.Command{
 
 var addAttachmentCmd = &cobra.Command{
 	Use:   "attachment",
-	Short: "Add an attachment to an mcap file",
+	Short: "Add an attachment to an MCAP file",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
@@ -140,7 +140,7 @@ var addAttachmentCmd = &cobra.Command{
 		}
 		err = utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
 			if remote {
-				die("not supported on remote mcap files")
+				die("not supported on remote MCAP files")
 			}
 			fi, err := os.Stat(addAttachmentFilename)
 			if err != nil {

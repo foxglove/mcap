@@ -237,7 +237,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 // mergeCmd represents the merge command
 var mergeCmd = &cobra.Command{
 	Use:   "merge file1.mcap [file2.mcap] [file3.mcap]...",
-	Short: "Merge a selection of mcap files by record timestamp",
+	Short: "Merge a selection of MCAP files by record timestamp",
 	Run: func(cmd *cobra.Command, args []string) {
 		if mergeOutputFile == "" && !utils.StdoutRedirected() {
 			die(PleaseRedirect)

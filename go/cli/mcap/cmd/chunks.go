@@ -46,7 +46,7 @@ func printChunks(w io.Writer, chunkIndexes []*mcap.ChunkIndex) {
 // chunksCmd represents the chunks command
 var chunksCmd = &cobra.Command{
 	Use:   "chunks",
-	Short: "List chunks in an mcap file",
+	Short: "List chunks in an MCAP file",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {

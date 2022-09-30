@@ -118,7 +118,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 
 var infoCmd = &cobra.Command{
 	Use:   "info",
-	Short: "Report statistics about an mcap file",
+	Short: "Report statistics about an MCAP file",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {

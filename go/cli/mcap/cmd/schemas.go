@@ -100,7 +100,7 @@ func printSchemas(w io.Writer, schemas []*mcap.Schema) {
 // schemasCmd represents the schemas command
 var schemasCmd = &cobra.Command{
 	Use:   "schemas",
-	Short: "List schemas in an mcap file",
+	Short: "List schemas in an MCAP file",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {

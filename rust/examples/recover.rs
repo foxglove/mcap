@@ -19,13 +19,13 @@ struct Args {
     #[clap(short, long, arg_enum, default_value = "auto")]
     color: logsetup::Color,
 
-    #[clap(help = "input mcap file")]
+    #[clap(help = "input MCAP file")]
     input: Utf8PathBuf,
 
     #[clap(
         short,
         long,
-        help = "output mcap file, defaults to <input-file>.recovered.mcap"
+        help = "output MCAP file, defaults to <input-file>.recovered.mcap"
     )]
     output: Option<Utf8PathBuf>,
 }
