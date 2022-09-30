@@ -48,7 +48,7 @@ fn as_json(view: &Record<'_>) -> Value {
 pub fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        eprintln!("Please supply an mcap file as argument");
+        eprintln!("Please supply an MCAP file as argument");
         process::exit(1);
     }
     let file = std::fs::read(&args[1]).expect("file wouldn't open");

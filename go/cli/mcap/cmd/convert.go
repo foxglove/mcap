@@ -65,7 +65,7 @@ func checkMagic(path string) (FileType, error) {
 
 var convertCmd = &cobra.Command{
 	Use:   "convert [input] [output]",
-	Short: "Convert a bag file to an mcap file",
+	Short: "Convert a bag file to an MCAP file",
 	Args:  cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		filetype, err := checkMagic(args[0])

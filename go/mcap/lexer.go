@@ -27,7 +27,7 @@ func (e *errInvalidChunkCrc) Error() string {
 }
 
 // ErrBadMagic indicates the lexer has detected invalid magic bytes.
-var ErrBadMagic = errors.New("not an mcap file")
+var ErrBadMagic = errors.New("not an MCAP file")
 
 const (
 	// TokenHeader represents a header token.

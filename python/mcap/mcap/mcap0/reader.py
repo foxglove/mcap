@@ -205,7 +205,7 @@ class SeekingReader(McapReader):
         footer = next(StreamReader(self._stream, skip_magic=True).records)
         if not isinstance(footer, Footer):
             raise McapError(
-                f"expected footer at end of mcap file, found {type(footer)}"
+                f"expected footer at end of MCAP file, found {type(footer)}"
             )
         if footer.summary_offset_start == 0:
             return None

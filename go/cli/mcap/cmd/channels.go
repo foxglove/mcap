@@ -44,7 +44,7 @@ func printChannels(w io.Writer, channels []*mcap.Channel) error {
 // channelsCmd represents the channels command
 var channelsCmd = &cobra.Command{
 	Use:   "channels",
-	Short: "List channels in an mcap file",
+	Short: "List channels in an MCAP file",
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {

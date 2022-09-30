@@ -6,7 +6,7 @@ import (
 
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "list records of an mcap file",
+	Short: "List records of an MCAP file",
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.Help()
 	},
