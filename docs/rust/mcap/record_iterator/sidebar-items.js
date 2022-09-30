@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":[["RecordIterator","A wrapper for a [`std::io::Read`] implementation which parses out records and returns them from an iterator."]]};

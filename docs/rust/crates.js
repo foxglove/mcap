@@ -1,1 +1,1 @@
-window.ALL_CRATES = ["conformance_reader","mcap"];
+window.ALL_CRATES = ["mcap"];

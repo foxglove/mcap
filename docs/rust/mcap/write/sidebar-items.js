@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["WriteOptions",""],["Writer","Writes an MCAP file to the given writer."]]};

@@ -61,68 +61,340 @@
 <span id="61">61</span>
 <span id="62">62</span>
 <span id="63">63</span>
-</pre><pre class="rust"><code><span class="attribute">#![<span class="ident">doc</span> <span class="op">=</span> <span class="macro">include_str!</span>(<span class="string">&quot;../README.md&quot;</span>)]</span>
-<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">lexer</span>;
-<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">parse</span>;
-<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">record_iterator</span>;
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
+<span id="78">78</span>
+<span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+<span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
+</pre><pre class="rust"><code><span class="doccomment">//! A library for manipulating [Foxglove MCAP](https://github.com/foxglove/mcap) files,</span>
+<span class="doccomment">//! both reading:</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! ```no_run</span>
+<span class="doccomment">//! use std::fs;</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! use anyhow::{Context, Result};</span>
+<span class="doccomment">//! use camino::Utf8Path;</span>
+<span class="doccomment">//! use memmap::Mmap;</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! fn map_mcap&lt;P: AsRef&lt;Utf8Path&gt;&gt;(p: P) -&gt; Result&lt;Mmap&gt; {</span>
+<span class="doccomment">//!     let fd = fs::File::open(p.as_ref()).context(&quot;Couldn&#39;t open MCAP file&quot;)?;</span>
+<span class="doccomment">//!     unsafe { Mmap::map(&amp;fd) }.context(&quot;Couldn&#39;t map MCAP file&quot;)</span>
+<span class="doccomment">//! }</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! fn read_it() -&gt; Result&lt;()&gt; {</span>
+<span class="doccomment">//!     let mapped = map_mcap(&quot;in.mcap&quot;)?;</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//!     for message in mcap::MessageStream::new(&amp;mapped)? {</span>
+<span class="doccomment">//!         println!(&quot;{:?}&quot;, message?);</span>
+<span class="doccomment">//!         // Or whatever else you&#39;d like to do...</span>
+<span class="doccomment">//!     }</span>
+<span class="doccomment">//!     Ok(())</span>
+<span class="doccomment">//! }</span>
+<span class="doccomment">//! ```</span>
+<span class="doccomment">//! or writing:</span>
+<span class="doccomment">//! ```no_run</span>
+<span class="doccomment">//! use std::{collections::BTreeMap, fs, io::BufWriter};</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! use anyhow::Result;</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! use mcap::{Channel, records::MessageHeader, Writer};</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//! fn write_it() -&gt; Result&lt;()&gt; {</span>
+<span class="doccomment">//!     // To set the profile or compression options, see mcap::WriteOptions.</span>
+<span class="doccomment">//!     let mut out = Writer::new(</span>
+<span class="doccomment">//!         BufWriter::new(fs::File::create(&quot;out.mcap&quot;)?)</span>
+<span class="doccomment">//!     )?;</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//!     // Channels and schemas are automatically assigned ID as they&#39;re serialized,</span>
+<span class="doccomment">//!     // and automatically deduplicated with `Arc` when deserialized.</span>
+<span class="doccomment">//!     let my_channel = Channel {</span>
+<span class="doccomment">//!         topic: String::from(&quot;cool stuff&quot;),</span>
+<span class="doccomment">//!         schema: None,</span>
+<span class="doccomment">//!         message_encoding: String::from(&quot;application/octet-stream&quot;),</span>
+<span class="doccomment">//!         metadata: BTreeMap::default()</span>
+<span class="doccomment">//!     };</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//!     let channel_id = out.add_channel(&amp;my_channel)?;</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//!     out.write_to_known_channel(</span>
+<span class="doccomment">//!         &amp;MessageHeader {</span>
+<span class="doccomment">//!             channel_id,</span>
+<span class="doccomment">//!             sequence: 25,</span>
+<span class="doccomment">//!             log_time: 6,</span>
+<span class="doccomment">//!             publish_time: 24</span>
+<span class="doccomment">//!         },</span>
+<span class="doccomment">//!         &amp;[1, 2, 3]</span>
+<span class="doccomment">//!     )?;</span>
+<span class="doccomment">//!     out.write_to_known_channel(</span>
+<span class="doccomment">//!         &amp;MessageHeader {</span>
+<span class="doccomment">//!             channel_id,</span>
+<span class="doccomment">//!             sequence: 32,</span>
+<span class="doccomment">//!             log_time: 23,</span>
+<span class="doccomment">//!             publish_time: 25</span>
+<span class="doccomment">//!         },</span>
+<span class="doccomment">//!         &amp;[3, 4, 5]</span>
+<span class="doccomment">//!     )?;</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//!     out.finish()?;</span>
+<span class="doccomment">//!</span>
+<span class="doccomment">//!     Ok(())</span>
+<span class="doccomment">//! }</span>
+<span class="doccomment">//! ```</span>
+
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">read</span>;
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">records</span>;
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">write</span>;
 
-<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">test</span>)]</span>
-<span class="kw">mod</span> <span class="ident">tests</span> {
-    <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::record_iterator::RecordIterator</span>;
-    <span class="kw">use</span> <span class="ident"><span class="kw">crate</span>::records</span>::<span class="kw-2">*</span>;
+<span class="kw">mod</span> <span class="ident">io_utils</span>;
 
-    <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use</span> <span class="ident">records::Record</span>;
-    <span class="kw">use</span> <span class="ident">std::io::Read</span>;
-    <span class="kw">use</span> <span class="ident">std::path::PathBuf</span>;
+<span class="kw">use</span> <span class="ident">std</span>::{<span class="ident">borrow::Cow</span>, <span class="ident">collections::BTreeMap</span>, <span class="ident">fmt</span>, <span class="ident">sync::Arc</span>};
 
-    <span class="kw">fn</span> <span class="ident">test_asset_path</span>(<span class="ident">name</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span>) -&gt; <span class="ident">PathBuf</span> {
-        <span class="kw">let</span> <span class="ident">pkg_path</span> <span class="op">=</span> <span class="ident">PathBuf::from</span>(<span class="macro">env!</span>(<span class="string">&quot;CARGO_MANIFEST_DIR&quot;</span>));
-        <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">repo_root</span>) <span class="op">=</span> <span class="ident">pkg_path</span>.<span class="ident">parent</span>() {
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">asset_path</span>: <span class="ident">PathBuf</span> <span class="op">=</span> <span class="ident">repo_root</span>.<span class="ident">to_owned</span>();
-            <span class="ident">asset_path</span>.<span class="ident">push</span>(<span class="string">&quot;tests/conformance/data&quot;</span>);
-            <span class="ident">asset_path</span>.<span class="ident">push</span>(<span class="ident">name</span>);
-            <span class="kw">return</span> <span class="ident">asset_path</span>;
-        }
-        <span class="macro">panic!</span>(<span class="string">&quot;expected CARGO_MANIFEST_DIR to be a real path with a parent&quot;</span>)
-    }
+<span class="kw">use</span> <span class="ident">thiserror::Error</span>;
 
-    <span class="kw">fn</span> <span class="ident">read_test_asset</span>(<span class="ident">name</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span>) -&gt; <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">u8</span><span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">path</span> <span class="op">=</span> <span class="ident">test_asset_path</span>(<span class="ident">name</span>);
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">file</span> <span class="op">=</span> <span class="ident">std::fs::File::open</span>(<span class="ident">path</span>).<span class="ident">unwrap</span>();
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">out</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">u8</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
-        <span class="ident">file</span>.<span class="ident">read_to_end</span>(<span class="kw-2">&amp;mut</span> <span class="ident">out</span>).<span class="ident">unwrap</span>();
-        <span class="kw">return</span> <span class="ident">out</span>;
-    }
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Error</span>)]</span>
+<span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">McapError</span> {
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Bad magic number&quot;</span>)]</span>
+    <span class="ident">BadMagic</span>,
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Footer record couldn&#39;t be found at the end of the file, before the magic bytes&quot;</span>)]</span>
+    <span class="ident">BadFooter</span>,
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Attachment CRC failed (expeted {saved:08X}, got {calculated:08X}&quot;</span>)]</span>
+    <span class="ident">BadAttachmentCrc</span> { <span class="ident">saved</span>: <span class="ident">u32</span>, <span class="ident">calculated</span>: <span class="ident">u32</span> },
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Chunk CRC failed (expected {saved:08X}, got {calculated:08X}&quot;</span>)]</span>
+    <span class="ident">BadChunkCrc</span> { <span class="ident">saved</span>: <span class="ident">u32</span>, <span class="ident">calculated</span>: <span class="ident">u32</span> },
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Data section CRC failed (expected {saved:08X}, got {calculated:08X})&quot;</span>)]</span>
+    <span class="ident">BadDataCrc</span> { <span class="ident">saved</span>: <span class="ident">u32</span>, <span class="ident">calculated</span>: <span class="ident">u32</span> },
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Summary section CRC failed (expected {saved:08X}, got {calculated:08X})&quot;</span>)]</span>
+    <span class="ident">BadSummaryCrc</span> { <span class="ident">saved</span>: <span class="ident">u32</span>, <span class="ident">calculated</span>: <span class="ident">u32</span> },
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Index offset and length didn&#39;t point to the expected record type&quot;</span>)]</span>
+    <span class="ident">BadIndex</span>,
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Attachment length ({header}) exceeds space in record ({available})&quot;</span>)]</span>
+    <span class="ident">BadAttachmentLength</span> { <span class="ident">header</span>: <span class="ident">u64</span>, <span class="ident">available</span>: <span class="ident">u64</span> },
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Chunk length ({header}) exceeds space in record ({available})&quot;</span>)]</span>
+    <span class="ident">BadChunkLength</span> { <span class="ident">header</span>: <span class="ident">u64</span>, <span class="ident">available</span>: <span class="ident">u64</span> },
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Schema length ({header}) exceeds space in record ({available})&quot;</span>)]</span>
+    <span class="ident">BadSchemaLength</span> { <span class="ident">header</span>: <span class="ident">u32</span>, <span class="ident">available</span>: <span class="ident">u32</span> },
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Channel `{0}` has mulitple records that don&#39;t match.&quot;</span>)]</span>
+    <span class="ident">ConflictingChannels</span>(<span class="ident">String</span>),
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Schema `{0}` has mulitple records that don&#39;t match.&quot;</span>)]</span>
+    <span class="ident">ConflictingSchemas</span>(<span class="ident">String</span>),
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Record parse failed&quot;</span>)]</span>
+    <span class="ident">Parse</span>(<span class="attribute">#[<span class="ident">from</span>]</span> <span class="ident">binrw::Error</span>),
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;I/O error from writing, or reading a compression stream&quot;</span>)]</span>
+    <span class="ident">Io</span>(<span class="attribute">#[<span class="ident">from</span>]</span> <span class="ident">std::io::Error</span>),
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Schema has an ID of 0&quot;</span>)]</span>
+    <span class="ident">InvalidSchemaId</span>,
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;MCAP file ended in the middle of a record&quot;</span>)]</span>
+    <span class="ident">UnexpectedEof</span>,
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Chunk ended in the middle of a record&quot;</span>)]</span>
+    <span class="ident">UnexpectedEoc</span>,
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Message {0} referenced unknown channel {1}&quot;</span>)]</span>
+    <span class="ident">UnknownChannel</span>(<span class="ident">u32</span>, <span class="ident">u16</span>),
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Channel `{0}` referenced unknown schema {1}&quot;</span>)]</span>
+    <span class="ident">UnknownSchema</span>(<span class="ident">String</span>, <span class="ident">u16</span>),
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Found record with opcode {0:02X} in a chunk&quot;</span>)]</span>
+    <span class="ident">UnexpectedChunkRecord</span>(<span class="ident">u8</span>),
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Unsupported compression format `{0}`&quot;</span>)]</span>
+    <span class="ident">UnsupportedCompression</span>(<span class="ident">String</span>),
+}
 
-    <span class="attribute">#[<span class="ident">test</span>]</span>
-    <span class="kw">fn</span> <span class="ident">no_data_read</span>() {
-        <span class="kw">let</span> <span class="ident">mcap_data</span> <span class="op">=</span> <span class="ident">read_test_asset</span>(<span class="string">&quot;NoData/NoData.mcap&quot;</span>);
-        <span class="kw">let</span> <span class="ident">expected</span>: [<span class="ident">Record</span>; <span class="number">3</span>] <span class="op">=</span> [
-            <span class="ident">Record::Header</span>(<span class="ident">Header</span> {
-                <span class="ident">library</span>: <span class="string">&quot;&quot;</span>.<span class="ident">into</span>(),
-                <span class="ident">profile</span>: <span class="string">&quot;&quot;</span>.<span class="ident">into</span>(),
-            }),
-            <span class="ident">Record::DataEnd</span>(<span class="ident">DataEnd</span> {
-                <span class="ident">data_section_crc</span>: <span class="number">3959079795</span>,
-            }),
-            <span class="ident">Record::Footer</span>(<span class="ident">Footer</span> {
-                <span class="ident">summary_crc</span>: <span class="number">1875167664</span>,
-                <span class="ident">summary_offset_start</span>: <span class="number">0</span>,
-                <span class="ident">summary_start</span>: <span class="number">0</span>,
-            }),
-        ];
+<span class="kw">pub</span> <span class="kw">type</span> <span class="ident">McapResult</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span> <span class="op">=</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">T</span>, <span class="ident">McapError</span><span class="op">&gt;</span>;
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">count</span> <span class="op">=</span> <span class="number">0</span>;
-        <span class="ident">RecordIterator::new</span>(<span class="kw-2">&amp;</span><span class="ident">mcap_data</span>[..])
-            .<span class="ident">zip</span>(<span class="ident">expected</span>.<span class="ident">iter</span>())
-            .<span class="ident">for_each</span>(<span class="op">|</span>(<span class="ident">actual</span>, <span class="ident">expected</span>)<span class="op">|</span> {
-                <span class="macro">assert_eq!</span>(<span class="ident">expected</span>, <span class="kw-2">&amp;</span><span class="ident">actual</span>.<span class="ident">expect</span>(<span class="string">&quot;failed to parse&quot;</span>));
-                <span class="ident">count</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
-            });
-        <span class="macro">assert_eq!</span>(<span class="number">3</span>, <span class="ident">count</span>);
+<span class="doccomment">/// Magic bytes for the MCAP format</span>
+<span class="kw">pub</span> <span class="kw">const</span> <span class="ident">MAGIC</span>: <span class="kw-2">&amp;</span>[<span class="ident">u8</span>] <span class="op">=</span> <span class="kw-2">&amp;</span>[<span class="number">0x89</span>, <span class="string">b&#39;M&#39;</span>, <span class="string">b&#39;C&#39;</span>, <span class="string">b&#39;A&#39;</span>, <span class="string">b&#39;P&#39;</span>, <span class="number">0x30</span>, <span class="string">b&#39;\r&#39;</span>, <span class="string">b&#39;\n&#39;</span>];
+
+<span class="doccomment">/// Compression options for chunks of channels, schemas, and messages in an MCAP file</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Copy</span>, <span class="ident">Clone</span>, <span class="ident">Default</span>)]</span>
+<span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">Compression</span> {
+    <span class="attribute">#[<span class="ident">default</span>]</span>
+    <span class="ident">Zstd</span>,
+    <span class="ident">Lz4</span>,
+}
+
+<span class="doccomment">/// Describes a schema used by one or more [Channel]s in an MCAP file</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// The [`CoW`](std::borrow::Cow) can either borrow directly from the mapped file,</span>
+<span class="doccomment">/// or hold its own buffer if it was decompressed from a chunk.</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clone</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">Hash</span>)]</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Schema</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="ident">name</span>: <span class="ident">String</span>,
+    <span class="kw">pub</span> <span class="ident">encoding</span>: <span class="ident">String</span>,
+    <span class="kw">pub</span> <span class="ident">data</span>: <span class="ident">Cow</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, [<span class="ident">u8</span>]<span class="op">&gt;</span>,
+}
+
+<span class="kw">impl</span> <span class="ident">fmt::Debug</span> <span class="kw">for</span> <span class="ident">Schema</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">fmt</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">f</span>: <span class="kw-2">&amp;mut</span> <span class="ident">fmt::Formatter</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span>) -&gt; <span class="ident">fmt::Result</span> {
+        <span class="ident">f</span>.<span class="ident">debug_struct</span>(<span class="string">&quot;Schema&quot;</span>)
+            .<span class="ident">field</span>(<span class="string">&quot;name&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">name</span>)
+            .<span class="ident">field</span>(<span class="string">&quot;encoding&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">encoding</span>)
+            .<span class="ident">finish_non_exhaustive</span>()
     }
 }
+
+<span class="doccomment">/// Describes a channel which [Message]s are published to in an MCAP file</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">Hash</span>)]</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Channel</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="ident">topic</span>: <span class="ident">String</span>,
+    <span class="kw">pub</span> <span class="ident">schema</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">Schema</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span>,
+
+    <span class="kw">pub</span> <span class="ident">message_encoding</span>: <span class="ident">String</span>,
+    <span class="kw">pub</span> <span class="ident">metadata</span>: <span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">String</span>, <span class="ident">String</span><span class="op">&gt;</span>,
+}
+
+<span class="doccomment">/// An event in an MCAP file, published to a [Channel]</span>
+<span class="doccomment">///</span>
+<span class="doccomment">/// The [`CoW`](std::borrow::Cow) can either borrow directly from the mapped file,</span>
+<span class="doccomment">/// or hold its own buffer if it was decompressed from a chunk.</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>)]</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Message</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="ident">channel</span>: <span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">Channel</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span><span class="op">&gt;</span>,
+    <span class="kw">pub</span> <span class="ident">sequence</span>: <span class="ident">u32</span>,
+    <span class="kw">pub</span> <span class="ident">log_time</span>: <span class="ident">u64</span>,
+    <span class="kw">pub</span> <span class="ident">publish_time</span>: <span class="ident">u64</span>,
+    <span class="kw">pub</span> <span class="ident">data</span>: <span class="ident">Cow</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, [<span class="ident">u8</span>]<span class="op">&gt;</span>,
+}
+
+<span class="doccomment">/// An attachment and its metadata in an MCAP file</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>)]</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Attachment</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="ident">log_time</span>: <span class="ident">u64</span>,
+    <span class="kw">pub</span> <span class="ident">create_time</span>: <span class="ident">u64</span>,
+    <span class="kw">pub</span> <span class="ident">name</span>: <span class="ident">String</span>,
+    <span class="kw">pub</span> <span class="ident">media_type</span>: <span class="ident">String</span>,
+    <span class="kw">pub</span> <span class="ident">data</span>: <span class="ident">Cow</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, [<span class="ident">u8</span>]<span class="op">&gt;</span>,
+}
+
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">read</span>::{<span class="ident">MessageStream</span>, <span class="ident">Summary</span>};
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">write</span>::{<span class="ident">WriteOptions</span>, <span class="ident">Writer</span>};
 </code></pre></div>
 </section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="mcap" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.64.0 (a55dd71d5 2022-09-19)" ></div></body></html>

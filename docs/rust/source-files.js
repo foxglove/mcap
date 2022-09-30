@@ -1,5 +1,4 @@
 var sourcesIndex = JSON.parse('{\
-"conformance_reader":["",[],["conformance_reader.rs"]],\
-"mcap":["",[],["lexer.rs","lib.rs","parse.rs","record_iterator.rs","records.rs"]]\
+"mcap":["",[],["io_utils.rs","lib.rs","read.rs","records.rs","write.rs"]]\
 }');
 createSourceSidebar();
