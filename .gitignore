@@ -7,3 +7,4 @@ yarn-error.log
 __docs__
 dist
 site/
+.cache

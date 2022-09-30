@@ -1,3 +1,8 @@
+---
+description: >-
+  MCAP files can store multiple streams of heterogeneous data, serialized in any of the following data formats…
+---
+
 # Data Serialization Formats
 
 MCAP files can store multiple streams of heterogeneous data, serialized in any of the following data formats:
