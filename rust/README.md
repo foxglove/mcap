@@ -1,31 +1,18 @@
-# Rust MCAP reading library
+# Rust MCAP library
 
-A library for parsing [MCAP](https://mcap.dev) files in Rust.
+A library for reading and writing [Foxglove MCAP](https://github.com/foxglove/mcap) files.
+See the [crate documentation](https://docs.rs/mcap) for examples.
 
-## Work in Progress!
+## Design goals
 
-This library is a work in progress, and currently only limited record reading is supported.
-Check the [library support matrix](../docs/support-matrix.md) for a feature support comparison.
+- **Simple APIs:** Users should be able to iterate over messages, with each
+  automatically linked to its channel, and that channel linked to its schema.
+  Users shouldn't have to manually track channel and schema IDs.
 
-### Usage example
+- **Performance:** Writers shouldn't hold large buffers (e.g., the current chunk)
+  in memory. Readers should support memory-mapped files to avoid needless copies
+  and to let the OS do what it does best: loading and caching large files based
+  on how you're actually reading them.
 
-```rust
-use mcap::records::Record;
-use mcap::record_iterator::RecordIterator;
-
-let mut file = std::fs::File::open("../tests/conformance/data/OneMessage/OneMessage.mcap")
-    .expect("file not found");
-for rec in RecordIterator::new(&mut file) {
-    match rec {
-        Ok(rec) => match rec {
-            Record::Header(header) => println!("Found a header: {:?}", header),
-            Record::Message(message) => println!("Found a message: {:?}", message),
-            Record::Footer(_) => println!("Found the footer, expect no more records"),
-            _ => println!("Found another record: {:?}", rec),
-        },
-        Err(err) => {
-            eprintln!("failed to read next record: {}", err);
-        }
-    }
-}
-```
+- **Resilience:** Like MCAP itself, the library should let you recover every
+  valid message from an incomplete file or chunk.

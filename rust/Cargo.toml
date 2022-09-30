@@ -2,19 +2,38 @@
 name = "mcap"
 description = "A library for reading and writing MCAP files"
 homepage = "https://mcap.dev"
+keywords = [ "foxglove", "mcap" ]
+categories = [ "science::robotics", "compression" ]
 repository = "https://github.com/foxglove/mcap"
 documentation = "https://mcap.dev/docs/rust/doc/mcap/index.html"
 readme = "README.md"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+binrw = "0.9"
+byteorder = "1.4"
+crc32fast = "1.3"
+enumset = "1.0.11"
+log = "0.4"
+lz4 = "1.0"
+num_cpus = "1.13"
+paste = "1.0"
 serde = { version = "1", features = ["derive"] }
+thiserror = "1.0"
+zstd = { version = "0.11", features = ["zstdmt"] }
+
+[dev-dependencies]
+anyhow = "1"
+atty = "0.2"
+camino = "1.0"
+clap = { version = "3.2", features = ["derive"]}
+itertools = "0.10"
+memmap = "0.7"
+rayon = "1.5"
 serde_json = { version = "1" }
-lz4 = { version = "1" }
-zstd = { version = "0.11" }
-crc = { version = "3" }
-lifetime = { version = "0.1", features = ["macros"] }
+simplelog = "0.12"
+tempfile = "3.3"
