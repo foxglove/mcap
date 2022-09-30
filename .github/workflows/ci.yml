@@ -154,7 +154,7 @@ jobs:
         with:
           toolchain: stable
           default: true
-      - run: cd rust && cargo build
+      - run: cd rust && cargo build --example=conformance_reader
       - run: yarn install --frozen-lockfile
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner rust-

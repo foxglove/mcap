@@ -25,6 +25,7 @@ ignorePaths:
   - mkdocs.yml
   - fathom.html
   - vendor
+  - rust
 
 words:
   - callerid

@@ -1,6 +1,5 @@
 use mcap::records::Record;
 
-use mcap::record_iterator::RecordIterator;
 use serde_json::{json, Value};
 use std::env;
 use std::process;
@@ -52,9 +51,9 @@ pub fn main() {
         eprintln!("Please supply an mcap file as argument");
         process::exit(1);
     }
-    let mut file = std::fs::File::open(&args[1]).expect("file wouldn't open");
+    let file = std::fs::read(&args[1]).expect("file wouldn't open");
     let mut json_records: Vec<Value> = vec![];
-    for rec in RecordIterator::new(&mut file) {
+    for rec in mcap::read::ChunkFlattener::new(&file).expect("Couldn't read file") {
         match rec {
             Ok(rec) => match rec {
                 // Skip message indices

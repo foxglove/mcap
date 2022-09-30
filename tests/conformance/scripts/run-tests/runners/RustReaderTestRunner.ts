@@ -11,7 +11,7 @@ export default class RustReaderTestRunner extends ReadTestRunner {
 
   async runReadTest(filePath: string): Promise<string> {
     const { stdout } = await promisify(exec)(`./conformance_reader ${filePath}`, {
-      cwd: join(__dirname, "../../../../../rust/target/debug/"),
+      cwd: join(__dirname, "../../../../../rust/target/debug/examples"),
     });
     return stdout.trim();
   }
