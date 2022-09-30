@@ -239,7 +239,7 @@
         <span class="n">footer</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">StreamReader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">,</span> <span class="n">skip_magic</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">records</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">footer</span><span class="p">,</span> <span class="n">Footer</span><span class="p">):</span>
             <span class="k">raise</span> <span class="n">McapError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;expected footer at end of mcap file, found </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">footer</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;expected footer at end of MCAP file, found </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">footer</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="n">footer</span><span class="o">.</span><span class="n">summary_offset_start</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
