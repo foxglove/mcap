@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"sort"
 	"time"
@@ -122,7 +121,7 @@ var infoCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
-			log.Fatal("Unexpected number of args")
+			die("Unexpected number of args")
 		}
 		// check if it's a remote file
 		filename := args[0]
@@ -142,7 +141,7 @@ var infoCmd = &cobra.Command{
 			return nil
 		})
 		if err != nil {
-			log.Fatalf("Failed to read file %s: %v", filename, err)
+			die("Failed to read file %s: %v", filename, err)
 		}
 	},
 }

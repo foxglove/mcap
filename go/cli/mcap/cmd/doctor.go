@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"log"
 	"math"
 	"os"
 
@@ -125,7 +124,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			log.Fatal("Failed to read token:", err)
+			die("Failed to read token: %s", err)
 		}
 		if len(data) > len(msg) {
 			msg = data
@@ -231,7 +230,7 @@ func (doctor *mcapDoctor) Examine() error {
 				}
 				break
 			}
-			log.Fatal("Failed to read token:", err)
+			die("Failed to read token: %s", err)
 		}
 		lastToken = tokenType
 		if len(data) > len(msg) {
@@ -454,7 +453,7 @@ func main(cmd *cobra.Command, args []string) {
 		return doctor.Examine()
 	})
 	if err != nil {
-		log.Fatalf("Doctor command failed: %s", err)
+		die("Doctor command failed: %s", err)
 	}
 }
 

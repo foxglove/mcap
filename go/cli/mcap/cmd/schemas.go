@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"sort"
 	"strings"
@@ -15,10 +14,6 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb" // cspell:words descriptorpb
-)
-
-var (
-	protobufSchemaSeparator = "================================================================================\n"
 )
 
 func parseDescriptor(b []byte) (*descriptorpb.FileDescriptorSet, error) {
@@ -74,12 +69,12 @@ func printSchemas(w io.Writer, schemas []*mcap.Schema) {
 		case "protobuf":
 			descriptor, err := parseDescriptor(schema.Data)
 			if err != nil {
-				log.Fatalf("failed to parse descriptor: %v", err)
+				die("failed to parse descriptor: %v", err)
 			}
 			buf := &bytes.Buffer{}
 			err = printDescriptor(buf, descriptor)
 			if err != nil {
-				log.Fatalf("Failed to print descriptor: %v", err)
+				die("Failed to print descriptor: %v", err)
 			}
 			displayString = buf.String()
 		default:
@@ -104,7 +99,7 @@ var schemasCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
-			log.Fatal("Unexpected number of args")
+			die("Unexpected number of args")
 		}
 		filename := args[0]
 		err := utils.WithReader(ctx, filename, func(matched bool, rs io.ReadSeeker) error {
@@ -128,7 +123,7 @@ var schemasCmd = &cobra.Command{
 			return nil
 		})
 		if err != nil {
-			log.Fatal("Failed to list schemas: %w", err)
+			die("Failed to list schemas: %s", err)
 		}
 	},
 }
