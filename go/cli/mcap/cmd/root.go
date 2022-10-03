@@ -29,7 +29,7 @@ func die(s string, args ...any) {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "Config file (default is $HOME/.mcap.yaml)")
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	rootCmd.InitDefaultVersionFlag()
 }
 
 func initConfig() {
