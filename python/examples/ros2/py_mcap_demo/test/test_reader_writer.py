@@ -1,4 +1,4 @@
-from mcap.mcap0.reader import make_reader
+from mcap.reader import make_reader
 
 from py_mcap_demo.reader import read_messages
 from py_mcap_demo.writer import write_to

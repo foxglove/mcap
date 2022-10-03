@@ -2,7 +2,7 @@ from time import time_ns
 import json
 import sys
 
-from mcap.mcap0.writer import Writer
+from mcap.writer import Writer
 
 with open(sys.argv[1], "wb") as stream:
     writer = Writer(stream)
