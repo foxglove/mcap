@@ -69,7 +69,7 @@ var channelsCmd = &cobra.Command{
 			return printChannels(os.Stdout, channels)
 		})
 		if err != nil {
-			die("Failed to list channels: %w", err)
+			die("Failed to list channels: %s", err)
 		}
 	},
 }
