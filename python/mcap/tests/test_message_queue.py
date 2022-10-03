@@ -1,5 +1,5 @@
-from mcap.mcap0.records import ChunkIndex, Message, Schema, Channel
-from mcap.mcap0.message_queue import MessageQueue, QueueItem
+from mcap.records import ChunkIndex, Message, Schema, Channel
+from mcap.message_queue import MessageQueue, QueueItem
 
 
 def dummy_chunk_index(start_time: int, end_time: int) -> ChunkIndex:

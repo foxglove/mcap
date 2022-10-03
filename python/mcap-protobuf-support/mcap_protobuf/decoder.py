@@ -3,9 +3,9 @@ from typing import Dict, Any, Type
 
 from google.protobuf.descriptor_pb2 import FileDescriptorSet
 from google.protobuf.message_factory import GetMessages
-from mcap.mcap0.exceptions import McapError
-from mcap.mcap0.records import Message, Schema
-from mcap.mcap0.well_known import SchemaEncoding
+from mcap.exceptions import McapError
+from mcap.records import Message, Schema
+from mcap.well_known import SchemaEncoding
 
 
 class McapProtobufDecodeError(McapError):
@@ -24,9 +24,9 @@ class Decoder:
         and returns the decoded protobuf message from within.
 
         :param schema: The message schema record from the MCAP.
-        :type schema: mcap.mcap0.records.Schema
+        :type schema: mcap.records.Schema
         :param message: The message record containing content to be decoded.
-        :type message: mcap.mcap0.records.Message
+        :type message: mcap.records.Message
         :raises McapProtobufDecodeError: if the content could not be decoded as a protobuf message
             with the given schema.
         :return: The decoded message content.

@@ -1,6 +1,6 @@
 """the :py:mod:`mcap_ros1.reader` module provides high-level ROS1 message reading
 capability. For more low-level control, consider using the underlying
-:py:class:`mcap_ros1.decoder.Decoder` and :py:class:`mcap.mcap0.reader.McapReader` objects directly.
+:py:class:`mcap_ros1.decoder.Decoder` and :py:class:`mcap.reader.McapReader` objects directly.
 """
 from typing import IO, Union, Any, Dict, Iterator, Optional, Iterable
 from datetime import datetime
@@ -8,8 +8,8 @@ from os import PathLike
 
 from .decoder import Decoder
 
-from mcap.mcap0.records import Message, Channel
-from mcap.mcap0.reader import McapReader, make_reader
+from mcap.records import Message, Channel
+from mcap.reader import McapReader, make_reader
 
 
 def read_ros1_messages(
@@ -36,7 +36,7 @@ def read_ros1_messages(
     .. note::
         this generator assumes the source MCAP conforms to the `ros1` MCAP profile.
         If you need to decode ROS1 messages from a file containing other encodings, use
-        the :py:func:`mcap.mcap0.reader.McapReader.iter_messages()` function to iterate through
+        the :py:func:`mcap.reader.McapReader.iter_messages()` function to iterate through
         Message records in your MCAP, and decode the ROS1 messages with
         the :py:class:`mcap_ros1.decoder.Decoder` class.
     """

@@ -1,6 +1,6 @@
 from io import BytesIO
 
-from mcap.mcap0.reader import make_reader
+from mcap.reader import make_reader
 from mcap_protobuf.decoder import Decoder
 
 from .generate import generate_sample_data

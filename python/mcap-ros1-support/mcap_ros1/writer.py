@@ -1,6 +1,6 @@
 from io import BufferedWriter, BytesIO
 from typing import IO, Any, Dict, Optional, Union
-from mcap.mcap0.writer import Writer as McapWriter
+from mcap.writer import Writer as McapWriter
 import mcap
 import time
 
