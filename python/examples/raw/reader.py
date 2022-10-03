@@ -1,6 +1,6 @@
 import sys
 
-from mcap.mcap0.reader import make_reader
+from mcap.reader import make_reader
 
 with open(sys.argv[1], "rb") as f:
     reader = make_reader(f)

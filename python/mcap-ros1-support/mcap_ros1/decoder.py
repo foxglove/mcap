@@ -8,9 +8,9 @@ try:
 except ImportError:
     from .vendor.genpy import dynamic  # type: ignore
 
-from mcap.mcap0.exceptions import McapError
-from mcap.mcap0.records import Message, Schema
-from mcap.mcap0.well_known import SchemaEncoding
+from mcap.exceptions import McapError
+from mcap.records import Message, Schema
+from mcap.well_known import SchemaEncoding
 
 
 class McapROS1DecodeError(McapError):
@@ -29,9 +29,9 @@ class Decoder:
         and returns the decoded ROS1 message from within.
 
         :param schema: The message schema record from the MCAP.
-        :type schema: mcap.mcap0.records.Schema
+        :type schema: mcap.records.Schema
         :param message: The message record containing content to be decoded.
-        :type message: mcap.mcap0.records.Message
+        :type message: mcap.records.Message
         :raises McapROS1DecodeError: if the content could not be decoded as a ROS1 message with
             the given schema.
         :return: The decoded message content.

@@ -2,7 +2,7 @@ import contextlib
 from io import BytesIO
 from tempfile import TemporaryFile
 
-from mcap.mcap0.writer import Writer
+from mcap.writer import Writer
 from std_msgs.msg import String  # type: ignore
 
 

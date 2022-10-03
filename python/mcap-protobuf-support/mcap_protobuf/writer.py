@@ -1,8 +1,8 @@
 import time
 from typing import Optional, Dict, Any, Tuple
 
-from mcap.mcap0.writer import Writer as McapWriter
-from mcap.mcap0.well_known import MessageEncoding
+from mcap.writer import Writer as McapWriter
+from mcap.well_known import MessageEncoding
 import mcap
 
 from .schema import register_schema

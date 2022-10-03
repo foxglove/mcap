@@ -1,7 +1,7 @@
 from typing import Any, Set
 from google.protobuf.descriptor import FileDescriptor
 from google.protobuf.descriptor_pb2 import FileDescriptorSet
-from mcap.mcap0.writer import Writer as McapWriter
+from mcap.writer import Writer as McapWriter
 
 
 def register_schema(writer: McapWriter, message_class: Any):

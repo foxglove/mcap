@@ -8,9 +8,9 @@ import zlib
 import lz4.frame
 import pytest
 
-from mcap.mcap0.writer import CompressionType, Writer
-from mcap.mcap0.records import Chunk, ChunkIndex, Statistics
-from mcap.mcap0.stream_reader import StreamReader
+from mcap.writer import CompressionType, Writer
+from mcap.records import Chunk, ChunkIndex, Statistics
+from mcap.stream_reader import StreamReader
 
 
 @contextlib.contextmanager
