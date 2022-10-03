@@ -5,3 +5,4 @@ exclude =
   mcap-protobuf-support/tests/*pb2.py,
   mcap-ros1-support/mcap_ros1/vendor/genpy/*.py,
   mcap-ros1-support/mcap_ros1/vendor/genmsg/*.py,
+  mcap-ros2-support/mcap_ros2/vendor/rosidl_adapter/*.py,

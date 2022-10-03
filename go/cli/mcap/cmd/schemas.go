@@ -69,7 +69,7 @@ func printSchemas(w io.Writer, schemas []*mcap.Schema) {
 
 		var displayString string
 		switch schema.Encoding {
-		case "ros1msg", "ros2msg":
+		case "ros1msg", "ros2msg", "ros2idl":
 			displayString = string(schema.Data)
 		case "protobuf":
 			descriptor, err := parseDescriptor(schema.Data)
