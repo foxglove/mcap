@@ -1,0 +1,7 @@
+mcap.serialization module
+=========================
+
+.. automodule:: mcap.serialization
+   :members:
+   :undoc-members:
+   :show-inheritance:

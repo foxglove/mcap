@@ -1,0 +1,7 @@
+mcap.opcode module
+==================
+
+.. automodule:: mcap.opcode
+   :members:
+   :undoc-members:
+   :show-inheritance:

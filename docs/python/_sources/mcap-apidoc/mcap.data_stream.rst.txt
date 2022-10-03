@@ -1,0 +1,7 @@
+mcap.data\_stream module
+========================
+
+.. automodule:: mcap.data_stream
+   :members:
+   :undoc-members:
+   :show-inheritance:

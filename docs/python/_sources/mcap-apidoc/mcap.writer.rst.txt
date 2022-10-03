@@ -1,0 +1,7 @@
+mcap.writer module
+==================
+
+.. automodule:: mcap.writer
+   :members:
+   :undoc-members:
+   :show-inheritance:

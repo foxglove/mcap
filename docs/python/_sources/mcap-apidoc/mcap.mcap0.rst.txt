@@ -7,16 +7,13 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
-   mcap.mcap0.chunk_builder
-   mcap.mcap0.data_stream
    mcap.mcap0.exceptions
    mcap.mcap0.message_queue
-   mcap.mcap0.opcode
    mcap.mcap0.reader
    mcap.mcap0.records
    mcap.mcap0.serialization
    mcap.mcap0.stream_reader
-   mcap.mcap0.summary
+   mcap.mcap0.warning
    mcap.mcap0.well_known
    mcap.mcap0.writer
 

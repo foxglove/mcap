@@ -1,0 +1,7 @@
+mcap.stream\_reader module
+==========================
+
+.. automodule:: mcap.stream_reader
+   :members:
+   :undoc-members:
+   :show-inheritance:

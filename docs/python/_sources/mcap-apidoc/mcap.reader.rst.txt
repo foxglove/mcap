@@ -1,0 +1,7 @@
+mcap.reader module
+==================
+
+.. automodule:: mcap.reader
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -1,7 +1,0 @@
-mcap.mcap0.summary module
-=========================
-
-.. automodule:: mcap.mcap0.summary
-   :members:
-   :undoc-members:
-   :show-inheritance:

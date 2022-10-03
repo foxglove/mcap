@@ -16,7 +16,7 @@
     <script src="../_static/doctools.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="mcap.mcap0.opcode module" href="mcap.mcap0.opcode.html" />
+    <link rel="next" title="mcap.mcap0.reader module" href="mcap.mcap0.reader.html" />
     <link rel="prev" title="mcap.mcap0.exceptions module" href="mcap.mcap0.exceptions.html" />
    
   <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
@@ -36,32 +36,6 @@
             
   <section id="module-mcap.mcap0.message_queue">
 <span id="mcap-mcap0-message-queue-module"></span><h1>mcap.mcap0.message_queue module<a class="headerlink" href="#module-mcap.mcap0.message_queue" title="Permalink to this heading">¶</a></h1>
-<dl class="py class">
-<dt class="sig sig-object py" id="mcap.mcap0.message_queue.MessageQueue">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">mcap.mcap0.message_queue.</span></span><span class="sig-name descname"><span class="pre">MessageQueue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_time_order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reverse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/mcap/mcap0/message_queue.html#MessageQueue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.mcap0.message_queue.MessageQueue" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>A queue of MCAP messages and chunk indices.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>log_time_order</strong> – if True, this queue acts as a priority queue, ordered by log time.
-if False, <code class="docutils literal notranslate"><span class="pre">pop()</span></code> returns elements in insert order.</p></li>
-<li><p><strong>reverse</strong> – if True, order elements in descending log time order rather than ascending.</p></li>
-</ul>
-</dd>
-</dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="mcap.mcap0.message_queue.MessageQueue.pop">
-<span class="sig-name descname"><span class="pre">pop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="mcap.mcap0.records.html#mcap.mcap0.records.ChunkIndex" title="mcap.mcap0.records.ChunkIndex"><span class="pre">ChunkIndex</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="mcap.mcap0.records.html#mcap.mcap0.records.Schema" title="mcap.mcap0.records.Schema"><span class="pre">Schema</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="mcap.mcap0.records.html#mcap.mcap0.records.Channel" title="mcap.mcap0.records.Channel"><span class="pre">Channel</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="mcap.mcap0.records.html#mcap.mcap0.records.Message" title="mcap.mcap0.records.Message"><span class="pre">Message</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../_modules/mcap/mcap0/message_queue.html#MessageQueue.pop"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.mcap0.message_queue.MessageQueue.pop" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="mcap.mcap0.message_queue.MessageQueue.push">
-<span class="sig-name descname"><span class="pre">push</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="mcap.mcap0.records.html#mcap.mcap0.records.ChunkIndex" title="mcap.mcap0.records.ChunkIndex"><span class="pre">ChunkIndex</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="mcap.mcap0.records.html#mcap.mcap0.records.Schema" title="mcap.mcap0.records.Schema"><span class="pre">Schema</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="mcap.mcap0.records.html#mcap.mcap0.records.Channel" title="mcap.mcap0.records.Channel"><span class="pre">Channel</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="mcap.mcap0.records.html#mcap.mcap0.records.Message" title="mcap.mcap0.records.Message"><span class="pre">Message</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/mcap/mcap0/message_queue.html#MessageQueue.push"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.mcap0.message_queue.MessageQueue.push" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
 </section>
 
 
@@ -104,7 +78,7 @@ if False, <code class="docutils literal notranslate"><span class="pre">pop()</sp
   <li><a href="mcap.html">mcap package</a><ul>
   <li><a href="mcap.mcap0.html">mcap.mcap0 package</a><ul>
       <li>Previous: <a href="mcap.mcap0.exceptions.html" title="previous chapter">mcap.mcap0.exceptions module</a></li>
-      <li>Next: <a href="mcap.mcap0.opcode.html" title="next chapter">mcap.mcap0.opcode module</a></li>
+      <li>Next: <a href="mcap.mcap0.reader.html" title="next chapter">mcap.mcap0.reader module</a></li>
   </ul></li>
   </ul></li>
   </ul></li>

@@ -17,7 +17,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="mcap.mcap0.writer module" href="mcap.mcap0.writer.html" />
-    <link rel="prev" title="mcap.mcap0.summary module" href="mcap.mcap0.summary.html" />
+    <link rel="prev" title="mcap.mcap0.warning module" href="mcap.mcap0.warning.html" />
    
   <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
   
@@ -36,110 +36,6 @@
             
   <section id="module-mcap.mcap0.well_known">
 <span id="mcap-mcap0-well-known-module"></span><h1>mcap.mcap0.well_known module<a class="headerlink" href="#module-mcap.mcap0.well_known" title="Permalink to this heading">¶</a></h1>
-<p>Enums listing the sets of well-known profiles, schema encodings and message encodings
-available in the
-<a class="reference external" href="https://github.com/foxglove/mcap/blob/main/docs/specification/appendix.md">MCAP Specification</a>.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>You don’t need to use these profiles or encodings to use MCAP! Custom profiles and
-encoding strings are allowed.</p>
-</div>
-<dl class="py class">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.MessageEncoding">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">mcap.mcap0.well_known.</span></span><span class="sig-name descname"><span class="pre">MessageEncoding</span></span><a class="reference internal" href="../_modules/mcap/mcap0/well_known.html#MessageEncoding"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.mcap0.well_known.MessageEncoding" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Well-known message encodings for message records</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.MessageEncoding.CBOR">
-<span class="sig-name descname"><span class="pre">CBOR</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cbor'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.MessageEncoding.CBOR" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.MessageEncoding.CDR">
-<span class="sig-name descname"><span class="pre">CDR</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cdr'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.MessageEncoding.CDR" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.MessageEncoding.Flatbuffer">
-<span class="sig-name descname"><span class="pre">Flatbuffer</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'flatbuffer'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.MessageEncoding.Flatbuffer" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.MessageEncoding.JSON">
-<span class="sig-name descname"><span class="pre">JSON</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'json'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.MessageEncoding.JSON" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.MessageEncoding.Protobuf">
-<span class="sig-name descname"><span class="pre">Protobuf</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'protobuf'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.MessageEncoding.Protobuf" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.MessageEncoding.ROS1">
-<span class="sig-name descname"><span class="pre">ROS1</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ros1'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.MessageEncoding.ROS1" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.Profile">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">mcap.mcap0.well_known.</span></span><span class="sig-name descname"><span class="pre">Profile</span></span><a class="reference internal" href="../_modules/mcap/mcap0/well_known.html#Profile"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.mcap0.well_known.Profile" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Well-known MCAP profiles.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.Profile.ROS1">
-<span class="sig-name descname"><span class="pre">ROS1</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ros1'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.Profile.ROS1" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.Profile.ROS2">
-<span class="sig-name descname"><span class="pre">ROS2</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ros2'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.Profile.ROS2" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.SchemaEncoding">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">mcap.mcap0.well_known.</span></span><span class="sig-name descname"><span class="pre">SchemaEncoding</span></span><a class="reference internal" href="../_modules/mcap/mcap0/well_known.html#SchemaEncoding"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.mcap0.well_known.SchemaEncoding" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Well-known encodings for schema records.</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.SchemaEncoding.Flatbuffer">
-<span class="sig-name descname"><span class="pre">Flatbuffer</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'flatbuffer'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.SchemaEncoding.Flatbuffer" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.SchemaEncoding.JSONSchema">
-<span class="sig-name descname"><span class="pre">JSONSchema</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'jsonschema'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.SchemaEncoding.JSONSchema" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.SchemaEncoding.Protobuf">
-<span class="sig-name descname"><span class="pre">Protobuf</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'protobuf'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.SchemaEncoding.Protobuf" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.SchemaEncoding.ROS1">
-<span class="sig-name descname"><span class="pre">ROS1</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ros1msg'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.SchemaEncoding.ROS1" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.SchemaEncoding.ROS2">
-<span class="sig-name descname"><span class="pre">ROS2</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ros2msg'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.SchemaEncoding.ROS2" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.SchemaEncoding.ROS2IDL">
-<span class="sig-name descname"><span class="pre">ROS2IDL</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ros2idl'</span></em><a class="headerlink" href="#mcap.mcap0.well_known.SchemaEncoding.ROS2IDL" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="mcap.mcap0.well_known.SchemaEncoding.SelfDescribing">
-<span class="sig-name descname"><span class="pre">SelfDescribing</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#mcap.mcap0.well_known.SchemaEncoding.SelfDescribing" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
 </section>
 
 
@@ -181,7 +77,7 @@ encoding strings are allowed.</p>
   <li><a href="index.html">mcap</a><ul>
   <li><a href="mcap.html">mcap package</a><ul>
   <li><a href="mcap.mcap0.html">mcap.mcap0 package</a><ul>
-      <li>Previous: <a href="mcap.mcap0.summary.html" title="previous chapter">mcap.mcap0.summary module</a></li>
+      <li>Previous: <a href="mcap.mcap0.warning.html" title="previous chapter">mcap.mcap0.warning module</a></li>
       <li>Next: <a href="mcap.mcap0.writer.html" title="next chapter">mcap.mcap0.writer module</a></li>
   </ul></li>
   </ul></li>

@@ -1,0 +1,7 @@
+mcap.well\_known module
+=======================
+
+.. automodule:: mcap.well_known
+   :members:
+   :undoc-members:
+   :show-inheritance:

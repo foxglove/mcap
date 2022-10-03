@@ -1,0 +1,7 @@
+mcap.records module
+===================
+
+.. automodule:: mcap.records
+   :members:
+   :undoc-members:
+   :show-inheritance:

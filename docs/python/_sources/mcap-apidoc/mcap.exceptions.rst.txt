@@ -1,0 +1,7 @@
+mcap.exceptions module
+======================
+
+.. automodule:: mcap.exceptions
+   :members:
+   :undoc-members:
+   :show-inheritance:

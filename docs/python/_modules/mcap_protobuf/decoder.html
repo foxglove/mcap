@@ -37,9 +37,9 @@
 
 <span class="kn">from</span> <span class="nn">google.protobuf.descriptor_pb2</span> <span class="kn">import</span> <span class="n">FileDescriptorSet</span>
 <span class="kn">from</span> <span class="nn">google.protobuf.message_factory</span> <span class="kn">import</span> <span class="n">GetMessages</span>
-<span class="kn">from</span> <span class="nn">mcap.mcap0.exceptions</span> <span class="kn">import</span> <span class="n">McapError</span>
-<span class="kn">from</span> <span class="nn">mcap.mcap0.records</span> <span class="kn">import</span> <span class="n">Message</span><span class="p">,</span> <span class="n">Schema</span>
-<span class="kn">from</span> <span class="nn">mcap.mcap0.well_known</span> <span class="kn">import</span> <span class="n">SchemaEncoding</span>
+<span class="kn">from</span> <span class="nn">mcap.exceptions</span> <span class="kn">import</span> <span class="n">McapError</span>
+<span class="kn">from</span> <span class="nn">mcap.records</span> <span class="kn">import</span> <span class="n">Message</span><span class="p">,</span> <span class="n">Schema</span>
+<span class="kn">from</span> <span class="nn">mcap.well_known</span> <span class="kn">import</span> <span class="n">SchemaEncoding</span>
 
 
 <div class="viewcode-block" id="McapProtobufDecodeError"><a class="viewcode-back" href="../../mcap-protobuf-apidoc/mcap_protobuf.decoder.html#mcap_protobuf.decoder.McapProtobufDecodeError">[docs]</a><span class="k">class</span> <span class="nc">McapProtobufDecodeError</span><span class="p">(</span><span class="n">McapError</span><span class="p">):</span>
@@ -58,9 +58,9 @@
 <span class="sd">        and returns the decoded protobuf message from within.</span>
 
 <span class="sd">        :param schema: The message schema record from the MCAP.</span>
-<span class="sd">        :type schema: mcap.mcap0.records.Schema</span>
+<span class="sd">        :type schema: mcap.records.Schema</span>
 <span class="sd">        :param message: The message record containing content to be decoded.</span>
-<span class="sd">        :type message: mcap.mcap0.records.Message</span>
+<span class="sd">        :type message: mcap.records.Message</span>
 <span class="sd">        :raises McapProtobufDecodeError: if the content could not be decoded as a protobuf message</span>
 <span class="sd">            with the given schema.</span>
 <span class="sd">        :return: The decoded message content.</span>

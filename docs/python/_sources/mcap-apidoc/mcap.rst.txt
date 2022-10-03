@@ -9,6 +9,25 @@ Subpackages
 
    mcap.mcap0
 
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   mcap.chunk_builder
+   mcap.data_stream
+   mcap.exceptions
+   mcap.message_queue
+   mcap.opcode
+   mcap.reader
+   mcap.records
+   mcap.serialization
+   mcap.stream_reader
+   mcap.summary
+   mcap.well_known
+   mcap.writer
+
 Module contents
 ---------------
 

@@ -42,14 +42,14 @@
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <dl class="py method">
 <dt class="sig sig-object py" id="mcap_ros1.decoder.Decoder.decode">
-<span class="sig-name descname"><span class="pre">decode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schema</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Schema" title="mcap.mcap0.records.Schema"><span class="pre">Schema</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Message" title="mcap.mcap0.records.Message"><span class="pre">Message</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../_modules/mcap_ros1/decoder.html#Decoder.decode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap_ros1.decoder.Decoder.decode" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">decode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">schema</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../mcap-apidoc/mcap.records.html#mcap.records.Schema" title="mcap.records.Schema"><span class="pre">Schema</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../mcap-apidoc/mcap.records.html#mcap.records.Message" title="mcap.records.Message"><span class="pre">Message</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="reference internal" href="../_modules/mcap_ros1/decoder.html#Decoder.decode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap_ros1.decoder.Decoder.decode" title="Permalink to this definition">¶</a></dt>
 <dd><p>Takes a Message record from an MCAP along with its associated Schema,
 and returns the decoded ROS1 message from within.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>schema</strong> (<a class="reference internal" href="../mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Schema" title="mcap.mcap0.records.Schema"><em>mcap.mcap0.records.Schema</em></a>) – The message schema record from the MCAP.</p></li>
-<li><p><strong>message</strong> (<a class="reference internal" href="../mcap-apidoc/mcap.mcap0.records.html#mcap.mcap0.records.Message" title="mcap.mcap0.records.Message"><em>mcap.mcap0.records.Message</em></a>) – The message record containing content to be decoded.</p></li>
+<li><p><strong>schema</strong> (<a class="reference internal" href="../mcap-apidoc/mcap.records.html#mcap.records.Schema" title="mcap.records.Schema"><em>mcap.records.Schema</em></a>) – The message schema record from the MCAP.</p></li>
+<li><p><strong>message</strong> (<a class="reference internal" href="../mcap-apidoc/mcap.records.html#mcap.records.Message" title="mcap.records.Message"><em>mcap.records.Message</em></a>) – The message record containing content to be decoded.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
@@ -67,7 +67,7 @@ the given schema.</p>
 <dl class="py exception">
 <dt class="sig sig-object py" id="mcap_ros1.decoder.McapROS1DecodeError">
 <em class="property"><span class="pre">exception</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">mcap_ros1.decoder.</span></span><span class="sig-name descname"><span class="pre">McapROS1DecodeError</span></span><a class="reference internal" href="../_modules/mcap_ros1/decoder.html#McapROS1DecodeError"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap_ros1.decoder.McapROS1DecodeError" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="../mcap-apidoc/mcap.mcap0.exceptions.html#mcap.mcap0.exceptions.McapError" title="mcap.mcap0.exceptions.McapError"><code class="xref py py-class docutils literal notranslate"><span class="pre">McapError</span></code></a></p>
+<dd><p>Bases: <a class="reference internal" href="../mcap-apidoc/mcap.exceptions.html#mcap.exceptions.McapError" title="mcap.exceptions.McapError"><code class="xref py py-class docutils literal notranslate"><span class="pre">McapError</span></code></a></p>
 <p>Raised if a MCAP message record cannot be decoded as a ROS1 message.</p>
 </dd></dl>
 
