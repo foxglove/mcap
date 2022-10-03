@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"os"
 	"strconv"
@@ -100,7 +99,7 @@ func printMessages(
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			log.Fatalf("Failed to read next message: %s", err)
+			die("Failed to read next message: %s", err)
 		}
 		if !formatJSON {
 			if len(message.Data) > 10 {
@@ -183,7 +182,7 @@ var catCmd = &cobra.Command{
 		ctx := context.Background()
 		stat, err := os.Stdin.Stat()
 		if err != nil {
-			log.Fatal(err)
+			die("Failed to stat() stdin: %s", err)
 		}
 		// read stdin if no filename has been provided and data is available on stdin.
 		readingStdin := (stat.Mode()&os.ModeCharDevice == 0 && len(args) == 0)
@@ -191,22 +190,22 @@ var catCmd = &cobra.Command{
 		if readingStdin {
 			reader, err := mcap.NewReader(os.Stdin)
 			if err != nil {
-				log.Fatalf("Failed to create reader: %s", err)
+				die("Failed to create reader: %s", err)
 			}
 			it, err := reader.Messages(getReadOpts(false)...)
 			if err != nil {
-				log.Fatalf("Failed to read messages: %s", err)
+				die("Failed to read messages: %s", err)
 			}
 			err = printMessages(ctx, os.Stdout, it, catFormatJSON)
 			if err != nil {
-				log.Fatalf("Failed to print messages: %s", err)
+				die("Failed to print messages: %s", err)
 			}
 			return
 		}
 
 		// otherwise, could be a remote or local file
 		if len(args) != 1 {
-			log.Fatal("supply a file")
+			die("supply a file")
 		}
 		filename := args[0]
 		err = utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
@@ -225,7 +224,7 @@ var catCmd = &cobra.Command{
 			return nil
 		})
 		if err != nil {
-			log.Fatalf("Error: %s", err)
+			die("Error: %s", err)
 		}
 	},
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
@@ -32,7 +31,7 @@ func printChunks(w io.Writer, chunkIndexes []*mcap.ChunkIndex) {
 			fmt.Sprintf("%d", ci.ChunkLength),
 			fmt.Sprintf("%d", ci.MessageStartTime),
 			fmt.Sprintf("%d", ci.MessageEndTime),
-			fmt.Sprintf("%s", ci.Compression),
+			string(ci.Compression),
 			fmt.Sprintf("%d", ci.CompressedSize),
 			fmt.Sprintf("%d", ci.UncompressedSize),
 			fmt.Sprintf("%f", ratio),
@@ -50,7 +49,7 @@ var chunksCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
-			log.Fatal("Unexpected number of args")
+			die("Unexpected number of args")
 		}
 		filename := args[0]
 		err := utils.WithReader(ctx, filename, func(matched bool, rs io.ReadSeeker) error {
@@ -66,7 +65,7 @@ var chunksCmd = &cobra.Command{
 			return nil
 		})
 		if err != nil {
-			log.Fatal("Failed to list chunks: %w", err)
+			die("Failed to list chunks: %s", err)
 		}
 	},
 }
