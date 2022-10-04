@@ -72,4 +72,4 @@ ci-docs: ci-image
 
 .PHONY: ci-format-check
 ci-format-check: ci-image
-	docker run -t --rm -v $(CURDIR):/mcap/cpp mcap_cpp_ci python3 scripts/format.py .
+	docker run -t --rm -v $(CURDIR):/mcap/cpp -v $(HOME)/.conan/data:/root/.conan/data mcap_cpp_ci python3 scripts/format.py .
