@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Read MCAP files with ROS 2 message data in Python.">
+        <meta name="description" content="Read and write MCAP files with ROS 2 message data in Python.">
       
       
       
@@ -17,7 +17,7 @@
     
     
       
-        <title>Reading ROS 2 - MCAP</title>
+        <title>Reading and writing ROS 2 - MCAP</title>
       
     
     
@@ -63,9 +63,9 @@
       
         <meta  property="og:type"  content="website" >
       
-        <meta  property="og:title"  content="Reading ROS 2 - MCAP" >
+        <meta  property="og:title"  content="Reading and writing ROS 2 - MCAP" >
       
-        <meta  property="og:description"  content="Read MCAP files with ROS 2 message data in Python." >
+        <meta  property="og:description"  content="Read and write MCAP files with ROS 2 message data in Python." >
       
         <meta  property="og:image"  content="https://mcap.dev/assets/images/social/guides/python/ros2.png" >
       
@@ -79,9 +79,9 @@
       
         <meta  name="twitter:card"  content="summary_large_image" >
       
-        <meta  name="twitter:title"  content="Reading ROS 2 - MCAP" >
+        <meta  name="twitter:title"  content="Reading and writing ROS 2 - MCAP" >
       
-        <meta  name="twitter:description"  content="Read MCAP files with ROS 2 message data in Python." >
+        <meta  name="twitter:description"  content="Read and write MCAP files with ROS 2 message data in Python." >
       
         <meta  name="twitter:image"  content="https://mcap.dev/assets/images/social/guides/python/ros2.png" >
       
@@ -109,7 +109,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#reading-ros-2" class="md-skip">
+        <a href="#reading-and-writing-ros-2" class="md-skip">
           Skip to content
         </a>
       
@@ -141,7 +141,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Reading ROS 2
+              Reading and writing ROS 2
             
           </span>
         </div>
@@ -499,12 +499,12 @@
       
       
         <label class="md-nav__link md-nav__link--active" for="__toc">
-          Reading ROS 2
+          Reading and writing ROS 2
           <span class="md-nav__icon md-icon"></span>
         </label>
       
       <a href="ros2.html" class="md-nav__link md-nav__link--active">
-        Reading ROS 2
+        Reading and writing ROS 2
       </a>
       
         
@@ -525,6 +525,13 @@
         <li class="md-nav__item">
   <a href="#reading" class="md-nav__link">
     Reading
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#writing" class="md-nav__link">
+    Writing
   </a>
   
 </li>
@@ -1012,6 +1019,13 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#writing" class="md-nav__link">
+    Writing
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#important-links" class="md-nav__link">
     Important links
   </a>
@@ -1038,8 +1052,10 @@
   </a>
 
 
-<h1 id="reading-ros-2">Reading ROS 2</h1>
-<p>To start writing Python code that reads ROS 2 data from MCAP, install the <a href="https://index.ros.org/p/rosbag2_py/"><code>rosbag2_py</code> package</a>.</p>
+<h1 id="reading-and-writing-ros-2">Reading and writing ROS 2</h1>
+<p>To start writing Python code that reads ROS 2 data from MCAP, You will need a supported ROS2 distro installed, along with the <code>rosbag2</code> and <code>rosbag2_storage_mcap</code> packages. To get set up, make sure you&rsquo;ve followed the <a href="https://docs.ros.org/en/humble/Installation.html">ROS2 installation guide</a>, then:</p>
+<div class="highlight"><pre><span></span><code>$ sudo apt-get install ros-<span class="nv">$ROS_DISTRO</span>-rosbag2 ros-<span class="nv">$ROS_DISTRO</span>-rosbag2-storage-mcap
+</code></pre></div>
 <h2 id="reading">Reading</h2>
 <p>We’ll start with our imports:</p>
 <div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">argparse</span>
@@ -1086,9 +1102,42 @@
 <span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
     <span class="n">main</span><span class="p">()</span>
 </code></pre></div>
+<h2 id="writing">Writing</h2>
+<p>Writing MCAP using the <code>rosbag2_py</code> API is simple, starting with some imports:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">rclpy.serialization</span> <span class="kn">import</span> <span class="n">serialize_message</span>
+<span class="kn">from</span> <span class="nn">std_msgs.msg</span> <span class="kn">import</span> <span class="n">String</span>
+<span class="kn">import</span> <span class="nn">rosbag2_py</span>
+</code></pre></div>
+<p>Then we&rsquo;ll open a new bag using the <code>mcap</code> storage plugin:</p>
+<div class="highlight"><pre><span></span><code><span class="n">writer</span> <span class="o">=</span> <span class="n">rosbag2_py</span><span class="o">.</span><span class="n">SequentialWriter</span><span class="p">()</span>
+<span class="n">writer</span><span class="o">.</span><span class="n">open</span><span class="p">(</span>
+    <span class="n">rosbag2_py</span><span class="o">.</span><span class="n">StorageOptions</span><span class="p">(</span><span class="n">uri</span><span class="o">=</span><span class="s2">&quot;output.mcap&quot;</span><span class="p">,</span> <span class="n">storage_id</span><span class="o">=</span><span class="s2">&quot;mcap&quot;</span><span class="p">),</span>
+    <span class="n">rosbag2_py</span><span class="o">.</span><span class="n">ConverterOptions</span><span class="p">(</span>
+        <span class="n">input_serialization_format</span><span class="o">=</span><span class="s2">&quot;cdr&quot;</span><span class="p">,</span> <span class="n">output_serialization_format</span><span class="o">=</span><span class="s2">&quot;cdr&quot;</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Now we can create a topic and add some messages to it:</p>
+<div class="highlight"><pre><span></span><code><span class="n">writer</span><span class="o">.</span><span class="n">create_topic</span><span class="p">(</span>
+    <span class="n">rosbag2_py</span><span class="o">.</span><span class="n">TopicMetadata</span><span class="p">(</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;/chatter&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="s2">&quot;std_msgs/msg/String&quot;</span><span class="p">,</span> <span class="n">serialization_format</span><span class="o">=</span><span class="s2">&quot;cdr&quot;</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">start_time</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+    <span class="n">msg</span> <span class="o">=</span> <span class="n">String</span><span class="p">()</span>
+    <span class="n">msg</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Chatter #</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="n">timestamp</span> <span class="o">=</span> <span class="n">start_time</span> <span class="o">+</span> <span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)</span>
+    <span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;/chatter&quot;</span><span class="p">,</span> <span class="n">serialize_message</span><span class="p">(</span><span class="n">msg</span><span class="p">),</span> <span class="n">timestamp</span><span class="p">)</span>
+</code></pre></div>
+<p>Finally, we delete the writer to close the MCAP:</p>
+<div class="highlight"><pre><span></span><code><span class="k">del</span> <span class="n">writer</span>
+</code></pre></div>
 <h2 id="important-links">Important links</h2>
 <ul>
-<li><a href="https://github.com/foxglove/mcap/tree/main/python/mcap">MCAP Python library</a></li>
+<li><a href="https://github.com/ros2/rosbag2"><code>rosbag2</code> source repository</a></li>
+<li><a href="https://github.com/ros-tooling/rosbag2_storage_mcap">MCAP Storage Plugin</a></li>
 <li><a href="https://github.com/foxglove/mcap/tree/main/python/examples/ros2">Example code</a></li>
 </ul>
 
