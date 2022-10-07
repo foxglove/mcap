@@ -1,11 +1,10 @@
 """Decoding of CDR (Common Data Representation) data."""
 
 import struct
-from enum import Enum
-from typing import List, Optional
+from enum import IntEnum
 
 
-class EncapsulationKind(Enum):
+class EncapsulationKind(IntEnum):
     """Represents the kind of encapsulation used in a CDR stream."""
 
     CDR_BE = 0  # Big-endian
@@ -17,16 +16,20 @@ class EncapsulationKind(Enum):
 class CdrReader:
     """Parses values from CDR data."""
 
-    def __init__(self, data: bytearray):
-        kind = struct.unpack_from("B", data, 0)[0]
+    __slots__ = ("data", "offset", "little_endian")
+
+    def __init__(self, data: bytes):
+        if len(data) < 4:
+            raise ValueError(
+                f"Invalid CDR data size {len(data)}, must contain at least a 4-byte header"
+            )
+        kind = struct.unpack_from("B", data, 1)[0]
         self.data = data
-        self.offset = 0
-        self.littleEndian = (
-            kind == EncapsulationKind.CDR_LE or kind == EncapsulationKind.PL_CDR_LE
-        )
+        self.offset = 4
+        self.little_endian = kind & 1 == 1
 
     def kind(self) -> EncapsulationKind:
-        return struct.unpack_from("B", self.data, 0)[0]
+        return struct.unpack_from("B", self.data, 1)[0]
 
     def decoded_bytes(self) -> int:
         return self.offset
@@ -46,42 +49,42 @@ class CdrReader:
 
     def int16(self) -> int:
         self.__align(2)
-        fmt = "<h" if self.littleEndian else ">h"
+        fmt = "<h" if self.little_endian else ">h"
         value = struct.unpack_from(fmt, self.data, self.offset)[0]
         self.offset += 2
         return value
 
     def uint16(self) -> int:
         self.__align(2)
-        fmt = "<H" if self.littleEndian else ">H"
+        fmt = "<H" if self.little_endian else ">H"
         value = struct.unpack_from(fmt, self.data, self.offset)[0]
         self.offset += 2
         return value
 
     def int32(self) -> int:
         self.__align(4)
-        fmt = "<i" if self.littleEndian else ">i"
+        fmt = "<i" if self.little_endian else ">i"
         value = struct.unpack_from(fmt, self.data, self.offset)[0]
         self.offset += 4
         return value
 
     def uint32(self) -> int:
         self.__align(4)
-        fmt = "<I" if self.littleEndian else ">I"
+        fmt = "<I" if self.little_endian else ">I"
         value = struct.unpack_from(fmt, self.data, self.offset)[0]
         self.offset += 4
         return value
 
     def int64(self) -> int:
         self.__align(8)
-        fmt = "<q" if self.littleEndian else ">q"
+        fmt = "<q" if self.little_endian else ">q"
         value = struct.unpack_from(fmt, self.data, self.offset)[0]
         self.offset += 8
         return value
 
     def uint64(self) -> int:
         self.__align(8)
-        fmt = "<Q" if self.littleEndian else ">Q"
+        fmt = "<Q" if self.little_endian else ">Q"
         value = struct.unpack_from(fmt, self.data, self.offset)[0]
         self.offset += 8
         return value
@@ -106,14 +109,14 @@ class CdrReader:
 
     def float32(self) -> float:
         self.__align(4)
-        fmt = "<f" if self.littleEndian else ">f"
+        fmt = "<f" if self.little_endian else ">f"
         value = struct.unpack_from(fmt, self.data, self.offset)[0]
         self.offset += 4
         return value
 
     def float64(self) -> float:
         self.__align(8)
-        fmt = "<d" if self.littleEndian else ">d"
+        fmt = "<d" if self.little_endian else ">d"
         value = struct.unpack_from(fmt, self.data, self.offset)[0]
         self.offset += 8
         return value
@@ -123,21 +126,20 @@ class CdrReader:
         if length <= 1:
             self.offset += length
             return ""
-        data = self.data[self.offset : self.offset + length - 1]
+        return self.string_raw(length - 1)
+
+    def string_raw(self, length: int) -> str:
+        data = self.uint8_array(length)
         value = data.decode("utf-8")
-        self.offset += length
         return value
 
     def sequence_length(self) -> int:
         return self.uint32()
 
-    def int8_array(self, count: Optional[int] = None) -> List[int]:
-        count = count or self.sequence_length()
-        return [self.int8() for _ in range(count)]
-
-    def uint8_array(self, count: Optional[int] = None) -> List[int]:
-        count = count or self.sequence_length()
-        return [self.uint8() for _ in range(count)]
+    def uint8_array(self, length: int) -> bytes:
+        data = self.data[self.offset : self.offset + length]
+        self.offset += length
+        return data
 
     def seek(self, relative_offset: int):
         new_offset = self.offset + relative_offset

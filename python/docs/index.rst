@@ -8,6 +8,7 @@ Usage Examples
    protobuf_example
    ros1_example
    ros2_example
+   ros2_noenv_example
 
 API Documentation
 -----------------

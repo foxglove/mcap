@@ -1,8 +1,10 @@
-from typing import Dict, Any, Type
+from typing import Dict, Any
 
 from mcap.mcap0.exceptions import McapError
 from mcap.mcap0.records import Message, Schema
 from mcap.mcap0.well_known import SchemaEncoding
+
+from .dynamic import DecoderFunction, generate_dynamic
 
 
 class McapROS2DecodeError(McapError):
@@ -12,12 +14,14 @@ class McapROS2DecodeError(McapError):
 
 
 class Decoder:
+    """Decodes MCAP message records into ROS2 messages."""
+
     def __init__(self):
         """Decodes ROS2 messages from MCAP Message records."""
-        self._types: Dict[int, Type[Any]] = {}
+        self._decoders: Dict[int, DecoderFunction] = {}
 
     def decode(self, schema: Schema, message: Message) -> Any:
-        """Takes a Message record from an MCAP along with its associated Schema,
+        """Take a Message record from an MCAP along with its associated Schema
         and returns the decoded ROS2 message from within.
 
         :param schema: The message schema record from the MCAP.
@@ -28,18 +32,19 @@ class Decoder:
             the given schema.
         :return: The decoded message content.
         """
-        if schema.encoding != SchemaEncoding.ROS2:
-            raise McapROS2DecodeError(
-                f"can't decode schema with encoding {schema.encoding}"
-            )
-        generated_type = self._types.get(schema.id)
-        if generated_type is None:
-            type_dict = dynamic.generate_dynamic(  # type: ignore
+        decoder = self._decoders.get(schema.id)
+        if decoder is None:
+            if schema.encoding != SchemaEncoding.ROS2:
+                raise McapROS2DecodeError(
+                    f"can't decode schema with encoding {schema.encoding}"
+                )
+            type_dict = generate_dynamic(  # type: ignore
                 schema.name, schema.data.decode()
             )
-            generated_type = type_dict[schema.name]
-            self._types[schema.id] = generated_type
+            decoder = type_dict[schema.name]
+            if decoder is None:
+                raise McapROS2DecodeError(f"schema decoding failed for {schema.name}")
+            self._decoders[schema.id] = decoder
 
-        ros_msg = generated_type()
-        ros_msg.deserialize(message.data)
+        ros_msg = decoder(message.data)
         return ros_msg

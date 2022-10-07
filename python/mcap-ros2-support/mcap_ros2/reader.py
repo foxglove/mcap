@@ -12,15 +12,15 @@ from mcap.mcap0.records import Message, Channel
 from mcap.mcap0.reader import McapReader, make_reader
 
 
-def read_ros1_messages(
+def read_ros2_messages(
     source: Union[str, bytes, PathLike[str], McapReader, IO[bytes]],
     topics: Optional[Iterable[str]] = None,
     start_time: Optional[Union[int, datetime]] = None,
     end_time: Optional[Union[int, datetime]] = None,
     log_time_order: bool = True,
     reverse: bool = False,
-) -> Iterator["McapROS1Message"]:
-    """High-level generator that reads ROS1 messages from an MCAP file.
+) -> Iterator["McapROS2Message"]:
+    """High-level generator that reads ROS2 messages from an MCAP file.
 
     :param source: some source of MCAP file data. Supply a stream of bytes, an McapReader instance,
         or the path to a valid MCAP file in the filesystem.
@@ -34,11 +34,11 @@ def read_ros1_messages(
     :yields: an McapROS1Message instance for each ROS1 message in the MCAP file.
 
     .. note::
-        this generator assumes the source MCAP conforms to the `ros1` MCAP profile.
-        If you need to decode ROS1 messages from a file containing other encodings, use
+        this generator assumes the source MCAP conforms to the `ros2` MCAP profile.
+        If you need to decode ROS2 messages from a file containing other encodings, use
         the :py:func:`mcap.mcap0.reader.McapReader.iter_messages()` function to iterate through
-        Message records in your MCAP, and decode the ROS1 messages with
-        the :py:class:`mcap_ros1.decoder.Decoder` class.
+        Message records in your MCAP, and decode the ROS2 messages with
+        the :py:class:`mcap_ros2.decoder.Decoder` class.
     """
 
     if start_time is not None and isinstance(start_time, datetime):
@@ -64,7 +64,7 @@ def read_ros1_messages(
         for schema, channel, message in reader.iter_messages(
             topics, start_time, end_time, log_time_order, reverse
         ):
-            yield McapROS1Message(
+            yield McapROS2Message(
                 ros_msg=decoder.decode(schema=schema, message=message),
                 message=message,
                 channel=channel,
@@ -74,18 +74,27 @@ def read_ros1_messages(
             fd.close()
 
 
-class McapROS1Message:
-    """Contains a single ROS message and associated metadata.
+class McapROS2Message:
+    """Contains a single ROS2 message and associated metadata.
 
-    :ivar ros_msg: the decoded ROS1 message.
+    :ivar ros_msg: the decoded ROS2 message.
     :ivar sequence_count: the message sequence count if included in the MCAP, or 0 otherwise.
     :ivar topic: the topic that the message was published on.
-    :ivar channel_metadata: the metadata associated with this ROS1 topic, if any.
+    :ivar channel_metadata: the metadata associated with this ROS2 topic, if any.
     :ivar log_time_ns: the time this message was logged by the recorder, as a POSIX nanosecond
         timestamp.
     :ivar log_time_ns: the time this message was published, as a POSIX nanosecond
         timestamp.
     """
+
+    __slots__ = (
+        "ros_msg",
+        "sequence_count",
+        "topic",
+        "channel_metadata",
+        "log_time_ns",
+        "publish_time_ns",
+    )
 
     def __init__(self, ros_msg: Any, message: Message, channel: Channel):
         self.ros_msg = ros_msg
