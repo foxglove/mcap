@@ -574,22 +574,21 @@ impl<'a> ChannelAccumulator<'a> {
 /// Reads all messages from the MCAP file---in the order they were written---and
 /// perform needed validation (CRCs, etc.) as we go.
 ///
-/// This stops at the end of the data section and does not read the summary.
+/// Unlike [`MessageStream`], this iterator returns the raw [`MessageHeader`](records::MessageHeader)
+/// and message data instead of constructing a [`Message`].
+/// This can be useful for situations where you don't need the specifics of each
+/// message's [`Channel`], but just want to be able to discriminate them _by_ their channel
+/// (e.g., build some map of `Channel -> Vec<Message>`).
 ///
-/// Because tying the lifetime of each message to the underlying MCAP memory map
-/// makes it very difficult to send between threads or use in async land,
-/// and because we assume _most_ MCAP files have _most_ messages in compressed chunks,
-/// yielded [`Message`](crate::Message)s have unbounded lifetimes.
-/// For messages we've decompressed into their own buffers, this is free!
-/// For uncompressed messages, we take a copy of the message's data.
-pub struct MessageStream<'a> {
+/// This stops at the end of the data section and does not read the summary.
+pub struct RawMessageStream<'a> {
     full_file: &'a [u8],
     records: ChunkFlattener<'a>,
     done: bool,
     channeler: ChannelAccumulator<'static>,
 }
 
-impl<'a> MessageStream<'a> {
+impl<'a> RawMessageStream<'a> {
     pub fn new(buf: &'a [u8]) -> McapResult<Self> {
         Self::new_with_options(buf, enum_set!())
     }
@@ -605,10 +604,15 @@ impl<'a> MessageStream<'a> {
             channeler: ChannelAccumulator::default(),
         })
     }
+
+    /// Gets the channel with the given ID (presumably from a [`MessageHeader`](records::MessageHeader))
+    pub fn get_channel(&self, channel_id: u16) -> Option<Arc<Channel<'a>>> {
+        self.channeler.get(channel_id)
+    }
 }
 
-impl<'a> Iterator for MessageStream<'a> {
-    type Item = McapResult<Message<'static>>;
+impl<'a> Iterator for RawMessageStream<'a> {
+    type Item = McapResult<(records::MessageHeader, Cow<'a, [u8]>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.done {
@@ -640,25 +644,7 @@ impl<'a> Iterator for MessageStream<'a> {
                 }
 
                 Record::Message { header, data } => {
-                    // Messages must have a previously-read channel.
-                    let channel = match self.channeler.get(header.channel_id) {
-                        Some(c) => c,
-                        None => {
-                            break Some(Err(McapError::UnknownChannel(
-                                header.sequence,
-                                header.channel_id,
-                            )))
-                        }
-                    };
-
-                    let m = Message {
-                        channel,
-                        sequence: header.sequence,
-                        log_time: header.log_time,
-                        publish_time: header.publish_time,
-                        data: Cow::Owned(data.into_owned()),
-                    };
-                    break Some(Ok(m));
+                    break Some(Ok((header, data)));
                 }
 
                 // If it's EOD, do unholy things to calculate the CRC.
@@ -695,6 +681,63 @@ impl<'a> Iterator for MessageStream<'a> {
             self.done = true;
         }
         n
+    }
+}
+
+/// Like [`RawMessageStream`], but constructs a [`Message`]
+/// (complete with its [`Channel`]) from the raw header and data.
+///
+/// This stops at the end of the data section and does not read the summary.
+///
+/// Because tying the lifetime of each message to the underlying MCAP memory map
+/// makes it very difficult to send between threads or use in async land,
+/// and because we assume _most_ MCAP files have _most_ messages in compressed chunks,
+/// yielded [`Message`]s have unbounded lifetimes.
+/// For messages we've decompressed into their own buffers, this is free!
+/// For uncompressed messages, we take a copy of the message's data.
+pub struct MessageStream<'a> {
+    inner: RawMessageStream<'a>,
+}
+
+impl<'a> MessageStream<'a> {
+    pub fn new(buf: &'a [u8]) -> McapResult<Self> {
+        Self::new_with_options(buf, enum_set!())
+    }
+
+    pub fn new_with_options(buf: &'a [u8], options: EnumSet<Options>) -> McapResult<Self> {
+        RawMessageStream::new_with_options(buf, options).map(|inner| Self { inner })
+    }
+}
+
+impl<'a> Iterator for MessageStream<'a> {
+    type Item = McapResult<Message<'static>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.inner.next() {
+            Some(Ok((header, data))) => {
+                // Messages must have a previously-read channel.
+                let channel = match self.inner.channeler.get(header.channel_id) {
+                    Some(c) => c,
+                    None => {
+                        return Some(Err(McapError::UnknownChannel(
+                            header.sequence,
+                            header.channel_id,
+                        )))
+                    }
+                };
+
+                Some(Ok(Message {
+                    channel,
+                    sequence: header.sequence,
+                    log_time: header.log_time,
+                    publish_time: header.publish_time,
+                    data: Cow::Owned(data.into_owned()),
+                }))
+            }
+            // Coerce Option<McapResult<(header, data)>> into Option<McapResult<Message>>
+            Some(Err(e)) => Some(Err(e)),
+            None => None,
+        }
     }
 }
 
