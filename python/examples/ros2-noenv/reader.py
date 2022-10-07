@@ -1,5 +1,4 @@
 import sys
-import json
 
 from mcap_ros2.reader import read_ros2_messages
 
