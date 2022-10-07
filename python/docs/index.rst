@@ -19,6 +19,7 @@ API Documentation
    mcap-apidoc/index
    mcap-protobuf-apidoc/index
    mcap-ros1-apidoc/index
+   mcap-ros2-apidoc/index
 
 Indices and tables
 ------------------
