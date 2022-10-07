@@ -1,0 +1,7 @@
+mcap\_ros2.reader module
+========================
+
+.. automodule:: mcap_ros2.reader
+   :members:
+   :undoc-members:
+   :show-inheritance:

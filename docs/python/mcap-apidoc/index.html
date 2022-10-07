@@ -14,10 +14,11 @@
     <script src="../_static/underscore.js"></script>
     <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
     <script src="../_static/doctools.js"></script>
+    <script src="../_static/sphinx_highlight.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="mcap package" href="mcap.html" />
-    <link rel="prev" title="Using rosbag2_py to use MCAP with ROS 2" href="../ros2_example.html" />
+    <link rel="prev" title="Working with ROS 2 Messages outside of a ROS 2 environment" href="../ros2_noenv_example.html" />
    
   <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
   
@@ -48,18 +49,80 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="mcap.html#submodules">Submodules</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="mcap.chunk_builder.html">mcap.chunk_builder module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="mcap.data_stream.html">mcap.data_stream module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="mcap.exceptions.html">mcap.exceptions module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="mcap.message_queue.html">mcap.message_queue module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="mcap.opcode.html">mcap.opcode module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="mcap.reader.html">mcap.reader module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="mcap.records.html">mcap.records module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="mcap.serialization.html">mcap.serialization module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="mcap.stream_reader.html">mcap.stream_reader module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="mcap.summary.html">mcap.summary module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="mcap.well_known.html">mcap.well_known module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="mcap.writer.html">mcap.writer module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="mcap.chunk_builder.html">mcap.chunk_builder module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="mcap.chunk_builder.html#mcap.chunk_builder.ChunkBuilder"><code class="docutils literal notranslate"><span class="pre">ChunkBuilder</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="mcap.data_stream.html">mcap.data_stream module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="mcap.data_stream.html#mcap.data_stream.ReadDataStream"><code class="docutils literal notranslate"><span class="pre">ReadDataStream</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.data_stream.html#mcap.data_stream.RecordBuilder"><code class="docutils literal notranslate"><span class="pre">RecordBuilder</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="mcap.exceptions.html">mcap.exceptions module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="mcap.exceptions.html#mcap.exceptions.EndOfFile"><code class="docutils literal notranslate"><span class="pre">EndOfFile</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.exceptions.html#mcap.exceptions.InvalidMagic"><code class="docutils literal notranslate"><span class="pre">InvalidMagic</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.exceptions.html#mcap.exceptions.McapError"><code class="docutils literal notranslate"><span class="pre">McapError</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="mcap.message_queue.html">mcap.message_queue module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="mcap.message_queue.html#mcap.message_queue.MessageQueue"><code class="docutils literal notranslate"><span class="pre">MessageQueue</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="mcap.opcode.html">mcap.opcode module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="mcap.opcode.html#mcap.opcode.Opcode"><code class="docutils literal notranslate"><span class="pre">Opcode</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="mcap.reader.html">mcap.reader module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="mcap.reader.html#mcap.reader.McapReader"><code class="docutils literal notranslate"><span class="pre">McapReader</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.reader.html#mcap.reader.NonSeekingReader"><code class="docutils literal notranslate"><span class="pre">NonSeekingReader</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.reader.html#mcap.reader.SeekingReader"><code class="docutils literal notranslate"><span class="pre">SeekingReader</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.reader.html#mcap.reader.make_reader"><code class="docutils literal notranslate"><span class="pre">make_reader()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="mcap.records.html">mcap.records module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.Attachment"><code class="docutils literal notranslate"><span class="pre">Attachment</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.AttachmentIndex"><code class="docutils literal notranslate"><span class="pre">AttachmentIndex</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.Channel"><code class="docutils literal notranslate"><span class="pre">Channel</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.Chunk"><code class="docutils literal notranslate"><span class="pre">Chunk</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.ChunkIndex"><code class="docutils literal notranslate"><span class="pre">ChunkIndex</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.DataEnd"><code class="docutils literal notranslate"><span class="pre">DataEnd</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.Footer"><code class="docutils literal notranslate"><span class="pre">Footer</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.Header"><code class="docutils literal notranslate"><span class="pre">Header</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.McapRecord"><code class="docutils literal notranslate"><span class="pre">McapRecord</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.Message"><code class="docutils literal notranslate"><span class="pre">Message</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.MessageIndex"><code class="docutils literal notranslate"><span class="pre">MessageIndex</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.Metadata"><code class="docutils literal notranslate"><span class="pre">Metadata</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.MetadataIndex"><code class="docutils literal notranslate"><span class="pre">MetadataIndex</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.Schema"><code class="docutils literal notranslate"><span class="pre">Schema</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.Statistics"><code class="docutils literal notranslate"><span class="pre">Statistics</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.records.html#mcap.records.SummaryOffset"><code class="docutils literal notranslate"><span class="pre">SummaryOffset</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="mcap.serialization.html">mcap.serialization module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="mcap.serialization.html#mcap.serialization.normalize_value"><code class="docutils literal notranslate"><span class="pre">normalize_value()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.serialization.html#mcap.serialization.stringify_record"><code class="docutils literal notranslate"><span class="pre">stringify_record()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="mcap.stream_reader.html">mcap.stream_reader module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="mcap.stream_reader.html#mcap.stream_reader.StreamReader"><code class="docutils literal notranslate"><span class="pre">StreamReader</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="mcap.summary.html">mcap.summary module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="mcap.summary.html#mcap.summary.Summary"><code class="docutils literal notranslate"><span class="pre">Summary</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="mcap.well_known.html">mcap.well_known module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="mcap.well_known.html#mcap.well_known.MessageEncoding"><code class="docutils literal notranslate"><span class="pre">MessageEncoding</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.well_known.html#mcap.well_known.Profile"><code class="docutils literal notranslate"><span class="pre">Profile</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.well_known.html#mcap.well_known.SchemaEncoding"><code class="docutils literal notranslate"><span class="pre">SchemaEncoding</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="mcap.writer.html">mcap.writer module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="mcap.writer.html#mcap.writer.CompressionType"><code class="docutils literal notranslate"><span class="pre">CompressionType</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.writer.html#mcap.writer.IndexType"><code class="docutils literal notranslate"><span class="pre">IndexType</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="mcap.writer.html#mcap.writer.Writer"><code class="docutils literal notranslate"><span class="pre">Writer</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="mcap.html#module-mcap">Module contents</a></li>
@@ -91,6 +154,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../protobuf_example.html">Working with Protobuf Messages</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../ros1_example.html">Working with ROS 1 Messages</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../ros2_example.html">Using <code class="docutils literal notranslate"><span class="pre">rosbag2_py</span></code> to use MCAP with ROS 2</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ros2_noenv_example.html">Working with ROS 2 Messages outside of a ROS 2 environment</a></li>
 </ul>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">mcap</a><ul>
@@ -99,13 +163,14 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="../mcap-protobuf-apidoc/index.html">mcap_protobuf</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../mcap-ros1-apidoc/index.html">mcap_ros1</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mcap-ros2-apidoc/index.html">mcap_ros2</a></li>
 </ul>
 
 <div class="relations">
 <h3>Related Topics</h3>
 <ul>
   <li><a href="../index.html">Documentation overview</a><ul>
-      <li>Previous: <a href="../ros2_example.html" title="previous chapter">Using <code class="docutils literal notranslate"><span class="pre">rosbag2_py</span></code> to use MCAP with ROS 2</a></li>
+      <li>Previous: <a href="../ros2_noenv_example.html" title="previous chapter">Working with ROS 2 Messages outside of a ROS 2 environment</a></li>
       <li>Next: <a href="mcap.html" title="next chapter">mcap package</a></li>
   </ul></li>
 </ul>
@@ -136,7 +201,7 @@
       
       
       
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.1.1</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.2.3</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |

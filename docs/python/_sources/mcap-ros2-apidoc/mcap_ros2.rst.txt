@@ -1,0 +1,21 @@
+mcap\_ros2 package
+==================
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   mcap_ros2.cdr
+   mcap_ros2.decoder
+   mcap_ros2.dynamic
+   mcap_ros2.reader
+
+Module contents
+---------------
+
+.. automodule:: mcap_ros2
+   :members:
+   :undoc-members:
+   :show-inheritance:

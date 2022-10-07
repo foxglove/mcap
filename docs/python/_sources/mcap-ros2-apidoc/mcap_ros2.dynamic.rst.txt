@@ -1,0 +1,7 @@
+mcap\_ros2.dynamic module
+=========================
+
+.. automodule:: mcap_ros2.dynamic
+   :members:
+   :undoc-members:
+   :show-inheritance:

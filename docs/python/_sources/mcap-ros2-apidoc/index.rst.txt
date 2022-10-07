@@ -1,0 +1,7 @@
+mcap_ros2
+=========
+
+.. toctree::
+   :maxdepth: 4
+
+   mcap_ros2
