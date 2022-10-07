@@ -1,3 +1,9 @@
+# Slightly modified version of parser.py from
+# [rosidl_adapter](https://github.com/ros2/rosidl/tree/humble/rosidl_adapter)
+# to add type annotations to some of the exposed classes and functions.
+#
+# The original file license follows:
+#
 # Copyright 2014-2018 Open Source Robotics Foundation, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
