@@ -1,5 +1,14 @@
+"""
+This is a placeholder writer for ROS2 MCAP files.
+
+Until mcap_ros2 supports writing, this hardcodes a single message and writes
+several copies to an MCAP.
+"""
+
 import sys
+
 from mcap.mcap0.writer import Writer as McapWriter
+
 
 SCHEMA_NAME = "tf2_msgs/TFMessage"
 SCHEMA_TEXT = """\

@@ -7,4 +7,5 @@ exclude =
   mcap-ros1-support/mcap_ros1/vendor/genpy/*.py,
   mcap-ros1-support/mcap_ros1/vendor/genmsg/*.py,
   mcap-ros2-support/mcap_ros2/vendor/rosidl_adapter/*.py,
-ignore = E203 W503
+# E203 is not PEP8 compliant, W503/Q000 conflict with black formatting
+extend-ignore = E203 W503 Q000

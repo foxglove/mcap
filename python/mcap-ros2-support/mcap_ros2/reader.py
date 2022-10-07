@@ -1,15 +1,19 @@
-"""the :py:mod:`mcap_ros1.reader` module provides high-level ROS1 message reading
-capability. For more low-level control, consider using the underlying
-:py:class:`mcap_ros1.decoder.Decoder` and :py:class:`mcap.mcap0.reader.McapReader` objects directly.
 """
-from typing import IO, Union, Any, Dict, Iterator, Optional, Iterable
+The :py:mod:`mcap_ros2.reader` module provides high-level ROS2 message reading capability.
+
+For more low-level control, consider using the underlying
+:py:class:`mcap_ros2.decoder.Decoder` and :py:class:`mcap.mcap0.reader.McapReader`
+objects directly.
+"""
+
 from datetime import datetime
 from os import PathLike
+from typing import Any, Dict, IO, Iterable, Iterator, Optional, Union
+
+from mcap.mcap0.reader import McapReader, make_reader
+from mcap.mcap0.records import Channel, Message
 
 from .decoder import Decoder
-
-from mcap.mcap0.records import Message, Channel
-from mcap.mcap0.reader import McapReader, make_reader
 
 
 def read_ros2_messages(
@@ -40,7 +44,6 @@ def read_ros2_messages(
         Message records in your MCAP, and decode the ROS2 messages with
         the :py:class:`mcap_ros2.decoder.Decoder` class.
     """
-
     if start_time is not None and isinstance(start_time, datetime):
         start_time = int(start_time.timestamp() * 1e9)
     if end_time is not None and isinstance(end_time, datetime):
@@ -97,6 +100,13 @@ class McapROS2Message:
     )
 
     def __init__(self, ros_msg: Any, message: Message, channel: Channel):
+        """
+        Construct a new McapROS2Message instance.
+
+        :param ros_msg: the decoded ROS2 message.
+        :param message: the MCAP Message record that contains the ROS2 message.
+        :param channel: the MCAP Channel record referenced by the Message record.
+        """
         self.ros_msg = ros_msg
         self.sequence_count: int = message.sequence
         self.topic: str = channel.topic
@@ -107,10 +117,10 @@ class McapROS2Message:
 
     @property
     def log_time(self) -> datetime:
-        """The timestamp representing when this message was logged by the recorder."""
+        """Return the timestamp representing when this message was logged by the recorder."""
         return datetime.fromtimestamp(float(self.log_time_ns) / 1e9)
 
     @property
     def publish_time(self) -> datetime:
-        """The timestamp representing when this message was published."""
+        """Return the timestamp representing when this message was published."""
         return datetime.fromtimestamp(float(self.publish_time_ns) / 1e9)

@@ -1,3 +1,5 @@
+"""A simple example of reading ROS2 messages from an MCAP file without a ROS2 environment."""
+
 import sys
 
 from mcap_ros2.reader import read_ros2_messages
