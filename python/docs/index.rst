@@ -8,6 +8,7 @@ Usage Examples
    protobuf_example
    ros1_example
    ros2_example
+   ros2_noenv_example
 
 API Documentation
 -----------------
@@ -18,6 +19,7 @@ API Documentation
    mcap-apidoc/index
    mcap-protobuf-apidoc/index
    mcap-ros1-apidoc/index
+   mcap-ros2-apidoc/index
 
 Indices and tables
 ------------------

@@ -14,7 +14,8 @@
 
   "search.exclude": {
     "**/node_modules": true,
-    "tests/conformance/data": true
+    "tests/conformance/data": true,
+    "python/**/build": true,
   },
 
   "python.formatting.provider": "black",
