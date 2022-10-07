@@ -1,10 +1,14 @@
 ---
-description: Read MCAP files with ROS 2 message data in Python.
+description: Read and write MCAP files with ROS 2 message data in Python.
 ---
 
-# Reading ROS 2
+# Reading and writing ROS 2
 
-To start writing Python code that reads ROS 2 data from MCAP, install the [`rosbag2_py` package](https://index.ros.org/p/rosbag2_py/).
+To start writing Python code that reads ROS 2 data from MCAP, You will need a supported ROS2 distro installed, along with the `rosbag2` and `rosbag2_storage_mcap` packages. To get set up, make sure you've followed the [ROS2 installation guide](https://docs.ros.org/en/humble/Installation.html), then:
+
+```bash
+$ sudo apt-get install ros-$ROS_DISTRO-rosbag2 ros-$ROS_DISTRO-rosbag2-storage-mcap
+```
 
 ## Reading
 
@@ -62,7 +66,53 @@ if __name__ == "__main__":
     main()
 ```
 
+## Writing
+
+Writing MCAP using the `rosbag2_py` API is simple, starting with some imports:
+
+```python
+from rclpy.serialization import serialize_message
+from std_msgs.msg import String
+import rosbag2_py
+```
+
+Then we'll open a new bag using the `mcap` storage plugin:
+
+```python
+writer = rosbag2_py.SequentialWriter()
+writer.open(
+    rosbag2_py.StorageOptions(uri="output.mcap", storage_id="mcap"),
+    rosbag2_py.ConverterOptions(
+        input_serialization_format="cdr", output_serialization_format="cdr"
+    ),
+)
+```
+
+Now we can create a topic and add some messages to it:
+
+```python
+writer.create_topic(
+    rosbag2_py.TopicMetadata(
+        name="/chatter", type="std_msgs/msg/String", serialization_format="cdr"
+    )
+)
+
+start_time = 0
+for i in range(10):
+    msg = String()
+    msg.data = f"Chatter #{i}"
+    timestamp = start_time + (i * 100)
+    writer.write("/chatter", serialize_message(msg), timestamp)
+```
+
+Finally, we delete the writer to close the MCAP:
+
+```python
+del writer
+```
+
 ## Important links
 
-- [MCAP Python library](https://github.com/foxglove/mcap/tree/main/python/mcap)
+- [`rosbag2` source repository](https://github.com/ros2/rosbag2)
+- [MCAP Storage Plugin](https://github.com/ros-tooling/rosbag2_storage_mcap)
 - [Example code](https://github.com/foxglove/mcap/tree/main/python/examples/ros2)
