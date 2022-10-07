@@ -21,6 +21,7 @@ ignorePaths:
   - package.json
   - package.xml
   - "*_pb2.py"
+  - "*.pyc"
   - Pipfile*
   - mkdocs.yml
   - fathom.html
@@ -49,6 +50,7 @@ words:
   - libmcap
   - mcap
   - nanos
+  - noenv
   - nsec
   - nsecs
   - parseable
