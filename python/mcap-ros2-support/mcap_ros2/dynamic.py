@@ -71,7 +71,7 @@ TimeDefinition = MessageSpecification(
 
 
 def generate_dynamic(schema_name: str, schema_text: str) -> Dict[str, DecoderFunction]:
-    """Convert a ROS2 concatenated message definition into a dictionary of message deserializers.
+    """Convert a ROS2 concatenated message definition into a dictionary of message parsers.
 
     Modeled after the `generate_dynamic` function in ROS1 `genpy.dynamic`.
 

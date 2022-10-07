@@ -1,6 +1,6 @@
 # Python MCAP ROS2 support
 
-This package provides ROS2 support for the Python MCAP file format reader.
+This package provides ROS2 support for the Python MCAP file format reader. It has no dependencies on ROS2 itself or a ROS2 environment, and can be used in any Python project.
 
 ## Installation
 
