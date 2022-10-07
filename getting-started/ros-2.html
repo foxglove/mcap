@@ -409,6 +409,26 @@
     Convert to MCAP
   </a>
   
+    <nav class="md-nav" aria-label="Convert to MCAP">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#using-the-mcap-cli-tool" class="md-nav__link">
+    Using the mcap CLI tool
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-ros2-bag-convert" class="md-nav__link">
+    Using ros2 bag convert
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1041,6 +1061,26 @@
     Convert to MCAP
   </a>
   
+    <nav class="md-nav" aria-label="Convert to MCAP">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#using-the-mcap-cli-tool" class="md-nav__link">
+    Using the mcap CLI tool
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-ros2-bag-convert" class="md-nav__link">
+    Using ros2 bag convert
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1106,14 +1146,26 @@
 
 <h1 id="ros-2">ROS 2</h1>
 <h2 id="convert-to-mcap">Convert to MCAP</h2>
+<h3 id="using-the-mcap-cli-tool">Using the <code>mcap</code> CLI tool</h3>
 <p>To convert your existing ROS 2 db3 files into MCAP files, <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap#installing">install the mcap CLI tool</a> and run the following command:</p>
 <div class="highlight"><pre><span></span><code>$ mcap convert multiple_files_1.db3 demo.mcap
 </code></pre></div>
 <p>mcap will search the path stored in your $AMENT_PREFIX_PATH environment variable to locate the ROS message definitions on your hard drive.</p>
 <p>Alternatively, you can specify a colon-separated list of directories for the CLI tool to search using the ament-prefix-path flag:</p>
-<div class="highlight"><pre><span></span><code>$ mcap convert ros1_input.bag ros1_output.mcap --ament-prefix-path=/your/first/directory;/your/second/directory
+<div class="highlight"><pre><span></span><code>$ mcap convert ros2_input.db3 ros1_output.mcap --ament-prefix-path=/your/first/directory;/your/second/directory
 </code></pre></div>
 <p>You can also use the mcap CLI tool to inspect MCAP files, validate them, and even echo their messages to <code>stdout</code>. For a full list of possible commands, check out the <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap">mcap GitHub repo</a>.</p>
+<h3 id="using-ros2-bag-convert">Using <code>ros2 bag convert</code></h3>
+<p>The <code>mcap</code> CLI conversion support for SQLite bags works by emulating the behavior of the ROS 2 resource discovery mechanism. This may produce different results from recording the bag directly in MCAP using the <a href="https://github.com/ros-tooling/rosbag2_storage_mcap">rosbag2 MCAP storage plugin</a>.</p>
+<p>To create an MCAP exactly the way the rosbag2 MCAP storage plugin would create it, you can use <code>ros2 bag convert</code> from within your ROS2 workspace.</p>
+<div class="highlight"><pre><span></span><code>$ cat <span class="s">&lt;&lt; EOF &gt; convert.yaml</span>
+<span class="s">output_bags:</span>
+<span class="s">  - uri: ros2_output</span>
+<span class="s">    storage_id: mcap</span>
+<span class="s">    all: true</span>
+<span class="s">EOF</span>
+$ ros2 bag convert -i ros2_input.db3 -o convert.yaml
+</code></pre></div>
 <h2 id="read-and-write-mcap">Read and write MCAP</h2>
 <p>If you&rsquo;re starting from scratch, you can write code that allows you to <strong>write your ROS 2 data to MCAP files</strong> and subsequently <strong>read your ROS 2 data from your MCAP files</strong>.</p>
 <h3 id="guides">Guides</h3>
