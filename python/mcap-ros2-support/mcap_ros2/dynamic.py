@@ -159,8 +159,6 @@ def _read_complex_type(
             "__slots__": [field.name for field in fields],
             "__repr__": __repr__,
             "__str__": __repr__,
-            "__getstate__": __getstate__,
-            "__setstate__": __setstate__,
         },
     )
     msg = Msg()
@@ -223,14 +221,3 @@ def _read_complex_type(
 def __repr__(self: Any) -> str:
     fields = ", ".join(f"{field}={getattr(self, field)}" for field in self.__slots__)
     return f"{self.__name__}({fields})"
-
-
-def __getstate__(self: Any):
-    """Support for Python pickling."""
-    return [getattr(self, x) for x in self.__slots__]
-
-
-def __setstate__(self: Any, state: Any):
-    """Support for Python pickling."""
-    for x, val in zip(self.__slots__, state):
-        setattr(self, x, val)
