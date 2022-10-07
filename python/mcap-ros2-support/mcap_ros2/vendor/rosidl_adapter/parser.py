@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import textwrap
+from typing import List, Optional
 
 PACKAGE_NAME_MESSAGE_TYPE_SEPARATOR = '/'
 COMMENT_DELIMITER = '#'
@@ -157,7 +158,11 @@ class BaseType:
 
     __slots__ = ['pkg_name', 'type', 'string_upper_bound']
 
-    def __init__(self, type_string, context_package_name=None):
+    pkg_name: Optional[str]
+    type: str
+    string_upper_bound: Optional[int]
+
+    def __init__(self, type_string: str, context_package_name: Optional[str] = None):
         # check for primitive types
         if type_string in PRIMITIVE_TYPES:
             self.pkg_name = None
@@ -236,7 +241,11 @@ class Type(BaseType):
 
     __slots__ = ['is_array', 'array_size', 'is_upper_bound']
 
-    def __init__(self, type_string, context_package_name=None):
+    is_array: bool
+    array_size: Optional[int]
+    is_upper_bound: bool
+
+    def __init__(self, type_string: str, context_package_name: Optional[str] = None):
         # check for array brackets
         self.is_array = type_string[-1] == ']'
 
@@ -384,13 +393,13 @@ class Field:
 
 class MessageSpecification:
 
-    def __init__(self, pkg_name, msg_name, fields, constants):
+    def __init__(self, pkg_name: str, msg_name: str, fields: List[Field], constants: List[Constant]):
         self.base_type = BaseType(
             pkg_name + PACKAGE_NAME_MESSAGE_TYPE_SEPARATOR + msg_name)
         self.msg_name = msg_name
         self.annotations = {}
 
-        self.fields = []
+        self.fields: List[Field] = []
         for index, field in enumerate(fields):
             if not isinstance(field, Field):
                 raise TypeError("field %u must be a 'Field' instance" % index)
@@ -404,7 +413,7 @@ class MessageSpecification:
                 'the fields iterable contains duplicate names: %s' %
                 ', '.join(sorted(duplicate_field_names)))
 
-        self.constants = []
+        self.constants: List[Constant] = []
         for index, constant in enumerate(constants):
             if not isinstance(constant, Constant):
                 raise TypeError("constant %u must be a 'Constant' instance" %
@@ -462,7 +471,7 @@ def extract_file_level_comments(message_string):
     return file_level_comments, file_content
 
 
-def parse_message_string(pkg_name, msg_name, message_string):
+def parse_message_string(pkg_name: str, msg_name: str, message_string: str) -> MessageSpecification:
     fields = []
     constants = []
     last_element = None  # either a field or a constant
