@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 from .cdr import CdrReader
 
+# cSpell:words wstring msgdefs
 
 Message = SimpleNamespace
 DecoderFunction = Callable[[bytes], Message]
