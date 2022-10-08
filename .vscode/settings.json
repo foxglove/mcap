@@ -16,10 +16,22 @@
     "**/node_modules": true,
     "tests/conformance/data": true,
     "python/**/build": true,
+    "python/docs/*-apidoc": true,
   },
 
   "python.formatting.provider": "black",
   "python.analysis.typeCheckingMode": "strict",
+  "python.linting.flake8Enabled": true,
+  "python.linting.enabled": true,
+  "python.linting.flake8Args": [
+    "--config",
+    "python/.flake8"
+  ],
+  "python.analysis.extraPaths": [
+    "./python/mcap",
+    "./python/mcap-ros1-support",
+    "./python/mcap-ros2-support"
+  ],
 
   "gopls": {
     "build.experimentalWorkspaceModule": true
@@ -28,8 +40,5 @@
   // https://github.com/microsoft/vscode-cpptools/issues/722
   "C_Cpp.autoAddFileAssociations": false,
   "C_Cpp.default.cppStandard": "c++17",
-  "lldb.library": "/Library/Developer/CommandLineTools/Library/PrivateFrameworks/LLDB.framework",
-  "python.linting.flake8Enabled": true,
-  "python.linting.enabled": true,
-  "python.linting.flake8Args": ["--config", "python/.flake8"]
+  "lldb.library": "/Library/Developer/CommandLineTools/Library/PrivateFrameworks/LLDB.framework"
 }

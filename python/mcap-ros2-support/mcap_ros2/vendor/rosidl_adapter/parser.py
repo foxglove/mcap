@@ -22,7 +22,7 @@ import os
 import re
 import sys
 import textwrap
-from typing import List, Optional
+from typing import List, Optional, Union
 
 PACKAGE_NAME_MESSAGE_TYPE_SEPARATOR = '/'
 COMMENT_DELIMITER = '#'
@@ -326,7 +326,7 @@ class Constant:
 
     __slots__ = ['type', 'name', 'value', 'annotations']
 
-    def __init__(self, primitive_type, name, value_string):
+    def __init__(self, primitive_type: str, name: str, value_string: str):
         if primitive_type not in PRIMITIVE_TYPES:
             raise TypeError("the constant type '%s' must be a primitive type" %
                             primitive_type)
@@ -360,7 +360,7 @@ class Constant:
 
 class Field:
 
-    def __init__(self, type_, name, default_value_string=None):
+    def __init__(self, type_: Type, name: str, default_value_string: Optional[str] = None):
         if not isinstance(type_, Type):
             raise TypeError(
                 "the field type '%s' must be a 'Type' instance" % type_)
@@ -604,7 +604,7 @@ def process_comments(instance):
             instance.annotations['comment'] = textwrap.dedent(text).split('\n')
 
 
-def parse_value_string(type_, value_string):
+def parse_value_string(type_: Type, value_string: str):
     if type_.is_primitive_type() and not type_.is_array:
         return parse_primitive_value_string(type_, value_string)
 
@@ -638,7 +638,7 @@ def parse_value_string(type_, value_string):
                     (type_.array_size, len(value_strings)))
 
         # parse all primitive values one by one
-        values = []
+        values: List[Union[bool, int, float, str]] = []
         for index, element_string in enumerate(value_strings):
             element_string = element_string.strip()
             try:
@@ -654,10 +654,10 @@ def parse_value_string(type_, value_string):
         "parsing string values into type '%s' is not supported" % type_)
 
 
-def parse_string_array_value_string(element_string, expected_size):
+def parse_string_array_value_string(element_string: str, expected_size: Optional[int]):
     # Walks the string, if start with quote (' or ") find next unescapted quote,
     # returns a list of string elements
-    value_strings = []
+    value_strings: List[str] = []
     while len(element_string) > 0:
         element_string = element_string.lstrip(' ')
         if element_string[0] == ',':
@@ -709,7 +709,7 @@ def find_matching_end_quote(string, quote):
     return -1
 
 
-def parse_primitive_value_string(type_, value_string):
+def parse_primitive_value_string(type_: Type, value_string: str):
     if not type_.is_primitive_type() or type_.is_array:
         raise ValueError('the passed type must be a non-array primitive type')
     primitive_type = type_.type

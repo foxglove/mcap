@@ -2,22 +2,22 @@
 The :py:mod:`mcap_ros2.reader` module provides high-level ROS2 message reading capability.
 
 For more low-level control, consider using the underlying
-:py:class:`mcap_ros2.decoder.Decoder` and :py:class:`mcap.mcap0.reader.McapReader`
+:py:class:`mcap_ros2.decoder.Decoder` and :py:class:`mcap.reader.McapReader`
 objects directly.
 """
 
 from datetime import datetime
 from os import PathLike
-from typing import Any, Dict, IO, Iterable, Iterator, Optional, Union
+from typing import Any, IO, Iterable, Iterator, Optional, Union
 
-from mcap.mcap0.reader import McapReader, make_reader
-from mcap.mcap0.records import Channel, Message
+from mcap.reader import McapReader, make_reader
+from mcap.records import Channel, Message, Schema
 
 from .decoder import Decoder
 
 
 def read_ros2_messages(
-    source: Union[str, bytes, PathLike, McapReader, IO[bytes]],
+    source: Union[str, bytes, PathLike[str], McapReader, IO[bytes]],
     topics: Optional[Iterable[str]] = None,
     start_time: Optional[Union[int, datetime]] = None,
     end_time: Optional[Union[int, datetime]] = None,
@@ -40,7 +40,7 @@ def read_ros2_messages(
     .. note::
         this generator assumes the source MCAP conforms to the `ros2` MCAP profile.
         If you need to decode ROS2 messages from a file containing other encodings, use
-        the :py:func:`mcap.mcap0.reader.McapReader.iter_messages()` function to iterate through
+        the :py:func:`mcap.reader.McapReader.iter_messages()` function to iterate through
         Message records in your MCAP, and decode the ROS2 messages with
         the :py:class:`mcap_ros2.decoder.Decoder` class.
     """
@@ -71,6 +71,7 @@ def read_ros2_messages(
                 ros_msg=decoder.decode(schema=schema, message=message),
                 message=message,
                 channel=channel,
+                schema=schema,
             )
     finally:
         if fd is not None:
@@ -82,24 +83,26 @@ class McapROS2Message:
 
     :ivar ros_msg: the decoded ROS2 message.
     :ivar sequence_count: the message sequence count if included in the MCAP, or 0 otherwise.
-    :ivar topic: the topic that the message was published on.
-    :ivar channel_metadata: the metadata associated with this ROS2 topic, if any.
     :ivar log_time_ns: the time this message was logged by the recorder, as a POSIX nanosecond
         timestamp.
     :ivar log_time_ns: the time this message was published, as a POSIX nanosecond
         timestamp.
+    :ivar channel: the MCAP Channel record referenced by the Message record
+    :ivar schema: the MCAP Schema record referenced by the Channel record
     """
 
     __slots__ = (
         "ros_msg",
         "sequence_count",
-        "topic",
-        "channel_metadata",
         "log_time_ns",
         "publish_time_ns",
+        "channel",
+        "schema",
     )
 
-    def __init__(self, ros_msg: Any, message: Message, channel: Channel):
+    def __init__(
+        self, ros_msg: Any, message: Message, channel: Channel, schema: Schema
+    ):
         """
         Construct a new McapROS2Message instance.
 
@@ -109,11 +112,10 @@ class McapROS2Message:
         """
         self.ros_msg = ros_msg
         self.sequence_count: int = message.sequence
-        self.topic: str = channel.topic
-        self.channel_metadata: Dict[str, str] = channel.metadata
-
         self.log_time_ns: int = message.log_time
         self.publish_time_ns: int = message.publish_time
+        self.channel = channel
+        self.schema = schema
 
     @property
     def log_time(self) -> datetime:

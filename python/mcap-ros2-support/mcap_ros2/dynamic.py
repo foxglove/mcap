@@ -1,10 +1,11 @@
 """ROS2 message definition parsing and message deserialization."""
 
 import re
+from io import BytesIO
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional, Union
 
-from .cdr import CdrReader
+from .cdr import CdrReader, CdrWriter
 from .vendor.rosidl_adapter.parser import (
     Field,
     MessageSpecification,
@@ -14,8 +15,11 @@ from .vendor.rosidl_adapter.parser import (
 
 # cSpell:words wstring msgdefs
 
-Message = SimpleNamespace
-DecoderFunction = Callable[[bytes], Message]
+DecodedMessage = SimpleNamespace
+DecoderFunction = Callable[[bytes], DecodedMessage]
+EncoderFunction = Callable[[Any], bytes]
+PrimitiveValue = Union[bool, int, float, str]
+DefaultValue = Union[PrimitiveValue, List[PrimitiveValue]]
 
 
 def _parseWstring(reader: CdrReader) -> str:
@@ -24,6 +28,14 @@ def _parseWstring(reader: CdrReader) -> str:
 
 def _parseWstringArray(reader: CdrReader, array_length: int) -> List[str]:
     raise NotImplementedError("wstring[] parsing is not implemented")
+
+
+def _writeWstring(writer: CdrWriter, value: str):
+    raise NotImplementedError("wstring writing is not implemented")
+
+
+def _writeWstringArray(writer: CdrWriter, value: List[str]):
+    raise NotImplementedError("wstring[] writing is not implemented")
 
 
 FIELD_PARSERS = {
@@ -62,10 +74,50 @@ ARRAY_PARSERS = {
     "wstring": _parseWstringArray,
 }
 
+FIELD_WRITERS = {
+    "bool": CdrWriter.write_boolean,
+    "byte": CdrWriter.write_uint8,
+    "char": CdrWriter.write_int8,
+    "float32": CdrWriter.write_float32,
+    "float64": CdrWriter.write_float64,
+    "int8": CdrWriter.write_int8,
+    "uint8": CdrWriter.write_uint8,
+    "int16": CdrWriter.write_int16,
+    "uint16": CdrWriter.write_uint16,
+    "int32": CdrWriter.write_int32,
+    "uint32": CdrWriter.write_uint32,
+    "int64": CdrWriter.write_int64,
+    "uint64": CdrWriter.write_uint64,
+    "string": CdrWriter.write_string,
+    "wstring": _writeWstring,
+}
+
+ARRAY_WRITERS = {
+    "bool": CdrWriter.write_boolean_array,
+    "byte": CdrWriter.write_uint8_array,
+    "char": CdrWriter.write_int8_array,
+    "float32": CdrWriter.write_float32_array,
+    "float64": CdrWriter.write_float64_array,
+    "int8": CdrWriter.write_int8_array,
+    "uint8": CdrWriter.write_uint8_array,
+    "int16": CdrWriter.write_int16_array,
+    "uint16": CdrWriter.write_uint16_array,
+    "int32": CdrWriter.write_int32_array,
+    "uint32": CdrWriter.write_uint32_array,
+    "int64": CdrWriter.write_int64_array,
+    "uint64": CdrWriter.write_uint64_array,
+    "string": CdrWriter.write_string_array,
+    "wstring": _writeWstringArray,
+}
+
+STRING_TYPES = ("string", "wstring")
+FLOAT_TYPES = ("float32", "float64")
+INT_TYPES = ("int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64")
+
 TimeDefinition = MessageSpecification(
     "builtin_interfaces",
     "Time",
-    [Field(Type("uint32"), "seconds"), Field(Type("uint32"), "nanoseconds")],
+    [Field(Type("uint32"), "sec"), Field(Type("uint32"), "nanosec")],
     [],
 )
 
@@ -77,13 +129,323 @@ def generate_dynamic(schema_name: str, schema_text: str) -> Dict[str, DecoderFun
 
     :param schema_name: The name of the schema defined in `schema_text`.
     :param schema_text: The schema text to use for deserializing the message payload.
-    :return: A dictionary containing the generated message.
+    :return: A dictionary mapping schema names to message parser.
     """
     msgdefs: Dict[str, MessageSpecification] = {
         "builtin_interfaces/Time": TimeDefinition,
         "builtin_interfaces/Duration": TimeDefinition,
     }
-    generators: Dict[str, DecoderFunction] = {}
+    decoders: Dict[str, DecoderFunction] = {}
+
+    def handle_msgdef(
+        cur_schema_name: str, short_name: str, msgdef: MessageSpecification
+    ):
+        # Add the message definition to the dictionary
+        msgdefs[cur_schema_name] = msgdef
+        msgdefs[short_name] = msgdef
+
+        # Add the message decoder to the dictionary
+        decoder: DecoderFunction = _make_read_message(cur_schema_name, msgdefs)
+        decoders[cur_schema_name] = decoder
+        decoders[short_name] = decoder
+
+    _for_each_msgdef(schema_name, schema_text, handle_msgdef)
+    return decoders
+
+
+def serialize_dynamic(schema_name: str, schema_text: str) -> Dict[str, EncoderFunction]:
+    """Convert a ROS2 concatenated message definition into a dictionary of message encoders.
+
+    :param schema_name: The name of the schema defined in `schema_text`.
+    :param schema_text: The schema text to use for serializing message payloads.
+    :return: A dictionary mapping schema names to message encoders.
+    """
+    msgdefs: Dict[str, MessageSpecification] = {
+        "builtin_interfaces/Time": TimeDefinition,
+        "builtin_interfaces/Duration": TimeDefinition,
+    }
+    encoders: Dict[str, EncoderFunction] = {}
+
+    def handle_msgdef(
+        cur_schema_name: str, short_name: str, msgdef: MessageSpecification
+    ):
+        # Add the message definition to the dictionary
+        msgdefs[cur_schema_name] = msgdef
+        msgdefs[short_name] = msgdef
+
+        # Add the message encoder to the dictionary
+        encoder: EncoderFunction = _make_encode_message(cur_schema_name, msgdefs)
+        encoders[cur_schema_name] = encoder
+        encoders[short_name] = encoder
+
+    _for_each_msgdef(schema_name, schema_text, handle_msgdef)
+    return encoders
+
+
+def read_message(
+    schema_name: str, msgdefs: Dict[str, MessageSpecification], data: bytes
+) -> DecodedMessage:
+    """Deserialize a ROS2 message from bytes.
+
+    :param schema_name: The name of the schema to use for deserializing the message payload. This
+        key must exist in the `msgdefs` dictionary
+    :param msgdefs: A dictionary containing the message definitions for the top-level message and
+        any nested messages.
+    :param data: The message payload to deserialize.
+    :return: The deserialized message.
+    """
+    msgdef = msgdefs[schema_name]
+    if msgdef is None:
+        raise ValueError(f'Message definition not found for "{schema_name}"')
+    reader = CdrReader(data)
+    return _read_complex_type(msgdef.msg_name, msgdef.fields, msgdefs, reader)
+
+
+def encode_message(
+    schema_name: str, msgdefs: Dict[str, MessageSpecification], ros2_msg: Any
+) -> bytes:
+    """Serialize a ROS2 message to bytes.
+
+    :param schema_name: The name of the schema to use for deserializing the message payload. This
+        key must exist in the `msgdefs` dictionary
+    :param msgdefs: A dictionary containing the message definitions for the top-level message and
+        any nested messages.
+    :param ros2_msg: The message to serialize.
+    :return: The serialized message.
+    """
+    msgdef = msgdefs[schema_name]
+    if msgdef is None:
+        raise ValueError(f'Message definition not found for "{schema_name}"')
+    output = BytesIO()
+    writer = CdrWriter(output)
+    _write_complex_type(msgdef.msg_name, msgdef.fields, msgdefs, ros2_msg, writer)
+    return output.getvalue()
+
+
+def _make_read_message(
+    schema_name: str, msgdefs: Dict[str, MessageSpecification]
+) -> DecoderFunction:
+    return lambda data: read_message(schema_name, msgdefs, data)
+
+
+def _make_encode_message(
+    schema_name: str, msgdefs: Dict[str, MessageSpecification]
+) -> EncoderFunction:
+    return lambda msg: encode_message(schema_name, msgdefs, msg)
+
+
+def _read_complex_type(
+    msg_name: str,
+    fields: List[Field],
+    msgdefs: Dict[str, MessageSpecification],
+    reader: CdrReader,
+) -> DecodedMessage:
+    Msg = type(
+        msg_name,
+        (SimpleNamespace,),
+        {
+            "__name__": msg_name,
+            "__slots__": [field.name for field in fields],
+            "__repr__": __repr__,
+            "__str__": __repr__,
+        },
+    )
+    msg = Msg()
+
+    for field in fields:
+        ftype = field.type
+        if not ftype.is_primitive_type():
+            # Complex type
+            nested_definition = msgdefs[f"{ftype.pkg_name}/{ftype.type}"]
+            if nested_definition is None:
+                raise ValueError(
+                    f'Message definition not found for field "{field.name}" with '
+                    'type "{ftype.type}"'
+                )
+
+            if ftype.is_array:
+                # For dynamic length arrays we need to read a uint32 prefix
+                array_length = (
+                    ftype.array_size
+                    if ftype.is_fixed_size_array() and ftype.array_size is not None
+                    else reader.uint32()
+                )
+                array = [
+                    _read_complex_type(
+                        nested_definition.msg_name,
+                        nested_definition.fields,
+                        msgdefs,
+                        reader,
+                    )
+                    for _ in range(array_length)
+                ]
+                setattr(msg, field.name, array)
+            else:
+                value = _read_complex_type(
+                    nested_definition.msg_name,
+                    nested_definition.fields,
+                    msgdefs,
+                    reader,
+                )
+                setattr(msg, field.name, value)
+        else:
+            # Primitive type
+            if ftype.is_array:
+                array_parser_fn = ARRAY_PARSERS[ftype.type]
+                if array_parser_fn is None:
+                    raise NotImplementedError(
+                        f"Parsing for type {ftype.type}[] is not implemented"
+                    )
+                # For dynamic length arrays we need to read a uint32 prefix
+                array_length = (
+                    ftype.array_size
+                    if ftype.is_fixed_size_array() and ftype.array_size is not None
+                    else reader.sequence_length()
+                )
+                value = array_parser_fn(reader, array_length)
+                setattr(msg, field.name, value)
+            else:
+                parser_fn = FIELD_PARSERS[ftype.type]
+                if parser_fn is None:
+                    raise NotImplementedError(
+                        f"Parsing for type {ftype.type} is not implemented"
+                    )
+                value = parser_fn(reader)
+                setattr(msg, field.name, value)
+
+    return msg
+
+
+def _write_complex_type(
+    msg_name: str,
+    fields: List[Field],
+    msgdefs: Dict[str, MessageSpecification],
+    ros2_msg: Any,
+    writer: CdrWriter,
+) -> None:
+    for field in fields:
+        ftype = field.type
+        if not ftype.is_primitive_type():
+            # Complex type
+            nested_definition = msgdefs[f"{ftype.pkg_name}/{ftype.type}"]
+            if nested_definition is None:
+                raise ValueError(
+                    f'Message definition not found for field "{field.name}" with '
+                    'type "{ftype.type}"'
+                )
+
+            if ftype.is_array:
+                array: Union[List[Any], Any] = _get_property(ros2_msg, field.name)
+                if array is None:
+                    array = []
+                if not isinstance(array, list):
+                    raise ValueError(
+                        f'Field "{field.name}" is not an array but has array type '
+                        f'"{ftype.type}[]"'
+                    )
+
+                if ftype.is_fixed_size_array() and ftype.array_size is not None:
+                    # Fixed length array, ensure the input array is the correct length
+                    while len(array) < ftype.array_size:
+                        array.append({})
+                    if len(array) > ftype.array_size:
+                        array = array[: ftype.array_size]
+
+                    for item in array:
+                        _write_complex_type(
+                            nested_definition.msg_name,
+                            nested_definition.fields,
+                            msgdefs,
+                            item,
+                            writer,
+                        )
+                else:
+                    # Limit the array to the upper bound length, if present
+                    if (
+                        ftype.is_upper_bound
+                        and ftype.array_size is not None
+                        and len(array) > ftype.array_size
+                    ):
+                        array = array[: ftype.array_size]
+
+                    # Dynamic length array, write a uint32 prefix
+                    writer.write_uint32(len(array))
+                    # Write the array values
+                    for item in array:
+                        _write_complex_type(
+                            nested_definition.msg_name,
+                            nested_definition.fields,
+                            msgdefs,
+                            item,
+                            writer,
+                        )
+            else:
+                _write_complex_type(
+                    nested_definition.msg_name,
+                    nested_definition.fields,
+                    msgdefs,
+                    _get_property(ros2_msg, field.name) or {},
+                    writer,
+                )
+        else:
+            # Primitive type
+            if ftype.is_array:
+                array: Union[List[Any], Any] = _get_property(ros2_msg, field.name)
+                if array is None:
+                    array = []
+                if not isinstance(array, list):
+                    raise ValueError(
+                        f'Field "{field.name}" is not an array but has array type '
+                        f'"{ftype.type}[]"'
+                    )
+
+                array_writer_fn = ARRAY_WRITERS[ftype.type]
+                if array_writer_fn is None:
+                    raise NotImplementedError(
+                        f"Writing for type {ftype.type}[] is not implemented"
+                    )
+
+                if ftype.is_fixed_size_array() and ftype.array_size is not None:
+                    # Fixed length array, ensure the input array is the correct length
+                    while len(array) < ftype.array_size:
+                        array.append(None)
+                    if len(array) > ftype.array_size:
+                        array = array[: ftype.array_size]
+
+                    array = _coerce_values(array, ftype.type, field.default_value)
+                    array_writer_fn(writer, array)
+                else:
+                    # Limit the array to the upper bound length, if present
+                    if (
+                        ftype.is_upper_bound
+                        and ftype.array_size is not None
+                        and len(array) > ftype.array_size
+                    ):
+                        array = array[: ftype.array_size]
+
+                    array = _coerce_values(array, ftype.type, field.default_value)
+
+                    # Dynamic length array, write a uint32 prefix
+                    writer.write_uint32(len(array))
+                    # Write the array values
+                    array_writer_fn(writer, array)
+            else:
+                writer_fn = FIELD_WRITERS[ftype.type]
+                if writer_fn is None:
+                    raise NotImplementedError(
+                        f"Writing for type {ftype.type} is not implemented"
+                    )
+
+                value = _get_property(ros2_msg, field.name)
+                value: Any = _coerce_value(value, ftype.type, field.default_value)
+                writer_fn(writer, value)
+
+
+def _for_each_msgdef(
+    schema_name: str,
+    schema_text: str,
+    fn: Callable[[str, str, MessageSpecification], None],
+) -> None:
     cur_schema_name = schema_name
 
     # Split schema_text by separator lines containing at least 3 = characters
@@ -108,114 +470,64 @@ def generate_dynamic(schema_name: str, schema_text: str) -> Dict[str, DecoderFun
         short_name = pkg_name + "/" + msg_name
         msgdef = parse_message_string(pkg_name, msg_name, cur_schema_text)
 
-        # Add the message definition to the dictionary
-        msgdefs[cur_schema_name] = msgdef
-        msgdefs[short_name] = msgdef
-
-        # Add the message generator to the dictionary
-        generator: DecoderFunction = _make_read_message(cur_schema_name, msgdefs)
-        generators[cur_schema_name] = generator
-        generators[short_name] = generator
-
-    return generators
+        fn(cur_schema_name, short_name, msgdef)
 
 
-def read_message(
-    schema_name: str, msgdefs: Dict[str, MessageSpecification], data: bytes
-) -> Message:
-    """Deserialize a ROS2 message from bytes.
-
-    :param schema_name: The name of the schema to use for deserializing the message payload. This
-        key must exist in the `msgdefs` dictionary
-    :param msgdefs: A dictionary containing the message definitions for the top-level message and
-        any nested messages.
-    :param data: The message payload to deserialize.
-    :return: The deserialized message.
-    """
-    msgdef = msgdefs[schema_name]
-    if msgdef is None:
-        raise ValueError(f'Message definition not found for "{schema_name}"')
-    reader = CdrReader(data)
-    return _read_complex_type(msgdef.msg_name, msgdef.fields, msgdefs, reader)
+def _get_property(obj: Any, name: str) -> Any:
+    if hasattr(obj, name):
+        return getattr(obj, name)
+    try:
+        return obj[name]
+    except (KeyError, TypeError):
+        return None
 
 
-def _make_read_message(
-    schema_name: str, msgdefs: Dict[str, MessageSpecification]
-) -> DecoderFunction:
-    return lambda data: read_message(schema_name, msgdefs, data)
+def _coerce_value(
+    value: Any, type_name: str, default_value: Optional[DefaultValue]
+) -> PrimitiveValue:
+    if isinstance(default_value, list):
+        raise ValueError("Default value for primitive types cannot be an array")
+
+    if type_name in STRING_TYPES:
+        return (
+            str(value)
+            if value is not None
+            else default_value
+            if default_value is not None
+            else ""
+        )
+    elif type_name in FLOAT_TYPES:
+        return (
+            float(value)
+            if value is not None
+            else default_value
+            if default_value is not None
+            else 0.0
+        )
+    elif type_name in INT_TYPES:
+        return (
+            int(value)
+            if value is not None
+            else default_value
+            if default_value is not None
+            else 0
+        )
+    elif type_name == "bool":
+        return (
+            bool(value)
+            if value is not None
+            else default_value
+            if default_value is not None
+            else False
+        )
+    else:
+        raise NotImplementedError(f'coercion for type "{type_name}" is not implemented')
 
 
-def _read_complex_type(
-    msg_name: str,
-    fields: List[Field],
-    msgdefs: Dict[str, MessageSpecification],
-    reader: CdrReader,
-) -> Message:
-    Msg = type(
-        msg_name,
-        (SimpleNamespace,),
-        {
-            "__name__": msg_name,
-            "__slots__": [field.name for field in fields],
-            "__repr__": __repr__,
-            "__str__": __repr__,
-        },
-    )
-    msg = Msg()
-
-    for field in fields:
-        if not field.type.is_primitive_type():
-            # Complex type
-            nested_definition = msgdefs[f"{field.type.pkg_name}/{field.type.type}"]
-            if nested_definition is None:
-                raise ValueError(
-                    f'Message definition not found for field "{field.name}" with '
-                    'type "{field.type.type}"'
-                )
-
-            if field.type.is_array:
-                # For dynamic length arrays we need to read a uint32 prefix
-                array_length = field.type.array_size or reader.uint32()
-                array = [
-                    _read_complex_type(
-                        nested_definition.msg_name,
-                        nested_definition.fields,
-                        msgdefs,
-                        reader,
-                    )
-                    for _ in range(array_length)
-                ]
-                setattr(msg, field.name, array)
-            else:
-                value = _read_complex_type(
-                    nested_definition.msg_name,
-                    nested_definition.fields,
-                    msgdefs,
-                    reader,
-                )
-                setattr(msg, field.name, value)
-        else:
-            # Primitive type
-            if field.type.is_array:
-                parser_fn = ARRAY_PARSERS[field.type.type]
-                if parser_fn is None:
-                    raise NotImplementedError(
-                        f"Parsing for type {field.type.type}[] is not implemented"
-                    )
-                # For dynamic length arrays we need to read a uint32 prefix
-                array_length = field.type.array_size or reader.sequence_length()
-                value = parser_fn(reader, array_length)
-                setattr(msg, field.name, value)
-            else:
-                parser_fn = FIELD_PARSERS[field.type.type]
-                if parser_fn is None:
-                    raise NotImplementedError(
-                        f"Parsing for type {field.type.type} is not implemented"
-                    )
-                value = parser_fn(reader)
-                setattr(msg, field.name, value)
-
-    return msg
+def _coerce_values(
+    values: List[Any], type_name: str, default_value: Optional[DefaultValue]
+) -> List[PrimitiveValue]:
+    return [_coerce_value(value, type_name, default_value) for value in values]
 
 
 def __repr__(self: Any) -> str:

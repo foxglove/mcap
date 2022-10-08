@@ -48,7 +48,7 @@ class Writer:
             timestamp. Will default to ``log_time`` if not specified.
         :param sequence: An optional sequence number.
         """
-        if message._type not in self.__schema_ids.keys():
+        if message._type not in self.__schema_ids:
             schema_id = self.__writer.register_schema(
                 name=message._type,
                 data=message.__class__._full_text.encode(),
@@ -57,7 +57,7 @@ class Writer:
             self.__schema_ids[message._type] = schema_id
         schema_id = self.__schema_ids[message._type]
 
-        if topic not in self.__channel_ids.keys():
+        if topic not in self.__channel_ids:
             channel_id = self.__writer.register_channel(
                 topic=topic,
                 message_encoding="ros1",
