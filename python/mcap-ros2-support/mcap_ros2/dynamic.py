@@ -112,7 +112,18 @@ ARRAY_WRITERS = {
 
 STRING_TYPES = ("string", "wstring")
 FLOAT_TYPES = ("float32", "float64")
-INT_TYPES = ("int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64")
+INT_TYPES = (
+    "byte",
+    "char",
+    "int8",
+    "uint8",
+    "int16",
+    "uint16",
+    "int32",
+    "uint32",
+    "int64",
+    "uint64",
+)
 
 TimeDefinition = MessageSpecification(
     "builtin_interfaces",
@@ -393,9 +404,13 @@ def _write_complex_type(
                 array: Union[List[Any], Any] = _get_property(ros2_msg, field.name)
                 if array is None:
                     array = []
-                if not isinstance(array, list):
+                if (
+                    not isinstance(array, list)
+                    and not isinstance(array, tuple)
+                    and not isinstance(array, bytes)
+                ):
                     raise ValueError(
-                        f'Field "{field.name}" is not an array but has array type '
+                        f'Field "{field.name}" is not an array ({type(array)}) but has array type '
                         f'"{ftype.type}[]"'
                     )
 
