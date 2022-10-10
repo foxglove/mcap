@@ -50,6 +50,7 @@ words:
   - libmcap
   - mcap
   - nanos
+  - nanosec
   - noenv
   - nsec
   - nsecs
