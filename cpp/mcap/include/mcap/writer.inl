@@ -4,7 +4,6 @@
 #include <lz4frame.h>
 #include <lz4hc.h>
 
-#define ZSTD_STATIC_LINKING_ONLY
 #include <zstd.h>
 #include <zstd_errors.h>
 
