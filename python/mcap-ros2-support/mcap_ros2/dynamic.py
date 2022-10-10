@@ -3,7 +3,7 @@
 import re
 from io import BytesIO
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from .cdr import CdrReader, CdrWriter
 from .vendor.rosidl_adapter.parser import (
@@ -346,7 +346,9 @@ def _write_complex_type(
                 )
 
             if ftype.is_array:
-                array: Union[List[Any], Any] = _get_property(ros2_msg, field.name)
+                array: Union[List[Any], Tuple[Any], Any] = _get_property(
+                    ros2_msg, field.name
+                )
                 if array is None:
                     array = []
                 if not isinstance(array, list):
@@ -401,7 +403,9 @@ def _write_complex_type(
         else:
             # Primitive type
             if ftype.is_array:
-                array: Union[List[Any], Any] = _get_property(ros2_msg, field.name)
+                array: Union[List[Any], Tuple[Any], Any] = _get_property(
+                    ros2_msg, field.name
+                )
                 if array is None:
                     array = []
                 if (
@@ -414,36 +418,71 @@ def _write_complex_type(
                         f'"{ftype.type}[]"'
                     )
 
-                array_writer_fn = ARRAY_WRITERS[ftype.type]
-                if array_writer_fn is None:
-                    raise NotImplementedError(
-                        f"Writing for type {ftype.type}[] is not implemented"
-                    )
+                # Special handling for bytes
+                if isinstance(array, bytes):
+                    byte_array: bytes = array
+                    if ftype.type != "uint8" and ftype.type != "byte":
+                        raise ValueError(
+                            f'Field "{field.name}" has type "uint8[]" but has type "{ftype.type}[]"'
+                        )
 
-                if ftype.is_fixed_size_array() and ftype.array_size is not None:
-                    # Fixed length array, ensure the input array is the correct length
-                    while len(array) < ftype.array_size:
-                        array.append(None)
-                    if len(array) > ftype.array_size:
-                        array = array[: ftype.array_size]
+                    if ftype.is_fixed_size_array() and ftype.array_size is not None:
+                        # Fixed length byte array, ensure the input array is the correct length
+                        while len(byte_array) < ftype.array_size:
+                            byte_array += b"\0"
+                        if len(byte_array) > ftype.array_size:
+                            byte_array = byte_array[: ftype.array_size]
 
-                    array = _coerce_values(array, ftype.type, field.default_value)
-                    array_writer_fn(writer, array)
+                        writer.write_bytes(byte_array)
+                    else:
+                        # Limit the byte array to the upper bound length, if present
+                        if (
+                            ftype.is_upper_bound
+                            and ftype.array_size is not None
+                            and len(array) > ftype.array_size
+                        ):
+                            byte_array = byte_array[: ftype.array_size]
+
+                        # Dynamic length byte array, write a uint32 prefix
+                        writer.write_uint32(len(byte_array))
+                        # Write the byte array values
+                        writer.write_bytes(byte_array)
                 else:
-                    # Limit the array to the upper bound length, if present
-                    if (
-                        ftype.is_upper_bound
-                        and ftype.array_size is not None
-                        and len(array) > ftype.array_size
-                    ):
-                        array = array[: ftype.array_size]
+                    array_writer_fn = ARRAY_WRITERS[ftype.type]
+                    if array_writer_fn is None:
+                        raise NotImplementedError(
+                            f"Writing for type {ftype.type}[] is not implemented"
+                        )
 
-                    array = _coerce_values(array, ftype.type, field.default_value)
+                    if ftype.is_fixed_size_array() and ftype.array_size is not None:
+                        # Convert tuples to lists
+                        list_array = list(array) if isinstance(array, tuple) else array
 
-                    # Dynamic length array, write a uint32 prefix
-                    writer.write_uint32(len(array))
-                    # Write the array values
-                    array_writer_fn(writer, array)
+                        # Fixed length array, ensure the input array is the correct length
+                        while len(list_array) < ftype.array_size:
+                            list_array.append(None)
+                        if len(list_array) > ftype.array_size:
+                            list_array = list_array[: ftype.array_size]
+
+                        list_array: List[Any] = _coerce_values(
+                            list_array, ftype.type, field.default_value
+                        )
+                        array_writer_fn(writer, list_array)
+                    else:
+                        # Limit the array to the upper bound length, if present
+                        if (
+                            ftype.is_upper_bound
+                            and ftype.array_size is not None
+                            and len(array) > ftype.array_size
+                        ):
+                            array = array[: ftype.array_size]
+
+                        array = _coerce_values(array, ftype.type, field.default_value)
+
+                        # Dynamic length array, write a uint32 prefix
+                        writer.write_uint32(len(array))
+                        # Write the array values
+                        array_writer_fn(writer, array)
             else:
                 writer_fn = FIELD_WRITERS[ftype.type]
                 if writer_fn is None:
@@ -540,7 +579,9 @@ def _coerce_value(
 
 
 def _coerce_values(
-    values: List[Any], type_name: str, default_value: Optional[DefaultValue]
+    values: Union[List[Any], Tuple[Any]],
+    type_name: str,
+    default_value: Optional[DefaultValue],
 ) -> List[PrimitiveValue]:
     return [_coerce_value(value, type_name, default_value) for value in values]
 
