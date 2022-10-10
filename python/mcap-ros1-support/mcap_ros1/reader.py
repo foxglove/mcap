@@ -8,7 +8,7 @@ from os import PathLike
 
 from .decoder import Decoder
 
-from mcap.records import Message, Channel
+from mcap.records import Message, Channel, Schema
 from mcap.reader import McapReader, make_reader
 
 
@@ -68,6 +68,7 @@ def read_ros1_messages(
                 ros_msg=decoder.decode(schema=schema, message=message),
                 message=message,
                 channel=channel,
+                schema=schema,
             )
     finally:
         if fd is not None:
@@ -87,14 +88,28 @@ class McapROS1Message:
         timestamp.
     """
 
-    def __init__(self, ros_msg: Any, message: Message, channel: Channel):
-        self.ros_msg = ros_msg
+    __slots__ = (
+        "ros_msg",
+        "sequence_count",
+        "topic",
+        "channel_metadata",
+        "log_time_ns",
+        "publish_time_ns",
+        "channel",
+        "schema",
+    )
+
+    def __init__(
+        self, ros_msg: Any, message: Message, channel: Channel, schema: Schema
+    ):
+        self.ros_msg: Any = ros_msg
         self.sequence_count: int = message.sequence
         self.topic: str = channel.topic
         self.channel_metadata: Dict[str, str] = channel.metadata
-
         self.log_time_ns: int = message.log_time
         self.publish_time_ns: int = message.publish_time
+        self.channel: Channel = channel
+        self.schema: Schema = schema
 
     @property
     def log_time(self) -> datetime:
