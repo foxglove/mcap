@@ -37,22 +37,22 @@
 <span class="sd">The :py:mod:`mcap_ros2.reader` module provides high-level ROS2 message reading capability.</span>
 
 <span class="sd">For more low-level control, consider using the underlying</span>
-<span class="sd">:py:class:`mcap_ros2.decoder.Decoder` and :py:class:`mcap.mcap0.reader.McapReader`</span>
+<span class="sd">:py:class:`mcap_ros2.decoder.Decoder` and :py:class:`mcap.reader.McapReader`</span>
 <span class="sd">objects directly.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
 <span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">PathLike</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">IO</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">IO</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
-<span class="kn">from</span> <span class="nn">mcap.mcap0.reader</span> <span class="kn">import</span> <span class="n">McapReader</span><span class="p">,</span> <span class="n">make_reader</span>
-<span class="kn">from</span> <span class="nn">mcap.mcap0.records</span> <span class="kn">import</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span>
+<span class="kn">from</span> <span class="nn">mcap.reader</span> <span class="kn">import</span> <span class="n">McapReader</span><span class="p">,</span> <span class="n">make_reader</span>
+<span class="kn">from</span> <span class="nn">mcap.records</span> <span class="kn">import</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">,</span> <span class="n">Schema</span>
 
 <span class="kn">from</span> <span class="nn">.decoder</span> <span class="kn">import</span> <span class="n">Decoder</span>
 
 
 <div class="viewcode-block" id="read_ros2_messages"><a class="viewcode-back" href="../../mcap-ros2-apidoc/mcap_ros2.reader.html#mcap_ros2.reader.read_ros2_messages">[docs]</a><span class="k">def</span> <span class="nf">read_ros2_messages</span><span class="p">(</span>
-    <span class="n">source</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">,</span> <span class="n">PathLike</span><span class="p">,</span> <span class="n">McapReader</span><span class="p">,</span> <span class="n">IO</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]],</span>
+    <span class="n">source</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">,</span> <span class="s2">&quot;PathLike[str]&quot;</span><span class="p">,</span> <span class="n">McapReader</span><span class="p">,</span> <span class="n">IO</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]],</span>
     <span class="n">topics</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">start_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">datetime</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">end_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">datetime</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -75,7 +75,7 @@
 <span class="sd">    .. note::</span>
 <span class="sd">        this generator assumes the source MCAP conforms to the `ros2` MCAP profile.</span>
 <span class="sd">        If you need to decode ROS2 messages from a file containing other encodings, use</span>
-<span class="sd">        the :py:func:`mcap.mcap0.reader.McapReader.iter_messages()` function to iterate through</span>
+<span class="sd">        the :py:func:`mcap.reader.McapReader.iter_messages()` function to iterate through</span>
 <span class="sd">        Message records in your MCAP, and decode the ROS2 messages with</span>
 <span class="sd">        the :py:class:`mcap_ros2.decoder.Decoder` class.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -106,6 +106,7 @@
                 <span class="n">ros_msg</span><span class="o">=</span><span class="n">decoder</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">),</span>
                 <span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">,</span>
                 <span class="n">channel</span><span class="o">=</span><span class="n">channel</span><span class="p">,</span>
+                <span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">,</span>
             <span class="p">)</span>
     <span class="k">finally</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">fd</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -117,24 +118,26 @@
 
 <span class="sd">    :ivar ros_msg: the decoded ROS2 message.</span>
 <span class="sd">    :ivar sequence_count: the message sequence count if included in the MCAP, or 0 otherwise.</span>
-<span class="sd">    :ivar topic: the topic that the message was published on.</span>
-<span class="sd">    :ivar channel_metadata: the metadata associated with this ROS2 topic, if any.</span>
 <span class="sd">    :ivar log_time_ns: the time this message was logged by the recorder, as a POSIX nanosecond</span>
 <span class="sd">        timestamp.</span>
 <span class="sd">    :ivar log_time_ns: the time this message was published, as a POSIX nanosecond</span>
 <span class="sd">        timestamp.</span>
+<span class="sd">    :ivar channel: the MCAP Channel record referenced by the Message record</span>
+<span class="sd">    :ivar schema: the MCAP Schema record referenced by the Channel record</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="vm">__slots__</span> <span class="o">=</span> <span class="p">(</span>
         <span class="s2">&quot;ros_msg&quot;</span><span class="p">,</span>
         <span class="s2">&quot;sequence_count&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;topic&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;channel_metadata&quot;</span><span class="p">,</span>
         <span class="s2">&quot;log_time_ns&quot;</span><span class="p">,</span>
         <span class="s2">&quot;publish_time_ns&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;channel&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;schema&quot;</span><span class="p">,</span>
     <span class="p">)</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ros_msg</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">Message</span><span class="p">,</span> <span class="n">channel</span><span class="p">:</span> <span class="n">Channel</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">ros_msg</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">Message</span><span class="p">,</span> <span class="n">channel</span><span class="p">:</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">schema</span><span class="p">:</span> <span class="n">Schema</span>
+    <span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Construct a new McapROS2Message instance.</span>
 
@@ -144,11 +147,10 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ros_msg</span> <span class="o">=</span> <span class="n">ros_msg</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">sequence_count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">sequence</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">topic</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">channel</span><span class="o">.</span><span class="n">topic</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">channel_metadata</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">channel</span><span class="o">.</span><span class="n">metadata</span>
-
         <span class="bp">self</span><span class="o">.</span><span class="n">log_time_ns</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">log_time</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">publish_time_ns</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">publish_time</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">channel</span> <span class="o">=</span> <span class="n">channel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">schema</span> <span class="o">=</span> <span class="n">schema</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">log_time</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">datetime</span><span class="p">:</span>
@@ -182,7 +184,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../protobuf_example.html">Working with Protobuf Messages</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../ros1_example.html">Working with ROS 1 Messages</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../ros2_example.html">Using <code class="docutils literal notranslate"><span class="pre">rosbag2_py</span></code> to use MCAP with ROS 2</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../ros2_noenv_example.html">Working with ROS 2 Messages outside of a ROS 2 environment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../ros2_noenv_example.html">Working with ROS 2 Messages</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../mcap-apidoc/index.html">mcap</a></li>

@@ -11,6 +11,7 @@ Submodules
    mcap_ros2.decoder
    mcap_ros2.dynamic
    mcap_ros2.reader
+   mcap_ros2.writer
 
 Module contents
 ---------------

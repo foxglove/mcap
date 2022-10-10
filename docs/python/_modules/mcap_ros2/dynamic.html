@@ -36,10 +36,11 @@
 <span></span><span class="sd">&quot;&quot;&quot;ROS2 message definition parsing and message deserialization.&quot;&quot;&quot;</span>
 
 <span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BytesIO</span>
 <span class="kn">from</span> <span class="nn">types</span> <span class="kn">import</span> <span class="n">SimpleNamespace</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
 
-<span class="kn">from</span> <span class="nn">.cdr</span> <span class="kn">import</span> <span class="n">CdrReader</span>
+<span class="kn">from</span> <span class="nn">.cdr</span> <span class="kn">import</span> <span class="n">CdrReader</span><span class="p">,</span> <span class="n">CdrWriter</span>
 <span class="kn">from</span> <span class="nn">.vendor.rosidl_adapter.parser</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">Field</span><span class="p">,</span>
     <span class="n">MessageSpecification</span><span class="p">,</span>
@@ -47,10 +48,13 @@
     <span class="n">parse_message_string</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="c1"># cSpell:words wstring msgdefs</span>
+<span class="c1"># cSpell:words ftype wstring msgdefs</span>
 
-<span class="n">Message</span> <span class="o">=</span> <span class="n">SimpleNamespace</span>
-<span class="n">DecoderFunction</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">bytes</span><span class="p">],</span> <span class="n">Message</span><span class="p">]</span>
+<span class="n">DecodedMessage</span> <span class="o">=</span> <span class="n">SimpleNamespace</span>
+<span class="n">DecoderFunction</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">bytes</span><span class="p">],</span> <span class="n">DecodedMessage</span><span class="p">]</span>
+<span class="n">EncoderFunction</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="nb">bytes</span><span class="p">]</span>
+<span class="n">PrimitiveValue</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>
+<span class="n">DefaultValue</span> <span class="o">=</span> <span class="n">Union</span><span class="p">[</span><span class="n">PrimitiveValue</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">PrimitiveValue</span><span class="p">]]</span>
 
 
 <span class="k">def</span> <span class="nf">_parseWstring</span><span class="p">(</span><span class="n">reader</span><span class="p">:</span> <span class="n">CdrReader</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -59,6 +63,14 @@
 
 <span class="k">def</span> <span class="nf">_parseWstringArray</span><span class="p">(</span><span class="n">reader</span><span class="p">:</span> <span class="n">CdrReader</span><span class="p">,</span> <span class="n">array_length</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
     <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;wstring[] parsing is not implemented&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_writeWstring</span><span class="p">(</span><span class="n">writer</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;wstring writing is not implemented&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_writeWstringArray</span><span class="p">(</span><span class="n">writer</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]):</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;wstring[] writing is not implemented&quot;</span><span class="p">)</span>
 
 
 <span class="n">FIELD_PARSERS</span> <span class="o">=</span> <span class="p">{</span>
@@ -97,10 +109,61 @@
     <span class="s2">&quot;wstring&quot;</span><span class="p">:</span> <span class="n">_parseWstringArray</span><span class="p">,</span>
 <span class="p">}</span>
 
+<span class="n">FIELD_WRITERS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;bool&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_boolean</span><span class="p">,</span>
+    <span class="s2">&quot;byte&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_uint8</span><span class="p">,</span>
+    <span class="s2">&quot;char&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_int8</span><span class="p">,</span>
+    <span class="s2">&quot;float32&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_float32</span><span class="p">,</span>
+    <span class="s2">&quot;float64&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_float64</span><span class="p">,</span>
+    <span class="s2">&quot;int8&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_int8</span><span class="p">,</span>
+    <span class="s2">&quot;uint8&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_uint8</span><span class="p">,</span>
+    <span class="s2">&quot;int16&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_int16</span><span class="p">,</span>
+    <span class="s2">&quot;uint16&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_uint16</span><span class="p">,</span>
+    <span class="s2">&quot;int32&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_int32</span><span class="p">,</span>
+    <span class="s2">&quot;uint32&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_uint32</span><span class="p">,</span>
+    <span class="s2">&quot;int64&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_int64</span><span class="p">,</span>
+    <span class="s2">&quot;uint64&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_uint64</span><span class="p">,</span>
+    <span class="s2">&quot;string&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_string</span><span class="p">,</span>
+    <span class="s2">&quot;wstring&quot;</span><span class="p">:</span> <span class="n">_writeWstring</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">ARRAY_WRITERS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;bool&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_boolean_array</span><span class="p">,</span>
+    <span class="s2">&quot;byte&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_uint8_array</span><span class="p">,</span>
+    <span class="s2">&quot;char&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_int8_array</span><span class="p">,</span>
+    <span class="s2">&quot;float32&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_float32_array</span><span class="p">,</span>
+    <span class="s2">&quot;float64&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_float64_array</span><span class="p">,</span>
+    <span class="s2">&quot;int8&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_int8_array</span><span class="p">,</span>
+    <span class="s2">&quot;uint8&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_uint8_array</span><span class="p">,</span>
+    <span class="s2">&quot;int16&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_int16_array</span><span class="p">,</span>
+    <span class="s2">&quot;uint16&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_uint16_array</span><span class="p">,</span>
+    <span class="s2">&quot;int32&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_int32_array</span><span class="p">,</span>
+    <span class="s2">&quot;uint32&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_uint32_array</span><span class="p">,</span>
+    <span class="s2">&quot;int64&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_int64_array</span><span class="p">,</span>
+    <span class="s2">&quot;uint64&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_uint64_array</span><span class="p">,</span>
+    <span class="s2">&quot;string&quot;</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="o">.</span><span class="n">write_string_array</span><span class="p">,</span>
+    <span class="s2">&quot;wstring&quot;</span><span class="p">:</span> <span class="n">_writeWstringArray</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">STRING_TYPES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;string&quot;</span><span class="p">,</span> <span class="s2">&quot;wstring&quot;</span><span class="p">)</span>
+<span class="n">FLOAT_TYPES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;float32&quot;</span><span class="p">,</span> <span class="s2">&quot;float64&quot;</span><span class="p">)</span>
+<span class="n">INT_TYPES</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;byte&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;char&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;int8&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;uint8&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;int16&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;uint16&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;int32&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;uint32&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;int64&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;uint64&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
 <span class="n">TimeDefinition</span> <span class="o">=</span> <span class="n">MessageSpecification</span><span class="p">(</span>
     <span class="s2">&quot;builtin_interfaces&quot;</span><span class="p">,</span>
     <span class="s2">&quot;Time&quot;</span><span class="p">,</span>
-    <span class="p">[</span><span class="n">Field</span><span class="p">(</span><span class="n">Type</span><span class="p">(</span><span class="s2">&quot;uint32&quot;</span><span class="p">),</span> <span class="s2">&quot;seconds&quot;</span><span class="p">),</span> <span class="n">Field</span><span class="p">(</span><span class="n">Type</span><span class="p">(</span><span class="s2">&quot;uint32&quot;</span><span class="p">),</span> <span class="s2">&quot;nanoseconds&quot;</span><span class="p">)],</span>
+    <span class="p">[</span><span class="n">Field</span><span class="p">(</span><span class="n">Type</span><span class="p">(</span><span class="s2">&quot;uint32&quot;</span><span class="p">),</span> <span class="s2">&quot;sec&quot;</span><span class="p">),</span> <span class="n">Field</span><span class="p">(</span><span class="n">Type</span><span class="p">(</span><span class="s2">&quot;uint32&quot;</span><span class="p">),</span> <span class="s2">&quot;nanosec&quot;</span><span class="p">)],</span>
     <span class="p">[],</span>
 <span class="p">)</span>
 
@@ -112,13 +175,366 @@
 
 <span class="sd">    :param schema_name: The name of the schema defined in `schema_text`.</span>
 <span class="sd">    :param schema_text: The schema text to use for deserializing the message payload.</span>
-<span class="sd">    :return: A dictionary containing the generated message.</span>
+<span class="sd">    :return: A dictionary mapping schema names to message parser.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">msgdefs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MessageSpecification</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">&quot;builtin_interfaces/Time&quot;</span><span class="p">:</span> <span class="n">TimeDefinition</span><span class="p">,</span>
         <span class="s2">&quot;builtin_interfaces/Duration&quot;</span><span class="p">:</span> <span class="n">TimeDefinition</span><span class="p">,</span>
     <span class="p">}</span>
-    <span class="n">generators</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">DecoderFunction</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">decoders</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">DecoderFunction</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span> <span class="nf">handle_msgdef</span><span class="p">(</span>
+        <span class="n">cur_schema_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">short_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">msgdef</span><span class="p">:</span> <span class="n">MessageSpecification</span>
+    <span class="p">):</span>
+        <span class="c1"># Add the message definition to the dictionary</span>
+        <span class="n">msgdefs</span><span class="p">[</span><span class="n">cur_schema_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">msgdef</span>
+        <span class="n">msgdefs</span><span class="p">[</span><span class="n">short_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">msgdef</span>
+
+        <span class="c1"># Add the message decoder to the dictionary</span>
+        <span class="n">decoder</span><span class="p">:</span> <span class="n">DecoderFunction</span> <span class="o">=</span> <span class="n">_make_read_message</span><span class="p">(</span><span class="n">cur_schema_name</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">)</span>
+        <span class="n">decoders</span><span class="p">[</span><span class="n">cur_schema_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">decoder</span>
+        <span class="n">decoders</span><span class="p">[</span><span class="n">short_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">decoder</span>
+
+    <span class="n">_for_each_msgdef</span><span class="p">(</span><span class="n">schema_name</span><span class="p">,</span> <span class="n">schema_text</span><span class="p">,</span> <span class="n">handle_msgdef</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">decoders</span></div>
+
+
+<div class="viewcode-block" id="serialize_dynamic"><a class="viewcode-back" href="../../mcap-ros2-apidoc/mcap_ros2.dynamic.html#mcap_ros2.dynamic.serialize_dynamic">[docs]</a><span class="k">def</span> <span class="nf">serialize_dynamic</span><span class="p">(</span><span class="n">schema_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">schema_text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">EncoderFunction</span><span class="p">]:</span>
+    <span class="sd">&quot;&quot;&quot;Convert a ROS2 concatenated message definition into a dictionary of message encoders.</span>
+
+<span class="sd">    :param schema_name: The name of the schema defined in `schema_text`.</span>
+<span class="sd">    :param schema_text: The schema text to use for serializing message payloads.</span>
+<span class="sd">    :return: A dictionary mapping schema names to message encoders.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">msgdefs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MessageSpecification</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;builtin_interfaces/Time&quot;</span><span class="p">:</span> <span class="n">TimeDefinition</span><span class="p">,</span>
+        <span class="s2">&quot;builtin_interfaces/Duration&quot;</span><span class="p">:</span> <span class="n">TimeDefinition</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="n">encoders</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">EncoderFunction</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span> <span class="nf">handle_msgdef</span><span class="p">(</span>
+        <span class="n">cur_schema_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">short_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">msgdef</span><span class="p">:</span> <span class="n">MessageSpecification</span>
+    <span class="p">):</span>
+        <span class="c1"># Add the message definition to the dictionary</span>
+        <span class="n">msgdefs</span><span class="p">[</span><span class="n">cur_schema_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">msgdef</span>
+        <span class="n">msgdefs</span><span class="p">[</span><span class="n">short_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">msgdef</span>
+
+        <span class="c1"># Add the message encoder to the dictionary</span>
+        <span class="n">encoder</span><span class="p">:</span> <span class="n">EncoderFunction</span> <span class="o">=</span> <span class="n">_make_encode_message</span><span class="p">(</span><span class="n">cur_schema_name</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">)</span>
+        <span class="n">encoders</span><span class="p">[</span><span class="n">cur_schema_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">encoder</span>
+        <span class="n">encoders</span><span class="p">[</span><span class="n">short_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">encoder</span>
+
+    <span class="n">_for_each_msgdef</span><span class="p">(</span><span class="n">schema_name</span><span class="p">,</span> <span class="n">schema_text</span><span class="p">,</span> <span class="n">handle_msgdef</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">encoders</span></div>
+
+
+<div class="viewcode-block" id="read_message"><a class="viewcode-back" href="../../mcap-ros2-apidoc/mcap_ros2.dynamic.html#mcap_ros2.dynamic.read_message">[docs]</a><span class="k">def</span> <span class="nf">read_message</span><span class="p">(</span>
+    <span class="n">schema_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MessageSpecification</span><span class="p">],</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DecodedMessage</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Deserialize a ROS2 message from bytes.</span>
+
+<span class="sd">    :param schema_name: The name of the schema to use for deserializing the message payload. This</span>
+<span class="sd">        key must exist in the `msgdefs` dictionary</span>
+<span class="sd">    :param msgdefs: A dictionary containing the message definitions for the top-level message and</span>
+<span class="sd">        any nested messages.</span>
+<span class="sd">    :param data: The message payload to deserialize.</span>
+<span class="sd">    :return: The deserialized message.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">msgdef</span> <span class="o">=</span> <span class="n">msgdefs</span><span class="p">[</span><span class="n">schema_name</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">msgdef</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Message definition not found for &quot;</span><span class="si">{</span><span class="n">schema_name</span><span class="si">}</span><span class="s1">&quot;&#39;</span><span class="p">)</span>
+    <span class="n">reader</span> <span class="o">=</span> <span class="n">CdrReader</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_read_complex_type</span><span class="p">(</span><span class="n">msgdef</span><span class="o">.</span><span class="n">msg_name</span><span class="p">,</span> <span class="n">msgdef</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">,</span> <span class="n">reader</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="encode_message"><a class="viewcode-back" href="../../mcap-ros2-apidoc/mcap_ros2.dynamic.html#mcap_ros2.dynamic.encode_message">[docs]</a><span class="k">def</span> <span class="nf">encode_message</span><span class="p">(</span>
+    <span class="n">schema_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MessageSpecification</span><span class="p">],</span> <span class="n">ros2_msg</span><span class="p">:</span> <span class="n">Any</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Serialize a ROS2 message to bytes.</span>
+
+<span class="sd">    :param schema_name: The name of the schema to use for deserializing the message payload. This</span>
+<span class="sd">        key must exist in the `msgdefs` dictionary</span>
+<span class="sd">    :param msgdefs: A dictionary containing the message definitions for the top-level message and</span>
+<span class="sd">        any nested messages.</span>
+<span class="sd">    :param ros2_msg: The message to serialize.</span>
+<span class="sd">    :return: The serialized message.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">msgdef</span> <span class="o">=</span> <span class="n">msgdefs</span><span class="p">[</span><span class="n">schema_name</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">msgdef</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Message definition not found for &quot;</span><span class="si">{</span><span class="n">schema_name</span><span class="si">}</span><span class="s1">&quot;&#39;</span><span class="p">)</span>
+    <span class="n">output</span> <span class="o">=</span> <span class="n">BytesIO</span><span class="p">()</span>
+    <span class="n">writer</span> <span class="o">=</span> <span class="n">CdrWriter</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+    <span class="n">_write_complex_type</span><span class="p">(</span><span class="n">msgdef</span><span class="o">.</span><span class="n">msg_name</span><span class="p">,</span> <span class="n">msgdef</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">,</span> <span class="n">ros2_msg</span><span class="p">,</span> <span class="n">writer</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">output</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span></div>
+
+
+<span class="k">def</span> <span class="nf">_make_read_message</span><span class="p">(</span>
+    <span class="n">schema_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MessageSpecification</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DecoderFunction</span><span class="p">:</span>
+    <span class="k">return</span> <span class="k">lambda</span> <span class="n">data</span><span class="p">:</span> <span class="n">read_message</span><span class="p">(</span><span class="n">schema_name</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_make_encode_message</span><span class="p">(</span>
+    <span class="n">schema_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MessageSpecification</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EncoderFunction</span><span class="p">:</span>
+    <span class="k">return</span> <span class="k">lambda</span> <span class="n">msg</span><span class="p">:</span> <span class="n">encode_message</span><span class="p">(</span><span class="n">schema_name</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">,</span> <span class="n">msg</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_read_complex_type</span><span class="p">(</span>
+    <span class="n">msg_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">fields</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Field</span><span class="p">],</span>
+    <span class="n">msgdefs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MessageSpecification</span><span class="p">],</span>
+    <span class="n">reader</span><span class="p">:</span> <span class="n">CdrReader</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DecodedMessage</span><span class="p">:</span>
+    <span class="n">Msg</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span>
+        <span class="n">msg_name</span><span class="p">,</span>
+        <span class="p">(</span><span class="n">SimpleNamespace</span><span class="p">,),</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;__name__&quot;</span><span class="p">:</span> <span class="n">msg_name</span><span class="p">,</span>
+            <span class="s2">&quot;__slots__&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">],</span>
+            <span class="s2">&quot;__repr__&quot;</span><span class="p">:</span> <span class="fm">__repr__</span><span class="p">,</span>
+            <span class="s2">&quot;__str__&quot;</span><span class="p">:</span> <span class="fm">__repr__</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">)</span>
+    <span class="n">msg</span> <span class="o">=</span> <span class="n">Msg</span><span class="p">()</span>
+
+    <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+        <span class="n">ftype</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">type</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">ftype</span><span class="o">.</span><span class="n">is_primitive_type</span><span class="p">():</span>
+            <span class="c1"># Complex type</span>
+            <span class="n">nested_definition</span> <span class="o">=</span> <span class="n">msgdefs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">ftype</span><span class="o">.</span><span class="n">pkg_name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">nested_definition</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s1">&#39;Message definition not found for field &quot;</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">&quot; with &#39;</span>
+                    <span class="s1">&#39;type &quot;</span><span class="si">{ftype.type}</span><span class="s1">&quot;&#39;</span>
+                <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">ftype</span><span class="o">.</span><span class="n">is_array</span><span class="p">:</span>
+                <span class="c1"># For dynamic length arrays we need to read a uint32 prefix</span>
+                <span class="n">array_length</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span>
+                    <span class="k">if</span> <span class="n">ftype</span><span class="o">.</span><span class="n">is_fixed_size_array</span><span class="p">()</span> <span class="ow">and</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="k">else</span> <span class="n">reader</span><span class="o">.</span><span class="n">uint32</span><span class="p">()</span>
+                <span class="p">)</span>
+                <span class="n">array</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">_read_complex_type</span><span class="p">(</span>
+                        <span class="n">nested_definition</span><span class="o">.</span><span class="n">msg_name</span><span class="p">,</span>
+                        <span class="n">nested_definition</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span>
+                        <span class="n">msgdefs</span><span class="p">,</span>
+                        <span class="n">reader</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">array_length</span><span class="p">)</span>
+                <span class="p">]</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">array</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">_read_complex_type</span><span class="p">(</span>
+                    <span class="n">nested_definition</span><span class="o">.</span><span class="n">msg_name</span><span class="p">,</span>
+                    <span class="n">nested_definition</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span>
+                    <span class="n">msgdefs</span><span class="p">,</span>
+                    <span class="n">reader</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Primitive type</span>
+            <span class="k">if</span> <span class="n">ftype</span><span class="o">.</span><span class="n">is_array</span><span class="p">:</span>
+                <span class="n">array_parser_fn</span> <span class="o">=</span> <span class="n">ARRAY_PARSERS</span><span class="p">[</span><span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">array_parser_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Parsing for type </span><span class="si">{</span><span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2">[] is not implemented&quot;</span>
+                    <span class="p">)</span>
+                <span class="c1"># For dynamic length arrays we need to read a uint32 prefix</span>
+                <span class="n">array_length</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span>
+                    <span class="k">if</span> <span class="n">ftype</span><span class="o">.</span><span class="n">is_fixed_size_array</span><span class="p">()</span> <span class="ow">and</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                    <span class="k">else</span> <span class="n">reader</span><span class="o">.</span><span class="n">sequence_length</span><span class="p">()</span>
+                <span class="p">)</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">array_parser_fn</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="n">array_length</span><span class="p">)</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">parser_fn</span> <span class="o">=</span> <span class="n">FIELD_PARSERS</span><span class="p">[</span><span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">parser_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Parsing for type </span><span class="si">{</span><span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2"> is not implemented&quot;</span>
+                    <span class="p">)</span>
+                <span class="n">value</span> <span class="o">=</span> <span class="n">parser_fn</span><span class="p">(</span><span class="n">reader</span><span class="p">)</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">msg</span>
+
+
+<span class="k">def</span> <span class="nf">_write_complex_type</span><span class="p">(</span>
+    <span class="n">msg_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">fields</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Field</span><span class="p">],</span>
+    <span class="n">msgdefs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MessageSpecification</span><span class="p">],</span>
+    <span class="n">ros2_msg</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">writer</span><span class="p">:</span> <span class="n">CdrWriter</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+        <span class="n">ftype</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">type</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">ftype</span><span class="o">.</span><span class="n">is_primitive_type</span><span class="p">():</span>
+            <span class="c1"># Complex type</span>
+            <span class="n">nested_definition</span> <span class="o">=</span> <span class="n">msgdefs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">ftype</span><span class="o">.</span><span class="n">pkg_name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">nested_definition</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s1">&#39;Message definition not found for field &quot;</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">&quot; with &#39;</span>
+                    <span class="s1">&#39;type &quot;</span><span class="si">{ftype.type}</span><span class="s1">&quot;&#39;</span>
+                <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">ftype</span><span class="o">.</span><span class="n">is_array</span><span class="p">:</span>
+                <span class="n">array</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">_get_property</span><span class="p">(</span>
+                    <span class="n">ros2_msg</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">array</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">array</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s1">&#39;Field &quot;</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">&quot; is not an array but has array type &#39;</span>
+                        <span class="sa">f</span><span class="s1">&#39;&quot;</span><span class="si">{</span><span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s1">[]&quot;&#39;</span>
+                    <span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">ftype</span><span class="o">.</span><span class="n">is_fixed_size_array</span><span class="p">()</span> <span class="ow">and</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># Fixed length array, ensure the input array is the correct length</span>
+                    <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">array</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span><span class="p">:</span>
+                        <span class="n">array</span><span class="o">.</span><span class="n">append</span><span class="p">({})</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">array</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span><span class="p">:</span>
+                        <span class="n">array</span> <span class="o">=</span> <span class="n">array</span><span class="p">[:</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span><span class="p">]</span>
+
+                    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">array</span><span class="p">:</span>
+                        <span class="n">_write_complex_type</span><span class="p">(</span>
+                            <span class="n">nested_definition</span><span class="o">.</span><span class="n">msg_name</span><span class="p">,</span>
+                            <span class="n">nested_definition</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span>
+                            <span class="n">msgdefs</span><span class="p">,</span>
+                            <span class="n">item</span><span class="p">,</span>
+                            <span class="n">writer</span><span class="p">,</span>
+                        <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Limit the array to the upper bound length, if present</span>
+                    <span class="k">if</span> <span class="p">(</span>
+                        <span class="n">ftype</span><span class="o">.</span><span class="n">is_upper_bound</span>
+                        <span class="ow">and</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                        <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">array</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span>
+                    <span class="p">):</span>
+                        <span class="n">array</span> <span class="o">=</span> <span class="n">array</span><span class="p">[:</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span><span class="p">]</span>
+
+                    <span class="c1"># Dynamic length array, write a uint32 prefix</span>
+                    <span class="n">writer</span><span class="o">.</span><span class="n">write_uint32</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">array</span><span class="p">))</span>
+                    <span class="c1"># Write the array values</span>
+                    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">array</span><span class="p">:</span>
+                        <span class="n">_write_complex_type</span><span class="p">(</span>
+                            <span class="n">nested_definition</span><span class="o">.</span><span class="n">msg_name</span><span class="p">,</span>
+                            <span class="n">nested_definition</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span>
+                            <span class="n">msgdefs</span><span class="p">,</span>
+                            <span class="n">item</span><span class="p">,</span>
+                            <span class="n">writer</span><span class="p">,</span>
+                        <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">_write_complex_type</span><span class="p">(</span>
+                    <span class="n">nested_definition</span><span class="o">.</span><span class="n">msg_name</span><span class="p">,</span>
+                    <span class="n">nested_definition</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span>
+                    <span class="n">msgdefs</span><span class="p">,</span>
+                    <span class="n">_get_property</span><span class="p">(</span><span class="n">ros2_msg</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{},</span>
+                    <span class="n">writer</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Primitive type</span>
+            <span class="k">if</span> <span class="n">ftype</span><span class="o">.</span><span class="n">is_array</span><span class="p">:</span>
+                <span class="n">array</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">_get_property</span><span class="p">(</span>
+                    <span class="n">ros2_msg</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span>
+                <span class="p">)</span>
+                <span class="k">if</span> <span class="n">array</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">array</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+                    <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
+                    <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">)</span>
+                <span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s1">&#39;Field &quot;</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">&quot; is not an array (</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">array</span><span class="p">)</span><span class="si">}</span><span class="s1">) but has array type &#39;</span>
+                        <span class="sa">f</span><span class="s1">&#39;&quot;</span><span class="si">{</span><span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s1">[]&quot;&#39;</span>
+                    <span class="p">)</span>
+
+                <span class="c1"># Special handling for bytes</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">):</span>
+                    <span class="n">byte_array</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="n">array</span>
+                    <span class="k">if</span> <span class="n">ftype</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;uint8&quot;</span> <span class="ow">and</span> <span class="n">ftype</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;byte&quot;</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s1">&#39;Field &quot;</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">&quot; has type &quot;uint8[]&quot; but has type &quot;</span><span class="si">{</span><span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s1">[]&quot;&#39;</span>
+                        <span class="p">)</span>
+
+                    <span class="k">if</span> <span class="n">ftype</span><span class="o">.</span><span class="n">is_fixed_size_array</span><span class="p">()</span> <span class="ow">and</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="c1"># Fixed length byte array, ensure the input array is the correct length</span>
+                        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">byte_array</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span><span class="p">:</span>
+                            <span class="n">byte_array</span> <span class="o">+=</span> <span class="sa">b</span><span class="s2">&quot;</span><span class="se">\0</span><span class="s2">&quot;</span>
+                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">byte_array</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span><span class="p">:</span>
+                            <span class="n">byte_array</span> <span class="o">=</span> <span class="n">byte_array</span><span class="p">[:</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span><span class="p">]</span>
+
+                        <span class="n">writer</span><span class="o">.</span><span class="n">write_bytes</span><span class="p">(</span><span class="n">byte_array</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># Limit the byte array to the upper bound length, if present</span>
+                        <span class="k">if</span> <span class="p">(</span>
+                            <span class="n">ftype</span><span class="o">.</span><span class="n">is_upper_bound</span>
+                            <span class="ow">and</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                            <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">array</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span>
+                        <span class="p">):</span>
+                            <span class="n">byte_array</span> <span class="o">=</span> <span class="n">byte_array</span><span class="p">[:</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span><span class="p">]</span>
+
+                        <span class="c1"># Dynamic length byte array, write a uint32 prefix</span>
+                        <span class="n">writer</span><span class="o">.</span><span class="n">write_uint32</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">byte_array</span><span class="p">))</span>
+                        <span class="c1"># Write the byte array values</span>
+                        <span class="n">writer</span><span class="o">.</span><span class="n">write_bytes</span><span class="p">(</span><span class="n">byte_array</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">array_writer_fn</span> <span class="o">=</span> <span class="n">ARRAY_WRITERS</span><span class="p">[</span><span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">array_writer_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                            <span class="sa">f</span><span class="s2">&quot;Writing for type </span><span class="si">{</span><span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2">[] is not implemented&quot;</span>
+                        <span class="p">)</span>
+
+                    <span class="k">if</span> <span class="n">ftype</span><span class="o">.</span><span class="n">is_fixed_size_array</span><span class="p">()</span> <span class="ow">and</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="c1"># Convert tuples to lists</span>
+                        <span class="n">list_array</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">array</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="k">else</span> <span class="n">array</span>
+
+                        <span class="c1"># Fixed length array, ensure the input array is the correct length</span>
+                        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">list_array</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span><span class="p">:</span>
+                            <span class="n">list_array</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">list_array</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span><span class="p">:</span>
+                            <span class="n">list_array</span> <span class="o">=</span> <span class="n">list_array</span><span class="p">[:</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span><span class="p">]</span>
+
+                        <span class="n">list_array</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">_coerce_values</span><span class="p">(</span>
+                            <span class="n">list_array</span><span class="p">,</span> <span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">default_value</span>
+                        <span class="p">)</span>
+                        <span class="n">array_writer_fn</span><span class="p">(</span><span class="n">writer</span><span class="p">,</span> <span class="n">list_array</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="c1"># Limit the array to the upper bound length, if present</span>
+                        <span class="k">if</span> <span class="p">(</span>
+                            <span class="n">ftype</span><span class="o">.</span><span class="n">is_upper_bound</span>
+                            <span class="ow">and</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+                            <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">array</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span>
+                        <span class="p">):</span>
+                            <span class="n">array</span> <span class="o">=</span> <span class="n">array</span><span class="p">[:</span> <span class="n">ftype</span><span class="o">.</span><span class="n">array_size</span><span class="p">]</span>
+
+                        <span class="n">array</span> <span class="o">=</span> <span class="n">_coerce_values</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">default_value</span><span class="p">)</span>
+
+                        <span class="c1"># Dynamic length array, write a uint32 prefix</span>
+                        <span class="n">writer</span><span class="o">.</span><span class="n">write_uint32</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">array</span><span class="p">))</span>
+                        <span class="c1"># Write the array values</span>
+                        <span class="n">array_writer_fn</span><span class="p">(</span><span class="n">writer</span><span class="p">,</span> <span class="n">array</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">writer_fn</span> <span class="o">=</span> <span class="n">FIELD_WRITERS</span><span class="p">[</span><span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">writer_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Writing for type </span><span class="si">{</span><span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2"> is not implemented&quot;</span>
+                    <span class="p">)</span>
+
+                <span class="n">value</span> <span class="o">=</span> <span class="n">_get_property</span><span class="p">(</span><span class="n">ros2_msg</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+                <span class="n">value</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">_coerce_value</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">ftype</span><span class="o">.</span><span class="n">type</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">default_value</span><span class="p">)</span>
+                <span class="n">writer_fn</span><span class="p">(</span><span class="n">writer</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_for_each_msgdef</span><span class="p">(</span>
+    <span class="n">schema_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">schema_text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">MessageSpecification</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="n">cur_schema_name</span> <span class="o">=</span> <span class="n">schema_name</span>
 
     <span class="c1"># Split schema_text by separator lines containing at least 3 = characters</span>
@@ -143,114 +559,66 @@
         <span class="n">short_name</span> <span class="o">=</span> <span class="n">pkg_name</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">msg_name</span>
         <span class="n">msgdef</span> <span class="o">=</span> <span class="n">parse_message_string</span><span class="p">(</span><span class="n">pkg_name</span><span class="p">,</span> <span class="n">msg_name</span><span class="p">,</span> <span class="n">cur_schema_text</span><span class="p">)</span>
 
-        <span class="c1"># Add the message definition to the dictionary</span>
-        <span class="n">msgdefs</span><span class="p">[</span><span class="n">cur_schema_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">msgdef</span>
-        <span class="n">msgdefs</span><span class="p">[</span><span class="n">short_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">msgdef</span>
-
-        <span class="c1"># Add the message generator to the dictionary</span>
-        <span class="n">generator</span><span class="p">:</span> <span class="n">DecoderFunction</span> <span class="o">=</span> <span class="n">_make_read_message</span><span class="p">(</span><span class="n">cur_schema_name</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">)</span>
-        <span class="n">generators</span><span class="p">[</span><span class="n">cur_schema_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">generator</span>
-        <span class="n">generators</span><span class="p">[</span><span class="n">short_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">generator</span>
-
-    <span class="k">return</span> <span class="n">generators</span></div>
+        <span class="n">fn</span><span class="p">(</span><span class="n">cur_schema_name</span><span class="p">,</span> <span class="n">short_name</span><span class="p">,</span> <span class="n">msgdef</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="read_message"><a class="viewcode-back" href="../../mcap-ros2-apidoc/mcap_ros2.dynamic.html#mcap_ros2.dynamic.read_message">[docs]</a><span class="k">def</span> <span class="nf">read_message</span><span class="p">(</span>
-    <span class="n">schema_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MessageSpecification</span><span class="p">],</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Message</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;Deserialize a ROS2 message from bytes.</span>
-
-<span class="sd">    :param schema_name: The name of the schema to use for deserializing the message payload. This</span>
-<span class="sd">        key must exist in the `msgdefs` dictionary</span>
-<span class="sd">    :param msgdefs: A dictionary containing the message definitions for the top-level message and</span>
-<span class="sd">        any nested messages.</span>
-<span class="sd">    :param data: The message payload to deserialize.</span>
-<span class="sd">    :return: The deserialized message.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">msgdef</span> <span class="o">=</span> <span class="n">msgdefs</span><span class="p">[</span><span class="n">schema_name</span><span class="p">]</span>
-    <span class="k">if</span> <span class="n">msgdef</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Message definition not found for &quot;</span><span class="si">{</span><span class="n">schema_name</span><span class="si">}</span><span class="s1">&quot;&#39;</span><span class="p">)</span>
-    <span class="n">reader</span> <span class="o">=</span> <span class="n">CdrReader</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">_read_complex_type</span><span class="p">(</span><span class="n">msgdef</span><span class="o">.</span><span class="n">msg_name</span><span class="p">,</span> <span class="n">msgdef</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">,</span> <span class="n">reader</span><span class="p">)</span></div>
+<span class="k">def</span> <span class="nf">_get_property</span><span class="p">(</span><span class="n">obj</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">obj</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
 
 
-<span class="k">def</span> <span class="nf">_make_read_message</span><span class="p">(</span>
-    <span class="n">schema_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MessageSpecification</span><span class="p">]</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DecoderFunction</span><span class="p">:</span>
-    <span class="k">return</span> <span class="k">lambda</span> <span class="n">data</span><span class="p">:</span> <span class="n">read_message</span><span class="p">(</span><span class="n">schema_name</span><span class="p">,</span> <span class="n">msgdefs</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">_coerce_value</span><span class="p">(</span>
+    <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">type_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">default_value</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DefaultValue</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PrimitiveValue</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">default_value</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Default value for primitive types cannot be an array&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">type_name</span> <span class="ow">in</span> <span class="n">STRING_TYPES</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">default_value</span>
+            <span class="k">if</span> <span class="n">default_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+        <span class="p">)</span>
+    <span class="k">elif</span> <span class="n">type_name</span> <span class="ow">in</span> <span class="n">FLOAT_TYPES</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">default_value</span>
+            <span class="k">if</span> <span class="n">default_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="p">)</span>
+    <span class="k">elif</span> <span class="n">type_name</span> <span class="ow">in</span> <span class="n">INT_TYPES</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">default_value</span>
+            <span class="k">if</span> <span class="n">default_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="mi">0</span>
+        <span class="p">)</span>
+    <span class="k">elif</span> <span class="n">type_name</span> <span class="o">==</span> <span class="s2">&quot;bool&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="nb">bool</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">default_value</span>
+            <span class="k">if</span> <span class="n">default_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="kc">False</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;coercion for type &quot;</span><span class="si">{</span><span class="n">type_name</span><span class="si">}</span><span class="s1">&quot; is not implemented&#39;</span><span class="p">)</span>
 
 
-<span class="k">def</span> <span class="nf">_read_complex_type</span><span class="p">(</span>
-    <span class="n">msg_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">fields</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Field</span><span class="p">],</span>
-    <span class="n">msgdefs</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MessageSpecification</span><span class="p">],</span>
-    <span class="n">reader</span><span class="p">:</span> <span class="n">CdrReader</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Message</span><span class="p">:</span>
-    <span class="n">Msg</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span>
-        <span class="n">msg_name</span><span class="p">,</span>
-        <span class="p">(</span><span class="n">SimpleNamespace</span><span class="p">,),</span>
-        <span class="p">{</span>
-            <span class="s2">&quot;__name__&quot;</span><span class="p">:</span> <span class="n">msg_name</span><span class="p">,</span>
-            <span class="s2">&quot;__slots__&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">],</span>
-            <span class="s2">&quot;__repr__&quot;</span><span class="p">:</span> <span class="fm">__repr__</span><span class="p">,</span>
-            <span class="s2">&quot;__str__&quot;</span><span class="p">:</span> <span class="fm">__repr__</span><span class="p">,</span>
-        <span class="p">},</span>
-    <span class="p">)</span>
-    <span class="n">msg</span> <span class="o">=</span> <span class="n">Msg</span><span class="p">()</span>
-
-    <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">is_primitive_type</span><span class="p">():</span>
-            <span class="c1"># Complex type</span>
-            <span class="n">nested_definition</span> <span class="o">=</span> <span class="n">msgdefs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">pkg_name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">nested_definition</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s1">&#39;Message definition not found for field &quot;</span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">&quot; with &#39;</span>
-                    <span class="s1">&#39;type &quot;</span><span class="si">{field.type.type}</span><span class="s1">&quot;&#39;</span>
-                <span class="p">)</span>
-
-            <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">is_array</span><span class="p">:</span>
-                <span class="c1"># For dynamic length arrays we need to read a uint32 prefix</span>
-                <span class="n">array_length</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">array_size</span> <span class="ow">or</span> <span class="n">reader</span><span class="o">.</span><span class="n">uint32</span><span class="p">()</span>
-                <span class="n">array</span> <span class="o">=</span> <span class="p">[</span>
-                    <span class="n">_read_complex_type</span><span class="p">(</span>
-                        <span class="n">nested_definition</span><span class="o">.</span><span class="n">msg_name</span><span class="p">,</span>
-                        <span class="n">nested_definition</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span>
-                        <span class="n">msgdefs</span><span class="p">,</span>
-                        <span class="n">reader</span><span class="p">,</span>
-                    <span class="p">)</span>
-                    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">array_length</span><span class="p">)</span>
-                <span class="p">]</span>
-                <span class="nb">setattr</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">array</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">value</span> <span class="o">=</span> <span class="n">_read_complex_type</span><span class="p">(</span>
-                    <span class="n">nested_definition</span><span class="o">.</span><span class="n">msg_name</span><span class="p">,</span>
-                    <span class="n">nested_definition</span><span class="o">.</span><span class="n">fields</span><span class="p">,</span>
-                    <span class="n">msgdefs</span><span class="p">,</span>
-                    <span class="n">reader</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="nb">setattr</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># Primitive type</span>
-            <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">is_array</span><span class="p">:</span>
-                <span class="n">parser_fn</span> <span class="o">=</span> <span class="n">ARRAY_PARSERS</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">type</span><span class="p">]</span>
-                <span class="k">if</span> <span class="n">parser_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Parsing for type </span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2">[] is not implemented&quot;</span>
-                    <span class="p">)</span>
-                <span class="c1"># For dynamic length arrays we need to read a uint32 prefix</span>
-                <span class="n">array_length</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">array_size</span> <span class="ow">or</span> <span class="n">reader</span><span class="o">.</span><span class="n">sequence_length</span><span class="p">()</span>
-                <span class="n">value</span> <span class="o">=</span> <span class="n">parser_fn</span><span class="p">(</span><span class="n">reader</span><span class="p">,</span> <span class="n">array_length</span><span class="p">)</span>
-                <span class="nb">setattr</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">parser_fn</span> <span class="o">=</span> <span class="n">FIELD_PARSERS</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">type</span><span class="p">]</span>
-                <span class="k">if</span> <span class="n">parser_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Parsing for type </span><span class="si">{</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="o">.</span><span class="n">type</span><span class="si">}</span><span class="s2"> is not implemented&quot;</span>
-                    <span class="p">)</span>
-                <span class="n">value</span> <span class="o">=</span> <span class="n">parser_fn</span><span class="p">(</span><span class="n">reader</span><span class="p">)</span>
-                <span class="nb">setattr</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">msg</span>
+<span class="k">def</span> <span class="nf">_coerce_values</span><span class="p">(</span>
+    <span class="n">values</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">]],</span>
+    <span class="n">type_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">default_value</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">DefaultValue</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">PrimitiveValue</span><span class="p">]:</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">_coerce_value</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">type_name</span><span class="p">,</span> <span class="n">default_value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">values</span><span class="p">]</span>
 
 
 <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -279,7 +647,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../protobuf_example.html">Working with Protobuf Messages</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../ros1_example.html">Working with ROS 1 Messages</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../ros2_example.html">Using <code class="docutils literal notranslate"><span class="pre">rosbag2_py</span></code> to use MCAP with ROS 2</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../ros2_noenv_example.html">Working with ROS 2 Messages outside of a ROS 2 environment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../ros2_noenv_example.html">Working with ROS 2 Messages</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../mcap-apidoc/index.html">mcap</a></li>

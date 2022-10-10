@@ -1,0 +1,7 @@
+mcap\_ros2.writer module
+========================
+
+.. automodule:: mcap_ros2.writer
+   :members:
+   :undoc-members:
+   :show-inheritance:
