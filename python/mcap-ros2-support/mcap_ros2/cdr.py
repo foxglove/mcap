@@ -326,6 +326,14 @@ class CdrWriter:
         """Write an unsigned 16-bit integer in big endian."""
         self._pack(pack_uint16be, value, size=2)
 
+    def write_uint32BE(self, value: int):
+        """Write an unsigned 32-bit integer in big endian."""
+        self._pack(pack_uint32be, value, size=4)
+
+    def write_uint64BE(self, value: int):
+        """Write an unsigned 64-bit integer in big endian."""
+        self._pack(pack_uint64be, value, size=8)
+
     def write_float32(self, value: float):
         """Write a 32-bit floating point number."""
         self._pack(
