@@ -28,7 +28,7 @@ examples: pipenv
 	cd examples/protobuf && pipenv run python reader.py $(CURDIR)/example_mcaps/point_cloud.mcap
 	pipenv run python examples/ros1/writer.py example_mcaps/ros1.mcap
 	pipenv run python examples/ros1/reader.py example_mcaps/ros1.mcap
-	pipenv run python examples/ros2-noenv/dummy_writer.py example_mcaps/ros2.mcap
+	pipenv run python examples/ros2-noenv/writer.py example_mcaps/ros2.mcap
 	pipenv run python examples/ros2-noenv/reader.py example_mcaps/ros2.mcap
 	make -C examples/ros2 clean
 	make -C examples/ros2 write

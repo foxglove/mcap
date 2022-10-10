@@ -1,6 +1,7 @@
 $schema: https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json
 version: "0.2"
 ignorePaths:
+  - __docs__
   - cspell.config.yaml
   - node_modules
   - go.mod
@@ -29,6 +30,7 @@ ignorePaths:
   - rust
 
 words:
+  - bagfile
   - callerid
   - cbor
   - cmake
@@ -50,6 +52,7 @@ words:
   - libmcap
   - mcap
   - nanos
+  - nanosec
   - noenv
   - nsec
   - nsecs
@@ -68,6 +71,7 @@ words:
   - struct
   - swiftformat
   - swiftlint
+  - tfmessage
   - typecheck
   - typedoc
   - unchunked
