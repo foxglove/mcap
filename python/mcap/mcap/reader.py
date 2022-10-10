@@ -10,6 +10,7 @@ from .records import (
     McapRecord,
     Schema,
     Channel,
+    Header,
     Message,
     Metadata,
     ChunkIndex,
@@ -115,6 +116,11 @@ class McapReader(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def get_header(self) -> Header:
+        """Reads the Header recors from the beginning of the MCAP file."""
+        raise NotImplementedError()
+
+    @abstractmethod
     def get_summary(self) -> Optional[Summary]:
         """Reads the (optional) summary section from the MCAP file."""
         raise NotImplementedError()
@@ -197,6 +203,16 @@ class SeekingReader(McapReader):
             else:
                 yield next_item
 
+    def get_header(self) -> Header:
+        """Reads the Header recors from the beginning of the MCAP file."""
+        self._stream.seek(0)
+        header = next(StreamReader(self._stream, skip_magic=False).records)
+        if not isinstance(header, Header):
+            raise McapError(
+                f"expected header at beginning of MCAP file, found {type(header)}"
+            )
+        return header
+
     def get_summary(self) -> Optional[Summary]:
         """Reads the (optional) summary section from the MCAP file."""
         if self._summary is not None:
@@ -258,6 +274,16 @@ class NonSeekingReader(McapReader):
                 "cannot use more than one query against a non-seeking data source"
             )
         self._spent = True
+
+    def get_header(self) -> Header:
+        """Reads the Header recors from the beginning of the MCAP file."""
+        self._check_spent()
+        header = next(StreamReader(self._stream, skip_magic=True).records)
+        if not isinstance(header, Header):
+            raise McapError(
+                f"expected header at beginning of MCAP file, found {type(header)}"
+            )
+        return header
 
     def iter_messages(
         self,

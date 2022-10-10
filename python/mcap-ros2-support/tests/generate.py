@@ -2,7 +2,7 @@ import contextlib
 from io import BytesIO
 from tempfile import TemporaryFile
 
-from mcap.mcap0.writer import Writer
+from mcap.writer import Writer
 
 
 class String:
@@ -13,10 +13,11 @@ class String:
         self.data = data
 
     def serialize(self, buff: BytesIO):
-        buff.write(b"\x03")  # CDR header (little-endian, 3)
-        buff.write(b"\x00" * 3)  # Alignment padding
-        buff.write(len(self.data).to_bytes(4, "little"))  # String length
+        buff.write(b"\x00\x03")  # CDR header (little-endian, 3)
+        buff.write(b"\x00\x00")  # Alignment padding
+        buff.write((len(self.data) + 1).to_bytes(4, "little"))  # String length
         buff.write(self.data.encode())  # String data
+        buff.write(b"\x00")  # Null terminator
 
 
 @contextlib.contextmanager

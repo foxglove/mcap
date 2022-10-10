@@ -1,4 +1,4 @@
-from mcap.mcap0.reader import make_reader
+from mcap.reader import make_reader
 from mcap_ros2.decoder import Decoder
 
 from .generate import generate_sample_data
