@@ -2,6 +2,7 @@ go 1.18
 
 use (
 	./cli/mcap
+	./cli/check-tag
 	./conformance/test-streamed-read-conformance
 	./conformance/test-streamed-write-conformance
 	./mcap

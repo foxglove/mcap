@@ -52,8 +52,8 @@ type Writer struct {
 func (w *Writer) WriteHeader(header *Header) error {
 	var library string
 	if !w.opts.OverrideLibrary {
-		library = fmt.Sprintf("mcap go #%s", Version())
-		if header.Library != "" {
+		library = fmt.Sprintf("mcap go %s", Version)
+		if header.Library != "" && header.Library != library {
 			library += "; " + header.Library
 		}
 	} else {
