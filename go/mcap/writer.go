@@ -91,11 +91,7 @@ func (w *Writer) WriteFooter(f *Footer) error {
 	if err != nil {
 		return err
 	}
-	var summaryCrc uint32
-	if w.opts.IncludeCRC {
-		summaryCrc = w.w.Checksum()
-	}
-	offset += putUint32(w.msg[offset:], summaryCrc)
+	offset += putUint32(w.msg[offset:], w.w.Checksum())
 	_, err = w.w.Write(w.msg[offset-4 : offset])
 	return err
 }
@@ -735,7 +731,7 @@ type WriterOptions struct {
 
 // NewWriter returns a new MCAP writer.
 func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
-	writer := newWriteSizer(w)
+	writer := newWriteSizer(w, opts.IncludeCRC)
 	if _, err := writer.Write(Magic); err != nil {
 		return nil, err
 	}
