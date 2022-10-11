@@ -13,10 +13,11 @@ import (
 func TestMCAPReadWrite(t *testing.T) {
 	t.Run("test header", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionZSTD})
+		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionZSTD, OverrideLibrary: true})
 		assert.Nil(t, err)
 		err = w.WriteHeader(&Header{
 			Profile: "ros1",
+			Library: "libfoo v0",
 		})
 		assert.Nil(t, err)
 		lexer, err := NewLexer(buf)
@@ -30,7 +31,7 @@ func TestMCAPReadWrite(t *testing.T) {
 		assert.Equal(t, "ros1", profile)
 		library, _, err := readPrefixedString(record, offset)
 		assert.Nil(t, err)
-		assert.Equal(t, "mcap go #", library)
+		assert.Equal(t, "libfoo v0", library)
 		assert.Equal(t, TokenHeader, tokenType)
 	})
 	t.Run("zero-valued schema IDs permitted", func(t *testing.T) {

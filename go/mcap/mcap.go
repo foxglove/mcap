@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"runtime/debug"
 )
 
 // Magic is the magic number for an MCAP file.
@@ -27,14 +26,6 @@ type CompressionFormat string
 // String converts a compression format to a string for display.
 func (c CompressionFormat) String() string {
 	return string(c)
-}
-
-func Version() string {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return "unknown"
-	}
-	return info.Main.Version
 }
 
 const (
