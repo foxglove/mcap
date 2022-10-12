@@ -125,7 +125,15 @@
 <div class="viewcode-block" id="McapReader"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.McapReader">[docs]</a><span class="k">class</span> <span class="nc">McapReader</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;Reads data out of an MCAP file, using the summary section where available to efficiently</span>
 <span class="sd">    read only the parts of the file that are needed.</span>
+
+<span class="sd">    :param stream: a file-like object for reading the source data from.</span>
+<span class="sd">    :param validate_crcs: if ``True``, will validate Chunk and DataEnd CRC values as messages are</span>
+<span class="sd">        read.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">IO</span><span class="p">[</span><span class="nb">bytes</span><span class="p">],</span> <span class="n">validate_crcs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
 
 <div class="viewcode-block" id="McapReader.iter_messages"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.McapReader.iter_messages">[docs]</a>    <span class="nd">@abstractmethod</span>
     <span class="k">def</span> <span class="nf">iter_messages</span><span class="p">(</span>
@@ -171,18 +179,26 @@
         <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div></div>
 
 
-<div class="viewcode-block" id="make_reader"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.make_reader">[docs]</a><span class="k">def</span> <span class="nf">make_reader</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">IO</span><span class="p">[</span><span class="nb">bytes</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">McapReader</span><span class="p">:</span>
+<div class="viewcode-block" id="make_reader"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.make_reader">[docs]</a><span class="k">def</span> <span class="nf">make_reader</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">IO</span><span class="p">[</span><span class="nb">bytes</span><span class="p">],</span> <span class="n">validate_crcs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">McapReader</span><span class="p">:</span>
     <span class="sd">&quot;&quot;&quot;constructs the appropriate McapReader implementation for this data source.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">stream</span><span class="o">.</span><span class="n">seekable</span><span class="p">():</span>
-        <span class="k">return</span> <span class="n">SeekingReader</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">NonSeekingReader</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">SeekingReader</span><span class="p">(</span><span class="n">stream</span><span class="p">,</span> <span class="n">validate_crcs</span><span class="o">=</span><span class="n">validate_crcs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">NonSeekingReader</span><span class="p">(</span><span class="n">stream</span><span class="p">,</span> <span class="n">validate_crcs</span><span class="o">=</span><span class="n">validate_crcs</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="SeekingReader"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.SeekingReader">[docs]</a><span class="k">class</span> <span class="nc">SeekingReader</span><span class="p">(</span><span class="n">McapReader</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;an McapReader for reading out of seekable data sources.&quot;&quot;&quot;</span>
+    <span class="sd">&quot;&quot;&quot;an McapReader for reading out of seekable data sources.</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">IO</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]):</span>
+<span class="sd">    :param stream: a file-like object for reading the source data from.</span>
+<span class="sd">    :param validate_crcs: if ``True``, will validate Chunk CRCs for any chunks read. This class</span>
+<span class="sd">        does not validate the data section CRC in the DataEnd record because it is designed not to</span>
+<span class="sd">        read the entire data section when reading messages. To read messages while validating the</span>
+<span class="sd">        data section CRC, use :py:class:`NonSeekingReader`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">IO</span><span class="p">[</span><span class="nb">bytes</span><span class="p">],</span> <span class="n">validate_crcs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="o">=</span> <span class="n">stream</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_crcs</span> <span class="o">=</span> <span class="n">validate_crcs</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_summary</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Summary</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="SeekingReader.iter_messages"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.SeekingReader.iter_messages">[docs]</a>    <span class="k">def</span> <span class="nf">iter_messages</span><span class="p">(</span>
@@ -224,7 +240,7 @@
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_item</span><span class="p">,</span> <span class="n">ChunkIndex</span><span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">next_item</span><span class="o">.</span><span class="n">chunk_start_offset</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">+</span> <span class="mi">8</span><span class="p">,</span> <span class="n">io</span><span class="o">.</span><span class="n">SEEK_SET</span><span class="p">)</span>
                 <span class="n">chunk</span> <span class="o">=</span> <span class="n">Chunk</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">ReadDataStream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">))</span>
-                <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">breakup_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">breakup_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="n">validate_crc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_validate_crcs</span><span class="p">):</span>
                     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Message</span><span class="p">):</span>
                         <span class="n">channel</span> <span class="o">=</span> <span class="n">summary</span><span class="o">.</span><span class="n">channels</span><span class="p">[</span><span class="n">record</span><span class="o">.</span><span class="n">channel_id</span><span class="p">]</span>
                         <span class="k">if</span> <span class="n">topics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">channel</span><span class="o">.</span><span class="n">topic</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">topics</span><span class="p">:</span>
@@ -239,7 +255,7 @@
                 <span class="k">yield</span> <span class="n">next_item</span></div>
 
 <div class="viewcode-block" id="SeekingReader.get_header"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.SeekingReader.get_header">[docs]</a>    <span class="k">def</span> <span class="nf">get_header</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Header</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Reads the Header recors from the beginning of the MCAP file.&quot;&quot;&quot;</span>
+        <span class="sd">&quot;&quot;&quot;Reads the Header record from the beginning of the MCAP file.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
         <span class="n">header</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">StreamReader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">,</span> <span class="n">skip_magic</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">records</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">Header</span><span class="p">):</span>
@@ -297,11 +313,17 @@
 
 
 <div class="viewcode-block" id="NonSeekingReader"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.NonSeekingReader">[docs]</a><span class="k">class</span> <span class="nc">NonSeekingReader</span><span class="p">(</span><span class="n">McapReader</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">IO</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="o">=</span> <span class="n">stream</span>
+    <span class="sd">&quot;&quot;&quot;an McapReader for reading out of non-seekable data sources, such as a pipe or socket.</span>
+
+<span class="sd">    :param stream: a file-like object for reading the source data from.</span>
+<span class="sd">    :param validate_crcs: if ``True``, will validate chunk and data section CRC values.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stream</span><span class="p">:</span> <span class="n">IO</span><span class="p">[</span><span class="nb">bytes</span><span class="p">],</span> <span class="n">validate_crcs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stream_reader</span> <span class="o">=</span> <span class="n">StreamReader</span><span class="p">(</span><span class="n">stream</span><span class="p">,</span> <span class="n">validate_crcs</span><span class="o">=</span><span class="n">validate_crcs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_schemas</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Schema</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_channels</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Channel</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_spent</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_spent</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="k">def</span> <span class="nf">_check_spent</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spent</span><span class="p">:</span>
@@ -311,9 +333,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_spent</span> <span class="o">=</span> <span class="kc">True</span>
 
 <div class="viewcode-block" id="NonSeekingReader.get_header"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.NonSeekingReader.get_header">[docs]</a>    <span class="k">def</span> <span class="nf">get_header</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Header</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;Reads the Header recors from the beginning of the MCAP file.&quot;&quot;&quot;</span>
+        <span class="sd">&quot;&quot;&quot;Reads the Header record from the beginning of the MCAP file.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_spent</span><span class="p">()</span>
-        <span class="n">header</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">StreamReader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">,</span> <span class="n">skip_magic</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">records</span><span class="p">)</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream_reader</span><span class="o">.</span><span class="n">records</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">Header</span><span class="p">):</span>
             <span class="k">raise</span> <span class="n">McapError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;expected header at beginning of MCAP file, found </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">header</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -362,7 +384,7 @@
         <span class="n">end_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Schema</span><span class="p">,</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]]:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_spent</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">StreamReader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span><span class="o">.</span><span class="n">records</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream_reader</span><span class="o">.</span><span class="n">records</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Schema</span><span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_schemas</span><span class="p">[</span><span class="n">record</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">record</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Channel</span><span class="p">):</span>
@@ -389,19 +411,19 @@
 <div class="viewcode-block" id="NonSeekingReader.get_summary"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.NonSeekingReader.get_summary">[docs]</a>    <span class="k">def</span> <span class="nf">get_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Summary</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;Returns a Summary object containing records from the (optional) summary section.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_spent</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">_read_summary_from_stream_reader</span><span class="p">(</span><span class="n">StreamReader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">))</span></div>
+        <span class="k">return</span> <span class="n">_read_summary_from_stream_reader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream_reader</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="NonSeekingReader.iter_attachments"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.NonSeekingReader.iter_attachments">[docs]</a>    <span class="k">def</span> <span class="nf">iter_attachments</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Attachment</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;Iterates through attachment records in the MCAP.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_spent</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">StreamReader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span><span class="o">.</span><span class="n">records</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream_reader</span><span class="o">.</span><span class="n">records</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Attachment</span><span class="p">):</span>
                 <span class="k">yield</span> <span class="n">record</span></div>
 
 <div class="viewcode-block" id="NonSeekingReader.iter_metadata"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.NonSeekingReader.iter_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">iter_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Metadata</span><span class="p">]:</span>
         <span class="sd">&quot;&quot;&quot;Iterates through metadata records in the MCAP.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_spent</span><span class="p">()</span>
-        <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">StreamReader</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span><span class="o">.</span><span class="n">records</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream_reader</span><span class="o">.</span><span class="n">records</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Metadata</span><span class="p">):</span>
                 <span class="k">yield</span> <span class="n">record</span></div></div>
 </pre></div>

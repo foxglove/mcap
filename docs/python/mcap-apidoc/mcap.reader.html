@@ -40,10 +40,19 @@
 <p>High-level classes for reading content out of MCAP data sources.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="mcap.reader.McapReader">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">mcap.reader.</span></span><span class="sig-name descname"><span class="pre">McapReader</span></span><a class="reference internal" href="../_modules/mcap/reader.html#McapReader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.reader.McapReader" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">mcap.reader.</span></span><span class="sig-name descname"><span class="pre">McapReader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stream</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IO</span><span class="p"><span class="pre">[</span></span><span class="pre">bytes</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate_crcs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/mcap/reader.html#McapReader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.reader.McapReader" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
 <p>Reads data out of an MCAP file, using the summary section where available to efficiently
 read only the parts of the file that are needed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>stream</strong> – a file-like object for reading the source data from.</p></li>
+<li><p><strong>validate_crcs</strong> – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, will validate Chunk and DataEnd CRC values as messages are
+read.</p></li>
+</ul>
+</dd>
+</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="mcap.reader.McapReader.get_header">
 <em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_header</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="mcap.records.html#mcap.records.Header" title="mcap.records.Header"><span class="pre">Header</span></a></span></span><a class="reference internal" href="../_modules/mcap/reader.html#McapReader.get_header"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.reader.McapReader.get_header" title="Permalink to this definition">¶</a></dt>
@@ -93,12 +102,21 @@ yielded in descending log time order.</p></li>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="mcap.reader.NonSeekingReader">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">mcap.reader.</span></span><span class="sig-name descname"><span class="pre">NonSeekingReader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stream</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IO</span><span class="p"><span class="pre">[</span></span><span class="pre">bytes</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/mcap/reader.html#NonSeekingReader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.reader.NonSeekingReader" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">mcap.reader.</span></span><span class="sig-name descname"><span class="pre">NonSeekingReader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stream</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IO</span><span class="p"><span class="pre">[</span></span><span class="pre">bytes</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate_crcs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/mcap/reader.html#NonSeekingReader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.reader.NonSeekingReader" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#mcap.reader.McapReader" title="mcap.reader.McapReader"><code class="xref py py-class docutils literal notranslate"><span class="pre">McapReader</span></code></a></p>
+<p>an McapReader for reading out of non-seekable data sources, such as a pipe or socket.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>stream</strong> – a file-like object for reading the source data from.</p></li>
+<li><p><strong>validate_crcs</strong> – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, will validate chunk and data section CRC values.</p></li>
+</ul>
+</dd>
+</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="mcap.reader.NonSeekingReader.get_header">
 <span class="sig-name descname"><span class="pre">get_header</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="mcap.records.html#mcap.records.Header" title="mcap.records.Header"><span class="pre">Header</span></a></span></span><a class="reference internal" href="../_modules/mcap/reader.html#NonSeekingReader.get_header"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.reader.NonSeekingReader.get_header" title="Permalink to this definition">¶</a></dt>
-<dd><p>Reads the Header recors from the beginning of the MCAP file.</p>
+<dd><p>Reads the Header record from the beginning of the MCAP file.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -149,13 +167,24 @@ of the MCAP to be loaded into memory.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="mcap.reader.SeekingReader">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">mcap.reader.</span></span><span class="sig-name descname"><span class="pre">SeekingReader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stream</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IO</span><span class="p"><span class="pre">[</span></span><span class="pre">bytes</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/mcap/reader.html#SeekingReader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.reader.SeekingReader" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">mcap.reader.</span></span><span class="sig-name descname"><span class="pre">SeekingReader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stream</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IO</span><span class="p"><span class="pre">[</span></span><span class="pre">bytes</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate_crcs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/mcap/reader.html#SeekingReader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.reader.SeekingReader" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#mcap.reader.McapReader" title="mcap.reader.McapReader"><code class="xref py py-class docutils literal notranslate"><span class="pre">McapReader</span></code></a></p>
 <p>an McapReader for reading out of seekable data sources.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>stream</strong> – a file-like object for reading the source data from.</p></li>
+<li><p><strong>validate_crcs</strong> – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, will validate Chunk CRCs for any chunks read. This class
+does not validate the data section CRC in the DataEnd record because it is designed not to
+read the entire data section when reading messages. To read messages while validating the
+data section CRC, use <a class="reference internal" href="#mcap.reader.NonSeekingReader" title="mcap.reader.NonSeekingReader"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonSeekingReader</span></code></a>.</p></li>
+</ul>
+</dd>
+</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="mcap.reader.SeekingReader.get_header">
 <span class="sig-name descname"><span class="pre">get_header</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="mcap.records.html#mcap.records.Header" title="mcap.records.Header"><span class="pre">Header</span></a></span></span><a class="reference internal" href="../_modules/mcap/reader.html#SeekingReader.get_header"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.reader.SeekingReader.get_header" title="Permalink to this definition">¶</a></dt>
-<dd><p>Reads the Header recors from the beginning of the MCAP file.</p>
+<dd><p>Reads the Header record from the beginning of the MCAP file.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -201,7 +230,7 @@ yielded in descending log time order.</p></li>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="mcap.reader.make_reader">
-<span class="sig-prename descclassname"><span class="pre">mcap.reader.</span></span><span class="sig-name descname"><span class="pre">make_reader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stream</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IO</span><span class="p"><span class="pre">[</span></span><span class="pre">bytes</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#mcap.reader.McapReader" title="mcap.reader.McapReader"><span class="pre">McapReader</span></a></span></span><a class="reference internal" href="../_modules/mcap/reader.html#make_reader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.reader.make_reader" title="Permalink to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">mcap.reader.</span></span><span class="sig-name descname"><span class="pre">make_reader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stream</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">IO</span><span class="p"><span class="pre">[</span></span><span class="pre">bytes</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate_crcs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#mcap.reader.McapReader" title="mcap.reader.McapReader"><span class="pre">McapReader</span></a></span></span><a class="reference internal" href="../_modules/mcap/reader.html#make_reader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#mcap.reader.make_reader" title="Permalink to this definition">¶</a></dt>
 <dd><p>constructs the appropriate McapReader implementation for this data source.</p>
 </dd></dl>
 

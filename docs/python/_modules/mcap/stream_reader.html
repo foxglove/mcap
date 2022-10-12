@@ -37,6 +37,7 @@
 <span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BufferedReader</span><span class="p">,</span> <span class="n">BytesIO</span><span class="p">,</span> <span class="n">RawIOBase</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">IO</span>
 <span class="kn">import</span> <span class="nn">zstandard</span>
+<span class="kn">import</span> <span class="nn">zlib</span>
 <span class="kn">import</span> <span class="nn">lz4.frame</span>  <span class="c1"># type: ignore</span>
 
 <span class="kn">from</span> <span class="nn">.data_stream</span> <span class="kn">import</span> <span class="n">ReadDataStream</span>
@@ -64,8 +65,21 @@
 <span class="n">MAGIC_SIZE</span> <span class="o">=</span> <span class="mi">8</span>
 
 
-<span class="k">def</span> <span class="nf">breakup_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">:</span> <span class="n">Chunk</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">McapRecord</span><span class="p">]:</span>
-    <span class="n">stream</span><span class="p">,</span> <span class="n">stream_length</span> <span class="o">=</span> <span class="n">get_chunk_data_stream</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">CRCValidationError</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">expected</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">actual</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">record</span><span class="p">:</span> <span class="n">McapRecord</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">expected</span> <span class="o">=</span> <span class="n">expected</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">actual</span> <span class="o">=</span> <span class="n">actual</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">record</span> <span class="o">=</span> <span class="n">record</span>
+
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;crc validation failed in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">record</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;expected: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">expected</span><span class="si">}</span><span class="s2">, calculated: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">actual</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">breakup_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">:</span> <span class="n">Chunk</span><span class="p">,</span> <span class="n">validate_crc</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">McapRecord</span><span class="p">]:</span>
+    <span class="n">stream</span><span class="p">,</span> <span class="n">stream_length</span> <span class="o">=</span> <span class="n">get_chunk_data_stream</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="n">validate_crc</span><span class="o">=</span><span class="n">validate_crc</span><span class="p">)</span>
     <span class="n">records</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">McapRecord</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">while</span> <span class="n">stream</span><span class="o">.</span><span class="n">count</span> <span class="o">&lt;</span> <span class="n">stream_length</span><span class="p">:</span>
         <span class="n">opcode</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read1</span><span class="p">()</span>
@@ -82,24 +96,36 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="c1"># Unknown chunk record type</span>
             <span class="n">stream</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">length</span><span class="p">)</span>
+
     <span class="k">return</span> <span class="n">records</span>
 
 
-<span class="k">def</span> <span class="nf">get_chunk_data_stream</span><span class="p">(</span><span class="n">chunk</span><span class="p">:</span> <span class="n">Chunk</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">ReadDataStream</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="k">def</span> <span class="nf">get_chunk_data_stream</span><span class="p">(</span>
+    <span class="n">chunk</span><span class="p">:</span> <span class="n">Chunk</span><span class="p">,</span> <span class="n">validate_crc</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">ReadDataStream</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
     <span class="k">if</span> <span class="n">chunk</span><span class="o">.</span><span class="n">compression</span> <span class="o">==</span> <span class="s2">&quot;zstd&quot;</span><span class="p">:</span>
         <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="n">zstandard</span><span class="o">.</span><span class="n">decompress</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">chunk</span><span class="o">.</span><span class="n">uncompressed_size</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">ReadDataStream</span><span class="p">(</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">data</span><span class="p">)),</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">chunk</span><span class="o">.</span><span class="n">compression</span> <span class="o">==</span> <span class="s2">&quot;lz4&quot;</span><span class="p">:</span>
         <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span> <span class="o">=</span> <span class="n">lz4</span><span class="o">.</span><span class="n">frame</span><span class="o">.</span><span class="n">decompress</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>  <span class="c1"># type: ignore</span>
-        <span class="k">return</span> <span class="n">ReadDataStream</span><span class="p">(</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">data</span><span class="p">)),</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">ReadDataStream</span><span class="p">(</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">data</span><span class="p">)),</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunk</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">chunk</span><span class="o">.</span><span class="n">data</span>
+
+    <span class="k">if</span> <span class="n">validate_crc</span> <span class="ow">and</span> <span class="n">chunk</span><span class="o">.</span><span class="n">uncompressed_crc</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">calculated_crc</span> <span class="o">=</span> <span class="n">zlib</span><span class="o">.</span><span class="n">crc32</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">calculated_crc</span> <span class="o">!=</span> <span class="n">chunk</span><span class="o">.</span><span class="n">uncompressed_crc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">CRCValidationError</span><span class="p">(</span>
+                <span class="n">expected</span><span class="o">=</span><span class="n">chunk</span><span class="o">.</span><span class="n">uncompressed_crc</span><span class="p">,</span>
+                <span class="n">actual</span><span class="o">=</span><span class="n">calculated_crc</span><span class="p">,</span>
+                <span class="n">record</span><span class="o">=</span><span class="n">chunk</span><span class="p">,</span>
+            <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ReadDataStream</span><span class="p">(</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">data</span><span class="p">)),</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">read_magic</span><span class="p">(</span><span class="n">stream</span><span class="p">:</span> <span class="n">ReadDataStream</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
     <span class="n">magic</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s2">&quot;&lt;8B&quot;</span><span class="p">,</span> <span class="n">stream</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">MAGIC_SIZE</span><span class="p">))</span>
     <span class="k">if</span> <span class="n">magic</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">137</span><span class="p">,</span> <span class="mi">77</span><span class="p">,</span> <span class="mi">67</span><span class="p">,</span> <span class="mi">65</span><span class="p">,</span> <span class="mi">80</span><span class="p">,</span> <span class="mi">48</span><span class="p">,</span> <span class="mi">13</span><span class="p">,</span> <span class="mi">10</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="n">InvalidMagic</span><span class="p">()</span>
+        <span class="k">raise</span> <span class="n">InvalidMagic</span><span class="p">(</span><span class="n">magic</span><span class="p">)</span>
     <span class="k">return</span> <span class="kc">True</span>
 
 
@@ -113,80 +139,104 @@
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Returns records encountered in the MCAP in order.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">__magic</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">__magic</span> <span class="o">=</span> <span class="n">read_magic</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_skip_magic</span><span class="p">:</span>
+            <span class="n">read_magic</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
 
-        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">__footer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">opcode</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">read1</span><span class="p">()</span>
-            <span class="n">length</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
-            <span class="n">count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">count</span>
-            <span class="n">record</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__read_record</span><span class="p">(</span><span class="n">opcode</span><span class="p">,</span> <span class="n">length</span><span class="p">)</span>
-            <span class="n">padding</span> <span class="o">=</span> <span class="n">length</span> <span class="o">-</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">count</span> <span class="o">-</span> <span class="n">count</span><span class="p">)</span>
+        <span class="n">checksum_before_read</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_footer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Can&#39;t validate the data_end crc if we skip magic.</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validate_crcs</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_skip_magic</span><span class="p">:</span>
+                <span class="n">checksum_before_read</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">checksum</span><span class="p">()</span>
+            <span class="n">opcode</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">read1</span><span class="p">()</span>
+            <span class="n">length</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">count</span>
+            <span class="n">record</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_record</span><span class="p">(</span><span class="n">opcode</span><span class="p">,</span> <span class="n">length</span><span class="p">)</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_validate_crcs</span>
+                <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_skip_magic</span>
+                <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">DataEnd</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="n">record</span><span class="o">.</span><span class="n">data_section_crc</span> <span class="o">!=</span> <span class="mi">0</span>
+                <span class="ow">and</span> <span class="n">record</span><span class="o">.</span><span class="n">data_section_crc</span> <span class="o">!=</span> <span class="n">checksum_before_read</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="n">CRCValidationError</span><span class="p">(</span>
+                    <span class="n">expected</span><span class="o">=</span><span class="n">record</span><span class="o">.</span><span class="n">data_section_crc</span><span class="p">,</span>
+                    <span class="n">actual</span><span class="o">=</span><span class="n">checksum_before_read</span><span class="p">,</span>
+                    <span class="n">record</span><span class="o">=</span><span class="n">record</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="n">padding</span> <span class="o">=</span> <span class="n">length</span> <span class="o">-</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">count</span> <span class="o">-</span> <span class="n">count</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">padding</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">padding</span><span class="p">)</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Chunk</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">__emit_chunks</span><span class="p">:</span>
-                <span class="n">chunk_records</span> <span class="o">=</span> <span class="n">breakup_chunk</span><span class="p">(</span><span class="n">record</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">padding</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Chunk</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_emit_chunks</span><span class="p">:</span>
+                <span class="n">chunk_records</span> <span class="o">=</span> <span class="n">breakup_chunk</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">validate_crc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_validate_crcs</span><span class="p">)</span>
                 <span class="k">for</span> <span class="n">chunk_record</span> <span class="ow">in</span> <span class="n">chunk_records</span><span class="p">:</span>
                     <span class="k">yield</span> <span class="n">chunk_record</span>
             <span class="k">elif</span> <span class="n">record</span><span class="p">:</span>
                 <span class="k">yield</span> <span class="n">record</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Footer</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">__footer</span> <span class="o">=</span> <span class="n">record</span>
-                <span class="n">read_magic</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_footer</span> <span class="o">=</span> <span class="n">record</span>
+                <span class="n">read_magic</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="nb">input</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">BytesIO</span><span class="p">,</span> <span class="n">RawIOBase</span><span class="p">,</span> <span class="n">BufferedReader</span><span class="p">,</span> <span class="n">IO</span><span class="p">[</span><span class="nb">bytes</span><span class="p">]],</span>
         <span class="n">skip_magic</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">emit_chunks</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">validate_crcs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        input: The input stream from which to read records.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span> <span class="o">=</span> <span class="n">ReadDataStream</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="o">=</span> <span class="n">ReadDataStream</span><span class="p">(</span>
+                <span class="nb">open</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">),</span> <span class="n">calculate_crc</span><span class="o">=</span><span class="n">validate_crcs</span>
+            <span class="p">)</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">RawIOBase</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span> <span class="o">=</span> <span class="n">ReadDataStream</span><span class="p">(</span><span class="n">BufferedReader</span><span class="p">(</span><span class="nb">input</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="o">=</span> <span class="n">ReadDataStream</span><span class="p">(</span>
+                <span class="n">BufferedReader</span><span class="p">(</span><span class="nb">input</span><span class="p">),</span> <span class="n">calculate_crc</span><span class="o">=</span><span class="n">validate_crcs</span>
+            <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span> <span class="o">=</span> <span class="n">ReadDataStream</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__footer</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Footer</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__magic</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">skip_magic</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__emit_chunks</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">emit_chunks</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span> <span class="o">=</span> <span class="n">ReadDataStream</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">calculate_crc</span><span class="o">=</span><span class="n">validate_crcs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_footer</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Footer</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_skip_magic</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">skip_magic</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_emit_chunks</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">emit_chunks</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_crcs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">validate_crcs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_calculated_data_section_crc</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span> <span class="nf">__read_record</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">opcode</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">length</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">McapRecord</span><span class="p">]:</span>
+    <span class="k">def</span> <span class="nf">_read_record</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">opcode</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">length</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">McapRecord</span><span class="p">]:</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">ATTACHMENT</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">Attachment</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">Attachment</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">ATTACHMENT_INDEX</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">AttachmentIndex</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">AttachmentIndex</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">CHANNEL</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">Channel</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">Channel</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">CHUNK</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">Chunk</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">Chunk</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">CHUNK_INDEX</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">ChunkIndex</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">ChunkIndex</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">DATA_END</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">DataEnd</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">DataEnd</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">FOOTER</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">Footer</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">Footer</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">HEADER</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">Header</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">Header</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">MESSAGE</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">Message</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">,</span> <span class="n">length</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">Message</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">,</span> <span class="n">length</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">MESSAGE_INDEX</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">MessageIndex</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">MessageIndex</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">METADATA</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">Metadata</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">Metadata</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">METADATA_INDEX</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">MetadataIndex</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">MetadataIndex</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">SCHEMA</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">Schema</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">Schema</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">STATISTICS</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">Statistics</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">Statistics</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">opcode</span> <span class="o">==</span> <span class="n">Opcode</span><span class="o">.</span><span class="n">SUMMARY_OFFSET</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">SummaryOffset</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">SummaryOffset</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">)</span>
 
         <span class="c1"># Skip unknown record types</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">length</span> <span class="o">-</span> <span class="mi">9</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">length</span> <span class="o">-</span> <span class="mi">9</span><span class="p">)</span></div>
 
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;StreamReader&quot;</span><span class="p">]</span>
