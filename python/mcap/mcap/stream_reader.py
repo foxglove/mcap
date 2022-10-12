@@ -90,7 +90,7 @@ def get_chunk_data_stream(
 def read_magic(stream: ReadDataStream) -> bool:
     magic = struct.unpack("<8B", stream.read(MAGIC_SIZE))
     if magic != (137, 77, 67, 65, 80, 48, 13, 10):
-        raise InvalidMagic()
+        raise InvalidMagic(magic)
     return True
 
 
@@ -104,8 +104,8 @@ class StreamReader:
         """
         Returns records encountered in the MCAP in order.
         """
-        if not self._magic:
-            self._magic = read_magic(self._stream)
+        if not self._skip_magic:
+            read_magic(self._stream)
 
         while self._footer is None:
             opcode = self._stream.read1()
@@ -146,7 +146,7 @@ class StreamReader:
         else:
             self._stream = ReadDataStream(input, calculate_crc=validate_crcs)
         self._footer: Optional[Footer] = None
-        self._magic: bool = skip_magic
+        self._skip_magic: bool = skip_magic
         self._emit_chunks: bool = emit_chunks
         self._validate_crcs: bool = validate_crcs
 
@@ -163,7 +163,7 @@ class StreamReader:
             return ChunkIndex.read(self._stream)
         if opcode == Opcode.DATA_END:
             # We can only expect the data end CRC to be valid if we've read the start magic.
-            if self._validate_crcs and self._magic:
+            if self._validate_crcs and not self._skip_magic:
                 data_section_checksum = self._stream.checksum()
                 data_end = DataEnd.read(self._stream)
                 if (
