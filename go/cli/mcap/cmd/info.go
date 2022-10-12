@@ -61,29 +61,17 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			compressionFormatStats[ci.Compression] = stats
 		}
 		fmt.Fprintf(buf, "compression:\n")
-		totalCompressedSize := uint64(0)
-		totalUncompressedSize := uint64(0)
 		chunkCount := len(info.ChunkIndexes)
 		for k, v := range compressionFormatStats {
 			compressionRatio := 100 * (1 - float64(v.compressedSize)/float64(v.uncompressedSize))
-			fmt.Fprintf(buf, "\t%s: [%d/%d chunks] (%.2f%%) \n", k, v.count, chunkCount, compressionRatio)
-			totalCompressedSize += v.compressedSize
-			totalUncompressedSize += v.uncompressedSize
+			fmt.Fprintf(buf, "\t%s: [%d/%d chunks] ", k, v.count, chunkCount)
+			fmt.Fprintf(buf, "[%.2d MB/%.2d MB (%.2f%%)] ",
+				(v.uncompressedSize / (1024 * 1024)), (v.compressedSize / (1024 * 1024)), compressionRatio)
+			if durationInSeconds > 0 {
+				fmt.Fprintf(buf, "[%.2f MB/sec] ", float64(v.compressedSize/(1024*1024))/durationInSeconds)
+			}
+			fmt.Fprintf(buf, "\n")
 		}
-
-		fmt.Fprintf(buf, "uncompressed: %.2d MB", totalUncompressedSize/(1024*1024))
-		if durationInSeconds > 0 {
-			fmt.Fprintf(buf, " @ %.2f MB/sec", float64(totalUncompressedSize/(1024*1024))/durationInSeconds)
-		}
-		fmt.Fprintf(buf, "\n")
-
-		fmt.Fprintf(buf, "compressed: %.2d MB", totalCompressedSize/(1024*1024))
-		if durationInSeconds > 0 {
-			fmt.Fprintf(buf, " @ %.2f MB/sec", float64(totalCompressedSize/(1024*1024))/durationInSeconds)
-		}
-
-		totalCompressionRatio := 100 * (1 - float64(totalCompressedSize)/float64(totalUncompressedSize))
-		fmt.Fprintf(buf, " (%.2f%%) \n", totalCompressionRatio)
 	}
 	fmt.Fprintf(buf, "channels:\n")
 	chanIDs := []uint16{}
