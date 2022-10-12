@@ -90,6 +90,10 @@ def _chunks_matching_topics(
 class McapReader(ABC):
     """Reads data out of an MCAP file, using the summary section where available to efficiently
     read only the parts of the file that are needed.
+
+    :param stream: a file-like object for reading the source data from.
+    :param validate_crcs: if ``True``, will validate Chunk and DataEnd CRC values as messages are
+        read.
     """
 
     @abstractmethod
@@ -148,7 +152,14 @@ def make_reader(stream: IO[bytes], validate_crcs: bool = False) -> McapReader:
 
 
 class SeekingReader(McapReader):
-    """an McapReader for reading out of seekable data sources."""
+    """an McapReader for reading out of seekable data sources.
+
+    :param stream: a file-like object for reading the source data from.
+    :param validate_crcs: if ``True``, will validate Chunk CRCs for any chunks read. This class
+        does not validate the data section CRC in the DataEnd record because it is designed not to
+        read the entire data section when reading messages. To read messages while validating the
+        data section CRC, use :py:class:`NonSeekingReader`.
+    """
 
     def __init__(self, stream: IO[bytes], validate_crcs: bool = False):
         self._stream = stream
@@ -267,6 +278,12 @@ class SeekingReader(McapReader):
 
 
 class NonSeekingReader(McapReader):
+    """an McapReader for reading out of non-seekable data sources, such as a pipe or socket.
+
+    :param stream: a file-like object for reading the source data from.
+    :param validate_crcs: if ``True``, will validate chunk and data section CRC values.
+    """
+
     def __init__(self, stream: IO[bytes], validate_crcs: bool = False):
         self._stream_reader = StreamReader(stream, validate_crcs=validate_crcs)
         self._schemas: Dict[int, Schema] = {}
@@ -281,7 +298,7 @@ class NonSeekingReader(McapReader):
         self._spent = True
 
     def get_header(self) -> Header:
-        """Reads the Header recors from the beginning of the MCAP file."""
+        """Reads the Header record from the beginning of the MCAP file."""
         self._check_spent()
         header = next(self._stream_reader.records)
         if not isinstance(header, Header):
