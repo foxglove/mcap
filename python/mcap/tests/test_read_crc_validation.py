@@ -62,6 +62,10 @@ def test_validation_passes(reader_cls: Type[McapReader]):
         reader = reader_cls(f, validate_crcs=True)
         for _ in reader.iter_messages():
             pass
+    with open(ONE_MESSAGE_MCAP, "rb") as f:
+        reader = reader_cls(f, validate_crcs=True)
+        for _ in reader.iter_messages():
+            pass
 
 
 @pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
