@@ -1,4 +1,3 @@
-import binascii
 import struct
 from io import BufferedReader, BytesIO, RawIOBase
 from typing import Iterator, List, Optional, Tuple, Union, IO
@@ -31,12 +30,16 @@ MAGIC_SIZE = 8
 
 
 class CRCValidationError(ValueError):
-    def __init__(self, expected: int, actual: int):
+    def __init__(self, expected: int, actual: int, record: McapRecord):
         self._expected = expected
         self._actual = actual
+        self._record = record
 
     def __str__(self):
-        return f"crc validation failed, expected {self._expected}, calculated: {self._actual}"
+        return (
+            f"crc validation failed in {type(self._record).__name__},"
+            f"expected {self._expected}, calculated: {self._actual}"
+        )
 
 
 def breakup_chunk(chunk: Chunk, validate_crc: bool = False) -> List[McapRecord]:
@@ -63,7 +66,9 @@ def breakup_chunk(chunk: Chunk, validate_crc: bool = False) -> List[McapRecord]:
         and chunk.uncompressed_crc != stream.checksum()
     ):
         raise CRCValidationError(
-            expected=chunk.uncompressed_crc, actual=stream.checksum()
+            expected=chunk.uncompressed_crc,
+            actual=stream.checksum(),
+            record=chunk,
         )
 
     return records
@@ -168,7 +173,9 @@ class StreamReader:
                     and data_end.data_section_crc != data_section_checksum
                 ):
                     raise CRCValidationError(
-                        expected=data_end.data_section_crc, actual=data_section_checksum
+                        expected=data_end.data_section_crc,
+                        actual=data_section_checksum,
+                        record=data_end,
                     )
             else:
                 data_end = DataEnd.read(self._stream)
