@@ -31,14 +31,14 @@ MAGIC_SIZE = 8
 
 class CRCValidationError(ValueError):
     def __init__(self, expected: int, actual: int, record: McapRecord):
-        self._expected = expected
-        self._actual = actual
-        self._record = record
+        self.expected = expected
+        self.actual = actual
+        self.record = record
 
     def __str__(self):
         return (
-            f"crc validation failed in {type(self._record).__name__},"
-            f"expected {self._expected}, calculated: {self._actual}"
+            f"crc validation failed in {type(self.record).__name__}, "
+            f"expected: {self.expected}, calculated: {self.actual}"
         )
 
 

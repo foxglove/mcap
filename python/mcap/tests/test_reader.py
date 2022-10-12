@@ -1,7 +1,6 @@
 """tests for the McapReader implementations."""
 import os
 from pathlib import Path
-
 import pytest
 
 from mcap.reader import make_reader, SeekingReader, NonSeekingReader, McapReader
