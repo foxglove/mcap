@@ -96,3 +96,13 @@ Refer to the API documentation in
 [mcap/mcap.hpp](https://github.com/foxglove/mcap/blob/main/cpp/mcap/include/mcap/mcap.hpp)
 for full details. The high-level interfaces for reading and writing are
 `McapReader` and `McapWriter`.
+
+## Releasing new versions
+
+1. Update the `#define MCAP_LIBRARY_VERSION` and all other occurrences of the same version number, e.g. in `conanfile.py`, `build.sh`, and others.
+1. Once the version number has been updated, create and push a git tag named `releases/cpp/vX.Y.Z` matching the new version number.
+1. Make a pull request to [conan-io/conan-center-index](https://github.com/conan-io/conan-center-index) to update the [mcap recipe](https://github.com/conan-io/conan-center-index/tree/master/recipes/mcap):
+   - Update [`config.yml`](https://github.com/conan-io/conan-center-index/blob/master/recipes/mcap/config.yml) to add the new version.
+   - Update [`all/conandata.yml`](https://github.com/conan-io/conan-center-index/blob/master/recipes/mcap/all/conandata.yml) to add an entry pointing at the tarball from the new release tag. <!-- cspell: word conandata -->
+   - Follow the instructions for [developing recipes locally](https://github.com/conan-io/conan-center-index/blob/master/docs/developing_recipes_locally.md) to test the recipe.
+   - Examples of previous changes to the mcap recipe: https://github.com/conan-io/conan-center-index/commits/master/recipes/mcap
