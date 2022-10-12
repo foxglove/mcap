@@ -1,29 +1,41 @@
+import binascii
 import struct
 from io import BytesIO
-from typing import IO
+from typing import IO, Optional
 
 from .exceptions import EndOfFile
 from .opcode import Opcode
 
 
 class ReadDataStream:
-    def __init__(self, stream: IO[bytes]):
-        self.__count = 0
-        self.__stream = stream
+    def __init__(self, stream: IO[bytes], calculate_crc: bool = False):
+        self._count = 0
+        self._stream = stream
+        self._crc: Optional[int] = None
+        if calculate_crc:
+            self._crc = 0
 
     @property
     def count(self) -> int:
-        return self.__count
+        return self._count
 
     def read(self, length: int) -> bytes:
         if length == 0:
             return b""
 
-        data = self.__stream.read(length)
-        self.__count += len(data)
+        data = self._stream.read(length)
+        self._count += len(data)
+        if self._crc is not None:
+            self._crc = binascii.crc32(data, self._crc)
         if data == b"":
             raise EndOfFile()
         return data
+
+    def checksum(self) -> int:
+        if self._crc is not None:
+            return self._crc
+        else:
+            raise RuntimeError("requested checksum where calculate_crc == false")
 
     def read1(self) -> int:
         [value] = struct.unpack("<B", self.read(1))
@@ -48,31 +60,31 @@ class ReadDataStream:
 
 class RecordBuilder:
     def __init__(self):
-        self.__buffer = BytesIO()
+        self._buffer = BytesIO()
 
     @property
     def count(self) -> int:
-        return self.__buffer.tell()
+        return self._buffer.tell()
 
     def start_record(self, opcode: Opcode):
-        self.__record_start_offset = self.__buffer.tell()
-        self.__buffer.write(struct.pack("<BQ", opcode, 0))  # placeholder size
+        self._record_start_offset = self._buffer.tell()
+        self._buffer.write(struct.pack("<BQ", opcode, 0))  # placeholder size
 
     def finish_record(self):
-        pos = self.__buffer.tell()
-        length = pos - self.__record_start_offset - 9
-        self.__buffer.seek(self.__record_start_offset + 1)
-        self.__buffer.write(struct.pack("<Q", length))
-        self.__buffer.seek(pos)
+        pos = self._buffer.tell()
+        length = pos - self._record_start_offset - 9
+        self._buffer.seek(self._record_start_offset + 1)
+        self._buffer.write(struct.pack("<Q", length))
+        self._buffer.seek(pos)
 
     def end(self):
-        buf = self.__buffer.getvalue()
-        self.__buffer.close()
-        self.__buffer = BytesIO()
+        buf = self._buffer.getvalue()
+        self._buffer.close()
+        self._buffer = BytesIO()
         return buf
 
     def write(self, data: bytes):
-        self.__buffer.write(data)
+        self._buffer.write(data)
 
     def write_prefixed_string(self, value: str):
         bytes = value.encode()

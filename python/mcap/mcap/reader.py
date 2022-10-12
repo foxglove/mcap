@@ -136,18 +136,19 @@ class McapReader(ABC):
         raise NotImplementedError()
 
 
-def make_reader(stream: IO[bytes]) -> McapReader:
+def make_reader(stream: IO[bytes], validate_crcs: bool = False) -> McapReader:
     """constructs the appropriate McapReader implementation for this data source."""
     if stream.seekable():
-        return SeekingReader(stream)
-    return NonSeekingReader(stream)
+        return SeekingReader(stream, validate_crcs=validate_crcs)
+    return NonSeekingReader(stream, validate_crcs=validate_crcs)
 
 
 class SeekingReader(McapReader):
     """an McapReader for reading out of seekable data sources."""
 
-    def __init__(self, stream: IO[bytes]):
+    def __init__(self, stream: IO[bytes], validate_crcs: bool = False):
         self._stream = stream
+        self._validate_crcs = validate_crcs
         self._summary: Optional[Summary] = None
 
     def iter_messages(
@@ -189,7 +190,7 @@ class SeekingReader(McapReader):
             if isinstance(next_item, ChunkIndex):
                 self._stream.seek(next_item.chunk_start_offset + 1 + 8, io.SEEK_SET)
                 chunk = Chunk.read(ReadDataStream(self._stream))
-                for record in breakup_chunk(chunk):
+                for record in breakup_chunk(chunk, validate_crc=self._validate_crcs):
                     if isinstance(record, Message):
                         channel = summary.channels[record.channel_id]
                         if topics is not None and channel.topic not in topics:
@@ -204,7 +205,7 @@ class SeekingReader(McapReader):
                 yield next_item
 
     def get_header(self) -> Header:
-        """Reads the Header recors from the beginning of the MCAP file."""
+        """Reads the Header record from the beginning of the MCAP file."""
         self._stream.seek(0)
         header = next(StreamReader(self._stream, skip_magic=False).records)
         if not isinstance(header, Header):
@@ -262,11 +263,11 @@ class SeekingReader(McapReader):
 
 
 class NonSeekingReader(McapReader):
-    def __init__(self, stream: IO[bytes]):
-        self._stream = stream
+    def __init__(self, stream: IO[bytes], validate_crcs: bool = False):
+        self._stream_reader = StreamReader(stream, validate_crcs=validate_crcs)
         self._schemas: Dict[int, Schema] = {}
         self._channels: Dict[int, Channel] = {}
-        self._spent = False
+        self._spent: bool = False
 
     def _check_spent(self):
         if self._spent:
@@ -278,7 +279,7 @@ class NonSeekingReader(McapReader):
     def get_header(self) -> Header:
         """Reads the Header recors from the beginning of the MCAP file."""
         self._check_spent()
-        header = next(StreamReader(self._stream, skip_magic=True).records)
+        header = next(self._stream_reader.records)
         if not isinstance(header, Header):
             raise McapError(
                 f"expected header at beginning of MCAP file, found {type(header)}"
@@ -327,7 +328,7 @@ class NonSeekingReader(McapReader):
         end_time: Optional[int] = None,
     ) -> Iterator[Tuple[Schema, Channel, Message]]:
         self._check_spent()
-        for record in StreamReader(self._stream).records:
+        for record in self._stream_reader.records:
             if isinstance(record, Schema):
                 self._schemas[record.id] = record
             if isinstance(record, Channel):
@@ -354,18 +355,18 @@ class NonSeekingReader(McapReader):
     def get_summary(self) -> Optional[Summary]:
         """Returns a Summary object containing records from the (optional) summary section."""
         self._check_spent()
-        return _read_summary_from_stream_reader(StreamReader(self._stream))
+        return _read_summary_from_stream_reader(self._stream_reader)
 
     def iter_attachments(self) -> Iterator[Attachment]:
         """Iterates through attachment records in the MCAP."""
         self._check_spent()
-        for record in StreamReader(self._stream).records:
+        for record in self._stream_reader.records:
             if isinstance(record, Attachment):
                 yield record
 
     def iter_metadata(self) -> Iterator[Metadata]:
         """Iterates through metadata records in the MCAP."""
         self._check_spent()
-        for record in StreamReader(self._stream).records:
+        for record in self._stream_reader.records:
             if isinstance(record, Metadata):
                 yield record
