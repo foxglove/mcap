@@ -2,6 +2,7 @@ import struct
 from io import BufferedReader, BytesIO, RawIOBase
 from typing import Iterator, List, Optional, Tuple, Union, IO
 import zstandard
+import zlib
 import lz4.frame  # type: ignore
 
 from .data_stream import ReadDataStream
@@ -43,7 +44,7 @@ class CRCValidationError(ValueError):
 
 
 def breakup_chunk(chunk: Chunk, validate_crc: bool = False) -> List[McapRecord]:
-    stream, stream_length = get_chunk_data_stream(chunk, calculate_crc=validate_crc)
+    stream, stream_length = get_chunk_data_stream(chunk, validate_crc=validate_crc)
     records: List[McapRecord] = []
     while stream.count < stream_length:
         opcode = stream.read1()
@@ -60,33 +61,30 @@ def breakup_chunk(chunk: Chunk, validate_crc: bool = False) -> List[McapRecord]:
         else:
             # Unknown chunk record type
             stream.read(length)
-    if (
-        validate_crc
-        and chunk.uncompressed_crc != 0
-        and chunk.uncompressed_crc != stream.checksum()
-    ):
-        raise CRCValidationError(
-            expected=chunk.uncompressed_crc,
-            actual=stream.checksum(),
-            record=chunk,
-        )
 
     return records
 
 
 def get_chunk_data_stream(
-    chunk: Chunk, calculate_crc: bool = False
+    chunk: Chunk, validate_crc: bool = False
 ) -> Tuple[ReadDataStream, int]:
     if chunk.compression == "zstd":
         data: bytes = zstandard.decompress(chunk.data, chunk.uncompressed_size)
-        return ReadDataStream(BytesIO(data), calculate_crc=calculate_crc), len(data)
     elif chunk.compression == "lz4":
         data: bytes = lz4.frame.decompress(chunk.data)  # type: ignore
-        return ReadDataStream(BytesIO(data), calculate_crc=calculate_crc), len(data)
     else:
-        return ReadDataStream(BytesIO(chunk.data), calculate_crc=calculate_crc), len(
-            chunk.data
-        )
+        data = chunk.data
+
+    if validate_crc and chunk.uncompressed_crc != 0:
+        calculated_crc = zlib.crc32(data)
+        if calculated_crc != chunk.uncompressed_crc:
+            raise CRCValidationError(
+                expected=chunk.uncompressed_crc,
+                actual=calculated_crc,
+                record=chunk,
+            )
+
+    return ReadDataStream(BytesIO(data)), len(data)
 
 
 def read_magic(stream: ReadDataStream) -> bool:

@@ -93,6 +93,10 @@ class McapReader(ABC):
     """
 
     @abstractmethod
+    def __init__(self, stream: IO[bytes], validate_crcs: bool = False):
+        raise NotImplementedError()
+
+    @abstractmethod
     def iter_messages(
         self,
         topics: Optional[Iterable[str]] = None,
