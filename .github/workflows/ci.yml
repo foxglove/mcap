@@ -327,8 +327,7 @@ jobs:
         if: |
           !github.event.pull_request.head.repo.fork &&
           startsWith(github.ref, 'refs/tags/go/mcap/v')
-        working-directory: go/cli/check-tag
-        run: make build && bin/check-tag
+        run: make -C cli/mcap build && ./check_tag.sh cli/mcap/bin/mcap
 
   go-release-cli:
     permissions:
