@@ -30,6 +30,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	fmt.Fprintf(buf, "library: %s\n", info.Header.Library)
 	fmt.Fprintf(buf, "profile: %s\n", info.Header.Profile)
 	var start, end uint64
+	durationInSeconds := float64(0)
 	if info.Statistics != nil {
 		fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
 		start = info.Statistics.MessageStartTime
@@ -37,6 +38,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		starttime := time.Unix(int64(start/1e9), int64(start%1e9))
 		endtime := time.Unix(int64(end/1e9), int64(end%1e9))
 		fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
+		durationInSeconds = endtime.Sub(starttime).Seconds()
 		if starttime.After(LongAgo) {
 			fmt.Fprintf(buf, "start: %s (%s)\n", starttime.Format(time.RFC3339Nano), decimalTime(starttime))
 			fmt.Fprintf(buf, "end: %s (%s)\n", endtime.Format(time.RFC3339Nano), decimalTime(endtime))
@@ -59,11 +61,29 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			compressionFormatStats[ci.Compression] = stats
 		}
 		fmt.Fprintf(buf, "compression:\n")
+		totalCompressedSize := uint64(0)
+		totalUncompressedSize := uint64(0)
 		chunkCount := len(info.ChunkIndexes)
 		for k, v := range compressionFormatStats {
 			compressionRatio := 100 * (1 - float64(v.compressedSize)/float64(v.uncompressedSize))
 			fmt.Fprintf(buf, "\t%s: [%d/%d chunks] (%.2f%%) \n", k, v.count, chunkCount, compressionRatio)
+			totalCompressedSize += v.compressedSize
+			totalUncompressedSize += v.uncompressedSize
 		}
+
+		fmt.Fprintf(buf, "uncompressed: %.2d MB", totalUncompressedSize/(1024*1024))
+		if durationInSeconds > 0 {
+			fmt.Fprintf(buf, " @ %.2f MB/sec", float64(totalUncompressedSize/(1024*1024))/durationInSeconds)
+		}
+		fmt.Fprintf(buf, "\n")
+
+		fmt.Fprintf(buf, "compressed: %.2d MB", totalCompressedSize/(1024*1024))
+		if durationInSeconds > 0 {
+			fmt.Fprintf(buf, " @ %.2f MB/sec", float64(totalCompressedSize/(1024*1024))/durationInSeconds)
+		}
+
+		totalCompressionRatio := 100 * (1 - float64(totalCompressedSize)/float64(totalUncompressedSize))
+		fmt.Fprintf(buf, " (%.2f%%) \n", totalCompressionRatio)
 	}
 	fmt.Fprintf(buf, "channels:\n")
 	chanIDs := []uint16{}
