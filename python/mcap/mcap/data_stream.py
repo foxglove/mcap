@@ -24,12 +24,9 @@ class ReadDataStream:
             return b""
 
         data = self._stream.read(length)
-        print(f"at offset {self._count}")
         self._count += len(data)
         if self._crc is not None:
-            print(f"after reading {len(data)} bytes")
             self._crc = zlib.crc32(data, self._crc)
-            print(f"crc is {self._crc}")
         if data == b"":
             raise EndOfFile()
         return data

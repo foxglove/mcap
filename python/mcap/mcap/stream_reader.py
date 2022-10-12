@@ -107,11 +107,28 @@ class StreamReader:
         if not self._skip_magic:
             read_magic(self._stream)
 
+        checksum_before_read: int = 0
+
         while self._footer is None:
+            # Can't validate the data_end crc if we skip magic.
+            if self._validate_crcs and not self._skip_magic:
+                checksum_before_read = self._stream.checksum()
             opcode = self._stream.read1()
             length = self._stream.read8()
             count = self._stream.count
             record = self._read_record(opcode, length)
+            if (
+                self._validate_crcs
+                and not self._skip_magic
+                and isinstance(record, DataEnd)
+                and record.data_section_crc != 0
+                and record.data_section_crc != checksum_before_read
+            ):
+                raise CRCValidationError(
+                    expected=record.data_section_crc,
+                    actual=checksum_before_read,
+                    record=record,
+                )
             padding = length - (self._stream.count - count)
             if padding > 0:
                 self._stream.read(padding)
@@ -149,6 +166,7 @@ class StreamReader:
         self._skip_magic: bool = skip_magic
         self._emit_chunks: bool = emit_chunks
         self._validate_crcs: bool = validate_crcs
+        self._calculated_data_section_crc = None
 
     def _read_record(self, opcode: int, length: int) -> Optional[McapRecord]:
         if opcode == Opcode.ATTACHMENT:
@@ -162,22 +180,7 @@ class StreamReader:
         if opcode == Opcode.CHUNK_INDEX:
             return ChunkIndex.read(self._stream)
         if opcode == Opcode.DATA_END:
-            # We can only expect the data end CRC to be valid if we've read the start magic.
-            if self._validate_crcs and not self._skip_magic:
-                data_section_checksum = self._stream.checksum()
-                data_end = DataEnd.read(self._stream)
-                if (
-                    data_end.data_section_crc != 0
-                    and data_end.data_section_crc != data_section_checksum
-                ):
-                    raise CRCValidationError(
-                        expected=data_end.data_section_crc,
-                        actual=data_section_checksum,
-                        record=data_end,
-                    )
-            else:
-                data_end = DataEnd.read(self._stream)
-            return data_end
+            return DataEnd.read(self._stream)
         if opcode == Opcode.FOOTER:
             return Footer.read(self._stream)
         if opcode == Opcode.HEADER:
