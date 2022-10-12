@@ -611,8 +611,13 @@ impl<'a> RawMessageStream<'a> {
     }
 }
 
+pub struct RawMessage<'a> {
+    header: records::MessageHeader,
+    data: Cow<'a, [u8]>,
+}
+
 impl<'a> Iterator for RawMessageStream<'a> {
-    type Item = McapResult<(records::MessageHeader, Cow<'a, [u8]>)>;
+    type Item = McapResult<RawMessage<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.done {
@@ -644,7 +649,7 @@ impl<'a> Iterator for RawMessageStream<'a> {
                 }
 
                 Record::Message { header, data } => {
-                    break Some(Ok((header, data)));
+                    break Some(Ok(RawMessage { header, data }));
                 }
 
                 // If it's EOD, do unholy things to calculate the CRC.
@@ -714,7 +719,7 @@ impl<'a> Iterator for MessageStream<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.inner.next() {
-            Some(Ok((header, data))) => {
+            Some(Ok(RawMessage { header, data })) => {
                 // Messages must have a previously-read channel.
                 let channel = match self.inner.channeler.get(header.channel_id) {
                     Some(c) => c,
