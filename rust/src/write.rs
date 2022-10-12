@@ -112,7 +112,10 @@ pub struct WriteOptions {
 impl Default for WriteOptions {
     fn default() -> Self {
         Self {
+            #[cfg(feature = "zstd")]
             compression: Some(Compression::Zstd),
+            #[cfg(not(feature = "zstd"))]
+            compression: None,
             profile: String::new(),
         }
     }
@@ -608,6 +611,7 @@ impl<'a, W: Write + Seek> Drop for Writer<'a, W> {
 
 enum Compressor<W: Write> {
     Null(W),
+    #[cfg(feature = "zstd")]
     Zstd(zstd::Encoder<'static, W>),
     Lz4(lz4::Encoder<W>),
 }
@@ -616,6 +620,7 @@ impl<W: Write> Compressor<W> {
     fn finish(self) -> io::Result<W> {
         Ok(match self {
             Compressor::Null(w) => w,
+            #[cfg(feature = "zstd")]
             Compressor::Zstd(w) => w.finish()?,
             Compressor::Lz4(w) => {
                 let (w, err) = w.finish();
@@ -630,6 +635,7 @@ impl<W: Write> Write for Compressor<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
             Compressor::Null(w) => w.write(buf),
+            #[cfg(feature = "zstd")]
             Compressor::Zstd(w) => w.write(buf),
             Compressor::Lz4(w) => w.write(buf),
         }
@@ -638,6 +644,7 @@ impl<W: Write> Write for Compressor<W> {
     fn flush(&mut self) -> io::Result<()> {
         match self {
             Compressor::Null(w) => w.flush(),
+            #[cfg(feature = "zstd")]
             Compressor::Zstd(w) => w.flush(),
             Compressor::Lz4(w) => w.flush(),
         }
@@ -659,6 +666,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         op_and_len(&mut writer, op::CHUNK, !0)?;
 
         let compression_name = match compression {
+            #[cfg(feature = "zstd")]
             Some(Compression::Zstd) => "zstd",
             Some(Compression::Lz4) => "lz4",
             None => "",
@@ -677,6 +685,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         let stream_start = writer.stream_position()?;
 
         let compressor = match compression {
+            #[cfg(feature = "zstd")]
             Some(Compression::Zstd) => {
                 let mut enc = zstd::Encoder::new(writer, 0)?;
                 enc.multithread(num_cpus::get_physical() as u32)?;

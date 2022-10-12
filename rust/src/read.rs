@@ -266,12 +266,18 @@ pub struct ChunkReader<'a> {
 impl<'a> ChunkReader<'a> {
     pub fn new(header: records::ChunkHeader, data: &'a [u8]) -> McapResult<Self> {
         let decompressor = match header.compression.as_str() {
+            #[cfg(feature = "zstd")]
             "zstd" => ChunkDecompressor::Compressed(Some(CountingCrcReader::new(Box::new(
                 zstd::Decoder::new(data)?,
             )))),
+
+            #[cfg(not(feature = "zstd"))]
+            "zstd" => panic!("Unsupported compression format: zstd"),
+
             "lz4" => ChunkDecompressor::Compressed(Some(CountingCrcReader::new(Box::new(
                 lz4::Decoder::new(data)?,
             )))),
+
             "" => {
                 if header.uncompressed_size != header.compressed_size {
                     warn!(
