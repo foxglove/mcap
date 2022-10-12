@@ -1,4 +1,4 @@
-import binascii
+import zlib
 import struct
 from io import BytesIO
 from typing import IO, Optional
@@ -26,7 +26,7 @@ class ReadDataStream:
         data = self._stream.read(length)
         self._count += len(data)
         if self._crc is not None:
-            self._crc = binascii.crc32(data, self._crc)
+            self._crc = zlib.crc32(data, self._crc)
         if data == b"":
             raise EndOfFile()
         return data
