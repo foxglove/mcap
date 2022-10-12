@@ -19,7 +19,6 @@ class Attachment(McapRecord):
     name: str
     media_type: str
     data: bytes
-    crc: int
 
     def write(self, stream: RecordBuilder):
         builder = RecordBuilder()
@@ -44,14 +43,13 @@ class Attachment(McapRecord):
         media_type = stream.read_prefixed_string()
         data_length = stream.read8()
         data = stream.read(data_length)
-        crc = stream.read4()
+        stream.read4()  # skip crc
         return Attachment(
             create_time=create_time,
             log_time=log_time,
             name=name,
             media_type=media_type,
             data=data,
-            crc=crc,
         )
 
 
