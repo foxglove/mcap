@@ -10,13 +10,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const libraryString = "libfoo v0"
+
 func TestMCAPReadWrite(t *testing.T) {
 	t.Run("test header", func(t *testing.T) {
 		buf := &bytes.Buffer{}
-		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionZSTD})
+		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionZSTD, OverrideLibrary: true})
 		assert.Nil(t, err)
 		err = w.WriteHeader(&Header{
 			Profile: "ros1",
+			Library: libraryString,
 		})
 		assert.Nil(t, err)
 		lexer, err := NewLexer(buf)
@@ -30,7 +33,7 @@ func TestMCAPReadWrite(t *testing.T) {
 		assert.Equal(t, "ros1", profile)
 		library, _, err := readPrefixedString(record, offset)
 		assert.Nil(t, err)
-		assert.Equal(t, "mcap go #", library)
+		assert.Equal(t, "libfoo v0", library)
 		assert.Equal(t, TokenHeader, tokenType)
 	})
 	t.Run("zero-valued schema IDs permitted", func(t *testing.T) {
@@ -70,14 +73,16 @@ func TestOutputDeterminism(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		buf := &bytes.Buffer{}
 		w, err := NewWriter(buf, &WriterOptions{
-			Chunked:     true,
-			Compression: CompressionZSTD,
-			IncludeCRC:  true,
-			ChunkSize:   1024,
+			Chunked:         true,
+			Compression:     CompressionZSTD,
+			IncludeCRC:      true,
+			ChunkSize:       1024,
+			OverrideLibrary: true,
 		})
 		assert.Nil(t, err)
 		assert.Nil(t, w.WriteHeader(&Header{
 			Profile: "ros1",
+			Library: libraryString,
 		}))
 		assert.Nil(t, w.WriteSchema(&Schema{
 			ID:       1,
@@ -141,13 +146,15 @@ func TestChunkedReadWrite(t *testing.T) {
 		t.Run(fmt.Sprintf("chunked file with %s", compression), func(t *testing.T) {
 			buf := &bytes.Buffer{}
 			w, err := NewWriter(buf, &WriterOptions{
-				Chunked:     true,
-				Compression: compression,
-				IncludeCRC:  true,
+				Chunked:         true,
+				Compression:     compression,
+				IncludeCRC:      true,
+				OverrideLibrary: true,
 			})
 			assert.Nil(t, err)
 			assert.Nil(t, w.WriteHeader(&Header{
 				Profile: "ros1",
+				Library: libraryString,
 			}))
 			assert.Nil(t, w.WriteSchema(&Schema{
 				ID:       1,
@@ -218,13 +225,15 @@ func TestChunkBoundaryIndexing(t *testing.T) {
 	// Each chunk in the index should reflect the time of the corresponding
 	// message.
 	w, err := NewWriter(buf, &WriterOptions{
-		Chunked:     true,
-		ChunkSize:   20,
-		Compression: CompressionZSTD,
+		Chunked:         true,
+		ChunkSize:       20,
+		Compression:     CompressionZSTD,
+		OverrideLibrary: true,
 	})
 	assert.Nil(t, err)
 	err = w.WriteHeader(&Header{
 		Profile: "ros1",
+		Library: libraryString,
 	})
 	assert.Nil(t, err)
 	assert.Nil(t, w.WriteSchema(&Schema{
@@ -266,13 +275,15 @@ func TestChunkBoundaryIndexing(t *testing.T) {
 func TestIndexStructures(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w, err := NewWriter(buf, &WriterOptions{
-		Chunked:     true,
-		ChunkSize:   1024,
-		Compression: CompressionZSTD,
+		Chunked:         true,
+		ChunkSize:       1024,
+		Compression:     CompressionZSTD,
+		OverrideLibrary: true,
 	})
 	assert.Nil(t, err)
 	err = w.WriteHeader(&Header{
 		Profile: "ros1",
+		Library: libraryString,
 	})
 	assert.Nil(t, err)
 	assert.Nil(t, w.WriteSchema(&Schema{
@@ -339,13 +350,15 @@ func TestIndexStructures(t *testing.T) {
 func TestStatistics(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w, err := NewWriter(buf, &WriterOptions{
-		Chunked:     true,
-		ChunkSize:   1024,
-		Compression: CompressionZSTD,
+		Chunked:         true,
+		ChunkSize:       1024,
+		Compression:     CompressionZSTD,
+		OverrideLibrary: true,
 	})
 	assert.Nil(t, err)
 	assert.Nil(t, w.WriteHeader(&Header{
 		Profile: "ros1",
+		Library: libraryString,
 	}))
 	assert.Nil(t, w.WriteSchema(&Schema{
 		ID:       1,
@@ -386,10 +399,11 @@ func TestStatistics(t *testing.T) {
 
 func TestUnchunkedReadWrite(t *testing.T) {
 	buf := &bytes.Buffer{}
-	w, err := NewWriter(buf, &WriterOptions{})
+	w, err := NewWriter(buf, &WriterOptions{OverrideLibrary: true})
 	assert.Nil(t, err)
 	err = w.WriteHeader(&Header{
 		Profile: "ros1",
+		Library: libraryString,
 	})
 	assert.Nil(t, err)
 	err = w.WriteSchema(&Schema{
@@ -462,6 +476,43 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		tokenType, _, err := lexer.Next(nil)
 		assert.Nil(t, err)
 		assert.Equal(t, expected, tokenType, fmt.Sprintf("want %s got %s", expected, tokenType))
+	}
+}
+
+func TestLibraryString(t *testing.T) {
+	thisLibraryString := fmt.Sprintf("mcap go %s", Version)
+	cases := []struct {
+		input  string
+		output string
+	}{
+		{"", thisLibraryString},
+		{thisLibraryString, thisLibraryString},
+		{"some-library", fmt.Sprintf("%s; some-library", thisLibraryString)},
+	}
+	for _, c := range cases {
+		t.Run("library string is automatically filled", func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			w, err := NewWriter(buf, &WriterOptions{})
+			assert.Nil(t, err)
+			err = w.WriteHeader(&Header{
+				Profile: "ros1",
+				Library: c.input,
+			})
+			assert.Nil(t, err)
+			w.Close()
+			lexer, err := NewLexer(buf)
+			assert.Nil(t, err)
+			tokenType, record, err := lexer.Next(nil)
+			assert.Nil(t, err)
+			assert.Equal(t, tokenType, TokenHeader)
+			offset := 0
+			profile, offset, err := readPrefixedString(record, offset)
+			assert.Nil(t, err)
+			assert.Equal(t, "ros1", profile)
+			library, _, err := readPrefixedString(record, offset)
+			assert.Nil(t, err)
+			assert.Equal(t, library, c.output)
+		})
 	}
 }
 
