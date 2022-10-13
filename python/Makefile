@@ -7,6 +7,7 @@ build: pipenv
 	pipenv run python -m build mcap
 	pipenv run python -m build mcap-protobuf-support
 	pipenv run python -m build mcap-ros1-support
+	pipenv run python -m build mcap-ros2-support
 
 .PHONY: test
 test: pipenv
