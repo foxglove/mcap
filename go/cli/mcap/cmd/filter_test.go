@@ -11,6 +11,7 @@ import (
 )
 
 func writeFilterTestInput(t *testing.T, w io.Writer) {
+	mcap.Version = "1"
 	writer, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Chunked:   true,
 		ChunkSize: 10,
