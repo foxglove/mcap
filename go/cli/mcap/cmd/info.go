@@ -30,6 +30,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	fmt.Fprintf(buf, "library: %s\n", info.Header.Library)
 	fmt.Fprintf(buf, "profile: %s\n", info.Header.Profile)
 	var start, end uint64
+	durationInSeconds := float64(0)
 	if info.Statistics != nil {
 		fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
 		start = info.Statistics.MessageStartTime
@@ -37,6 +38,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		starttime := time.Unix(int64(start/1e9), int64(start%1e9))
 		endtime := time.Unix(int64(end/1e9), int64(end%1e9))
 		fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
+		durationInSeconds = endtime.Sub(starttime).Seconds()
 		if starttime.After(LongAgo) {
 			fmt.Fprintf(buf, "start: %s (%s)\n", starttime.Format(time.RFC3339Nano), decimalTime(starttime))
 			fmt.Fprintf(buf, "end: %s (%s)\n", endtime.Format(time.RFC3339Nano), decimalTime(endtime))
@@ -62,7 +64,13 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		chunkCount := len(info.ChunkIndexes)
 		for k, v := range compressionFormatStats {
 			compressionRatio := 100 * (1 - float64(v.compressedSize)/float64(v.uncompressedSize))
-			fmt.Fprintf(buf, "\t%s: [%d/%d chunks] (%.2f%%) \n", k, v.count, chunkCount, compressionRatio)
+			fmt.Fprintf(buf, "\t%s: [%d/%d chunks] ", k, v.count, chunkCount)
+			fmt.Fprintf(buf, "[%.2d MB/%.2d MB (%.2f%%)] ",
+				(v.uncompressedSize / (1024 * 1024)), (v.compressedSize / (1024 * 1024)), compressionRatio)
+			if durationInSeconds > 0 {
+				fmt.Fprintf(buf, "[%.2f MB/sec] ", float64(v.compressedSize/(1024*1024))/durationInSeconds)
+			}
+			fmt.Fprintf(buf, "\n")
 		}
 	}
 	fmt.Fprintf(buf, "channels:\n")
