@@ -153,3 +153,7 @@ overrides:
       - subrange
       - unkeyed
       - lowercased
+
+  - filename: "docs/**"
+    words:
+      - plex

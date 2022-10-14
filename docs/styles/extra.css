@@ -1,9 +1,14 @@
 .md-source__fact--version {
-    display: none;
-  }
-  .md-source__fact--stars::before {
-    margin-left: 0 !important;
-  }
-  .md-source__fact::before {
-    vertical-align: bottom;
-  }
+  display: none;
+}
+.md-source__fact--stars::before {
+  margin-left: 0 !important;
+}
+.md-source__fact::before {
+  vertical-align: bottom;
+}
+
+.md-typeset h2,
+.md-typeset h3 {
+  font-weight: 600;
+}
