@@ -107,6 +107,9 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	if info.Statistics != nil {
 		fmt.Fprintf(buf, "attachments: %d\n", info.Statistics.AttachmentCount)
 		fmt.Fprintf(buf, "metadata: %d\n", info.Statistics.MetadataCount)
+	} else {
+		fmt.Fprintf(buf, "attachments: unknown\n")
+		fmt.Fprintf(buf, "metadata: unknown\n")
 	}
 	_, err := buf.WriteTo(w)
 	return err
