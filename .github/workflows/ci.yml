@@ -157,7 +157,7 @@ jobs:
       - run: cd rust && cargo build --example=conformance_reader
       - run: yarn install --frozen-lockfile
       - run: yarn test:conformance:generate-inputs --verify
-      - run: yarn test:conformance --runner rust-
+      - run: yarn test:conformance --runner rust-reader
 
   docs:
     runs-on: ubuntu-latest
