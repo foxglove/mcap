@@ -1,8 +1,8 @@
 import { exec } from "child_process";
-import { intersection } from "lodash";
+import { isEqual } from "lodash";
 import { join } from "path";
 import { promisify } from "util";
-import { TestVariant } from "variants/types";
+import { TestFeatures, TestVariant } from "variants/types";
 
 import { WriteTestRunner } from "./TestRunner";
 
@@ -25,11 +25,13 @@ export default class RustWriterTestRunner extends WriteTestRunner {
   }
 
   supportsVariant(variant: TestVariant): boolean {
-    return (
-      intersection(
+    if (variant.records.some((rec) => rec.type === "Message")) {
+      return isEqual(
         [...variant.features],
-        ["ch", "mx", "st", "rsh", "rch", "ax", "mdx", "chx", "sum", "pad"],
-      ).length === 0
-    );
+        [TestFeatures.UseChunks, TestFeatures.UseSummaryOffset],
+      );
+    }
+
+    return false;
   }
 }

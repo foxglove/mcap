@@ -33,6 +33,9 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                     .attach(&attachment)
                     .expect("Couldn't write attachment");
             }
+            "AttachmentIndex" => {
+                // written automatically
+            }
             "Channel" => {
                 let id = record.get_field_u16("id");
                 let schema_id = record.get_field_u64("schema_id");
