@@ -21,7 +21,6 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
     for record in &spec.records {
         match record.record_type.as_str() {
             "Attachment" => {
-                // write attachment
                 let attachment = mcap::Attachment {
                     name: record.get_field_str("name").to_owned(),
                     create_time: record.get_field_u64("create_time"),
@@ -93,7 +92,13 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                 writer.write(&message).expect("Write message failed");
             }
             "Metadata" => {
-                // write metadata
+                let name = record.get_field_str("name");
+                let fields = record.get_field_meta("metadata");
+                let meta = mcap::records::Metadata {
+                    name: name.to_string(),
+                    metadata: fields,
+                };
+                writer.write_metadata(&meta).expect("Can't write metadata");
             }
             "Schema" => {
                 let name = record.get_field_str("name");
@@ -106,6 +111,12 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                     data: Cow::from(data),
                 };
                 schemas.insert(id, schema);
+            }
+            "Statistics" => {
+                // written automatically
+            }
+            "SummaryOffset" => {
+                // written automatically
             }
             _ => panic!("Unrecognzed record type: {}", record.record_type),
         }

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde_json::Value;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -37,6 +39,18 @@ impl Record {
             .filter_map(|n| u8::try_from(n).ok())
             .collect();
         return data;
+    }
+
+    pub fn get_field_meta(self: &Self, name: &str) -> BTreeMap<String, String> {
+        let data = self
+            .get_field(name)
+            .as_object()
+            .unwrap_or_else(|| panic!("Invalid: {}", name));
+        let mut result = BTreeMap::new();
+        for (key, value) in data.iter() {
+            result.insert(key.to_string(), value.as_str().unwrap().to_string());
+        }
+        return result;
     }
 
     pub fn get_field_str(self: &Self, name: &str) -> &str {
