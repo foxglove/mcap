@@ -206,8 +206,7 @@ jobs:
       - run: yarn workspace @mcap/core test
 
       - name: Publish to NPM
-        if:
-          ${{ startsWith(github.ref, 'refs/tags/releases/typescript/core/v') }}
+        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/core/v') }}
         run: yarn workspace @mcap/core publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
@@ -250,9 +249,7 @@ jobs:
       - run: make build
       - name: Publish mcap to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        if:
-          ${{ !github.event.pull_request.head.repo.fork && github.actor !=
-          'dependabot[bot]' }}
+        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
         with:
           user: __token__
           password: ${{ secrets.TESTPYPI_API_TOKEN }}
@@ -262,9 +259,7 @@ jobs:
 
       - name: Publish mcap-protobuf-support to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        if:
-          ${{ !github.event.pull_request.head.repo.fork && github.actor !=
-          'dependabot[bot]' }}
+        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
         with:
           user: __token__
           password: ${{ secrets.TESTPYPI_API_TOKEN }}
@@ -274,9 +269,7 @@ jobs:
 
       - name: Publish mcap-ros1-support to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        if:
-          ${{ !github.event.pull_request.head.repo.fork && github.actor !=
-          'dependabot[bot]' }}
+        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
         with:
           user: __token__
           password: ${{ secrets.TESTPYPI_API_TOKEN }}
@@ -286,9 +279,7 @@ jobs:
 
       - name: Publish mcap-ros2-support to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        if:
-          ${{ !github.event.pull_request.head.repo.fork && github.actor !=
-          'dependabot[bot]' }}
+        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
         with:
           user: __token__
           password: ${{ secrets.TESTPYPI_API_TOKEN }}
@@ -349,8 +340,7 @@ jobs:
         with:
           lfs: true
       - name: install golangci-lint
-        run:
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.49.0
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.49.0
       - run: make lint
       - run: make test
       - name: Check library version
@@ -364,9 +354,7 @@ jobs:
       contents: write
     needs:
       - go
-    if:
-      github.event_name == 'push' && startsWith(github.ref,
-      'refs/tags/releases/mcap-cli/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
     defaults:
       run:
         working-directory: go/cli/mcap
@@ -381,9 +369,7 @@ jobs:
           - os: linux
             image: ubuntu-latest
             arch: arm64
-            setup:
-              sudo apt-get update && sudo apt-get install -qq
-              gcc-aarch64-linux-gnu
+            setup: sudo apt-get update && sudo apt-get install -qq gcc-aarch64-linux-gnu
             env:
               CC: aarch64-linux-gnu-gcc
               CXX: aarch64-linux-gnu-g++
@@ -432,9 +418,7 @@ jobs:
   update-homebrew-formula:
     needs:
       - go-release-cli
-    if:
-      github.event_name == 'push' && startsWith(github.ref,
-      'refs/tags/releases/mcap-cli/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
     runs-on: ubuntu-latest
     steps:
       - name: Extract version
@@ -463,12 +447,8 @@ jobs:
       - uses: swift-actions/setup-swift@v1
         with:
           swift-version: "5.6"
-      - run:
-          docker run -t --rm -v $(pwd):/work -w /work
-          ghcr.io/realm/swiftlint:0.49.1
-      - run:
-          docker run -t --rm -v $(pwd):/work
-          ghcr.io/nicklockwood/swiftformat:0.49.18 --lint /work
+      - run: docker run -t --rm -v $(pwd):/work -w /work ghcr.io/realm/swiftlint:0.49.1
+      - run: docker run -t --rm -v $(pwd):/work ghcr.io/nicklockwood/swiftformat:0.49.18 --lint /work
       - run: swift build
       - run: swift test
 
@@ -491,7 +471,5 @@ jobs:
       - run: cargo build
       - run: cargo test
       - name: "publish to crates.io"
-        if:
-          github.event_name == 'push' && startsWith(github.ref,
-          'refs/tags/releases/rust/v')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/rust/v')
         run: cargo publish --token ${{ secrets.RUST_CRATES_IO_TOKEN }}
