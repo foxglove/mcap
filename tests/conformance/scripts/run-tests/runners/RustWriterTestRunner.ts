@@ -1,8 +1,7 @@
 import { exec } from "child_process";
-import { isEqual } from "lodash";
 import { join } from "path";
 import { promisify } from "util";
-import { TestFeatures, TestVariant } from "variants/types";
+import { TestVariant } from "variants/types";
 
 import { WriteTestRunner } from "./TestRunner";
 
@@ -24,14 +23,7 @@ export default class RustWriterTestRunner extends WriteTestRunner {
     return stdout as unknown as Uint8Array;
   }
 
-  supportsVariant(variant: TestVariant): boolean {
-    if (variant.records.some((rec) => rec.type === "Message")) {
-      return isEqual(
-        [...variant.features],
-        [TestFeatures.UseChunks, TestFeatures.UseSummaryOffset],
-      );
-    }
-
+  supportsVariant(_variant: TestVariant): boolean {
     return false;
   }
 }

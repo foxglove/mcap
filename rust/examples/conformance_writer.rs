@@ -6,8 +6,12 @@ mod conformance_writer_spec;
 fn write_file(spec: &conformance_writer_spec::WriterSpec) {
     let mut tmp = tempfile::NamedTempFile::new().expect("Couldn't open file");
     let tmp_path = tmp.path().to_owned();
-    let mut writer =
-        mcap::Writer::new(std::io::BufWriter::new(&mut tmp)).expect("Couldn't create writer");
+    let out_buffer = std::io::BufWriter::new(&mut tmp);
+    let mut writer = mcap::WriteOptions::new()
+        .compression(None)
+        .profile("")
+        .create(out_buffer)
+        .expect("Couldn't create writer");
 
     let mut channels = HashMap::<u16, mcap::Channel>::new();
     let mut schemas = HashMap::<u64, mcap::Schema>::new();
@@ -45,6 +49,9 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                     .add_channel(&channel)
                     .expect("Couldn't write channel");
                 channels.insert(id, channel);
+            }
+            "ChunkIndex" => {
+                // written automatically
             }
             "DataEnd" => {
                 let data_section_crc = record.get_field_u32("data_section_crc");
