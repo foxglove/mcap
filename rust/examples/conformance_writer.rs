@@ -6,14 +6,8 @@ mod conformance_writer_spec;
 fn write_file(spec: &conformance_writer_spec::WriterSpec) {
     let mut tmp = tempfile::NamedTempFile::new().expect("Couldn't open file");
     let tmp_path = tmp.path().to_owned();
-    let mut writer = mcap::Writer::with_options(
-        std::io::BufWriter::new(&mut tmp),
-        mcap::WriteOptions {
-            compression: None,
-            profile: String::from(""),
-        },
-    )
-    .expect("Couldn't create writer");
+    let mut writer =
+        mcap::Writer::new(std::io::BufWriter::new(&mut tmp)).expect("Couldn't create writer");
 
     let mut channels = HashMap::<u16, mcap::Channel>::new();
     let mut schemas = HashMap::<u64, mcap::Schema>::new();
