@@ -24,9 +24,7 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
       primary: "black"
-  font:
-    text: IBM Plex Sans
-    code: IBM Plex Mono
+  font: false # Fonts are configured in theme/main.html
 
 plugins:
   - social
