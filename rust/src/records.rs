@@ -14,7 +14,6 @@ use std::{
 
 use binrw::io::{Read, Seek, Write};
 use binrw::*;
-use serde::{Deserialize, Serialize};
 
 /// Opcodes for MCAP file records.
 ///
@@ -44,30 +43,26 @@ pub mod op {
 /// For records with large slices of binary data (schemas, messages, chunks...),
 /// we use a [`CoW`](std::borrow::Cow) that can either borrow directly from the mapped file,
 /// or hold its own buffer if it was decompressed from a chunk.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub enum Record<'a> {
     Header(Header),
     Footer(Footer),
     Schema {
-        #[serde(flatten)]
         header: SchemaHeader,
         data: Cow<'a, [u8]>,
     },
     Channel(Channel),
     Message {
-        #[serde(flatten)]
         header: MessageHeader,
         data: Cow<'a, [u8]>,
     },
     Chunk {
-        #[serde(flatten)]
         header: ChunkHeader,
         data: Cow<'a, [u8]>,
     },
     MessageIndex(MessageIndex),
     ChunkIndex(ChunkIndex),
     Attachment {
-        #[serde(flatten)]
         header: AttachmentHeader,
         data: Cow<'a, [u8]>,
     },
@@ -171,7 +166,7 @@ fn write_vec<W: binrw::io::Write + binrw::io::Seek, T: binrw::BinWrite<Args = ()
     Ok(())
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct Header {
     #[br(map = |s: McapString| s.inner )]
     #[bw(write_with = write_string)]
@@ -182,14 +177,14 @@ pub struct Header {
     pub library: String,
 }
 
-#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, BinRead, BinWrite)]
 pub struct Footer {
     pub summary_start: u64,
     pub summary_offset_start: u64,
     pub summary_crc: u32,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct SchemaHeader {
     pub id: u16,
 
@@ -304,7 +299,7 @@ where
     Ok(parsed)
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct Channel {
     pub id: u16,
     pub schema_id: u16,
@@ -332,7 +327,7 @@ pub fn nanos_to_system_time(n: u64) -> SystemTime {
     UNIX_EPOCH + Duration::from_nanos(n)
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct MessageHeader {
     pub channel_id: u16,
     pub sequence: u32,
@@ -342,7 +337,7 @@ pub struct MessageHeader {
     pub publish_time: u64,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct ChunkHeader {
     pub message_start_time: u64,
 
@@ -359,14 +354,14 @@ pub struct ChunkHeader {
     pub compressed_size: u64,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, BinRead, BinWrite)]
 pub struct MessageIndexEntry {
     pub log_time: u64,
 
     pub offset: u64,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct MessageIndex {
     pub channel_id: u16,
 
@@ -375,7 +370,7 @@ pub struct MessageIndex {
     pub records: Vec<MessageIndexEntry>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct ChunkIndex {
     pub message_start_time: u64,
 
@@ -400,7 +395,7 @@ pub struct ChunkIndex {
     pub uncompressed_size: u64,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct AttachmentHeader {
     pub log_time: u64,
 
@@ -415,7 +410,7 @@ pub struct AttachmentHeader {
     pub media_type: String,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct AttachmentIndex {
     pub offset: u64,
 
@@ -436,7 +431,7 @@ pub struct AttachmentIndex {
     pub media_type: String,
 }
 
-#[derive(Debug, Default, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct Statistics {
     pub message_count: u64,
     pub schema_count: u16,
@@ -454,7 +449,7 @@ pub struct Statistics {
     pub channel_message_counts: BTreeMap<u16, u64>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct Metadata {
     #[br(map = |s: McapString| s.inner )]
     #[bw(write_with = write_string)]
@@ -465,7 +460,7 @@ pub struct Metadata {
     pub metadata: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct MetadataIndex {
     pub offset: u64,
 
@@ -476,14 +471,14 @@ pub struct MetadataIndex {
     pub name: String,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, BinRead, BinWrite)]
 pub struct SummaryOffset {
     pub group_opcode: u8,
     pub group_start: u64,
     pub group_length: u64,
 }
 
-#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, BinRead, BinWrite, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, BinRead, BinWrite)]
 pub struct DataEnd {
     pub data_section_crc: u32,
 }
