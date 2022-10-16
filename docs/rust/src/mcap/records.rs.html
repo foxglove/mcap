@@ -524,11 +524,6 @@
 <span id="524">524</span>
 <span id="525">525</span>
 <span id="526">526</span>
-<span id="527">527</span>
-<span id="528">528</span>
-<span id="529">529</span>
-<span id="530">530</span>
-<span id="531">531</span>
 </pre><pre class="rust"><code><span class="doccomment">//! Raw records parsed from an MCAP file</span>
 <span class="doccomment">//!</span>
 <span class="doccomment">//! See &lt;https://github.com/foxglove/mcap/tree/main/docs/specification&gt;</span>
@@ -545,7 +540,6 @@
 
 <span class="kw">use</span> <span class="ident">binrw::io</span>::{<span class="ident">Read</span>, <span class="ident">Seek</span>, <span class="ident">Write</span>};
 <span class="kw">use</span> <span class="ident">binrw</span>::<span class="kw-2">*</span>;
-<span class="kw">use</span> <span class="ident">serde</span>::{<span class="ident">Deserialize</span>, <span class="ident">Serialize</span>};
 
 <span class="doccomment">/// Opcodes for MCAP file records.</span>
 <span class="doccomment">///</span>
@@ -575,30 +569,26 @@
 <span class="doccomment">/// For records with large slices of binary data (schemas, messages, chunks...),</span>
 <span class="doccomment">/// we use a [`CoW`](std::borrow::Cow) that can either borrow directly from the mapped file,</span>
 <span class="doccomment">/// or hold its own buffer if it was decompressed from a chunk.</span>
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>)]</span>
 <span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">Record</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
     <span class="ident">Header</span>(<span class="ident">Header</span>),
     <span class="ident">Footer</span>(<span class="ident">Footer</span>),
     <span class="ident">Schema</span> {
-        <span class="attribute">#[<span class="ident">serde</span>(<span class="ident">flatten</span>)]</span>
         <span class="ident">header</span>: <span class="ident">SchemaHeader</span>,
         <span class="ident">data</span>: <span class="ident">Cow</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, [<span class="ident">u8</span>]<span class="op">&gt;</span>,
     },
     <span class="ident">Channel</span>(<span class="ident">Channel</span>),
     <span class="ident">Message</span> {
-        <span class="attribute">#[<span class="ident">serde</span>(<span class="ident">flatten</span>)]</span>
         <span class="ident">header</span>: <span class="ident">MessageHeader</span>,
         <span class="ident">data</span>: <span class="ident">Cow</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, [<span class="ident">u8</span>]<span class="op">&gt;</span>,
     },
     <span class="ident">Chunk</span> {
-        <span class="attribute">#[<span class="ident">serde</span>(<span class="ident">flatten</span>)]</span>
         <span class="ident">header</span>: <span class="ident">ChunkHeader</span>,
         <span class="ident">data</span>: <span class="ident">Cow</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, [<span class="ident">u8</span>]<span class="op">&gt;</span>,
     },
     <span class="ident">MessageIndex</span>(<span class="ident">MessageIndex</span>),
     <span class="ident">ChunkIndex</span>(<span class="ident">ChunkIndex</span>),
     <span class="ident">Attachment</span> {
-        <span class="attribute">#[<span class="ident">serde</span>(<span class="ident">flatten</span>)]</span>
         <span class="ident">header</span>: <span class="ident">AttachmentHeader</span>,
         <span class="ident">data</span>: <span class="ident">Cow</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, [<span class="ident">u8</span>]<span class="op">&gt;</span>,
     },
@@ -702,7 +692,7 @@
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Header</span> {
     <span class="attribute">#[<span class="ident">br</span>(<span class="ident">map</span> <span class="op">=</span> <span class="op">|</span><span class="ident">s</span>: <span class="ident">McapString</span><span class="op">|</span> <span class="ident">s</span>.<span class="ident">inner</span> )]</span>
     <span class="attribute">#[<span class="ident">bw</span>(<span class="ident">write_with</span> <span class="op">=</span> <span class="ident">write_string</span>)]</span>
@@ -713,14 +703,14 @@
     <span class="kw">pub</span> <span class="ident">library</span>: <span class="ident">String</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Default</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Default</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Footer</span> {
     <span class="kw">pub</span> <span class="ident">summary_start</span>: <span class="ident">u64</span>,
     <span class="kw">pub</span> <span class="ident">summary_offset_start</span>: <span class="ident">u64</span>,
     <span class="kw">pub</span> <span class="ident">summary_crc</span>: <span class="ident">u32</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">SchemaHeader</span> {
     <span class="kw">pub</span> <span class="ident">id</span>: <span class="ident">u16</span>,
 
@@ -835,7 +825,7 @@
     <span class="prelude-val">Ok</span>(<span class="ident">parsed</span>)
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Channel</span> {
     <span class="kw">pub</span> <span class="ident">id</span>: <span class="ident">u16</span>,
     <span class="kw">pub</span> <span class="ident">schema_id</span>: <span class="ident">u16</span>,
@@ -863,7 +853,7 @@
     <span class="ident">UNIX_EPOCH</span> <span class="op">+</span> <span class="ident">Duration::from_nanos</span>(<span class="ident">n</span>)
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Copy</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Copy</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">MessageHeader</span> {
     <span class="kw">pub</span> <span class="ident">channel_id</span>: <span class="ident">u16</span>,
     <span class="kw">pub</span> <span class="ident">sequence</span>: <span class="ident">u32</span>,
@@ -873,7 +863,7 @@
     <span class="kw">pub</span> <span class="ident">publish_time</span>: <span class="ident">u64</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">ChunkHeader</span> {
     <span class="kw">pub</span> <span class="ident">message_start_time</span>: <span class="ident">u64</span>,
 
@@ -890,14 +880,14 @@
     <span class="kw">pub</span> <span class="ident">compressed_size</span>: <span class="ident">u64</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">MessageIndexEntry</span> {
     <span class="kw">pub</span> <span class="ident">log_time</span>: <span class="ident">u64</span>,
 
     <span class="kw">pub</span> <span class="ident">offset</span>: <span class="ident">u64</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">MessageIndex</span> {
     <span class="kw">pub</span> <span class="ident">channel_id</span>: <span class="ident">u16</span>,
 
@@ -906,7 +896,7 @@
     <span class="kw">pub</span> <span class="ident">records</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">MessageIndexEntry</span><span class="op">&gt;</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">ChunkIndex</span> {
     <span class="kw">pub</span> <span class="ident">message_start_time</span>: <span class="ident">u64</span>,
 
@@ -931,7 +921,7 @@
     <span class="kw">pub</span> <span class="ident">uncompressed_size</span>: <span class="ident">u64</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">AttachmentHeader</span> {
     <span class="kw">pub</span> <span class="ident">log_time</span>: <span class="ident">u64</span>,
 
@@ -946,7 +936,7 @@
     <span class="kw">pub</span> <span class="ident">media_type</span>: <span class="ident">String</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">AttachmentIndex</span> {
     <span class="kw">pub</span> <span class="ident">offset</span>: <span class="ident">u64</span>,
 
@@ -967,7 +957,7 @@
     <span class="kw">pub</span> <span class="ident">media_type</span>: <span class="ident">String</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Default</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Default</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Statistics</span> {
     <span class="kw">pub</span> <span class="ident">message_count</span>: <span class="ident">u64</span>,
     <span class="kw">pub</span> <span class="ident">schema_count</span>: <span class="ident">u16</span>,
@@ -985,7 +975,7 @@
     <span class="kw">pub</span> <span class="ident">channel_message_counts</span>: <span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">u16</span>, <span class="ident">u64</span><span class="op">&gt;</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Metadata</span> {
     <span class="attribute">#[<span class="ident">br</span>(<span class="ident">map</span> <span class="op">=</span> <span class="op">|</span><span class="ident">s</span>: <span class="ident">McapString</span><span class="op">|</span> <span class="ident">s</span>.<span class="ident">inner</span> )]</span>
     <span class="attribute">#[<span class="ident">bw</span>(<span class="ident">write_with</span> <span class="op">=</span> <span class="ident">write_string</span>)]</span>
@@ -996,7 +986,7 @@
     <span class="kw">pub</span> <span class="ident">metadata</span>: <span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">String</span>, <span class="ident">String</span><span class="op">&gt;</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">MetadataIndex</span> {
     <span class="kw">pub</span> <span class="ident">offset</span>: <span class="ident">u64</span>,
 
@@ -1007,14 +997,14 @@
     <span class="kw">pub</span> <span class="ident">name</span>: <span class="ident">String</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">SummaryOffset</span> {
     <span class="kw">pub</span> <span class="ident">group_opcode</span>: <span class="ident">u8</span>,
     <span class="kw">pub</span> <span class="ident">group_start</span>: <span class="ident">u64</span>,
     <span class="kw">pub</span> <span class="ident">group_length</span>: <span class="ident">u64</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Default</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>, <span class="ident">Serialize</span>, <span class="ident">Deserialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Default</span>, <span class="ident">Clone</span>, <span class="ident">Copy</span>, <span class="ident">Eq</span>, <span class="ident">PartialEq</span>, <span class="ident">BinRead</span>, <span class="ident">BinWrite</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">DataEnd</span> {
     <span class="kw">pub</span> <span class="ident">data_section_crc</span>: <span class="ident">u32</span>,
 }
