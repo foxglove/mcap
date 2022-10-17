@@ -14,7 +14,7 @@ use tempfile::tempfile;
 fn demo_round_trip() -> Result<()> {
     use mcap::records::op;
 
-    let mapped = map_mcap("../testdata/mcap/demo.mcap")?;
+    let mapped = map_mcap("tests/data/compressed.mcap")?;
 
     let messages = mcap::MessageStream::new(&mapped)?;
 
@@ -122,7 +122,7 @@ fn demo_round_trip() -> Result<()> {
 
 #[test]
 fn demo_random_chunk_access() -> Result<()> {
-    let mapped = map_mcap("../testdata/mcap/demo.mcap")?;
+    let mapped = map_mcap("tests/data/compressed.mcap")?;
 
     let summary = mcap::Summary::read(&mapped)?.unwrap();
 
