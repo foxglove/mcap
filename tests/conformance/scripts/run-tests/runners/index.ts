@@ -6,6 +6,7 @@ import KaitaiStructReaderTestRunner from "./KaitaiStructReaderTestRunner";
 import PythonStreamedReaderTestRunner from "./PythonStreamedReaderTestRunner";
 import PythonWriterTestRunner from "./PythonWriterTestRunner";
 import RustReaderTestRunner from "./RustReaderTestRunner";
+import RustWriterTestRunner from "./RustWriterTestRunner";
 import SwiftIndexedReaderTestRunner from "./SwiftIndexedReaderTestRunner";
 import SwiftStreamedReaderTestRunner from "./SwiftStreamedReaderTestRunner";
 import SwiftWriterTestRunner from "./SwiftWriterTestRunner";
@@ -25,6 +26,7 @@ const runners: readonly (ReadTestRunner | WriteTestRunner)[] = [
   new TypescriptStreamedReaderTestRunner(),
   new TypescriptWriterTestRunner(),
   new RustReaderTestRunner(),
+  new RustWriterTestRunner(),
   new SwiftWriterTestRunner(),
   new SwiftStreamedReaderTestRunner(),
   new SwiftIndexedReaderTestRunner(),
