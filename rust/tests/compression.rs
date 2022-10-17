@@ -10,7 +10,7 @@ use memmap::Mmap;
 use tempfile::tempfile;
 
 fn round_trip(comp: Option<mcap::Compression>) -> Result<()> {
-    let mapped = map_mcap("../testdata/mcap/demo.mcap")?;
+    let mapped = map_mcap("tests/data/compressed.mcap")?;
 
     let mut tmp = tempfile()?;
     let mut writer = mcap::WriteOptions::new()
