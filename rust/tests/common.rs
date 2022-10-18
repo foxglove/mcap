@@ -13,8 +13,8 @@ pub fn map_mcap<P: AsRef<Utf8Path>>(p: P) -> Result<Mmap> {
 #[allow(dead_code)]
 pub fn mcap_test_file() -> Result<Mmap> {
     if cfg!(feature = "zstd") {
-        return map_mcap("tests/data/compressed.mcap");
+        map_mcap("tests/data/compressed.mcap")
     } else {
-        return map_mcap("tests/data/uncompressed.mcap");
+        map_mcap("tests/data/uncompressed.mcap")
     }
 }
