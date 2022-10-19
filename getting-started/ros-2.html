@@ -400,6 +400,13 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#record-with-mcap" class="md-nav__link">
+    Record with MCAP
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#convert-to-mcap" class="md-nav__link">
     Convert to MCAP
   </a>
@@ -1052,6 +1059,13 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#record-with-mcap" class="md-nav__link">
+    Record with MCAP
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#convert-to-mcap" class="md-nav__link">
     Convert to MCAP
   </a>
@@ -1140,6 +1154,20 @@
 
 
 <h1 id="ros-2">ROS 2</h1>
+<h2 id="record-with-mcap">Record with MCAP</h2>
+<p>ROS2 supports recording directly to MCAP using the <a href="https://github.com/ros-tooling/rosbag2_storage_mcap">rosbag2 MCAP storage plugin</a>. To get started, install the plugin:</p>
+<div class="highlight"><pre><span></span><code>$ sudo apt-get install ros-$ROS_DISTRO-rosbag2-storage-mcap
+</code></pre></div>
+<p>Set your storage ID to <code>mcap</code> when recording:</p>
+<div class="highlight"><pre><span></span><code>$ ros2 bag record -s mcap --all
+</code></pre></div>
+<p>You can also customize <a href="https://github.com/ros-tooling/rosbag2_storage_mcap#writer-configuration">MCAP writer options</a> such as compression and chunk size using storage options:</p>
+<div class="highlight"><pre><span></span><code>$ cat &lt;&lt; EOF &gt; my_storage_config.yaml
+compression: &quot;Lz4&quot;
+compressionLevel: &quot;Fastest&quot;
+EOF
+$ ros2 bag record -s mcap --all --storage-config-file my_storage_config.yaml
+</code></pre></div>
 <h2 id="convert-to-mcap">Convert to MCAP</h2>
 <h3 id="using-the-mcap-cli-tool">Using the <code>mcap</code> CLI tool</h3>
 <p>To convert your existing ROS 2 db3 files into MCAP files, <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap#installing">install the mcap CLI tool</a> and run the following command:</p>
