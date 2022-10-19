@@ -4,6 +4,30 @@ description: Read, write, and visualize MCAP files containing ROS 2 data.
 
 # ROS 2
 
+## Record with MCAP
+
+ROS2 supports recording directly to MCAP using the [rosbag2 MCAP storage plugin](https://github.com/ros-tooling/rosbag2_storage_mcap). To get started, install the plugin:
+
+```
+$ sudo apt-get install ros-$ROS_DISTRO-rosbag2-storage-mcap
+```
+
+Set your storage ID to `mcap` when recording:
+
+```
+$ ros2 bag record -s mcap --all
+```
+
+You can also customize [MCAP writer options](https://github.com/ros-tooling/rosbag2_storage_mcap#writer-configuration) such as compression and chunk size using storage options:
+
+```
+$ cat << EOF > my_storage_config.yaml
+compression: "Lz4"
+compressionLevel: "Fastest"
+EOF
+$ ros2 bag record -s mcap --all --storage-config-file my_storage_config.yaml
+```
+
 ## Convert to MCAP
 
 ### Using the `mcap` CLI tool
