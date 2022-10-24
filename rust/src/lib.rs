@@ -135,9 +135,9 @@ pub type McapResult<T> = Result<T, McapError>;
 pub const MAGIC: &[u8] = &[0x89, b'M', b'C', b'A', b'P', 0x30, b'\r', b'\n'];
 
 /// Compression options for chunks of channels, schemas, and messages in an MCAP file
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone)]
 pub enum Compression {
-    #[default]
+    #[cfg(feature = "zstd")]
     Zstd,
     Lz4,
 }
