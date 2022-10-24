@@ -334,9 +334,9 @@
 <span class="kw">pub</span> <span class="kw">const</span> <span class="ident">MAGIC</span>: <span class="kw-2">&amp;</span>[<span class="ident">u8</span>] <span class="op">=</span> <span class="kw-2">&amp;</span>[<span class="number">0x89</span>, <span class="string">b&#39;M&#39;</span>, <span class="string">b&#39;C&#39;</span>, <span class="string">b&#39;A&#39;</span>, <span class="string">b&#39;P&#39;</span>, <span class="number">0x30</span>, <span class="string">b&#39;\r&#39;</span>, <span class="string">b&#39;\n&#39;</span>];
 
 <span class="doccomment">/// Compression options for chunks of channels, schemas, and messages in an MCAP file</span>
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Copy</span>, <span class="ident">Clone</span>, <span class="ident">Default</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Copy</span>, <span class="ident">Clone</span>)]</span>
 <span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">Compression</span> {
-    <span class="attribute">#[<span class="ident">default</span>]</span>
+    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
     <span class="ident">Zstd</span>,
     <span class="ident">Lz4</span>,
 }

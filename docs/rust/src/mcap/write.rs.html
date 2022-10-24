@@ -813,6 +813,15 @@
 <span id="813">813</span>
 <span id="814">814</span>
 <span id="815">815</span>
+<span id="816">816</span>
+<span id="817">817</span>
+<span id="818">818</span>
+<span id="819">819</span>
+<span id="820">820</span>
+<span id="821">821</span>
+<span id="822">822</span>
+<span id="823">823</span>
+<span id="824">824</span>
 </pre><pre class="rust"><code><span class="doccomment">//! Write MCAP files</span>
 
 <span class="kw">use</span> <span class="ident">std</span>::{
@@ -927,7 +936,10 @@
 <span class="kw">impl</span> <span class="ident">Default</span> <span class="kw">for</span> <span class="ident">WriteOptions</span> {
     <span class="kw">fn</span> <span class="ident">default</span>() -&gt; <span class="self">Self</span> {
         <span class="self">Self</span> {
+            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
             <span class="ident">compression</span>: <span class="prelude-val">Some</span>(<span class="ident">Compression::Zstd</span>),
+            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>))]</span>
+            <span class="ident">compression</span>: <span class="prelude-val">None</span>,
             <span class="ident">profile</span>: <span class="ident">String::new</span>(),
         }
     }
@@ -1423,6 +1435,7 @@
 
 <span class="kw">enum</span> <span class="ident">Compressor</span><span class="op">&lt;</span><span class="ident">W</span>: <span class="ident">Write</span><span class="op">&gt;</span> {
     <span class="ident">Null</span>(<span class="ident">W</span>),
+    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
     <span class="ident">Zstd</span>(<span class="ident">zstd::Encoder</span><span class="op">&lt;</span><span class="lifetime">&#39;static</span>, <span class="ident">W</span><span class="op">&gt;</span>),
     <span class="ident">Lz4</span>(<span class="ident">lz4::Encoder</span><span class="op">&lt;</span><span class="ident">W</span><span class="op">&gt;</span>),
 }
@@ -1431,6 +1444,7 @@
     <span class="kw">fn</span> <span class="ident">finish</span>(<span class="self">self</span>) -&gt; <span class="ident">io::Result</span><span class="op">&lt;</span><span class="ident">W</span><span class="op">&gt;</span> {
         <span class="prelude-val">Ok</span>(<span class="kw">match</span> <span class="self">self</span> {
             <span class="ident">Compressor::Null</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>,
+            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
             <span class="ident">Compressor::Zstd</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">finish</span>()<span class="question-mark">?</span>,
             <span class="ident">Compressor::Lz4</span>(<span class="ident">w</span>) =&gt; {
                 <span class="kw">let</span> (<span class="ident">w</span>, <span class="ident">err</span>) <span class="op">=</span> <span class="ident">w</span>.<span class="ident">finish</span>();
@@ -1445,6 +1459,7 @@
     <span class="kw">fn</span> <span class="ident">write</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">buf</span>: <span class="kw-2">&amp;</span>[<span class="ident">u8</span>]) -&gt; <span class="ident">io::Result</span><span class="op">&lt;</span><span class="ident">usize</span><span class="op">&gt;</span> {
         <span class="kw">match</span> <span class="self">self</span> {
             <span class="ident">Compressor::Null</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">write</span>(<span class="ident">buf</span>),
+            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
             <span class="ident">Compressor::Zstd</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">write</span>(<span class="ident">buf</span>),
             <span class="ident">Compressor::Lz4</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">write</span>(<span class="ident">buf</span>),
         }
@@ -1453,6 +1468,7 @@
     <span class="kw">fn</span> <span class="ident">flush</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>) -&gt; <span class="ident">io::Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">match</span> <span class="self">self</span> {
             <span class="ident">Compressor::Null</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">flush</span>(),
+            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
             <span class="ident">Compressor::Zstd</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">flush</span>(),
             <span class="ident">Compressor::Lz4</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">flush</span>(),
         }
@@ -1474,6 +1490,7 @@
         <span class="ident">op_and_len</span>(<span class="kw-2">&amp;mut</span> <span class="ident">writer</span>, <span class="ident">op::CHUNK</span>, <span class="op">!</span><span class="number">0</span>)<span class="question-mark">?</span>;
 
         <span class="kw">let</span> <span class="ident">compression_name</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">compression</span> {
+            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
             <span class="prelude-val">Some</span>(<span class="ident">Compression::Zstd</span>) =&gt; <span class="string">&quot;zstd&quot;</span>,
             <span class="prelude-val">Some</span>(<span class="ident">Compression::Lz4</span>) =&gt; <span class="string">&quot;lz4&quot;</span>,
             <span class="prelude-val">None</span> =&gt; <span class="string">&quot;&quot;</span>,
@@ -1492,6 +1509,7 @@
         <span class="kw">let</span> <span class="ident">stream_start</span> <span class="op">=</span> <span class="ident">writer</span>.<span class="ident">stream_position</span>()<span class="question-mark">?</span>;
 
         <span class="kw">let</span> <span class="ident">compressor</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">compression</span> {
+            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
             <span class="prelude-val">Some</span>(<span class="ident">Compression::Zstd</span>) =&gt; {
                 <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">enc</span> <span class="op">=</span> <span class="ident">zstd::Encoder::new</span>(<span class="ident">writer</span>, <span class="number">0</span>)<span class="question-mark">?</span>;
                 <span class="ident">enc</span>.<span class="ident">multithread</span>(<span class="ident">num_cpus::get_physical</span>() <span class="kw">as</span> <span class="ident">u32</span>)<span class="question-mark">?</span>;

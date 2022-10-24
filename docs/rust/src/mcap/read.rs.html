@@ -1188,6 +1188,12 @@
 <span id="1188">1188</span>
 <span id="1189">1189</span>
 <span id="1190">1190</span>
+<span id="1191">1191</span>
+<span id="1192">1192</span>
+<span id="1193">1193</span>
+<span id="1194">1194</span>
+<span id="1195">1195</span>
+<span id="1196">1196</span>
 </pre><pre class="rust"><code><span class="doccomment">//! Read MCAP files</span>
 <span class="doccomment">//!</span>
 <span class="doccomment">//! MCAPs are read from a byte slice instead of a [`Read`] trait object.</span>
@@ -1456,12 +1462,18 @@
 <span class="kw">impl</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> <span class="ident">ChunkReader</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">header</span>: <span class="ident">records::ChunkHeader</span>, <span class="ident">data</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> [<span class="ident">u8</span>]) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">decompressor</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">header</span>.<span class="ident">compression</span>.<span class="ident">as_str</span>() {
+            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
             <span class="string">&quot;zstd&quot;</span> =&gt; <span class="ident">ChunkDecompressor::Compressed</span>(<span class="prelude-val">Some</span>(<span class="ident">CountingCrcReader::new</span>(<span class="ident">Box::new</span>(
                 <span class="ident">zstd::Decoder::new</span>(<span class="ident">data</span>)<span class="question-mark">?</span>,
             )))),
+
+            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>))]</span>
+            <span class="string">&quot;zstd&quot;</span> =&gt; <span class="macro">panic!</span>(<span class="string">&quot;Unsupported compression format: zstd&quot;</span>),
+
             <span class="string">&quot;lz4&quot;</span> =&gt; <span class="ident">ChunkDecompressor::Compressed</span>(<span class="prelude-val">Some</span>(<span class="ident">CountingCrcReader::new</span>(<span class="ident">Box::new</span>(
                 <span class="ident">lz4::Decoder::new</span>(<span class="ident">data</span>)<span class="question-mark">?</span>,
             )))),
+
             <span class="string">&quot;&quot;</span> =&gt; {
                 <span class="kw">if</span> <span class="ident">header</span>.<span class="ident">uncompressed_size</span> <span class="op">!</span><span class="op">=</span> <span class="ident">header</span>.<span class="ident">compressed_size</span> {
                     <span class="macro">warn!</span>(
