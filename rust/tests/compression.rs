@@ -10,7 +10,7 @@ use memmap::Mmap;
 use tempfile::tempfile;
 
 fn round_trip(comp: Option<mcap::Compression>) -> Result<()> {
-    let mapped = map_mcap("tests/data/compressed.mcap")?;
+    let mapped = mcap_test_file()?;
 
     let mut tmp = tempfile()?;
     let mut writer = mcap::WriteOptions::new()
@@ -43,6 +43,7 @@ fn uncompressed_round_trip() -> Result<()> {
     round_trip(None)
 }
 
+#[cfg(feature = "zstd")]
 #[test]
 fn zstd_round_trip() -> Result<()> {
     round_trip(Some(mcap::Compression::Zstd))

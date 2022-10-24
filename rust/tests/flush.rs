@@ -11,7 +11,7 @@ use tempfile::tempfile;
 
 #[test]
 fn flush_and_cut_chunks() -> Result<()> {
-    let mapped = map_mcap("tests/data/compressed.mcap")?;
+    let mapped = mcap_test_file()?;
 
     let messages = mcap::MessageStream::new(&mapped)?;
 
