@@ -3,7 +3,6 @@
 #include <iostream>
 #include <lz4frame.h>
 #include <lz4hc.h>
-
 #include <zstd.h>
 #include <zstd_errors.h>
 
@@ -352,17 +351,24 @@ void McapWriter::open(std::ostream& stream, const McapWriterOptions& options) {
   open(*streamOutput_, options);
 }
 
+void McapWriter::closeLastChunk() {
+  if (!opened_ || !output_) {
+    return;
+  }
+  auto& fileOutput = *output_;
+  auto* chunkWriter = getChunkWriter();
+  if (chunkWriter && !chunkWriter->empty()) {
+    writeChunk(fileOutput, *chunkWriter);
+  }
+}
+
 void McapWriter::close() {
   if (!opened_ || !output_) {
     return;
   }
-  auto* chunkWriter = getChunkWriter();
-  auto& fileOutput = *output_;
+  closeLastChunk();
 
-  // Check if there is an open chunk that needs to be closed
-  if (chunkWriter && !chunkWriter->empty()) {
-    writeChunk(fileOutput, *chunkWriter);
-  }
+  auto& fileOutput = *output_;
 
   // Write the Data End record
   write(fileOutput, DataEnd{fileOutput.crc()});
