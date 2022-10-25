@@ -401,6 +401,12 @@ public:
    */
   IWritable* dataSink();
 
+  /**
+   * @brief finishes the current chunk in progress and writes it to the file, if a chunk
+   * is in progress.
+   */
+  void closeLastChunk();
+
   // The following static methods are used for serialization of records and
   // primitives to an output stream. They are not intended to be used directly
   // unless you are implementing a lower level writer or tests
