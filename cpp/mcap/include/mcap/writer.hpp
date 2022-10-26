@@ -149,21 +149,19 @@ private:
 
 /**
  * @brief Implements the IWritable interface used by McapWriter by wrapping a
- * FILE* pointer created by fopen() and a write buffer.
+ * FILE* pointer created by fopen().
  */
 class FileWriter final : public IWritable {
 public:
   ~FileWriter() override;
 
-  Status open(std::string_view filename, size_t bufferCapacity = 1024);
+  Status open(std::string_view filename);
 
   void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
   uint64_t size() const override;
 
 private:
-  std::vector<std::byte> buffer_;
-  size_t bufferCapacity_;
   std::FILE* file_ = nullptr;
   uint64_t size_ = 0;
 };
