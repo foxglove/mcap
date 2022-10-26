@@ -121,18 +121,18 @@ The `ros1` profile describes how to create MCAP files for [ROS 1](https://wiki.r
 
 #### Header
 
-- `profile`: MUST contain `ros1`
+- `profile`: MUST be `ros1`
 
 #### Channel
 
-- `message_encoding`: MUST contain `ros`
+- `message_encoding`: MUST be `ros1`
 - `metadata` keys:
   - `callerid` (optional, string)
   - `latching` (optional, bool stringified as "true" or "false")
 
 #### Schema
 
-- `encoding`: MUST contain `ros1msg`
+- `encoding`: MUST be `ros1msg`
 
 ### ROS2
 
@@ -140,14 +140,14 @@ The `ros2` profile describes how to create MCAP files for [ROS 2](https://docs.r
 
 #### Header
 
-- `profile`: MUST contain `ros2`
+- `profile`: MUST be `ros2`
 
 #### Channel
 
-- `message_encoding`: MUST contain `cdr`
+- `message_encoding`: MUST be `cdr`
 - `metadata`:
   - `offered_qos_profiles` (required, string)
 
 #### Schema
 
-- `encoding`: MUST contain either `ros2msg` or `ros2idl`
+- `encoding`: MUST be either `ros2msg` or `ros2idl`
