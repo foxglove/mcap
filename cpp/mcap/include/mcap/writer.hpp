@@ -155,7 +155,7 @@ class FileWriter final : public IWritable {
 public:
   ~FileWriter() override;
 
-  Status open(std::string_view filename, size_t bufferCapacity = 1024);
+  Status open(std::string_view filename, size_t bufferCapacity = 16384);
 
   void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;

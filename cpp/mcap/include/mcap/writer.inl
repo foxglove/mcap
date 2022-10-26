@@ -45,6 +45,10 @@ Status FileWriter::open(std::string_view filename, size_t bufferCapacity) {
     const auto msg = internal::StrCat("failed to open file \"", filename, "\" for writing");
     return Status(StatusCode::OpenFailed, msg);
   }
+  if (setvbuf(file_, NULL, _IONBF, 0) != 0) {
+    const auto msg = internal::StrCat("failed to update buffer size for \"", filename, "\"");
+    return Status(StatusCode::OpenFailed, msg);
+  }
   bufferCapacity_ = bufferCapacity;
   buffer_.reserve(bufferCapacity);
   return StatusCode::Success;
