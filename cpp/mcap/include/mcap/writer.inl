@@ -38,50 +38,29 @@ FileWriter::~FileWriter() {
   end();
 }
 
-Status FileWriter::open(std::string_view filename, size_t bufferCapacity) {
+Status FileWriter::open(std::string_view filename) {
   end();
   file_ = std::fopen(filename.data(), "wb");
   if (!file_) {
     const auto msg = internal::StrCat("failed to open file \"", filename, "\" for writing");
     return Status(StatusCode::OpenFailed, msg);
   }
-  bufferCapacity_ = bufferCapacity;
-  buffer_.reserve(bufferCapacity);
   return StatusCode::Success;
 }
 
 void FileWriter::handleWrite(const std::byte* data, uint64_t size) {
   assert(file_);
-
-  // If this will overflow the buffer, flush it
-  if (buffer_.size() > 0 && buffer_.size() + size > bufferCapacity_) {
-    const size_t written = std::fwrite(buffer_.data(), 1, buffer_.size(), file_);
-    (void)written;
-    assert(written == buffer_.size());
-    buffer_.clear();
-  }
-  // Append to the buffer if it will fit, otherwise directly write
-  if (buffer_.size() + size <= bufferCapacity_) {
-    buffer_.insert(buffer_.end(), data, data + size);
-  } else {
-    const size_t written = std::fwrite(data, 1, size, file_);
-    (void)written;
-    assert(written == size);
-  }
-
+  const size_t written = std::fwrite(data, 1, size, file_);
+  (void)written;
+  assert(written == size);
   size_ += size;
 }
 
 void FileWriter::end() {
   if (file_) {
-    if (buffer_.size() > 0) {
-      std::fwrite(buffer_.data(), 1, buffer_.size(), file_);
-    }
-
     std::fclose(file_);
     file_ = nullptr;
   }
-  buffer_.clear();
   size_ = 0;
 }
 
