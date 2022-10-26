@@ -125,7 +125,7 @@ The `ros1` profile describes how to create MCAP files for [ROS 1](https://wiki.r
 
 #### Channel
 
-- `message_encoding`: MUST contain `ros`
+- `message_encoding`: MUST contain `ros1`
 - `metadata` keys:
   - `callerid` (optional, string)
   - `latching` (optional, bool stringified as "true" or "false")
