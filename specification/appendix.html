@@ -1592,11 +1592,11 @@
 <p>The <code>ros1</code> profile describes how to create MCAP files for <a href="https://wiki.ros.org/Distributions">ROS 1</a>.</p>
 <h4 id="header">Header</h4>
 <ul>
-<li><code>profile</code>: MUST contain <code>ros1</code></li>
+<li><code>profile</code>: MUST be <code>ros1</code></li>
 </ul>
 <h4 id="channel">Channel</h4>
 <ul>
-<li><code>message_encoding</code>: MUST contain <code>ros</code></li>
+<li><code>message_encoding</code>: MUST be <code>ros1</code></li>
 <li><code>metadata</code> keys:<ul>
 <li><code>callerid</code> (optional, string)</li>
 <li><code>latching</code> (optional, bool stringified as &ldquo;true&rdquo; or &ldquo;false&rdquo;)</li>
@@ -1605,17 +1605,17 @@
 </ul>
 <h4 id="schema">Schema</h4>
 <ul>
-<li><code>encoding</code>: MUST contain <code>ros1msg</code></li>
+<li><code>encoding</code>: MUST be <code>ros1msg</code></li>
 </ul>
 <h3 id="ros2">ROS2</h3>
 <p>The <code>ros2</code> profile describes how to create MCAP files for <a href="https://docs.ros.org/">ROS 2</a>.</p>
 <h4 id="header_1">Header</h4>
 <ul>
-<li><code>profile</code>: MUST contain <code>ros2</code></li>
+<li><code>profile</code>: MUST be <code>ros2</code></li>
 </ul>
 <h4 id="channel_1">Channel</h4>
 <ul>
-<li><code>message_encoding</code>: MUST contain <code>cdr</code></li>
+<li><code>message_encoding</code>: MUST be <code>cdr</code></li>
 <li><code>metadata</code>:<ul>
 <li><code>offered_qos_profiles</code> (required, string)</li>
 </ul>
@@ -1623,7 +1623,7 @@
 </ul>
 <h4 id="schema_1">Schema</h4>
 <ul>
-<li><code>encoding</code>: MUST contain either <code>ros2msg</code> or <code>ros2idl</code></li>
+<li><code>encoding</code>: MUST be either <code>ros2msg</code> or <code>ros2idl</code></li>
 </ul>
 
 
