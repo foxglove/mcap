@@ -36,17 +36,18 @@ function roundUp(numToRound: number, multiple: number) {
   }
 }
 const scriptParameters = {
-  mcapTimeLength: 5000, //ms
-  gridMessageFrequency: 10, //hz
+  mcapTimeLength: 3000, //ms
+  gridMessageFrequency: 5, //hz
 };
 
 const gridParameters = {
   cell_size: { x: 10, y: 10 },
-  column_count: 1024,
-  row_count: 1024,
+  column_count: 256,
+  row_count: 256,
   cell_stride: 4,
   row_stride: 0,
 };
+
 gridParameters.row_stride = roundUp(gridParameters.column_count * gridParameters.cell_stride, 2);
 console.log(`row stride ${gridParameters.row_stride}`);
 
@@ -56,7 +57,7 @@ interface GridDataFuncParams {
   i: number;
   rows: number;
   cols: number;
-  z: number;
+  time: number;
 }
 
 const fieldDataFuncs = {
@@ -95,7 +96,7 @@ function makeNewGridFromParamsWithoutData() {
   return defaultGrid;
 }
 
-function makeDataForGridFields(grid: Omit<Grid, "data">, row_count: number, zFactor: number) {
+function addGridData(grid: Omit<Grid, "data">, row_count: number, time: number) {
   const { column_count, fields, cell_stride, row_stride } = grid;
   const data = new Uint8Array(row_stride * row_count);
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -116,7 +117,7 @@ function makeDataForGridFields(grid: Omit<Grid, "data">, row_count: number, zFac
             i,
             rows: row_count,
             cols: column_count,
-            z: zFactor,
+            time,
           });
           view.setFloat32(i + offset, value);
         } else {
@@ -132,18 +133,17 @@ function makeDataForGridFields(grid: Omit<Grid, "data">, row_count: number, zFac
 async function addMessageAtTime(
   mcapFile: McapWriter,
   gridChannelId: number,
-  getMessageData: () => Message["data"],
+  getMessageData: (time: number) => Message["data"],
   time: bigint,
 ): Promise<void> {
-  console.log('getting message');
-  const msgData = Buffer.from(JSON.stringify(getMessageData()));
+  const message = getMessageData(Number(time));
   console.log(`writing message at ${time}`);
   await mcapFile.addMessage({
     channelId: gridChannelId,
     sequence: 0,
     publishTime: time,
     logTime: time,
-    data: msgData,
+    data: message,
   });
 }
 
@@ -154,7 +154,7 @@ async function main() {
 
   const mcapFile = new McapWriter({
     writable: fileHandleWritable,
-    useStatistics: true,
+    useStatistics: false,
     useChunks: true,
     useChunkIndex: true,
   });
@@ -209,12 +209,16 @@ async function main() {
 
   const timeBetweenMessages = 1000 / gridMessageFrequency; // 1s (ms) / frequency
   let currTime = 0;
-  let z = 0;
-  const getGridMessageData = () => {
+  const getGridMessageData = (time: number) => {
+    console.time('generate message')
     const grid = makeNewGridFromParamsWithoutData();
-    makeDataForGridFields(grid, gridParameters.row_count, z);
-    z++;
-    return Buffer.from(JSON.stringify(grid));
+    addGridData(grid, gridParameters.row_count, time);
+    console.timeEnd('generate message');
+
+    console.time('stringify');
+    const data = Buffer.from(JSON.stringify(grid));
+    console.timeEnd('stringify');
+    return data;
   };
   let count = 0;
   const proms = [];
