@@ -25,6 +25,7 @@
     "@foxglove/rosmsg": "3.0.0",
     "@foxglove/rosmsg-serialization": "1.2.3",
     "@foxglove/rosmsg2-serialization": "1.0.4",
+    "@foxglove/schemas": "^0.7.1",
     "@foxglove/tsconfig": "1.1.0",
     "@foxglove/wasm-bz2": "^0.0.4",
     "@mcap/core": "*",
