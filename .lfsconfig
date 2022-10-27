@@ -3,4 +3,4 @@
     # This is here to work around a bug in the Swift Package Manager which prevents
     # it from installing packages when the source repository uses Git LFS.
     # https://forums.swift.org/t/swiftpm-with-git-lfs/42396/4
-    url = https://github.com/foxglove/mcap.git
+    url = https://github.com/foxglove/mcap.git/info/lfs
