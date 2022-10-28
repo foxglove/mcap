@@ -112,13 +112,13 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		rows = append(rows, row)
 	}
 	utils.FormatTable(buf, rows)
-	var attachmentCount, metadataCount uint32
 	if info.Statistics != nil {
-		attachmentCount = info.Statistics.AttachmentCount
-		metadataCount = info.Statistics.MetadataCount
+		fmt.Fprintf(buf, "attachments: %d\n", info.Statistics.AttachmentCount)
+		fmt.Fprintf(buf, "metadata: %d\n", info.Statistics.MetadataCount)
+	} else {
+		fmt.Fprintf(buf, "attachments: unknown\n")
+		fmt.Fprintf(buf, "metadata: unknown\n")
 	}
-	fmt.Fprintf(buf, "attachments: %d\n", attachmentCount)
-	fmt.Fprintf(buf, "metadata: %d\n", metadataCount)
 	_, err := buf.WriteTo(w)
 	return err
 }
