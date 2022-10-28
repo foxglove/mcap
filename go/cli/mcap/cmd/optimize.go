@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"bytes"
-	"errors"
-	"fmt"
-	"io"
+	"math"
 	"os"
+	"regexp"
 
+	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/spf13/cobra"
 )
@@ -15,156 +15,6 @@ var (
 	optimizeMode   string
 	optimizeTopics []string
 )
-
-func optimize(r io.Reader, w io.Writer, topics map[string]bool) error {
-	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{
-		SkipMagic:   false,
-		ValidateCRC: false,
-		EmitChunks:  false,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to construct lexer: %w", err)
-	}
-	writer, err := mcap.NewWriter(w, &mcap.WriterOptions{
-		IncludeCRC:  true,
-		Chunked:     true,
-		ChunkSize:   4 * 1024 * 1024,
-		Compression: "zstd",
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create writer: %w", err)
-	}
-	attachmentBuffer := bytes.Buffer{}
-	attachmentWriter, err := mcap.NewWriter(&attachmentBuffer, &mcap.WriterOptions{
-		IncludeCRC:  true,
-		Chunked:     true,
-		ChunkSize:   4 * 1024 * 1024,
-		Compression: "zstd",
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create attachment writer: %w", err)
-	}
-	schemas := make(map[uint16]*mcap.Schema)
-	channels := make(map[uint16]*mcap.Channel)
-	buf := make([]byte, 1024)
-	for {
-		tokenType, token, err := lexer.Next(buf)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return fmt.Errorf("failed to pull next record: %w", err)
-		}
-		if len(token) > len(buf) {
-			buf = token
-		}
-		switch tokenType {
-
-		case mcap.TokenHeader:
-			record, err := mcap.ParseHeader(token)
-			if err != nil {
-				return fmt.Errorf("failed to parse header: %w", err)
-			}
-			err = writer.WriteHeader(record)
-			if err != nil {
-				return fmt.Errorf("failed to write header to optimized mcap: %w", err)
-			}
-			err = attachmentWriter.WriteHeader(record)
-			if err != nil {
-				return fmt.Errorf("failed to write header to preload attachment: %w", err)
-			}
-		case mcap.TokenSchema:
-			record, err := mcap.ParseSchema(token)
-			if err != nil {
-				return fmt.Errorf("failed to parse schema: %w", err)
-			}
-			if _, ok := schemas[record.ID]; !ok {
-				err := writer.WriteSchema(record)
-				if err != nil {
-					return fmt.Errorf("failed to write schema: %w", err)
-				}
-				schemas[record.ID] = record
-			}
-		case mcap.TokenChannel:
-			record, err := mcap.ParseChannel(token)
-			if err != nil {
-				return fmt.Errorf("failed to parse channel: %w", err)
-			}
-			if _, ok := channels[record.ID]; !ok {
-				err := writer.WriteChannel(record)
-				if err != nil {
-					return fmt.Errorf("failed to write channel: %w", err)
-				}
-				channels[record.ID] = record
-
-				if topics[record.Topic] {
-					err := attachmentWriter.WriteSchema(schemas[record.SchemaID])
-					if err != nil {
-						return fmt.Errorf("failed to write schema to attachment: %w", err)
-					}
-					err = attachmentWriter.WriteChannel(record)
-					if err != nil {
-						return fmt.Errorf("failed to write channel to attachment record", err)
-					}
-				}
-			}
-		case mcap.TokenMessage:
-			record, err := mcap.ParseMessage(token)
-			if err != nil {
-				return fmt.Errorf("failed to parse message: %w", err)
-			}
-			err = writer.WriteMessage(record)
-			if err != nil {
-				return fmt.Errorf("failed to write message: %w", err)
-			}
-
-			if topics[channels[record.ChannelID].Topic] {
-				err := attachmentWriter.WriteMessage(record)
-				if err != nil {
-					return fmt.Errorf("failed to write message to preload attachment: %w", err)
-				}
-			}
-		case mcap.TokenMetadata:
-			record, err := mcap.ParseMetadata(token)
-			if err != nil {
-				return fmt.Errorf("failed to parse metadata: %w", err)
-			}
-			err = writer.WriteMetadata(record)
-			if err != nil {
-				return fmt.Errorf("failed to write metadata: %w", err)
-			}
-		case mcap.TokenAttachment:
-			record, err := mcap.ParseAttachment(token)
-			if err != nil {
-				return fmt.Errorf("failed to parse metadata: %w", err)
-			}
-			err = writer.WriteAttachment(record)
-			if err != nil {
-				return fmt.Errorf("failed to write metadata: %w", err)
-			}
-		default:
-			continue
-		}
-	}
-	err = attachmentWriter.Close()
-	if err != nil {
-		return fmt.Errorf("failed to close attachment writer: %w", err)
-	}
-	err = writer.WriteAttachment(&mcap.Attachment{
-		LogTime:    0,
-		CreateTime: 0,
-		Name:       "preload_topics",
-		Data:       attachmentBuffer.Bytes(),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to write preload_topics attachment: %w", err)
-	}
-	err = writer.Close()
-	if err != nil {
-		return fmt.Errorf("failed to close optimized mcap: %w", err)
-	}
-	return nil
-}
 
 var optimizeCmd = &cobra.Command{
 	Use:   "optimize [file]",
@@ -178,15 +28,35 @@ var optimizeCmd = &cobra.Command{
 		if err != nil {
 			die("failed to open file: %s", err)
 		}
-
-		topics := make(map[string]bool)
+		includeTopics := []regexp.Regexp{}
 		for _, topic := range optimizeTopics {
-			topics[topic] = true
+			re := regexp.MustCompile(topic)
+			includeTopics = append(includeTopics, *re)
 		}
 
-		err = optimize(f, os.Stdout, topics)
+		buf := &bytes.Buffer{}
+		err = filter(f, buf, &filterOpts{
+			includeTopics:     includeTopics,
+			start:             0,
+			end:               math.MaxUint64,
+			compressionFormat: "zstd",
+		})
 		if err != nil {
-			die("failed to optimize mcap: %s", err)
+			die("failed to filter input mcap")
+		}
+		_, err = f.Seek(0, 0)
+		if err != nil {
+			die("failed to seek to input start: %w", err)
+		}
+
+		err = utils.RewriteMCAP(os.Stdout, f, func(w *mcap.Writer) error {
+			return w.WriteAttachment(&mcap.Attachment{
+				Name: "preload_topics",
+				Data: buf.Bytes(),
+			})
+		})
+		if err != nil {
+			die("failed to attach optimized mcap")
 		}
 	},
 }
