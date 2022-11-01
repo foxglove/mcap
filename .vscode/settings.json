@@ -13,6 +13,7 @@
   "cSpell.enabled": true,
 
   "search.exclude": {
+    "**/build": true,
     "**/node_modules": true,
     "tests/conformance/data": true,
     "python/**/build": true,
@@ -39,6 +40,5 @@
 
   // https://github.com/microsoft/vscode-cpptools/issues/722
   "C_Cpp.autoAddFileAssociations": false,
-  "C_Cpp.default.cppStandard": "c++17",
-  "lldb.library": "/Library/Developer/CommandLineTools/Library/PrivateFrameworks/LLDB.framework"
+  "C_Cpp.default.cppStandard": "c++17"
 }
