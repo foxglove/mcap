@@ -53,13 +53,13 @@ std::string SerializeFdSet(const google::protobuf::Descriptor* toplevelDescripto
   while (!toAdd.empty()) {
     const google::protobuf::FileDescriptor* next = toAdd.front();
     toAdd.pop();
-    next->CopyTo(fdSet.add_file());
+    if (added.find(next->name()) == added.end()) {
+      next->CopyTo(fdSet.add_file());
+    }
     added.insert(next->name());
     for (int i = 0; i < next->dependency_count(); ++i) {
       const auto& dep = next->dependency(i);
-      if (added.find(dep->name()) == added.end()) {
-        toAdd.push(dep);
-      }
+      toAdd.push(dep);
     }
   }
   return fdSet.SerializeAsString();
