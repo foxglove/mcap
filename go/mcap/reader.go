@@ -58,6 +58,7 @@ type Reader struct {
 	l        *Lexer
 	r        io.Reader
 	rs       io.ReadSeeker
+	header   *Header
 	channels map[uint16]*Channel
 }
 
@@ -141,34 +142,14 @@ func (r *Reader) Messages(
 	return r.unindexedIterator(ro.Topics, uint64(ro.Start), uint64(ro.End)), nil
 }
 
-func (r *Reader) readHeader() (*Header, error) {
-	_, err := r.rs.Seek(8, io.SeekStart)
-	if err != nil {
-		return nil, fmt.Errorf("failed to seek to header: %w", err)
-	}
-	buf := make([]byte, 9)
-	_, err = io.ReadFull(r.rs, buf)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read header length: %w", err)
-	}
-	if opcode := buf[0]; opcode != byte(OpHeader) {
-		return nil, fmt.Errorf("unexpected opcode %d in header", opcode)
-	}
-	buf = make([]byte, binary.LittleEndian.Uint64(buf[1:]))
-	_, err = io.ReadFull(r.rs, buf)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read header: %w", err)
-	}
-	return ParseHeader(buf)
+// Get the Header record from this MCAP.
+func (r *Reader) Header() *Header {
+	return r.header
 }
 
 func (r *Reader) Info() (*Info, error) {
-	header, err := r.readHeader()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read header: %w", err)
-	}
 	it := r.indexedMessageIterator(nil, 0, math.MaxUint64, readopts.FileOrder)
-	err = it.parseSummarySection()
+	err := it.parseSummarySection()
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +161,7 @@ func (r *Reader) Info() (*Info, error) {
 		AttachmentIndexes: it.attachmentIndexes,
 		MetadataIndexes:   it.metadataIndexes,
 		Schemas:           it.schemas,
-		Header:            header,
+		Header:            r.header,
 	}, nil
 }
 
@@ -195,10 +176,22 @@ func NewReader(r io.Reader) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
+	token, headerData, err := lexer.Next(nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not read MCAP header when opening reader: %w", err)
+	}
+	if token != TokenHeader {
+		return nil, fmt.Errorf("expected first record in MCAP to be a Header, found %v", headerData)
+	}
+	header, err := ParseHeader(headerData)
+	if err != nil {
+		return nil, err
+	}
 	return &Reader{
 		l:        lexer,
 		r:        r,
 		rs:       rs,
+		header:   header,
 		channels: make(map[uint16]*Channel),
 	}, nil
 }
