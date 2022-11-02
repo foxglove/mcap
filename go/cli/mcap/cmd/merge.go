@@ -14,7 +14,6 @@ import (
 )
 
 var (
-	mergeProfile     string
 	mergeCompression string
 	mergeChunkSize   int64
 	mergeIncludeCRC  bool
@@ -23,7 +22,6 @@ var (
 )
 
 type mergeOpts struct {
-	profile     string
 	compression string
 	chunkSize   int64
 	includeCRC  bool
@@ -125,16 +123,17 @@ func (m *mcapMerger) addSchema(w *mcap.Writer, inputID int, schema *mcap.Schema)
 	return newSchema.ID, nil
 }
 
-func buildIterator(r io.Reader) (mcap.MessageIterator, error) {
-	reader, err := mcap.NewReader(r)
-	if err != nil {
-		return nil, err
+func outputProfile(profiles []string) string {
+	if len(profiles) == 0 {
+		return ""
 	}
-	iterator, err := reader.Messages(readopts.UsingIndex(false))
-	if err != nil {
-		return nil, err
+	firstProfile := profiles[0]
+	for _, profile := range profiles {
+		if profile != firstProfile {
+			return ""
+		}
 	}
-	return iterator, nil
+	return firstProfile
 }
 
 func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
@@ -147,14 +146,12 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 	if err != nil {
 		return fmt.Errorf("failed to create writer: %w", err)
 	}
-	err = writer.WriteHeader(&mcap.Header{
-		Profile: m.opts.profile,
-	})
 	if err != nil {
 		return fmt.Errorf("failed to write header: %w", err)
 	}
 
 	iterators := make([]mcap.MessageIterator, len(inputs))
+	profiles := make([]string, len(inputs))
 	pq := utils.NewPriorityQueue(nil)
 
 	// for each input reader, initialize an mcap reader and read the first
@@ -162,10 +159,21 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 	// renumbered IDs, and load the message (with renumbered IDs) into the
 	// priority queue.
 	for inputID, inputReader := range inputs {
-		iterator, err := buildIterator(inputReader)
+		reader, err := mcap.NewReader(inputReader)
 		if err != nil {
-			return fmt.Errorf("failed to build iterator for input %d: %w", inputID, err)
+			return err
 		}
+		profiles[inputID] = reader.Header().Profile
+		iterator, err := reader.Messages(readopts.UsingIndex(false))
+		if err != nil {
+			return err
+		}
+		iterators[inputID] = iterator
+	}
+	if err := writer.WriteHeader(&mcap.Header{Profile: outputProfile(profiles)}); err != nil {
+		return err
+	}
+	for inputID, iterator := range iterators {
 		schema, channel, message, err := iterator.Next(nil)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -182,8 +190,6 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 		if err != nil {
 			return fmt.Errorf("failed to add initial channel for input %d: %w", inputID, err)
 		}
-		iterators[inputID] = iterator
-
 		// push the first message onto the priority queue
 		heap.Push(pq, utils.NewTaggedMessage(inputID, message))
 	}
@@ -252,7 +258,6 @@ var mergeCmd = &cobra.Command{
 			readers = append(readers, f)
 		}
 		opts := mergeOpts{
-			profile:     mergeProfile,
 			compression: mergeCompression,
 			chunkSize:   mergeChunkSize,
 			includeCRC:  mergeIncludeCRC,
@@ -313,12 +318,5 @@ func init() {
 		"",
 		true,
 		"chunk the output file",
-	)
-	mergeCmd.PersistentFlags().StringVarP(
-		&mergeProfile,
-		"profile",
-		"",
-		"",
-		"profile to record in output header (default: empty string)",
 	)
 }

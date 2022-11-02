@@ -16,7 +16,7 @@ func prepInput(t *testing.T, w io.Writer, schemaID uint16, channelID uint16, top
 	})
 	assert.Nil(t, err)
 
-	assert.Nil(t, writer.WriteHeader(&mcap.Header{}))
+	assert.Nil(t, writer.WriteHeader(&mcap.Header{Profile: "testprofile"}))
 	assert.Nil(t, writer.WriteSchema(&mcap.Schema{
 		ID: schemaID,
 	}))
@@ -51,6 +51,7 @@ func TestMCAPMerging(t *testing.T) {
 		// output should now be a well-formed mcap
 		reader, err := mcap.NewReader(output)
 		assert.Nil(t, err)
+		assert.Equal(t, reader.Header().Profile, "testprofile")
 		it, err := reader.Messages(readopts.UsingIndex(false))
 		assert.Nil(t, err)
 
@@ -80,6 +81,7 @@ func TestMultiChannelInput(t *testing.T) {
 	assert.Nil(t, merger.mergeInputs(output, []io.Reader{multiChannelInput, buf3}))
 	reader, err := mcap.NewReader(output)
 	assert.Nil(t, err)
+	assert.Equal(t, reader.Header().Profile, "testprofile")
 	it, err := reader.Messages(readopts.UsingIndex(false))
 	assert.Nil(t, err)
 	messages := make(map[string]int)
