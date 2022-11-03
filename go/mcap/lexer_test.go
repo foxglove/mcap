@@ -131,7 +131,7 @@ func TestBadMagic(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			_, err := NewLexer(bytes.NewReader(c.magic))
-			assert.ErrorIs(t, err, ErrBadMagic)
+			assert.IsType(t, &ErrBadMagic{}, err)
 		})
 	}
 }

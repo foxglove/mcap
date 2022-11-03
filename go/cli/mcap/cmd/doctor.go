@@ -124,7 +124,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			die("Failed to read token: %s", err)
+			doctor.fatalf("Failed to read next token: %s", err)
 		}
 		if len(data) > len(msg) {
 			msg = data
@@ -140,8 +140,12 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 				doctor.error("Failed to parse schema:", err)
 			}
 
-			if schema.Encoding == "" && len(schema.Data) > 0 {
-				doctor.error("Schema.data field should not be set when Schema.encoding is empty")
+			if schema.Encoding == "" {
+				if len(schema.Data) == 0 {
+					doctor.warn("Schema with ID: %d, Name: %s has empty Encoding and Data fields", schema.ID, schema.Name)
+				} else {
+					doctor.error("Schema with ID: %d has empty Encoding but Data contains: %s", schema.ID, string(schema.Data))
+				}
 			}
 
 			if schema.ID == 0 {
@@ -230,7 +234,7 @@ func (doctor *mcapDoctor) Examine() error {
 				}
 				break
 			}
-			die("Failed to read token: %s", err)
+			doctor.fatalf("Failed to read next token: %s", err)
 		}
 		lastToken = tokenType
 		if len(data) > len(msg) {
@@ -427,7 +431,7 @@ func (doctor *mcapDoctor) Examine() error {
 	if doctor.errorCount == 0 {
 		return nil
 	} else {
-		return fmt.Errorf("Encountered %d errors", doctor.errorCount)
+		return fmt.Errorf("encountered %d errors", doctor.errorCount)
 	}
 }
 
