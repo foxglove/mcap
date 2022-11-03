@@ -263,7 +263,7 @@ func (doctor *mcapDoctor) Examine() error {
 
 			if schema.Encoding == "" {
 				if len(schema.Data) == 0 {
-					doctor.warn("Schema with ID: %d, Name: %d has empty Encoding and Data fields", schema.ID, schema.Name)
+					doctor.warn("Schema with ID: %d, Name: %s has empty Encoding and Data fields", schema.ID, schema.Name)
 				} else {
 					doctor.error("Schema with ID: %d has empty Encoding but Data contains: %s", schema.ID, string(schema.Data))
 				}
