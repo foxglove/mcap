@@ -261,8 +261,12 @@ func (doctor *mcapDoctor) Examine() error {
 				doctor.error("Failed to parse schema:", err)
 			}
 
-			if schema.Encoding == "" && len(schema.Data) > 0 {
-				doctor.error("Schema.data field should not be set when Schema.encoding is empty")
+			if schema.Encoding == "" {
+				if len(schema.Data) == 0 {
+					doctor.warn("Schema with ID: %d, Name: %d has empty Encoding and Data fields", schema.ID, schema.Name)
+				} else {
+					doctor.error("Schema with ID: %d has empty Encoding but Data contains: %s", schema.ID, string(schema.Data))
+				}
 			}
 
 			if schema.ID == 0 {
