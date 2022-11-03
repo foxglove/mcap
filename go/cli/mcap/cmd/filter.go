@@ -204,13 +204,16 @@ func filter(
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
-			if opts.recover && errors.Is(err, io.ErrUnexpectedEOF) {
-				fmt.Println("Input file was truncated.")
-				return nil
-			}
-			if opts.recover && token == mcap.TokenInvalidChunk {
-				fmt.Printf("Invalid chunk encountered, skipping: %s\n", err)
-				continue
+			if opts.recover {
+				var expected *mcap.ErrTruncatedRecord
+				if errors.As(err, &expected) {
+					fmt.Println(expected.Error())
+					return nil
+				}
+				if token == mcap.TokenInvalidChunk {
+					fmt.Printf("Invalid chunk encountered, skipping: %s\n", err)
+					continue
+				}
 			}
 			return err
 		}

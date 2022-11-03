@@ -26,8 +26,42 @@ func (e *errInvalidChunkCrc) Error() string {
 	return fmt.Sprintf("invalid chunk CRC: %x != %x", e.actual, e.expected)
 }
 
+type ErrTruncatedRecord struct {
+	opcode      OpCode
+	actualLen   int
+	expectedLen uint64
+}
+
+func (e *ErrTruncatedRecord) Error() string {
+	if e.expectedLen == 0 {
+		return fmt.Sprintf(
+			"MCAP truncated in record length field after %s opcode (%x), received %d bytes",
+			e.opcode.String(),
+			byte(e.opcode),
+			e.actualLen,
+		)
+	}
+	return fmt.Sprintf(
+		"MCAP truncated in %s (0x%x) record content with expected length %d, data ended after %d bytes",
+		e.opcode.String(),
+		byte(e.opcode),
+		e.expectedLen,
+		e.actualLen,
+	)
+}
+
+func (e *ErrTruncatedRecord) Unwrap() error {
+	return io.ErrUnexpectedEOF
+}
+
 // ErrBadMagic indicates the lexer has detected invalid magic bytes.
-var ErrBadMagic = errors.New("not an MCAP file")
+type ErrBadMagic struct {
+	actual []byte
+}
+
+func (e *ErrBadMagic) Error() string {
+	return fmt.Sprintf("Invalid magic at start of file, found: %v", e.actual)
+}
 
 const (
 	// TokenHeader represents a header token.
@@ -133,7 +167,7 @@ type Lexer struct {
 // the result.
 func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 	for {
-		_, err := io.ReadFull(l.reader, l.buf[:9])
+		readLength, err := io.ReadFull(l.reader, l.buf[:9])
 		if err != nil {
 			unexpectedEOF := errors.Is(err, io.ErrUnexpectedEOF)
 			eof := errors.Is(err, io.EOF)
@@ -142,8 +176,13 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 				l.reader = l.basereader
 				continue
 			}
-			if unexpectedEOF || eof {
-				return TokenError, nil, io.EOF
+			if unexpectedEOF {
+				if readLength == len(Magic) && bytes.Equal(Magic, l.buf[:len(Magic)]) {
+					return TokenError, nil, io.EOF
+				}
+				// unexpectedEOF indicates at least one byte was read
+				opcode := OpCode(l.buf[0])
+				return TokenError, nil, &ErrTruncatedRecord{opcode: opcode, actualLen: readLength}
 			}
 			return TokenError, nil, err
 		}
@@ -153,7 +192,7 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			return TokenError, nil, ErrRecordTooLarge
 		}
 		if opcode == OpChunk && !l.emitChunks {
-			err := loadChunk(l)
+			err := loadChunk(l, recordLen)
 			if err != nil {
 				if l.emitInvalidChunks {
 					var invalidCrc *errInvalidChunkCrc
@@ -174,7 +213,14 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 		}
 
 		record := p[:recordLen]
-		_, err = io.ReadFull(l.reader, record)
+		readLength, err = io.ReadFull(l.reader, record)
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			return TokenError, nil, &ErrTruncatedRecord{
+				opcode:      opcode,
+				actualLen:   readLength,
+				expectedLen: recordLen,
+			}
+		}
 		if err != nil {
 			return TokenError, nil, err
 		}
@@ -226,11 +272,11 @@ type decoders struct {
 
 func validateMagic(r io.Reader) error {
 	magic := make([]byte, len(Magic))
-	if _, err := io.ReadFull(r, magic); err != nil {
-		return ErrBadMagic
+	if readLen, err := io.ReadFull(r, magic); err != nil {
+		return &ErrBadMagic{actual: magic[:readLen]}
 	}
 	if !bytes.Equal(magic, Magic) {
-		return ErrBadMagic
+		return &ErrBadMagic{actual: magic}
 	}
 	return nil
 }
@@ -270,14 +316,22 @@ func (l *Lexer) setLZ4Decoder(r io.Reader) {
 	l.reader = l.decoders.lz4
 }
 
-func loadChunk(l *Lexer) error {
+func loadChunk(l *Lexer, recordLen uint64) error {
 	if l.inChunk {
 		return ErrNestedChunk
 	}
-	_, err := io.ReadFull(l.reader, l.buf[:8+8+8+4+4])
+	readLength, err := io.ReadFull(l.reader, l.buf[:8+8+8+4+4])
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return &ErrTruncatedRecord{
+			opcode:      OpChunk,
+			expectedLen: recordLen,
+			actualLen:   readLength,
+		}
+	}
 	if err != nil {
 		return err
 	}
+
 	_, offset, err := getUint64(l.buf, 0) // start
 	if err != nil {
 		return fmt.Errorf("failed to read start: %w", err)
@@ -300,7 +354,15 @@ func loadChunk(l *Lexer) error {
 	}
 
 	// read compression and records length into buffer
-	_, err = io.ReadFull(l.reader, l.buf[:compressionLen+8])
+	thisReadLength, err := io.ReadFull(l.reader, l.buf[:compressionLen+8])
+	readLength += thisReadLength
+	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+		return &ErrTruncatedRecord{
+			opcode:      OpChunk,
+			expectedLen: recordLen,
+			actualLen:   readLength,
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("failed to read compression from chunk: %w", err)
 	}
