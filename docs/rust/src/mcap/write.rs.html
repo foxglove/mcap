@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/write.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>write.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled><link rel="stylesheet" type="text/css" href="../../dark.css" disabled><link rel="stylesheet" type="text/css" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../mcap/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../mcap/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../mcap/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/write.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>write.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../normalize.css"><link rel="stylesheet" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../ayu.css" disabled><link rel="stylesheet" href="../../dark.css" disabled><link rel="stylesheet" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../mcap/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../mcap/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../mcap/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
 <span id="2">2</span>
 <span id="3">3</span>
 <span id="4">4</span>
@@ -822,829 +822,829 @@
 <span id="822">822</span>
 <span id="823">823</span>
 <span id="824">824</span>
-</pre><pre class="rust"><code><span class="doccomment">//! Write MCAP files</span>
+</pre><pre class="rust"><code><span class="doccomment">//! Write MCAP files
 
-<span class="kw">use</span> <span class="ident">std</span>::{
-    <span class="ident">borrow::Cow</span>,
-    <span class="ident">collections</span>::{<span class="ident">BTreeMap</span>, <span class="ident">HashMap</span>},
-    <span class="ident">io</span>::{<span class="self">self</span>, <span class="ident">prelude</span>::<span class="kw-2">*</span>, <span class="ident">Cursor</span>, <span class="ident">SeekFrom</span>},
-    <span class="ident">mem::size_of</span>,
+</span><span class="kw">use </span>std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap},
+    io::{<span class="self">self</span>, prelude::<span class="kw-2">*</span>, Cursor, SeekFrom},
+    mem::size_of,
 };
 
-<span class="kw">use</span> <span class="ident">binrw::prelude</span>::<span class="kw-2">*</span>;
-<span class="kw">use</span> <span class="ident">byteorder</span>::{<span class="ident">WriteBytesExt</span>, <span class="ident">LE</span>};
+<span class="kw">use </span>binrw::prelude::<span class="kw-2">*</span>;
+<span class="kw">use </span>byteorder::{WriteBytesExt, LE};
 
-<span class="kw">use</span> <span class="kw">crate</span>::{
-    <span class="ident">io_utils::CountingCrcWriter</span>,
-    <span class="ident">records</span>::{<span class="self">self</span>, <span class="ident">op</span>, <span class="ident">MessageHeader</span>, <span class="ident">Record</span>},
-    <span class="ident">Attachment</span>, <span class="ident">Channel</span>, <span class="ident">Compression</span>, <span class="ident">McapError</span>, <span class="ident">McapResult</span>, <span class="ident">Message</span>, <span class="ident">Schema</span>, <span class="ident">MAGIC</span>,
+<span class="kw">use crate</span>::{
+    io_utils::CountingCrcWriter,
+    records::{<span class="self">self</span>, op, MessageHeader, Record},
+    Attachment, Channel, Compression, McapError, McapResult, Message, Schema, MAGIC,
 };
 
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">records::Metadata</span>;
+<span class="kw">pub use </span>records::Metadata;
 
-<span class="kw">enum</span> <span class="ident">WriteMode</span><span class="op">&lt;</span><span class="ident">W</span>: <span class="ident">Write</span> <span class="op">+</span> <span class="ident">Seek</span><span class="op">&gt;</span> {
-    <span class="ident">Raw</span>(<span class="ident">W</span>),
-    <span class="ident">Chunk</span>(<span class="ident">ChunkWriter</span><span class="op">&lt;</span><span class="ident">W</span><span class="op">&gt;</span>),
+<span class="kw">enum </span>WriteMode&lt;W: Write + Seek&gt; {
+    Raw(W),
+    Chunk(ChunkWriter&lt;W&gt;),
 }
 
-<span class="kw">fn</span> <span class="ident">op_and_len</span><span class="op">&lt;</span><span class="ident">W</span>: <span class="ident">Write</span><span class="op">&gt;</span>(<span class="ident">w</span>: <span class="kw-2">&amp;mut</span> <span class="ident">W</span>, <span class="ident">op</span>: <span class="ident">u8</span>, <span class="ident">len</span>: <span class="ident">usize</span>) -&gt; <span class="ident">io::Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-    <span class="ident">w</span>.<span class="ident">write_u8</span>(<span class="ident">op</span>)<span class="question-mark">?</span>;
-    <span class="ident">w</span>.<span class="ident">write_u64</span>::<span class="op">&lt;</span><span class="ident">LE</span><span class="op">&gt;</span>(<span class="ident">len</span> <span class="kw">as</span> <span class="ident">u64</span>)<span class="question-mark">?</span>;
+<span class="kw">fn </span>op_and_len&lt;W: Write&gt;(w: <span class="kw-2">&amp;mut </span>W, op: u8, len: usize) -&gt; io::Result&lt;()&gt; {
+    w.write_u8(op)<span class="question-mark">?</span>;
+    w.write_u64::&lt;LE&gt;(len <span class="kw">as </span>u64)<span class="question-mark">?</span>;
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="kw">fn</span> <span class="ident">write_record</span><span class="op">&lt;</span><span class="ident">W</span>: <span class="ident">Write</span><span class="op">&gt;</span>(<span class="ident">w</span>: <span class="kw-2">&amp;mut</span> <span class="ident">W</span>, <span class="ident">r</span>: <span class="kw-2">&amp;</span><span class="ident">Record</span>) -&gt; <span class="ident">io::Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-    <span class="comment">// Annoying: our stream isn&#39;t Seek if we&#39;re writing to a compressed chunk stream,</span>
-    <span class="comment">// so we need an intermediate buffer.</span>
-    <span class="macro">macro_rules!</span> <span class="ident">record</span> {
-        (<span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>:<span class="ident">expr</span>, <span class="macro-nonterminal">$</span><span class="macro-nonterminal">b</span>:<span class="ident">ident</span>) =&gt; {{
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">rec_buf</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
-            <span class="ident">Cursor::new</span>(<span class="kw-2">&amp;mut</span> <span class="ident">rec_buf</span>).<span class="ident">write_le</span>(<span class="macro-nonterminal">$</span><span class="macro-nonterminal">b</span>).<span class="ident">unwrap</span>();
+<span class="kw">fn </span>write_record&lt;W: Write&gt;(w: <span class="kw-2">&amp;mut </span>W, r: <span class="kw-2">&amp;</span>Record) -&gt; io::Result&lt;()&gt; {
+    <span class="comment">// Annoying: our stream isn&#39;t Seek if we&#39;re writing to a compressed chunk stream,
+    // so we need an intermediate buffer.
+    </span><span class="macro">macro_rules! </span>record {
+        (<span class="macro-nonterminal">$op</span>:expr, <span class="macro-nonterminal">$b</span>:ident) =&gt; {{
+            <span class="kw">let </span><span class="kw-2">mut </span>rec_buf = Vec::new();
+            Cursor::new(<span class="kw-2">&amp;mut </span>rec_buf).write_le(<span class="macro-nonterminal">$b</span>).unwrap();
 
-            <span class="ident">op_and_len</span>(<span class="ident">w</span>, <span class="macro-nonterminal">$</span><span class="macro-nonterminal">op</span>, <span class="ident">rec_buf</span>.<span class="ident">len</span>())<span class="question-mark">?</span>;
-            <span class="ident">w</span>.<span class="ident">write_all</span>(<span class="kw-2">&amp;</span><span class="ident">rec_buf</span>)<span class="question-mark">?</span>;
+            op_and_len(w, <span class="macro-nonterminal">$op</span>, rec_buf.len())<span class="question-mark">?</span>;
+            w.write_all(<span class="kw-2">&amp;</span>rec_buf)<span class="question-mark">?</span>;
         }};
     }
 
-    <span class="kw">match</span> <span class="ident">r</span> {
-        <span class="ident">Record::Header</span>(<span class="ident">h</span>) =&gt; <span class="macro">record!</span>(<span class="ident">op::HEADER</span>, <span class="ident">h</span>),
-        <span class="ident">Record::Footer</span>(<span class="kw">_</span>) =&gt; {
+    <span class="kw">match </span>r {
+        Record::Header(h) =&gt; <span class="macro">record!</span>(op::HEADER, h),
+        Record::Footer(<span class="kw">_</span>) =&gt; {
             <span class="macro">unreachable!</span>(<span class="string">&quot;Footer handles its own serialization because its CRC is self-referencing&quot;</span>)
         }
-        <span class="ident">Record::Schema</span> { <span class="ident">header</span>, <span class="ident">data</span> } =&gt; {
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">header_buf</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
-            <span class="ident">Cursor::new</span>(<span class="kw-2">&amp;mut</span> <span class="ident">header_buf</span>).<span class="ident">write_le</span>(<span class="ident">header</span>).<span class="ident">unwrap</span>();
+        Record::Schema { header, data } =&gt; {
+            <span class="kw">let </span><span class="kw-2">mut </span>header_buf = Vec::new();
+            Cursor::new(<span class="kw-2">&amp;mut </span>header_buf).write_le(header).unwrap();
 
-            <span class="ident">op_and_len</span>(
-                <span class="ident">w</span>,
-                <span class="ident">op::SCHEMA</span>,
-                <span class="ident">header_buf</span>.<span class="ident">len</span>() <span class="op">+</span> <span class="ident">size_of</span>::<span class="op">&lt;</span><span class="ident">u32</span><span class="op">&gt;</span>() <span class="op">+</span> <span class="ident">data</span>.<span class="ident">len</span>(),
+            op_and_len(
+                w,
+                op::SCHEMA,
+                header_buf.len() + size_of::&lt;u32&gt;() + data.len(),
             )<span class="question-mark">?</span>;
-            <span class="ident">w</span>.<span class="ident">write_all</span>(<span class="kw-2">&amp;</span><span class="ident">header_buf</span>)<span class="question-mark">?</span>;
-            <span class="ident">w</span>.<span class="ident">write_u32</span>::<span class="op">&lt;</span><span class="ident">LE</span><span class="op">&gt;</span>(<span class="ident">data</span>.<span class="ident">len</span>() <span class="kw">as</span> <span class="ident">u32</span>)<span class="question-mark">?</span>;
-            <span class="ident">w</span>.<span class="ident">write_all</span>(<span class="ident">data</span>)<span class="question-mark">?</span>;
+            w.write_all(<span class="kw-2">&amp;</span>header_buf)<span class="question-mark">?</span>;
+            w.write_u32::&lt;LE&gt;(data.len() <span class="kw">as </span>u32)<span class="question-mark">?</span>;
+            w.write_all(data)<span class="question-mark">?</span>;
         }
-        <span class="ident">Record::Channel</span>(<span class="ident">c</span>) =&gt; <span class="macro">record!</span>(<span class="ident">op::CHANNEL</span>, <span class="ident">c</span>),
-        <span class="ident">Record::Message</span> { <span class="ident">header</span>, <span class="ident">data</span> } =&gt; {
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">header_buf</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
-            <span class="ident">Cursor::new</span>(<span class="kw-2">&amp;mut</span> <span class="ident">header_buf</span>).<span class="ident">write_le</span>(<span class="ident">header</span>).<span class="ident">unwrap</span>();
+        Record::Channel(c) =&gt; <span class="macro">record!</span>(op::CHANNEL, c),
+        Record::Message { header, data } =&gt; {
+            <span class="kw">let </span><span class="kw-2">mut </span>header_buf = Vec::new();
+            Cursor::new(<span class="kw-2">&amp;mut </span>header_buf).write_le(header).unwrap();
 
-            <span class="ident">op_and_len</span>(<span class="ident">w</span>, <span class="ident">op::MESSAGE</span>, <span class="ident">header_buf</span>.<span class="ident">len</span>() <span class="op">+</span> <span class="ident">data</span>.<span class="ident">len</span>())<span class="question-mark">?</span>;
-            <span class="ident">w</span>.<span class="ident">write_all</span>(<span class="kw-2">&amp;</span><span class="ident">header_buf</span>)<span class="question-mark">?</span>;
-            <span class="ident">w</span>.<span class="ident">write_all</span>(<span class="ident">data</span>)<span class="question-mark">?</span>;
+            op_and_len(w, op::MESSAGE, header_buf.len() + data.len())<span class="question-mark">?</span>;
+            w.write_all(<span class="kw-2">&amp;</span>header_buf)<span class="question-mark">?</span>;
+            w.write_all(data)<span class="question-mark">?</span>;
         }
-        <span class="ident">Record::Chunk</span> { .. } =&gt; {
+        Record::Chunk { .. } =&gt; {
             <span class="macro">unreachable!</span>(<span class="string">&quot;Chunks handle their own serialization due to seeking shenanigans&quot;</span>)
         }
-        <span class="ident">Record::MessageIndex</span>(<span class="kw">_</span>) =&gt; {
+        Record::MessageIndex(<span class="kw">_</span>) =&gt; {
             <span class="macro">unreachable!</span>(<span class="string">&quot;MessageIndexes handle their own serialization to recycle the buffer between indexes&quot;</span>)
         }
-        <span class="ident">Record::ChunkIndex</span>(<span class="ident">c</span>) =&gt; <span class="macro">record!</span>(<span class="ident">op::CHUNK_INDEX</span>, <span class="ident">c</span>),
-        <span class="ident">Record::Attachment</span> { <span class="ident">header</span>, <span class="ident">data</span> } =&gt; {
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">header_buf</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
-            <span class="ident">Cursor::new</span>(<span class="kw-2">&amp;mut</span> <span class="ident">header_buf</span>).<span class="ident">write_le</span>(<span class="ident">header</span>).<span class="ident">unwrap</span>();
-            <span class="ident">op_and_len</span>(
-                <span class="ident">w</span>,
-                <span class="ident">op::ATTACHMENT</span>,
-                <span class="ident">header_buf</span>.<span class="ident">len</span>() <span class="op">+</span> <span class="ident">size_of</span>::<span class="op">&lt;</span><span class="ident">u64</span><span class="op">&gt;</span>() <span class="op">+</span> <span class="ident">data</span>.<span class="ident">len</span>() <span class="op">+</span> <span class="ident">size_of</span>::<span class="op">&lt;</span><span class="ident">u32</span><span class="op">&gt;</span>(), <span class="comment">/* crc */</span>
-            )<span class="question-mark">?</span>;
+        Record::ChunkIndex(c) =&gt; <span class="macro">record!</span>(op::CHUNK_INDEX, c),
+        Record::Attachment { header, data } =&gt; {
+            <span class="kw">let </span><span class="kw-2">mut </span>header_buf = Vec::new();
+            Cursor::new(<span class="kw-2">&amp;mut </span>header_buf).write_le(header).unwrap();
+            op_and_len(
+                w,
+                op::ATTACHMENT,
+                header_buf.len() + size_of::&lt;u64&gt;() + data.len() + size_of::&lt;u32&gt;(), <span class="comment">/* crc */
+            </span>)<span class="question-mark">?</span>;
 
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">checksummer</span> <span class="op">=</span> <span class="ident">CountingCrcWriter::new</span>(<span class="ident">w</span>);
-            <span class="ident">checksummer</span>.<span class="ident">write_all</span>(<span class="kw-2">&amp;</span><span class="ident">header_buf</span>)<span class="question-mark">?</span>;
-            <span class="ident">checksummer</span>.<span class="ident">write_u64</span>::<span class="op">&lt;</span><span class="ident">LE</span><span class="op">&gt;</span>(<span class="ident">data</span>.<span class="ident">len</span>() <span class="kw">as</span> <span class="ident">u64</span>)<span class="question-mark">?</span>;
-            <span class="ident">checksummer</span>.<span class="ident">write_all</span>(<span class="ident">data</span>)<span class="question-mark">?</span>;
-            <span class="kw">let</span> (<span class="ident">w</span>, <span class="ident">crc</span>) <span class="op">=</span> <span class="ident">checksummer</span>.<span class="ident">finalize</span>();
-            <span class="ident">w</span>.<span class="ident">write_u32</span>::<span class="op">&lt;</span><span class="ident">LE</span><span class="op">&gt;</span>(<span class="ident">crc</span>)<span class="question-mark">?</span>;
+            <span class="kw">let </span><span class="kw-2">mut </span>checksummer = CountingCrcWriter::new(w);
+            checksummer.write_all(<span class="kw-2">&amp;</span>header_buf)<span class="question-mark">?</span>;
+            checksummer.write_u64::&lt;LE&gt;(data.len() <span class="kw">as </span>u64)<span class="question-mark">?</span>;
+            checksummer.write_all(data)<span class="question-mark">?</span>;
+            <span class="kw">let </span>(w, crc) = checksummer.finalize();
+            w.write_u32::&lt;LE&gt;(crc)<span class="question-mark">?</span>;
         }
-        <span class="ident">Record::AttachmentIndex</span>(<span class="ident">ai</span>) =&gt; <span class="macro">record!</span>(<span class="ident">op::ATTACHMENT_INDEX</span>, <span class="ident">ai</span>),
-        <span class="ident">Record::Statistics</span>(<span class="ident">s</span>) =&gt; <span class="macro">record!</span>(<span class="ident">op::STATISTICS</span>, <span class="ident">s</span>),
-        <span class="ident">Record::Metadata</span>(<span class="ident">m</span>) =&gt; <span class="macro">record!</span>(<span class="ident">op::METADATA</span>, <span class="ident">m</span>),
-        <span class="ident">Record::MetadataIndex</span>(<span class="ident">mi</span>) =&gt; <span class="macro">record!</span>(<span class="ident">op::METADATA_INDEX</span>, <span class="ident">mi</span>),
-        <span class="ident">Record::SummaryOffset</span>(<span class="ident">so</span>) =&gt; <span class="macro">record!</span>(<span class="ident">op::SUMMARY_OFFSET</span>, <span class="ident">so</span>),
-        <span class="ident">Record::DataEnd</span>(<span class="ident">eod</span>) =&gt; <span class="macro">record!</span>(<span class="ident">op::DATA_END</span>, <span class="ident">eod</span>),
-        <span class="kw">_</span> =&gt; <span class="macro">todo!</span>(),
+        Record::AttachmentIndex(ai) =&gt; <span class="macro">record!</span>(op::ATTACHMENT_INDEX, ai),
+        Record::Statistics(s) =&gt; <span class="macro">record!</span>(op::STATISTICS, s),
+        Record::Metadata(m) =&gt; <span class="macro">record!</span>(op::METADATA, m),
+        Record::MetadataIndex(mi) =&gt; <span class="macro">record!</span>(op::METADATA_INDEX, mi),
+        Record::SummaryOffset(so) =&gt; <span class="macro">record!</span>(op::SUMMARY_OFFSET, so),
+        Record::DataEnd(eod) =&gt; <span class="macro">record!</span>(op::DATA_END, eod),
+        <span class="kw">_ </span>=&gt; <span class="macro">todo!</span>(),
     };
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>)]</span>
-<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">WriteOptions</span> {
-    <span class="ident">compression</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Compression</span><span class="op">&gt;</span>,
-    <span class="ident">profile</span>: <span class="ident">String</span>,
+<span class="attribute">#[derive(Debug, Clone)]
+</span><span class="kw">pub struct </span>WriteOptions {
+    compression: <span class="prelude-ty">Option</span>&lt;Compression&gt;,
+    profile: String,
 }
 
-<span class="kw">impl</span> <span class="ident">Default</span> <span class="kw">for</span> <span class="ident">WriteOptions</span> {
-    <span class="kw">fn</span> <span class="ident">default</span>() -&gt; <span class="self">Self</span> {
-        <span class="self">Self</span> {
-            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
-            <span class="ident">compression</span>: <span class="prelude-val">Some</span>(<span class="ident">Compression::Zstd</span>),
-            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">not</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>))]</span>
-            <span class="ident">compression</span>: <span class="prelude-val">None</span>,
-            <span class="ident">profile</span>: <span class="ident">String::new</span>(),
+<span class="kw">impl </span>Default <span class="kw">for </span>WriteOptions {
+    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            <span class="attribute">#[cfg(feature = <span class="string">&quot;zstd&quot;</span>)]
+            </span>compression: <span class="prelude-val">Some</span>(Compression::Zstd),
+            <span class="attribute">#[cfg(not(feature = <span class="string">&quot;zstd&quot;</span>))]
+            </span>compression: <span class="prelude-val">None</span>,
+            profile: String::new(),
         }
     }
 }
 
-<span class="kw">impl</span> <span class="ident">WriteOptions</span> {
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>() -&gt; <span class="self">Self</span> {
-        <span class="ident"><span class="self">Self</span>::default</span>()
+<span class="kw">impl </span>WriteOptions {
+    <span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::default()
     }
 
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">compression</span>(<span class="self">self</span>, <span class="ident">compression</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Compression</span><span class="op">&gt;</span>) -&gt; <span class="self">Self</span> {
-        <span class="self">Self</span> {
-            <span class="ident">compression</span>,
-            ..<span class="self">self</span>
-        }
+    <span class="kw">pub fn </span>compression(<span class="self">self</span>, compression: <span class="prelude-ty">Option</span>&lt;Compression&gt;) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            compression,
+            ..<span class="self">self
+        </span>}
     }
 
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">profile</span><span class="op">&lt;</span><span class="ident">S</span>: <span class="ident">Into</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">profile</span>: <span class="ident">S</span>) -&gt; <span class="self">Self</span> {
-        <span class="self">Self</span> {
-            <span class="ident">profile</span>: <span class="ident">profile</span>.<span class="ident">into</span>(),
-            ..<span class="self">self</span>
-        }
+    <span class="kw">pub fn </span>profile&lt;S: Into&lt;String&gt;&gt;(<span class="self">self</span>, profile: S) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            profile: profile.into(),
+            ..<span class="self">self
+        </span>}
     }
 
-    <span class="doccomment">/// Creates a [`Writer`] whch writes to `w` using the given options</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">create</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, <span class="ident">W</span>: <span class="ident">Write</span> <span class="op">+</span> <span class="ident">Seek</span><span class="op">&gt;</span>(<span class="self">self</span>, <span class="ident">w</span>: <span class="ident">W</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span><span class="ident">Writer</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, <span class="ident">W</span><span class="op">&gt;</span><span class="op">&gt;</span> {
-        <span class="ident">Writer::with_options</span>(<span class="ident">w</span>, <span class="self">self</span>)
+    <span class="doccomment">/// Creates a [`Writer`] whch writes to `w` using the given options
+    </span><span class="kw">pub fn </span>create&lt;<span class="lifetime">&#39;a</span>, W: Write + Seek&gt;(<span class="self">self</span>, w: W) -&gt; McapResult&lt;Writer&lt;<span class="lifetime">&#39;a</span>, W&gt;&gt; {
+        Writer::with_options(w, <span class="self">self</span>)
     }
 }
 
-<span class="doccomment">/// Writes an MCAP file to the given [writer](Write).</span>
-<span class="doccomment">///</span>
-<span class="doccomment">/// Users should call [`finish()`](Self::finish) to flush the stream</span>
-<span class="doccomment">/// and check for errors when done; otherwise the result will be unwrapped on drop.</span>
-<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Writer</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, <span class="ident">W</span>: <span class="ident">Write</span> <span class="op">+</span> <span class="ident">Seek</span><span class="op">&gt;</span> {
-    <span class="ident">writer</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">WriteMode</span><span class="op">&lt;</span><span class="ident">W</span><span class="op">&gt;</span><span class="op">&gt;</span>,
-    <span class="ident">compression</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Compression</span><span class="op">&gt;</span>,
-    <span class="ident">schemas</span>: <span class="ident">HashMap</span><span class="op">&lt;</span><span class="ident">Schema</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>, <span class="ident">u16</span><span class="op">&gt;</span>,
-    <span class="ident">channels</span>: <span class="ident">HashMap</span><span class="op">&lt;</span><span class="ident">Channel</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>, <span class="ident">u16</span><span class="op">&gt;</span>,
-    <span class="ident">stats</span>: <span class="ident">records::Statistics</span>,
-    <span class="ident">chunk_indexes</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">records::ChunkIndex</span><span class="op">&gt;</span>,
-    <span class="ident">attachment_indexes</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">records::AttachmentIndex</span><span class="op">&gt;</span>,
-    <span class="ident">metadata_indexes</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">records::MetadataIndex</span><span class="op">&gt;</span>,
+<span class="doccomment">/// Writes an MCAP file to the given [writer](Write).
+///
+/// Users should call [`finish()`](Self::finish) to flush the stream
+/// and check for errors when done; otherwise the result will be unwrapped on drop.
+</span><span class="kw">pub struct </span>Writer&lt;<span class="lifetime">&#39;a</span>, W: Write + Seek&gt; {
+    writer: <span class="prelude-ty">Option</span>&lt;WriteMode&lt;W&gt;&gt;,
+    compression: <span class="prelude-ty">Option</span>&lt;Compression&gt;,
+    schemas: HashMap&lt;Schema&lt;<span class="lifetime">&#39;a</span>&gt;, u16&gt;,
+    channels: HashMap&lt;Channel&lt;<span class="lifetime">&#39;a</span>&gt;, u16&gt;,
+    stats: records::Statistics,
+    chunk_indexes: Vec&lt;records::ChunkIndex&gt;,
+    attachment_indexes: Vec&lt;records::AttachmentIndex&gt;,
+    metadata_indexes: Vec&lt;records::MetadataIndex&gt;,
 }
 
-<span class="kw">impl</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, <span class="ident">W</span>: <span class="ident">Write</span> <span class="op">+</span> <span class="ident">Seek</span><span class="op">&gt;</span> <span class="ident">Writer</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, <span class="ident">W</span><span class="op">&gt;</span> {
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">writer</span>: <span class="ident">W</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="ident"><span class="self">Self</span>::with_options</span>(<span class="ident">writer</span>, <span class="ident">WriteOptions::default</span>())
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;a</span>, W: Write + Seek&gt; Writer&lt;<span class="lifetime">&#39;a</span>, W&gt; {
+    <span class="kw">pub fn </span>new(writer: W) -&gt; McapResult&lt;<span class="self">Self</span>&gt; {
+        <span class="self">Self</span>::with_options(writer, WriteOptions::default())
     }
 
-    <span class="kw">fn</span> <span class="ident">with_options</span>(<span class="kw-2">mut</span> <span class="ident">writer</span>: <span class="ident">W</span>, <span class="ident">opts</span>: <span class="ident">WriteOptions</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="ident">writer</span>.<span class="ident">write_all</span>(<span class="ident">MAGIC</span>)<span class="question-mark">?</span>;
+    <span class="kw">fn </span>with_options(<span class="kw-2">mut </span>writer: W, opts: WriteOptions) -&gt; McapResult&lt;<span class="self">Self</span>&gt; {
+        writer.write_all(MAGIC)<span class="question-mark">?</span>;
 
-        <span class="ident">write_record</span>(
-            <span class="kw-2">&amp;mut</span> <span class="ident">writer</span>,
-            <span class="kw-2">&amp;</span><span class="ident">Record::Header</span>(<span class="ident">records::Header</span> {
-                <span class="ident">profile</span>: <span class="ident">opts</span>.<span class="ident">profile</span>,
-                <span class="ident">library</span>: <span class="ident">String::from</span>(<span class="string">&quot;mcap-rs-&quot;</span>) <span class="op">+</span> <span class="macro">env!</span>(<span class="string">&quot;CARGO_PKG_VERSION&quot;</span>),
+        write_record(
+            <span class="kw-2">&amp;mut </span>writer,
+            <span class="kw-2">&amp;</span>Record::Header(records::Header {
+                profile: opts.profile,
+                library: String::from(<span class="string">&quot;mcap-rs-&quot;</span>) + <span class="macro">env!</span>(<span class="string">&quot;CARGO_PKG_VERSION&quot;</span>),
             }),
         )<span class="question-mark">?</span>;
 
-        <span class="prelude-val">Ok</span>(<span class="self">Self</span> {
-            <span class="ident">writer</span>: <span class="prelude-val">Some</span>(<span class="ident">WriteMode::Raw</span>(<span class="ident">writer</span>)),
-            <span class="ident">compression</span>: <span class="ident">opts</span>.<span class="ident">compression</span>,
-            <span class="ident">schemas</span>: <span class="ident">HashMap::new</span>(),
-            <span class="ident">channels</span>: <span class="ident">HashMap::new</span>(),
-            <span class="ident">stats</span>: <span class="ident">records::Statistics::default</span>(),
-            <span class="ident">chunk_indexes</span>: <span class="ident">Vec::new</span>(),
-            <span class="ident">attachment_indexes</span>: <span class="ident">Vec::new</span>(),
-            <span class="ident">metadata_indexes</span>: <span class="ident">Vec::new</span>(),
+        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
+            writer: <span class="prelude-val">Some</span>(WriteMode::Raw(writer)),
+            compression: opts.compression,
+            schemas: HashMap::new(),
+            channels: HashMap::new(),
+            stats: records::Statistics::default(),
+            chunk_indexes: Vec::new(),
+            attachment_indexes: Vec::new(),
+            metadata_indexes: Vec::new(),
         })
     }
 
-    <span class="doccomment">/// Adds a channel (and its provided schema, if any), returning its ID.</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// Useful with subequent calls to [`write_to_known_channel()`](Self::write_to_known_channel)</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">add_channel</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">chan</span>: <span class="kw-2">&amp;</span><span class="ident">Channel</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span><span class="ident">u16</span><span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">schema_id</span> <span class="op">=</span> <span class="kw">match</span> <span class="kw-2">&amp;</span><span class="ident">chan</span>.<span class="ident">schema</span> {
-            <span class="prelude-val">Some</span>(<span class="ident">s</span>) =&gt; <span class="self">self</span>.<span class="ident">add_schema</span>(<span class="ident">s</span>)<span class="question-mark">?</span>,
-            <span class="prelude-val">None</span> =&gt; <span class="number">0</span>,
+    <span class="doccomment">/// Adds a channel (and its provided schema, if any), returning its ID.
+    ///
+    /// Useful with subequent calls to [`write_to_known_channel()`](Self::write_to_known_channel)
+    </span><span class="kw">pub fn </span>add_channel(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chan: <span class="kw-2">&amp;</span>Channel&lt;<span class="lifetime">&#39;a</span>&gt;) -&gt; McapResult&lt;u16&gt; {
+        <span class="kw">let </span>schema_id = <span class="kw">match </span><span class="kw-2">&amp;</span>chan.schema {
+            <span class="prelude-val">Some</span>(s) =&gt; <span class="self">self</span>.add_schema(s)<span class="question-mark">?</span>,
+            <span class="prelude-val">None </span>=&gt; <span class="number">0</span>,
         };
 
-        <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">id</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">channels</span>.<span class="ident">get</span>(<span class="ident">chan</span>) {
-            <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="kw-2">*</span><span class="ident">id</span>);
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = <span class="self">self</span>.channels.get(chan) {
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="kw-2">*</span>id);
         }
 
-        <span class="self">self</span>.<span class="ident">stats</span>.<span class="ident">channel_count</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
+        <span class="self">self</span>.stats.channel_count += <span class="number">1</span>;
 
-        <span class="kw">let</span> <span class="ident">next_channel_id</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">channels</span>.<span class="ident">len</span>() <span class="kw">as</span> <span class="ident">u16</span>;
-        <span class="macro">assert!</span>(<span class="self">self</span>
-            .<span class="ident">channels</span>
-            .<span class="ident">insert</span>(<span class="ident">chan</span>.<span class="ident">clone</span>(), <span class="ident">next_channel_id</span>)
-            .<span class="ident">is_none</span>());
-        <span class="self">self</span>.<span class="ident">chunkin_time</span>()<span class="question-mark">?</span>
-            .<span class="ident">write_channel</span>(<span class="ident">next_channel_id</span>, <span class="ident">schema_id</span>, <span class="ident">chan</span>)<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(<span class="ident">next_channel_id</span>)
+        <span class="kw">let </span>next_channel_id = <span class="self">self</span>.channels.len() <span class="kw">as </span>u16;
+        <span class="macro">assert!</span>(<span class="self">self
+            </span>.channels
+            .insert(chan.clone(), next_channel_id)
+            .is_none());
+        <span class="self">self</span>.chunkin_time()<span class="question-mark">?
+            </span>.write_channel(next_channel_id, schema_id, chan)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(next_channel_id)
     }
 
-    <span class="kw">fn</span> <span class="ident">add_schema</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">schema</span>: <span class="kw-2">&amp;</span><span class="ident">Schema</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span><span class="ident">u16</span><span class="op">&gt;</span> {
-        <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">id</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">schemas</span>.<span class="ident">get</span>(<span class="ident">schema</span>) {
-            <span class="kw">return</span> <span class="prelude-val">Ok</span>(<span class="kw-2">*</span><span class="ident">id</span>);
+    <span class="kw">fn </span>add_schema(<span class="kw-2">&amp;mut </span><span class="self">self</span>, schema: <span class="kw-2">&amp;</span>Schema&lt;<span class="lifetime">&#39;a</span>&gt;) -&gt; McapResult&lt;u16&gt; {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(id) = <span class="self">self</span>.schemas.get(schema) {
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="kw-2">*</span>id);
         }
 
-        <span class="self">self</span>.<span class="ident">stats</span>.<span class="ident">schema_count</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
+        <span class="self">self</span>.stats.schema_count += <span class="number">1</span>;
 
-        <span class="comment">// Schema IDs cannot be zero, that&#39;s the sentinel value in a channel</span>
-        <span class="comment">// for &quot;no schema&quot;</span>
-        <span class="kw">let</span> <span class="ident">next_schema_id</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">schemas</span>.<span class="ident">len</span>() <span class="kw">as</span> <span class="ident">u16</span> <span class="op">+</span> <span class="number">1</span>;
-        <span class="macro">assert!</span>(<span class="self">self</span>
-            .<span class="ident">schemas</span>
-            .<span class="ident">insert</span>(<span class="ident">schema</span>.<span class="ident">clone</span>(), <span class="ident">next_schema_id</span>)
-            .<span class="ident">is_none</span>());
-        <span class="self">self</span>.<span class="ident">chunkin_time</span>()<span class="question-mark">?</span>.<span class="ident">write_schema</span>(<span class="ident">next_schema_id</span>, <span class="ident">schema</span>)<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(<span class="ident">next_schema_id</span>)
+        <span class="comment">// Schema IDs cannot be zero, that&#39;s the sentinel value in a channel
+        // for &quot;no schema&quot;
+        </span><span class="kw">let </span>next_schema_id = <span class="self">self</span>.schemas.len() <span class="kw">as </span>u16 + <span class="number">1</span>;
+        <span class="macro">assert!</span>(<span class="self">self
+            </span>.schemas
+            .insert(schema.clone(), next_schema_id)
+            .is_none());
+        <span class="self">self</span>.chunkin_time()<span class="question-mark">?</span>.write_schema(next_schema_id, schema)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(next_schema_id)
     }
 
-    <span class="doccomment">/// Write the given message (and its provided channel, if needed).</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">write</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">message</span>: <span class="kw-2">&amp;</span><span class="ident">Message</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">channel_id</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">add_channel</span>(<span class="kw-2">&amp;</span><span class="ident">message</span>.<span class="ident">channel</span>)<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="ident">header</span> <span class="op">=</span> <span class="ident">MessageHeader</span> {
-            <span class="ident">channel_id</span>,
-            <span class="ident">sequence</span>: <span class="ident">message</span>.<span class="ident">sequence</span>,
-            <span class="ident">log_time</span>: <span class="ident">message</span>.<span class="ident">log_time</span>,
-            <span class="ident">publish_time</span>: <span class="ident">message</span>.<span class="ident">publish_time</span>,
+    <span class="doccomment">/// Write the given message (and its provided channel, if needed).
+    </span><span class="kw">pub fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, message: <span class="kw-2">&amp;</span>Message&lt;<span class="lifetime">&#39;a</span>&gt;) -&gt; McapResult&lt;()&gt; {
+        <span class="kw">let </span>channel_id = <span class="self">self</span>.add_channel(<span class="kw-2">&amp;</span>message.channel)<span class="question-mark">?</span>;
+        <span class="kw">let </span>header = MessageHeader {
+            channel_id,
+            sequence: message.sequence,
+            log_time: message.log_time,
+            publish_time: message.publish_time,
         };
-        <span class="kw">let</span> <span class="ident">data</span>: <span class="kw-2">&amp;</span>[<span class="ident">u8</span>] <span class="op">=</span> <span class="kw-2">&amp;</span><span class="ident">message</span>.<span class="ident">data</span>;
-        <span class="self">self</span>.<span class="ident">write_to_known_channel</span>(<span class="kw-2">&amp;</span><span class="ident">header</span>, <span class="ident">data</span>)
+        <span class="kw">let </span>data: <span class="kw-2">&amp;</span>[u8] = <span class="kw-2">&amp;</span>message.data;
+        <span class="self">self</span>.write_to_known_channel(<span class="kw-2">&amp;</span>header, data)
     }
 
-    <span class="doccomment">/// Write a message to an added channel, given its ID.</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// This skips hash lookups of the channel and schema if you already added them.</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">write_to_known_channel</span>(
-        <span class="kw-2">&amp;mut</span> <span class="self">self</span>,
-        <span class="ident">header</span>: <span class="kw-2">&amp;</span><span class="ident">MessageHeader</span>,
-        <span class="ident">data</span>: <span class="kw-2">&amp;</span>[<span class="ident">u8</span>],
-    ) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="comment">// The number of channels should be relatively small,</span>
-        <span class="comment">// do a quick linear search to make sure we&#39;re not being given a bogus ID</span>
-        <span class="kw">if</span> <span class="op">!</span><span class="self">self</span>.<span class="ident">channels</span>.<span class="ident">values</span>().<span class="ident">any</span>(<span class="op">|</span><span class="ident">id</span><span class="op">|</span> <span class="kw-2">*</span><span class="ident">id</span> <span class="op">==</span> <span class="ident">header</span>.<span class="ident">channel_id</span>) {
-            <span class="kw">return</span> <span class="prelude-val">Err</span>(<span class="ident">McapError::UnknownChannel</span>(
-                <span class="ident">header</span>.<span class="ident">sequence</span>,
-                <span class="ident">header</span>.<span class="ident">channel_id</span>,
+    <span class="doccomment">/// Write a message to an added channel, given its ID.
+    ///
+    /// This skips hash lookups of the channel and schema if you already added them.
+    </span><span class="kw">pub fn </span>write_to_known_channel(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        header: <span class="kw-2">&amp;</span>MessageHeader,
+        data: <span class="kw-2">&amp;</span>[u8],
+    ) -&gt; McapResult&lt;()&gt; {
+        <span class="comment">// The number of channels should be relatively small,
+        // do a quick linear search to make sure we&#39;re not being given a bogus ID
+        </span><span class="kw">if </span>!<span class="self">self</span>.channels.values().any(|id| <span class="kw-2">*</span>id == header.channel_id) {
+            <span class="kw">return </span><span class="prelude-val">Err</span>(McapError::UnknownChannel(
+                header.sequence,
+                header.channel_id,
             ));
         }
 
-        <span class="self">self</span>.<span class="ident">stats</span>.<span class="ident">message_count</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
-        <span class="self">self</span>.<span class="ident">stats</span>.<span class="ident">message_start_time</span> <span class="op">=</span> <span class="kw">match</span> <span class="self">self</span>.<span class="ident">stats</span>.<span class="ident">message_start_time</span> {
-            <span class="number">0</span> =&gt; <span class="ident">header</span>.<span class="ident">log_time</span>,
-            <span class="ident">nz</span> =&gt; <span class="ident">nz</span>.<span class="ident">min</span>(<span class="ident">header</span>.<span class="ident">log_time</span>),
+        <span class="self">self</span>.stats.message_count += <span class="number">1</span>;
+        <span class="self">self</span>.stats.message_start_time = <span class="kw">match </span><span class="self">self</span>.stats.message_start_time {
+            <span class="number">0 </span>=&gt; header.log_time,
+            nz =&gt; nz.min(header.log_time),
         };
-        <span class="self">self</span>.<span class="ident">stats</span>.<span class="ident">message_end_time</span> <span class="op">=</span> <span class="kw">match</span> <span class="self">self</span>.<span class="ident">stats</span>.<span class="ident">message_end_time</span> {
-            <span class="number">0</span> =&gt; <span class="ident">header</span>.<span class="ident">log_time</span>,
-            <span class="ident">nz</span> =&gt; <span class="ident">nz</span>.<span class="ident">max</span>(<span class="ident">header</span>.<span class="ident">log_time</span>),
+        <span class="self">self</span>.stats.message_end_time = <span class="kw">match </span><span class="self">self</span>.stats.message_end_time {
+            <span class="number">0 </span>=&gt; header.log_time,
+            nz =&gt; nz.max(header.log_time),
         };
-        <span class="kw-2">*</span><span class="self">self</span>
-            .<span class="ident">stats</span>
-            .<span class="ident">channel_message_counts</span>
-            .<span class="ident">entry</span>(<span class="ident">header</span>.<span class="ident">channel_id</span>)
-            .<span class="ident">or_insert</span>(<span class="number">0</span>) <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
+        <span class="kw-2">*</span><span class="self">self
+            </span>.stats
+            .channel_message_counts
+            .entry(header.channel_id)
+            .or_insert(<span class="number">0</span>) += <span class="number">1</span>;
 
-        <span class="self">self</span>.<span class="ident">chunkin_time</span>()<span class="question-mark">?</span>.<span class="ident">write_message</span>(<span class="ident">header</span>, <span class="ident">data</span>)<span class="question-mark">?</span>;
+        <span class="self">self</span>.chunkin_time()<span class="question-mark">?</span>.write_message(header, data)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">attach</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">attachment</span>: <span class="kw-2">&amp;</span><span class="ident">Attachment</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="self">self</span>.<span class="ident">stats</span>.<span class="ident">attachment_count</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
+    <span class="kw">pub fn </span>attach(<span class="kw-2">&amp;mut </span><span class="self">self</span>, attachment: <span class="kw-2">&amp;</span>Attachment) -&gt; McapResult&lt;()&gt; {
+        <span class="self">self</span>.stats.attachment_count += <span class="number">1</span>;
 
-        <span class="kw">let</span> <span class="ident">header</span> <span class="op">=</span> <span class="ident">records::AttachmentHeader</span> {
-            <span class="ident">log_time</span>: <span class="ident">attachment</span>.<span class="ident">log_time</span>,
-            <span class="ident">create_time</span>: <span class="ident">attachment</span>.<span class="ident">create_time</span>,
-            <span class="ident">name</span>: <span class="ident">attachment</span>.<span class="ident">name</span>.<span class="ident">clone</span>(),
-            <span class="ident">media_type</span>: <span class="ident">attachment</span>.<span class="ident">media_type</span>.<span class="ident">clone</span>(),
+        <span class="kw">let </span>header = records::AttachmentHeader {
+            log_time: attachment.log_time,
+            create_time: attachment.create_time,
+            name: attachment.name.clone(),
+            media_type: attachment.media_type.clone(),
         };
 
-        <span class="comment">// Attachments don&#39;t live in chunks.</span>
-        <span class="kw">let</span> <span class="ident">w</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">finish_chunk</span>()<span class="question-mark">?</span>;
+        <span class="comment">// Attachments don&#39;t live in chunks.
+        </span><span class="kw">let </span>w = <span class="self">self</span>.finish_chunk()<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> <span class="ident">offset</span> <span class="op">=</span> <span class="ident">w</span>.<span class="ident">stream_position</span>()<span class="question-mark">?</span>;
+        <span class="kw">let </span>offset = w.stream_position()<span class="question-mark">?</span>;
 
-        <span class="ident">write_record</span>(
-            <span class="ident">w</span>,
-            <span class="kw-2">&amp;</span><span class="ident">Record::Attachment</span> {
-                <span class="ident">header</span>,
-                <span class="ident">data</span>: <span class="ident">Cow::Borrowed</span>(<span class="kw-2">&amp;</span><span class="ident">attachment</span>.<span class="ident">data</span>),
+        write_record(
+            w,
+            <span class="kw-2">&amp;</span>Record::Attachment {
+                header,
+                data: Cow::Borrowed(<span class="kw-2">&amp;</span>attachment.data),
             },
         )<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> <span class="ident">length</span> <span class="op">=</span> <span class="ident">w</span>.<span class="ident">stream_position</span>()<span class="question-mark">?</span> <span class="op">-</span> <span class="ident">offset</span>;
-        <span class="self">self</span>.<span class="ident">attachment_indexes</span>.<span class="ident">push</span>(<span class="ident">records::AttachmentIndex</span> {
-            <span class="ident">offset</span>,
-            <span class="ident">length</span>,
-            <span class="ident">log_time</span>: <span class="ident">attachment</span>.<span class="ident">log_time</span>,
-            <span class="ident">create_time</span>: <span class="ident">attachment</span>.<span class="ident">create_time</span>,
-            <span class="ident">data_size</span>: <span class="ident">attachment</span>.<span class="ident">data</span>.<span class="ident">len</span>() <span class="kw">as</span> <span class="ident">u64</span>,
-            <span class="ident">name</span>: <span class="ident">attachment</span>.<span class="ident">name</span>.<span class="ident">clone</span>(),
-            <span class="ident">media_type</span>: <span class="ident">attachment</span>.<span class="ident">media_type</span>.<span class="ident">clone</span>(),
+        <span class="kw">let </span>length = w.stream_position()<span class="question-mark">? </span>- offset;
+        <span class="self">self</span>.attachment_indexes.push(records::AttachmentIndex {
+            offset,
+            length,
+            log_time: attachment.log_time,
+            create_time: attachment.create_time,
+            data_size: attachment.data.len() <span class="kw">as </span>u64,
+            name: attachment.name.clone(),
+            media_type: attachment.media_type.clone(),
         });
 
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">write_metadata</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">metadata</span>: <span class="kw-2">&amp;</span><span class="ident">Metadata</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="self">self</span>.<span class="ident">stats</span>.<span class="ident">metadata_count</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
+    <span class="kw">pub fn </span>write_metadata(<span class="kw-2">&amp;mut </span><span class="self">self</span>, metadata: <span class="kw-2">&amp;</span>Metadata) -&gt; McapResult&lt;()&gt; {
+        <span class="self">self</span>.stats.metadata_count += <span class="number">1</span>;
 
-        <span class="kw">let</span> <span class="ident">w</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">finish_chunk</span>()<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="ident">offset</span> <span class="op">=</span> <span class="ident">w</span>.<span class="ident">stream_position</span>()<span class="question-mark">?</span>;
+        <span class="kw">let </span>w = <span class="self">self</span>.finish_chunk()<span class="question-mark">?</span>;
+        <span class="kw">let </span>offset = w.stream_position()<span class="question-mark">?</span>;
 
-        <span class="comment">// Should we specialize this to avoid taking a clone of the map?</span>
-        <span class="ident">write_record</span>(<span class="ident">w</span>, <span class="kw-2">&amp;</span><span class="ident">Record::Metadata</span>(<span class="ident">metadata</span>.<span class="ident">clone</span>()))<span class="question-mark">?</span>;
+        <span class="comment">// Should we specialize this to avoid taking a clone of the map?
+        </span>write_record(w, <span class="kw-2">&amp;</span>Record::Metadata(metadata.clone()))<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> <span class="ident">length</span> <span class="op">=</span> <span class="ident">w</span>.<span class="ident">stream_position</span>()<span class="question-mark">?</span> <span class="op">-</span> <span class="ident">offset</span>;
+        <span class="kw">let </span>length = w.stream_position()<span class="question-mark">? </span>- offset;
 
-        <span class="self">self</span>.<span class="ident">metadata_indexes</span>.<span class="ident">push</span>(<span class="ident">records::MetadataIndex</span> {
-            <span class="ident">offset</span>,
-            <span class="ident">length</span>,
-            <span class="ident">name</span>: <span class="ident">metadata</span>.<span class="ident">name</span>.<span class="ident">clone</span>(),
+        <span class="self">self</span>.metadata_indexes.push(records::MetadataIndex {
+            offset,
+            length,
+            name: metadata.name.clone(),
         });
 
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="doccomment">/// Finishes the current chunk, if we have one, and flushes the underlying</span>
-    <span class="doccomment">/// [writer](Write).</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// We finish the chunk to guarantee that the file can be streamed by future</span>
-    <span class="doccomment">/// readers at least up to this point.</span>
-    <span class="doccomment">/// (The alternative is to just flush the writer mid-chunk.</span>
-    <span class="doccomment">/// But if we did that, and then writing was suddenly interrupted afterwards,</span>
-    <span class="doccomment">/// readers would have to try to recover a half-written chunk,</span>
-    <span class="doccomment">/// probably with an unfinished compresion stream.)</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// Note that lossless compression schemes like LZ4 and Zstd improve</span>
-    <span class="doccomment">/// as they go, so larger chunks will tend to have better compression.</span>
-    <span class="doccomment">/// (Of course, this depends heavily on the entropy of what&#39;s being compressed!</span>
-    <span class="doccomment">/// A stream of zeroes will compress great at any chunk size, and a stream</span>
-    <span class="doccomment">/// of random data will compress terribly at any chunk size.)</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">flush</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="self">self</span>.<span class="ident">finish_chunk</span>()<span class="question-mark">?</span>.<span class="ident">flush</span>()<span class="question-mark">?</span>;
+    <span class="doccomment">/// Finishes the current chunk, if we have one, and flushes the underlying
+    /// [writer](Write).
+    ///
+    /// We finish the chunk to guarantee that the file can be streamed by future
+    /// readers at least up to this point.
+    /// (The alternative is to just flush the writer mid-chunk.
+    /// But if we did that, and then writing was suddenly interrupted afterwards,
+    /// readers would have to try to recover a half-written chunk,
+    /// probably with an unfinished compresion stream.)
+    ///
+    /// Note that lossless compression schemes like LZ4 and Zstd improve
+    /// as they go, so larger chunks will tend to have better compression.
+    /// (Of course, this depends heavily on the entropy of what&#39;s being compressed!
+    /// A stream of zeroes will compress great at any chunk size, and a stream
+    /// of random data will compress terribly at any chunk size.)
+    </span><span class="kw">pub fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; McapResult&lt;()&gt; {
+        <span class="self">self</span>.finish_chunk()<span class="question-mark">?</span>.flush()<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="doccomment">/// `.expect()` message when we go to write and self.writer is `None`,</span>
-    <span class="doccomment">/// which should only happen when [`Writer::finish()`] was called.</span>
-    <span class="kw">const</span> <span class="ident">WHERE_WRITER</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;Trying to write a record on a finished MCAP&quot;</span>;
+    <span class="doccomment">/// `.expect()` message when we go to write and self.writer is `None`,
+    /// which should only happen when [`Writer::finish()`] was called.
+    </span><span class="kw">const </span>WHERE_WRITER: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str = <span class="string">&quot;Trying to write a record on a finished MCAP&quot;</span>;
 
-    <span class="doccomment">/// Starts a new chunk if we haven&#39;t done so already.</span>
-    <span class="kw">fn</span> <span class="ident">chunkin_time</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span><span class="kw-2">&amp;mut</span> <span class="ident">ChunkWriter</span><span class="op">&lt;</span><span class="ident">W</span><span class="op">&gt;</span><span class="op">&gt;</span> {
-        <span class="comment">// Some Rust tricky: we can&#39;t move the writer out of self.writer,</span>
-        <span class="comment">// leave that empty for a bit, and then replace it with a ChunkWriter.</span>
-        <span class="comment">// (That would leave it in an unspecified state if we bailed here!)</span>
-        <span class="comment">// Instead briefly swap it out for a null writer while we set up the chunker</span>
-        <span class="comment">// The writer will only be None if finish() was called.</span>
-        <span class="kw">let</span> <span class="ident">prev_writer</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">writer</span>.<span class="ident">take</span>().<span class="ident">expect</span>(<span class="ident"><span class="self">Self</span>::WHERE_WRITER</span>);
+    <span class="doccomment">/// Starts a new chunk if we haven&#39;t done so already.
+    </span><span class="kw">fn </span>chunkin_time(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; McapResult&lt;<span class="kw-2">&amp;mut </span>ChunkWriter&lt;W&gt;&gt; {
+        <span class="comment">// Some Rust tricky: we can&#39;t move the writer out of self.writer,
+        // leave that empty for a bit, and then replace it with a ChunkWriter.
+        // (That would leave it in an unspecified state if we bailed here!)
+        // Instead briefly swap it out for a null writer while we set up the chunker
+        // The writer will only be None if finish() was called.
+        </span><span class="kw">let </span>prev_writer = <span class="self">self</span>.writer.take().expect(<span class="self">Self</span>::WHERE_WRITER);
 
-        <span class="self">self</span>.<span class="ident">writer</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="kw">match</span> <span class="ident">prev_writer</span> {
-            <span class="ident">WriteMode::Raw</span>(<span class="ident">w</span>) =&gt; {
-                <span class="comment">// It&#39;s chunkin time.</span>
-                <span class="self">self</span>.<span class="ident">stats</span>.<span class="ident">chunk_count</span> <span class="op">+</span><span class="op">=</span> <span class="number">1</span>;
-                <span class="ident">WriteMode::Chunk</span>(<span class="ident">ChunkWriter::new</span>(<span class="ident">w</span>, <span class="self">self</span>.<span class="ident">compression</span>)<span class="question-mark">?</span>)
+        <span class="self">self</span>.writer = <span class="prelude-val">Some</span>(<span class="kw">match </span>prev_writer {
+            WriteMode::Raw(w) =&gt; {
+                <span class="comment">// It&#39;s chunkin time.
+                </span><span class="self">self</span>.stats.chunk_count += <span class="number">1</span>;
+                WriteMode::Chunk(ChunkWriter::new(w, <span class="self">self</span>.compression)<span class="question-mark">?</span>)
             }
-            <span class="ident">chunk</span> =&gt; <span class="ident">chunk</span>,
+            chunk =&gt; chunk,
         });
 
-        <span class="kw">match</span> <span class="kw-2">&amp;mut</span> <span class="self">self</span>.<span class="ident">writer</span> {
-            <span class="prelude-val">Some</span>(<span class="ident">WriteMode::Chunk</span>(<span class="ident">c</span>)) =&gt; <span class="prelude-val">Ok</span>(<span class="ident">c</span>),
-            <span class="kw">_</span> =&gt; <span class="macro">unreachable!</span>(),
+        <span class="kw">match </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.writer {
+            <span class="prelude-val">Some</span>(WriteMode::Chunk(c)) =&gt; <span class="prelude-val">Ok</span>(c),
+            <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
         }
     }
 
-    <span class="doccomment">/// Finish the current chunk, if we have one.</span>
-    <span class="kw">fn</span> <span class="ident">finish_chunk</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span><span class="kw-2">&amp;mut</span> <span class="ident">W</span><span class="op">&gt;</span> {
-        <span class="comment">// See above</span>
-        <span class="kw">let</span> <span class="ident">prev_writer</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">writer</span>.<span class="ident">take</span>().<span class="ident">expect</span>(<span class="ident"><span class="self">Self</span>::WHERE_WRITER</span>);
+    <span class="doccomment">/// Finish the current chunk, if we have one.
+    </span><span class="kw">fn </span>finish_chunk(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; McapResult&lt;<span class="kw-2">&amp;mut </span>W&gt; {
+        <span class="comment">// See above
+        </span><span class="kw">let </span>prev_writer = <span class="self">self</span>.writer.take().expect(<span class="self">Self</span>::WHERE_WRITER);
 
-        <span class="self">self</span>.<span class="ident">writer</span> <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="kw">match</span> <span class="ident">prev_writer</span> {
-            <span class="ident">WriteMode::Chunk</span>(<span class="ident">c</span>) =&gt; {
-                <span class="kw">let</span> (<span class="ident">w</span>, <span class="ident">index</span>) <span class="op">=</span> <span class="ident">c</span>.<span class="ident">finish</span>()<span class="question-mark">?</span>;
-                <span class="self">self</span>.<span class="ident">chunk_indexes</span>.<span class="ident">push</span>(<span class="ident">index</span>);
-                <span class="ident">WriteMode::Raw</span>(<span class="ident">w</span>)
+        <span class="self">self</span>.writer = <span class="prelude-val">Some</span>(<span class="kw">match </span>prev_writer {
+            WriteMode::Chunk(c) =&gt; {
+                <span class="kw">let </span>(w, index) = c.finish()<span class="question-mark">?</span>;
+                <span class="self">self</span>.chunk_indexes.push(index);
+                WriteMode::Raw(w)
             }
-            <span class="ident">raw</span> =&gt; <span class="ident">raw</span>,
+            raw =&gt; raw,
         });
 
-        <span class="kw">match</span> <span class="kw-2">&amp;mut</span> <span class="self">self</span>.<span class="ident">writer</span> {
-            <span class="prelude-val">Some</span>(<span class="ident">WriteMode::Raw</span>(<span class="ident">w</span>)) =&gt; <span class="prelude-val">Ok</span>(<span class="ident">w</span>),
-            <span class="kw">_</span> =&gt; <span class="macro">unreachable!</span>(),
+        <span class="kw">match </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.writer {
+            <span class="prelude-val">Some</span>(WriteMode::Raw(w)) =&gt; <span class="prelude-val">Ok</span>(w),
+            <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
         }
     }
 
-    <span class="doccomment">/// Finishes any current chunk and writes out the rest of the file.</span>
-    <span class="doccomment">///</span>
-    <span class="doccomment">/// Subsequent calls to other methods will panic.</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">finish</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">if</span> <span class="self">self</span>.<span class="ident">writer</span>.<span class="ident">is_none</span>() {
-            <span class="comment">// We already called finish().</span>
-            <span class="comment">// Maybe we&#39;re dropping after the user called it?</span>
-            <span class="kw">return</span> <span class="prelude-val">Ok</span>(());
+    <span class="doccomment">/// Finishes any current chunk and writes out the rest of the file.
+    ///
+    /// Subsequent calls to other methods will panic.
+    </span><span class="kw">pub fn </span>finish(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; McapResult&lt;()&gt; {
+        <span class="kw">if </span><span class="self">self</span>.writer.is_none() {
+            <span class="comment">// We already called finish().
+            // Maybe we&#39;re dropping after the user called it?
+            </span><span class="kw">return </span><span class="prelude-val">Ok</span>(());
         }
 
-        <span class="comment">// Finish any chunk we were working on and update stats, indexes, etc.</span>
-        <span class="self">self</span>.<span class="ident">finish_chunk</span>()<span class="question-mark">?</span>;
+        <span class="comment">// Finish any chunk we were working on and update stats, indexes, etc.
+        </span><span class="self">self</span>.finish_chunk()<span class="question-mark">?</span>;
 
-        <span class="comment">// Grab the writer - self.writer becoming None makes subsequent writes fail.</span>
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">writer</span> <span class="op">=</span> <span class="kw">match</span> <span class="self">self</span>.<span class="ident">writer</span>.<span class="ident">take</span>() {
-            <span class="comment">// We called finish_chunk() above, so we&#39;re back to raw writes for</span>
-            <span class="comment">// the summary section.</span>
-            <span class="prelude-val">Some</span>(<span class="ident">WriteMode::Raw</span>(<span class="ident">w</span>)) =&gt; <span class="ident">w</span>,
-            <span class="kw">_</span> =&gt; <span class="macro">unreachable!</span>(),
+        <span class="comment">// Grab the writer - self.writer becoming None makes subsequent writes fail.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>writer = <span class="kw">match </span><span class="self">self</span>.writer.take() {
+            <span class="comment">// We called finish_chunk() above, so we&#39;re back to raw writes for
+            // the summary section.
+            </span><span class="prelude-val">Some</span>(WriteMode::Raw(w)) =&gt; w,
+            <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
         };
-        <span class="kw">let</span> <span class="ident">writer</span> <span class="op">=</span> <span class="kw-2">&amp;mut</span> <span class="ident">writer</span>;
+        <span class="kw">let </span>writer = <span class="kw-2">&amp;mut </span>writer;
 
-        <span class="comment">// We&#39;re done with the data secton!</span>
-        <span class="ident">write_record</span>(<span class="ident">writer</span>, <span class="kw-2">&amp;</span><span class="ident">Record::DataEnd</span>(<span class="ident">records::DataEnd::default</span>()))<span class="question-mark">?</span>;
+        <span class="comment">// We&#39;re done with the data secton!
+        </span>write_record(writer, <span class="kw-2">&amp;</span>Record::DataEnd(records::DataEnd::default()))<span class="question-mark">?</span>;
 
-        <span class="comment">// Take all the data we need, swapping in empty containers.</span>
-        <span class="comment">// Without this, we get yelled at for moving things out of a mutable ref</span>
-        <span class="comment">// (&amp;mut self).</span>
-        <span class="comment">// (We could get around all this noise by having finish() take self,</span>
-        <span class="comment">// but then it wouldn&#39;t be droppable _and_ finish...able.)</span>
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">stats</span> <span class="op">=</span> <span class="ident">records::Statistics::default</span>();
-        <span class="ident">std::mem::swap</span>(<span class="kw-2">&amp;mut</span> <span class="ident">stats</span>, <span class="kw-2">&amp;mut</span> <span class="self">self</span>.<span class="ident">stats</span>);
+        <span class="comment">// Take all the data we need, swapping in empty containers.
+        // Without this, we get yelled at for moving things out of a mutable ref
+        // (&amp;mut self).
+        // (We could get around all this noise by having finish() take self,
+        // but then it wouldn&#39;t be droppable _and_ finish...able.)
+        </span><span class="kw">let </span><span class="kw-2">mut </span>stats = records::Statistics::default();
+        std::mem::swap(<span class="kw-2">&amp;mut </span>stats, <span class="kw-2">&amp;mut </span><span class="self">self</span>.stats);
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">chunk_indexes</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
-        <span class="ident">std::mem::swap</span>(<span class="kw-2">&amp;mut</span> <span class="ident">chunk_indexes</span>, <span class="kw-2">&amp;mut</span> <span class="self">self</span>.<span class="ident">chunk_indexes</span>);
+        <span class="kw">let </span><span class="kw-2">mut </span>chunk_indexes = Vec::new();
+        std::mem::swap(<span class="kw-2">&amp;mut </span>chunk_indexes, <span class="kw-2">&amp;mut </span><span class="self">self</span>.chunk_indexes);
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">attachment_indexes</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
-        <span class="ident">std::mem::swap</span>(<span class="kw-2">&amp;mut</span> <span class="ident">attachment_indexes</span>, <span class="kw-2">&amp;mut</span> <span class="self">self</span>.<span class="ident">attachment_indexes</span>);
+        <span class="kw">let </span><span class="kw-2">mut </span>attachment_indexes = Vec::new();
+        std::mem::swap(<span class="kw-2">&amp;mut </span>attachment_indexes, <span class="kw-2">&amp;mut </span><span class="self">self</span>.attachment_indexes);
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">metadata_indexes</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
-        <span class="ident">std::mem::swap</span>(<span class="kw-2">&amp;mut</span> <span class="ident">metadata_indexes</span>, <span class="kw-2">&amp;mut</span> <span class="self">self</span>.<span class="ident">metadata_indexes</span>);
+        <span class="kw">let </span><span class="kw-2">mut </span>metadata_indexes = Vec::new();
+        std::mem::swap(<span class="kw-2">&amp;mut </span>metadata_indexes, <span class="kw-2">&amp;mut </span><span class="self">self</span>.metadata_indexes);
 
-        <span class="comment">// Make some Schema and Channel lists for the summary section.</span>
-        <span class="comment">// Be sure to grab schema IDs for the channels from the schema hash map before we drain it!</span>
-        <span class="kw">struct</span> <span class="ident">ChannelSummary</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
-            <span class="ident">channel</span>: <span class="ident">Channel</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span>,
-            <span class="ident">channel_id</span>: <span class="ident">u16</span>,
-            <span class="ident">schema_id</span>: <span class="ident">u16</span>,
+        <span class="comment">// Make some Schema and Channel lists for the summary section.
+        // Be sure to grab schema IDs for the channels from the schema hash map before we drain it!
+        </span><span class="kw">struct </span>ChannelSummary&lt;<span class="lifetime">&#39;a</span>&gt; {
+            channel: Channel&lt;<span class="lifetime">&#39;a</span>&gt;,
+            channel_id: u16,
+            schema_id: u16,
         }
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">all_channels</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">ChannelSummary</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span><span class="op">&gt;</span> <span class="op">=</span> <span class="self">self</span>
-            .<span class="ident">channels</span>
-            .<span class="ident">drain</span>()
-            .<span class="ident">map</span>(<span class="op">|</span>(<span class="ident">channel</span>, <span class="ident">channel_id</span>)<span class="op">|</span> {
-                <span class="kw">let</span> <span class="ident">schema_id</span> <span class="op">=</span> <span class="kw">match</span> <span class="kw-2">&amp;</span><span class="ident">channel</span>.<span class="ident">schema</span> {
-                    <span class="prelude-val">Some</span>(<span class="ident">s</span>) =&gt; <span class="kw-2">*</span><span class="self">self</span>.<span class="ident">schemas</span>.<span class="ident">get</span>(<span class="ident">s</span>).<span class="ident">unwrap</span>(),
-                    <span class="prelude-val">None</span> =&gt; <span class="number">0</span>,
+        <span class="kw">let </span><span class="kw-2">mut </span>all_channels: Vec&lt;ChannelSummary&lt;<span class="lifetime">&#39;_</span>&gt;&gt; = <span class="self">self
+            </span>.channels
+            .drain()
+            .map(|(channel, channel_id)| {
+                <span class="kw">let </span>schema_id = <span class="kw">match </span><span class="kw-2">&amp;</span>channel.schema {
+                    <span class="prelude-val">Some</span>(s) =&gt; <span class="kw-2">*</span><span class="self">self</span>.schemas.get(s).unwrap(),
+                    <span class="prelude-val">None </span>=&gt; <span class="number">0</span>,
                 };
 
-                <span class="ident">ChannelSummary</span> {
-                    <span class="ident">channel</span>,
-                    <span class="ident">channel_id</span>,
-                    <span class="ident">schema_id</span>,
+                ChannelSummary {
+                    channel,
+                    channel_id,
+                    schema_id,
                 }
             })
-            .<span class="ident">collect</span>();
-        <span class="ident">all_channels</span>.<span class="ident">sort_unstable_by_key</span>(<span class="op">|</span><span class="ident">cs</span><span class="op">|</span> <span class="ident">cs</span>.<span class="ident">channel_id</span>);
+            .collect();
+        all_channels.sort_unstable_by_key(|cs| cs.channel_id);
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">all_schemas</span>: <span class="ident">Vec</span><span class="op">&lt;</span>(<span class="ident">Schema</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span>, <span class="ident">u16</span>)<span class="op">&gt;</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">schemas</span>.<span class="ident">drain</span>().<span class="ident">collect</span>();
-        <span class="ident">all_schemas</span>.<span class="ident">sort_unstable_by_key</span>(<span class="op">|</span>(<span class="kw">_</span>, <span class="ident">v</span>)<span class="op">|</span> <span class="kw-2">*</span><span class="ident">v</span>);
+        <span class="kw">let </span><span class="kw-2">mut </span>all_schemas: Vec&lt;(Schema&lt;<span class="lifetime">&#39;_</span>&gt;, u16)&gt; = <span class="self">self</span>.schemas.drain().collect();
+        all_schemas.sort_unstable_by_key(|(<span class="kw">_</span>, v)| <span class="kw-2">*</span>v);
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">offsets</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
+        <span class="kw">let </span><span class="kw-2">mut </span>offsets = Vec::new();
 
-        <span class="kw">let</span> <span class="ident">summary_start</span> <span class="op">=</span> <span class="ident">writer</span>.<span class="ident">stream_position</span>()<span class="question-mark">?</span>;
+        <span class="kw">let </span>summary_start = writer.stream_position()<span class="question-mark">?</span>;
 
-        <span class="comment">// Let&#39;s get a CRC of the summary section.</span>
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">ccw</span> <span class="op">=</span> <span class="ident">CountingCrcWriter::new</span>(<span class="ident">writer</span>);
+        <span class="comment">// Let&#39;s get a CRC of the summary section.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>ccw = CountingCrcWriter::new(writer);
 
-        <span class="kw">fn</span> <span class="ident">posit</span><span class="op">&lt;</span><span class="ident">W</span>: <span class="ident">Write</span> <span class="op">+</span> <span class="ident">Seek</span><span class="op">&gt;</span>(<span class="ident">ccw</span>: <span class="kw-2">&amp;mut</span> <span class="ident">CountingCrcWriter</span><span class="op">&lt;</span><span class="ident">W</span><span class="op">&gt;</span>) -&gt; <span class="ident">io::Result</span><span class="op">&lt;</span><span class="ident">u64</span><span class="op">&gt;</span> {
-            <span class="ident">ccw</span>.<span class="ident">get_mut</span>().<span class="ident">stream_position</span>()
+        <span class="kw">fn </span>posit&lt;W: Write + Seek&gt;(ccw: <span class="kw-2">&amp;mut </span>CountingCrcWriter&lt;W&gt;) -&gt; io::Result&lt;u64&gt; {
+            ccw.get_mut().stream_position()
         }
 
-        <span class="comment">// Write all schemas.</span>
-        <span class="kw">let</span> <span class="ident">schemas_start</span> <span class="op">=</span> <span class="ident">summary_start</span>;
-        <span class="kw">for</span> (<span class="ident">schema</span>, <span class="ident">id</span>) <span class="kw">in</span> <span class="ident">all_schemas</span> {
-            <span class="kw">let</span> <span class="ident">header</span> <span class="op">=</span> <span class="ident">records::SchemaHeader</span> {
-                <span class="ident">id</span>,
-                <span class="ident">name</span>: <span class="ident">schema</span>.<span class="ident">name</span>,
-                <span class="ident">encoding</span>: <span class="ident">schema</span>.<span class="ident">encoding</span>,
+        <span class="comment">// Write all schemas.
+        </span><span class="kw">let </span>schemas_start = summary_start;
+        <span class="kw">for </span>(schema, id) <span class="kw">in </span>all_schemas {
+            <span class="kw">let </span>header = records::SchemaHeader {
+                id,
+                name: schema.name,
+                encoding: schema.encoding,
             };
-            <span class="kw">let</span> <span class="ident">data</span> <span class="op">=</span> <span class="ident">schema</span>.<span class="ident">data</span>;
+            <span class="kw">let </span>data = schema.data;
 
-            <span class="ident">write_record</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>, <span class="kw-2">&amp;</span><span class="ident">Record::Schema</span> { <span class="ident">header</span>, <span class="ident">data</span> })<span class="question-mark">?</span>;
+            write_record(<span class="kw-2">&amp;mut </span>ccw, <span class="kw-2">&amp;</span>Record::Schema { header, data })<span class="question-mark">?</span>;
         }
-        <span class="kw">let</span> <span class="ident">schemas_end</span> <span class="op">=</span> <span class="ident">posit</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>)<span class="question-mark">?</span>;
-        <span class="kw">if</span> <span class="ident">schemas_end</span> <span class="op">-</span> <span class="ident">schemas_start</span> <span class="op">&gt;</span> <span class="number">0</span> {
-            <span class="ident">offsets</span>.<span class="ident">push</span>(<span class="ident">records::SummaryOffset</span> {
-                <span class="ident">group_opcode</span>: <span class="ident">op::SCHEMA</span>,
-                <span class="ident">group_start</span>: <span class="ident">schemas_start</span>,
-                <span class="ident">group_length</span>: <span class="ident">schemas_end</span> <span class="op">-</span> <span class="ident">schemas_start</span>,
+        <span class="kw">let </span>schemas_end = posit(<span class="kw-2">&amp;mut </span>ccw)<span class="question-mark">?</span>;
+        <span class="kw">if </span>schemas_end - schemas_start &gt; <span class="number">0 </span>{
+            offsets.push(records::SummaryOffset {
+                group_opcode: op::SCHEMA,
+                group_start: schemas_start,
+                group_length: schemas_end - schemas_start,
             });
         }
 
-        <span class="comment">// Write all channels.</span>
-        <span class="kw">let</span> <span class="ident">channels_start</span> <span class="op">=</span> <span class="ident">schemas_end</span>;
-        <span class="kw">for</span> <span class="ident">cs</span> <span class="kw">in</span> <span class="ident">all_channels</span> {
-            <span class="kw">let</span> <span class="ident">rec</span> <span class="op">=</span> <span class="ident">records::Channel</span> {
-                <span class="ident">id</span>: <span class="ident">cs</span>.<span class="ident">channel_id</span>,
-                <span class="ident">schema_id</span>: <span class="ident">cs</span>.<span class="ident">schema_id</span>,
-                <span class="ident">topic</span>: <span class="ident">cs</span>.<span class="ident">channel</span>.<span class="ident">topic</span>,
-                <span class="ident">message_encoding</span>: <span class="ident">cs</span>.<span class="ident">channel</span>.<span class="ident">message_encoding</span>,
-                <span class="ident">metadata</span>: <span class="ident">cs</span>.<span class="ident">channel</span>.<span class="ident">metadata</span>,
+        <span class="comment">// Write all channels.
+        </span><span class="kw">let </span>channels_start = schemas_end;
+        <span class="kw">for </span>cs <span class="kw">in </span>all_channels {
+            <span class="kw">let </span>rec = records::Channel {
+                id: cs.channel_id,
+                schema_id: cs.schema_id,
+                topic: cs.channel.topic,
+                message_encoding: cs.channel.message_encoding,
+                metadata: cs.channel.metadata,
             };
-            <span class="ident">write_record</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>, <span class="kw-2">&amp;</span><span class="ident">Record::Channel</span>(<span class="ident">rec</span>))<span class="question-mark">?</span>;
+            write_record(<span class="kw-2">&amp;mut </span>ccw, <span class="kw-2">&amp;</span>Record::Channel(rec))<span class="question-mark">?</span>;
         }
-        <span class="kw">let</span> <span class="ident">channels_end</span> <span class="op">=</span> <span class="ident">posit</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>)<span class="question-mark">?</span>;
-        <span class="kw">if</span> <span class="ident">channels_end</span> <span class="op">-</span> <span class="ident">channels_start</span> <span class="op">&gt;</span> <span class="number">0</span> {
-            <span class="ident">offsets</span>.<span class="ident">push</span>(<span class="ident">records::SummaryOffset</span> {
-                <span class="ident">group_opcode</span>: <span class="ident">op::CHANNEL</span>,
-                <span class="ident">group_start</span>: <span class="ident">channels_start</span>,
-                <span class="ident">group_length</span>: <span class="ident">channels_end</span> <span class="op">-</span> <span class="ident">channels_start</span>,
+        <span class="kw">let </span>channels_end = posit(<span class="kw-2">&amp;mut </span>ccw)<span class="question-mark">?</span>;
+        <span class="kw">if </span>channels_end - channels_start &gt; <span class="number">0 </span>{
+            offsets.push(records::SummaryOffset {
+                group_opcode: op::CHANNEL,
+                group_start: channels_start,
+                group_length: channels_end - channels_start,
             });
         }
 
-        <span class="comment">// Write all chunk indexes.</span>
-        <span class="kw">let</span> <span class="ident">chunk_indexes_start</span> <span class="op">=</span> <span class="ident">channels_end</span>;
-        <span class="kw">for</span> <span class="ident">index</span> <span class="kw">in</span> <span class="ident">chunk_indexes</span> {
-            <span class="ident">write_record</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>, <span class="kw-2">&amp;</span><span class="ident">Record::ChunkIndex</span>(<span class="ident">index</span>))<span class="question-mark">?</span>;
+        <span class="comment">// Write all chunk indexes.
+        </span><span class="kw">let </span>chunk_indexes_start = channels_end;
+        <span class="kw">for </span>index <span class="kw">in </span>chunk_indexes {
+            write_record(<span class="kw-2">&amp;mut </span>ccw, <span class="kw-2">&amp;</span>Record::ChunkIndex(index))<span class="question-mark">?</span>;
         }
-        <span class="kw">let</span> <span class="ident">chunk_indexes_end</span> <span class="op">=</span> <span class="ident">posit</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>)<span class="question-mark">?</span>;
-        <span class="kw">if</span> <span class="ident">chunk_indexes_end</span> <span class="op">-</span> <span class="ident">chunk_indexes_start</span> <span class="op">&gt;</span> <span class="number">0</span> {
-            <span class="ident">offsets</span>.<span class="ident">push</span>(<span class="ident">records::SummaryOffset</span> {
-                <span class="ident">group_opcode</span>: <span class="ident">op::CHUNK_INDEX</span>,
-                <span class="ident">group_start</span>: <span class="ident">chunk_indexes_start</span>,
-                <span class="ident">group_length</span>: <span class="ident">chunk_indexes_end</span> <span class="op">-</span> <span class="ident">chunk_indexes_start</span>,
+        <span class="kw">let </span>chunk_indexes_end = posit(<span class="kw-2">&amp;mut </span>ccw)<span class="question-mark">?</span>;
+        <span class="kw">if </span>chunk_indexes_end - chunk_indexes_start &gt; <span class="number">0 </span>{
+            offsets.push(records::SummaryOffset {
+                group_opcode: op::CHUNK_INDEX,
+                group_start: chunk_indexes_start,
+                group_length: chunk_indexes_end - chunk_indexes_start,
             });
         }
 
-        <span class="comment">// ...and attachment indexes</span>
-        <span class="kw">let</span> <span class="ident">attachment_indexes_start</span> <span class="op">=</span> <span class="ident">chunk_indexes_end</span>;
-        <span class="kw">for</span> <span class="ident">index</span> <span class="kw">in</span> <span class="ident">attachment_indexes</span> {
-            <span class="ident">write_record</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>, <span class="kw-2">&amp;</span><span class="ident">Record::AttachmentIndex</span>(<span class="ident">index</span>))<span class="question-mark">?</span>;
+        <span class="comment">// ...and attachment indexes
+        </span><span class="kw">let </span>attachment_indexes_start = chunk_indexes_end;
+        <span class="kw">for </span>index <span class="kw">in </span>attachment_indexes {
+            write_record(<span class="kw-2">&amp;mut </span>ccw, <span class="kw-2">&amp;</span>Record::AttachmentIndex(index))<span class="question-mark">?</span>;
         }
-        <span class="kw">let</span> <span class="ident">attachment_indexes_end</span> <span class="op">=</span> <span class="ident">posit</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>)<span class="question-mark">?</span>;
-        <span class="kw">if</span> <span class="ident">attachment_indexes_end</span> <span class="op">-</span> <span class="ident">attachment_indexes_start</span> <span class="op">&gt;</span> <span class="number">0</span> {
-            <span class="ident">offsets</span>.<span class="ident">push</span>(<span class="ident">records::SummaryOffset</span> {
-                <span class="ident">group_opcode</span>: <span class="ident">op::ATTACHMENT_INDEX</span>,
-                <span class="ident">group_start</span>: <span class="ident">attachment_indexes_start</span>,
-                <span class="ident">group_length</span>: <span class="ident">attachment_indexes_end</span> <span class="op">-</span> <span class="ident">attachment_indexes_start</span>,
+        <span class="kw">let </span>attachment_indexes_end = posit(<span class="kw-2">&amp;mut </span>ccw)<span class="question-mark">?</span>;
+        <span class="kw">if </span>attachment_indexes_end - attachment_indexes_start &gt; <span class="number">0 </span>{
+            offsets.push(records::SummaryOffset {
+                group_opcode: op::ATTACHMENT_INDEX,
+                group_start: attachment_indexes_start,
+                group_length: attachment_indexes_end - attachment_indexes_start,
             });
         }
 
-        <span class="comment">// ...and metadata indexes</span>
-        <span class="kw">let</span> <span class="ident">metadata_indexes_start</span> <span class="op">=</span> <span class="ident">attachment_indexes_end</span>;
-        <span class="kw">for</span> <span class="ident">index</span> <span class="kw">in</span> <span class="ident">metadata_indexes</span> {
-            <span class="ident">write_record</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>, <span class="kw-2">&amp;</span><span class="ident">Record::MetadataIndex</span>(<span class="ident">index</span>))<span class="question-mark">?</span>;
+        <span class="comment">// ...and metadata indexes
+        </span><span class="kw">let </span>metadata_indexes_start = attachment_indexes_end;
+        <span class="kw">for </span>index <span class="kw">in </span>metadata_indexes {
+            write_record(<span class="kw-2">&amp;mut </span>ccw, <span class="kw-2">&amp;</span>Record::MetadataIndex(index))<span class="question-mark">?</span>;
         }
-        <span class="kw">let</span> <span class="ident">metadata_indexes_end</span> <span class="op">=</span> <span class="ident">posit</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>)<span class="question-mark">?</span>;
-        <span class="kw">if</span> <span class="ident">metadata_indexes_end</span> <span class="op">-</span> <span class="ident">metadata_indexes_start</span> <span class="op">&gt;</span> <span class="number">0</span> {
-            <span class="ident">offsets</span>.<span class="ident">push</span>(<span class="ident">records::SummaryOffset</span> {
-                <span class="ident">group_opcode</span>: <span class="ident">op::METADATA_INDEX</span>,
-                <span class="ident">group_start</span>: <span class="ident">metadata_indexes_start</span>,
-                <span class="ident">group_length</span>: <span class="ident">metadata_indexes_end</span> <span class="op">-</span> <span class="ident">metadata_indexes_start</span>,
+        <span class="kw">let </span>metadata_indexes_end = posit(<span class="kw-2">&amp;mut </span>ccw)<span class="question-mark">?</span>;
+        <span class="kw">if </span>metadata_indexes_end - metadata_indexes_start &gt; <span class="number">0 </span>{
+            offsets.push(records::SummaryOffset {
+                group_opcode: op::METADATA_INDEX,
+                group_start: metadata_indexes_start,
+                group_length: metadata_indexes_end - metadata_indexes_start,
             });
         }
 
-        <span class="kw">let</span> <span class="ident">stats_start</span> <span class="op">=</span> <span class="ident">metadata_indexes_end</span>;
-        <span class="ident">write_record</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>, <span class="kw-2">&amp;</span><span class="ident">Record::Statistics</span>(<span class="ident">stats</span>))<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="ident">stats_end</span> <span class="op">=</span> <span class="ident">posit</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>)<span class="question-mark">?</span>;
-        <span class="macro">assert!</span>(<span class="ident">stats_end</span> <span class="op">&gt;</span> <span class="ident">stats_start</span>);
-        <span class="ident">offsets</span>.<span class="ident">push</span>(<span class="ident">records::SummaryOffset</span> {
-            <span class="ident">group_opcode</span>: <span class="ident">op::STATISTICS</span>,
-            <span class="ident">group_start</span>: <span class="ident">stats_start</span>,
-            <span class="ident">group_length</span>: <span class="ident">stats_end</span> <span class="op">-</span> <span class="ident">stats_start</span>,
+        <span class="kw">let </span>stats_start = metadata_indexes_end;
+        write_record(<span class="kw-2">&amp;mut </span>ccw, <span class="kw-2">&amp;</span>Record::Statistics(stats))<span class="question-mark">?</span>;
+        <span class="kw">let </span>stats_end = posit(<span class="kw-2">&amp;mut </span>ccw)<span class="question-mark">?</span>;
+        <span class="macro">assert!</span>(stats_end &gt; stats_start);
+        offsets.push(records::SummaryOffset {
+            group_opcode: op::STATISTICS,
+            group_start: stats_start,
+            group_length: stats_end - stats_start,
         });
 
-        <span class="comment">// Write the summary offsets we&#39;ve been accumulating</span>
-        <span class="kw">let</span> <span class="ident">summary_offset_start</span> <span class="op">=</span> <span class="ident">stats_end</span>;
-        <span class="kw">for</span> <span class="ident">offset</span> <span class="kw">in</span> <span class="ident">offsets</span> {
-            <span class="ident">write_record</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>, <span class="kw-2">&amp;</span><span class="ident">Record::SummaryOffset</span>(<span class="ident">offset</span>))<span class="question-mark">?</span>;
+        <span class="comment">// Write the summary offsets we&#39;ve been accumulating
+        </span><span class="kw">let </span>summary_offset_start = stats_end;
+        <span class="kw">for </span>offset <span class="kw">in </span>offsets {
+            write_record(<span class="kw-2">&amp;mut </span>ccw, <span class="kw-2">&amp;</span>Record::SummaryOffset(offset))<span class="question-mark">?</span>;
         }
 
-        <span class="comment">// Wat: the CRC in the footer _includes_ part of the footer.</span>
-        <span class="ident">op_and_len</span>(<span class="kw-2">&amp;mut</span> <span class="ident">ccw</span>, <span class="ident">op::FOOTER</span>, <span class="number">20</span>)<span class="question-mark">?</span>;
-        <span class="ident">ccw</span>.<span class="ident">write_u64</span>::<span class="op">&lt;</span><span class="ident">LE</span><span class="op">&gt;</span>(<span class="ident">summary_start</span>)<span class="question-mark">?</span>;
-        <span class="ident">ccw</span>.<span class="ident">write_u64</span>::<span class="op">&lt;</span><span class="ident">LE</span><span class="op">&gt;</span>(<span class="ident">summary_offset_start</span>)<span class="question-mark">?</span>;
+        <span class="comment">// Wat: the CRC in the footer _includes_ part of the footer.
+        </span>op_and_len(<span class="kw-2">&amp;mut </span>ccw, op::FOOTER, <span class="number">20</span>)<span class="question-mark">?</span>;
+        ccw.write_u64::&lt;LE&gt;(summary_start)<span class="question-mark">?</span>;
+        ccw.write_u64::&lt;LE&gt;(summary_offset_start)<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> (<span class="ident">writer</span>, <span class="ident">summary_crc</span>) <span class="op">=</span> <span class="ident">ccw</span>.<span class="ident">finalize</span>();
+        <span class="kw">let </span>(writer, summary_crc) = ccw.finalize();
 
-        <span class="ident">writer</span>.<span class="ident">write_u32</span>::<span class="op">&lt;</span><span class="ident">LE</span><span class="op">&gt;</span>(<span class="ident">summary_crc</span>)<span class="question-mark">?</span>;
+        writer.write_u32::&lt;LE&gt;(summary_crc)<span class="question-mark">?</span>;
 
-        <span class="ident">writer</span>.<span class="ident">write_all</span>(<span class="ident">MAGIC</span>)<span class="question-mark">?</span>;
-        <span class="ident">writer</span>.<span class="ident">flush</span>()<span class="question-mark">?</span>;
+        writer.write_all(MAGIC)<span class="question-mark">?</span>;
+        writer.flush()<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 }
 
-<span class="kw">impl</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, <span class="ident">W</span>: <span class="ident">Write</span> <span class="op">+</span> <span class="ident">Seek</span><span class="op">&gt;</span> <span class="ident">Drop</span> <span class="kw">for</span> <span class="ident">Writer</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, <span class="ident">W</span><span class="op">&gt;</span> {
-    <span class="kw">fn</span> <span class="ident">drop</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>) {
-        <span class="self">self</span>.<span class="ident">finish</span>().<span class="ident">unwrap</span>()
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;a</span>, W: Write + Seek&gt; Drop <span class="kw">for </span>Writer&lt;<span class="lifetime">&#39;a</span>, W&gt; {
+    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+        <span class="self">self</span>.finish().unwrap()
     }
 }
 
-<span class="kw">enum</span> <span class="ident">Compressor</span><span class="op">&lt;</span><span class="ident">W</span>: <span class="ident">Write</span><span class="op">&gt;</span> {
-    <span class="ident">Null</span>(<span class="ident">W</span>),
-    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
-    <span class="ident">Zstd</span>(<span class="ident">zstd::Encoder</span><span class="op">&lt;</span><span class="lifetime">&#39;static</span>, <span class="ident">W</span><span class="op">&gt;</span>),
-    <span class="ident">Lz4</span>(<span class="ident">lz4::Encoder</span><span class="op">&lt;</span><span class="ident">W</span><span class="op">&gt;</span>),
+<span class="kw">enum </span>Compressor&lt;W: Write&gt; {
+    Null(W),
+    <span class="attribute">#[cfg(feature = <span class="string">&quot;zstd&quot;</span>)]
+    </span>Zstd(zstd::Encoder&lt;<span class="lifetime">&#39;static</span>, W&gt;),
+    Lz4(lz4::Encoder&lt;W&gt;),
 }
 
-<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">W</span>: <span class="ident">Write</span><span class="op">&gt;</span> <span class="ident">Compressor</span><span class="op">&lt;</span><span class="ident">W</span><span class="op">&gt;</span> {
-    <span class="kw">fn</span> <span class="ident">finish</span>(<span class="self">self</span>) -&gt; <span class="ident">io::Result</span><span class="op">&lt;</span><span class="ident">W</span><span class="op">&gt;</span> {
-        <span class="prelude-val">Ok</span>(<span class="kw">match</span> <span class="self">self</span> {
-            <span class="ident">Compressor::Null</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>,
-            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
-            <span class="ident">Compressor::Zstd</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">finish</span>()<span class="question-mark">?</span>,
-            <span class="ident">Compressor::Lz4</span>(<span class="ident">w</span>) =&gt; {
-                <span class="kw">let</span> (<span class="ident">w</span>, <span class="ident">err</span>) <span class="op">=</span> <span class="ident">w</span>.<span class="ident">finish</span>();
-                <span class="ident">err</span><span class="question-mark">?</span>;
-                <span class="ident">w</span>
+<span class="kw">impl</span>&lt;W: Write&gt; Compressor&lt;W&gt; {
+    <span class="kw">fn </span>finish(<span class="self">self</span>) -&gt; io::Result&lt;W&gt; {
+        <span class="prelude-val">Ok</span>(<span class="kw">match </span><span class="self">self </span>{
+            Compressor::Null(w) =&gt; w,
+            <span class="attribute">#[cfg(feature = <span class="string">&quot;zstd&quot;</span>)]
+            </span>Compressor::Zstd(w) =&gt; w.finish()<span class="question-mark">?</span>,
+            Compressor::Lz4(w) =&gt; {
+                <span class="kw">let </span>(w, err) = w.finish();
+                err<span class="question-mark">?</span>;
+                w
             }
         })
     }
 }
 
-<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">W</span>: <span class="ident">Write</span><span class="op">&gt;</span> <span class="ident">Write</span> <span class="kw">for</span> <span class="ident">Compressor</span><span class="op">&lt;</span><span class="ident">W</span><span class="op">&gt;</span> {
-    <span class="kw">fn</span> <span class="ident">write</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">buf</span>: <span class="kw-2">&amp;</span>[<span class="ident">u8</span>]) -&gt; <span class="ident">io::Result</span><span class="op">&lt;</span><span class="ident">usize</span><span class="op">&gt;</span> {
-        <span class="kw">match</span> <span class="self">self</span> {
-            <span class="ident">Compressor::Null</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">write</span>(<span class="ident">buf</span>),
-            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
-            <span class="ident">Compressor::Zstd</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">write</span>(<span class="ident">buf</span>),
-            <span class="ident">Compressor::Lz4</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">write</span>(<span class="ident">buf</span>),
+<span class="kw">impl</span>&lt;W: Write&gt; Write <span class="kw">for </span>Compressor&lt;W&gt; {
+    <span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, buf: <span class="kw-2">&amp;</span>[u8]) -&gt; io::Result&lt;usize&gt; {
+        <span class="kw">match </span><span class="self">self </span>{
+            Compressor::Null(w) =&gt; w.write(buf),
+            <span class="attribute">#[cfg(feature = <span class="string">&quot;zstd&quot;</span>)]
+            </span>Compressor::Zstd(w) =&gt; w.write(buf),
+            Compressor::Lz4(w) =&gt; w.write(buf),
         }
     }
 
-    <span class="kw">fn</span> <span class="ident">flush</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>) -&gt; <span class="ident">io::Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">match</span> <span class="self">self</span> {
-            <span class="ident">Compressor::Null</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">flush</span>(),
-            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
-            <span class="ident">Compressor::Zstd</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">flush</span>(),
-            <span class="ident">Compressor::Lz4</span>(<span class="ident">w</span>) =&gt; <span class="ident">w</span>.<span class="ident">flush</span>(),
+    <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; io::Result&lt;()&gt; {
+        <span class="kw">match </span><span class="self">self </span>{
+            Compressor::Null(w) =&gt; w.flush(),
+            <span class="attribute">#[cfg(feature = <span class="string">&quot;zstd&quot;</span>)]
+            </span>Compressor::Zstd(w) =&gt; w.flush(),
+            Compressor::Lz4(w) =&gt; w.flush(),
         }
     }
 }
 
-<span class="kw">struct</span> <span class="ident">ChunkWriter</span><span class="op">&lt;</span><span class="ident">W</span>: <span class="ident">Write</span><span class="op">&gt;</span> {
-    <span class="ident">header_start</span>: <span class="ident">u64</span>,
-    <span class="ident">stream_start</span>: <span class="ident">u64</span>,
-    <span class="ident">header</span>: <span class="ident">records::ChunkHeader</span>,
-    <span class="ident">compressor</span>: <span class="ident">CountingCrcWriter</span><span class="op">&lt;</span><span class="ident">Compressor</span><span class="op">&lt;</span><span class="ident">W</span><span class="op">&gt;</span><span class="op">&gt;</span>,
-    <span class="ident">indexes</span>: <span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">u16</span>, <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">records::MessageIndexEntry</span><span class="op">&gt;</span><span class="op">&gt;</span>,
+<span class="kw">struct </span>ChunkWriter&lt;W: Write&gt; {
+    header_start: u64,
+    stream_start: u64,
+    header: records::ChunkHeader,
+    compressor: CountingCrcWriter&lt;Compressor&lt;W&gt;&gt;,
+    indexes: BTreeMap&lt;u16, Vec&lt;records::MessageIndexEntry&gt;&gt;,
 }
 
-<span class="kw">impl</span><span class="op">&lt;</span><span class="ident">W</span>: <span class="ident">Write</span> <span class="op">+</span> <span class="ident">Seek</span><span class="op">&gt;</span> <span class="ident">ChunkWriter</span><span class="op">&lt;</span><span class="ident">W</span><span class="op">&gt;</span> {
-    <span class="kw">fn</span> <span class="ident">new</span>(<span class="kw-2">mut</span> <span class="ident">writer</span>: <span class="ident">W</span>, <span class="ident">compression</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Compression</span><span class="op">&gt;</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">header_start</span> <span class="op">=</span> <span class="ident">writer</span>.<span class="ident">stream_position</span>()<span class="question-mark">?</span>;
+<span class="kw">impl</span>&lt;W: Write + Seek&gt; ChunkWriter&lt;W&gt; {
+    <span class="kw">fn </span>new(<span class="kw-2">mut </span>writer: W, compression: <span class="prelude-ty">Option</span>&lt;Compression&gt;) -&gt; McapResult&lt;<span class="self">Self</span>&gt; {
+        <span class="kw">let </span>header_start = writer.stream_position()<span class="question-mark">?</span>;
 
-        <span class="ident">op_and_len</span>(<span class="kw-2">&amp;mut</span> <span class="ident">writer</span>, <span class="ident">op::CHUNK</span>, <span class="op">!</span><span class="number">0</span>)<span class="question-mark">?</span>;
+        op_and_len(<span class="kw-2">&amp;mut </span>writer, op::CHUNK, !<span class="number">0</span>)<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> <span class="ident">compression_name</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">compression</span> {
-            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
-            <span class="prelude-val">Some</span>(<span class="ident">Compression::Zstd</span>) =&gt; <span class="string">&quot;zstd&quot;</span>,
-            <span class="prelude-val">Some</span>(<span class="ident">Compression::Lz4</span>) =&gt; <span class="string">&quot;lz4&quot;</span>,
-            <span class="prelude-val">None</span> =&gt; <span class="string">&quot;&quot;</span>,
+        <span class="kw">let </span>compression_name = <span class="kw">match </span>compression {
+            <span class="attribute">#[cfg(feature = <span class="string">&quot;zstd&quot;</span>)]
+            </span><span class="prelude-val">Some</span>(Compression::Zstd) =&gt; <span class="string">&quot;zstd&quot;</span>,
+            <span class="prelude-val">Some</span>(Compression::Lz4) =&gt; <span class="string">&quot;lz4&quot;</span>,
+            <span class="prelude-val">None </span>=&gt; <span class="string">&quot;&quot;</span>,
         };
 
-        <span class="kw">let</span> <span class="ident">header</span> <span class="op">=</span> <span class="ident">records::ChunkHeader</span> {
-            <span class="ident">message_start_time</span>: <span class="number">0</span>,
-            <span class="ident">message_end_time</span>: <span class="number">0</span>,
-            <span class="ident">uncompressed_size</span>: <span class="op">!</span><span class="number">0</span>,
-            <span class="ident">uncompressed_crc</span>: <span class="op">!</span><span class="number">0</span>,
-            <span class="ident">compression</span>: <span class="ident">String::from</span>(<span class="ident">compression_name</span>),
-            <span class="ident">compressed_size</span>: <span class="op">!</span><span class="number">0</span>,
+        <span class="kw">let </span>header = records::ChunkHeader {
+            message_start_time: <span class="number">0</span>,
+            message_end_time: <span class="number">0</span>,
+            uncompressed_size: !<span class="number">0</span>,
+            uncompressed_crc: !<span class="number">0</span>,
+            compression: String::from(compression_name),
+            compressed_size: !<span class="number">0</span>,
         };
 
-        <span class="ident">writer</span>.<span class="ident">write_le</span>(<span class="kw-2">&amp;</span><span class="ident">header</span>)<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="ident">stream_start</span> <span class="op">=</span> <span class="ident">writer</span>.<span class="ident">stream_position</span>()<span class="question-mark">?</span>;
+        writer.write_le(<span class="kw-2">&amp;</span>header)<span class="question-mark">?</span>;
+        <span class="kw">let </span>stream_start = writer.stream_position()<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> <span class="ident">compressor</span> <span class="op">=</span> <span class="kw">match</span> <span class="ident">compression</span> {
-            <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
-            <span class="prelude-val">Some</span>(<span class="ident">Compression::Zstd</span>) =&gt; {
-                <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">enc</span> <span class="op">=</span> <span class="ident">zstd::Encoder::new</span>(<span class="ident">writer</span>, <span class="number">0</span>)<span class="question-mark">?</span>;
-                <span class="ident">enc</span>.<span class="ident">multithread</span>(<span class="ident">num_cpus::get_physical</span>() <span class="kw">as</span> <span class="ident">u32</span>)<span class="question-mark">?</span>;
-                <span class="ident">Compressor::Zstd</span>(<span class="ident">enc</span>)
+        <span class="kw">let </span>compressor = <span class="kw">match </span>compression {
+            <span class="attribute">#[cfg(feature = <span class="string">&quot;zstd&quot;</span>)]
+            </span><span class="prelude-val">Some</span>(Compression::Zstd) =&gt; {
+                <span class="kw">let </span><span class="kw-2">mut </span>enc = zstd::Encoder::new(writer, <span class="number">0</span>)<span class="question-mark">?</span>;
+                enc.multithread(num_cpus::get_physical() <span class="kw">as </span>u32)<span class="question-mark">?</span>;
+                Compressor::Zstd(enc)
             }
-            <span class="prelude-val">Some</span>(<span class="ident">Compression::Lz4</span>) =&gt; {
-                <span class="kw">let</span> <span class="ident">b</span> <span class="op">=</span> <span class="ident">lz4::EncoderBuilder::new</span>();
-                <span class="ident">Compressor::Lz4</span>(<span class="ident">b</span>.<span class="ident">build</span>(<span class="ident">writer</span>)<span class="question-mark">?</span>)
+            <span class="prelude-val">Some</span>(Compression::Lz4) =&gt; {
+                <span class="kw">let </span>b = lz4::EncoderBuilder::new();
+                Compressor::Lz4(b.build(writer)<span class="question-mark">?</span>)
             }
-            <span class="prelude-val">None</span> =&gt; <span class="ident">Compressor::Null</span>(<span class="ident">writer</span>),
+            <span class="prelude-val">None </span>=&gt; Compressor::Null(writer),
         };
-        <span class="kw">let</span> <span class="ident">compressor</span> <span class="op">=</span> <span class="ident">CountingCrcWriter::new</span>(<span class="ident">compressor</span>);
-        <span class="prelude-val">Ok</span>(<span class="self">Self</span> {
-            <span class="ident">compressor</span>,
-            <span class="ident">header_start</span>,
-            <span class="ident">stream_start</span>,
-            <span class="ident">header</span>,
-            <span class="ident">indexes</span>: <span class="ident">BTreeMap::new</span>(),
+        <span class="kw">let </span>compressor = CountingCrcWriter::new(compressor);
+        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
+            compressor,
+            header_start,
+            stream_start,
+            header,
+            indexes: BTreeMap::new(),
         })
     }
 
-    <span class="kw">fn</span> <span class="ident">write_schema</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">id</span>: <span class="ident">u16</span>, <span class="ident">schema</span>: <span class="kw-2">&amp;</span><span class="ident">Schema</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">header</span> <span class="op">=</span> <span class="ident">records::SchemaHeader</span> {
-            <span class="ident">id</span>,
-            <span class="ident">name</span>: <span class="ident">schema</span>.<span class="ident">name</span>.<span class="ident">clone</span>(),
-            <span class="ident">encoding</span>: <span class="ident">schema</span>.<span class="ident">encoding</span>.<span class="ident">clone</span>(),
+    <span class="kw">fn </span>write_schema(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: u16, schema: <span class="kw-2">&amp;</span>Schema) -&gt; McapResult&lt;()&gt; {
+        <span class="kw">let </span>header = records::SchemaHeader {
+            id,
+            name: schema.name.clone(),
+            encoding: schema.encoding.clone(),
         };
-        <span class="ident">write_record</span>(
-            <span class="kw-2">&amp;mut</span> <span class="self">self</span>.<span class="ident">compressor</span>,
-            <span class="kw-2">&amp;</span><span class="ident">Record::Schema</span> {
-                <span class="ident">header</span>,
-                <span class="ident">data</span>: <span class="ident">Cow::Borrowed</span>(<span class="kw-2">&amp;</span><span class="ident">schema</span>.<span class="ident">data</span>),
+        write_record(
+            <span class="kw-2">&amp;mut </span><span class="self">self</span>.compressor,
+            <span class="kw-2">&amp;</span>Record::Schema {
+                header,
+                data: Cow::Borrowed(<span class="kw-2">&amp;</span>schema.data),
             },
         )<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn</span> <span class="ident">write_channel</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">id</span>: <span class="ident">u16</span>, <span class="ident">schema_id</span>: <span class="ident">u16</span>, <span class="ident">chan</span>: <span class="kw-2">&amp;</span><span class="ident">Channel</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="macro">assert_eq!</span>(<span class="ident">schema_id</span> <span class="op">==</span> <span class="number">0</span>, <span class="ident">chan</span>.<span class="ident">schema</span>.<span class="ident">is_none</span>());
+    <span class="kw">fn </span>write_channel(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: u16, schema_id: u16, chan: <span class="kw-2">&amp;</span>Channel) -&gt; McapResult&lt;()&gt; {
+        <span class="macro">assert_eq!</span>(schema_id == <span class="number">0</span>, chan.schema.is_none());
 
-        <span class="kw">let</span> <span class="ident">rec</span> <span class="op">=</span> <span class="ident">records::Channel</span> {
-            <span class="ident">id</span>,
-            <span class="ident">schema_id</span>,
-            <span class="ident">topic</span>: <span class="ident">chan</span>.<span class="ident">topic</span>.<span class="ident">clone</span>(),
-            <span class="ident">message_encoding</span>: <span class="ident">chan</span>.<span class="ident">message_encoding</span>.<span class="ident">clone</span>(),
-            <span class="ident">metadata</span>: <span class="ident">chan</span>.<span class="ident">metadata</span>.<span class="ident">clone</span>(),
+        <span class="kw">let </span>rec = records::Channel {
+            id,
+            schema_id,
+            topic: chan.topic.clone(),
+            message_encoding: chan.message_encoding.clone(),
+            metadata: chan.metadata.clone(),
         };
 
-        <span class="ident">write_record</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>.<span class="ident">compressor</span>, <span class="kw-2">&amp;</span><span class="ident">Record::Channel</span>(<span class="ident">rec</span>))<span class="question-mark">?</span>;
+        write_record(<span class="kw-2">&amp;mut </span><span class="self">self</span>.compressor, <span class="kw-2">&amp;</span>Record::Channel(rec))<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn</span> <span class="ident">write_message</span>(<span class="kw-2">&amp;mut</span> <span class="self">self</span>, <span class="ident">header</span>: <span class="kw-2">&amp;</span><span class="ident">MessageHeader</span>, <span class="ident">data</span>: <span class="kw-2">&amp;</span>[<span class="ident">u8</span>]) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="comment">// Update min/max time</span>
-        <span class="self">self</span>.<span class="ident">header</span>.<span class="ident">message_start_time</span> <span class="op">=</span> <span class="kw">match</span> <span class="self">self</span>.<span class="ident">header</span>.<span class="ident">message_start_time</span> {
-            <span class="number">0</span> =&gt; <span class="ident">header</span>.<span class="ident">log_time</span>,
-            <span class="ident">nz</span> =&gt; <span class="ident">nz</span>.<span class="ident">min</span>(<span class="ident">header</span>.<span class="ident">log_time</span>),
+    <span class="kw">fn </span>write_message(<span class="kw-2">&amp;mut </span><span class="self">self</span>, header: <span class="kw-2">&amp;</span>MessageHeader, data: <span class="kw-2">&amp;</span>[u8]) -&gt; McapResult&lt;()&gt; {
+        <span class="comment">// Update min/max time
+        </span><span class="self">self</span>.header.message_start_time = <span class="kw">match </span><span class="self">self</span>.header.message_start_time {
+            <span class="number">0 </span>=&gt; header.log_time,
+            nz =&gt; nz.min(header.log_time),
         };
-        <span class="self">self</span>.<span class="ident">header</span>.<span class="ident">message_end_time</span> <span class="op">=</span> <span class="kw">match</span> <span class="self">self</span>.<span class="ident">header</span>.<span class="ident">message_end_time</span> {
-            <span class="number">0</span> =&gt; <span class="ident">header</span>.<span class="ident">log_time</span>,
-            <span class="ident">nz</span> =&gt; <span class="ident">nz</span>.<span class="ident">max</span>(<span class="ident">header</span>.<span class="ident">log_time</span>),
+        <span class="self">self</span>.header.message_end_time = <span class="kw">match </span><span class="self">self</span>.header.message_end_time {
+            <span class="number">0 </span>=&gt; header.log_time,
+            nz =&gt; nz.max(header.log_time),
         };
 
-        <span class="comment">// Add an index for this message</span>
-        <span class="self">self</span>.<span class="ident">indexes</span>
-            .<span class="ident">entry</span>(<span class="ident">header</span>.<span class="ident">channel_id</span>)
-            .<span class="ident">or_default</span>()
-            .<span class="ident">push</span>(<span class="ident">records::MessageIndexEntry</span> {
-                <span class="ident">log_time</span>: <span class="ident">header</span>.<span class="ident">log_time</span>,
-                <span class="ident">offset</span>: <span class="self">self</span>.<span class="ident">compressor</span>.<span class="ident">position</span>(),
+        <span class="comment">// Add an index for this message
+        </span><span class="self">self</span>.indexes
+            .entry(header.channel_id)
+            .or_default()
+            .push(records::MessageIndexEntry {
+                log_time: header.log_time,
+                offset: <span class="self">self</span>.compressor.position(),
             });
 
-        <span class="ident">write_record</span>(
-            <span class="kw-2">&amp;mut</span> <span class="self">self</span>.<span class="ident">compressor</span>,
-            <span class="kw-2">&amp;</span><span class="ident">Record::Message</span> {
-                <span class="ident">header</span>: <span class="kw-2">*</span><span class="ident">header</span>,
-                <span class="ident">data</span>: <span class="ident">Cow::Borrowed</span>(<span class="ident">data</span>),
+        write_record(
+            <span class="kw-2">&amp;mut </span><span class="self">self</span>.compressor,
+            <span class="kw-2">&amp;</span>Record::Message {
+                header: <span class="kw-2">*</span>header,
+                data: Cow::Borrowed(data),
             },
         )<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn</span> <span class="ident">finish</span>(<span class="kw-2">mut</span> <span class="self">self</span>) -&gt; <span class="ident">McapResult</span><span class="op">&lt;</span>(<span class="ident">W</span>, <span class="ident">records::ChunkIndex</span>)<span class="op">&gt;</span> {
-        <span class="comment">// Get the number of uncompressed bytes written and the CRC.</span>
-        <span class="self">self</span>.<span class="ident">header</span>.<span class="ident">uncompressed_size</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">compressor</span>.<span class="ident">position</span>();
-        <span class="kw">let</span> (<span class="ident">stream</span>, <span class="ident">crc</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">compressor</span>.<span class="ident">finalize</span>();
-        <span class="self">self</span>.<span class="ident">header</span>.<span class="ident">uncompressed_crc</span> <span class="op">=</span> <span class="ident">crc</span>;
+    <span class="kw">fn </span>finish(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; McapResult&lt;(W, records::ChunkIndex)&gt; {
+        <span class="comment">// Get the number of uncompressed bytes written and the CRC.
+        </span><span class="self">self</span>.header.uncompressed_size = <span class="self">self</span>.compressor.position();
+        <span class="kw">let </span>(stream, crc) = <span class="self">self</span>.compressor.finalize();
+        <span class="self">self</span>.header.uncompressed_crc = crc;
 
-        <span class="comment">// Finalize the compression stream - it maintains an internal buffer.</span>
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">writer</span> <span class="op">=</span> <span class="ident">stream</span>.<span class="ident">finish</span>()<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="ident">end_of_stream</span> <span class="op">=</span> <span class="ident">writer</span>.<span class="ident">stream_position</span>()<span class="question-mark">?</span>;
-        <span class="self">self</span>.<span class="ident">header</span>.<span class="ident">compressed_size</span> <span class="op">=</span> <span class="ident">end_of_stream</span> <span class="op">-</span> <span class="self">self</span>.<span class="ident">stream_start</span>;
-        <span class="kw">let</span> <span class="ident">record_size</span> <span class="op">=</span> (<span class="ident">end_of_stream</span> <span class="op">-</span> <span class="self">self</span>.<span class="ident">header_start</span>) <span class="kw">as</span> <span class="ident">usize</span> <span class="op">-</span> <span class="number">9</span>; <span class="comment">// 1 byte op, 8 byte len</span>
+        <span class="comment">// Finalize the compression stream - it maintains an internal buffer.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>writer = stream.finish()<span class="question-mark">?</span>;
+        <span class="kw">let </span>end_of_stream = writer.stream_position()<span class="question-mark">?</span>;
+        <span class="self">self</span>.header.compressed_size = end_of_stream - <span class="self">self</span>.stream_start;
+        <span class="kw">let </span>record_size = (end_of_stream - <span class="self">self</span>.header_start) <span class="kw">as </span>usize - <span class="number">9</span>; <span class="comment">// 1 byte op, 8 byte len
 
-        <span class="comment">// Back up, write our finished header, then continue at the end of the stream.</span>
-        <span class="ident">writer</span>.<span class="ident">seek</span>(<span class="ident">SeekFrom::Start</span>(<span class="self">self</span>.<span class="ident">header_start</span>))<span class="question-mark">?</span>;
-        <span class="ident">op_and_len</span>(<span class="kw-2">&amp;mut</span> <span class="ident">writer</span>, <span class="ident">op::CHUNK</span>, <span class="ident">record_size</span>)<span class="question-mark">?</span>;
-        <span class="ident">writer</span>.<span class="ident">write_le</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">header</span>)<span class="question-mark">?</span>;
-        <span class="macro">assert_eq!</span>(<span class="self">self</span>.<span class="ident">stream_start</span>, <span class="ident">writer</span>.<span class="ident">stream_position</span>()<span class="question-mark">?</span>);
-        <span class="macro">assert_eq!</span>(<span class="ident">writer</span>.<span class="ident">seek</span>(<span class="ident">SeekFrom::End</span>(<span class="number">0</span>))<span class="question-mark">?</span>, <span class="ident">end_of_stream</span>);
+        // Back up, write our finished header, then continue at the end of the stream.
+        </span>writer.seek(SeekFrom::Start(<span class="self">self</span>.header_start))<span class="question-mark">?</span>;
+        op_and_len(<span class="kw-2">&amp;mut </span>writer, op::CHUNK, record_size)<span class="question-mark">?</span>;
+        writer.write_le(<span class="kw-2">&amp;</span><span class="self">self</span>.header)<span class="question-mark">?</span>;
+        <span class="macro">assert_eq!</span>(<span class="self">self</span>.stream_start, writer.stream_position()<span class="question-mark">?</span>);
+        <span class="macro">assert_eq!</span>(writer.seek(SeekFrom::End(<span class="number">0</span>))<span class="question-mark">?</span>, end_of_stream);
 
-        <span class="comment">// Write our message indexes</span>
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">message_index_offsets</span>: <span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">u16</span>, <span class="ident">u64</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">BTreeMap::new</span>();
+        <span class="comment">// Write our message indexes
+        </span><span class="kw">let </span><span class="kw-2">mut </span>message_index_offsets: BTreeMap&lt;u16, u64&gt; = BTreeMap::new();
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">index_buf</span> <span class="op">=</span> <span class="ident">Vec::new</span>();
-        <span class="kw">for</span> (<span class="ident">channel_id</span>, <span class="ident">records</span>) <span class="kw">in</span> <span class="self">self</span>.<span class="ident">indexes</span> {
-            <span class="macro">assert!</span>(<span class="ident">message_index_offsets</span>
-                .<span class="ident">insert</span>(<span class="ident">channel_id</span>, <span class="ident">writer</span>.<span class="ident">stream_position</span>()<span class="question-mark">?</span>)
-                .<span class="ident">is_none</span>());
-            <span class="ident">index_buf</span>.<span class="ident">clear</span>();
-            <span class="kw">let</span> <span class="ident">index</span> <span class="op">=</span> <span class="ident">records::MessageIndex</span> {
-                <span class="ident">channel_id</span>,
-                <span class="ident">records</span>,
+        <span class="kw">let </span><span class="kw-2">mut </span>index_buf = Vec::new();
+        <span class="kw">for </span>(channel_id, records) <span class="kw">in </span><span class="self">self</span>.indexes {
+            <span class="macro">assert!</span>(message_index_offsets
+                .insert(channel_id, writer.stream_position()<span class="question-mark">?</span>)
+                .is_none());
+            index_buf.clear();
+            <span class="kw">let </span>index = records::MessageIndex {
+                channel_id,
+                records,
             };
 
-            <span class="ident">Cursor::new</span>(<span class="kw-2">&amp;mut</span> <span class="ident">index_buf</span>).<span class="ident">write_le</span>(<span class="kw-2">&amp;</span><span class="ident">index</span>)<span class="question-mark">?</span>;
-            <span class="ident">op_and_len</span>(<span class="kw-2">&amp;mut</span> <span class="ident">writer</span>, <span class="ident">op::MESSAGE_INDEX</span>, <span class="ident">index_buf</span>.<span class="ident">len</span>())<span class="question-mark">?</span>;
-            <span class="ident">writer</span>.<span class="ident">write_all</span>(<span class="kw-2">&amp;</span><span class="ident">index_buf</span>)<span class="question-mark">?</span>;
+            Cursor::new(<span class="kw-2">&amp;mut </span>index_buf).write_le(<span class="kw-2">&amp;</span>index)<span class="question-mark">?</span>;
+            op_and_len(<span class="kw-2">&amp;mut </span>writer, op::MESSAGE_INDEX, index_buf.len())<span class="question-mark">?</span>;
+            writer.write_all(<span class="kw-2">&amp;</span>index_buf)<span class="question-mark">?</span>;
         }
-        <span class="kw">let</span> <span class="ident">end_of_indexes</span> <span class="op">=</span> <span class="ident">writer</span>.<span class="ident">stream_position</span>()<span class="question-mark">?</span>;
+        <span class="kw">let </span>end_of_indexes = writer.stream_position()<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> <span class="ident">index</span> <span class="op">=</span> <span class="ident">records::ChunkIndex</span> {
-            <span class="ident">message_start_time</span>: <span class="self">self</span>.<span class="ident">header</span>.<span class="ident">message_start_time</span>,
-            <span class="ident">message_end_time</span>: <span class="self">self</span>.<span class="ident">header</span>.<span class="ident">message_end_time</span>,
-            <span class="ident">chunk_start_offset</span>: <span class="self">self</span>.<span class="ident">header_start</span>,
-            <span class="ident">chunk_length</span>: <span class="ident">end_of_stream</span> <span class="op">-</span> <span class="self">self</span>.<span class="ident">header_start</span>,
-            <span class="ident">message_index_offsets</span>,
-            <span class="ident">message_index_length</span>: <span class="ident">end_of_indexes</span> <span class="op">-</span> <span class="ident">end_of_stream</span>,
-            <span class="ident">compression</span>: <span class="self">self</span>.<span class="ident">header</span>.<span class="ident">compression</span>,
-            <span class="ident">compressed_size</span>: <span class="self">self</span>.<span class="ident">header</span>.<span class="ident">compressed_size</span>,
-            <span class="ident">uncompressed_size</span>: <span class="self">self</span>.<span class="ident">header</span>.<span class="ident">uncompressed_size</span>,
+        <span class="kw">let </span>index = records::ChunkIndex {
+            message_start_time: <span class="self">self</span>.header.message_start_time,
+            message_end_time: <span class="self">self</span>.header.message_end_time,
+            chunk_start_offset: <span class="self">self</span>.header_start,
+            chunk_length: end_of_stream - <span class="self">self</span>.header_start,
+            message_index_offsets,
+            message_index_length: end_of_indexes - end_of_stream,
+            compression: <span class="self">self</span>.header.compression,
+            compressed_size: <span class="self">self</span>.header.compressed_size,
+            uncompressed_size: <span class="self">self</span>.header.uncompressed_size,
         };
 
-        <span class="prelude-val">Ok</span>((<span class="ident">writer</span>, <span class="ident">index</span>))
+        <span class="prelude-val">Ok</span>((writer, index))
     }
 }
 </code></pre></div>
-</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="mcap" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.64.0 (a55dd71d5 2022-09-19)" ></div></body></html>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="mcap" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0 (897e37553 2022-11-02)" ></div></body></html>

@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/lib.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>lib.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled><link rel="stylesheet" type="text/css" href="../../dark.css" disabled><link rel="stylesheet" type="text/css" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../mcap/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../mcap/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../mcap/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/lib.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>lib.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../normalize.css"><link rel="stylesheet" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../ayu.css" disabled><link rel="stylesheet" href="../../dark.css" disabled><link rel="stylesheet" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../mcap/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../mcap/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../mcap/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
 <span id="2">2</span>
 <span id="3">3</span>
 <span id="4">4</span>
@@ -197,204 +197,204 @@
 <span id="197">197</span>
 <span id="198">198</span>
 <span id="199">199</span>
-</pre><pre class="rust"><code><span class="doccomment">//! A library for manipulating [Foxglove MCAP](https://github.com/foxglove/mcap) files,</span>
-<span class="doccomment">//! both reading:</span>
-<span class="doccomment">//!</span>
-<span class="doccomment">//! ```no_run</span>
-<span class="doccomment">//! use std::fs;</span>
-<span class="doccomment">//!</span>
-<span class="doccomment">//! use anyhow::{Context, Result};</span>
-<span class="doccomment">//! use camino::Utf8Path;</span>
-<span class="doccomment">//! use memmap::Mmap;</span>
-<span class="doccomment">//!</span>
-<span class="doccomment">//! fn map_mcap&lt;P: AsRef&lt;Utf8Path&gt;&gt;(p: P) -&gt; Result&lt;Mmap&gt; {</span>
-<span class="doccomment">//!     let fd = fs::File::open(p.as_ref()).context(&quot;Couldn&#39;t open MCAP file&quot;)?;</span>
-<span class="doccomment">//!     unsafe { Mmap::map(&amp;fd) }.context(&quot;Couldn&#39;t map MCAP file&quot;)</span>
-<span class="doccomment">//! }</span>
-<span class="doccomment">//!</span>
-<span class="doccomment">//! fn read_it() -&gt; Result&lt;()&gt; {</span>
-<span class="doccomment">//!     let mapped = map_mcap(&quot;in.mcap&quot;)?;</span>
-<span class="doccomment">//!</span>
-<span class="doccomment">//!     for message in mcap::MessageStream::new(&amp;mapped)? {</span>
-<span class="doccomment">//!         println!(&quot;{:?}&quot;, message?);</span>
-<span class="doccomment">//!         // Or whatever else you&#39;d like to do...</span>
-<span class="doccomment">//!     }</span>
-<span class="doccomment">//!     Ok(())</span>
-<span class="doccomment">//! }</span>
-<span class="doccomment">//! ```</span>
-<span class="doccomment">//! or writing:</span>
-<span class="doccomment">//! ```no_run</span>
-<span class="doccomment">//! use std::{collections::BTreeMap, fs, io::BufWriter};</span>
-<span class="doccomment">//!</span>
-<span class="doccomment">//! use anyhow::Result;</span>
-<span class="doccomment">//!</span>
-<span class="doccomment">//! use mcap::{Channel, records::MessageHeader, Writer};</span>
-<span class="doccomment">//!</span>
-<span class="doccomment">//! fn write_it() -&gt; Result&lt;()&gt; {</span>
-<span class="doccomment">//!     // To set the profile or compression options, see mcap::WriteOptions.</span>
-<span class="doccomment">//!     let mut out = Writer::new(</span>
-<span class="doccomment">//!         BufWriter::new(fs::File::create(&quot;out.mcap&quot;)?)</span>
-<span class="doccomment">//!     )?;</span>
-<span class="doccomment">//!</span>
-<span class="doccomment">//!     // Channels and schemas are automatically assigned ID as they&#39;re serialized,</span>
-<span class="doccomment">//!     // and automatically deduplicated with `Arc` when deserialized.</span>
-<span class="doccomment">//!     let my_channel = Channel {</span>
-<span class="doccomment">//!         topic: String::from(&quot;cool stuff&quot;),</span>
-<span class="doccomment">//!         schema: None,</span>
-<span class="doccomment">//!         message_encoding: String::from(&quot;application/octet-stream&quot;),</span>
-<span class="doccomment">//!         metadata: BTreeMap::default()</span>
-<span class="doccomment">//!     };</span>
-<span class="doccomment">//!</span>
-<span class="doccomment">//!     let channel_id = out.add_channel(&amp;my_channel)?;</span>
-<span class="doccomment">//!</span>
-<span class="doccomment">//!     out.write_to_known_channel(</span>
-<span class="doccomment">//!         &amp;MessageHeader {</span>
-<span class="doccomment">//!             channel_id,</span>
-<span class="doccomment">//!             sequence: 25,</span>
-<span class="doccomment">//!             log_time: 6,</span>
-<span class="doccomment">//!             publish_time: 24</span>
-<span class="doccomment">//!         },</span>
-<span class="doccomment">//!         &amp;[1, 2, 3]</span>
-<span class="doccomment">//!     )?;</span>
-<span class="doccomment">//!     out.write_to_known_channel(</span>
-<span class="doccomment">//!         &amp;MessageHeader {</span>
-<span class="doccomment">//!             channel_id,</span>
-<span class="doccomment">//!             sequence: 32,</span>
-<span class="doccomment">//!             log_time: 23,</span>
-<span class="doccomment">//!             publish_time: 25</span>
-<span class="doccomment">//!         },</span>
-<span class="doccomment">//!         &amp;[3, 4, 5]</span>
-<span class="doccomment">//!     )?;</span>
-<span class="doccomment">//!</span>
-<span class="doccomment">//!     out.finish()?;</span>
-<span class="doccomment">//!</span>
-<span class="doccomment">//!     Ok(())</span>
-<span class="doccomment">//! }</span>
-<span class="doccomment">//! ```</span>
+</pre><pre class="rust"><code><span class="doccomment">//! A library for manipulating [Foxglove MCAP](https://github.com/foxglove/mcap) files,
+//! both reading:
+//!
+//! ```no_run
+//! use std::fs;
+//!
+//! use anyhow::{Context, Result};
+//! use camino::Utf8Path;
+//! use memmap::Mmap;
+//!
+//! fn map_mcap&lt;P: AsRef&lt;Utf8Path&gt;&gt;(p: P) -&gt; Result&lt;Mmap&gt; {
+//!     let fd = fs::File::open(p.as_ref()).context(&quot;Couldn&#39;t open MCAP file&quot;)?;
+//!     unsafe { Mmap::map(&amp;fd) }.context(&quot;Couldn&#39;t map MCAP file&quot;)
+//! }
+//!
+//! fn read_it() -&gt; Result&lt;()&gt; {
+//!     let mapped = map_mcap(&quot;in.mcap&quot;)?;
+//!
+//!     for message in mcap::MessageStream::new(&amp;mapped)? {
+//!         println!(&quot;{:?}&quot;, message?);
+//!         // Or whatever else you&#39;d like to do...
+//!     }
+//!     Ok(())
+//! }
+//! ```
+//! or writing:
+//! ```no_run
+//! use std::{collections::BTreeMap, fs, io::BufWriter};
+//!
+//! use anyhow::Result;
+//!
+//! use mcap::{Channel, records::MessageHeader, Writer};
+//!
+//! fn write_it() -&gt; Result&lt;()&gt; {
+//!     // To set the profile or compression options, see mcap::WriteOptions.
+//!     let mut out = Writer::new(
+//!         BufWriter::new(fs::File::create(&quot;out.mcap&quot;)?)
+//!     )?;
+//!
+//!     // Channels and schemas are automatically assigned ID as they&#39;re serialized,
+//!     // and automatically deduplicated with `Arc` when deserialized.
+//!     let my_channel = Channel {
+//!         topic: String::from(&quot;cool stuff&quot;),
+//!         schema: None,
+//!         message_encoding: String::from(&quot;application/octet-stream&quot;),
+//!         metadata: BTreeMap::default()
+//!     };
+//!
+//!     let channel_id = out.add_channel(&amp;my_channel)?;
+//!
+//!     out.write_to_known_channel(
+//!         &amp;MessageHeader {
+//!             channel_id,
+//!             sequence: 25,
+//!             log_time: 6,
+//!             publish_time: 24
+//!         },
+//!         &amp;[1, 2, 3]
+//!     )?;
+//!     out.write_to_known_channel(
+//!         &amp;MessageHeader {
+//!             channel_id,
+//!             sequence: 32,
+//!             log_time: 23,
+//!             publish_time: 25
+//!         },
+//!         &amp;[3, 4, 5]
+//!     )?;
+//!
+//!     out.finish()?;
+//!
+//!     Ok(())
+//! }
+//! ```
 
-<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">read</span>;
-<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">records</span>;
-<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">write</span>;
+</span><span class="kw">pub mod </span>read;
+<span class="kw">pub mod </span>records;
+<span class="kw">pub mod </span>write;
 
-<span class="kw">mod</span> <span class="ident">io_utils</span>;
+<span class="kw">mod </span>io_utils;
 
-<span class="kw">use</span> <span class="ident">std</span>::{<span class="ident">borrow::Cow</span>, <span class="ident">collections::BTreeMap</span>, <span class="ident">fmt</span>, <span class="ident">sync::Arc</span>};
+<span class="kw">use </span>std::{borrow::Cow, collections::BTreeMap, fmt, sync::Arc};
 
-<span class="kw">use</span> <span class="ident">thiserror::Error</span>;
+<span class="kw">use </span>thiserror::Error;
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Error</span>)]</span>
-<span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">McapError</span> {
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Bad magic number&quot;</span>)]</span>
-    <span class="ident">BadMagic</span>,
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Footer record couldn&#39;t be found at the end of the file, before the magic bytes&quot;</span>)]</span>
-    <span class="ident">BadFooter</span>,
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Attachment CRC failed (expeted {saved:08X}, got {calculated:08X}&quot;</span>)]</span>
-    <span class="ident">BadAttachmentCrc</span> { <span class="ident">saved</span>: <span class="ident">u32</span>, <span class="ident">calculated</span>: <span class="ident">u32</span> },
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Chunk CRC failed (expected {saved:08X}, got {calculated:08X}&quot;</span>)]</span>
-    <span class="ident">BadChunkCrc</span> { <span class="ident">saved</span>: <span class="ident">u32</span>, <span class="ident">calculated</span>: <span class="ident">u32</span> },
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Data section CRC failed (expected {saved:08X}, got {calculated:08X})&quot;</span>)]</span>
-    <span class="ident">BadDataCrc</span> { <span class="ident">saved</span>: <span class="ident">u32</span>, <span class="ident">calculated</span>: <span class="ident">u32</span> },
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Summary section CRC failed (expected {saved:08X}, got {calculated:08X})&quot;</span>)]</span>
-    <span class="ident">BadSummaryCrc</span> { <span class="ident">saved</span>: <span class="ident">u32</span>, <span class="ident">calculated</span>: <span class="ident">u32</span> },
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Index offset and length didn&#39;t point to the expected record type&quot;</span>)]</span>
-    <span class="ident">BadIndex</span>,
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Attachment length ({header}) exceeds space in record ({available})&quot;</span>)]</span>
-    <span class="ident">BadAttachmentLength</span> { <span class="ident">header</span>: <span class="ident">u64</span>, <span class="ident">available</span>: <span class="ident">u64</span> },
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Chunk length ({header}) exceeds space in record ({available})&quot;</span>)]</span>
-    <span class="ident">BadChunkLength</span> { <span class="ident">header</span>: <span class="ident">u64</span>, <span class="ident">available</span>: <span class="ident">u64</span> },
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Schema length ({header}) exceeds space in record ({available})&quot;</span>)]</span>
-    <span class="ident">BadSchemaLength</span> { <span class="ident">header</span>: <span class="ident">u32</span>, <span class="ident">available</span>: <span class="ident">u32</span> },
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Channel `{0}` has mulitple records that don&#39;t match.&quot;</span>)]</span>
-    <span class="ident">ConflictingChannels</span>(<span class="ident">String</span>),
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Schema `{0}` has mulitple records that don&#39;t match.&quot;</span>)]</span>
-    <span class="ident">ConflictingSchemas</span>(<span class="ident">String</span>),
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Record parse failed&quot;</span>)]</span>
-    <span class="ident">Parse</span>(<span class="attribute">#[<span class="ident">from</span>]</span> <span class="ident">binrw::Error</span>),
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;I/O error from writing, or reading a compression stream&quot;</span>)]</span>
-    <span class="ident">Io</span>(<span class="attribute">#[<span class="ident">from</span>]</span> <span class="ident">std::io::Error</span>),
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Schema has an ID of 0&quot;</span>)]</span>
-    <span class="ident">InvalidSchemaId</span>,
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;MCAP file ended in the middle of a record&quot;</span>)]</span>
-    <span class="ident">UnexpectedEof</span>,
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Chunk ended in the middle of a record&quot;</span>)]</span>
-    <span class="ident">UnexpectedEoc</span>,
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Message {0} referenced unknown channel {1}&quot;</span>)]</span>
-    <span class="ident">UnknownChannel</span>(<span class="ident">u32</span>, <span class="ident">u16</span>),
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Channel `{0}` referenced unknown schema {1}&quot;</span>)]</span>
-    <span class="ident">UnknownSchema</span>(<span class="ident">String</span>, <span class="ident">u16</span>),
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Found record with opcode {0:02X} in a chunk&quot;</span>)]</span>
-    <span class="ident">UnexpectedChunkRecord</span>(<span class="ident">u8</span>),
-    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;Unsupported compression format `{0}`&quot;</span>)]</span>
-    <span class="ident">UnsupportedCompression</span>(<span class="ident">String</span>),
+<span class="attribute">#[derive(Debug, Error)]
+</span><span class="kw">pub enum </span>McapError {
+    <span class="attribute">#[error(<span class="string">&quot;Bad magic number&quot;</span>)]
+    </span>BadMagic,
+    <span class="attribute">#[error(<span class="string">&quot;Footer record couldn&#39;t be found at the end of the file, before the magic bytes&quot;</span>)]
+    </span>BadFooter,
+    <span class="attribute">#[error(<span class="string">&quot;Attachment CRC failed (expeted {saved:08X}, got {calculated:08X}&quot;</span>)]
+    </span>BadAttachmentCrc { saved: u32, calculated: u32 },
+    <span class="attribute">#[error(<span class="string">&quot;Chunk CRC failed (expected {saved:08X}, got {calculated:08X}&quot;</span>)]
+    </span>BadChunkCrc { saved: u32, calculated: u32 },
+    <span class="attribute">#[error(<span class="string">&quot;Data section CRC failed (expected {saved:08X}, got {calculated:08X})&quot;</span>)]
+    </span>BadDataCrc { saved: u32, calculated: u32 },
+    <span class="attribute">#[error(<span class="string">&quot;Summary section CRC failed (expected {saved:08X}, got {calculated:08X})&quot;</span>)]
+    </span>BadSummaryCrc { saved: u32, calculated: u32 },
+    <span class="attribute">#[error(<span class="string">&quot;Index offset and length didn&#39;t point to the expected record type&quot;</span>)]
+    </span>BadIndex,
+    <span class="attribute">#[error(<span class="string">&quot;Attachment length ({header}) exceeds space in record ({available})&quot;</span>)]
+    </span>BadAttachmentLength { header: u64, available: u64 },
+    <span class="attribute">#[error(<span class="string">&quot;Chunk length ({header}) exceeds space in record ({available})&quot;</span>)]
+    </span>BadChunkLength { header: u64, available: u64 },
+    <span class="attribute">#[error(<span class="string">&quot;Schema length ({header}) exceeds space in record ({available})&quot;</span>)]
+    </span>BadSchemaLength { header: u32, available: u32 },
+    <span class="attribute">#[error(<span class="string">&quot;Channel `{0}` has mulitple records that don&#39;t match.&quot;</span>)]
+    </span>ConflictingChannels(String),
+    <span class="attribute">#[error(<span class="string">&quot;Schema `{0}` has mulitple records that don&#39;t match.&quot;</span>)]
+    </span>ConflictingSchemas(String),
+    <span class="attribute">#[error(<span class="string">&quot;Record parse failed&quot;</span>)]
+    </span>Parse(<span class="attribute">#[from] </span>binrw::Error),
+    <span class="attribute">#[error(<span class="string">&quot;I/O error from writing, or reading a compression stream&quot;</span>)]
+    </span>Io(<span class="attribute">#[from] </span>std::io::Error),
+    <span class="attribute">#[error(<span class="string">&quot;Schema has an ID of 0&quot;</span>)]
+    </span>InvalidSchemaId,
+    <span class="attribute">#[error(<span class="string">&quot;MCAP file ended in the middle of a record&quot;</span>)]
+    </span>UnexpectedEof,
+    <span class="attribute">#[error(<span class="string">&quot;Chunk ended in the middle of a record&quot;</span>)]
+    </span>UnexpectedEoc,
+    <span class="attribute">#[error(<span class="string">&quot;Message {0} referenced unknown channel {1}&quot;</span>)]
+    </span>UnknownChannel(u32, u16),
+    <span class="attribute">#[error(<span class="string">&quot;Channel `{0}` referenced unknown schema {1}&quot;</span>)]
+    </span>UnknownSchema(String, u16),
+    <span class="attribute">#[error(<span class="string">&quot;Found record with opcode {0:02X} in a chunk&quot;</span>)]
+    </span>UnexpectedChunkRecord(u8),
+    <span class="attribute">#[error(<span class="string">&quot;Unsupported compression format `{0}`&quot;</span>)]
+    </span>UnsupportedCompression(String),
 }
 
-<span class="kw">pub</span> <span class="kw">type</span> <span class="ident">McapResult</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span> <span class="op">=</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">T</span>, <span class="ident">McapError</span><span class="op">&gt;</span>;
+<span class="kw">pub type </span>McapResult&lt;T&gt; = <span class="prelude-ty">Result</span>&lt;T, McapError&gt;;
 
-<span class="doccomment">/// Magic bytes for the MCAP format</span>
-<span class="kw">pub</span> <span class="kw">const</span> <span class="ident">MAGIC</span>: <span class="kw-2">&amp;</span>[<span class="ident">u8</span>] <span class="op">=</span> <span class="kw-2">&amp;</span>[<span class="number">0x89</span>, <span class="string">b&#39;M&#39;</span>, <span class="string">b&#39;C&#39;</span>, <span class="string">b&#39;A&#39;</span>, <span class="string">b&#39;P&#39;</span>, <span class="number">0x30</span>, <span class="string">b&#39;\r&#39;</span>, <span class="string">b&#39;\n&#39;</span>];
+<span class="doccomment">/// Magic bytes for the MCAP format
+</span><span class="kw">pub const </span>MAGIC: <span class="kw-2">&amp;</span>[u8] = <span class="kw-2">&amp;</span>[<span class="number">0x89</span>, <span class="string">b&#39;M&#39;</span>, <span class="string">b&#39;C&#39;</span>, <span class="string">b&#39;A&#39;</span>, <span class="string">b&#39;P&#39;</span>, <span class="number">0x30</span>, <span class="string">b&#39;\r&#39;</span>, <span class="string">b&#39;\n&#39;</span>];
 
-<span class="doccomment">/// Compression options for chunks of channels, schemas, and messages in an MCAP file</span>
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Copy</span>, <span class="ident">Clone</span>)]</span>
-<span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">Compression</span> {
-    <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">feature</span> <span class="op">=</span> <span class="string">&quot;zstd&quot;</span>)]</span>
-    <span class="ident">Zstd</span>,
-    <span class="ident">Lz4</span>,
+<span class="doccomment">/// Compression options for chunks of channels, schemas, and messages in an MCAP file
+</span><span class="attribute">#[derive(Debug, Copy, Clone)]
+</span><span class="kw">pub enum </span>Compression {
+    <span class="attribute">#[cfg(feature = <span class="string">&quot;zstd&quot;</span>)]
+    </span>Zstd,
+    Lz4,
 }
 
-<span class="doccomment">/// Describes a schema used by one or more [Channel]s in an MCAP file</span>
-<span class="doccomment">///</span>
-<span class="doccomment">/// The [`CoW`](std::borrow::Cow) can either borrow directly from the mapped file,</span>
-<span class="doccomment">/// or hold its own buffer if it was decompressed from a chunk.</span>
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clone</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">Hash</span>)]</span>
-<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Schema</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
-    <span class="kw">pub</span> <span class="ident">name</span>: <span class="ident">String</span>,
-    <span class="kw">pub</span> <span class="ident">encoding</span>: <span class="ident">String</span>,
-    <span class="kw">pub</span> <span class="ident">data</span>: <span class="ident">Cow</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, [<span class="ident">u8</span>]<span class="op">&gt;</span>,
+<span class="doccomment">/// Describes a schema used by one or more [Channel]s in an MCAP file
+///
+/// The [`CoW`](std::borrow::Cow) can either borrow directly from the mapped file,
+/// or hold its own buffer if it was decompressed from a chunk.
+</span><span class="attribute">#[derive(Clone, PartialEq, Eq, Hash)]
+</span><span class="kw">pub struct </span>Schema&lt;<span class="lifetime">&#39;a</span>&gt; {
+    <span class="kw">pub </span>name: String,
+    <span class="kw">pub </span>encoding: String,
+    <span class="kw">pub </span>data: Cow&lt;<span class="lifetime">&#39;a</span>, [u8]&gt;,
 }
 
-<span class="kw">impl</span> <span class="ident">fmt::Debug</span> <span class="kw">for</span> <span class="ident">Schema</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span> {
-    <span class="kw">fn</span> <span class="ident">fmt</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">f</span>: <span class="kw-2">&amp;mut</span> <span class="ident">fmt::Formatter</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span>) -&gt; <span class="ident">fmt::Result</span> {
-        <span class="ident">f</span>.<span class="ident">debug_struct</span>(<span class="string">&quot;Schema&quot;</span>)
-            .<span class="ident">field</span>(<span class="string">&quot;name&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">name</span>)
-            .<span class="ident">field</span>(<span class="string">&quot;encoding&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">encoding</span>)
-            .<span class="ident">finish_non_exhaustive</span>()
+<span class="kw">impl </span>fmt::Debug <span class="kw">for </span>Schema&lt;<span class="lifetime">&#39;_</span>&gt; {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">&#39;_</span>&gt;) -&gt; fmt::Result {
+        f.debug_struct(<span class="string">&quot;Schema&quot;</span>)
+            .field(<span class="string">&quot;name&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.name)
+            .field(<span class="string">&quot;encoding&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.encoding)
+            .finish_non_exhaustive()
     }
 }
 
-<span class="doccomment">/// Describes a channel which [Message]s are published to in an MCAP file</span>
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>, <span class="ident">Hash</span>)]</span>
-<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Channel</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
-    <span class="kw">pub</span> <span class="ident">topic</span>: <span class="ident">String</span>,
-    <span class="kw">pub</span> <span class="ident">schema</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">Schema</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span>,
+<span class="doccomment">/// Describes a channel which [Message]s are published to in an MCAP file
+</span><span class="attribute">#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+</span><span class="kw">pub struct </span>Channel&lt;<span class="lifetime">&#39;a</span>&gt; {
+    <span class="kw">pub </span>topic: String,
+    <span class="kw">pub </span>schema: <span class="prelude-ty">Option</span>&lt;Arc&lt;Schema&lt;<span class="lifetime">&#39;a</span>&gt;&gt;&gt;,
 
-    <span class="kw">pub</span> <span class="ident">message_encoding</span>: <span class="ident">String</span>,
-    <span class="kw">pub</span> <span class="ident">metadata</span>: <span class="ident">BTreeMap</span><span class="op">&lt;</span><span class="ident">String</span>, <span class="ident">String</span><span class="op">&gt;</span>,
+    <span class="kw">pub </span>message_encoding: String,
+    <span class="kw">pub </span>metadata: BTreeMap&lt;String, String&gt;,
 }
 
-<span class="doccomment">/// An event in an MCAP file, published to a [Channel]</span>
-<span class="doccomment">///</span>
-<span class="doccomment">/// The [`CoW`](std::borrow::Cow) can either borrow directly from the mapped file,</span>
-<span class="doccomment">/// or hold its own buffer if it was decompressed from a chunk.</span>
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">Clone</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>)]</span>
-<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Message</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
-    <span class="kw">pub</span> <span class="ident">channel</span>: <span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">Channel</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span><span class="op">&gt;</span>,
-    <span class="kw">pub</span> <span class="ident">sequence</span>: <span class="ident">u32</span>,
-    <span class="kw">pub</span> <span class="ident">log_time</span>: <span class="ident">u64</span>,
-    <span class="kw">pub</span> <span class="ident">publish_time</span>: <span class="ident">u64</span>,
-    <span class="kw">pub</span> <span class="ident">data</span>: <span class="ident">Cow</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, [<span class="ident">u8</span>]<span class="op">&gt;</span>,
+<span class="doccomment">/// An event in an MCAP file, published to a [Channel]
+///
+/// The [`CoW`](std::borrow::Cow) can either borrow directly from the mapped file,
+/// or hold its own buffer if it was decompressed from a chunk.
+</span><span class="attribute">#[derive(Debug, Clone, PartialEq, Eq)]
+</span><span class="kw">pub struct </span>Message&lt;<span class="lifetime">&#39;a</span>&gt; {
+    <span class="kw">pub </span>channel: Arc&lt;Channel&lt;<span class="lifetime">&#39;a</span>&gt;&gt;,
+    <span class="kw">pub </span>sequence: u32,
+    <span class="kw">pub </span>log_time: u64,
+    <span class="kw">pub </span>publish_time: u64,
+    <span class="kw">pub </span>data: Cow&lt;<span class="lifetime">&#39;a</span>, [u8]&gt;,
 }
 
-<span class="doccomment">/// An attachment and its metadata in an MCAP file</span>
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">PartialEq</span>, <span class="ident">Eq</span>)]</span>
-<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Attachment</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
-    <span class="kw">pub</span> <span class="ident">log_time</span>: <span class="ident">u64</span>,
-    <span class="kw">pub</span> <span class="ident">create_time</span>: <span class="ident">u64</span>,
-    <span class="kw">pub</span> <span class="ident">name</span>: <span class="ident">String</span>,
-    <span class="kw">pub</span> <span class="ident">media_type</span>: <span class="ident">String</span>,
-    <span class="kw">pub</span> <span class="ident">data</span>: <span class="ident">Cow</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span>, [<span class="ident">u8</span>]<span class="op">&gt;</span>,
+<span class="doccomment">/// An attachment and its metadata in an MCAP file
+</span><span class="attribute">#[derive(Debug, PartialEq, Eq)]
+</span><span class="kw">pub struct </span>Attachment&lt;<span class="lifetime">&#39;a</span>&gt; {
+    <span class="kw">pub </span>log_time: u64,
+    <span class="kw">pub </span>create_time: u64,
+    <span class="kw">pub </span>name: String,
+    <span class="kw">pub </span>media_type: String,
+    <span class="kw">pub </span>data: Cow&lt;<span class="lifetime">&#39;a</span>, [u8]&gt;,
 }
 
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">read</span>::{<span class="ident">MessageStream</span>, <span class="ident">Summary</span>};
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">write</span>::{<span class="ident">WriteOptions</span>, <span class="ident">Writer</span>};
+<span class="kw">pub use </span>read::{MessageStream, Summary};
+<span class="kw">pub use </span>write::{WriteOptions, Writer};
 </code></pre></div>
-</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="mcap" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.64.0 (a55dd71d5 2022-09-19)" ></div></body></html>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="mcap" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0 (897e37553 2022-11-02)" ></div></body></html>
