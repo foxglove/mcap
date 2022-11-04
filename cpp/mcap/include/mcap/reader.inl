@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <cassert>
 #include <lz4frame.h>
-
 #include <zstd.h>
 #include <zstd_errors.h>
 
@@ -1740,11 +1739,13 @@ void LinearMessageView::Iterator::operator++(int) {
   ++*this;
 }
 
-bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
+bool MCAP_PUBLIC operator==(const LinearMessageView::Iterator& a,
+                            const LinearMessageView::Iterator& b) {
   return a.impl_ == b.impl_;
 }
 
-bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
+bool MCAP_PUBLIC operator!=(const LinearMessageView::Iterator& a,
+                            const LinearMessageView::Iterator& b) {
   return !(a == b);
 }
 
