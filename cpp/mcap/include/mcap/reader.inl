@@ -1739,13 +1739,11 @@ void LinearMessageView::Iterator::operator++(int) {
   ++*this;
 }
 
-bool MCAP_PUBLIC operator==(const LinearMessageView::Iterator& a,
-                            const LinearMessageView::Iterator& b) {
+bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
   return a.impl_ == b.impl_;
 }
 
-bool MCAP_PUBLIC operator!=(const LinearMessageView::Iterator& a,
-                            const LinearMessageView::Iterator& b) {
+bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
   return !(a == b);
 }
 

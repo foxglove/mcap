@@ -642,8 +642,8 @@ struct MCAP_PUBLIC LinearMessageView {
     pointer operator->() const;
     Iterator& operator++();
     void operator++(int);
-    friend bool operator==(const Iterator& a, const Iterator& b);
-    friend bool operator!=(const Iterator& a, const Iterator& b);
+    MCAP_PUBLIC friend bool operator==(const Iterator& a, const Iterator& b);
+    friend MCAP_PUBLIC bool operator!=(const Iterator& a, const Iterator& b);
 
   private:
     friend LinearMessageView;
