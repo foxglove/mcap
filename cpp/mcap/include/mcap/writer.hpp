@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "visibility.hpp"
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -151,7 +152,7 @@ private:
  * @brief Implements the IWritable interface used by McapWriter by wrapping a
  * FILE* pointer created by fopen().
  */
-class FileWriter final : public IWritable {
+class MCAP_PUBLIC FileWriter final : public IWritable {
 public:
   ~FileWriter() override;
 
@@ -277,7 +278,7 @@ private:
  * @brief An in-memory IChunkWriter implementation that holds data in a
  * temporary buffer before flushing to an ZStandard-compressed buffer.
  */
-class ZStdWriter final : public IChunkWriter {
+class MCAP_PUBLIC ZStdWriter final : public IChunkWriter {
 public:
   ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize);
   ~ZStdWriter() override;
@@ -300,7 +301,7 @@ private:
 /**
  * @brief Provides a write interface to an MCAP file.
  */
-class McapWriter final {
+class MCAP_EXPORT McapWriter final {
 public:
   ~McapWriter();
 

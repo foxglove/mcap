@@ -1,6 +1,7 @@
 #pragma once
 
 #include "errors.hpp"
+#include "visibility.hpp"
 #include <cstddef>
 #include <functional>
 #include <limits>
@@ -353,7 +354,7 @@ struct DataEnd {
  * to that Channel's Schema. The Channel pointer is guaranteed to be valid,
  * while the Schema pointer may be null if the Channel references schema_id 0.
  */
-struct MessageView {
+struct MCAP_PUBLIC MessageView {
   const Message& message;
   const ChannelPtr channel;
   const SchemaPtr schema;

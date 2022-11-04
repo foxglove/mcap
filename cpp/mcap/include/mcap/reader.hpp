@@ -3,6 +3,7 @@
 #include "intervaltree.hpp"
 #include "read_job_queue.hpp"
 #include "types.hpp"
+#include "visibility.hpp"
 #include <cstdio>
 #include <fstream>
 #include <map>
@@ -71,7 +72,7 @@ struct IReadable {
  * @brief IReadable implementation wrapping a FILE* pointer created by fopen()
  * and a read buffer.
  */
-class FileReader final : public IReadable {
+class MCAP_EXPORT FileReader final : public IReadable {
 public:
   FileReader(std::FILE* file);
 
@@ -88,7 +89,7 @@ private:
 /**
  * @brief IReadable implementation wrapping a std::ifstream input file stream.
  */
-class FileStreamReader final : public IReadable {
+class MCAP_EXPORT FileStreamReader final : public IReadable {
 public:
   FileStreamReader(std::ifstream& stream);
 
@@ -153,7 +154,7 @@ private:
  * @brief ICompressedReader implementation that decompresses Zstandard
  * (https://facebook.github.io/zstd/) data.
  */
-class ZStdReader final : public ICompressedReader {
+class MCAP_PUBLIC ZStdReader final : public ICompressedReader {
 public:
   void reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) override;
   uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override;
@@ -187,7 +188,7 @@ private:
  * @brief ICompressedReader implementation that decompresses LZ4
  * (https://lz4.github.io/lz4/) data.
  */
-class LZ4Reader final : public ICompressedReader {
+class MCAP_PUBLIC LZ4Reader final : public ICompressedReader {
 public:
   void reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) override;
   uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override;
@@ -267,7 +268,7 @@ public:
 /**
  * @brief Provides a read interface to an MCAP file.
  */
-class McapReader final {
+class MCAP_PUBLIC McapReader final {
 public:
   ~McapReader();
 
@@ -629,8 +630,8 @@ private:
 /**
  * @brief An iterable view of Messages in an MCAP file.
  */
-struct LinearMessageView {
-  struct Iterator {
+struct MCAP_PUBLIC LinearMessageView {
+  struct MCAP_PUBLIC Iterator {
     using iterator_category = std::input_iterator_tag;
     using difference_type = int64_t;
     using value_type = MessageView;
