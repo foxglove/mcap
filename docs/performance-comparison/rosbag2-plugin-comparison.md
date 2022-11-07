@@ -35,7 +35,33 @@ The following configurations of both plugins are tested:
 
 ## Software Versions
 
-- list all ROS 2 packages by version
+Some installed package versions were omitted for clarity.
+
+| ROS 2 Package Name                | Version |
+| --------------------------------- | ------- |
+| mcap_vendor                       | 0.5.0   |
+| rcl                               | 5.4.0   |
+| rmw                               | 6.3.0   |
+| rmw_dds_common                    | 1.7.0   |
+| rmw_fastrtps_cpp                  | 6.3.0   |
+| rmw_fastrtps_shared_cpp           | 6.3.0   |
+| rmw_implementation                | 2.9.0   |
+| rmw_implementation_cmake          | 6.3.0   |
+| ros_core                          | 0.10.0  |
+| ros_environment                   | 3.2.0   |
+| ros_workspace                     | 1.0.2   |
+| rosbag2_compression               | 0.17.0  |
+| rosbag2_cpp                       | 0.17.0  |
+| rosbag2_storage                   | 0.17.0  |
+| rosbag2_storage_default_plugins   | 0.17.0  |
+| rosbag2_storage_mcap              | 0.5.0   |
+| rosbag2_storage_mcap_testdata     | 0.5.0   |
+| rosbag2_storage_plugin_comparison | 0.1.0   |
+| rosbag2_storage_sqlite3           | 0.17.0  |
+| rosbag2_test_common               | 0.17.0  |
+| shared_queues_vendor              | 0.17.0  |
+| sqlite3_vendor                    | 0.17.0  |
+| zstd_vendor                       | 0.17.0  |
 
 ## Message sizes tested
 
@@ -47,7 +73,7 @@ The following configurations of both plugins are tested:
   - 10KiB: 20%
   - 100B: 10%
 
-When testing write throughput, 250MiB of messages are stored as quickly as possible. When testing message drops,
+When testing write throughput, 250MiB of messages are stored as quickly as possible.
 
 ## Cache sizes tested
 
@@ -66,10 +92,9 @@ These benchmarks were recorded on two hardware platforms:
 | --- | --- | --- |
 | CPU | Apple M1 Pro | Core i5-7260U @ 2.20Ghz, 2 cores (4 threads) |
 | RAM | 32GB LPDDR5-6400, estimated 200GB/s bandwidth | 8GiB DDR4-2133, estimated 34.1 GB/s bandwidth |
+| Disk |  |  |
 | Kernel | Linux 5.15.0-48-generic | Linux 5.15.0-52-generic |
 | Distro | Ubuntu 22.04.1 Jammy aarch64 virtualized with Parallels 17 | Ubuntu 22.04.1 Jammy x86_64 |
-
-Bags were recorded into a `tmpfs` mount, in order to eliminate variability in disk write speeds from the test results.
 
 ## Results
 
@@ -77,10 +102,50 @@ Bags were recorded into a `tmpfs` mount, in order to eliminate variability in di
 
 ### Raw write throughput
 
-Error bars represent a 95% confidence interval.
+Results in CSV form are available here:
 
-## Discussion
+<ul>
+  <li><a href="m1/digest.csv" download>Apple M1 Pro results</a></li>
+  <li><a href="nuc/results.csv" download>Intel NUC7i5BNH results</a></li>
+</ul>
+
+The throughput values are represented below as bar charts. Error bars represent a 95% confidence interval.
+
+<div style="display: flex; flex-wrap: wrap; padding: 0 4px">
+  <div style="flex: 50%; padding: 0 4px;">
+    <img src="m1/1MiB_1KiB.png" title="M1 Throughput, 1MiB messages, 1KiB cache"/>
+    <img src="m1/1MiB_10MiB.png" title="M1 Throughput, 1MiB messages, 10MiB cache"/>
+    <img src="m1/10KiB_1KiB.png" title="M1 Throughput, 10KiB messages, 1KiB cache"/>
+    <img src="m1/10KiB_10MiB.png" title="M1 Throughput, 10KiB messages, 10MiB cache"/>
+    <img src="m1/100B_1KiB.png" title="M1 Throughput, 100B messages, 1KiB cache"/>
+    <img src="m1/100B_10MiB.png" title="M1 Throughput, 100B messages, 10MiB cache"/>
+    <img src="m1/mixed_1KiB.png" title="M1 Throughput, mixed messages, 1KiB cache"/>
+    <img src="m1/mixed_10MiB.png" title="M1 Throughput, mixed messages, 10MiB cache"/>
+  </div>
+  <div style="flex: 50%; padding: 0 4px;">
+    <img src="nuc/1MiB_1KiB.png" title="nuc throughput, 1MiB messages, 1KiB cache"/>
+    <img src="nuc/1MiB_10MiB.png" title="nuc throughput, 1MiB messages, 10MiB cache"/>
+    <img src="nuc/10KiB_1KiB.png" title="nuc throughput, 10KiB messages, 1KiB cache"/>
+    <img src="nuc/10KiB_10MiB.png" title="nuc throughput, 10KiB messages, 10MiB cache"/>
+    <img src="nuc/100B_1KiB.png" title="nuc throughput, 100B messages, 1KiB cache"/>
+    <img src="nuc/100B_10MiB.png" title="nuc throughput, 100B messages, 10MiB cache"/>
+    <img src="nuc/mixed_1KiB.png" title="nuc throughput, mixed messages, 1KiB cache"/>
+    <img src="nuc/mixed_10MiB.png" title="nuc throughput, mixed messages, 10MiB cache"/>
+  </div>
+</div>
+
+#### Key Takeaways
+
+- CRC calculation currently incurs a large performance penalty. MCAP currently uses an architecture-independent CRC calculation strategy with a 16KiB precalculated lookup table. See [this issue](https://github.com/foxglove/mcap/issues/708) for discussion on improving this.
+- When dealing with many small messages, there is a clear advantage to using MCAP in un-chunked mode. This removes the overhead of calculating and writing message the message index to the file.
+- MCAP either performs on-par with or significantly better than the SQLite storage plugin in their default configurations. It's also worth noting that in their default configurations, MCAP can offer better corruption resilience than the SQLite storage plugin as well.
 
 ### Recommendations
 
+Given the above results, we feel comfortable recommending MCAP as a replacement for SQLite as a general-purpose ROS 2 storage plugin.
+
 ### How do I replicate these results?
+
+#### Message Drops
+
+#### Raw Throughput
