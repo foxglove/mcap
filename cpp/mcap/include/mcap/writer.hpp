@@ -469,5 +469,5 @@ private:
 }  // namespace mcap
 
 #ifdef MCAP_IMPLEMENTATION
-#include "writer.inl"
+#  include "writer.inl"
 #endif

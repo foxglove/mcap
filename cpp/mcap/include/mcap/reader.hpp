@@ -706,5 +706,5 @@ private:
 }  // namespace mcap
 
 #ifdef MCAP_IMPLEMENTATION
-#include "reader.inl"
+#  include "reader.inl"
 #endif

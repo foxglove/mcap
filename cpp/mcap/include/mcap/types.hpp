@@ -369,5 +369,5 @@ struct MCAP_PUBLIC MessageView {
 }  // namespace mcap
 
 #ifdef MCAP_IMPLEMENTATION
-#include "types.inl"
+#  include "types.inl"
 #endif
