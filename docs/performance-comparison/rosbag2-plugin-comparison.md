@@ -4,6 +4,8 @@ _Oct, 2022_
 _James Smith ([@james-rms](https://github.com/james-rms))_  
 _[Foxglove](https://foxglove.dev)_
 
+<!-- cspell:words nocrc nochunking pluggable robotec middlewares fastrtps LPDDR aarch -->
+
 ## Context
 
 The [ROS 2 bag recording framework](https://github.com/ros2/rosbag2) supports pluggable storage layers, allowing users to choose different storage formats and recording libraries. When a user installs ROS 2 for the first time, they get a storage plugin by default which records bags with [SQLite](https://sqlite.org). This document compares write performance of the default plugin against the [MCAP storage plugin](https://github.com/ros-tooling/rosbag2_storage_mcap).
@@ -55,7 +57,6 @@ Some installed package versions were omitted for clarity.
 | rosbag2_storage                   | 0.17.0  |
 | rosbag2_storage_default_plugins   | 0.17.0  |
 | rosbag2_storage_mcap              | 0.5.0   |
-| rosbag2_storage_mcap_testdata     | 0.5.0   |
 | rosbag2_storage_plugin_comparison | 0.1.0   |
 | rosbag2_storage_sqlite3           | 0.17.0  |
 | rosbag2_test_common               | 0.17.0  |
@@ -105,32 +106,32 @@ These benchmarks were recorded on two hardware platforms:
 Results in CSV form are available here:
 
 <ul>
-  <li><a href="m1/digest.csv" download>Apple M1 Pro results</a></li>
-  <li><a href="nuc/results.csv" download>Intel NUC7i5BNH results</a></li>
+  <li><a href="throughput/m1/m1_throughput_results.csv" download>Apple M1 Pro results</a></li>
+  <li><a href="throughput/nuc/nuc_throughput_results.csv" download>Intel NUC7i5BNH results</a></li>
 </ul>
 
 The throughput values are represented below as bar charts. Error bars represent a 95% confidence interval.
 
 <div style="display: flex; flex-wrap: wrap; padding: 0 4px">
   <div style="flex: 50%; padding: 0 4px;">
-    <img src="m1/1MiB_1KiB.png" title="M1 Throughput, 1MiB messages, 1KiB cache"/>
-    <img src="m1/1MiB_10MiB.png" title="M1 Throughput, 1MiB messages, 10MiB cache"/>
-    <img src="m1/10KiB_1KiB.png" title="M1 Throughput, 10KiB messages, 1KiB cache"/>
-    <img src="m1/10KiB_10MiB.png" title="M1 Throughput, 10KiB messages, 10MiB cache"/>
-    <img src="m1/100B_1KiB.png" title="M1 Throughput, 100B messages, 1KiB cache"/>
-    <img src="m1/100B_10MiB.png" title="M1 Throughput, 100B messages, 10MiB cache"/>
-    <img src="m1/mixed_1KiB.png" title="M1 Throughput, mixed messages, 1KiB cache"/>
-    <img src="m1/mixed_10MiB.png" title="M1 Throughput, mixed messages, 10MiB cache"/>
+    <img src="throughput/m1/1MiB_1KiB.png" title="M1 Throughput, 1MiB messages, 1KiB cache"/>
+    <img src="throughput/m1/1MiB_10MiB.png" title="M1 Throughput, 1MiB messages, 10MiB cache"/>
+    <img src="throughput/m1/10KiB_1KiB.png" title="M1 Throughput, 10KiB messages, 1KiB cache"/>
+    <img src="throughput/m1/10KiB_10MiB.png" title="M1 Throughput, 10KiB messages, 10MiB cache"/>
+    <img src="throughput/m1/100B_1KiB.png" title="M1 Throughput, 100B messages, 1KiB cache"/>
+    <img src="throughput/m1/100B_10MiB.png" title="M1 Throughput, 100B messages, 10MiB cache"/>
+    <img src="throughput/m1/mixed_1KiB.png" title="M1 Throughput, mixed messages, 1KiB cache"/>
+    <img src="throughput/m1/mixed_10MiB.png" title="M1 Throughput, mixed messages, 10MiB cache"/>
   </div>
   <div style="flex: 50%; padding: 0 4px;">
-    <img src="nuc/1MiB_1KiB.png" title="nuc throughput, 1MiB messages, 1KiB cache"/>
-    <img src="nuc/1MiB_10MiB.png" title="nuc throughput, 1MiB messages, 10MiB cache"/>
-    <img src="nuc/10KiB_1KiB.png" title="nuc throughput, 10KiB messages, 1KiB cache"/>
-    <img src="nuc/10KiB_10MiB.png" title="nuc throughput, 10KiB messages, 10MiB cache"/>
-    <img src="nuc/100B_1KiB.png" title="nuc throughput, 100B messages, 1KiB cache"/>
-    <img src="nuc/100B_10MiB.png" title="nuc throughput, 100B messages, 10MiB cache"/>
-    <img src="nuc/mixed_1KiB.png" title="nuc throughput, mixed messages, 1KiB cache"/>
-    <img src="nuc/mixed_10MiB.png" title="nuc throughput, mixed messages, 10MiB cache"/>
+    <img src="throughput/nuc/1MiB_1KiB.png" title="nuc throughput, 1MiB messages, 1KiB cache"/>
+    <img src="throughput/nuc/1MiB_10MiB.png" title="nuc throughput, 1MiB messages, 10MiB cache"/>
+    <img src="throughput/nuc/10KiB_1KiB.png" title="nuc throughput, 10KiB messages, 1KiB cache"/>
+    <img src="throughput/nuc/10KiB_10MiB.png" title="nuc throughput, 10KiB messages, 10MiB cache"/>
+    <img src="throughput/nuc/100B_1KiB.png" title="nuc throughput, 100B messages, 1KiB cache"/>
+    <img src="throughput/nuc/100B_10MiB.png" title="nuc throughput, 100B messages, 10MiB cache"/>
+    <img src="throughput/nuc/mixed_1KiB.png" title="nuc throughput, mixed messages, 1KiB cache"/>
+    <img src="throughput/nuc/mixed_10MiB.png" title="nuc throughput, mixed messages, 10MiB cache"/>
   </div>
 </div>
 
