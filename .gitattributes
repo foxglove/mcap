@@ -4,7 +4,7 @@ testdata/mcap/demo.mcap filter=lfs diff=lfs merge=lfs -text
 testdata/ filter=lfs diff=lfs merge=lfs -text
 tests/conformance/data/** linguist-generated=true
 go/ros/testdata/markers.bag filter=lfs diff=lfs merge=lfs -text
-python/mcap-ros1-support/mcap_ros1/vendor/** linguist-vendored=true
+python/mcap-ros1-support/mcap_ros1/vendor/** linguist-vendored=true linguist-generated=true
 cpp/examples/protobuf/proto/** linguist-vendored=true
 *.csv linguist-generated=true
 testdata/db3/eloquent-twist.db3 filter=lfs diff=lfs merge=lfs -text
