@@ -28,6 +28,7 @@ ignorePaths:
   - fathom.html
   - vendor
   - rust
+  - cpp/examples/protobuf/proto
 
 words:
   - bagfile

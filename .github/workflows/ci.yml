@@ -189,6 +189,7 @@ jobs:
       - run: make ci-format-check
       - run: make ci
       - run: make test-host
+      - run: make test-examples-host
       - run: make run-examples-host
 
   typescript:
