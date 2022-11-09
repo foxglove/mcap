@@ -9,7 +9,7 @@ MCAP files can store multiple streams of heterogeneous data, serialized in any o
 
 - [ROS 1](http://wiki.ros.org/)
 - [ROS 2](https://docs.ros.org/)
-- [JSON Schema](http://jsonschema.org/)
+- [JSON Schema](http://json-schema.org/)
 - [Protobuf](https://developers.google.com/protocol-buffers)
 - [FlatBuffers](https://google.github.io/flatbuffers/)
 
