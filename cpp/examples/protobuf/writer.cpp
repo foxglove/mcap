@@ -4,8 +4,7 @@
 #define MCAP_IMPLEMENTATION
 #include "mcap/writer.hpp"
 
-#include <google/protobuf/descriptor.pb.h>
-
+#include "BuildFileDescriptorSet.h"
 #include "foxglove/PointCloud.pb.h"
 #include <chrono>
 #include <cmath>
@@ -43,28 +42,6 @@ public:
   }
 };
 
-// Writes the FileDescriptor of this descriptor and all transitive dependencies
-// to a string, for use as a channel schema.
-std::string SerializeFdSet(const google::protobuf::Descriptor* toplevelDescriptor) {
-  google::protobuf::FileDescriptorSet fdSet;
-  std::queue<const google::protobuf::FileDescriptor*> toAdd;
-  toAdd.push(toplevelDescriptor->file());
-  std::unordered_set<std::string> added;
-  while (!toAdd.empty()) {
-    const google::protobuf::FileDescriptor* next = toAdd.front();
-    toAdd.pop();
-    next->CopyTo(fdSet.add_file());
-    added.insert(next->name());
-    for (int i = 0; i < next->dependency_count(); ++i) {
-      const auto& dep = next->dependency(i);
-      if (added.find(dep->name()) == added.end()) {
-        toAdd.push(dep);
-      }
-    }
-  }
-  return fdSet.SerializeAsString();
-}
-
 int main(int argc, char** argv) {
   if (argc != 2) {
     std::cerr << "Usage: " << argv[0] << " <output.mcap>" << std::endl;
@@ -92,11 +69,12 @@ int main(int argc, char** argv) {
   mcap::ChannelId channelId;
   {
     // protobuf schemas in MCAP are represented as a serialized FileDescriptorSet.
-    // You can use the method in SerializeFdSet to generate this at runtime, or generate them
-    // ahead of time with protoc:
+    // You can use the method in BuildFileDescriptorSet to generate this at runtime,
+    // or generate them ahead of time with protoc:
     //   protoc --include_imports --descriptor_set_out=filename your_type.proto
-    mcap::Schema schema("foxglove.PointCloud", "protobuf",
-                        SerializeFdSet(foxglove::PointCloud::descriptor()));
+    mcap::Schema schema(
+      "foxglove.PointCloud", "protobuf",
+      foxglove::BuildFileDescriptorSet(foxglove::PointCloud::descriptor()).SerializeAsString());
     writer.addSchema(schema);
 
     // choose an arbitrary topic name.

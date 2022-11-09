@@ -4,14 +4,11 @@ syntax = "proto3";
 
 package foxglove;
 
-// A vector in 3D space that represents a direction only
-message Vector3 {
+// A vector in 2D space that represents a direction only
+message Vector2 {
   // x coordinate length
   double x = 1;
 
   // y coordinate length
   double y = 2;
-
-  // z coordinate length
-  double z = 3;
 }
