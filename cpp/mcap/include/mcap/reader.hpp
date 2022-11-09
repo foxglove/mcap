@@ -106,7 +106,7 @@ private:
 /**
  * @brief An abstract interface for compressed readers.
  */
-class ICompressedReader : public IReadable {
+class MCAP_PUBLIC ICompressedReader : public IReadable {
 public:
   virtual ~ICompressedReader() = default;
 
