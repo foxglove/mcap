@@ -1,6 +1,7 @@
 #pragma once
 
 #include "errors.hpp"
+#include "visibility.hpp"
 #include <cstddef>
 #include <functional>
 #include <limits>
@@ -74,13 +75,14 @@ enum struct OpCode : uint8_t {
 /**
  * @brief Get the string representation of an OpCode.
  */
+MCAP_PUBLIC
 constexpr std::string_view OpCodeString(OpCode opcode);
 
 /**
  * @brief A generic Type-Length-Value record using a uint8 type and uint64
  * length. This is the generic form of all MCAP records.
  */
-struct Record {
+struct MCAP_PUBLIC Record {
   OpCode opcode;
   uint64_t dataSize;
   std::byte* data;
@@ -96,7 +98,7 @@ struct Record {
  * <https://github.com/foxglove/mcap/tree/main/docs/specification/profiles>) and
  * a string signature of the recording library.
  */
-struct Header {
+struct MCAP_PUBLIC Header {
   std::string profile;
   std::string library;
 };
@@ -108,7 +110,7 @@ struct Header {
  * Summary and Summary Offset sections. A `summaryStart` and
  * `summaryOffsetStart` of zero indicates no Summary section is available.
  */
-struct Footer {
+struct MCAP_PUBLIC Footer {
   ByteOffset summaryStart;
   ByteOffset summaryOffsetStart;
   uint32_t summaryCrc;
@@ -125,7 +127,7 @@ struct Footer {
  * describing the shape of messages. One or more Channel records map to a single
  * Schema.
  */
-struct Schema {
+struct MCAP_PUBLIC Schema {
   SchemaId id;
   std::string name;
   std::string encoding;
@@ -152,7 +154,7 @@ struct Schema {
  * encodings that are not self-describing (e.g. JSON) or when schema information
  * is available (e.g. JSONSchema).
  */
-struct Channel {
+struct MCAP_PUBLIC Channel {
   ChannelId id;
   std::string topic;
   std::string messageEncoding;
@@ -175,7 +177,7 @@ using ChannelPtr = std::shared_ptr<Channel>;
 /**
  * @brief A single Message published to a Channel.
  */
-struct Message {
+struct MCAP_PUBLIC Message {
   ChannelId channelId;
   /**
    * @brief An optional sequence number. If non-zero, sequence numbers should be
@@ -208,7 +210,7 @@ struct Message {
  * @brief An collection of Schemas, Channels, and Messages that supports
  * compression and indexing.
  */
-struct Chunk {
+struct MCAP_PUBLIC Chunk {
   Timestamp messageStartTime;
   Timestamp messageEndTime;
   ByteOffset uncompressedSize;
@@ -222,7 +224,7 @@ struct Chunk {
  * @brief A list of timestamps to byte offsets for a single Channel. This record
  * appears after each Chunk, one per Channel that appeared in that Chunk.
  */
-struct MessageIndex {
+struct MCAP_PUBLIC MessageIndex {
   ChannelId channelId;
   std::vector<std::pair<Timestamp, ByteOffset>> records;
 };
@@ -232,7 +234,7 @@ struct MessageIndex {
  * summary information for a single Chunk and pointing to each Message Index
  * record associated with that Chunk.
  */
-struct ChunkIndex {
+struct MCAP_PUBLIC ChunkIndex {
   Timestamp messageStartTime;
   Timestamp messageEndTime;
   ByteOffset chunkStartOffset;
@@ -249,7 +251,7 @@ struct ChunkIndex {
  * a name, media type, timestamps, and optional CRC. Attachment records are
  * written in the Data section, outside of Chunks.
  */
-struct Attachment {
+struct MCAP_PUBLIC Attachment {
   Timestamp logTime;
   Timestamp createTime;
   std::string name;
@@ -263,7 +265,7 @@ struct Attachment {
  * @brief Attachment Index records are found in the Summary section, providing
  * summary information for a single Attachment.
  */
-struct AttachmentIndex {
+struct MCAP_PUBLIC AttachmentIndex {
   ByteOffset offset;
   ByteOffset length;
   Timestamp logTime;
@@ -293,7 +295,7 @@ struct AttachmentIndex {
  * @brief The Statistics record is found in the Summary section, providing
  * counts and timestamp ranges for the entire file.
  */
-struct Statistics {
+struct MCAP_PUBLIC Statistics {
   uint64_t messageCount;
   uint16_t schemaCount;
   uint32_t channelCount;
@@ -309,7 +311,7 @@ struct Statistics {
  * @brief Holds a named map of key/value strings containing arbitrary user data.
  * Metadata records are found in the Data section, outside of Chunks.
  */
-struct Metadata {
+struct MCAP_PUBLIC Metadata {
   std::string name;
   KeyValueMap metadata;
 };
@@ -318,7 +320,7 @@ struct Metadata {
  * @brief Metdata Index records are found in the Summary section, providing
  * summary information for a single Metadata record.
  */
-struct MetadataIndex {
+struct MCAP_PUBLIC MetadataIndex {
   uint64_t offset;
   uint64_t length;
   std::string name;
@@ -333,7 +335,7 @@ struct MetadataIndex {
  * found in the Summary section, a Summary Offset references the file offset and
  * length where that type of Summary record can be found.
  */
-struct SummaryOffset {
+struct MCAP_PUBLIC SummaryOffset {
   OpCode groupOpCode;
   ByteOffset groupStart;
   ByteOffset groupLength;
@@ -343,7 +345,7 @@ struct SummaryOffset {
  * @brief The final record in the Data section, signaling the end of Data and
  * beginning of Summary. Optionally contains a CRC of the entire Data section.
  */
-struct DataEnd {
+struct MCAP_PUBLIC DataEnd {
   uint32_t dataSectionCrc;
 };
 
@@ -353,7 +355,7 @@ struct DataEnd {
  * to that Channel's Schema. The Channel pointer is guaranteed to be valid,
  * while the Schema pointer may be null if the Channel references schema_id 0.
  */
-struct MessageView {
+struct MCAP_PUBLIC MessageView {
   const Message& message;
   const ChannelPtr channel;
   const SchemaPtr schema;
@@ -367,5 +369,5 @@ struct MessageView {
 }  // namespace mcap
 
 #ifdef MCAP_IMPLEMENTATION
-#include "types.inl"
+#  include "types.inl"
 #endif

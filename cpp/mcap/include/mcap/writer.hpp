@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "visibility.hpp"
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -15,7 +16,7 @@ namespace mcap {
 /**
  * @brief Configuration options for McapWriter.
  */
-struct McapWriterOptions {
+struct MCAP_PUBLIC McapWriterOptions {
   /**
    * @brief Disable CRC calculations for Chunks.
    */
@@ -106,7 +107,7 @@ struct McapWriterOptions {
 /**
  * @brief An abstract interface for writing MCAP data.
  */
-class IWritable {
+class MCAP_PUBLIC IWritable {
 public:
   bool crcEnabled = false;
 
@@ -151,7 +152,7 @@ private:
  * @brief Implements the IWritable interface used by McapWriter by wrapping a
  * FILE* pointer created by fopen().
  */
-class FileWriter final : public IWritable {
+class MCAP_PUBLIC FileWriter final : public IWritable {
 public:
   ~FileWriter() override;
 
@@ -170,7 +171,7 @@ private:
  * @brief Implements the IWritable interface used by McapWriter by wrapping a
  * std::ostream stream.
  */
-class StreamWriter final : public IWritable {
+class MCAP_PUBLIC StreamWriter final : public IWritable {
 public:
   StreamWriter(std::ostream& stream);
 
@@ -188,7 +189,7 @@ private:
  * in memory and written to disk as a single record, to support optimal
  * compression and calculating the final Chunk data size.
  */
-class IChunkWriter : public IWritable {
+class MCAP_PUBLIC IChunkWriter : public IWritable {
 public:
   virtual ~IChunkWriter() = default;
 
@@ -235,7 +236,7 @@ protected:
  * @brief An in-memory IChunkWriter implementation backed by a
  * growable buffer.
  */
-class BufferWriter final : public IChunkWriter {
+class MCAP_PUBLIC BufferWriter final : public IChunkWriter {
 public:
   void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
@@ -254,7 +255,7 @@ private:
  * @brief An in-memory IChunkWriter implementation that holds data in a
  * temporary buffer before flushing to an LZ4-compressed buffer.
  */
-class LZ4Writer final : public IChunkWriter {
+class MCAP_PUBLIC LZ4Writer final : public IChunkWriter {
 public:
   LZ4Writer(CompressionLevel compressionLevel, uint64_t chunkSize);
 
@@ -277,7 +278,7 @@ private:
  * @brief An in-memory IChunkWriter implementation that holds data in a
  * temporary buffer before flushing to an ZStandard-compressed buffer.
  */
-class ZStdWriter final : public IChunkWriter {
+class MCAP_PUBLIC ZStdWriter final : public IChunkWriter {
 public:
   ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize);
   ~ZStdWriter() override;
@@ -300,7 +301,7 @@ private:
 /**
  * @brief Provides a write interface to an MCAP file.
  */
-class McapWriter final {
+class MCAP_PUBLIC McapWriter final {
 public:
   ~McapWriter();
 
@@ -468,5 +469,5 @@ private:
 }  // namespace mcap
 
 #ifdef MCAP_IMPLEMENTATION
-#include "writer.inl"
+#  include "writer.inl"
 #endif
