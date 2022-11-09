@@ -8,9 +8,7 @@
 #    define MCAP_EXPORT __declspec(dllexport)
 #    define MCAP_IMPORT __declspec(dllimport)
 #  endif
-// MCAP_BUILDING_DLL to be defined by build process producing a shared library
-// It must be left unset by consumers of the shared library
-#  ifdef MCAP_BUILDING_DLL
+#  ifdef MCAP_IMPLEMENTATION
 #    define MCAP_PUBLIC MCAP_EXPORT
 #  else
 #    define MCAP_PUBLIC MCAP_IMPORT
