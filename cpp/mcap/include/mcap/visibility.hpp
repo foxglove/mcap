@@ -13,17 +13,12 @@
 #  else
 #    define MCAP_PUBLIC MCAP_IMPORT
 #  endif
-#  define MCAP_PUBLIC_TYPE MCAP_PUBLIC
-#  define MCAP_LOCAL
 #else
 #  define MCAP_EXPORT __attribute__((visibility("default")))
 #  define MCAP_IMPORT
 #  if __GNUC__ >= 4
 #    define MCAP_PUBLIC __attribute__((visibility("default")))
-#    define MCAP_LOCAL __attribute__((visibility("hidden")))
 #  else
 #    define MCAP_PUBLIC
-#    define MCAP_LOCAL
 #  endif
-#  define MCAP_PUBLIC_TYPE
 #endif
