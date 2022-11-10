@@ -197,7 +197,7 @@ jobs:
 
       - name: "Preview: auth to GCS"
         if: "!github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && github.ref != 'refs/heads/main'"
-        uses: "google-github-actions/auth@v0"
+        uses: "google-github-actions/auth@v1"
         with:
           credentials_json: "${{ secrets.GCS_PREVIEW_KEY_JSON }}"
 
