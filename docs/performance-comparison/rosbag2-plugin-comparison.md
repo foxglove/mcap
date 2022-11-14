@@ -74,7 +74,7 @@ Messages were written to the bag files in a variety of different size suites.
 
 When testing write throughput, 250MiB of messages are stored as quickly as possible.
 
-The message content was determined by taking sequential slices from a sample MCAP file. For example, if a test needed two 100B messages, the first message would contain the bytes of the sample file from range [0, 100), and the second message [100, 200). The input MCAP file was chunked and uncompressed.
+The message content was determined by taking sequential slices from a sample file containing uncompressed robotics data. For example, if a test needed two 100B messages, the first message would contain the bytes of the sample file from range [0, 100), and the second message [100, 200). An MCAP file containing [https://nuscenes.org] data in uncompressed form was used for the results presented here.
 
 This strategy was chosen to provide non-zero, non-random message content that would be representative of a robotics application.
 
@@ -164,28 +164,21 @@ build the test binaries:
 $ colcon build --packages-select rosbag2_storage_plugin_comparison
 ```
 
-Find some sample data to use as message content for the tests. A simple enough option is to download some [public bag data](https://google-cartographer-ros.readthedocs.io/en/latest/data.html) and convert it to MCAP with the [MCAP CLI](https://github.com/foxglove/mcap/tree/main/go/cli/mcap):
+Find some sample data to use as message content for the tests. A simple enough option is to download some [public bag data](https://google-cartographer-ros.readthedocs.io/en/latest/data.html) and use that as your source of data. To ensure that any downloaded bags are uncompressed, you can use the [mcap CLI](https://github.com/foxglove/mcap/tree/main/go/cli/mcap):
 
 ```
-mcap convert --compression none <input bag> <output mcap>
+mcap convert --compression none <input bag> sample.mcap
 ```
 
-Launch the test.
+Launch the benchmark sweep.
 
 ```
-
 $ ros2 run rosbag2_storage_plugin_comparison sweep.py --message-data sample.mcap output.csv
-
 ```
 
 To produce bar charts like the ones on this page, use the `plot.py` script included:
 
 ```
-
-$ pip install matplotlib numpy pandas $ python3 rosbag2/rosbag2_performance/rosbag2_storage_plugin_comparison/scripts/plot.py output.csv
-
-```
-
-```
-
+$ pip install matplotlib numpy pandas
+$ python3 rosbag2/rosbag2_performance/rosbag2_storage_plugin_comparison/scripts/plot.py output.csv
 ```
