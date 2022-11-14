@@ -58,19 +58,25 @@ Some installed package versions were omitted for clarity.
 | sqlite3_vendor                    | 0.17.0  |
 | zstd_vendor                       | 0.17.0  |
 
-## Message sizes tested
+## Messages
 
 > Here the `MiB` suffix indicates that we are measuring [Mebibytes](https://en.wikipedia.org/wiki/Byte#Multiple-byte_units).
 
-- 1MiB
-- 10KiB
-- 100B
+Messages were written to the bag files in a variety of different size suites.
+
+- All 1MiB
+- All 10KiB
+- All 100B
 - Mixed: Messages from all of the above sizes at the following ratios (by number of bytes, not messages)
   - 1MiB: 70%
   - 10KiB: 20%
   - 100B: 10%
 
 When testing write throughput, 250MiB of messages are stored as quickly as possible.
+
+The message content was determined by taking sequential slices from a sample MCAP file. For example, if a test needed two 100B messages, the first message would contain the bytes of the sample file from range [0, 100), and the second message [100, 200). The input MCAP file was chunked and uncompressed.
+
+This strategy was chosen to provide non-zero, non-random message content that would be representative of a robotics application.
 
 ## Cache sizes tested
 
@@ -158,15 +164,28 @@ build the test binaries:
 $ colcon build --packages-select rosbag2_storage_plugin_comparison
 ```
 
-Launch the test
+Find some sample data to use as message content for the tests. A simple enough option is to download some [public bag data](https://google-cartographer-ros.readthedocs.io/en/latest/data.html) and convert it to MCAP with the [MCAP CLI](https://github.com/foxglove/mcap/tree/main/go/cli/mcap):
 
 ```
-$ ros2 run rosbag2_storage_plugin_comparison sweep.py output.csv
+mcap convert --compression none <input bag> <output mcap>
+```
+
+Launch the test.
+
+```
+
+$ ros2 run rosbag2_storage_plugin_comparison sweep.py --message-data sample.mcap output.csv
+
 ```
 
 To produce bar charts like the ones on this page, use the `plot.py` script included:
 
 ```
-$ pip install matplotlib numpy pandas
-$ python3 rosbag2/rosbag2_performance/rosbag2_storage_plugin_comparison/scripts/plot.py output.csv
+
+$ pip install matplotlib numpy pandas $ python3 rosbag2/rosbag2_performance/rosbag2_storage_plugin_comparison/scripts/plot.py output.csv
+
+```
+
+```
+
 ```
