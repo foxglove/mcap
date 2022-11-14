@@ -48,8 +48,8 @@ int main(int argc, char** argv) {
     std::cout << it->channel->topic << "\t(" << it->schema->name << ")\t[" << it->message.logTime
               << "]:\t{ ";
 
-    for (auto it : parsed.items()) {
-      std::cout << it.key() << " ";
+    for (auto kv : parsed.items()) {
+      std::cout << kv.key() << " ";
     }
     std::cout << "}" << std::endl;
   }

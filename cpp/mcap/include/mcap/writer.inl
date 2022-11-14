@@ -1,4 +1,5 @@
 #include "crc32.hpp"
+#include <algorithm>
 #include <cassert>
 #include <iostream>
 #include <lz4frame.h>

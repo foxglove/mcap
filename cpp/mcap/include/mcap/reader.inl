@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <cassert>
 #include <lz4frame.h>
-
 #include <zstd.h>
 #include <zstd_errors.h>
 
@@ -1209,10 +1208,10 @@ RecordReader::RecordReader(IReadable& dataSource, ByteOffset startOffset, ByteOf
     , status_(StatusCode::Success)
     , curRecord_{} {}
 
-void RecordReader::reset(IReadable& dataSource, ByteOffset startOffset, ByteOffset endOffset) {
+void RecordReader::reset(IReadable& dataSource, ByteOffset startOffset, ByteOffset _endOffset) {
   dataSource_ = &dataSource;
   this->offset = startOffset;
-  this->endOffset = endOffset;
+  this->endOffset = _endOffset;
   status_ = StatusCode::Success;
   curRecord_ = {};
 }
