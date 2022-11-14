@@ -79,7 +79,7 @@ TEST_CASE("internal::crc32", "[writer]") {
   };
 
   std::array<uint8_t, 32> data;
-  std::iota(data.begin(), data.end(), 1);
+  std::iota(data.begin(), data.end(), (uint8_t)(1));
 
   REQUIRE(crc32(data.data(), 0) == 0);
   REQUIRE(crc32(data.data(), 1) == 2768625435);

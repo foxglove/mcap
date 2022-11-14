@@ -192,6 +192,29 @@ jobs:
       - run: make test-examples-host
       - run: make run-examples-host
 
+  cpp-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: cpp
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          lfs: "true"
+      - uses: actions/cache@v3
+        with:
+          path: ~/.conan/data
+          key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.7
+      - run: pip install conan==1.53.0
+      - run: conan config init
+      - run: conan editable add ./mcap mcap/0.6.0
+      - run: conan install test --install-folder test/build/Debug -s compiler.cppstd=17 -s build_type=Debug --build missing
+      - run: conan build test --build-folder test/build/Debug
+      - run: ./test/build/Debug/bin/unit-tests
+
   typescript:
     runs-on: ubuntu-latest
     steps:
