@@ -60,6 +60,8 @@ Some installed package versions were omitted for clarity.
 
 ## Message sizes tested
 
+> Here the `MiB` suffix indicates that we are measuring [Mebibytes](https://en.wikipedia.org/wiki/Byte#Multiple-byte_units).
+
 - 1MiB
 - 10KiB
 - 100B
