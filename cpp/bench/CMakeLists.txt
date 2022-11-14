@@ -7,12 +7,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if (MSVC)
   add_compile_options(/W4 /WX
     /wd4251 # suppress warning about having template instances (such as std::string) as public class members
-    /wd4267 # '+=': conversion from 'size_t' to 'uint32_t', possible loss of data
-    /wd4996 # 'fopen': This function or variable may be unsafe. Consider using fopen_s instead.
-            # To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
-    /wd4244 # 'argument': conversion from 'uint64_t' to 'long', possible loss of data
   )
-  add_compile_definitions(MCAP_BUILDING_DLL)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else()
   add_compile_options(-Wall -Wextra -pedantic -Werror)
 endif()
