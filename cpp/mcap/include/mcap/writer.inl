@@ -242,8 +242,8 @@ void ZStdWriter::handleWrite(const std::byte* data, uint64_t size) {
 void ZStdWriter::end() {
   const auto dstCapacity = ZSTD_compressBound(uncompressedBuffer_.size());
   compressedBuffer_.resize(dstCapacity);
-  const int dstSize = ZSTD_compress2(zstdContext_, compressedBuffer_.data(), dstCapacity,
-                                     uncompressedBuffer_.data(), uncompressedBuffer_.size());
+  const size_t dstSize = ZSTD_compress2(zstdContext_, compressedBuffer_.data(), dstCapacity,
+                                        uncompressedBuffer_.data(), uncompressedBuffer_.size());
   if (ZSTD_isError(dstSize)) {
     const auto errCode = ZSTD_getErrorCode(dstSize);
     std::cerr << "ZSTD_compress2 failed: " << ZSTD_getErrorName(dstSize) << " ("
@@ -889,7 +889,7 @@ uint64_t McapWriter::write(IWritable& output, const Chunk& chunk) {
 }
 
 uint64_t McapWriter::write(IWritable& output, const MessageIndex& index) {
-  const uint32_t recordsSize = index.records.size() * 16;
+  const uint32_t recordsSize = (uint32_t)(index.records.size()) * 16;
   const uint64_t recordSize = 2 + 4 + recordsSize;
 
   write(output, OpCode::MessageIndex);
@@ -906,7 +906,7 @@ uint64_t McapWriter::write(IWritable& output, const MessageIndex& index) {
 }
 
 uint64_t McapWriter::write(IWritable& output, const ChunkIndex& index) {
-  const uint32_t messageIndexOffsetsSize = index.messageIndexOffsets.size() * 10;
+  const uint32_t messageIndexOffsetsSize = (uint32_t)(index.messageIndexOffsets.size()) * 10;
   const uint64_t recordSize = /* start_time */ 8 +
                               /* end_time */ 8 +
                               /* chunk_start_offset */ 8 +
@@ -975,7 +975,7 @@ uint64_t McapWriter::write(IWritable& output, const MetadataIndex& index) {
 }
 
 uint64_t McapWriter::write(IWritable& output, const Statistics& stats) {
-  const uint32_t channelMessageCountsSize = stats.channelMessageCounts.size() * 10;
+  const uint32_t channelMessageCountsSize = (uint32_t)(stats.channelMessageCounts.size()) * 10;
   const uint64_t recordSize = /* message_count */ 8 +
                               /* schema_count */ 2 +
                               /* channel_count */ 4 +
