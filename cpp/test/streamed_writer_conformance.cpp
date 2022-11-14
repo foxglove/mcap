@@ -36,39 +36,40 @@ mcap::McapWriterOptions ReadOptions(const json& featuresJson) {
   options.noSummaryOffsets = true;
 
   for (const auto& feature : featuresJson) {
-    if (feature == UseChunks) {
+    const auto featureString = feature.get<std::string>();
+    if (featureString == UseChunks) {
       options.noChunking = false;
-    } else if (feature == UseMessageIndex) {
+    } else if (featureString == UseMessageIndex) {
       options.noChunking = false;
       options.noSummary = false;
       options.noMessageIndex = false;
-    } else if (feature == UseStatistics) {
+    } else if (featureString == UseStatistics) {
       options.noSummary = false;
       options.noStatistics = false;
-    } else if (feature == UseRepeatedSchemas) {
+    } else if (featureString == UseRepeatedSchemas) {
       options.noSummary = false;
       options.noRepeatedSchemas = false;
-    } else if (feature == UseRepeatedChannelInfos) {
+    } else if (featureString == UseRepeatedChannelInfos) {
       options.noSummary = false;
       options.noRepeatedChannels = false;
-    } else if (feature == UseAttachmentIndex) {
+    } else if (featureString == UseAttachmentIndex) {
       options.noSummary = false;
       options.noAttachmentIndex = false;
-    } else if (feature == UseMetadataIndex) {
+    } else if (featureString == UseMetadataIndex) {
       options.noSummary = false;
       options.noMetadataIndex = false;
-    } else if (feature == UseChunkIndex) {
+    } else if (featureString == UseChunkIndex) {
       options.noChunking = false;
       options.noSummary = false;
       options.noChunkIndex = false;
-    } else if (feature == UseSummaryOffset) {
+    } else if (featureString == UseSummaryOffset) {
       options.noSummary = false;
       options.noSummaryOffsets = false;
-    } else if (feature == AddExtraDataToRecords) {
+    } else if (featureString == AddExtraDataToRecords) {
       std::cerr << "AddExtraDataToRecords not supported\n";
       std::abort();
     } else {
-      std::cerr << "Unknown feature: " << feature << "\n";
+      std::cerr << "Unknown feature: " << featureString << "\n";
       std::abort();
     }
   }

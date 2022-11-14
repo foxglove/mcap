@@ -2,7 +2,6 @@
 #include <algorithm>
 #include <cassert>
 #include <lz4frame.h>
-
 #include <zstd.h>
 #include <zstd_errors.h>
 
@@ -63,7 +62,7 @@ uint64_t FileReader::read(std::byte** output, uint64_t offset, uint64_t size) {
   }
 
   if (offset != position_) {
-    std::fseek(file_, offset, SEEK_SET);
+    std::fseek(file_, (long)(offset), SEEK_SET);
     std::fflush(file_);
     position_ = offset;
   }
@@ -544,11 +543,11 @@ Status McapReader::readSummaryFromScan_(IReadable& reader) {
   if (statistics.messageStartTime == EndOffset) {
     statistics.messageStartTime = 0;
   }
-  statistics.schemaCount = schemas_.size();
-  statistics.channelCount = channels_.size();
-  statistics.attachmentCount = attachmentIndexes_.size();
-  statistics.metadataCount = metadataIndexes_.size();
-  statistics.chunkCount = chunkIndexes_.size();
+  statistics.schemaCount = (uint16_t)(schemas_.size());
+  statistics.channelCount = (uint32_t)(channels_.size());
+  statistics.attachmentCount = (uint32_t)(attachmentIndexes_.size());
+  statistics.metadataCount = (uint32_t)(metadataIndexes_.size());
+  statistics.chunkCount = (uint32_t)(chunkIndexes_.size());
   statistics_ = std::move(statistics);
 
   return StatusCode::Success;
@@ -1009,14 +1008,14 @@ Status McapReader::ParseAttachment(const Record& record, Attachment* attachment)
       !status.ok()) {
     return status;
   }
-  offset += 4 + attachment->name.size();
+  offset += 4 + (uint32_t)(attachment->name.size());
   // media_type
   if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
                                           &attachment->mediaType);
       !status.ok()) {
     return status;
   }
-  offset += 4 + attachment->mediaType.size();
+  offset += 4 + (uint32_t)(attachment->mediaType.size());
   // data_size
   if (auto status = internal::ParseUint64(record.data + offset, record.dataSize - offset,
                                           &attachment->dataSize);
@@ -1030,7 +1029,7 @@ Status McapReader::ParseAttachment(const Record& record, Attachment* attachment)
     return Status{StatusCode::InvalidRecord, msg};
   }
   attachment->data = record.data + offset;
-  offset += attachment->dataSize;
+  offset += (uint32_t)(attachment->dataSize);
   // crc
   if (auto status =
         internal::ParseUint32(record.data + offset, record.dataSize - offset, &attachment->crc);
@@ -1064,7 +1063,7 @@ Status McapReader::ParseAttachmentIndex(const Record& record, AttachmentIndex* a
       !status.ok()) {
     return status;
   }
-  offset += 4 + attachmentIndex->name.size();
+  offset += 4 + (uint32_t)(attachmentIndex->name.size());
   // media_type
   if (auto status = internal::ParseString(record.data + offset, record.dataSize - offset,
                                           &attachmentIndex->mediaType);
@@ -1209,10 +1208,10 @@ RecordReader::RecordReader(IReadable& dataSource, ByteOffset startOffset, ByteOf
     , status_(StatusCode::Success)
     , curRecord_{} {}
 
-void RecordReader::reset(IReadable& dataSource, ByteOffset startOffset, ByteOffset endOffset) {
+void RecordReader::reset(IReadable& dataSource, ByteOffset startOffset, ByteOffset _endOffset) {
   dataSource_ = &dataSource;
   this->offset = startOffset;
-  this->endOffset = endOffset;
+  this->endOffset = _endOffset;
   status_ = StatusCode::Success;
   curRecord_ = {};
 }

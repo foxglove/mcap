@@ -83,7 +83,7 @@ inline uint32_t crc32Update(const uint32_t prev, const std::byte* const data, co
   }
 
   // Process 8 bytes (2 uint32s) at a time.
-  uint32_t remainingBytes = length - offset;
+  size_t remainingBytes = length - offset;
   for (; remainingBytes >= 8; offset += 8, remainingBytes -= 8) {
     r ^= getUint32LE(data + offset);
     uint32_t r2 = getUint32LE(data + offset + 4);
