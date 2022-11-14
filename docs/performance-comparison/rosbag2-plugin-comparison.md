@@ -92,6 +92,8 @@ These benchmarks were recorded on two hardware platforms:
 | Kernel | Linux 5.15.0-48-generic | Linux 5.15.0-52-generic |
 | Distro | Ubuntu 22.04.1 Jammy aarch64 virtualized with Parallels 17 | Ubuntu 22.04.1 Jammy x86_64 |
 
+All bags were written to a ramdisk, to eliminate the effect of disk I/O speed from the tests.
+
 ## Results
 
 ### Message drop performance
