@@ -4,7 +4,7 @@ _Oct, 2022_
 _James Smith ([@james-rms](https://github.com/james-rms))_  
 _[Foxglove](https://foxglove.dev)_
 
-<!-- cspell:words nocrc nochunking pluggable robotec middlewares fastrtps LPDDR aarch -->
+<!-- cspell:words ramdisk mebibytes rosdep nocrc nochunking pluggable robotec middlewares fastrtps LPDDR aarch -->
 
 ## Context
 
@@ -96,10 +96,6 @@ All bags were written to a ramdisk, to eliminate the effect of disk I/O speed fr
 
 ## Results
 
-### Message drop performance
-
-### Raw write throughput
-
 Results in CSV form are available here:
 
 <ul>
@@ -144,6 +140,33 @@ Given the above results, we feel comfortable recommending MCAP as a replacement 
 
 ### How do I replicate these results?
 
-#### Message Drops
+Clone this branch into a ROS 2 workspace:
 
-#### Raw Throughput
+```
+$ git clone -b plugin-comparison https://github.com/james-rms/rosbag2
+```
+
+Install dependencies:
+
+```
+$ rosdep install rosbag2_storage_plugin_comparison
+```
+
+build the test binaries:
+
+```
+$ colcon build --packages-select rosbag2_storage_plugin_comparison
+```
+
+Launch the test
+
+```
+$ ros2 run rosbag2_storage_plugin_comparison sweep.py output.csv
+```
+
+To produce bar charts like the ones on this page, use the `plot.py` script included:
+
+```
+$ pip install matplotlib numpy pandas
+$ python3 rosbag2/rosbag2_performance/rosbag2_storage_plugin_comparison/scripts/plot.py output.csv
+```
