@@ -654,6 +654,13 @@
     "@foxglove/rostime" "^1.1.0"
     heap "^0.2.6"
 
+"@foxglove/rosmsg-msgs-common@^2.0.0":
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/@foxglove/rosmsg-msgs-common/-/rosmsg-msgs-common-2.1.0.tgz#8d348db60dc69670916ca9dc56999abb6de4134f"
+  integrity sha512-Lxu3CEb+Ko1hrLu1bIqvvoc8DvGW1FAA21sWW0MoTPTgoQ1Rnpke2Z4H6O78C8DwXPzXAqZIisgxfFM9NYiHPA==
+  dependencies:
+    "@foxglove/rosmsg" "^3.1.0"
+
 "@foxglove/rosmsg-serialization@1.2.3", "@foxglove/rosmsg-serialization@^1.2.3":
   version "1.2.3"
   resolved "https://registry.yarnpkg.com/@foxglove/rosmsg-serialization/-/rosmsg-serialization-1.2.3.tgz#742adc7a322357b0a19aaebb4fe7c2c557f55e92"
@@ -677,10 +684,25 @@
   dependencies:
     md5-typescript "^1.0.5"
 
+"@foxglove/rosmsg@^3.1.0":
+  version "3.1.0"
+  resolved "https://registry.yarnpkg.com/@foxglove/rosmsg/-/rosmsg-3.1.0.tgz#edbe3e2e743a5cc89df8195889a054e639230916"
+  integrity sha512-uvL3a3PRusrQw4tg91tsXfPMCWjsKV35nAaHkzPqRt4bZRzO2DAUMavCltjRux5Hc8WLPYWt77iUSk3KfxqUZQ==
+  dependencies:
+    md5-typescript "^1.0.5"
+
 "@foxglove/rostime@^1.1.0":
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/@foxglove/rostime/-/rostime-1.1.1.tgz#6d9ec8e2264d7a44fa5066ce38cafed84d3c657a"
   integrity sha512-EI+rNLYRcrMHeyRsDuWjyDuTPwu9ZgQIk28RTsTxq1jO2zYFHuBni3TTC78BluS1QZD/iLxUeiGCfJl4eizB9A==
+
+"@foxglove/schemas@^0.7.1":
+  version "0.7.1"
+  resolved "https://registry.yarnpkg.com/@foxglove/schemas/-/schemas-0.7.1.tgz#d757152dfcf9c79dce0e26eedcc7c5462df3007e"
+  integrity sha512-9S6P6F1iZjSgoTzlyrDnzfxs2Mpc+v0fvcPo+JU5XeRiUdvAuohsXk/TR9ju/ZzGIGEhNFYACsu0KiRmtlc9bg==
+  dependencies:
+    "@foxglove/rosmsg-msgs-common" "^2.0.0"
+    tslib "^2"
 
 "@foxglove/tsconfig@1.1.0":
   version "1.1.0"
@@ -2443,6 +2465,11 @@ flat-cache@^3.0.4:
   dependencies:
     flatted "^3.1.0"
     rimraf "^3.0.2"
+
+flatbuffers@^22.10.26:
+  version "22.10.26"
+  resolved "https://registry.yarnpkg.com/flatbuffers/-/flatbuffers-22.10.26.tgz#1b92e9559f5253ca7dc54e2b0eb63d2bcdbe329b"
+  integrity sha512-sdO3emf/BlLfOogW6KwHuXg16APR/E86jNacDXfSInPzt8SSEzxlHcqDekfM/IJ1CGC5bvDksfNufNhS8h1FRA==
 
 flatted@^3.1.0:
   version "3.2.4"
