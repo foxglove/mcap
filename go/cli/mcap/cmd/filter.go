@@ -240,16 +240,25 @@ func filter(
 			if err != nil {
 				return err
 			}
+			// if any topics match an includeTopic, add it.
 			for _, matcher := range opts.includeTopics {
 				if matcher.MatchString(channel.Topic) {
 					channels[channel.ID] = markableChannel{channel, false}
 				}
 			}
-			for _, matcher := range opts.excludeTopics {
-				if !matcher.MatchString(channel.Topic) {
+			// if a topic does not match any excludeTopic, add it.
+			if len(opts.excludeTopics) != 0 {
+				shouldInclude := true
+				for _, matcher := range opts.excludeTopics {
+					if matcher.MatchString(channel.Topic) {
+						shouldInclude = false
+					}
+				}
+				if shouldInclude {
 					channels[channel.ID] = markableChannel{channel, false}
 				}
 			}
+			// if neither exclude or include topics are specified, add all channels.
 			if len(opts.includeTopics) == 0 && len(opts.excludeTopics) == 0 {
 				channels[channel.ID] = markableChannel{channel, false}
 			}
