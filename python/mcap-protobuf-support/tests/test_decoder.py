@@ -25,3 +25,16 @@ def test_protobuf_decoder():
             raise AssertionError(f"unrecognized topic {channel.topic}")
 
     assert count == 20
+
+
+def test_decode_twice():
+    output = BytesIO()
+    generate_sample_data(output)
+    # ensure that two decoders can exist and decode the same set of schemas
+    # without failing with "A file with this name is already in the pool.".
+    decoder_1 = Decoder()
+    decoder_2 = Decoder()
+    reader = make_reader(output)
+    for schema, _, message in reader.iter_messages():
+        decoder_1.decode(schema, message)
+        decoder_2.decode(schema, message)
