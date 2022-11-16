@@ -83,6 +83,23 @@ func TestFiltering(t *testing.T) {
 			},
 		},
 		{
+			name: "double exclusive topic filtering",
+			opts: &filterOpts{
+				compressionFormat: mcap.CompressionLZ4,
+				start:             0,
+				end:               1000,
+				excludeTopics: []regexp.Regexp{
+					*regexp.MustCompile("camera_a"),
+					*regexp.MustCompile("camera_b"),
+				},
+			},
+			expectedMessageCount: map[uint16]int{
+				1: 0,
+				2: 0,
+				3: 100,
+			},
+		},
+		{
 			name: "exclusive filtering and including attachments",
 			opts: &filterOpts{
 				compressionFormat:  mcap.CompressionLZ4,
