@@ -1,7 +1,9 @@
 # Comparison of `rosbag2` Storage Plugins
 
-_Oct, 2022_  
-_James Smith ([@james-rms](https://github.com/james-rms))_  
+_Nov 2022_
+
+_James Smith ([@james-rms](https://github.com/james-rms))_
+
 _[Foxglove](https://foxglove.dev)_
 
 <!-- cspell:words ramdisk mebibytes rosdep nocrc nochunking pluggable robotec middlewares fastrtps LPDDR aarch -->
