@@ -209,10 +209,7 @@ jobs:
         with:
           python-version: 3.7
       - run: pip install conan==1.53.0
-      - run: conan config init
-      - run: conan editable add ./mcap mcap/0.6.0
-      - run: conan install test --install-folder test/build/Debug -s compiler.cppstd=17 -s build_type=Debug --build missing
-      - run: conan build test --build-folder test/build/Debug
+      - run: bash build.sh --build-tests-only
       - run: ./test/build/Debug/bin/unit-tests
 
   typescript:
