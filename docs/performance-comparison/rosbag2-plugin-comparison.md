@@ -18,7 +18,7 @@ Performance is most critical when writing bag data rather than reading it back. 
 
 ## Benchmark description
 
-A new benchmark was created for this comparison, designed to directly measure the storage plugin with no other moving parts. [Available here](https://github.com/james-rms/rosbag2/tree/jrms/plugin-comparison/rosbag2_performance/rosbag2_storage_plugin_comparison), this benchmark directly uses the storage plugin API to write a fixed number of random bytes as fast as possible. This measures the raw write throughput of each storage plugin configuration.
+A new benchmark was created for this comparison, designed to directly measure the storage plugin with no other moving parts. [Available here](https://github.com/james-rms/rosbag2/tree/jrms/plugin-comparison/rosbag2_performance/rosbag2_storage_plugin_comparison), this benchmark directly uses the storage plugin API to write a fixed number of bytes as fast as possible. This measures the raw write throughput of each storage plugin configuration.
 
 ## Plugin Configurations
 
