@@ -28,6 +28,7 @@ theme:
 
 plugins:
   - social
+  - glightbox
 
 extra_css: [styles/extra.css]
 
@@ -83,6 +84,7 @@ nav:
       - ROS 2 Storage Plugin: "https://github.com/ros-tooling/rosbag2_storage_mcap"
       - Motivation:
           - "motivation/evaluation-of-robotics-data-recording-file-formats.md"
+      - Performance Evaluation: "performance-comparison/rosbag2-plugin-comparison.md"
 
 # Header / Footer links and copy
 repo_url: https://github.com/foxglove/mcap
