@@ -1,1233 +1,611 @@
 
-<!doctype html>
-<html lang="en" class="no-js">
-  <head>
-    
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width,initial-scale=1">
-      
-        <meta name="description" content="Read and write MCAP files with Protobuf-encoded messages in C++.">
-      
-      
-      
-        <link rel="canonical" href="https://mcap.dev/guides/cpp/protobuf.html">
-      
-      <link rel="icon" href="../../img/favicon32.png">
-      <meta name="generator" content="mkdocs-1.4.0, mkdocs-material-8.5.3">
-    
-    
-      
-        <title>Reading and writing Protobuf - MCAP</title>
-      
-    
-    
-      <link rel="stylesheet" href="../../assets/stylesheets/main.7a952b86.min.css">
-      
-        
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.cbb835fc.min.css">
-        
-      
-      
+<!DOCTYPE html>
 
-    
-    
-    
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=IBM+Plex+Sans:300,300i,400,400i,600,600i%7CIBM+Plex+Mono:400,400i,600,600i&display=fallback">
+<html class="no-js" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<meta content="Read and write MCAP files with Protobuf-encoded messages in C++." name="description"/>
+<link href="https://mcap.dev/guides/cpp/protobuf.html" rel="canonical"/>
+<link href="../../img/favicon32.png" rel="icon"/>
+<meta content="mkdocs-1.4.2, mkdocs-material-8.5.8" name="generator"/>
+<title>Reading and writing Protobuf - MCAP</title>
+<link href="../../assets/stylesheets/main.20d9efc8.min.css" rel="stylesheet"/>
+<link href="../../assets/stylesheets/palette.815d1a91.min.css" rel="stylesheet"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css?family=IBM+Plex+Sans:300,300i,400,400i,600,600i%7CIBM+Plex+Mono:400,400i,600,600i&amp;display=fallback" rel="stylesheet"/>
 <style>:root{--md-text-font:"IBM Plex Sans";--md-code-font:"IBM Plex Mono"}</style>
-    
-      <link rel="stylesheet" href="../../styles/extra.css">
-    
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
-    
-      
-  
-
-
-  <script
-      src="https://cdn.usefathom.com/script.js"
-      data-site="RULHQVMR"
-      defer
-></script>
-  
-    <script>"undefined"!=typeof __md_analytics&&__md_analytics()</script>
-  
-
-    
-    
-      
-        <meta  property="og:type"  content="website" >
-      
-        <meta  property="og:title"  content="Reading and writing Protobuf - MCAP" >
-      
-        <meta  property="og:description"  content="Read and write MCAP files with Protobuf-encoded messages in C++." >
-      
-        <meta  property="og:image"  content="https://mcap.dev/assets/images/social/guides/cpp/protobuf.png" >
-      
-        <meta  property="og:image:type"  content="image/png" >
-      
-        <meta  property="og:image:width"  content="1200" >
-      
-        <meta  property="og:image:height"  content="630" >
-      
-        <meta  property="og:url"  content="https://mcap.dev/guides/cpp/protobuf.html" >
-      
-        <meta  name="twitter:card"  content="summary_large_image" >
-      
-        <meta  name="twitter:title"  content="Reading and writing Protobuf - MCAP" >
-      
-        <meta  name="twitter:description"  content="Read and write MCAP files with Protobuf-encoded messages in C++." >
-      
-        <meta  name="twitter:image"  content="https://mcap.dev/assets/images/social/guides/cpp/protobuf.png" >
-      
-    
-    
-  </head>
-  
-  
-    
-    
-      
-    
-    
-    
-    
-    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="">
-  
-    
-    
-      <script>var palette=__md_get("__palette");if(palette&&"object"==typeof palette.color)for(var key of Object.keys(palette.color))document.body.setAttribute("data-md-color-"+key,palette.color[key])</script>
-    
-    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
-    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
-    <label class="md-overlay" for="__drawer"></label>
-    <div data-md-component="skip">
-      
-        
-        <a href="#reading-and-writing-protobuf" class="md-skip">
+<link href="../../styles/extra.css" rel="stylesheet"/>
+<script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+<script data-site="RULHQVMR" defer="" src="https://cdn.usefathom.com/script.js"></script>
+<script>"undefined"!=typeof __md_analytics&&__md_analytics()</script>
+<meta content="website" property="og:type"/>
+<meta content="Reading and writing Protobuf - MCAP" property="og:title"/>
+<meta content="Read and write MCAP files with Protobuf-encoded messages in C++." property="og:description"/>
+<meta content="https://mcap.dev/assets/images/social/guides/cpp/protobuf.png" property="og:image"/>
+<meta content="image/png" property="og:image:type"/>
+<meta content="1200" property="og:image:width"/>
+<meta content="630" property="og:image:height"/>
+<meta content="https://mcap.dev/guides/cpp/protobuf.html" property="og:url"/>
+<meta content="summary_large_image" name="twitter:card"/>
+<meta content="Reading and writing Protobuf - MCAP" name="twitter:title"/>
+<meta content="Read and write MCAP files with Protobuf-encoded messages in C++." name="twitter:description"/>
+<meta content="https://mcap.dev/assets/images/social/guides/cpp/protobuf.png" name="twitter:image"/>
+<link href="../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
+            html.glightbox-open { overflow: initial; height: 100%; }
+            .gdesc-inner { font-size: 0.75rem; }
+            .gslide-title { margin-top: 0px; user-select: text; }
+            .gslide-desc { color: #666; user-select: text; }
+            .gslide-image img { background: white; }
+            
+                .gscrollbar-fixer { padding-right: 15px; }
+                </style><script src="../../assets/javascripts/glightbox.min.js"></script></head>
+<body data-md-color-accent="" data-md-color-primary="white" data-md-color-scheme="default" dir="ltr">
+<script>var palette=__md_get("__palette");if(palette&&"object"==typeof palette.color)for(var key of Object.keys(palette.color))document.body.setAttribute("data-md-color-"+key,palette.color[key])</script>
+<input autocomplete="off" class="md-toggle" data-md-toggle="drawer" id="__drawer" type="checkbox"/>
+<input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox"/>
+<label class="md-overlay" for="__drawer"></label>
+<div data-md-component="skip">
+<a class="md-skip" href="#reading-and-writing-protobuf">
           Skip to content
         </a>
-      
-    </div>
-    <div data-md-component="announce">
-      
-    </div>
-    
-    
-      
-
+</div>
+<div data-md-component="announce">
+</div>
 <header class="md-header" data-md-component="header">
-  <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="MCAP" class="md-header__button md-logo" aria-label="MCAP" data-md-component="logo">
-      
-  <img src="../../img/mcap.png" alt="logo">
-
-    </a>
-    <label class="md-header__button md-icon" for="__drawer">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
-    </label>
-    <div class="md-header__title" data-md-component="header-title">
-      <div class="md-header__ellipsis">
-        <div class="md-header__topic">
-          <span class="md-ellipsis">
+<nav aria-label="Header" class="md-header__inner md-grid">
+<a aria-label="MCAP" class="md-header__button md-logo" data-md-component="logo" href="../.." title="MCAP">
+<img alt="logo" src="../../img/mcap.png"/>
+</a>
+<label class="md-header__button md-icon" for="__drawer">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"></path></svg>
+</label>
+<div class="md-header__title" data-md-component="header-title">
+<div class="md-header__ellipsis">
+<div class="md-header__topic">
+<span class="md-ellipsis">
             MCAP
           </span>
-        </div>
-        <div class="md-header__topic" data-md-component="header-topic">
-          <span class="md-ellipsis">
+</div>
+<div class="md-header__topic" data-md-component="header-topic">
+<span class="md-ellipsis">
             
               Reading and writing Protobuf
             
           </span>
-        </div>
-      </div>
-    </div>
-    
-      <form class="md-header__option" data-md-component="palette">
-        
-          
-          
-          <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent=""  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
-          
-            <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
-            </label>
-          
-        
-          
-          
-          <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent=""  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_2">
-          
-            <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12c0-2.42-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
-            </label>
-          
-        
-      </form>
-    
-    
-    
-    
-      <div class="md-header__source">
-        <a href="https://github.com/foxglove/mcap" title="Go to repository" class="md-source" data-md-component="source">
-  <div class="md-source__icon md-icon">
-    
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
-  </div>
-  <div class="md-source__repository">
+</div>
+</div>
+</div>
+<form class="md-header__option" data-md-component="palette">
+<input aria-label="Switch to dark mode" class="md-option" data-md-color-accent="" data-md-color-media="(prefers-color-scheme: light)" data-md-color-primary="white" data-md-color-scheme="default" id="__palette_1" name="__palette" type="radio"/>
+<label class="md-header__button md-icon" for="__palette_2" hidden="" title="Switch to dark mode">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"></path></svg>
+</label>
+<input aria-label="Switch to light mode" class="md-option" data-md-color-accent="" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-primary="black" data-md-color-scheme="slate" id="__palette_2" name="__palette" type="radio"/>
+<label class="md-header__button md-icon" for="__palette_1" hidden="" title="Switch to light mode">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12c0-2.42-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"></path></svg>
+</label>
+</form>
+<div class="md-header__source">
+<a class="md-source" data-md-component="source" href="https://github.com/foxglove/mcap" title="Go to repository">
+<div class="md-source__icon md-icon">
+<svg viewbox="0 0 496 512" xmlns="http://www.w3.org/2000/svg"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"></path></svg>
+</div>
+<div class="md-source__repository">
     GitHub
   </div>
 </a>
-      </div>
-    
-  </nav>
-  
+</div>
+</nav>
 </header>
-    
-    <div class="md-container" data-md-component="container">
-      
-      
-        
-          
-        
-      
-      <main class="md-main" data-md-component="main">
-        <div class="md-main__inner md-grid">
-          
-            
-              
-              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
-                <div class="md-sidebar__scrollwrap">
-                  <div class="md-sidebar__inner">
-                    
-
-
-<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
-  <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="MCAP" class="md-nav__button md-logo" aria-label="MCAP" data-md-component="logo">
-      
-  <img src="../../img/mcap.png" alt="logo">
-
-    </a>
+<div class="md-container" data-md-component="container">
+<main class="md-main" data-md-component="main">
+<div class="md-main__inner md-grid">
+<div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation">
+<div class="md-sidebar__scrollwrap">
+<div class="md-sidebar__inner">
+<nav aria-label="Navigation" class="md-nav md-nav--primary" data-md-level="0">
+<label class="md-nav__title" for="__drawer">
+<a aria-label="MCAP" class="md-nav__button md-logo" data-md-component="logo" href="../.." title="MCAP">
+<img alt="logo" src="../../img/mcap.png"/>
+</a>
     MCAP
   </label>
-  
-    <div class="md-nav__source">
-      <a href="https://github.com/foxglove/mcap" title="Go to repository" class="md-source" data-md-component="source">
-  <div class="md-source__icon md-icon">
-    
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
-  </div>
-  <div class="md-source__repository">
+<div class="md-nav__source">
+<a class="md-source" data-md-component="source" href="https://github.com/foxglove/mcap" title="Go to repository">
+<div class="md-source__icon md-icon">
+<svg viewbox="0 0 496 512" xmlns="http://www.w3.org/2000/svg"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"></path></svg>
+</div>
+<div class="md-source__repository">
     GitHub
   </div>
 </a>
-    </div>
-  
-  <ul class="md-nav__list" data-md-scrollfix>
-    
-      
-      
-      
-
-  
-  
-  
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-      
-        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_1" type="checkbox" id="__nav_1" >
-      
-      
-      
-      
-        <label class="md-nav__link" for="__nav_1">
+</div>
+<ul class="md-nav__list" data-md-scrollfix="">
+<li class="md-nav__item md-nav__item--nested">
+<input class="md-nav__toggle md-toggle" data-md-toggle="__nav_1" id="__nav_1" type="checkbox"/>
+<label class="md-nav__link" for="__nav_1">
           Home
           <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <nav class="md-nav" aria-label="Home" data-md-level="1">
-        <label class="md-nav__title" for="__nav_1">
-          <span class="md-nav__icon md-icon"></span>
+</label>
+<nav aria-label="Home" class="md-nav" data-md-level="1">
+<label class="md-nav__title" for="__nav_1">
+<span class="md-nav__icon md-icon"></span>
           Home
         </label>
-        <ul class="md-nav__list" data-md-scrollfix>
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../index.html" class="md-nav__link">
+<ul class="md-nav__list" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../index.html">
         Introduction
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../home/messages-channels-and-schemas.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../home/messages-channels-and-schemas.html">
         Messages, Channels and Schemas
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../home/data-serialization-formats.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../home/data-serialization-formats.html">
         Data Serialization Formats
       </a>
-    </li>
-  
-
-            
-          
-        </ul>
-      </nav>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-      
-        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_2" type="checkbox" id="__nav_2" >
-      
-      
-      
-      
-        <label class="md-nav__link" for="__nav_2">
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item md-nav__item--nested">
+<input class="md-nav__toggle md-toggle" data-md-toggle="__nav_2" id="__nav_2" type="checkbox"/>
+<label class="md-nav__link" for="__nav_2">
           Getting Started
           <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <nav class="md-nav" aria-label="Getting Started" data-md-level="1">
-        <label class="md-nav__title" for="__nav_2">
-          <span class="md-nav__icon md-icon"></span>
+</label>
+<nav aria-label="Getting Started" class="md-nav" data-md-level="1">
+<label class="md-nav__title" for="__nav_2">
+<span class="md-nav__icon md-icon"></span>
           Getting Started
         </label>
-        <ul class="md-nav__list" data-md-scrollfix>
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../getting-started/overview.html" class="md-nav__link">
+<ul class="md-nav__list" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../getting-started/overview.html">
         Overview
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../getting-started/ros-1.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../getting-started/ros-1.html">
         ROS 1
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../getting-started/ros-2.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../getting-started/ros-2.html">
         ROS 2
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../getting-started/protobuf.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../getting-started/protobuf.html">
         Protobuf
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../getting-started/json.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../getting-started/json.html">
         JSON
       </a>
-    </li>
-  
-
-            
-          
-        </ul>
-      </nav>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-    
-  
-  
-    
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
-      
-      
-        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3" type="checkbox" id="__nav_3" checked>
-      
-      
-      
-      
-        <label class="md-nav__link" for="__nav_3">
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item md-nav__item--active md-nav__item--nested">
+<input checked="" class="md-nav__toggle md-toggle" data-md-toggle="__nav_3" id="__nav_3" type="checkbox"/>
+<label class="md-nav__link" for="__nav_3">
           Guides
           <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <nav class="md-nav" aria-label="Guides" data-md-level="1">
-        <label class="md-nav__title" for="__nav_3">
-          <span class="md-nav__icon md-icon"></span>
+</label>
+<nav aria-label="Guides" class="md-nav" data-md-level="1">
+<label class="md-nav__title" for="__nav_3">
+<span class="md-nav__icon md-icon"></span>
           Guides
         </label>
-        <ul class="md-nav__list" data-md-scrollfix>
-          
-            
-              
-  
-  
-  
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-      
-        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_1" type="checkbox" id="__nav_3_1" >
-      
-      
-      
-      
-        <label class="md-nav__link" for="__nav_3_1">
+<ul class="md-nav__list" data-md-scrollfix="">
+<li class="md-nav__item md-nav__item--nested">
+<input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_1" id="__nav_3_1" type="checkbox"/>
+<label class="md-nav__link" for="__nav_3_1">
           Python
           <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <nav class="md-nav" aria-label="Python" data-md-level="2">
-        <label class="md-nav__title" for="__nav_3_1">
-          <span class="md-nav__icon md-icon"></span>
+</label>
+<nav aria-label="Python" class="md-nav" data-md-level="2">
+<label class="md-nav__title" for="__nav_3_1">
+<span class="md-nav__icon md-icon"></span>
           Python
         </label>
-        <ul class="md-nav__list" data-md-scrollfix>
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../python/ros1.html" class="md-nav__link">
+<ul class="md-nav__list" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="../python/ros1.html">
         Reading and writing ROS 1
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../python/ros2.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../python/ros2.html">
         Reading and writing ROS 2
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../python/json.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../python/json.html">
         Writing JSON
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../python/protobuf.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../python/protobuf.html">
         Reading and writing Protobuf
       </a>
-    </li>
-  
-
-            
-          
-        </ul>
-      </nav>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-    
-  
-  
-    
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
-      
-      
-        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_2" type="checkbox" id="__nav_3_2" checked>
-      
-      
-      
-      
-        <label class="md-nav__link" for="__nav_3_2">
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item md-nav__item--active md-nav__item--nested">
+<input checked="" class="md-nav__toggle md-toggle" data-md-toggle="__nav_3_2" id="__nav_3_2" type="checkbox"/>
+<label class="md-nav__link" for="__nav_3_2">
           C++
           <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <nav class="md-nav" aria-label="C++" data-md-level="2">
-        <label class="md-nav__title" for="__nav_3_2">
-          <span class="md-nav__icon md-icon"></span>
+</label>
+<nav aria-label="C++" class="md-nav" data-md-level="2">
+<label class="md-nav__title" for="__nav_3_2">
+<span class="md-nav__icon md-icon"></span>
           C++
         </label>
-        <ul class="md-nav__list" data-md-scrollfix>
-          
-            
-              
-  
-  
-    
-  
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
+<ul class="md-nav__list" data-md-scrollfix="">
+<li class="md-nav__item md-nav__item--active">
+<input class="md-nav__toggle md-toggle" data-md-toggle="toc" id="__toc" type="checkbox"/>
+<label class="md-nav__link md-nav__link--active" for="__toc">
           Reading and writing Protobuf
           <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="protobuf.html" class="md-nav__link md-nav__link--active">
+</label>
+<a class="md-nav__link md-nav__link--active" href="protobuf.html">
         Reading and writing Protobuf
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
+<nav aria-label="Table of contents" class="md-nav md-nav--secondary">
+<label class="md-nav__title" for="__toc">
+<span class="md-nav__icon md-icon"></span>
       Table of contents
     </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#reading" class="md-nav__link">
+<ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#reading">
     Reading
   </a>
-  
-    <nav class="md-nav" aria-label="Reading">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#statically-generated-class-definitions" class="md-nav__link">
+<nav aria-label="Reading" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#statically-generated-class-definitions">
     Statically generated class definitions
   </a>
-  
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#dynamically-read-fields" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#dynamically-read-fields">
     Dynamically read fields
   </a>
-  
-    <nav class="md-nav" aria-label="Dynamically read fields">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#load-schema-definitions" class="md-nav__link">
+<nav aria-label="Dynamically read fields" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#load-schema-definitions">
     Load schema definitions
   </a>
-  
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#print-messages" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#print-messages">
     Print messages
   </a>
-  
 </li>
-        
-      </ul>
-    </nav>
-  
+</ul>
+</nav>
 </li>
-        
-      </ul>
-    </nav>
-  
+</ul>
+</nav>
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#writing" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#writing">
     Writing
   </a>
-  
-    <nav class="md-nav" aria-label="Writing">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#register-schema" class="md-nav__link">
+<nav aria-label="Writing" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#register-schema">
     Register schema
   </a>
-  
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#register-channel" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#register-channel">
     Register channel
   </a>
-  
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#write-messages" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#write-messages">
     Write messages
   </a>
-  
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#inspect-mcap-file" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#inspect-mcap-file">
     Inspect MCAP file
   </a>
-  
 </li>
-        
-      </ul>
-    </nav>
-  
+</ul>
+</nav>
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#important-links" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#important-links">
     Important links
   </a>
-  
 </li>
-      
-    </ul>
-  
+</ul>
 </nav>
-      
-    </li>
-  
-
-            
-          
-        </ul>
-      </nav>
-    </li>
-  
-
-            
-          
-        </ul>
-      </nav>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-      
-        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_4" type="checkbox" id="__nav_4" >
-      
-      
-      
-      
-        <label class="md-nav__link" for="__nav_4">
+</li>
+</ul>
+</nav>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item md-nav__item--nested">
+<input class="md-nav__toggle md-toggle" data-md-toggle="__nav_4" id="__nav_4" type="checkbox"/>
+<label class="md-nav__link" for="__nav_4">
           Specification
           <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <nav class="md-nav" aria-label="Specification" data-md-level="1">
-        <label class="md-nav__title" for="__nav_4">
-          <span class="md-nav__icon md-icon"></span>
+</label>
+<nav aria-label="Specification" class="md-nav" data-md-level="1">
+<label class="md-nav__title" for="__nav_4">
+<span class="md-nav__icon md-icon"></span>
           Specification
         </label>
-        <ul class="md-nav__list" data-md-scrollfix>
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../specification/index.html" class="md-nav__link">
+<ul class="md-nav__list" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../specification/index.html">
         MCAP File Format Specification
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../specification/explanatory-notes.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../specification/explanatory-notes.html">
         Explanatory Notes
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../specification/appendix.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../specification/appendix.html">
         MCAP File Format Specification Appendix
       </a>
-    </li>
-  
-
-            
-          
-        </ul>
-      </nav>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-      
-        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5" type="checkbox" id="__nav_5" >
-      
-      
-      
-      
-        <label class="md-nav__link" for="__nav_5">
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item md-nav__item--nested">
+<input class="md-nav__toggle md-toggle" data-md-toggle="__nav_5" id="__nav_5" type="checkbox"/>
+<label class="md-nav__link" for="__nav_5">
           API Reference
           <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <nav class="md-nav" aria-label="API Reference" data-md-level="1">
-        <label class="md-nav__title" for="__nav_5">
-          <span class="md-nav__icon md-icon"></span>
+</label>
+<nav aria-label="API Reference" class="md-nav" data-md-level="1">
+<label class="md-nav__title" for="__nav_5">
+<span class="md-nav__icon md-icon"></span>
           API Reference
         </label>
-        <ul class="md-nav__list" data-md-scrollfix>
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../docs/python/index.html" class="md-nav__link">
+<ul class="md-nav__list" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../docs/python/index.html">
         Python
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../docs/cpp/index.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../docs/cpp/index.html">
         C++
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../docs/typescript/index.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../docs/typescript/index.html">
         TypeScript
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="https://pkg.go.dev/github.com/foxglove/mcap/go/mcap" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="https://pkg.go.dev/github.com/foxglove/mcap/go/mcap">
         Go
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../docs/swift/documentation/mcap/" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../docs/swift/documentation/mcap/">
         Swift
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../docs/rust/mcap/index.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../docs/rust/mcap/index.html">
         Rust
       </a>
-    </li>
-  
-
-            
-          
-        </ul>
-      </nav>
-    </li>
-  
-
-    
-      
-      
-      
-
-  
-  
-  
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-      
-        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6" type="checkbox" id="__nav_6" >
-      
-      
-      
-      
-        <label class="md-nav__link" for="__nav_6">
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item md-nav__item--nested">
+<input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6" id="__nav_6" type="checkbox"/>
+<label class="md-nav__link" for="__nav_6">
           More Resources
           <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <nav class="md-nav" aria-label="More Resources" data-md-level="1">
-        <label class="md-nav__title" for="__nav_6">
-          <span class="md-nav__icon md-icon"></span>
+</label>
+<nav aria-label="More Resources" class="md-nav" data-md-level="1">
+<label class="md-nav__title" for="__nav_6">
+<span class="md-nav__icon md-icon"></span>
           More Resources
         </label>
-        <ul class="md-nav__list" data-md-scrollfix>
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="https://github.com/foxglove/mcap" class="md-nav__link">
+<ul class="md-nav__list" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="https://github.com/foxglove/mcap">
         GitHub
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap">
         mcap CLI
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="https://foxglovedev.slack.com" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="https://foxglovedev.slack.com">
         Slack
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../support-matrix.html" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../support-matrix.html">
         Library Support
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="https://github.com/ros-tooling/rosbag2_storage_mcap" class="md-nav__link">
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="https://github.com/ros-tooling/rosbag2_storage_mcap">
         ROS 2 Storage Plugin
       </a>
-    </li>
-  
-
-            
-          
-            
-              
-  
-  
-  
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-      
-        <input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6_6" type="checkbox" id="__nav_6_6" >
-      
-      
-      
-      
-        <label class="md-nav__link" for="__nav_6_6">
+</li>
+<li class="md-nav__item md-nav__item--nested">
+<input class="md-nav__toggle md-toggle" data-md-toggle="__nav_6_6" id="__nav_6_6" type="checkbox"/>
+<label class="md-nav__link" for="__nav_6_6">
           Motivation
           <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <nav class="md-nav" aria-label="Motivation" data-md-level="2">
-        <label class="md-nav__title" for="__nav_6_6">
-          <span class="md-nav__icon md-icon"></span>
+</label>
+<nav aria-label="Motivation" class="md-nav" data-md-level="2">
+<label class="md-nav__title" for="__nav_6_6">
+<span class="md-nav__icon md-icon"></span>
           Motivation
         </label>
-        <ul class="md-nav__list" data-md-scrollfix>
-          
-            
-              
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../motivation/evaluation-of-robotics-data-recording-file-formats.html" class="md-nav__link">
+<ul class="md-nav__list" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../motivation/evaluation-of-robotics-data-recording-file-formats.html">
         Evaluation of robotics data recording file formats
       </a>
-    </li>
-  
-
-            
-          
-        </ul>
-      </nav>
-    </li>
-  
-
-            
-          
-        </ul>
-      </nav>
-    </li>
-  
-
-    
-  </ul>
+</li>
+</ul>
 </nav>
-                  </div>
-                </div>
-              </div>
-            
-            
-              
-              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
-                <div class="md-sidebar__scrollwrap">
-                  <div class="md-sidebar__inner">
-                    
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../../performance-comparison/rosbag2-plugin-comparison.html">
+        Performance Evaluation
+      </a>
+</li>
+</ul>
+</nav>
+</li>
+</ul>
+</nav>
+</div>
+</div>
+</div>
+<div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc">
+<div class="md-sidebar__scrollwrap">
+<div class="md-sidebar__inner">
+<nav aria-label="Table of contents" class="md-nav md-nav--secondary">
+<label class="md-nav__title" for="__toc">
+<span class="md-nav__icon md-icon"></span>
       Table of contents
     </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#reading" class="md-nav__link">
+<ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#reading">
     Reading
   </a>
-  
-    <nav class="md-nav" aria-label="Reading">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#statically-generated-class-definitions" class="md-nav__link">
+<nav aria-label="Reading" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#statically-generated-class-definitions">
     Statically generated class definitions
   </a>
-  
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#dynamically-read-fields" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#dynamically-read-fields">
     Dynamically read fields
   </a>
-  
-    <nav class="md-nav" aria-label="Dynamically read fields">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#load-schema-definitions" class="md-nav__link">
+<nav aria-label="Dynamically read fields" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#load-schema-definitions">
     Load schema definitions
   </a>
-  
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#print-messages" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#print-messages">
     Print messages
   </a>
-  
 </li>
-        
-      </ul>
-    </nav>
-  
+</ul>
+</nav>
 </li>
-        
-      </ul>
-    </nav>
-  
+</ul>
+</nav>
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#writing" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#writing">
     Writing
   </a>
-  
-    <nav class="md-nav" aria-label="Writing">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#register-schema" class="md-nav__link">
+<nav aria-label="Writing" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#register-schema">
     Register schema
   </a>
-  
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#register-channel" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#register-channel">
     Register channel
   </a>
-  
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#write-messages" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#write-messages">
     Write messages
   </a>
-  
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#inspect-mcap-file" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#inspect-mcap-file">
     Inspect MCAP file
   </a>
-  
 </li>
-        
-      </ul>
-    </nav>
-  
+</ul>
+</nav>
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#important-links" class="md-nav__link">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#important-links">
     Important links
   </a>
-  
 </li>
-      
-    </ul>
-  
+</ul>
 </nav>
-                  </div>
-                </div>
-              </div>
-            
-          
-          
-            <div class="md-content" data-md-component="content">
-              <article class="md-content__inner md-typeset">
-                
-                  
-
-  <a href="https://github.com/foxglove/mcap/edit/main/docs/guides/cpp/protobuf.md" title="Edit this page" class="md-content__button md-icon">
-    
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z"/></svg>
-  </a>
-
-
+</div>
+</div>
+</div>
+<div class="md-content" data-md-component="content">
+<article class="md-content__inner md-typeset">
+<a class="md-content__button md-icon" href="https://github.com/foxglove/mcap/edit/main/docs/guides/cpp/protobuf.md" title="Edit this page">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z"></path></svg>
+</a>
 <h1 id="reading-and-writing-protobuf">Reading and writing Protobuf</h1>
 <div class="admonition info">
 <p class="admonition-title">Info</p>
-<p>&ldquo;Writing&rdquo; section adapted from the original: <a href="https://foxglove.dev/blog/recording-robocar-data-with-mcap">Recording Robocar Data with MCAP</a></p>
+<p>“Writing” section adapted from the original: <a href="https://foxglove.dev/blog/recording-robocar-data-with-mcap">Recording Robocar Data with MCAP</a></p>
 </div>
 <h2 id="reading">Reading</h2>
 <p>To read Protobuf messages from an MCAP file using C++, we have two options:</p>
 <ul>
 <li>
 <p><strong>Static</strong> – Use statically generated class definitions to deserialize the MCAP file</p>
-<p>Best when there is existing code that uses these Protobuf classes. For example, if you have a simulation that drives a planning module with recorded messages, you already have generated class definitions. It makes sense to take advantage of Protobuf&rsquo;s existing <a href="https://developers.google.com/protocol-buffers/docs/cpptutorial?hl=en#extending-a-protocol-buffer">compatibility mechanisms</a> and use those definitions to deserialize the MCAP data.</p>
+<p>Best when there is existing code that uses these Protobuf classes. For example, if you have a simulation that drives a planning module with recorded messages, you already have generated class definitions. It makes sense to take advantage of Protobuf’s existing <a href="https://developers.google.com/protocol-buffers/docs/cpptutorial?hl=en#extending-a-protocol-buffer">compatibility mechanisms</a> and use those definitions to deserialize the MCAP data.</p>
 </li>
 </ul>
 <ul>
 <li>
 <p><strong>Dynamic</strong> – Dynamically read fields using the schema definitions in the MCAP file</p>
-<p>Preferred for inspecting and debugging message content. For example, when building a <a href="https://studio.foxglove.dev">visualization tool</a>, we want to provide a full view of all fields in a message as it was originally recorded. We can use Protobuf&rsquo;s <a href="https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.dynamic_message"><code>DynamicMessage</code></a> class to enumerate and inspect message fields in this way.</p>
+<p>Preferred for inspecting and debugging message content. For example, when building a <a href="https://studio.foxglove.dev">visualization tool</a>, we want to provide a full view of all fields in a message as it was originally recorded. We can use Protobuf’s <a href="https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.dynamic_message"><code>DynamicMessage</code></a> class to enumerate and inspect message fields in this way.</p>
 </li>
 </ul>
 <h3 id="statically-generated-class-definitions">Statically generated class definitions</h3>
 <p>First, we generate our class definitions and include the relevant header:</p>
-<div class="highlight"><pre><span></span><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;foxglove/PosesInFrame.pb.h&quot;</span><span class="cp"></span>
+<div class="highlight"><pre><span></span><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">"foxglove/PosesInFrame.pb.h"</span><span class="cp"></span>
 </code></pre></div>
 <p>We also include the MCAP reader implementation:</p>
 <div class="highlight"><pre><span></span><code><span class="cp">#define MCAP_IMPLEMENTATION</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;mcap/reader.hpp&quot;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"mcap/reader.hpp"</span><span class="cp"></span>
 </code></pre></div>
 <p>Use the <code>mcap::McapReader::open()</code> method to open an MCAP file for reading:</p>
 <div class="highlight"><pre><span></span><code><span class="n">mcap</span><span class="o">::</span><span class="n">McapReader</span><span class="w"> </span><span class="n">reader</span><span class="p">;</span><span class="w"></span>
 <span class="p">{</span><span class="w"></span>
 <span class="w">  </span><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">res</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">reader</span><span class="p">.</span><span class="n">open</span><span class="p">(</span><span class="n">inputFilename</span><span class="p">);</span><span class="w"></span>
 <span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">res</span><span class="p">.</span><span class="n">ok</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;Failed to open &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">inputFilename</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot; for reading: &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">res</span><span class="p">.</span><span class="n">message</span><span class="w"></span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">"Failed to open "</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">inputFilename</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">" for reading: "</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">res</span><span class="p">.</span><span class="n">message</span><span class="w"></span>
 <span class="w">              </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span><span class="w"></span>
 <span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
 <span class="w">  </span><span class="p">}</span><span class="w"></span>
@@ -1236,17 +614,17 @@
 <p>Use a <code>mcap::MessageView</code> to iterate through all of the messages in the MCAP file:</p>
 <div class="highlight"><pre><span></span><code><span class="k">auto</span><span class="w"> </span><span class="n">messageView</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">reader</span><span class="p">.</span><span class="n">readMessages</span><span class="p">();</span><span class="w"></span>
 <span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="k">auto</span><span class="w"> </span><span class="n">it</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">messageView</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="n">it</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">messageView</span><span class="p">.</span><span class="n">end</span><span class="p">();</span><span class="w"> </span><span class="n">it</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">  </span><span class="c1">// skip messages that we can&#39;t use</span>
-<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">((</span><span class="n">it</span><span class="o">-&gt;</span><span class="n">schema</span><span class="o">-&gt;</span><span class="n">encoding</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="s">&quot;protobuf&quot;</span><span class="p">)</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">it</span><span class="o">-&gt;</span><span class="n">schema</span><span class="o">-&gt;</span><span class="n">name</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="s">&quot;foxglove.PosesInFrame&quot;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">  </span><span class="c1">// skip messages that we can't use</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">((</span><span class="n">it</span><span class="o">-&gt;</span><span class="n">schema</span><span class="o">-&gt;</span><span class="n">encoding</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="s">"protobuf"</span><span class="p">)</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">it</span><span class="o">-&gt;</span><span class="n">schema</span><span class="o">-&gt;</span><span class="n">name</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="s">"foxglove.PosesInFrame"</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
 <span class="w">    </span><span class="k">continue</span><span class="p">;</span><span class="w"></span>
 <span class="w">  </span><span class="p">}</span><span class="w"></span>
 <span class="w">  </span><span class="n">foxglove</span><span class="o">::</span><span class="n">PosesInFrame</span><span class="w"> </span><span class="n">path</span><span class="p">;</span><span class="w"></span>
 <span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">path</span><span class="p">.</span><span class="n">ParseFromArray</span><span class="p">(</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="kt">void</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">it</span><span class="o">-&gt;</span><span class="n">message</span><span class="p">.</span><span class="n">data</span><span class="p">),</span><span class="w"></span>
 <span class="w">                                  </span><span class="n">it</span><span class="o">-&gt;</span><span class="n">message</span><span class="p">.</span><span class="n">dataSize</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;could not parse PosesInFrame&quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">"could not parse PosesInFrame"</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span><span class="w"></span>
 <span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
 <span class="w">  </span><span class="p">}</span><span class="w"></span>
-<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">cout</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;Found message: &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">path</span><span class="p">.</span><span class="n">ShortDebugString</span><span class="p">()</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span><span class="w"></span>
+<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">cout</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">"Found message: "</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">path</span><span class="p">.</span><span class="n">ShortDebugString</span><span class="p">()</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span><span class="w"></span>
 <span class="w">  </span><span class="c1">// print out the message</span>
 <span class="p">}</span><span class="w"></span>
 </code></pre></div>
@@ -1260,7 +638,7 @@
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;google/protobuf/dynamic_message.h&gt;</span><span class="cp"></span>
 
 <span class="cp">#define MCAP_IMPLEMENTATION</span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;mcap/reader.hpp&quot;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">"mcap/reader.hpp"</span><span class="cp"></span>
 
 <span class="k">namespace</span><span class="w"> </span><span class="nn">gp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nn">google</span><span class="o">::</span><span class="nn">protobuf</span><span class="p">;</span><span class="w"></span>
 </code></pre></div>
@@ -1269,7 +647,7 @@
 <span class="p">{</span><span class="w"></span>
 <span class="w">  </span><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="w"> </span><span class="n">res</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">reader</span><span class="p">.</span><span class="n">open</span><span class="p">(</span><span class="n">inputFilename</span><span class="p">);</span><span class="w"></span>
 <span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">res</span><span class="p">.</span><span class="n">ok</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;Failed to open &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">inputFilename</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot; for reading: &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">res</span><span class="p">.</span><span class="n">message</span><span class="w"></span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">"Failed to open "</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">inputFilename</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">" for reading: "</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">res</span><span class="p">.</span><span class="n">message</span><span class="w"></span>
 <span class="w">              </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span><span class="w"></span>
 <span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
 <span class="w">  </span><span class="p">}</span><span class="w"></span>
@@ -1282,7 +660,7 @@
 <span class="n">gp</span><span class="o">::</span><span class="n">DescriptorPool</span><span class="w"> </span><span class="nf">protoPool</span><span class="p">(</span><span class="o">&amp;</span><span class="n">protoDb</span><span class="p">);</span><span class="w"></span>
 <span class="n">gp</span><span class="o">::</span><span class="n">DynamicMessageFactory</span><span class="w"> </span><span class="nf">protoFactory</span><span class="p">(</span><span class="o">&amp;</span><span class="n">protoPool</span><span class="p">);</span><span class="w"></span>
 </code></pre></div>
-<p>Now we&rsquo;re ready to iterate through the messages in the MCAP file. We want to load every message&rsquo;s <code>FileDescriptorSet</code> into the <code>DescriptorDatabase</code>, if it hasn&rsquo;t been already:</p>
+<p>Now we’re ready to iterate through the messages in the MCAP file. We want to load every message’s <code>FileDescriptorSet</code> into the <code>DescriptorDatabase</code>, if it hasn’t been already:</p>
 <div class="highlight"><pre><span></span><code><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="k">auto</span><span class="w"> </span><span class="n">it</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">messageView</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="n">it</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">messageView</span><span class="p">.</span><span class="n">end</span><span class="p">();</span><span class="w"> </span><span class="n">it</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
 <span class="w">  </span><span class="k">const</span><span class="w"> </span><span class="n">gp</span><span class="o">::</span><span class="n">Descriptor</span><span class="o">*</span><span class="w"> </span><span class="n">descriptor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">protoPool</span><span class="p">.</span><span class="n">FindMessageTypeByName</span><span class="p">(</span><span class="n">it</span><span class="o">-&gt;</span><span class="n">schema</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">);</span><span class="w"></span>
 <span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">descriptor</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="k">nullptr</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
@@ -1291,11 +669,11 @@
 <span class="w">      </span><span class="k">return</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
 <span class="w">    </span><span class="p">}</span><span class="w"></span>
 </code></pre></div>
-<p>Next, let&rsquo;s define our <code>LoadSchema()</code> helper function:</p>
+<p>Next, let’s define our <code>LoadSchema()</code> helper function:</p>
 <div class="highlight"><pre><span></span><code><span class="kt">bool</span><span class="w"> </span><span class="nf">LoadSchema</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">mcap</span><span class="o">::</span><span class="n">SchemaPtr</span><span class="w"> </span><span class="n">schema</span><span class="p">,</span><span class="w"> </span><span class="n">gp</span><span class="o">::</span><span class="n">SimpleDescriptorDatabase</span><span class="o">*</span><span class="w"> </span><span class="n">protoDb</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
 <span class="w">  </span><span class="n">gp</span><span class="o">::</span><span class="n">FileDescriptorSet</span><span class="w"> </span><span class="n">fdSet</span><span class="p">;</span><span class="w"></span>
 <span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">fdSet</span><span class="p">.</span><span class="n">ParseFromArray</span><span class="p">(</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="kt">void</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">schema</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">.</span><span class="n">data</span><span class="p">()),</span><span class="w"> </span><span class="n">schema</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">.</span><span class="n">size</span><span class="p">()))</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;failed to parse schema data&quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">"failed to parse schema data"</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span><span class="w"></span>
 <span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span><span class="w"></span>
 <span class="w">  </span><span class="p">}</span><span class="w"></span>
 <span class="w">  </span><span class="n">gp</span><span class="o">::</span><span class="n">FileDescriptorProto</span><span class="w"> </span><span class="n">unused</span><span class="p">;</span><span class="w"></span>
@@ -1303,7 +681,7 @@
 <span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="o">&amp;</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fdSet</span><span class="p">.</span><span class="n">file</span><span class="p">(</span><span class="n">i</span><span class="p">);</span><span class="w"></span>
 <span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">protoDb</span><span class="o">-&gt;</span><span class="n">FindFileByName</span><span class="p">(</span><span class="n">file</span><span class="p">.</span><span class="n">name</span><span class="p">(),</span><span class="w"> </span><span class="o">&amp;</span><span class="n">unused</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
 <span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">protoDb</span><span class="o">-&gt;</span><span class="n">Add</span><span class="p">(</span><span class="n">file</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;failed to add definition &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">file</span><span class="p">.</span><span class="n">name</span><span class="p">()</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;to protoDB&quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span><span class="w"></span>
+<span class="w">        </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">"failed to add definition "</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">file</span><span class="p">.</span><span class="n">name</span><span class="p">()</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">"to protoDB"</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span><span class="w"></span>
 <span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span><span class="w"></span>
 <span class="w">      </span><span class="p">}</span><span class="w"></span>
 <span class="w">    </span><span class="p">}</span><span class="w"></span>
@@ -1319,7 +697,7 @@
 <div class="highlight"><pre><span></span><code><span class="n">gp</span><span class="o">::</span><span class="n">Message</span><span class="o">*</span><span class="w"> </span><span class="n">message</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">protoFactory</span><span class="p">.</span><span class="n">GetPrototype</span><span class="p">(</span><span class="n">descriptor</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">New</span><span class="p">();</span><span class="w"></span>
 <span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">message</span><span class="o">-&gt;</span><span class="n">ParseFromArray</span><span class="p">(</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="k">const</span><span class="w"> </span><span class="kt">void</span><span class="o">*&gt;</span><span class="p">(</span><span class="n">it</span><span class="o">-&gt;</span><span class="n">message</span><span class="p">.</span><span class="n">data</span><span class="p">),</span><span class="w"></span>
 <span class="w">                              </span><span class="n">it</span><span class="o">-&gt;</span><span class="n">message</span><span class="p">.</span><span class="n">dataSize</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;failed to parse message using included schema&quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span><span class="w"></span>
+<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">"failed to parse message using included schema"</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">endl</span><span class="p">;</span><span class="w"></span>
 <span class="w">  </span><span class="n">reader</span><span class="p">.</span><span class="n">close</span><span class="p">();</span><span class="w"></span>
 <span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
 <span class="p">}</span><span class="w"></span>
@@ -1331,11 +709,11 @@
 <h2 id="writing">Writing</h2>
 <p>Create an MCAP writer to start writing your Protobuf messages:</p>
 <div class="highlight"><pre><span></span><code><span class="n">mcap</span><span class="o">::</span><span class="n">McapWriter</span><span class="w"> </span><span class="n">writer</span><span class="p">;</span><span class="w"></span>
-<span class="n">mcap</span><span class="o">::</span><span class="n">McapWriterOptions</span><span class="w"> </span><span class="n">opts</span><span class="p">(</span><span class="s">&quot;protobuf&quot;</span><span class="p">);</span><span class="w"></span>
-<span class="k">auto</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">writer</span><span class="p">.</span><span class="n">open</span><span class="p">(</span><span class="s">&quot;output.mcap&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="n">mcap</span><span class="o">::</span><span class="n">McapWriterOptions</span><span class="w"> </span><span class="n">opts</span><span class="p">(</span><span class="s">"protobuf"</span><span class="p">);</span><span class="w"></span>
+<span class="k">auto</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">writer</span><span class="p">.</span><span class="n">open</span><span class="p">(</span><span class="s">"output.mcap"</span><span class="p">);</span><span class="w"></span>
 <span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">s</span><span class="p">.</span><span class="n">ok</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;Failed to open mcap writer: &quot;</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">status</span><span class="p">.</span><span class="n">message</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">;</span><span class="w"></span>
-<span class="w">  </span><span class="k">throw</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="p">(</span><span class="s">&quot;could not open mcap writer&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">cerr</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">"Failed to open mcap writer: "</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">status</span><span class="p">.</span><span class="n">message</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="s">"</span><span class="se">\n</span><span class="s">"</span><span class="p">;</span><span class="w"></span>
+<span class="w">  </span><span class="k">throw</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">runtime_error</span><span class="p">(</span><span class="s">"could not open mcap writer"</span><span class="p">);</span><span class="w"></span>
 <span class="p">}</span><span class="w"></span>
 </code></pre></div>
 <p>Configure it to your desired specifications using <code>McapWriterOptions</code>. For example, <code>opts.compressionLevel = mcap::CompressionLevel::Fast</code> will customize your writer to use a faster compression level.</p>
@@ -1356,7 +734,7 @@
 <span class="p">}</span><span class="w"></span>
 
 <span class="c1">// Returns a serialized google::protobuf::FileDescriptorSet containing</span>
-<span class="c1">// the necessary google::protobuf::FileDescriptor&#39;s to describe d.</span>
+<span class="c1">// the necessary google::protobuf::FileDescriptor's to describe d.</span>
 <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="nf">fdSet</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">google</span><span class="o">::</span><span class="n">protobuf</span><span class="o">::</span><span class="n">Descriptor</span><span class="o">*</span><span class="w"> </span><span class="n">d</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
 <span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="n">res</span><span class="p">;</span><span class="w"></span>
 <span class="w">  </span><span class="n">std</span><span class="o">::</span><span class="n">unordered_set</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span><span class="w"> </span><span class="n">files</span><span class="p">;</span><span class="w"></span>
@@ -1366,7 +744,7 @@
 <span class="p">}</span><span class="w"></span>
 
 <span class="n">mcap</span><span class="o">::</span><span class="n">Schema</span><span class="w"> </span><span class="nf">createSchema</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">google</span><span class="o">::</span><span class="n">protobuf</span><span class="o">::</span><span class="n">Descriptor</span><span class="o">*</span><span class="w"> </span><span class="n">d</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">  </span><span class="n">mcap</span><span class="o">::</span><span class="n">Schema</span><span class="w"> </span><span class="n">schema</span><span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">full_name</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;protobuf&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fdSet</span><span class="p">(</span><span class="n">d</span><span class="p">));</span><span class="w"></span>
+<span class="w">  </span><span class="n">mcap</span><span class="o">::</span><span class="n">Schema</span><span class="w"> </span><span class="n">schema</span><span class="p">(</span><span class="n">d</span><span class="o">-&gt;</span><span class="n">full_name</span><span class="p">(),</span><span class="w"> </span><span class="s">"protobuf"</span><span class="p">,</span><span class="w"> </span><span class="n">fdSet</span><span class="p">(</span><span class="n">d</span><span class="p">));</span><span class="w"></span>
 <span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="n">schema</span><span class="p">;</span><span class="w"></span>
 <span class="p">}</span><span class="w"></span>
 
@@ -1375,8 +753,8 @@
 <span class="n">writer</span><span class="p">.</span><span class="n">addSchema</span><span class="p">(</span><span class="n">path_schema</span><span class="p">);</span><span class="w">  </span><span class="c1">// Assigned schema id is written to path_schema.id</span>
 </code></pre></div>
 <h3 id="register-channel">Register channel</h3>
-<p>Next, we&rsquo;ll register a channel to write our messages to:</p>
-<div class="highlight"><pre><span></span><code><span class="n">mcap</span><span class="o">::</span><span class="n">Channel</span><span class="w"> </span><span class="n">path_channel</span><span class="p">(</span><span class="s">&quot;/planner/path&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;protobuf&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">path_schema</span><span class="p">.</span><span class="n">id</span><span class="p">);</span><span class="w"></span>
+<p>Next, we’ll register a channel to write our messages to:</p>
+<div class="highlight"><pre><span></span><code><span class="n">mcap</span><span class="o">::</span><span class="n">Channel</span><span class="w"> </span><span class="n">path_channel</span><span class="p">(</span><span class="s">"/planner/path"</span><span class="p">,</span><span class="w"> </span><span class="s">"protobuf"</span><span class="p">,</span><span class="w"> </span><span class="n">path_schema</span><span class="p">.</span><span class="n">id</span><span class="p">);</span><span class="w"></span>
 <span class="n">mcap</span><span class="p">.</span><span class="n">addChannel</span><span class="p">(</span><span class="n">path_channel</span><span class="p">);</span><span class="w">  </span><span class="c1">// Assigned channel id written to path_channel.id</span>
 </code></pre></div>
 <h3 id="write-messages">Write messages</h3>
@@ -1386,9 +764,9 @@
 <span class="kt">uint64_t</span><span class="w"> </span><span class="n">timestamp_ns</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">duration_cast</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">nanoseconds</span><span class="o">&gt;</span><span class="p">(</span><span class="w"></span>
 <span class="w">                                </span><span class="n">std</span><span class="o">::</span><span class="n">chrono</span><span class="o">::</span><span class="n">system_clock</span><span class="o">::</span><span class="n">now</span><span class="p">().</span><span class="n">time_since_epoch</span><span class="p">())</span><span class="w"></span>
 <span class="w">                                </span><span class="p">.</span><span class="n">count</span><span class="p">();</span><span class="w"></span>
-<span class="n">poses_msg</span><span class="p">.</span><span class="n">mutable_timestamp</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">set_seconds</span><span class="p">(</span><span class="n">timestamp_ns</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">1&#39;000&#39;000&#39;000ull</span><span class="p">)</span><span class="w"></span>
-<span class="n">poses_msg</span><span class="p">.</span><span class="n">mutable_timestamp</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">set_nanos</span><span class="p">(</span><span class="n">timestamp_ns</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">1&#39;000&#39;000&#39;000ull</span><span class="p">)</span><span class="w"></span>
-<span class="n">poses_msg</span><span class="p">.</span><span class="n">set_frame_id</span><span class="p">(</span><span class="s">&quot;base_link&quot;</span><span class="p">)</span><span class="w"></span>
+<span class="n">poses_msg</span><span class="p">.</span><span class="n">mutable_timestamp</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">set_seconds</span><span class="p">(</span><span class="n">timestamp_ns</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mi">1'000'000'000ull</span><span class="p">)</span><span class="w"></span>
+<span class="n">poses_msg</span><span class="p">.</span><span class="n">mutable_timestamp</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">set_nanos</span><span class="p">(</span><span class="n">timestamp_ns</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">1'000'000'000ull</span><span class="p">)</span><span class="w"></span>
+<span class="n">poses_msg</span><span class="p">.</span><span class="n">set_frame_id</span><span class="p">(</span><span class="s">"base_link"</span><span class="p">)</span><span class="w"></span>
 <span class="c1">// Example path in a straight line down the X axis</span>
 <span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">10</span><span class="p">;</span><span class="w"> </span><span class="o">++</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
 <span class="w">  </span><span class="k">auto</span><span class="w"> </span><span class="n">pose</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">poses_msg</span><span class="p">.</span><span class="n">add_poses</span><span class="p">();</span><span class="w"></span>
@@ -1415,119 +793,78 @@
 <div class="highlight"><pre><span></span><code><span class="n">writer</span><span class="p">.</span><span class="n">close</span><span class="p">();</span><span class="w"></span>
 </code></pre></div>
 <h3 id="inspect-mcap-file">Inspect MCAP file</h3>
-<p>Now, we can inspect our output MCAP file&rsquo;s messages. Use the <em>Data source</em> dialog in <a href="https://studio.foxglove.dev">Foxglove Studio</a> to “Open local file”.</p>
-<p>Add a few relevant panels (<a href="https://foxglove.dev/docs/studio/panels/plot">Plot</a>, <a href="https://foxglove.dev/docs/studio/panels/image">Image</a>, <a href="https://foxglove.dev/docs/studio/panels/raw-messages">Raw Messages</a>, <a href="https://foxglove.dev/docs/studio/panels/3d">3D</a>) to visualize the robot&rsquo;s performance.</p>
+<p>Now, we can inspect our output MCAP file’s messages. Use the <em>Data source</em> dialog in <a href="https://studio.foxglove.dev">Foxglove Studio</a> to “Open local file”.</p>
+<p>Add a few relevant panels (<a href="https://foxglove.dev/docs/studio/panels/plot">Plot</a>, <a href="https://foxglove.dev/docs/studio/panels/image">Image</a>, <a href="https://foxglove.dev/docs/studio/panels/raw-messages">Raw Messages</a>, <a href="https://foxglove.dev/docs/studio/panels/3d">3D</a>) to visualize the robot’s performance.</p>
 <h2 id="important-links">Important links</h2>
 <ul>
 <li><a href="https://github.com/foxglove/mcap/tree/main/cpp/examples/protobuf">Example code</a></li>
 <li><a href="https://github.com/foxglove/schemas">Foxglove schemas</a></li>
 </ul>
-
-
-  
-
-
-
-
-                
-              </article>
-            </div>
-          
-          
-        </div>
-        
-      </main>
-      
-        <footer class="md-footer">
-  
-    
-    <nav class="md-footer__inner md-grid" aria-label="Footer" >
-      
-        
-        <a href="../python/protobuf.html" class="md-footer__link md-footer__link--prev" aria-label="Previous: Reading and writing Protobuf" rel="prev">
-          <div class="md-footer__button md-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
-          </div>
-          <div class="md-footer__title">
-            <div class="md-ellipsis">
-              <span class="md-footer__direction">
+</article>
+</div>
+</div>
+</main>
+<footer class="md-footer">
+<nav aria-label="Footer" class="md-footer__inner md-grid">
+<a aria-label="Previous: Reading and writing Protobuf" class="md-footer__link md-footer__link--prev" href="../python/protobuf.html" rel="prev">
+<div class="md-footer__button md-icon">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"></path></svg>
+</div>
+<div class="md-footer__title">
+<div class="md-ellipsis">
+<span class="md-footer__direction">
                 Previous
               </span>
               Reading and writing Protobuf
             </div>
-          </div>
-        </a>
-      
-      
-        
-        <a href="../../specification/index.html" class="md-footer__link md-footer__link--next" aria-label="Next: MCAP File Format Specification" rel="next">
-          <div class="md-footer__title">
-            <div class="md-ellipsis">
-              <span class="md-footer__direction">
+</div>
+</a>
+<a aria-label="Next: MCAP File Format Specification" class="md-footer__link md-footer__link--next" href="../../specification/index.html" rel="next">
+<div class="md-footer__title">
+<div class="md-ellipsis">
+<span class="md-footer__direction">
                 Next
               </span>
               MCAP File Format Specification
             </div>
-          </div>
-          <div class="md-footer__button md-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4Z"/></svg>
-          </div>
-        </a>
-      
-    </nav>
-  
-  <div class="md-footer-meta md-typeset">
-    <div class="md-footer-meta__inner md-grid">
-      <div class="md-copyright">
-  
-    <div class="md-copyright__highlight">
-      Copyright &copy; 2022 Foxglove
+</div>
+<div class="md-footer__button md-icon">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4Z"></path></svg>
+</div>
+</a>
+</nav>
+<div class="md-footer-meta md-typeset">
+<div class="md-footer-meta__inner md-grid">
+<div class="md-copyright">
+<div class="md-copyright__highlight">
+      Copyright © 2022 Foxglove
     </div>
   
   
     Made with
-    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+    <a href="https://squidfunk.github.io/mkdocs-material/" rel="noopener" target="_blank">
       Material for MkDocs
     </a>
-  
 </div>
-      
-        <div class="md-social">
-  
-    
-    
-    <a href="https://twitter.com/foxglovedev" target="_blank" rel="noopener" title="Twitter" class="md-social__link">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z"/></svg>
-    </a>
-  
-    
-    
-    <a href="https://foxglovedev.slack.com" target="_blank" rel="noopener" title="Slack" class="md-social__link">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M94.12 315.1c0 25.9-21.16 47.06-47.06 47.06S0 341 0 315.1c0-25.9 21.16-47.06 47.06-47.06h47.06v47.06zm23.72 0c0-25.9 21.16-47.06 47.06-47.06s47.06 21.16 47.06 47.06v117.84c0 25.9-21.16 47.06-47.06 47.06s-47.06-21.16-47.06-47.06V315.1zm47.06-188.98c-25.9 0-47.06-21.16-47.06-47.06S139 32 164.9 32s47.06 21.16 47.06 47.06v47.06H164.9zm0 23.72c25.9 0 47.06 21.16 47.06 47.06s-21.16 47.06-47.06 47.06H47.06C21.16 243.96 0 222.8 0 196.9s21.16-47.06 47.06-47.06H164.9zm188.98 47.06c0-25.9 21.16-47.06 47.06-47.06 25.9 0 47.06 21.16 47.06 47.06s-21.16 47.06-47.06 47.06h-47.06V196.9zm-23.72 0c0 25.9-21.16 47.06-47.06 47.06-25.9 0-47.06-21.16-47.06-47.06V79.06c0-25.9 21.16-47.06 47.06-47.06 25.9 0 47.06 21.16 47.06 47.06V196.9zM283.1 385.88c25.9 0 47.06 21.16 47.06 47.06 0 25.9-21.16 47.06-47.06 47.06-25.9 0-47.06-21.16-47.06-47.06v-47.06h47.06zm0-23.72c-25.9 0-47.06-21.16-47.06-47.06 0-25.9 21.16-47.06 47.06-47.06h117.84c25.9 0 47.06 21.16 47.06 47.06 0 25.9-21.16 47.06-47.06 47.06H283.1z"/></svg>
-    </a>
-  
-    
-    
-    <a href="https://github.com/foxglove/mcap" target="_blank" rel="noopener" title="GitHub" class="md-social__link">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
-    </a>
-  
+<div class="md-social">
+<a class="md-social__link" href="https://twitter.com/foxglovedev" rel="noopener" target="_blank" title="Twitter">
+<svg viewbox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z"></path></svg>
+</a>
+<a class="md-social__link" href="https://foxglovedev.slack.com" rel="noopener" target="_blank" title="Slack">
+<svg viewbox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M94.12 315.1c0 25.9-21.16 47.06-47.06 47.06S0 341 0 315.1c0-25.9 21.16-47.06 47.06-47.06h47.06v47.06zm23.72 0c0-25.9 21.16-47.06 47.06-47.06s47.06 21.16 47.06 47.06v117.84c0 25.9-21.16 47.06-47.06 47.06s-47.06-21.16-47.06-47.06V315.1zm47.06-188.98c-25.9 0-47.06-21.16-47.06-47.06S139 32 164.9 32s47.06 21.16 47.06 47.06v47.06H164.9zm0 23.72c25.9 0 47.06 21.16 47.06 47.06s-21.16 47.06-47.06 47.06H47.06C21.16 243.96 0 222.8 0 196.9s21.16-47.06 47.06-47.06H164.9zm188.98 47.06c0-25.9 21.16-47.06 47.06-47.06 25.9 0 47.06 21.16 47.06 47.06s-21.16 47.06-47.06 47.06h-47.06V196.9zm-23.72 0c0 25.9-21.16 47.06-47.06 47.06-25.9 0-47.06-21.16-47.06-47.06V79.06c0-25.9 21.16-47.06 47.06-47.06 25.9 0 47.06 21.16 47.06 47.06V196.9zM283.1 385.88c25.9 0 47.06 21.16 47.06 47.06 0 25.9-21.16 47.06-47.06 47.06-25.9 0-47.06-21.16-47.06-47.06v-47.06h47.06zm0-23.72c-25.9 0-47.06-21.16-47.06-47.06 0-25.9 21.16-47.06 47.06-47.06h117.84c25.9 0 47.06 21.16 47.06 47.06 0 25.9-21.16 47.06-47.06 47.06H283.1z"></path></svg>
+</a>
+<a class="md-social__link" href="https://github.com/foxglove/mcap" rel="noopener" target="_blank" title="GitHub">
+<svg viewbox="0 0 496 512" xmlns="http://www.w3.org/2000/svg"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"></path></svg>
+</a>
 </div>
-      
-    </div>
-  </div>
+</div>
+</div>
 </footer>
-      
-    </div>
-    <div class="md-dialog" data-md-component="dialog">
-      <div class="md-dialog__inner md-typeset"></div>
-    </div>
-    
-    <script id="__config" type="application/json">{"base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.5bf1dace.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version.title": "Select version"}}</script>
-    
-    
-      <script src="../../assets/javascripts/bundle.37e9125f.min.js"></script>
-      
-    
-  </body>
+</div>
+<div class="md-dialog" data-md-component="dialog">
+<div class="md-dialog__inner md-typeset"></div>
+</div>
+<script id="__config" type="application/json">{"base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.16e2a7d4.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.config.lang": "en", "search.config.pipeline": "trimmer, stopWordFilter", "search.config.separator": "[\\s\\-]+", "search.placeholder": "Search", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version.title": "Select version"}}</script>
+<script src="../../assets/javascripts/bundle.d6c3db9e.min.js"></script>
+<script>document$.subscribe(() => {const lightbox = GLightbox({"touchNavigation": true, "loop": false, "zoomable": true, "draggable": true, "openEffect": "zoom", "closeEffect": "zoom"});})</script></body>
 </html>
