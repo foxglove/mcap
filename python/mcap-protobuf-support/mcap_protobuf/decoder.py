@@ -20,9 +20,9 @@ class Decoder:
         self._types: Dict[int, Type[Any]] = {}
         self._factory = MessageFactory()
 
-    def _get_message_classes(self, file_protos: Iterable[FileDescriptorProto]):
-        """Adds protos to the message factory pool in topological order, then returns
-        the message classes for all protos.
+    def _get_message_classes(self, file_descriptors: Iterable[FileDescriptorProto]):
+        """Adds file descriptors to the message factory pool in topological order, then returns
+        the message classes for all file descriptors.
 
         Modified from the original at:
         https://github.com/protocolbuffers/protobuf/blob/main/python/google/protobuf/message_factory.py
@@ -56,22 +56,24 @@ class Decoder:
         THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
         (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
         OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
         """
-        file_by_name = {file_proto.name: file_proto for file_proto in file_protos}
+        descriptor_by_name = {
+            file_descriptor.name: file_descriptor
+            for file_descriptor in file_descriptors
+        }
 
-        def _add_file(file_proto: FileDescriptorProto):
-            for dependency in file_proto.dependency:
-                if dependency in file_by_name:
+        def _add_file(file_descriptor: FileDescriptorProto):
+            for dependency in file_descriptor.dependency:
+                if dependency in descriptor_by_name:
                     # Remove from elements to be visited, in order to cut cycles.
-                    _add_file(file_by_name.pop(dependency))
-            self._factory.pool.Add(file_proto)
+                    _add_file(descriptor_by_name.pop(dependency))
+            self._factory.pool.Add(file_descriptor)
 
-        while file_by_name:
-            _add_file(file_by_name.popitem()[1])
+        while descriptor_by_name:
+            _add_file(descriptor_by_name.popitem()[1])
 
         return self._factory.GetMessages(
-            [file_proto.name for file_proto in file_protos]
+            [file_descriptor.name for file_descriptor in file_descriptors]
         )
 
     def decode(self, schema: Schema, message: Message) -> Any:
