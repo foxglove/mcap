@@ -176,7 +176,7 @@ async function main() {
     library: "mcap example",
   });
   const FrameTransformSchemaBuffer = fs.readFileSync(
-    `${__dirname}/../../flatbuffers/bin/FrameTransform.bfbs`,
+    `${__dirname}/../../flatbuffer/bin/FrameTransform.bfbs`,
   );
   const tfSchemaId = await mcapFile.registerSchema({
     name: "foxglove.FrameTransform",
@@ -210,7 +210,7 @@ async function main() {
     data: tfBuilder.asUint8Array(),
   });
 
-  const GridSchemaBuffer = fs.readFileSync(`${__dirname}/../../flatbuffers/bin/Grid.bfbs`);
+  const GridSchemaBuffer = fs.readFileSync(`${__dirname}/../../flatbuffer/bin/Grid.bfbs`);
 
   const gridSchemaId = await mcapFile.registerSchema({
     name: "foxglove.Grid",
