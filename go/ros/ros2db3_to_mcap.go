@@ -39,8 +39,8 @@ func getSchema(encoding string, rosType string, directories []string) ([]byte, e
 		}
 		lines := strings.Split(string(schemaIndex), "\n")
 		for _, line := range lines {
-			if line == fmt.Sprintf("msg/%s.%s", baseType, encoding) {
-				schemaPath := path.Join(dir, "share", rosPkg, "msg", baseType+"."+encoding)
+			if strings.HasSuffix(line, baseType+"."+encoding) {
+				schemaPath := path.Join(dir, "share", rosPkg, line)
 				schema, err := os.ReadFile(schemaPath)
 				if err != nil {
 					return nil, fmt.Errorf("failed to read schema: %w", err)
