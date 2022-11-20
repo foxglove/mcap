@@ -142,7 +142,15 @@ func record(op OpCode) []byte {
 }
 
 func attachment() []byte {
-	buf := make([]byte, 9)
+	recordLen := 9 + // opcode + record length
+		8 + // record time
+		8 + // create time
+		4 + // attachment name length
+		4 + // media type length
+		8 + // data size
+		4 // crc length
+	buf := make([]byte, recordLen)
 	buf[0] = byte(OpAttachment)
+	putUint64(buf[1:], uint64(recordLen-9))
 	return buf
 }

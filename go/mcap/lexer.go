@@ -80,8 +80,6 @@ const (
 	TokenMessageIndex
 	// TokenChunkIndex represents a chunk index token.
 	TokenChunkIndex
-	// TokenAttachment represents an attachment token.
-	TokenAttachment
 	// TokenAttachmentIndex represents an attachment index token.
 	TokenAttachmentIndex
 	// TokenStatistics represents a statistics token.
@@ -122,8 +120,6 @@ func (t TokenType) String() string {
 		return "message index"
 	case TokenChunkIndex:
 		return "chunk index"
-	case TokenAttachment:
-		return "attachment"
 	case TokenAttachmentIndex:
 		return "attachment index"
 	case TokenStatistics:
@@ -155,10 +151,12 @@ type Lexer struct {
 	inChunk                  bool
 	buf                      []byte
 	uncompressedChunk        []byte
-	validateCRC              bool
+	validateChunkCRCs        bool
+	computeAttachmentCRCs    bool
 	emitInvalidChunks        bool
 	maxRecordSize            int
 	maxDecompressedChunkSize int
+	attachmentCallback       func(*AttachmentReader) error
 }
 
 // Next returns the next token from the lexer as a byte array. The result will
@@ -191,16 +189,52 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 		if l.maxRecordSize > 0 && recordLen > uint64(l.maxRecordSize) {
 			return TokenError, nil, ErrRecordTooLarge
 		}
-		if opcode == OpChunk && !l.emitChunks {
-			err := loadChunk(l, recordLen)
-			if err != nil {
-				if l.emitInvalidChunks {
-					var invalidCrc *errInvalidChunkCrc
-					if errors.As(err, &invalidCrc) {
-						return TokenInvalidChunk, nil, err
+
+		// Chunks and attachments require special handling to avoid
+		// materialization into RAM. If it's a chunk, open up a decompressor and
+		// swap it in as the active reader, then continue on the next message
+		// (which will be from the chunk data). If it's an attachment, parse the
+		// record into an AttachmentReader and call any user-supplied callback.
+		// Then discard any remaining data and continue to the next record.
+		switch opcode {
+		case OpChunk:
+			if !l.emitChunks {
+				err := loadChunk(l, recordLen)
+				if err != nil {
+					if l.emitInvalidChunks {
+						var invalidCrc *errInvalidChunkCrc
+						if errors.As(err, &invalidCrc) {
+							return TokenInvalidChunk, nil, err
+						}
 					}
+					return TokenError, nil, err
 				}
-				return TokenError, nil, err
+				continue
+			}
+		case OpAttachment:
+			limitReader := &io.LimitedReader{
+				R: l.reader,
+				N: int64(recordLen),
+			}
+
+			if l.attachmentCallback != nil {
+				attachmentReader, err := parseAttachmentReader(
+					limitReader,
+					l.computeAttachmentCRCs,
+				)
+				if err != nil {
+					return TokenError, nil, fmt.Errorf("failed to parse attachment: %w", err)
+				}
+				err = l.attachmentCallback(attachmentReader)
+				if err != nil {
+					return TokenError, nil, fmt.Errorf("failed to handle attachment: %w", err)
+				}
+			}
+
+			// skip the base reader ahead to cover any unconsumed bytes of the attachment
+			err := skipReader(limitReader.R, limitReader.N)
+			if err != nil {
+				return TokenError, nil, fmt.Errorf("failed to consume unhandled attachment data: %w", err)
 			}
 			continue
 		}
@@ -238,8 +272,6 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			return TokenChannel, record, nil
 		case OpFooter:
 			return TokenFooter, record, nil
-		case OpAttachment:
-			return TokenAttachment, record, nil
 		case OpAttachmentIndex:
 			return TokenAttachmentIndex, record, nil
 		case OpChunkIndex:
@@ -394,7 +426,7 @@ func loadChunk(l *Lexer, recordLen uint64) error {
 	// validation. If we are not validating CRCs, we can use incremental
 	// decompression for the chunk's data, which may be beneficial to streaming
 	// readers.
-	if l.validateCRC {
+	if l.validateChunkCRCs {
 		if l.maxDecompressedChunkSize > 0 && uncompressedSize > uint64(l.maxDecompressedChunkSize) {
 			return ErrChunkTooLarge
 		}
@@ -437,8 +469,13 @@ func loadChunk(l *Lexer, recordLen uint64) error {
 type LexerOptions struct {
 	// SkipMagic instructs the lexer not to perform validation of the leading magic bytes.
 	SkipMagic bool
-	// ValidateCRC instructs the lexer to validate CRC checksums for chunks.
-	ValidateCRC bool
+	// ValidateChunkCRC instructs the lexer to validate CRC checksums for
+	// chunks.
+	ValidateChunkCRCs bool
+	// ComputeAttachmentCRCs instructs the lexer to compute CRCs for any
+	// attachments parsed from the file. Consumers should only set this to true
+	// if they intend to validate those CRCs in their attachment callback.
+	ComputeAttachmentCRCs bool
 	// EmitChunks instructs the lexer to emit chunk records without de-chunking.
 	// It is incompatible with ValidateCRC.
 	EmitChunks bool
@@ -451,19 +488,24 @@ type LexerOptions struct {
 	// MaxRecordSize defines the maximum size record the lexer will read.
 	// Records larger than this will result in an error.
 	MaxRecordSize int
+	// AttachmentCallback is a function to execute on attachments encountered in the file.
+	AttachmentCallback func(*AttachmentReader) error
 }
 
 // NewLexer returns a new lexer for the given reader.
 func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 	var maxRecordSize, maxDecompressedChunkSize int
-	var validateCRC, emitChunks, emitInvalidChunks, skipMagic bool
+	var computeAttachmentCRCs, validateChunkCRCs, emitChunks, emitInvalidChunks, skipMagic bool
+	var attachmentCallback func(*AttachmentReader) error
 	if len(opts) > 0 {
-		validateCRC = opts[0].ValidateCRC
+		validateChunkCRCs = opts[0].ValidateChunkCRCs
+		computeAttachmentCRCs = opts[0].ComputeAttachmentCRCs
 		emitChunks = opts[0].EmitChunks
 		emitInvalidChunks = opts[0].EmitInvalidChunks
 		skipMagic = opts[0].SkipMagic
 		maxRecordSize = opts[0].MaxRecordSize
 		maxDecompressedChunkSize = opts[0].MaxDecompressedChunkSize
+		attachmentCallback = opts[0].AttachmentCallback
 	}
 	if !skipMagic {
 		err := validateMagic(r)
@@ -475,10 +517,12 @@ func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 		basereader:               r,
 		reader:                   r,
 		buf:                      make([]byte, 32),
-		validateCRC:              validateCRC,
+		validateChunkCRCs:        validateChunkCRCs,
+		computeAttachmentCRCs:    computeAttachmentCRCs,
 		emitChunks:               emitChunks,
 		emitInvalidChunks:        emitInvalidChunks,
 		maxRecordSize:            maxRecordSize,
 		maxDecompressedChunkSize: maxDecompressedChunkSize,
+		attachmentCallback:       attachmentCallback,
 	}, nil
 }

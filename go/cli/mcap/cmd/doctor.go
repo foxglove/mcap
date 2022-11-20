@@ -105,9 +105,9 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 	uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
 
 	lexer, err := mcap.NewLexer(uncompressedBytesReader, &mcap.LexerOptions{
-		SkipMagic:   true,
-		ValidateCRC: true,
-		EmitChunks:  true,
+		SkipMagic:         true,
+		ValidateChunkCRCs: true,
+		EmitChunks:        true,
 	})
 	if err != nil {
 		doctor.error("Failed to make lexer for chunk bytes", err)
@@ -209,9 +209,9 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 
 func (doctor *mcapDoctor) Examine() error {
 	lexer, err := mcap.NewLexer(doctor.reader, &mcap.LexerOptions{
-		SkipMagic:   false,
-		ValidateCRC: true,
-		EmitChunks:  true,
+		SkipMagic:         false,
+		ValidateChunkCRCs: true,
+		EmitChunks:        true,
 	})
 	if err != nil {
 		doctor.fatal(err)
@@ -334,11 +334,6 @@ func (doctor *mcapDoctor) Examine() error {
 				doctor.error("Multiple chunk indexes found for chunk at offset", chunkIndex.ChunkStartOffset)
 			}
 			doctor.chunkIndexes[chunkIndex.ChunkStartOffset] = chunkIndex
-		case mcap.TokenAttachment:
-			_, err := mcap.ParseAttachment(data)
-			if err != nil {
-				doctor.error("Failed to parse attachment:", err)
-			}
 		case mcap.TokenAttachmentIndex:
 			_, err := mcap.ParseAttachmentIndex(data)
 			if err != nil {

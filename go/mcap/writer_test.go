@@ -28,10 +28,10 @@ func TestMCAPReadWrite(t *testing.T) {
 		assert.Nil(t, err)
 		// body of the header is the profile, followed by the metadata map
 		offset := 0
-		profile, offset, err := readPrefixedString(record, offset)
+		profile, offset, err := getPrefixedString(record, offset)
 		assert.Nil(t, err)
 		assert.Equal(t, "ros1", profile)
-		library, _, err := readPrefixedString(record, offset)
+		library, _, err := getPrefixedString(record, offset)
 		assert.Nil(t, err)
 		assert.Equal(t, "libfoo v0", library)
 		assert.Equal(t, TokenHeader, tokenType)
@@ -118,13 +118,15 @@ func TestOutputDeterminism(t *testing.T) {
 			Name:      "file.jpg",
 			LogTime:   0,
 			MediaType: "image/jpeg",
-			Data:      []byte{0x01, 0x02, 0x03, 0x04},
+			DataSize:  4,
+			Data:      bytes.NewReader([]byte{0x01, 0x02, 0x03, 0x04}),
 		}))
 		assert.Nil(t, w.WriteAttachment(&Attachment{
 			Name:      "file2.jpg",
 			LogTime:   0,
 			MediaType: "image/jpeg",
-			Data:      []byte{0x01, 0x02, 0x03, 0x04},
+			DataSize:  4,
+			Data:      bytes.NewReader([]byte{0x01, 0x02, 0x03, 0x04}),
 		}))
 		assert.Nil(t, w.Close())
 		if i == 0 {
@@ -312,7 +314,8 @@ func TestIndexStructures(t *testing.T) {
 		LogTime:    100,
 		CreateTime: 99,
 		MediaType:  "image/jpeg",
-		Data:       []byte{0x01, 0x02, 0x03, 0x04},
+		DataSize:   4,
+		Data:       bytes.NewReader([]byte{0x01, 0x02, 0x03, 0x04}),
 	}))
 	assert.Nil(t, w.Close())
 	t.Run("chunk indexes correct", func(t *testing.T) {
@@ -386,7 +389,8 @@ func TestStatistics(t *testing.T) {
 		Name:      "file.jpg",
 		LogTime:   0,
 		MediaType: "image/jpeg",
-		Data:      []byte{0x01, 0x02, 0x03, 0x04},
+		DataSize:  4,
+		Data:      bytes.NewReader([]byte{0x01, 0x02, 0x03, 0x04}),
 	}))
 	assert.Nil(t, w.Close())
 	assert.Equal(t, uint64(1000), w.Statistics.MessageCount)
@@ -441,7 +445,8 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		Name:      "file.jpg",
 		LogTime:   0,
 		MediaType: "image/jpeg",
-		Data:      []byte{0x01, 0x02, 0x03, 0x04},
+		DataSize:  4,
+		Data:      bytes.NewReader([]byte{0x01, 0x02, 0x03, 0x04}),
 	})
 	assert.Nil(t, err)
 	assert.Nil(t, w.Close())
@@ -461,7 +466,6 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		TokenSchema,
 		TokenChannel,
 		TokenMessage,
-		TokenAttachment,
 		TokenDataEnd,
 		TokenSchema,
 		TokenChannel,
@@ -506,10 +510,10 @@ func TestLibraryString(t *testing.T) {
 			assert.Nil(t, err)
 			assert.Equal(t, tokenType, TokenHeader)
 			offset := 0
-			profile, offset, err := readPrefixedString(record, offset)
+			profile, offset, err := getPrefixedString(record, offset)
 			assert.Nil(t, err)
 			assert.Equal(t, "ros1", profile)
-			library, _, err := readPrefixedString(record, offset)
+			library, _, err := getPrefixedString(record, offset)
 			assert.Nil(t, err)
 			assert.Equal(t, library, c.output)
 		})
@@ -615,6 +619,32 @@ func BenchmarkWriterAllocs(b *testing.B) {
 				elapsed := time.Since(t0)
 				b.ReportMetric(float64(c.messageCount)/elapsed.Seconds(), "messages/sec")
 			}
+		})
+	}
+}
+
+func TestWriteAttachment(t *testing.T) {
+	cases := []struct {
+		assertion  string
+		attachment *Attachment
+		err        error
+	}{
+		{
+			"incorrect content size",
+			&Attachment{
+				DataSize: 2,
+				Data:     bytes.NewReader([]byte{0x01, 0x02, 0x03, 0x04}),
+			},
+			ErrAttachmentDataSizeIncorrect,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.assertion, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			writer, err := NewWriter(buf, &WriterOptions{})
+			assert.Nil(t, err)
+			err = writer.WriteAttachment(c.attachment)
+			assert.ErrorIs(t, err, c.err)
 		})
 	}
 }

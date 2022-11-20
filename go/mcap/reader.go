@@ -10,7 +10,7 @@ import (
 	"github.com/foxglove/mcap/go/mcap/readopts"
 )
 
-func readPrefixedString(data []byte, offset int) (s string, newoffset int, err error) {
+func getPrefixedString(data []byte, offset int) (s string, newoffset int, err error) {
 	if len(data[offset:]) < 4 {
 		return "", 0, io.ErrShortBuffer
 	}
@@ -21,7 +21,7 @@ func readPrefixedString(data []byte, offset int) (s string, newoffset int, err e
 	return string(data[offset+4 : offset+length+4]), offset + 4 + length, nil
 }
 
-func readPrefixedBytes(data []byte, offset int) (s []byte, newoffset int, err error) {
+func getPrefixedBytes(data []byte, offset int) (s []byte, newoffset int, err error) {
 	if len(data[offset:]) < 4 {
 		return nil, 0, io.ErrShortBuffer
 	}
@@ -32,7 +32,7 @@ func readPrefixedBytes(data []byte, offset int) (s []byte, newoffset int, err er
 	return data[offset+4 : offset+length+4], offset + 4 + length, nil
 }
 
-func readPrefixedMap(data []byte, offset int) (result map[string]string, newoffset int, err error) {
+func getPrefixedMap(data []byte, offset int) (result map[string]string, newoffset int, err error) {
 	var key, value string
 	var inset int
 	m := make(map[string]string)
@@ -41,11 +41,11 @@ func readPrefixedMap(data []byte, offset int) (result map[string]string, newoffs
 		return nil, 0, fmt.Errorf("failed to read map length: %w", err)
 	}
 	for uint32(offset+inset) < uint32(offset)+maplen {
-		key, inset, err = readPrefixedString(data[offset:], inset)
+		key, inset, err = getPrefixedString(data[offset:], inset)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to read map key: %w", err)
 		}
-		value, inset, err = readPrefixedString(data[offset:], inset)
+		value, inset, err = getPrefixedString(data[offset:], inset)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to read map value: %w", err)
 		}

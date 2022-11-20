@@ -168,10 +168,6 @@ func filter(
 	w io.Writer,
 	opts *filterOpts,
 ) error {
-	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{ValidateCRC: true, EmitInvalidChunks: opts.recover})
-	if err != nil {
-		return err
-	}
 	mcapWriter, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Compression: opts.compressionFormat,
 		Chunked:     true,
@@ -182,6 +178,38 @@ func filter(
 	}
 
 	var numMessages, numAttachments, numMetadata uint64
+
+	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{
+		ValidateChunkCRCs: true,
+		EmitInvalidChunks: opts.recover,
+		AttachmentCallback: func(ar *mcap.AttachmentReader) error {
+			if !opts.includeAttachments {
+				return nil
+			}
+			if ar.LogTime < opts.start {
+				return nil
+			}
+			if ar.LogTime >= opts.end {
+				return nil
+			}
+			err = mcapWriter.WriteAttachment(&mcap.Attachment{
+				LogTime:    ar.LogTime,
+				CreateTime: ar.CreateTime,
+				Name:       ar.Name,
+				MediaType:  ar.MediaType,
+				DataSize:   ar.DataSize,
+				Data:       ar.Data(),
+			})
+			if err != nil {
+				return err
+			}
+			numAttachments++
+			return nil
+		},
+	})
+	if err != nil {
+		return err
+	}
 
 	defer func() {
 		err := mcapWriter.Close()
@@ -297,24 +325,6 @@ func filter(
 				return err
 			}
 			numMessages++
-		case mcap.TokenAttachment:
-			if !opts.includeAttachments {
-				continue
-			}
-			attachment, err := mcap.ParseAttachment(data)
-			if err != nil {
-				return err
-			}
-			if attachment.LogTime < opts.start {
-				continue
-			}
-			if attachment.LogTime >= opts.end {
-				continue
-			}
-			if err = mcapWriter.WriteAttachment(attachment); err != nil {
-				return err
-			}
-			numAttachments++
 		case mcap.TokenMetadata:
 			if !opts.includeMetadata {
 				continue
