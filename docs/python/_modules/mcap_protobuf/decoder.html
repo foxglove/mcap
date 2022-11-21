@@ -34,10 +34,10 @@
             
   <h1>Source code for mcap_protobuf.decoder</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Counter</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Type</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Iterable</span>
 
-<span class="kn">from</span> <span class="nn">google.protobuf.descriptor_pb2</span> <span class="kn">import</span> <span class="n">FileDescriptorSet</span>
-<span class="kn">from</span> <span class="nn">google.protobuf.message_factory</span> <span class="kn">import</span> <span class="n">GetMessages</span>
+<span class="kn">from</span> <span class="nn">google.protobuf.descriptor_pb2</span> <span class="kn">import</span> <span class="n">FileDescriptorSet</span><span class="p">,</span> <span class="n">FileDescriptorProto</span>
+<span class="kn">from</span> <span class="nn">google.protobuf.message_factory</span> <span class="kn">import</span> <span class="n">MessageFactory</span>
 <span class="kn">from</span> <span class="nn">mcap.exceptions</span> <span class="kn">import</span> <span class="n">McapError</span>
 <span class="kn">from</span> <span class="nn">mcap.records</span> <span class="kn">import</span> <span class="n">Message</span><span class="p">,</span> <span class="n">Schema</span>
 <span class="kn">from</span> <span class="nn">mcap.well_known</span> <span class="kn">import</span> <span class="n">SchemaEncoding</span>
@@ -53,6 +53,63 @@
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Decodes Protobuf messages from MCAP message records.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_types</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Type</span><span class="p">[</span><span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_factory</span> <span class="o">=</span> <span class="n">MessageFactory</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_get_message_classes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_descriptors</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">FileDescriptorProto</span><span class="p">]):</span>
+        <span class="sd">&quot;&quot;&quot;Adds file descriptors to the message factory pool in topological order, then returns</span>
+<span class="sd">        the message classes for all file descriptors.</span>
+
+<span class="sd">        Modified from the original at:</span>
+<span class="sd">        https://github.com/protocolbuffers/protobuf/blob/main/python/google/protobuf/message_factory.py</span>
+
+<span class="sd">        Protocol Buffers - Google&#39;s data interchange format</span>
+<span class="sd">        Copyright 2008 Google Inc.  All rights reserved.</span>
+<span class="sd">        https://developers.google.com/protocol-buffers/</span>
+
+<span class="sd">        Redistribution and use in source and binary forms, with or without</span>
+<span class="sd">        modification, are permitted provided that the following conditions are</span>
+<span class="sd">        met:</span>
+
+<span class="sd">            * Redistributions of source code must retain the above copyright</span>
+<span class="sd">        notice, this list of conditions and the following disclaimer.</span>
+<span class="sd">            * Redistributions in binary form must reproduce the above</span>
+<span class="sd">        copyright notice, this list of conditions and the following disclaimer</span>
+<span class="sd">        in the documentation and/or other materials provided with the</span>
+<span class="sd">        distribution.</span>
+<span class="sd">            * Neither the name of Google Inc. nor the names of its</span>
+<span class="sd">        contributors may be used to endorse or promote products derived from</span>
+<span class="sd">        this software without specific prior written permission.</span>
+
+<span class="sd">        THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS</span>
+<span class="sd">        &quot;AS IS&quot; AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT</span>
+<span class="sd">        LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR</span>
+<span class="sd">        A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT</span>
+<span class="sd">        OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,</span>
+<span class="sd">        SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT</span>
+<span class="sd">        LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,</span>
+<span class="sd">        DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY</span>
+<span class="sd">        THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT</span>
+<span class="sd">        (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE</span>
+<span class="sd">        OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">descriptor_by_name</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">file_descriptor</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">file_descriptor</span>
+            <span class="k">for</span> <span class="n">file_descriptor</span> <span class="ow">in</span> <span class="n">file_descriptors</span>
+        <span class="p">}</span>
+
+        <span class="k">def</span> <span class="nf">_add_file</span><span class="p">(</span><span class="n">file_descriptor</span><span class="p">:</span> <span class="n">FileDescriptorProto</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">dependency</span> <span class="ow">in</span> <span class="n">file_descriptor</span><span class="o">.</span><span class="n">dependency</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">dependency</span> <span class="ow">in</span> <span class="n">descriptor_by_name</span><span class="p">:</span>
+                    <span class="c1"># Remove from elements to be visited, in order to cut cycles.</span>
+                    <span class="n">_add_file</span><span class="p">(</span><span class="n">descriptor_by_name</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">dependency</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_factory</span><span class="o">.</span><span class="n">pool</span><span class="o">.</span><span class="n">Add</span><span class="p">(</span><span class="n">file_descriptor</span><span class="p">)</span>
+
+        <span class="k">while</span> <span class="n">descriptor_by_name</span><span class="p">:</span>
+            <span class="n">_add_file</span><span class="p">(</span><span class="n">descriptor_by_name</span><span class="o">.</span><span class="n">popitem</span><span class="p">()[</span><span class="mi">1</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_factory</span><span class="o">.</span><span class="n">GetMessages</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">file_descriptor</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">file_descriptor</span> <span class="ow">in</span> <span class="n">file_descriptors</span><span class="p">]</span>
+        <span class="p">)</span>
 
 <div class="viewcode-block" id="Decoder.decode"><a class="viewcode-back" href="../../mcap-protobuf-apidoc/mcap_protobuf.decoder.html#mcap_protobuf.decoder.Decoder.decode">[docs]</a>    <span class="k">def</span> <span class="nf">decode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">schema</span><span class="p">:</span> <span class="n">Schema</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">Message</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Takes a Message record from an MCAP along with its associated Schema,</span>
@@ -78,7 +135,7 @@
                     <span class="k">raise</span> <span class="n">McapError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;FileDescriptorSet contains </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2"> file descriptors for </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
-            <span class="n">messages</span> <span class="o">=</span> <span class="n">GetMessages</span><span class="p">(</span><span class="n">fds</span><span class="o">.</span><span class="n">file</span><span class="p">)</span>
+            <span class="n">messages</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_message_classes</span><span class="p">(</span><span class="n">fds</span><span class="o">.</span><span class="n">file</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">klass</span> <span class="ow">in</span> <span class="n">messages</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                 <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="n">schema</span><span class="o">.</span><span class="n">name</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_types</span><span class="p">[</span><span class="n">schema</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">klass</span>
