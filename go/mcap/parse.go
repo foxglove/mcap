@@ -7,11 +7,11 @@ import (
 
 // ParseHeader parses a header record.
 func ParseHeader(buf []byte) (*Header, error) {
-	profile, offset, err := readPrefixedString(buf, 0)
+	profile, offset, err := getPrefixedString(buf, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read profile: %w", err)
 	}
-	library, _, err := readPrefixedString(buf, offset)
+	library, _, err := getPrefixedString(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read library: %w", err)
 	}
@@ -48,15 +48,15 @@ func ParseSchema(buf []byte) (*Schema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read schema ID: %w", err)
 	}
-	name, offset, err := readPrefixedString(buf, offset)
+	name, offset, err := getPrefixedString(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read schema name: %w", err)
 	}
-	encoding, offset, err := readPrefixedString(buf, offset)
+	encoding, offset, err := getPrefixedString(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read encoding: %w", err)
 	}
-	data, _, err := readPrefixedBytes(buf, offset)
+	data, _, err := getPrefixedBytes(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read schema data: %w", err)
 	}
@@ -78,15 +78,15 @@ func ParseChannel(buf []byte) (*Channel, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read schema ID: %w", err)
 	}
-	topic, offset, err := readPrefixedString(buf, offset)
+	topic, offset, err := getPrefixedString(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read topic name: %w", err)
 	}
-	messageEncoding, offset, err := readPrefixedString(buf, offset)
+	messageEncoding, offset, err := getPrefixedString(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read message encoding: %w", err)
 	}
-	metadata, _, err := readPrefixedMap(buf, offset)
+	metadata, _, err := getPrefixedMap(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata: %w", err)
 	}
@@ -145,7 +145,7 @@ func ParseChunk(buf []byte) (*Chunk, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read uncompressed CRC: %w", err)
 	}
-	compression, offset, err := readPrefixedString(buf, offset)
+	compression, offset, err := getPrefixedString(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read compression: %w", err)
 	}
@@ -239,7 +239,7 @@ func ParseChunkIndex(buf []byte) (*ChunkIndex, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read message index length: %w", err)
 	}
-	compression, offset, err := readPrefixedString(buf, offset)
+	compression, offset, err := getPrefixedString(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read compression: %w", err)
 	}
@@ -264,41 +264,46 @@ func ParseChunkIndex(buf []byte) (*ChunkIndex, error) {
 	}, nil
 }
 
-// ParseAttachment parses an attachment record.
-func ParseAttachment(buf []byte) (*Attachment, error) {
-	logTime, offset, err := getUint64(buf, 0)
+func parseAttachmentReader(
+	r io.Reader,
+	computeCRC bool,
+) (*AttachmentReader, error) {
+	buf := make([]byte, 8)
+	crcReader := newCRCReader(r, computeCRC)
+	logTime, err := readUint64(buf, crcReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read record time: %w", err)
 	}
-	createTime, offset, err := getUint64(buf, offset)
+	createTime, err := readUint64(buf, crcReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read create time: %w", err)
 	}
-	name, offset, err := readPrefixedString(buf, offset)
+	name, err := readPrefixedString(buf, crcReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read attachment name: %w", err)
 	}
-	mediaType, offset, err := readPrefixedString(buf, offset)
+	mediaType, err := readPrefixedString(buf, crcReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read media type: %w", err)
 	}
-	dataSize, offset, err := getUint64(buf, offset)
+	dataSize, err := readUint64(buf, crcReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read attachment data size: %w", err)
 	}
-	data := buf[offset : offset+int(dataSize)]
-	offset += int(dataSize)
-	crc, _, err := getUint32(buf, offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read CRC: %w", err)
+	limitReader := &io.LimitedReader{
+		R: crcReader,
+		N: int64(dataSize),
 	}
-	return &Attachment{
+	return &AttachmentReader{
 		LogTime:    logTime,
 		CreateTime: createTime,
 		Name:       name,
 		MediaType:  mediaType,
-		Data:       data,
-		CRC:        crc,
+		DataSize:   dataSize,
+
+		baseReader: r,
+		crcReader:  crcReader,
+		data:       limitReader,
 	}, nil
 }
 
@@ -324,11 +329,11 @@ func ParseAttachmentIndex(buf []byte) (*AttachmentIndex, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read data size: %w", err)
 	}
-	name, offset, err := readPrefixedString(buf, offset)
+	name, offset, err := getPrefixedString(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read attachment name: %w", err)
 	}
-	mediaType, _, err := readPrefixedString(buf, offset)
+	mediaType, _, err := getPrefixedString(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read media type: %w", err)
 	}
@@ -417,11 +422,11 @@ func ParseStatistics(buf []byte) (*Statistics, error) {
 
 // ParseMetadata parses a metadata record.
 func ParseMetadata(buf []byte) (*Metadata, error) {
-	name, offset, err := readPrefixedString(buf, 0)
+	name, offset, err := getPrefixedString(buf, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata name: %w", err)
 	}
-	metadata, _, err := readPrefixedMap(buf, offset)
+	metadata, _, err := getPrefixedMap(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata: %w", err)
 	}
@@ -441,7 +446,7 @@ func ParseMetadataIndex(buf []byte) (*MetadataIndex, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata length: %w", err)
 	}
-	name, _, err := readPrefixedString(buf, offset)
+	name, _, err := getPrefixedString(buf, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read metadata name: %w", err)
 	}

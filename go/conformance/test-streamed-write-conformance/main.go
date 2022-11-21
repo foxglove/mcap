@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -279,13 +280,8 @@ func parseAttachment(fields []InputField) (*mcap.Attachment, error) {
 			if err != nil {
 				return nil, err
 			}
-			attachment.Data = data
-		case "crc":
-			crc, err := parseUint32(field.Value.(string))
-			if err != nil {
-				return nil, err
-			}
-			attachment.CRC = crc
+			attachment.Data = bytes.NewReader(data)
+			attachment.DataSize = uint64(len(data))
 		default:
 			return nil, UnknownField(field.Name)
 		}
