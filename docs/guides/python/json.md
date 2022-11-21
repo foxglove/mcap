@@ -76,7 +76,7 @@ base_timestamp = None
 for point_timestamp, intensity, x, y, z in point_reader(args.csv):
   if base_timestamp is None:
     base_timestamp = point_timestamp
-  points.extend(struct.pack("&lt;ffff", x, y, z, intensity))
+  points.extend(struct.pack("<ffff", x, y, z, intensity))
 assert base_timestamp is not None, "found no points in input csv"
 pointcloud["data"] = base64.b64encode(points).decode("utf-8")
 ```
