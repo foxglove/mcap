@@ -4,7 +4,6 @@ import { Builder } from "flatbuffers";
 import fs from "fs";
 import { open, FileHandle } from "fs/promises";
 
-import { Message } from "../../../core/src/types";
 import { buildGridMessage, buildTfMessage } from "./flatbufferUtils";
 
 const QUAT_IDENTITY = { x: 0, y: 0, z: 0, w: 1 };
@@ -27,12 +26,12 @@ class FileHandleWritable implements IWritable {
     return BigInt(this.totalBytesWritten);
   }
 }
-function roundUp(numToRound: number, multiple: number) {
-  if (multiple !== 0 && (multiple & (multiple - 1)) === 0) {
-    return (numToRound + multiple - 1) & -multiple;
-  } else {
-    throw Error(`invalid multiple ${multiple}, num to round ${numToRound}`);
+function nextPowerOfTwo(numToRound: number) {
+  let nextPower = 1;
+  while (nextPower < numToRound) {
+    nextPower *= 2;
   }
+  return nextPower;
 }
 const scriptParameters = {
   mcapTimeLength: 10000, //ms
@@ -48,7 +47,9 @@ const gridParameters = {
 };
 
 // set row stride to be next largest multiple of 2
-gridParameters.row_stride = roundUp(gridParameters.column_count * gridParameters.cell_stride, 2);
+gridParameters.row_stride = nextPowerOfTwo(
+  gridParameters.column_count * gridParameters.cell_stride,
+);
 console.log(`row stride ${gridParameters.row_stride}`);
 
 interface GridDataFuncParams {
@@ -61,14 +62,14 @@ interface GridDataFuncParams {
 }
 
 // functions to generate data for a grid message based off of time, placement and grid params
-const fieldDataFuncs = {
-  sinpluscos: ({ x, y }: GridDataFuncParams): number => {
+const fieldDataFuncs: { [k: string]: (x: GridDataFuncParams) => number } = {
+  sinPlusCos: ({ x, y }: GridDataFuncParams): number => {
     return Math.sin(y) + Math.cos(x);
   },
-  sinmultcos: ({ x, y }: GridDataFuncParams): number => {
+  sinTimesCos: ({ x, y }: GridDataFuncParams): number => {
     return Math.sin(y) * Math.cos(x);
   },
-  growingsintancos: ({ x, y, rows, cols, time }: GridDataFuncParams): number => {
+  growingSinTanCos: ({ x, y, rows, cols, time }: GridDataFuncParams): number => {
     const z = time * 0.0000000001;
     return (
       z +
@@ -76,13 +77,13 @@ const fieldDataFuncs = {
       Math.sin(Math.cos(Math.tan((y / rows) * Math.PI)))
     );
   },
-  sintancos: ({ x, y, rows, cols, time }: GridDataFuncParams): number => {
+  sinTanCos: ({ x, y, rows, cols, time }: GridDataFuncParams): number => {
     return (
       Math.sin(Math.cos(Math.tan((x / cols) * Math.PI + time))) +
       Math.sin(Math.cos(Math.tan((y / rows) * Math.PI)))
     );
   },
-} as { [k: string]: (x: GridDataFuncParams) => number };
+};
 
 function makeNewGrid() {
   const { cell_size, cell_stride, column_count, row_count, row_stride } = gridParameters;
@@ -102,14 +103,14 @@ function makeNewGrid() {
     column_count,
     cell_stride,
     row_stride,
-    fields: [{ name: "sintancos", offset: 0, type: NumericType.FLOAT32 }],
+    fields: [{ name: "sinTanCos", offset: 0, type: NumericType.FLOAT32 }],
   } as Omit<Grid, "data">;
 
   return defaultGrid;
 }
 
 // adds data to the grid based on the grid parameters and fields
-function addGridData(grid: Omit<Grid, "data">, row_count: number, time: number) {
+function getGridData(grid: Omit<Grid, "data">, row_count: number, time: number): Uint8Array {
   const { column_count, fields, cell_stride, row_stride } = grid;
   const data = new Uint8Array(row_stride * row_count);
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -140,23 +141,7 @@ function addGridData(grid: Omit<Grid, "data">, row_count: number, time: number) 
     }
   }
 
-  (grid as Grid).data = data;
-}
-
-async function addMessageAtTime(
-  mcapFile: McapWriter,
-  gridChannelId: number,
-  getMessageData: (time: number) => Message["data"],
-  time: bigint,
-): Promise<void> {
-  const message = getMessageData(Number(time));
-  await mcapFile.addMessage({
-    channelId: gridChannelId,
-    sequence: 0,
-    publishTime: time,
-    logTime: time,
-    data: message,
-  });
+  return data;
 }
 
 async function main() {
@@ -210,12 +195,12 @@ async function main() {
     data: tfBuilder.asUint8Array(),
   });
 
-  const GridSchemaBuffer = fs.readFileSync(`${__dirname}/../../flatbuffer/bin/Grid.bfbs`);
+  const binaryGridSchema = fs.readFileSync(`${__dirname}/../../flatbuffer/bin/Grid.bfbs`);
 
   const gridSchemaId = await mcapFile.registerSchema({
     name: "foxglove.Grid",
     encoding: "flatbuffer",
-    data: GridSchemaBuffer,
+    data: binaryGridSchema,
   });
 
   const gridChannelId = await mcapFile.registerChannel({
@@ -227,11 +212,12 @@ async function main() {
 
   const { mcapTimeLength, gridMessageFrequency } = scriptParameters;
 
-  const timeBetweenMessages = 1000 / gridMessageFrequency; // 1s (ms) / frequency
+  const msTimeBetweenMessages = (1 / gridMessageFrequency) * 1000; // interval length = (1 / frequency) * 1000 (ms in a second)
   let currTime = 0;
   const getGridMessageData = (time: number) => {
     const grid = makeNewGrid();
-    addGridData(grid, gridParameters.row_count, time);
+    const data = getGridData(grid, gridParameters.row_count, time);
+    (grid as Grid).data = data;
 
     const gridBuilder = new Builder();
     const fbGrid = buildGridMessage(gridBuilder, grid as Grid);
@@ -242,14 +228,17 @@ async function main() {
   let count = 0;
   while (currTime <= mcapTimeLength) {
     console.log(`Adding grid ${count}`);
-    await addMessageAtTime(
-      mcapFile,
-      gridChannelId,
-      getGridMessageData,
-      BigInt(currTime) * 1_000_000n,
-    );
+    const nsTime = BigInt(currTime) * 1_000_000n;
+    const message = getGridMessageData(currTime);
+    await mcapFile.addMessage({
+      channelId: gridChannelId,
+      sequence: 0,
+      publishTime: nsTime,
+      logTime: nsTime,
+      data: message,
+    });
     count++;
-    currTime += timeBetweenMessages;
+    currTime += msTimeBetweenMessages;
   }
 
   await mcapFile.end();
