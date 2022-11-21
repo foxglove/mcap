@@ -54,6 +54,7 @@ func writeFilterTestInput(t *testing.T, w io.Writer) {
 	assert.Nil(t, writer.WriteAttachment(&mcap.Attachment{
 		LogTime: 50,
 		Name:    "attachment",
+		Data:    bytes.NewReader(nil),
 	}))
 	assert.Nil(t, writer.WriteMetadata(&mcap.Metadata{
 		Name: "metadata",
@@ -154,16 +155,20 @@ func TestFiltering(t *testing.T) {
 
 			writeFilterTestInput(t, &readBuf)
 			assert.Nil(t, filter(&readBuf, &writeBuf, c.opts))
-
-			lexer, err := mcap.NewLexer(&writeBuf)
+			attachmentCounter := 0
+			metadataCounter := 0
+			lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
+				AttachmentCallback: func(ar *mcap.AttachmentReader) error {
+					attachmentCounter++
+					return nil
+				},
+			})
 			assert.Nil(t, err)
 			messageCounter := map[uint16]int{
 				1: 0,
 				2: 0,
 				3: 0,
 			}
-			attachmentCounter := 0
-			metadataCounter := 0
 			for {
 				token, record, err := lexer.Next(nil)
 				if err != nil {
@@ -175,8 +180,6 @@ func TestFiltering(t *testing.T) {
 					message, err := mcap.ParseMessage(record)
 					assert.Nil(t, err)
 					messageCounter[message.ChannelID]++
-				case mcap.TokenAttachment:
-					attachmentCounter++
 				case mcap.TokenMetadata:
 					metadataCounter++
 				}
@@ -202,8 +205,6 @@ func TestRecover(t *testing.T) {
 			includeMetadata:    true,
 		}))
 
-		lexer, err := mcap.NewLexer(&writeBuf)
-		assert.Nil(t, err)
 		messageCounter := map[uint16]int{
 			1: 0,
 			2: 0,
@@ -211,6 +212,13 @@ func TestRecover(t *testing.T) {
 		}
 		attachmentCounter := 0
 		metadataCounter := 0
+		lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
+			AttachmentCallback: func(ar *mcap.AttachmentReader) error {
+				attachmentCounter++
+				return nil
+			},
+		})
+		assert.Nil(t, err)
 		for {
 			token, record, err := lexer.Next(nil)
 			if err != nil {
@@ -222,8 +230,6 @@ func TestRecover(t *testing.T) {
 				message, err := mcap.ParseMessage(record)
 				assert.Nil(t, err)
 				messageCounter[message.ChannelID]++
-			case mcap.TokenAttachment:
-				attachmentCounter++
 			case mcap.TokenMetadata:
 				metadataCounter++
 			}
@@ -249,9 +255,6 @@ func TestRecover(t *testing.T) {
 			includeAttachments: true,
 			includeMetadata:    true,
 		}))
-
-		lexer, err := mcap.NewLexer(&writeBuf)
-		assert.Nil(t, err)
 		messageCounter := map[uint16]int{
 			1: 0,
 			2: 0,
@@ -259,6 +262,13 @@ func TestRecover(t *testing.T) {
 		}
 		attachmentCounter := 0
 		metadataCounter := 0
+		lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
+			AttachmentCallback: func(ar *mcap.AttachmentReader) error {
+				attachmentCounter++
+				return nil
+			},
+		})
+		assert.Nil(t, err)
 		for {
 			token, record, err := lexer.Next(nil)
 			if err != nil {
@@ -270,8 +280,6 @@ func TestRecover(t *testing.T) {
 				message, err := mcap.ParseMessage(record)
 				assert.Nil(t, err)
 				messageCounter[message.ChannelID]++
-			case mcap.TokenAttachment:
-				attachmentCounter++
 			case mcap.TokenMetadata:
 				metadataCounter++
 			}

@@ -134,10 +134,17 @@ var addAttachmentCmd = &cobra.Command{
 		if err != nil {
 			die("failed to create temp file: %s", err)
 		}
-		attachment, err := os.ReadFile(addAttachmentFilename)
+		attachment, err := os.Open(addAttachmentFilename)
 		if err != nil {
-			die("failed to read attachment: %s", err)
+			die("failed to open attachment file: %s", err)
 		}
+		defer attachment.Close()
+
+		stat, err := attachment.Stat()
+		if err != nil {
+			die("failed to stat file: %s", err)
+		}
+		contentLength := stat.Size()
 		err = utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
 			if remote {
 				die("not supported on remote MCAP files")
@@ -160,6 +167,7 @@ var addAttachmentCmd = &cobra.Command{
 					CreateTime: createTime,
 					Name:       addAttachmentFilename,
 					MediaType:  addAttachmentMediaType,
+					DataSize:   uint64(contentLength),
 					Data:       attachment,
 				})
 			})

@@ -5,6 +5,25 @@ import (
 	"io"
 )
 
+func readUint64(buf []byte, r io.Reader) (uint64, error) {
+	if _, err := io.ReadFull(r, buf[:8]); err != nil {
+		return 0, err
+	}
+	return binary.LittleEndian.Uint64(buf[:8]), nil
+}
+
+func readPrefixedString(buf []byte, r io.Reader) (string, error) {
+	if _, err := io.ReadFull(r, buf[:4]); err != nil {
+		return "", err
+	}
+	strlen := binary.LittleEndian.Uint32(buf[:4])
+	s := make([]byte, strlen)
+	if _, err := io.ReadFull(r, s); err != nil {
+		return "", err
+	}
+	return string(s), nil
+}
+
 func putByte(buf []byte, x byte) (int, error) {
 	if len(buf) < 1 {
 		return 0, io.ErrShortBuffer
@@ -59,4 +78,19 @@ func putPrefixedBytes(buf []byte, s []byte) int {
 	offset := putUint32(buf, uint32(len(s)))
 	offset += copy(buf[offset:], s)
 	return offset
+}
+
+func skipReader(r io.Reader, n int64) error {
+	if rs, ok := r.(io.ReadSeeker); ok {
+		_, err := rs.Seek(n, io.SeekCurrent)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	_, err := io.CopyN(io.Discard, r, n)
+	if err != nil {
+		return err
+	}
+	return nil
 }

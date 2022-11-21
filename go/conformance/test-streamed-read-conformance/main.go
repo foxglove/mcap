@@ -135,10 +135,12 @@ func (r Record) MarshalJSON() ([]byte, error) {
 	fields := make([]Field, 0, v.NumField())
 	for i := 0; i < v.NumField(); i++ {
 		if name := toSnakeCase(t.Field(i).Name); name != "crc" {
-			fields = append(fields, Field{
-				Name:  toSnakeCase(t.Field(i).Name),
-				Value: v.Field(i).Interface(),
-			})
+			if v.Field(i).CanInterface() {
+				fields = append(fields, Field{
+					Name:  toSnakeCase(t.Field(i).Name),
+					Value: v.Field(i).Interface(),
+				})
+			}
 		}
 	}
 	sort.Slice(fields, func(i, j int) bool {
@@ -158,17 +160,48 @@ func (r Record) MarshalJSON() ([]byte, error) {
 	return bytes, nil
 }
 
+type Attachment struct {
+	LogTime    uint64
+	CreateTime uint64
+	Name       string
+	MediaType  string
+	Data       []byte
+	CRC        uint32
+}
+
 func mcapToJSON(w io.Writer, filepath string) error {
 	f, err := os.Open(filepath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	lexer, err := mcap.NewLexer(f)
+	records := []Record{}
+
+	lexer, err := mcap.NewLexer(f, &mcap.LexerOptions{
+		AttachmentCallback: func(ar *mcap.AttachmentReader) error {
+			data, err := io.ReadAll(ar.Data())
+			if err != nil {
+				return err
+			}
+			crc, err := ar.ParsedCRC()
+			if err != nil {
+				return err
+			}
+			parsed := Attachment{
+				LogTime:    ar.LogTime,
+				CreateTime: ar.CreateTime,
+				Name:       ar.Name,
+				MediaType:  ar.MediaType,
+				Data:       data,
+				CRC:        crc,
+			}
+			records = append(records, Record{parsed})
+			return nil
+		},
+	})
 	if err != nil {
 		return err
 	}
-	records := []Record{}
 	for {
 		tokenType, data, err := lexer.Next(nil)
 		if err != nil {
@@ -227,12 +260,6 @@ func mcapToJSON(w io.Writer, filepath string) error {
 				return err
 			}
 			records = append(records, Record{*chunkIndex})
-		case mcap.TokenAttachment:
-			attachment, err := mcap.ParseAttachment(data)
-			if err != nil {
-				return err
-			}
-			records = append(records, Record{*attachment})
 		case mcap.TokenAttachmentIndex:
 			attachmentIndex, err := mcap.ParseAttachmentIndex(data)
 			if err != nil {
