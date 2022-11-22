@@ -8,3 +8,6 @@ python/mcap-ros1-support/mcap_ros1/vendor/** linguist-vendored=true
 cpp/examples/protobuf/proto/** linguist-vendored=true linguist-generated=true
 *.csv linguist-generated=true
 testdata/db3/eloquent-twist.db3 filter=lfs diff=lfs merge=lfs -text
+typescript/examples/flatbuffer/output/** linguist-generated=true
+typescript/examples/flatbuffer/bin/FrameTransform.bfbs filter=lfs diff=lfs merge=lfs -text
+typescript/examples/flatbuffer/bin/Grid.bfbs filter=lfs diff=lfs merge=lfs -text
