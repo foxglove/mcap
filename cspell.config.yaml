@@ -32,6 +32,7 @@ ignorePaths:
 
 words:
   - bagfile
+  - bfbs
   - callerid
   - cbor
   - cmake
@@ -41,7 +42,9 @@ words:
   - datetime
   - deserialization
   - distro
+  - Elems
   - flatbuffer
+  - flatbuffers
   - flatc
   - fwrite
   - gendeps
