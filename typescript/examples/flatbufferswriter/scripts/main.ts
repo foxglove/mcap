@@ -46,7 +46,7 @@ const gridParameters = {
   row_stride: 0,
 };
 
-// set row stride to be next largest multiple of 2
+// set row stride to be next largest power of 2
 gridParameters.row_stride = nextPowerOfTwo(
   gridParameters.column_count * gridParameters.cell_stride,
 );
