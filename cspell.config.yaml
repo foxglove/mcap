@@ -42,7 +42,7 @@ words:
   - datetime
   - deserialization
   - distro
-  - Elems
+  - elems
   - flatbuffer
   - flatbuffers
   - flatc
