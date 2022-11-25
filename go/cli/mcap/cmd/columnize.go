@@ -19,7 +19,7 @@ import (
 var (
 	columnizeHeuristic         string
 	columnizeTopics            []string
-	columnizeSizeThreshold     uint64
+	columnizeSizeThreshold     int
 	columnizeOutput            string
 	columnizeOutputCompression string
 	columnizeChunkSize         int64
@@ -27,7 +27,7 @@ var (
 
 const (
 	ColumnizeHeuristicManualTopics  = "manual-topics"
-	ColumnizeHeuristicSingleTopic   = "single-topic"
+	ColumnizeHeuristicSingleChannel = "single-channel"
 	ColumnizeHeuristicSingleSchema  = "single-schema"
 	ColumnizeHeuristicTopicSize     = "topic-size"
 	ColumnizeHeuristicSizeThreshold = "size-threshold"
@@ -62,6 +62,14 @@ of those messages are small, for example.`,
 			switch columnizeHeuristic {
 			case ColumnizeHeuristicManualTopics:
 				selector, err = column_selectors.NewManualTopicColumnSelector(rs, columnizeTopics)
+			case ColumnizeHeuristicSingleChannel:
+				selector, err = column_selectors.NewColumnPerChannelSelector(rs)
+			case ColumnizeHeuristicSingleSchema:
+				selector, err = column_selectors.NewColumnPerSchemaSelector(rs)
+			case ColumnizeHeuristicTopicSize:
+				selector, err = column_selectors.NewTopicSizeClassSelector(rs)
+			case ColumnizeHeuristicSizeThreshold:
+				selector, err = column_selectors.NewTopicSizeThresholdSelector(rs, columnizeSizeThreshold)
 			default:
 				err = fmt.Errorf("selector for heuristic %s unimplemented", columnizeHeuristic)
 			}
@@ -163,8 +171,8 @@ func init() {
 Select a heuristic to split messages into columns with. Choices are:
 
   manual-topics:  columns are specified manually by topic using the --column-topics argument.
-  single-topic:   messages from each unique topic are organized into their own column.
-  single-schema:  messages using each unique schema name are organized into their own column.
+  single-channel: columns are mapped 1:1 with channels.
+  single-schema:  columns are mapped 1:1 with schemas.
   topic-size:     messages are organized columns of power-of-two size classes, where a message's
 				  size class is defined by the average size of messages in its channel.
   size-threshold: messages are broken into two columns by a threshold set by --size-threshold.
@@ -177,7 +185,7 @@ is intended to be used multiple times, eg:
 mcap columnize <input> -o <output> -t /log,/rosout,/diagnostics -t /cam_front,/cam_rear -t /lidar
 
 Any topics not matching any list will be sorted into their own column together.`)
-	columnizeCmd.PersistentFlags().Uint64Var(&columnizeSizeThreshold, "size-threshold", 4096, `
+	columnizeCmd.PersistentFlags().IntVar(&columnizeSizeThreshold, "size-threshold", 4096, `
 the size threshold to choose whether a message goes into the "big" or "small" column.`)
 	columnizeCmd.PersistentFlags().StringVarP(&columnizeOutput, "output", "o", "columnized.mcap", "output file to write to")
 	columnizeCmd.PersistentFlags().StringVar(&columnizeOutputCompression, "compression", "zstd", "compression format")

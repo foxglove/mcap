@@ -13,6 +13,7 @@ type ChunkWriter struct {
 	compressed        *bytes.Buffer
 	compressedWriter  *countingCRCWriter
 	compressionFormat CompressionFormat
+	MessageIndexes    map[uint16]*MessageIndex
 
 	ChunkStartTime uint64
 	ChunkEndTime   uint64
@@ -39,6 +40,7 @@ func newChunkWriter(compression CompressionFormat, chunkSize int64, includeCRC b
 		compressed:        compressed,
 		compressedWriter:  compressedWriter,
 		compressionFormat: compression,
+		MessageIndexes:    make(map[uint16]*MessageIndex),
 		ChunkStartTime:    math.MaxUint64,
 		ChunkEndTime:      0,
 	}, nil

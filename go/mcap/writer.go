@@ -34,16 +34,15 @@ type Writer struct {
 	// MetadataIndexes created over the course of the recording.
 	MetadataIndexes []*MetadataIndex
 
-	channelIDs     []uint16
-	schemaIDs      []uint16
-	channels       map[uint16]*Channel
-	schemas        map[uint16]*Schema
-	messageIndexes map[uint16]*MessageIndex
-	w              *writeSizer
-	buf            []byte
-	msg            []byte
-	chunk          []byte
-	chunkWriters   []*ChunkWriter
+	channelIDs   []uint16
+	schemaIDs    []uint16
+	channels     map[uint16]*Channel
+	schemas      map[uint16]*Schema
+	w            *writeSizer
+	buf          []byte
+	msg          []byte
+	chunk        []byte
+	chunkWriters []*ChunkWriter
 
 	opts *WriterOptions
 
@@ -234,13 +233,13 @@ func (w *Writer) WriteMessage(m *Message) error {
 		} else {
 			chunkWriter = w.chunkWriters[0]
 		}
-		idx, ok := w.messageIndexes[m.ChannelID]
+		idx, ok := chunkWriter.MessageIndexes[m.ChannelID]
 		if !ok {
 			idx = &MessageIndex{
 				ChannelID: m.ChannelID,
 				Records:   nil,
 			}
-			w.messageIndexes[m.ChannelID] = idx
+			chunkWriter.MessageIndexes[m.ChannelID] = idx
 		}
 		idx.Add(m.LogTime, uint64(chunkWriter.UncompressedLen()))
 		_, err := w.writeRecord(chunkWriter, OpMessage, w.msg[:offset])
@@ -502,7 +501,7 @@ func (w *Writer) flushChunk(chunkWriter *ChunkWriter) error {
 	messageIndexOffsets := make(map[uint16]uint64)
 	if !w.opts.SkipMessageIndexing {
 		for _, chanID := range w.channelIDs {
-			if messageIndex, ok := w.messageIndexes[chanID]; ok {
+			if messageIndex, ok := chunkWriter.MessageIndexes[chanID]; ok {
 				messageIndex.Insort()
 				messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
 				err = w.WriteMessageIndex(messageIndex)
@@ -531,7 +530,7 @@ func (w *Writer) flushChunk(chunkWriter *ChunkWriter) error {
 		UncompressedSize:    uint64(uncompressedlen),
 	})
 	chunkWriter.Reset()
-	for _, idx := range w.messageIndexes {
+	for _, idx := range chunkWriter.MessageIndexes {
 		idx.Reset()
 	}
 	w.Statistics.ChunkCount++
@@ -821,12 +820,11 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 		return nil, err
 	}
 	return &Writer{
-		w:              writer,
-		buf:            make([]byte, 32),
-		channels:       make(map[uint16]*Channel),
-		schemas:        make(map[uint16]*Schema),
-		messageIndexes: make(map[uint16]*MessageIndex),
-		chunkWriters:   []*ChunkWriter{firstChunkWriter},
+		w:            writer,
+		buf:          make([]byte, 32),
+		channels:     make(map[uint16]*Channel),
+		schemas:      make(map[uint16]*Schema),
+		chunkWriters: []*ChunkWriter{firstChunkWriter},
 		Statistics: &Statistics{
 			ChannelMessageCounts: make(map[uint16]uint64),
 			MessageStartTime:     0,
