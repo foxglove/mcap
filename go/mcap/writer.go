@@ -1,15 +1,11 @@
 package mcap
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"sort"
-
-	"github.com/klauspost/compress/zstd"
-	"github.com/pierrec/lz4/v4"
 )
 
 // ErrUnknownSchema is returned when a schema ID is not known to the writer.
@@ -18,6 +14,14 @@ var ErrUnknownSchema = errors.New("unknown schema")
 // ErrAttachmentDataSizeIncorrect is returned when the length of a written
 // attachment does not match the length supplied.
 var ErrAttachmentDataSizeIncorrect = errors.New("attachment content length incorrect")
+
+// ColumnSelector defines an interface for types which can determine which column of chunks
+// a record should be written to.
+type ColumnSelector interface {
+	ColumnForSchema(*Schema) (int, error)
+	ColumnForChannel(*Channel) (int, error)
+	ColumnForMessage(*Message) (int, error)
+}
 
 // Writer is a writer for the MCAP format.
 type Writer struct {
@@ -30,21 +34,16 @@ type Writer struct {
 	// MetadataIndexes created over the course of the recording.
 	MetadataIndexes []*MetadataIndex
 
-	channelIDs       []uint16
-	schemaIDs        []uint16
-	channels         map[uint16]*Channel
-	schemas          map[uint16]*Schema
-	messageIndexes   map[uint16]*MessageIndex
-	w                *writeSizer
-	buf              []byte
-	msg              []byte
-	chunk            []byte
-	uncompressed     *bytes.Buffer
-	compressed       *bytes.Buffer
-	compressedWriter *countingCRCWriter
-
-	currentChunkStartTime uint64
-	currentChunkEndTime   uint64
+	channelIDs     []uint16
+	schemaIDs      []uint16
+	channels       map[uint16]*Channel
+	schemas        map[uint16]*Schema
+	messageIndexes map[uint16]*MessageIndex
+	w              *writeSizer
+	buf            []byte
+	msg            []byte
+	chunk          []byte
+	chunkWriters   []ChunkWriter
 
 	opts *WriterOptions
 
@@ -110,7 +109,17 @@ func (w *Writer) WriteSchema(s *Schema) (err error) {
 	offset += putPrefixedString(w.msg[offset:], s.Encoding)
 	offset += putPrefixedBytes(w.msg[offset:], s.Data)
 	if w.opts.Chunked && !w.closed {
-		_, err = w.writeRecord(w.compressedWriter, OpSchema, w.msg[:offset])
+		var chunkWriter *ChunkWriter
+		if w.opts.ColumnSelector != nil {
+			columnIndex, err := w.opts.ColumnSelector.ColumnForSchema(s)
+			if err != nil {
+				return err
+			}
+			chunkWriter = w.chunkWriterForColumnIndex(columnIndex)
+		} else {
+			chunkWriter = w.chunkWriterForColumnIndex(0)
+		}
+		_, err = w.writeRecord(chunkWriter, OpSchema, w.msg[:offset])
 	} else {
 		_, err = w.writeRecord(w.w, OpSchema, w.msg[:offset])
 	}
@@ -149,7 +158,17 @@ func (w *Writer) WriteChannel(c *Channel) error {
 	offset += copy(w.msg[offset:], userdata)
 	var err error
 	if w.opts.Chunked && !w.closed {
-		_, err = w.writeRecord(w.compressedWriter, OpChannel, w.msg[:offset])
+		var chunkWriter *ChunkWriter
+		if w.opts.ColumnSelector != nil {
+			columnIndex, err := w.opts.ColumnSelector.ColumnForChannel(c)
+			if err != nil {
+				return err
+			}
+			chunkWriter = w.chunkWriterForColumnIndex(columnIndex)
+		} else {
+			chunkWriter = w.chunkWriterForColumnIndex(0)
+		}
+		_, err = w.writeRecord(chunkWriter, OpChannel, w.msg[:offset])
 		if err != nil {
 			return err
 		}
@@ -165,6 +184,13 @@ func (w *Writer) WriteChannel(c *Channel) error {
 		w.channelIDs = append(w.channelIDs, c.ID)
 	}
 	return nil
+}
+
+func (w *Writer) chunkWriterForColumnIndex(idx int) *ChunkWriter {
+	for len(w.chunkWriters) < idx {
+		w.chunkWriters = append(w.chunkWriters, newChunkWriter(w.opts))
+	}
+	return &w.chunkWriters[idx]
 }
 
 // WriteMessage writes a message to the output. A message record encodes a
@@ -185,6 +211,16 @@ func (w *Writer) WriteMessage(m *Message) error {
 	w.Statistics.ChannelMessageCounts[m.ChannelID]++
 	w.Statistics.MessageCount++
 	if w.opts.Chunked && !w.closed {
+		var chunkWriter *ChunkWriter
+		if w.opts.ColumnSelector != nil {
+			columnIndex, err := w.opts.ColumnSelector.ColumnForMessage(m)
+			if err != nil {
+				return err
+			}
+			chunkWriter = w.chunkWriterForColumnIndex(columnIndex)
+		} else {
+			chunkWriter = w.chunkWriterForColumnIndex(0)
+		}
 		idx, ok := w.messageIndexes[m.ChannelID]
 		if !ok {
 			idx = &MessageIndex{
@@ -193,19 +229,19 @@ func (w *Writer) WriteMessage(m *Message) error {
 			}
 			w.messageIndexes[m.ChannelID] = idx
 		}
-		idx.Add(m.LogTime, uint64(w.compressedWriter.Size()))
-		_, err := w.writeRecord(w.compressedWriter, OpMessage, w.msg[:offset])
+		idx.Add(m.LogTime, uint64(chunkWriter.UncompressedLen()))
+		_, err := w.writeRecord(chunkWriter, OpMessage, w.msg[:offset])
 		if err != nil {
 			return err
 		}
-		if m.LogTime > w.currentChunkEndTime {
-			w.currentChunkEndTime = m.LogTime
+		if m.LogTime > chunkWriter.ChunkEndTime {
+			chunkWriter.ChunkEndTime = m.LogTime
 		}
-		if m.LogTime < w.currentChunkStartTime {
-			w.currentChunkStartTime = m.LogTime
+		if m.LogTime < chunkWriter.ChunkStartTime {
+			chunkWriter.ChunkStartTime = m.LogTime
 		}
-		if w.compressedWriter.Size() > w.opts.ChunkSize {
-			err := w.flushActiveChunk()
+		if chunkWriter.UncompressedLen() > int(w.opts.ChunkSize) {
+			err := w.flushChunk(chunkWriter)
 			if err != nil {
 				return err
 			}
@@ -413,50 +449,34 @@ func (w *Writer) WriteDataEnd(e *DataEnd) error {
 	return err
 }
 
-func (w *Writer) flushActiveChunk() error {
-	if w.compressedWriter.Size() == 0 {
+func (w *Writer) flushChunk(chunkWriter *ChunkWriter) error {
+	if chunkWriter.UncompressedLen() == 0 {
 		return nil
 	}
 
-	err := w.compressedWriter.Close()
+	err := chunkWriter.Close()
 	if err != nil {
 		return err
 	}
-	crc := w.compressedWriter.CRC()
-	compressedlen := w.compressed.Len()
-	uncompressedlen := w.compressedWriter.Size()
-	msglen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8 + compressedlen
+	compressedlen := chunkWriter.CompressedLen()
+	uncompressedlen := chunkWriter.UncompressedLen()
 	chunkStartOffset := w.w.Size()
-	start := w.currentChunkStartTime
-	end := w.currentChunkEndTime
 
 	// when writing a chunk, we don't go through writerecord to avoid needing to
 	// materialize the compressed data again. Instead, write the leading bytes
 	// then copy from the compressed data buffer.
-	recordlen := 1 + 8 + msglen
+	recordlen := chunkWriter.RecordLen()
 	if len(w.chunk) < recordlen {
 		w.chunk = make([]byte, recordlen*2)
 	}
-	offset, err := putByte(w.chunk, byte(OpChunk))
+	serializedlen, err := chunkWriter.SerializeTo(w.chunk)
 	if err != nil {
 		return err
 	}
-	offset += putUint64(w.chunk[offset:], uint64(msglen))
-	offset += putUint64(w.chunk[offset:], start)
-	offset += putUint64(w.chunk[offset:], end)
-	offset += putUint64(w.chunk[offset:], uint64(uncompressedlen))
-	offset += putUint32(w.chunk[offset:], crc)
-	offset += putPrefixedString(w.chunk[offset:], string(w.opts.Compression))
-	offset += putUint64(w.chunk[offset:], uint64(w.compressed.Len()))
-	offset += copy(w.chunk[offset:recordlen], w.compressed.Bytes())
-	_, err = w.w.Write(w.chunk[:offset])
+	_, err = w.w.Write(w.chunk[:serializedlen])
 	if err != nil {
 		return err
 	}
-	w.compressed.Reset()
-	w.compressedWriter.Reset(w.compressed)
-	w.compressedWriter.ResetSize()
-	w.compressedWriter.ResetCRC()
 	chunkEndOffset := w.w.Size()
 
 	// message indexes
@@ -477,12 +497,12 @@ func (w *Writer) flushActiveChunk() error {
 	messageIndexEnd := w.w.Size()
 	messageIndexLength := messageIndexEnd - chunkEndOffset
 	var chunkStart uint64
-	if w.currentChunkStartTime != math.MaxUint64 {
-		chunkStart = w.currentChunkStartTime
+	if chunkWriter.ChunkStartTime != math.MaxUint64 {
+		chunkStart = chunkWriter.ChunkStartTime
 	}
 	w.ChunkIndexes = append(w.ChunkIndexes, &ChunkIndex{
 		MessageStartTime:    chunkStart,
-		MessageEndTime:      w.currentChunkEndTime,
+		MessageEndTime:      chunkWriter.ChunkEndTime,
 		ChunkStartOffset:    chunkStartOffset,
 		ChunkLength:         chunkEndOffset - chunkStartOffset,
 		MessageIndexOffsets: messageIndexOffsets,
@@ -491,12 +511,11 @@ func (w *Writer) flushActiveChunk() error {
 		CompressedSize:      uint64(compressedlen),
 		UncompressedSize:    uint64(uncompressedlen),
 	})
+	chunkWriter.Reset()
 	for _, idx := range w.messageIndexes {
 		idx.Reset()
 	}
 	w.Statistics.ChunkCount++
-	w.currentChunkStartTime = math.MaxUint64
-	w.currentChunkEndTime = 0
 	return nil
 }
 
@@ -652,9 +671,12 @@ func (w *Writer) writeSummarySection() ([]*SummaryOffset, error) {
 // Close the writer by closing the active chunk and writing the summary section.
 func (w *Writer) Close() error {
 	if w.opts.Chunked {
-		err := w.flushActiveChunk()
-		if err != nil {
-			return fmt.Errorf("failed to flush active chunks: %w", err)
+		for i := range w.chunkWriters {
+			err := w.flushChunk(&w.chunkWriters[i])
+			if err != nil {
+				return fmt.Errorf("failed to flush active chunks: %w", err)
+			}
+
 		}
 	}
 	w.closed = true
@@ -758,6 +780,10 @@ type WriterOptions struct {
 	// OverrideLibrary causes the default header library to be overridden, not
 	// appended to.
 	OverrideLibrary bool
+
+	// ColumnSelector optionally determines which column of chunks Schemas, Channels, and Messages
+	// should be written to.
+	ColumnSelector ColumnSelector
 }
 
 // NewWriter returns a new MCAP writer.
@@ -766,38 +792,17 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	if _, err := writer.Write(Magic); err != nil {
 		return nil, err
 	}
-	compressed := bytes.Buffer{}
-	var compressedWriter *countingCRCWriter
 	if opts.Chunked {
-		switch opts.Compression {
-		case CompressionZSTD:
-			zw, err := zstd.NewWriter(&compressed, zstd.WithEncoderLevel(zstd.SpeedFastest))
-			if err != nil {
-				return nil, err
-			}
-			compressedWriter = newCountingCRCWriter(zw, opts.IncludeCRC)
-		case CompressionLZ4:
-			compressedWriter = newCountingCRCWriter(lz4.NewWriter(&compressed), opts.IncludeCRC)
-		case CompressionNone:
-			compressedWriter = newCountingCRCWriter(bufCloser{&compressed}, opts.IncludeCRC)
-		default:
-			return nil, fmt.Errorf("unsupported compression")
-		}
 		if opts.ChunkSize == 0 {
 			opts.ChunkSize = 1024 * 1024
 		}
 	}
 	return &Writer{
-		w:                     writer,
-		buf:                   make([]byte, 32),
-		channels:              make(map[uint16]*Channel),
-		schemas:               make(map[uint16]*Schema),
-		messageIndexes:        make(map[uint16]*MessageIndex),
-		uncompressed:          &bytes.Buffer{},
-		compressed:            &compressed,
-		compressedWriter:      compressedWriter,
-		currentChunkStartTime: math.MaxUint64,
-		currentChunkEndTime:   0,
+		w:              writer,
+		buf:            make([]byte, 32),
+		channels:       make(map[uint16]*Channel),
+		schemas:        make(map[uint16]*Schema),
+		messageIndexes: make(map[uint16]*MessageIndex),
 		Statistics: &Statistics{
 			ChannelMessageCounts: make(map[uint16]uint64),
 			MessageStartTime:     0,
