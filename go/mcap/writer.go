@@ -43,7 +43,7 @@ type Writer struct {
 	buf            []byte
 	msg            []byte
 	chunk          []byte
-	chunkWriters   []ChunkWriter
+	chunkWriters   []*ChunkWriter
 
 	opts *WriterOptions
 
@@ -115,9 +115,16 @@ func (w *Writer) WriteSchema(s *Schema) (err error) {
 			if err != nil {
 				return err
 			}
-			chunkWriter = w.chunkWriterForColumnIndex(columnIndex)
+			chunkWriter, err = w.chunkWriterForColumnIndex(columnIndex)
+			if err != nil {
+				return err
+			}
 		} else {
-			chunkWriter = w.chunkWriterForColumnIndex(0)
+			var err error
+			chunkWriter, err = w.chunkWriterForColumnIndex(0)
+			if err != nil {
+				return err
+			}
 		}
 		_, err = w.writeRecord(chunkWriter, OpSchema, w.msg[:offset])
 	} else {
@@ -164,9 +171,16 @@ func (w *Writer) WriteChannel(c *Channel) error {
 			if err != nil {
 				return err
 			}
-			chunkWriter = w.chunkWriterForColumnIndex(columnIndex)
+			chunkWriter, err = w.chunkWriterForColumnIndex(columnIndex)
+			if err != nil {
+				return err
+			}
 		} else {
-			chunkWriter = w.chunkWriterForColumnIndex(0)
+			var err error
+			chunkWriter, err = w.chunkWriterForColumnIndex(0)
+			if err != nil {
+				return err
+			}
 		}
 		_, err = w.writeRecord(chunkWriter, OpChannel, w.msg[:offset])
 		if err != nil {
@@ -186,11 +200,15 @@ func (w *Writer) WriteChannel(c *Channel) error {
 	return nil
 }
 
-func (w *Writer) chunkWriterForColumnIndex(idx int) *ChunkWriter {
+func (w *Writer) chunkWriterForColumnIndex(idx int) (*ChunkWriter, error) {
 	for len(w.chunkWriters) < idx {
-		w.chunkWriters = append(w.chunkWriters, newChunkWriter(w.opts))
+		chunkWriter, err := newChunkWriter(w.opts.Compression, w.opts.ChunkSize, w.opts.IncludeCRC)
+		if err != nil {
+			return nil, err
+		}
+		w.chunkWriters = append(w.chunkWriters, chunkWriter)
 	}
-	return &w.chunkWriters[idx]
+	return w.chunkWriters[idx], nil
 }
 
 // WriteMessage writes a message to the output. A message record encodes a
@@ -217,9 +235,16 @@ func (w *Writer) WriteMessage(m *Message) error {
 			if err != nil {
 				return err
 			}
-			chunkWriter = w.chunkWriterForColumnIndex(columnIndex)
+			chunkWriter, err = w.chunkWriterForColumnIndex(columnIndex)
+			if err != nil {
+				return err
+			}
 		} else {
-			chunkWriter = w.chunkWriterForColumnIndex(0)
+			var err error
+			chunkWriter, err = w.chunkWriterForColumnIndex(0)
+			if err != nil {
+				return err
+			}
 		}
 		idx, ok := w.messageIndexes[m.ChannelID]
 		if !ok {
@@ -240,7 +265,7 @@ func (w *Writer) WriteMessage(m *Message) error {
 		if m.LogTime < chunkWriter.ChunkStartTime {
 			chunkWriter.ChunkStartTime = m.LogTime
 		}
-		if chunkWriter.UncompressedLen() > int(w.opts.ChunkSize) {
+		if chunkWriter.UncompressedLen() > w.opts.ChunkSize {
 			err := w.flushChunk(chunkWriter)
 			if err != nil {
 				return err
@@ -465,10 +490,15 @@ func (w *Writer) flushChunk(chunkWriter *ChunkWriter) error {
 	// when writing a chunk, we don't go through writerecord to avoid needing to
 	// materialize the compressed data again. Instead, write the leading bytes
 	// then copy from the compressed data buffer.
-	recordlen := chunkWriter.RecordLen()
+	recordlen := 1 + 8 + chunkWriter.SerializedLen()
 	if len(w.chunk) < recordlen {
 		w.chunk = make([]byte, recordlen*2)
 	}
+	offset, err := putByte(w.chunk, byte(OpChunk))
+	if err != nil {
+		return err
+	}
+	offset += putUint64(w.chunk[offset:], uint64(chunkWriter.SerializedLen()))
 	serializedlen, err := chunkWriter.SerializeTo(w.chunk)
 	if err != nil {
 		return err
@@ -672,7 +702,7 @@ func (w *Writer) writeSummarySection() ([]*SummaryOffset, error) {
 func (w *Writer) Close() error {
 	if w.opts.Chunked {
 		for i := range w.chunkWriters {
-			err := w.flushChunk(&w.chunkWriters[i])
+			err := w.flushChunk(w.chunkWriters[i])
 			if err != nil {
 				return fmt.Errorf("failed to flush active chunks: %w", err)
 			}
