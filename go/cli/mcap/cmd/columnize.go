@@ -175,14 +175,14 @@ Select a heuristic to split messages into columns with. Choices are:
   single-schema:  columns are mapped 1:1 with schemas.
   topic-size:     messages are organized columns of power-of-two size classes, where a message's
 				  size class is defined by the average size of messages in its channel.
-  size-threshold: messages are broken into two columns by a threshold set by --size-threshold.
-  				  the value being thresholded is the average message size for that message's
+  size-threshold: messages are broken into two column by a threshold set by --size-threshold.
+				  the threshold is applied on the average message size for that message's
 				  channel.`)
 	columnizeCmd.PersistentFlags().StringArrayVarP(&columnizeTopics, "topics", "t", nil, `
-specify a list of topics to be sorted into a single column, separated by a comma. This argument
-is intended to be used multiple times, eg:
+specify a topic to be sorted into its own column. this argument is intended to be used multiple
+times, eg:
 
-mcap columnize <input> -o <output> -t /log,/rosout,/diagnostics -t /cam_front,/cam_rear -t /lidar
+mcap columnize <input> -o <output> -t /log -t /diagnostics -t /cam_front -t /cam_rear -t /lidar
 
 Any topics not matching any list will be sorted into their own column together.`)
 	columnizeCmd.PersistentFlags().IntVar(&columnizeSizeThreshold, "size-threshold", 4096, `
