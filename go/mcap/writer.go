@@ -487,11 +487,12 @@ func (w *Writer) flushChunk(chunkWriter *ChunkWriter) error {
 		return err
 	}
 	offset += putUint64(w.chunk[offset:], uint64(chunkWriter.SerializedLen()))
-	serializedlen, err := chunkWriter.SerializeTo(w.chunk)
+	serializedlen, err := chunkWriter.SerializeTo(w.chunk[offset:])
+	offset += serializedlen
 	if err != nil {
 		return err
 	}
-	_, err = w.w.Write(w.chunk[:serializedlen])
+	_, err = w.w.Write(w.chunk[:offset])
 	if err != nil {
 		return err
 	}

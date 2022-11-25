@@ -71,6 +71,7 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 		if errors.Is(err, io.EOF) {
 			break
 		}
+		assert.Nil(t, err)
 		assert.Equal(t, expectedTopics[i], channel.Topic)
 	}
 }

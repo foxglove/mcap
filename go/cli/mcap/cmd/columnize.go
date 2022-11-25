@@ -5,6 +5,7 @@ Copyright © 2022 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"github.com/foxglove/mcap/go/mcap"
 	"github.com/spf13/cobra"
 )
 
@@ -31,17 +32,8 @@ func StackChunks(inPaths []string, outPath []string) error {
 	return nil
 }
 
-type MultiFilter func(token mcap.TokenType, data []byte, writers []mcap.Writer) error
-
-func SingleTopicSelector() ColumnSelector {
-	topics := make([string]bool)
-	return func(token mcap.TokenType, data []byte, writers []mcap.Writer) error {
-
-	}
-}
-
-func splitter(r io.Reader, ws []io.Writer) {
-
+func SingleTopicSelector() mcap.ColumnSelector {
+	return nil
 }
 
 // columnizeCmd represents the columnize command
@@ -61,20 +53,6 @@ This can speed up access when trying to selectively read messages of a certain t
 of those messages are small, for example.`,
 
 	Run: func(cmd *cobra.Command, args []string) {
-		var decider ColumnDecider
-
-		switch columnizeHeuristic {
-		case ColumnizeHeuristicManualTopics:
-			decider = manualTopicDecider()
-		case ColumnizeHeuristicSingleTopic:
-			decider = buildTopicDecider()
-		case ColumnizeHeuristicSingleSchema:
-			decider = buildSchemaDecider()
-		case ColumnizeHeuristicTopicSize:
-		case ColumnizeHeuristicSizeThreshold:
-		default:
-			die("invalid heuristic selection: %s", columnizeHeuristic)
-		}:w http.ResponseWriter, r *http.Request
 	},
 }
 
