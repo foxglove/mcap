@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
+	"strings"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/spf13/cobra"
 )
 
-func printChunks(w io.Writer, chunkIndexes []*mcap.ChunkIndex) {
+func printChunks(w io.Writer, chunkIndexes []*mcap.ChunkIndex, chunkTopics [][]string) {
 	rows := make([][]string, 0, len(chunkIndexes))
 	rows = append(rows, []string{
 		"offset",
@@ -23,8 +25,9 @@ func printChunks(w io.Writer, chunkIndexes []*mcap.ChunkIndex) {
 		"uncompressed size",
 		"compression ratio",
 		"message index length",
+		"topics in chunk",
 	})
-	for _, ci := range chunkIndexes {
+	for i, ci := range chunkIndexes {
 		ratio := float64(ci.CompressedSize) / float64(ci.UncompressedSize)
 		row := []string{
 			fmt.Sprintf("%d", ci.ChunkStartOffset),
@@ -36,10 +39,26 @@ func printChunks(w io.Writer, chunkIndexes []*mcap.ChunkIndex) {
 			fmt.Sprintf("%d", ci.UncompressedSize),
 			fmt.Sprintf("%f", ratio),
 			fmt.Sprintf("%d", ci.MessageIndexLength),
+			strings.Join(chunkTopics[i], ", "),
 		}
 		rows = append(rows, row)
 	}
 	utils.FormatTable(w, rows)
+}
+
+func determineChunkTopics(info *mcap.Info) [][]string {
+	topicsPerChunk := make([][]string, len(info.ChunkIndexes))
+	for i, ci := range info.ChunkIndexes {
+		for channelID, _ := range ci.MessageIndexOffsets {
+			for _, channel := range info.Channels {
+				if channel.ID == channelID {
+					topicsPerChunk[i] = append(topicsPerChunk[i], channel.Topic)
+				}
+			}
+		}
+		sort.Strings(topicsPerChunk[i])
+	}
+	return topicsPerChunk
 }
 
 // chunksCmd represents the chunks command
@@ -61,7 +80,8 @@ var chunksCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to get info: %w", err)
 			}
-			printChunks(os.Stdout, info.ChunkIndexes)
+			chunkTopics := determineChunkTopics(info)
+			printChunks(os.Stdout, info.ChunkIndexes, chunkTopics)
 			return nil
 		})
 		if err != nil {

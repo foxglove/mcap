@@ -193,7 +193,7 @@ func (w *Writer) WriteChannel(c *Channel) error {
 }
 
 func (w *Writer) chunkWriterForColumnIndex(idx int) (*ChunkWriter, error) {
-	for len(w.chunkWriters) < idx {
+	for len(w.chunkWriters) < (idx + 1) {
 		chunkWriter, err := newChunkWriter(w.opts.Compression, w.opts.ChunkSize, w.opts.IncludeCRC)
 		if err != nil {
 			return nil, err
