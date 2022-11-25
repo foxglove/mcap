@@ -613,7 +613,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	}
 	var now uint64 = 100
 	addMsg(now)
-	for writer.compressedWriter.Size() != 0 {
+	for writer.chunkWriters[0].CompressedLen() != 0 {
 		now += 10
 		addMsg(now)
 	}
@@ -623,7 +623,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	now -= 55
 
 	addMsg(now)
-	for writer.compressedWriter.Size() != 0 {
+	for writer.chunkWriters[0].CompressedLen() != 0 {
 		now += 10
 		addMsg(now)
 	}

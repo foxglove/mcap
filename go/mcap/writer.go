@@ -120,11 +120,7 @@ func (w *Writer) WriteSchema(s *Schema) (err error) {
 				return err
 			}
 		} else {
-			var err error
-			chunkWriter, err = w.chunkWriterForColumnIndex(0)
-			if err != nil {
-				return err
-			}
+			chunkWriter = w.chunkWriters[0]
 		}
 		_, err = w.writeRecord(chunkWriter, OpSchema, w.msg[:offset])
 	} else {
@@ -176,11 +172,7 @@ func (w *Writer) WriteChannel(c *Channel) error {
 				return err
 			}
 		} else {
-			var err error
-			chunkWriter, err = w.chunkWriterForColumnIndex(0)
-			if err != nil {
-				return err
-			}
+			chunkWriter = w.chunkWriters[0]
 		}
 		_, err = w.writeRecord(chunkWriter, OpChannel, w.msg[:offset])
 		if err != nil {
@@ -240,11 +232,7 @@ func (w *Writer) WriteMessage(m *Message) error {
 				return err
 			}
 		} else {
-			var err error
-			chunkWriter, err = w.chunkWriterForColumnIndex(0)
-			if err != nil {
-				return err
-			}
+			chunkWriter = w.chunkWriters[0]
 		}
 		idx, ok := w.messageIndexes[m.ChannelID]
 		if !ok {
@@ -827,12 +815,17 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 			opts.ChunkSize = 1024 * 1024
 		}
 	}
+	firstChunkWriter, err := newChunkWriter(opts.Compression, opts.ChunkSize, opts.IncludeCRC)
+	if err != nil {
+		return nil, err
+	}
 	return &Writer{
 		w:              writer,
 		buf:            make([]byte, 32),
 		channels:       make(map[uint16]*Channel),
 		schemas:        make(map[uint16]*Schema),
 		messageIndexes: make(map[uint16]*MessageIndex),
+		chunkWriters:   []*ChunkWriter{firstChunkWriter},
 		Statistics: &Statistics{
 			ChannelMessageCounts: make(map[uint16]uint64),
 			MessageStartTime:     0,
