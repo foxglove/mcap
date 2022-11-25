@@ -193,7 +193,7 @@ func (w *Writer) WriteChannel(c *Channel) error {
 
 func (w *Writer) chunkWriterForColumnIndex(idx int) (*ChunkWriter, error) {
 	for len(w.chunkWriters) < (idx + 1) {
-		chunkWriter, err := newChunkWriter(w.opts.Compression, w.opts.ChunkSize, w.opts.IncludeCRC)
+		chunkWriter, err := newChunkWriter(w.opts.Compression, w.opts.IncludeCRC)
 		if err != nil {
 			return nil, err
 		}
@@ -694,7 +694,6 @@ func (w *Writer) Close() error {
 			if err != nil {
 				return fmt.Errorf("failed to flush active chunks: %w", err)
 			}
-
 		}
 	}
 	w.closed = true
@@ -815,7 +814,7 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 			opts.ChunkSize = 1024 * 1024
 		}
 	}
-	firstChunkWriter, err := newChunkWriter(opts.Compression, opts.ChunkSize, opts.IncludeCRC)
+	firstChunkWriter, err := newChunkWriter(opts.Compression, opts.IncludeCRC)
 	if err != nil {
 		return nil, err
 	}

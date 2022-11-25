@@ -19,7 +19,7 @@ type ChunkWriter struct {
 	ChunkEndTime   uint64
 }
 
-func newChunkWriter(compression CompressionFormat, chunkSize int64, includeCRC bool) (*ChunkWriter, error) {
+func newChunkWriter(compression CompressionFormat, includeCRC bool) (*ChunkWriter, error) {
 	var compressedWriter *countingCRCWriter
 	compressed := &bytes.Buffer{}
 	switch compression {
