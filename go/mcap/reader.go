@@ -147,6 +147,8 @@ func (r *Reader) Header() *Header {
 	return r.header
 }
 
+// Info scans the summary section to form a structure describing characteristics
+// of the underlying mcap file.
 func (r *Reader) Info() (*Info, error) {
 	it := r.indexedMessageIterator(nil, 0, math.MaxUint64, readopts.FileOrder)
 	err := it.parseSummarySection()
@@ -165,6 +167,11 @@ func (r *Reader) Info() (*Info, error) {
 	}, nil
 }
 
+// Close the reader.
+func (r *Reader) Close() {
+	r.l.Close()
+}
+
 func NewReader(r io.Reader) (*Reader, error) {
 	var rs io.ReadSeeker
 	if readseeker, ok := r.(io.ReadSeeker); ok {
@@ -176,6 +183,7 @@ func NewReader(r io.Reader) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer lexer.Close()
 	token, headerData, err := lexer.Next(nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not read MCAP header when opening reader: %w", err)

@@ -163,6 +163,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 		if err != nil {
 			return err
 		}
+		defer reader.Close()
 		profiles[inputID] = reader.Header().Profile
 		iterator, err := reader.Messages(readopts.UsingIndex(false))
 		if err != nil {
