@@ -7,8 +7,7 @@ import (
 )
 
 type manualTopicSelector struct {
-	channels        []channelIndexPair
-	remainderColumn int
+	channels []*mcap.Channel
 }
 
 func NewManualTopicColumnSelector(rs io.ReadSeeker, topics []string) (mcap.ColumnSelector, error) {
@@ -22,38 +21,37 @@ func NewManualTopicColumnSelector(rs io.ReadSeeker, topics []string) (mcap.Colum
 	}
 	selector := &manualTopicSelector{}
 	for _, channel := range info.Channels {
-		for i, topic := range topics {
+		for _, topic := range topics {
 			if topic == channel.Topic {
-				selector.channels = append(selector.channels, channelIndexPair{channel, i})
+				selector.channels = append(selector.channels, channel)
 			}
 		}
 	}
-	selector.remainderColumn = len(topics)
 	return selector, nil
 }
 
 func (m *manualTopicSelector) ColumnForChannel(c *mcap.Channel) (int, error) {
-	for _, pair := range m.channels {
-		if pair.channel.ID == c.ID {
-			return pair.index, nil
+	for _, channel := range m.channels {
+		if channel.ID == c.ID {
+			return 1, nil
 		}
 	}
-	return m.remainderColumn, nil
+	return 0, nil
 }
 func (m *manualTopicSelector) ColumnForSchema(s *mcap.Schema) (int, error) {
-	for _, pair := range m.channels {
-		if pair.channel.SchemaID == s.ID {
-			return pair.index, nil
+	for _, channel := range m.channels {
+		if channel.SchemaID == s.ID {
+			return 1, nil
 		}
 	}
-	return m.remainderColumn, nil
+	return 0, nil
 }
 
 func (m *manualTopicSelector) ColumnForMessage(message *mcap.Message) (int, error) {
-	for _, pair := range m.channels {
-		if pair.channel.ID == message.ChannelID {
-			return pair.index, nil
+	for _, channel := range m.channels {
+		if channel.ID == message.ChannelID {
+			return 1, nil
 		}
 	}
-	return m.remainderColumn, nil
+	return 0, nil
 }

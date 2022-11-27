@@ -1,7 +1,3 @@
-/*
-Copyright © 2022 NAME HERE <EMAIL ADDRESS>
-
-*/
 package cmd
 
 import (
@@ -17,25 +13,25 @@ import (
 )
 
 var (
-	columnizeHeuristic         string
-	columnizeTopics            []string
-	columnizeSizeThreshold     int
-	columnizeOutput            string
-	columnizeOutputCompression string
-	columnizeChunkSize         int64
+	groupbyHeuristic         string
+	groupbyTopics            []string
+	groupbySizeThreshold     int
+	groupbyOutput            string
+	groupbyOutputCompression string
+	groupbyChunkSize         int64
 )
 
 const (
-	ColumnizeHeuristicManualTopics  = "manual-topics"
-	ColumnizeHeuristicSingleChannel = "single-channel"
-	ColumnizeHeuristicSingleSchema  = "single-schema"
-	ColumnizeHeuristicTopicSize     = "topic-size"
-	ColumnizeHeuristicSizeThreshold = "size-threshold"
+	groupbyHeuristicManualTopics  = "manual-topics"
+	groupbyHeuristicSingleChannel = "single-channel"
+	groupbyHeuristicSingleSchema  = "single-schema"
+	groupbyHeuristicTopicSize     = "topic-size"
+	groupbyHeuristicSizeThreshold = "size-threshold"
 )
 
-// columnizeCmd represents the columnize command
-var columnizeCmd = &cobra.Command{
-	Use:   "columnize",
+// groupbyCmd represents the groupby command
+var groupbyCmd = &cobra.Command{
+	Use:   "groupby",
 	Short: "reorganize messages in an MCAP into columns for optimized read performance",
 	Long: `reorganize messages in an MCAP into columns. Instead of messages
 appearing in the MCAP in roughly log-time order, like so:
@@ -59,34 +55,35 @@ of those messages are small, for example.`,
 		// column selector, and a second time to rewrite it to the output file.
 		err := utils.WithReader(ctx, args[0], func(remote bool, rs io.ReadSeeker) error {
 			var err error
-			switch columnizeHeuristic {
-			case ColumnizeHeuristicManualTopics:
-				selector, err = column_selectors.NewManualTopicColumnSelector(rs, columnizeTopics)
-			case ColumnizeHeuristicSingleChannel:
+			switch groupbyHeuristic {
+			case groupbyHeuristicManualTopics:
+				selector, err = column_selectors.NewManualTopicColumnSelector(rs, groupbyTopics)
+			case groupbyHeuristicSingleChannel:
 				selector, err = column_selectors.NewColumnPerChannelSelector(rs)
-			case ColumnizeHeuristicSingleSchema:
-				selector, err = column_selectors.NewColumnPerSchemaSelector(rs)
-			case ColumnizeHeuristicTopicSize:
+			case groupbyHeuristicSingleSchema:
+				selector = column_selectors.NewColumnPerSchemaSelector()
+			case groupbyHeuristicTopicSize:
 				selector, err = column_selectors.NewTopicSizeClassSelector(rs)
-			case ColumnizeHeuristicSizeThreshold:
-				selector, err = column_selectors.NewTopicSizeThresholdSelector(rs, columnizeSizeThreshold)
+			case groupbyHeuristicSizeThreshold:
+				selector, err = column_selectors.NewTopicSizeThresholdSelector(rs, groupbySizeThreshold)
 			default:
-				err = fmt.Errorf("selector for heuristic %s unimplemented", columnizeHeuristic)
+				err = fmt.Errorf("selector for heuristic %s is not implemented", groupbyHeuristic)
 			}
 			return err
 		})
 		if err != nil {
 			die("error constructing selector: %e", err)
 		}
-		outfile, err := os.Create(columnizeOutput)
+		outfile, err := os.Create(groupbyOutput)
 		if err != nil {
 			die("error opening output file: %e", err)
 		}
 		defer outfile.Close()
 		writer, err := mcap.NewWriter(outfile, &mcap.WriterOptions{
 			Chunked:        true,
-			ChunkSize:      columnizeChunkSize,
+			ChunkSize:      groupbyChunkSize,
 			ColumnSelector: selector,
+			Compression:    mcap.CompressionFormat(groupbyOutputCompression),
 		})
 		if err != nil {
 			die("error constructing writer: %e", err)
@@ -167,28 +164,31 @@ of those messages are small, for example.`,
 }
 
 func init() {
-	columnizeCmd.PersistentFlags().StringVar(&columnizeHeuristic, "heuristic", "manual-topics", `
+	groupbyCmd.PersistentFlags().StringVar(&groupbyHeuristic, "heuristic", "manual-topics", `
 Select a heuristic to split messages into columns with. Choices are:
 
-  manual-topics:  columns are specified manually by topic using the --column-topics argument.
-  single-channel: columns are mapped 1:1 with channels.
-  single-schema:  columns are mapped 1:1 with schemas.
-  topic-size:     messages are organized columns of power-of-two size classes, where a message's
-				  size class is defined by the average size of messages in its channel.
-  size-threshold: messages are broken into two column by a threshold set by --size-threshold.
+  manual-topics:  messages are divided into two groups:
+  					1. with topics specified using the --topics argument
+  					2. all other topics.
+  single-channel: groups are mapped 1:1 with channels.
+  single-schema:  groups are mapped 1:1 with schemas.
+  topic-size:     messages are divided into groups of power-of-two size classes, where a message's
+				  size class is defined by the average size of messages in its channel. All topics
+				  with an average message size below 1KiB are grouped together.
+  size-threshold: messages are divided into two groups by a threshold set by --size-threshold.
 				  the threshold is applied on the average message size for that message's
 				  channel.`)
-	columnizeCmd.PersistentFlags().StringArrayVarP(&columnizeTopics, "topics", "t", nil, `
-specify a topic to be sorted into its own column. this argument is intended to be used multiple
+	groupbyCmd.PersistentFlags().StringArrayVarP(&groupbyTopics, "topics", "t", nil, `
+specify a topic to be sorted into the selected group. this argument is intended to be used multiple
 times, eg:
 
-mcap columnize <input> -o <output> -t /log -t /diagnostics -t /cam_front -t /cam_rear -t /lidar
+mcap groupby <input> -o <output> -t /log -t /diagnostics -t /cam_front -t /cam_rear -t /lidar
 
-Any topics not matching any list will be sorted into their own column together.`)
-	columnizeCmd.PersistentFlags().IntVar(&columnizeSizeThreshold, "size-threshold", 4096, `
-the size threshold to choose whether a message goes into the "big" or "small" column.`)
-	columnizeCmd.PersistentFlags().StringVarP(&columnizeOutput, "output", "o", "columnized.mcap", "output file to write to")
-	columnizeCmd.PersistentFlags().StringVar(&columnizeOutputCompression, "compression", "zstd", "compression format")
-	columnizeCmd.PersistentFlags().Int64Var(&columnizeChunkSize, "chunk-size", 4*1024*1024, "chunk size")
-	rootCmd.AddCommand(columnizeCmd)
+Any topics not matching any list will be grouped together.`)
+	groupbyCmd.PersistentFlags().IntVar(&groupbySizeThreshold, "size-threshold", 4096, `
+the size threshold to choose whether a message goes into the "big" or "small" group.`)
+	groupbyCmd.PersistentFlags().StringVarP(&groupbyOutput, "output", "o", "grouped.mcap", "output file to write to")
+	groupbyCmd.PersistentFlags().StringVar(&groupbyOutputCompression, "compression", "zstd", "compression format")
+	groupbyCmd.PersistentFlags().Int64Var(&groupbyChunkSize, "chunk-size", 4*1024*1024, "chunk size")
+	rootCmd.AddCommand(groupbyCmd)
 }

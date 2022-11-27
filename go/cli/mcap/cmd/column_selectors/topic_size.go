@@ -29,7 +29,11 @@ func NewTopicSizeClassSelector(rs io.ReadSeeker) (mcap.ColumnSelector, error) {
 	for topicName, averageSize := range topicAverageSizes {
 		for _, channel := range info.Channels {
 			if channel.Topic == topicName {
-				columnIndex := int(math.Log2(averageSize))
+				// All messages below 1kb are grouped into one column.
+				columnIndex := int(math.Log2(averageSize)) - 10
+				if columnIndex < 0 {
+					columnIndex = 0
+				}
 				selector.channels = append(selector.channels, channelIndexPair{
 					channel: channel,
 					index:   columnIndex,
