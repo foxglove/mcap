@@ -32,13 +32,13 @@ const (
 // groupbyCmd represents the groupby command
 var groupbyCmd = &cobra.Command{
 	Use:   "groupby",
-	Short: "reorganize messages in an MCAP into columns for optimized read performance",
-	Long: `reorganize messages in an MCAP into columns. Instead of messages
+	Short: "reorganize messages in an MCAP into groups for optimized read performance",
+	Long: `reorganize messages in an MCAP into groups. Instead of messages
 appearing in the MCAP in roughly log-time order, like so:
 
 	[Chunk [1  ][2][3    ]][Chunk [4][5  ][6     ]][Chunk [7    ][8  ][9]]
 
-Messages will be sorted into series of chunks (called columns) by some heuristic, such as size.
+Messages will be sorted into series of chunks (called groups) by some heuristic, such as size.
 
 	[Chunk [2][4][9]][Chunk [1  ][5  ][8  ]][Chunk [3    ][6     ][7    ]]
 
@@ -52,7 +52,7 @@ of those messages are small, for example.`,
 		var selector mcap.ColumnSelector
 		ctx := context.Background()
 		// We open the input file twice for reading - once to scan the file and construct the
-		// column selector, and a second time to rewrite it to the output file.
+		// group selector, and a second time to rewrite it to the output file.
 		err := utils.WithReader(ctx, args[0], func(remote bool, rs io.ReadSeeker) error {
 			var err error
 			switch groupbyHeuristic {
@@ -158,14 +158,14 @@ of those messages are small, for example.`,
 			}
 		})
 		if err != nil {
-			die("error columnizing: %e", err)
+			die("error grouping messages: %e", err)
 		}
 	},
 }
 
 func init() {
 	groupbyCmd.PersistentFlags().StringVar(&groupbyHeuristic, "heuristic", "manual-topics", `
-Select a heuristic to split messages into columns with. Choices are:
+Select a heuristic to split messages into groups with. Choices are:
 
   manual-topics:  messages are divided into two groups:
   					1. with topics specified using the --topics argument
