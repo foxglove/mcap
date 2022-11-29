@@ -53,7 +53,6 @@
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;Decodes Protobuf messages from MCAP message records.&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_types</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Type</span><span class="p">[</span><span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_factory</span> <span class="o">=</span> <span class="n">MessageFactory</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">_get_message_classes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file_descriptors</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">FileDescriptorProto</span><span class="p">]):</span>
         <span class="sd">&quot;&quot;&quot;Adds file descriptors to the message factory pool in topological order, then returns</span>
@@ -96,18 +95,19 @@
             <span class="n">file_descriptor</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">file_descriptor</span>
             <span class="k">for</span> <span class="n">file_descriptor</span> <span class="ow">in</span> <span class="n">file_descriptors</span>
         <span class="p">}</span>
+        <span class="n">factory</span> <span class="o">=</span> <span class="n">MessageFactory</span><span class="p">()</span>
 
         <span class="k">def</span> <span class="nf">_add_file</span><span class="p">(</span><span class="n">file_descriptor</span><span class="p">:</span> <span class="n">FileDescriptorProto</span><span class="p">):</span>
             <span class="k">for</span> <span class="n">dependency</span> <span class="ow">in</span> <span class="n">file_descriptor</span><span class="o">.</span><span class="n">dependency</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">dependency</span> <span class="ow">in</span> <span class="n">descriptor_by_name</span><span class="p">:</span>
                     <span class="c1"># Remove from elements to be visited, in order to cut cycles.</span>
                     <span class="n">_add_file</span><span class="p">(</span><span class="n">descriptor_by_name</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">dependency</span><span class="p">))</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_factory</span><span class="o">.</span><span class="n">pool</span><span class="o">.</span><span class="n">Add</span><span class="p">(</span><span class="n">file_descriptor</span><span class="p">)</span>
+            <span class="n">factory</span><span class="o">.</span><span class="n">pool</span><span class="o">.</span><span class="n">Add</span><span class="p">(</span><span class="n">file_descriptor</span><span class="p">)</span>
 
         <span class="k">while</span> <span class="n">descriptor_by_name</span><span class="p">:</span>
             <span class="n">_add_file</span><span class="p">(</span><span class="n">descriptor_by_name</span><span class="o">.</span><span class="n">popitem</span><span class="p">()[</span><span class="mi">1</span><span class="p">])</span>
 
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_factory</span><span class="o">.</span><span class="n">GetMessages</span><span class="p">(</span>
+        <span class="k">return</span> <span class="n">factory</span><span class="o">.</span><span class="n">GetMessages</span><span class="p">(</span>
             <span class="p">[</span><span class="n">file_descriptor</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">file_descriptor</span> <span class="ow">in</span> <span class="n">file_descriptors</span><span class="p">]</span>
         <span class="p">)</span>
 
