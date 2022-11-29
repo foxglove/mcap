@@ -18,7 +18,6 @@ class Decoder:
     def __init__(self):
         """Decodes Protobuf messages from MCAP message records."""
         self._types: Dict[int, Type[Any]] = {}
-        self._factory = MessageFactory()
 
     def _get_message_classes(self, file_descriptors: Iterable[FileDescriptorProto]):
         """Adds file descriptors to the message factory pool in topological order, then returns
@@ -61,18 +60,19 @@ class Decoder:
             file_descriptor.name: file_descriptor
             for file_descriptor in file_descriptors
         }
+        factory = MessageFactory()
 
         def _add_file(file_descriptor: FileDescriptorProto):
             for dependency in file_descriptor.dependency:
                 if dependency in descriptor_by_name:
                     # Remove from elements to be visited, in order to cut cycles.
                     _add_file(descriptor_by_name.pop(dependency))
-            self._factory.pool.Add(file_descriptor)
+            factory.pool.Add(file_descriptor)
 
         while descriptor_by_name:
             _add_file(descriptor_by_name.popitem()[1])
 
-        return self._factory.GetMessages(
+        return factory.GetMessages(
             [file_descriptor.name for file_descriptor in file_descriptors]
         )
 
