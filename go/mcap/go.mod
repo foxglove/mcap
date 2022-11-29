@@ -3,7 +3,7 @@ module github.com/foxglove/mcap/go/mcap
 go 1.18
 
 require (
-	github.com/klauspost/compress v1.14.1
+	github.com/klauspost/compress v1.15.12
 	github.com/pierrec/lz4/v4 v4.1.12
 	github.com/stretchr/testify v1.7.0
 )
