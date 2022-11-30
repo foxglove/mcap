@@ -822,6 +822,37 @@
 <span id="822">822</span>
 <span id="823">823</span>
 <span id="824">824</span>
+<span id="825">825</span>
+<span id="826">826</span>
+<span id="827">827</span>
+<span id="828">828</span>
+<span id="829">829</span>
+<span id="830">830</span>
+<span id="831">831</span>
+<span id="832">832</span>
+<span id="833">833</span>
+<span id="834">834</span>
+<span id="835">835</span>
+<span id="836">836</span>
+<span id="837">837</span>
+<span id="838">838</span>
+<span id="839">839</span>
+<span id="840">840</span>
+<span id="841">841</span>
+<span id="842">842</span>
+<span id="843">843</span>
+<span id="844">844</span>
+<span id="845">845</span>
+<span id="846">846</span>
+<span id="847">847</span>
+<span id="848">848</span>
+<span id="849">849</span>
+<span id="850">850</span>
+<span id="851">851</span>
+<span id="852">852</span>
+<span id="853">853</span>
+<span id="854">854</span>
+<span id="855">855</span>
 </pre><pre class="rust"><code><span class="doccomment">//! Write MCAP files
 
 </span><span class="kw">use </span>std::{
@@ -931,6 +962,7 @@
 </span><span class="kw">pub struct </span>WriteOptions {
     compression: <span class="prelude-ty">Option</span>&lt;Compression&gt;,
     profile: String,
+    chunk_size: <span class="prelude-ty">Option</span>&lt;u64&gt;,
 }
 
 <span class="kw">impl </span>Default <span class="kw">for </span>WriteOptions {
@@ -941,6 +973,7 @@
             <span class="attribute">#[cfg(not(feature = <span class="string">&quot;zstd&quot;</span>))]
             </span>compression: <span class="prelude-val">None</span>,
             profile: String::new(),
+            chunk_size: <span class="prelude-val">None</span>,
         }
     }
 }
@@ -950,16 +983,31 @@
         <span class="self">Self</span>::default()
     }
 
-    <span class="kw">pub fn </span>compression(<span class="self">self</span>, compression: <span class="prelude-ty">Option</span>&lt;Compression&gt;) -&gt; <span class="self">Self </span>{
+    <span class="doccomment">/// Specifies the compression that should be used on chunks.
+    </span><span class="kw">pub fn </span>compression(<span class="self">self</span>, compression: <span class="prelude-ty">Option</span>&lt;Compression&gt;) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             compression,
             ..<span class="self">self
         </span>}
     }
 
-    <span class="kw">pub fn </span>profile&lt;S: Into&lt;String&gt;&gt;(<span class="self">self</span>, profile: S) -&gt; <span class="self">Self </span>{
+    <span class="doccomment">/// specifies the profile that should be written to the MCAP Header record.
+    </span><span class="kw">pub fn </span>profile&lt;S: Into&lt;String&gt;&gt;(<span class="self">self</span>, profile: S) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
             profile: profile.into(),
+            ..<span class="self">self
+        </span>}
+    }
+
+    <span class="doccomment">/// specifies the target uncompressed size of each chunk.
+    ///
+    /// Messages will be written to chunks until the uncompressed chunk is larger than the
+    /// target chunk size, at which point th  chunk will be closed and a new one started.
+    /// If `None`, chunks will not be automatically closed and the user must call `flush()` to
+    /// begin a new chunk.
+    </span><span class="kw">pub fn </span>chunk_size(<span class="self">self</span>, chunk_size: <span class="prelude-ty">Option</span>&lt;u64&gt;) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            chunk_size: chunk_size,
             ..<span class="self">self
         </span>}
     }
@@ -976,7 +1024,7 @@
 /// and check for errors when done; otherwise the result will be unwrapped on drop.
 </span><span class="kw">pub struct </span>Writer&lt;<span class="lifetime">&#39;a</span>, W: Write + Seek&gt; {
     writer: <span class="prelude-ty">Option</span>&lt;WriteMode&lt;W&gt;&gt;,
-    compression: <span class="prelude-ty">Option</span>&lt;Compression&gt;,
+    options: WriteOptions,
     schemas: HashMap&lt;Schema&lt;<span class="lifetime">&#39;a</span>&gt;, u16&gt;,
     channels: HashMap&lt;Channel&lt;<span class="lifetime">&#39;a</span>&gt;, u16&gt;,
     stats: records::Statistics,
@@ -996,14 +1044,14 @@
         write_record(
             <span class="kw-2">&amp;mut </span>writer,
             <span class="kw-2">&amp;</span>Record::Header(records::Header {
-                profile: opts.profile,
+                profile: opts.profile.clone(),
                 library: String::from(<span class="string">&quot;mcap-rs-&quot;</span>) + <span class="macro">env!</span>(<span class="string">&quot;CARGO_PKG_VERSION&quot;</span>),
             }),
         )<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
             writer: <span class="prelude-val">Some</span>(WriteMode::Raw(writer)),
-            compression: opts.compression,
+            options: opts,
             schemas: HashMap::new(),
             channels: HashMap::new(),
             stats: records::Statistics::default(),
@@ -1100,6 +1148,20 @@
             .channel_message_counts
             .entry(header.channel_id)
             .or_insert(<span class="number">0</span>) += <span class="number">1</span>;
+
+        <span class="comment">// if the current chunk is larger than our target chunk size, finish it
+        // and start a new one.
+        </span><span class="kw">let </span>current_chunk_size = <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.writer {
+            <span class="prelude-val">Some</span>(WriteMode::Chunk(cw)) =&gt; <span class="prelude-val">Some</span>(cw.compressor.position()),
+            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+        };
+        <span class="kw">if let </span>(<span class="prelude-val">Some</span>(current_chunk_size), <span class="prelude-val">Some</span>(target)) =
+            (current_chunk_size, <span class="self">self</span>.options.chunk_size)
+        {
+            <span class="kw">if </span>current_chunk_size &gt; target {
+                <span class="self">self</span>.finish_chunk()<span class="question-mark">?</span>;
+            }
+        }
 
         <span class="self">self</span>.chunkin_time()<span class="question-mark">?</span>.write_message(header, data)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
@@ -1199,7 +1261,7 @@
             WriteMode::Raw(w) =&gt; {
                 <span class="comment">// It&#39;s chunkin time.
                 </span><span class="self">self</span>.stats.chunk_count += <span class="number">1</span>;
-                WriteMode::Chunk(ChunkWriter::new(w, <span class="self">self</span>.compression)<span class="question-mark">?</span>)
+                WriteMode::Chunk(ChunkWriter::new(w, <span class="self">self</span>.options.compression)<span class="question-mark">?</span>)
             }
             chunk =&gt; chunk,
         });
