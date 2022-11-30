@@ -145,6 +145,7 @@ func RewriteMCAP(w io.Writer, r io.ReadSeeker, fns ...func(writer *mcap.Writer) 
 	if err != nil {
 		return fmt.Errorf("failed to open mcap reader: %w", err)
 	}
+	defer reader.Close()
 	info, err := reader.Info()
 	if err != nil {
 		return fmt.Errorf("failed to get mcap info")
@@ -180,6 +181,7 @@ func RewriteMCAP(w io.Writer, r io.ReadSeeker, fns ...func(writer *mcap.Writer) 
 	if err != nil {
 		return fmt.Errorf("failed to construct lexer: %w", err)
 	}
+	defer lexer.Close()
 	buf := make([]byte, 1024)
 	schemas := make(map[uint16]bool)
 	channels := make(map[uint16]bool)

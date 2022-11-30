@@ -24,6 +24,7 @@ func TestMCAPReadWrite(t *testing.T) {
 		assert.Nil(t, err)
 		lexer, err := NewLexer(buf)
 		assert.Nil(t, err)
+		defer lexer.Close()
 		tokenType, record, err := lexer.Next(nil)
 		assert.Nil(t, err)
 		// body of the header is the profile, followed by the metadata map
@@ -195,6 +196,7 @@ func TestChunkedReadWrite(t *testing.T) {
 			assert.Equal(t, int(w.Offset()), buf.Len())
 			lexer, err := NewLexer(buf)
 			assert.Nil(t, err)
+			defer lexer.Close()
 			for i, expected := range []TokenType{
 				TokenHeader,
 				TokenSchema,
@@ -461,6 +463,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 
 	lexer, err := NewLexer(buf)
 	assert.Nil(t, err)
+	defer lexer.Close()
 	for _, expected := range []TokenType{
 		TokenHeader,
 		TokenSchema,
@@ -506,6 +509,7 @@ func TestLibraryString(t *testing.T) {
 			w.Close()
 			lexer, err := NewLexer(buf)
 			assert.Nil(t, err)
+			defer lexer.Close()
 			tokenType, record, err := lexer.Next(nil)
 			assert.Nil(t, err)
 			assert.Equal(t, tokenType, TokenHeader)

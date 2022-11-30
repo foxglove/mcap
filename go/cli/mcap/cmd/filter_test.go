@@ -164,6 +164,7 @@ func TestFiltering(t *testing.T) {
 				},
 			})
 			assert.Nil(t, err)
+			defer lexer.Close()
 			messageCounter := map[uint16]int{
 				1: 0,
 				2: 0,
@@ -219,6 +220,7 @@ func TestRecover(t *testing.T) {
 			},
 		})
 		assert.Nil(t, err)
+		defer lexer.Close()
 		for {
 			token, record, err := lexer.Next(nil)
 			if err != nil {

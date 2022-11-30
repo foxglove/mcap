@@ -296,6 +296,13 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 	}
 }
 
+// Close the lexer.
+func (l *Lexer) Close() {
+	if l.decoders.zstd != nil {
+		l.decoders.zstd.Close()
+	}
+}
+
 type decoders struct {
 	zstd *zstd.Decoder
 	lz4  *lz4.Reader
