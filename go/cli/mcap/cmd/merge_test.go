@@ -64,6 +64,7 @@ func TestMCAPMerging(t *testing.T) {
 		assert.Equal(t, 100, messages["/foo"])
 		assert.Equal(t, 100, messages["/bar"])
 		assert.Equal(t, 100, messages["/baz"])
+		reader.Close()
 	}
 }
 
@@ -81,6 +82,7 @@ func TestMultiChannelInput(t *testing.T) {
 	assert.Nil(t, merger.mergeInputs(output, []io.Reader{multiChannelInput, buf3}))
 	reader, err := mcap.NewReader(output)
 	assert.Nil(t, err)
+	defer reader.Close()
 	assert.Equal(t, reader.Header().Profile, "testprofile")
 	it, err := reader.Messages(readopts.UsingIndex(false))
 	assert.Nil(t, err)

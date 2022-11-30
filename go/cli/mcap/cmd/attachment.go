@@ -77,6 +77,7 @@ var getAttachmentCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to construct reader: %w", err)
 			}
+			defer reader.Close()
 			info, err := reader.Info()
 			if err != nil {
 				return fmt.Errorf("failed to get mcap info: %w", err)

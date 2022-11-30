@@ -113,6 +113,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 		doctor.error("Failed to make lexer for chunk bytes", err)
 		return
 	}
+	defer lexer.Close()
 
 	var minLogTime uint64 = math.MaxUint64
 	var maxLogTime uint64
@@ -216,6 +217,7 @@ func (doctor *mcapDoctor) Examine() error {
 	if err != nil {
 		doctor.fatal(err)
 	}
+	defer lexer.Close()
 
 	var lastMessageTime uint64
 	var lastToken mcap.TokenType
