@@ -2,12 +2,10 @@ mod common;
 
 use common::*;
 
-use std::io::BufWriter;
+use std::io::Cursor;
 
 use anyhow::Result;
 use itertools::Itertools;
-use memmap::Mmap;
-use tempfile::tempfile;
 
 #[test]
 fn flush_and_cut_chunks() -> Result<()> {
@@ -15,8 +13,10 @@ fn flush_and_cut_chunks() -> Result<()> {
 
     let messages = mcap::MessageStream::new(&mapped)?;
 
-    let mut tmp = tempfile()?;
-    let mut writer = mcap::Writer::new(BufWriter::new(&mut tmp))?;
+    let mut tmp: Vec<u8> = Vec::new();
+    let mut writer = mcap::WriteOptions::new()
+        .chunk_size(None)
+        .create(Cursor::new(&mut tmp))?;
 
     for (i, m) in messages.enumerate() {
         writer.write(&m?)?;
@@ -27,12 +27,9 @@ fn flush_and_cut_chunks() -> Result<()> {
     }
     drop(writer);
 
-    let ours = unsafe { Mmap::map(&tmp) }?;
-
     // Compare the message stream of our MCAP to the reference one.
     // Regardless of the chunk boundaries, they should be the same.
-    for (theirs, ours) in
-        mcap::MessageStream::new(&mapped)?.zip_eq(mcap::MessageStream::new(&ours)?)
+    for (theirs, ours) in mcap::MessageStream::new(&mapped)?.zip_eq(mcap::MessageStream::new(&tmp)?)
     {
         assert_eq!(ours?, theirs?)
     }
