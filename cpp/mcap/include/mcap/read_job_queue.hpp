@@ -48,7 +48,7 @@ private:
   /**
    * @brief return the timestamp key that should be used to compare jobs.
    */
-  static Timestamp ComparisonKey(const ReadJob& job, bool reverse) {
+  static Timestamp TimeComparisonKey(const ReadJob& job, bool reverse) {
     Timestamp result = 0;
     std::visit(
       [&](auto&& arg) {
@@ -68,13 +68,39 @@ private:
       job);
     return result;
   }
+  static ByteOffset PositionComparisonKey(const ReadJob& job) {
+    ByteOffset result = 0;
+    std::visit(
+      [&](auto&& arg) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, ReadMessageJob>) {
+          result = arg.offset;
+        } else if constexpr (std::is_same_v<T, DecompressChunkJob>) {
+          result = arg.chunkStartOffset;
+        } else {
+          static_assert(always_false_v<T>, "non-exhaustive visitor!");
+        }
+      },
+      job);
+    return result;
+  }
 
   static bool CompareForward(const ReadJob& a, const ReadJob& b) {
-    return ComparisonKey(a, false) > ComparisonKey(b, false);
+    auto aTimestamp = TimeComparisonKey(a, false);
+    auto bTimestamp = TimeComparisonKey(b, false);
+    if (aTimestamp == bTimestamp) {
+      return PositionComparisonKey(a) > PositionComparisonKey(b);
+    }
+    return aTimestamp > bTimestamp;
   }
 
   static bool CompareReverse(const ReadJob& a, const ReadJob& b) {
-    return ComparisonKey(a, true) < ComparisonKey(b, true);
+    auto aTimestamp = TimeComparisonKey(a, true);
+    auto bTimestamp = TimeComparisonKey(b, true);
+    if (aTimestamp == bTimestamp) {
+      return PositionComparisonKey(a) < PositionComparisonKey(b);
+    }
+    return aTimestamp < bTimestamp;
   }
 
 public:

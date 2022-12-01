@@ -6,6 +6,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -349,6 +350,27 @@ struct MCAP_PUBLIC DataEnd {
   uint32_t dataSectionCrc;
 };
 
+struct MCAP_PUBLIC MessageOffset {
+  ByteOffset messageStartOffset;
+  std::optional<ByteOffset> chunkStartOffset;
+
+  bool operator==(const MessageOffset& other) const;
+  bool operator>(const MessageOffset& other) const;
+
+  bool operator!=(const MessageOffset& other) const {
+    return !(*this == other);
+  }
+  bool operator>=(const MessageOffset& other) const {
+    return ((*this == other) || (*this > other));
+  }
+  bool operator<(const MessageOffset& other) const {
+    return !(*this >= other);
+  }
+  bool operator<=(const MessageOffset& other) const {
+    return !(*this > other);
+  }
+};
+
 /**
  * @brief Returned when iterating over Messages in a file, MessageView contains
  * a reference to one Message, a pointer to its Channel, and an optional pointer
@@ -359,11 +381,14 @@ struct MCAP_PUBLIC MessageView {
   const Message& message;
   const ChannelPtr channel;
   const SchemaPtr schema;
+  const MessageOffset messageOffset;
 
-  MessageView(const Message& message, const ChannelPtr channel, const SchemaPtr schema)
+  MessageView(const Message& message, const ChannelPtr channel, const SchemaPtr schema,
+              MessageOffset offset)
       : message(message)
       , channel(channel)
-      , schema(schema) {}
+      , schema(schema)
+      , messageOffset(offset) {}
 };
 
 }  // namespace mcap

@@ -625,4 +625,59 @@ TEST_CASE("Read Order", "[reader][writer]") {
 
     reader.close();
   }
+  SECTION("total ordering fallback to offset (chunked)") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("test");
+    opts.compression = mcap::Compression::None;
+    writer.open(buffer, opts);
+    mcap::Schema schema("schema", "schemaEncoding", "ab");
+    writer.addSchema(schema);
+    mcap::Channel channel("topic", "messageEncoding", schema.id);
+    writer.addChannel(channel);
+
+    mcap::Message msg;
+    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    WriteMsg(writer, channel.id, 0, 100, 100, data);
+    WriteMsg(writer, channel.id, 1, 100, 100, data);
+    WriteMsg(writer, channel.id, 2, 100, 100, data);
+    WriteMsg(writer, channel.id, 3, 300, 300, data);
+    WriteMsg(writer, channel.id, 4, 300, 300, data);
+    WriteMsg(writer, channel.id, 5, 300, 300, data);
+    WriteMsg(writer, channel.id, 6, 200, 200, data);
+    writer.close();
+
+    mcap::McapReader reader;
+    auto status = reader.open(buffer);
+    requireOk(status);
+
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+    mcap::ReadMessageOptions options;
+    options.startTime = 100;
+    options.endTime = 300;
+    options.messageOffsetTiebreaker = std::nullopt;
+    options.readOrder = mcap::ReadMessageOptions::ReadOrder::LogTimeOrder;
+    // with no tie breaker, messages should start with the first message in the time range.
+    auto firstMessageView = reader.readMessages(onProblem, options).begin();
+    REQUIRE(firstMessageView->message.sequence == 0);
+
+    // setting the tie breaker at the position of the first message, starting iteration again
+    // should yield the second message.
+    options.messageOffsetTiebreaker = firstMessageView->messageOffset;
+    REQUIRE(reader.readMessages(onProblem, options).begin()->message.sequence == 1);
+
+    // going in reverse now - with no tie breaker, messages should start with the last message
+    // in the time range.
+    options.messageOffsetTiebreaker = std::nullopt;
+    options.readOrder = mcap::ReadMessageOptions::ReadOrder::ReverseLogTimeOrder;
+    auto lastMessageView = reader.readMessages(onProblem, options).begin();
+    REQUIRE(lastMessageView->message.sequence == 5);
+    // using last message as tie breaker, iterating in reverse again, should start at the message
+    // before that one.
+    options.messageOffsetTiebreaker = lastMessageView->messageOffset;
+    REQUIRE(reader.readMessages(onProblem, options).begin()->message.sequence == 4);
+  }
 }

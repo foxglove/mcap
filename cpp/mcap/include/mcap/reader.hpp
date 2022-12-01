@@ -243,6 +243,15 @@ public:
    * `topicFilter` returns true for a given channel, messages from that channel will be included.
    * if not provided, messages from all channels are provided.
    */
+
+  /**
+   * @brief If provided, in forward order, messages with logTime == startTime
+   * will only be included if their offset in the file is after this offset.
+   * When reading in reverse order, messages with logTime == endTime will only be included
+   * if their offset if the file is before this offset.
+   */
+  std::optional<MessageOffset> messageOffsetTiebreaker = std::nullopt;
+
   std::function<bool(std::string_view)> topicFilter;
   enum struct ReadOrder { FileOrder, LogTimeOrder, ReverseLogTimeOrder };
   /**
@@ -591,7 +600,7 @@ private:
 struct MCAP_PUBLIC IndexedMessageReader {
 public:
   IndexedMessageReader(McapReader& reader, const ReadMessageOptions& options,
-                       const std::function<void(const Message&)> onMessage);
+                       const std::function<void(const Message&, MessageOffset)> onMessage);
 
   /**
    * @brief reads the next message out of the MCAP.
@@ -612,6 +621,7 @@ public:
 private:
   struct ChunkSlot {
     ByteArray decompressedChunk;
+    ByteOffset chunkStartOffset;
     int unreadMessages = 0;
   };
   size_t findFreeChunkSlot();
@@ -622,7 +632,7 @@ private:
   LZ4Reader lz4Reader_;
   ReadMessageOptions options_;
   std::unordered_set<ChannelId> selectedChannels_;
-  std::function<void(const Message&)> onMessage_;
+  std::function<void(const Message&, MessageOffset)> onMessage_;
   ReadJobQueue queue_;
   std::vector<ChunkSlot> chunkSlots_;
 };
@@ -675,7 +685,7 @@ struct MCAP_PUBLIC LinearMessageView {
       std::optional<MessageView> curMessageView_;
 
     private:
-      void onMessage(const Message& message);
+      void onMessage(const Message& message, MessageOffset offset);
     };
 
     std::unique_ptr<Impl> impl_;

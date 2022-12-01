@@ -4,6 +4,9 @@ default: build
 dev-image:
 	docker build -t mcap_cpp_dev -f dev.Dockerfile .
 
+dev-shell: dev-image
+	docker run --rm -v $(CURDIR):/src -it mcap_cpp_dev /bin/bash
+
 .PHONY: build
 build: dev-image
 	docker run -t --rm -v $(CURDIR):/src mcap_cpp_dev
