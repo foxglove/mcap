@@ -350,23 +350,23 @@ struct MCAP_PUBLIC DataEnd {
   uint32_t dataSectionCrc;
 };
 
-struct MCAP_PUBLIC MessageOffset {
-  ByteOffset messageStartOffset;
-  std::optional<ByteOffset> chunkStartOffset;
+struct MCAP_PUBLIC RecordOffset {
+  ByteOffset offset;
+  std::optional<ByteOffset> chunkOffset;
 
-  bool operator==(const MessageOffset& other) const;
-  bool operator>(const MessageOffset& other) const;
+  bool operator==(const RecordOffset& other) const;
+  bool operator>(const RecordOffset& other) const;
 
-  bool operator!=(const MessageOffset& other) const {
+  bool operator!=(const RecordOffset& other) const {
     return !(*this == other);
   }
-  bool operator>=(const MessageOffset& other) const {
+  bool operator>=(const RecordOffset& other) const {
     return ((*this == other) || (*this > other));
   }
-  bool operator<(const MessageOffset& other) const {
+  bool operator<(const RecordOffset& other) const {
     return !(*this >= other);
   }
-  bool operator<=(const MessageOffset& other) const {
+  bool operator<=(const RecordOffset& other) const {
     return !(*this > other);
   }
 };
@@ -381,10 +381,10 @@ struct MCAP_PUBLIC MessageView {
   const Message& message;
   const ChannelPtr channel;
   const SchemaPtr schema;
-  const MessageOffset messageOffset;
+  const RecordOffset messageOffset;
 
   MessageView(const Message& message, const ChannelPtr channel, const SchemaPtr schema,
-              MessageOffset offset)
+              RecordOffset offset)
       : message(message)
       , channel(channel)
       , schema(schema)

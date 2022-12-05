@@ -16,7 +16,7 @@ inline constexpr bool always_false_v = false;
  */
 struct ReadMessageJob {
   Timestamp timestamp;
-  ByteOffset offset;
+  RecordOffset offset;
   size_t chunkReaderIndex;
 };
 
@@ -68,15 +68,19 @@ private:
       job);
     return result;
   }
-  static ByteOffset PositionComparisonKey(const ReadJob& job) {
-    ByteOffset result = 0;
+  static RecordOffset PositionComparisonKey(const ReadJob& job, bool reverse) {
+    RecordOffset result;
     std::visit(
       [&](auto&& arg) {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, ReadMessageJob>) {
           result = arg.offset;
         } else if constexpr (std::is_same_v<T, DecompressChunkJob>) {
-          result = arg.chunkStartOffset;
+          if (reverse) {
+            result.offset = arg.messageIndexEndOffset;
+          } else {
+            result.offset = arg.chunkStartOffset;
+          }
         } else {
           static_assert(always_false_v<T>, "non-exhaustive visitor!");
         }
@@ -89,7 +93,7 @@ private:
     auto aTimestamp = TimeComparisonKey(a, false);
     auto bTimestamp = TimeComparisonKey(b, false);
     if (aTimestamp == bTimestamp) {
-      return PositionComparisonKey(a) > PositionComparisonKey(b);
+      return PositionComparisonKey(a, false) > PositionComparisonKey(b, false);
     }
     return aTimestamp > bTimestamp;
   }
@@ -98,7 +102,7 @@ private:
     auto aTimestamp = TimeComparisonKey(a, true);
     auto bTimestamp = TimeComparisonKey(b, true);
     if (aTimestamp == bTimestamp) {
-      return PositionComparisonKey(a) < PositionComparisonKey(b);
+      return PositionComparisonKey(a, true) < PositionComparisonKey(b, true);
     }
     return aTimestamp < bTimestamp;
   }
