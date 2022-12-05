@@ -243,15 +243,6 @@ public:
    * `topicFilter` returns true for a given channel, messages from that channel will be included.
    * if not provided, messages from all channels are provided.
    */
-
-  /**
-   * @brief If provided, in forward order, messages with logTime == startTime
-   * will only be included if their offset in the file is after this offset.
-   * When reading in reverse order, messages with logTime == endTime will only be included
-   * if their offset if the file is before this offset.
-   */
-  std::optional<MessageOffset> messageOffsetTiebreaker = std::nullopt;
-
   std::function<bool(std::string_view)> topicFilter;
   enum struct ReadOrder { FileOrder, LogTimeOrder, ReverseLogTimeOrder };
   /**

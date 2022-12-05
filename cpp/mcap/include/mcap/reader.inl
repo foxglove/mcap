@@ -1889,19 +1889,6 @@ bool IndexedMessageReader::next() {
                 if (timestamp > options_.endTime) {
                   continue;
                 }
-                if (options_.messageOffsetTiebreaker != std::nullopt) {
-                  MessageOffset thisMessageOffset{byteOffset, decompressChunkJob.chunkStartOffset};
-                  if ((timestamp == options_.endTime) &&
-                      (options_.readOrder == ReadMessageOptions::ReadOrder::ReverseLogTimeOrder) &&
-                      (thisMessageOffset >= *options_.messageOffsetTiebreaker)) {
-                    continue;
-                  }
-                  if ((timestamp == options_.startTime) &&
-                      (options_.readOrder != ReadMessageOptions::ReadOrder::ReverseLogTimeOrder) &&
-                      (thisMessageOffset <= *options_.messageOffsetTiebreaker)) {
-                    continue;
-                  }
-                }
                 ReadMessageJob job;
                 job.chunkReaderIndex = chunkReaderIndex;
                 job.offset = byteOffset;
