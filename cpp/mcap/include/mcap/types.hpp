@@ -354,6 +354,13 @@ struct MCAP_PUBLIC RecordOffset {
   ByteOffset offset;
   std::optional<ByteOffset> chunkOffset;
 
+  RecordOffset() = default;
+  explicit RecordOffset(ByteOffset offset_)
+      : offset(offset_){};
+  RecordOffset(ByteOffset offset_, ByteOffset chunkOffset_)
+      : offset(offset_)
+      , chunkOffset(chunkOffset_){};
+
   bool operator==(const RecordOffset& other) const;
   bool operator>(const RecordOffset& other) const;
 

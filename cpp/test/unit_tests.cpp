@@ -675,3 +675,143 @@ TEST_CASE("Read Order", "[reader][writer]") {
     REQUIRE(count == reverse_order_expected.size());
   }
 }
+
+TEST_CASE("RecordOffset equality operators", "[reader]") {
+  SECTION("equality") {
+    REQUIRE(mcap::RecordOffset(10) == mcap::RecordOffset(10));
+    REQUIRE(mcap::RecordOffset(10) != mcap::RecordOffset(20));
+
+    // record in chunk vs record not in chunk
+    REQUIRE(mcap::RecordOffset(10, 0) == mcap::RecordOffset(10, 0));
+    REQUIRE(mcap::RecordOffset(10, 0) != mcap::RecordOffset(10));
+    REQUIRE(mcap::RecordOffset(10) != mcap::RecordOffset(10, 0));
+
+    // records in different chunks with same offsets
+    REQUIRE(mcap::RecordOffset(10, 50) == mcap::RecordOffset(10, 50));
+    REQUIRE(mcap::RecordOffset(10, 50) != mcap::RecordOffset(10, 70));
+
+    // a nonexistent chunk offset is not the same as a zero chunk offset
+    REQUIRE(mcap::RecordOffset(10, 0) != mcap::RecordOffset(10));
+
+    // records in the same chunk with different internal offsets
+    REQUIRE(mcap::RecordOffset(10, 50) != mcap::RecordOffset(20, 50));
+  }
+  SECTION("inequality, non-equal records outside chunk") {
+    mcap::RecordOffset a(10);
+    mcap::RecordOffset b(20);
+
+    REQUIRE(a < b);
+    REQUIRE(!(b < a));
+
+    REQUIRE(a <= b);
+    REQUIRE(!(b <= a));
+
+    REQUIRE(!(a > b));
+    REQUIRE(b > a);
+
+    REQUIRE(!(a >= b));
+    REQUIRE(b >= a);
+  }
+
+  SECTION("inequality, equal records outside chunk") {
+    mcap::RecordOffset a(10);
+    mcap::RecordOffset b(10);
+
+    REQUIRE(!(a < b));
+    REQUIRE(!(b < a));
+
+    REQUIRE(a <= b);
+    REQUIRE(b <= a);
+
+    REQUIRE(!(a > b));
+    REQUIRE(!(b > a));
+
+    REQUIRE(a >= b);
+    REQUIRE(b >= a);
+  }
+
+  SECTION("inequality, non-equal records in same chunk") {
+    mcap::RecordOffset a(10, 30);
+    mcap::RecordOffset b(20, 30);
+
+    REQUIRE(a < b);
+    REQUIRE(!(b < a));
+
+    REQUIRE(a <= b);
+    REQUIRE(!(b <= a));
+
+    REQUIRE(!(a > b));
+    REQUIRE(b > a);
+
+    REQUIRE(!(a >= b));
+    REQUIRE(b >= a);
+  }
+
+  SECTION("inequality, equal records inside chunk") {
+    mcap::RecordOffset a(10, 30);
+    mcap::RecordOffset b(10, 30);
+
+    REQUIRE(!(a < b));
+    REQUIRE(!(b < a));
+
+    REQUIRE(a <= b);
+    REQUIRE(b <= a);
+
+    REQUIRE(!(a > b));
+    REQUIRE(!(b > a));
+
+    REQUIRE(a >= b);
+    REQUIRE(b >= a);
+  }
+
+  SECTION("inequality, non-equal records in same chunk") {
+    mcap::RecordOffset a(10, 30);
+    mcap::RecordOffset b(20, 30);
+
+    REQUIRE(a < b);
+    REQUIRE(!(b < a));
+
+    REQUIRE(a <= b);
+    REQUIRE(!(b <= a));
+
+    REQUIRE(!(a > b));
+    REQUIRE(b > a);
+
+    REQUIRE(!(a >= b));
+    REQUIRE(b >= a);
+  }
+
+  SECTION("inequality, equally-offsetted records in different chunks") {
+    mcap::RecordOffset a(10, 30);
+    mcap::RecordOffset b(10, 40);
+
+    REQUIRE(a < b);
+    REQUIRE(!(b < a));
+
+    REQUIRE(a <= b);
+    REQUIRE(!(b <= a));
+
+    REQUIRE(!(a > b));
+    REQUIRE(b > a);
+
+    REQUIRE(!(a >= b));
+    REQUIRE(b >= a);
+  }
+
+  SECTION("inequality, oppositely-offsetted records in different chunks") {
+    mcap::RecordOffset a(20, 30);
+    mcap::RecordOffset b(10, 40);
+
+    REQUIRE(a < b);
+    REQUIRE(!(b < a));
+
+    REQUIRE(a <= b);
+    REQUIRE(!(b <= a));
+
+    REQUIRE(!(a > b));
+    REQUIRE(b > a);
+
+    REQUIRE(!(a >= b));
+    REQUIRE(b >= a);
+  }
+}
