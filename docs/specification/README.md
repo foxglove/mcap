@@ -163,10 +163,16 @@ The message encoding and schema must match that of the Channel record correspond
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 2 | channel_id | uint16 | Channel ID |
-| 4 | sequence | uint32 | Optional message sequence count, which should increase by one for each successive message written with the same channel ID. This sequence is expected to roll over from 2<sup>32</sup> to 0. This can be used by readers to detect dropped or out-of-order messages. If not used, all `sequence` values in Message records with the same `channel_id` should be 0. |
+| 4 | sequence | uint32 | Optional message sequence count, which can be used by readers to detect dropped or out-of-order messages. If not used, all `sequence` values in Message records with the same `channel_id` should be 0. |
 | 8 | log_time | Timestamp | Time at which the message was recorded. |
 | 8 | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time. |
 | N | data | Bytes | Message data, to be decoded according to the schema of the channel. |
+
+!!! note "Using Message Sequence Counts"
+
+    Message sequence counts are specific to a channel, meaning that each successive Message record in an MCAP with the same channel ID should increase in `sequence` by 1. After this sequence count reaches (2<sup>32</sup> - 1), it is expected to roll over to 0.
+
+    Readers should not expect the sequence count for a given channel to start at 0. This is because the sequence count might originate from a publisher within the pub/sub system that was initialized before the MCAP was created.
 
 ### Chunk (op=0x06)
 
