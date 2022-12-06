@@ -676,30 +676,79 @@ TEST_CASE("Read Order", "[reader][writer]") {
   }
 }
 
-TEST_CASE("RecordOffset equality operators", "[reader]") {
-  SECTION("equality") {
-    REQUIRE(mcap::RecordOffset(10) == mcap::RecordOffset(10));
-    REQUIRE(mcap::RecordOffset(10) != mcap::RecordOffset(20));
+TEST_CASE("ReadJobQueue order", "[reader]") {
+  SECTION("successive chunks with out-of-order timestamps") {
+    mcap::ReadJobQueue q(false);
+    {
+      mcap::DecompressChunkJob chunk;
+      chunk.messageStartTime = 100;
+      chunk.messageEndTime = 200;
+      chunk.chunkStartOffset = 1000;
+      chunk.messageIndexEndOffset = 2000;
+      q.push(std::move(chunk));
+    }
+    {
+      mcap::DecompressChunkJob chunk;
+      chunk.messageStartTime = 0;
+      chunk.messageEndTime = 100;
+      chunk.chunkStartOffset = 2000;
+      chunk.messageIndexEndOffset = 3000;
+      q.push(std::move(chunk));
+    }
 
-    // record in chunk vs record not in chunk
-    REQUIRE(mcap::RecordOffset(10, 0) == mcap::RecordOffset(10, 0));
-    REQUIRE(mcap::RecordOffset(10, 0) != mcap::RecordOffset(10));
-    REQUIRE(mcap::RecordOffset(10) != mcap::RecordOffset(10, 0));
-
-    // records in different chunks with same offsets
-    REQUIRE(mcap::RecordOffset(10, 50) == mcap::RecordOffset(10, 50));
-    REQUIRE(mcap::RecordOffset(10, 50) != mcap::RecordOffset(10, 70));
-
-    // a nonexistent chunk offset is not the same as a zero chunk offset
-    REQUIRE(mcap::RecordOffset(10, 0) != mcap::RecordOffset(10));
-
-    // records in the same chunk with different internal offsets
-    REQUIRE(mcap::RecordOffset(10, 50) != mcap::RecordOffset(20, 50));
+    {
+      auto result = q.pop();
+      REQUIRE(std::get<mcap::DecompressChunkJob>(result).messageStartTime == 0);
+      REQUIRE(std::get<mcap::DecompressChunkJob>(result).chunkStartOffset == 2000);
+    }
+    {
+      auto result = q.pop();
+      REQUIRE(std::get<mcap::DecompressChunkJob>(result).messageStartTime == 100);
+      REQUIRE(std::get<mcap::DecompressChunkJob>(result).chunkStartOffset == 1000);
+    }
   }
-  SECTION("inequality, non-equal records outside chunk") {
+  SECTION("reverse time order: successive chunks with out-of-order timestamps") {
+    mcap::ReadJobQueue q(true);
+    {
+      mcap::DecompressChunkJob chunk;
+      chunk.messageStartTime = 100;
+      chunk.messageEndTime = 200;
+      chunk.chunkStartOffset = 1000;
+      chunk.messageIndexEndOffset = 2000;
+      q.push(std::move(chunk));
+    }
+    {
+      mcap::DecompressChunkJob chunk;
+      chunk.messageStartTime = 0;
+      chunk.messageEndTime = 100;
+      chunk.chunkStartOffset = 2000;
+      chunk.messageIndexEndOffset = 3000;
+      q.push(std::move(chunk));
+    }
+
+    {
+      auto result = q.pop();
+      REQUIRE(std::holds_alternative<mcap::DecompressChunkJob>(result));
+      REQUIRE(std::get<mcap::DecompressChunkJob>(result).messageStartTime == 100);
+      REQUIRE(std::get<mcap::DecompressChunkJob>(result).chunkStartOffset == 1000);
+    }
+    {
+      auto result = q.pop();
+      REQUIRE(std::holds_alternative<mcap::DecompressChunkJob>(result));
+      REQUIRE(std::get<mcap::DecompressChunkJob>(result).messageStartTime == 0);
+      REQUIRE(std::get<mcap::DecompressChunkJob>(result).chunkStartOffset == 2000);
+    }
+  }
+}
+
+TEST_CASE("RecordOffset equality operators", "[reader]") {
+  SECTION("non-equal records outside chunk") {
     mcap::RecordOffset a(10);
     mcap::RecordOffset b(20);
 
+    REQUIRE(a != b);
+    REQUIRE(b != a);
+
     REQUIRE(a < b);
     REQUIRE(!(b < a));
 
@@ -713,10 +762,13 @@ TEST_CASE("RecordOffset equality operators", "[reader]") {
     REQUIRE(b >= a);
   }
 
-  SECTION("inequality, equal records outside chunk") {
+  SECTION("equal records outside chunk") {
     mcap::RecordOffset a(10);
     mcap::RecordOffset b(10);
 
+    REQUIRE(a == b);
+    REQUIRE(b == a);
+
     REQUIRE(!(a < b));
     REQUIRE(!(b < a));
 
@@ -730,9 +782,12 @@ TEST_CASE("RecordOffset equality operators", "[reader]") {
     REQUIRE(b >= a);
   }
 
-  SECTION("inequality, non-equal records in same chunk") {
+  SECTION("non-equal records in same chunk") {
     mcap::RecordOffset a(10, 30);
     mcap::RecordOffset b(20, 30);
+
+    REQUIRE(a != b);
+    REQUIRE(b != a);
 
     REQUIRE(a < b);
     REQUIRE(!(b < a));
@@ -747,10 +802,13 @@ TEST_CASE("RecordOffset equality operators", "[reader]") {
     REQUIRE(b >= a);
   }
 
-  SECTION("inequality, equal records inside chunk") {
+  SECTION("equal records inside chunk") {
     mcap::RecordOffset a(10, 30);
     mcap::RecordOffset b(10, 30);
 
+    REQUIRE(a == b);
+    REQUIRE(b == a);
+
     REQUIRE(!(a < b));
     REQUIRE(!(b < a));
 
@@ -764,10 +822,13 @@ TEST_CASE("RecordOffset equality operators", "[reader]") {
     REQUIRE(b >= a);
   }
 
-  SECTION("inequality, non-equal records in same chunk") {
+  SECTION("non-equal records in same chunk") {
     mcap::RecordOffset a(10, 30);
     mcap::RecordOffset b(20, 30);
 
+    REQUIRE(a != b);
+    REQUIRE(b != a);
+
     REQUIRE(a < b);
     REQUIRE(!(b < a));
 
@@ -781,10 +842,13 @@ TEST_CASE("RecordOffset equality operators", "[reader]") {
     REQUIRE(b >= a);
   }
 
-  SECTION("inequality, equally-offsetted records in different chunks") {
+  SECTION("equally-offsetted records in different chunks") {
     mcap::RecordOffset a(10, 30);
     mcap::RecordOffset b(10, 40);
 
+    REQUIRE(a != b);
+    REQUIRE(b != a);
+
     REQUIRE(a < b);
     REQUIRE(!(b < a));
 
@@ -798,9 +862,12 @@ TEST_CASE("RecordOffset equality operators", "[reader]") {
     REQUIRE(b >= a);
   }
 
-  SECTION("inequality, oppositely-offsetted records in different chunks") {
+  SECTION("oppositely-offsetted records in different chunks") {
     mcap::RecordOffset a(20, 30);
     mcap::RecordOffset b(10, 40);
+
+    REQUIRE(a != b);
+    REQUIRE(b != a);
 
     REQUIRE(a < b);
     REQUIRE(!(b < a));
