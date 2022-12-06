@@ -1648,7 +1648,7 @@ void LinearMessageView::Iterator::Impl::onMessage(const Message& message, Record
   if (message.logTime < readMessageOptions_.startTime) {
     return;
   }
-  if (message.logTime > readMessageOptions_.endTime) {
+  if (message.logTime >= readMessageOptions_.endTime) {
     return;
   }
   auto maybeChannel = mcapReader_.channel(message.channelId);
@@ -1788,7 +1788,7 @@ IndexedMessageReader::IndexedMessageReader(
   }
   // Initialize the read job queue by finding all of the chunks that need to be read from.
   for (const auto& chunkIndex : mcapReader_.chunkIndexes()) {
-    if (chunkIndex.messageStartTime > options_.endTime) {
+    if (chunkIndex.messageStartTime >= options_.endTime) {
       // chunk starts after requested time range, skip it.
       continue;
     }
@@ -1883,19 +1883,15 @@ bool IndexedMessageReader::next() {
             }
             if (selectedChannels_.find(messageIndex.channelId) != selectedChannels_.end()) {
               for (const auto& [timestamp, byteOffset] : messageIndex.records) {
-                if (timestamp < options_.startTime) {
-                  continue;
+                if (timestamp >= options_.startTime && timestamp < options_.endTime) {
+                  ReadMessageJob job;
+                  job.chunkReaderIndex = chunkReaderIndex;
+                  job.offset.offset = byteOffset;
+                  job.offset.chunkOffset = decompressChunkJob.chunkStartOffset;
+                  job.timestamp = timestamp;
+                  queue_.push(std::move(job));
+                  chunkSlot.unreadMessages++;
                 }
-                if (timestamp > options_.endTime) {
-                  continue;
-                }
-                ReadMessageJob job;
-                job.chunkReaderIndex = chunkReaderIndex;
-                job.offset.offset = byteOffset;
-                job.offset.chunkOffset = decompressChunkJob.chunkStartOffset;
-                job.timestamp = timestamp;
-                queue_.push(std::move(job));
-                chunkSlot.unreadMessages++;
               }
             }
           } break;
