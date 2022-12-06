@@ -163,7 +163,7 @@ The message encoding and schema must match that of the Channel record correspond
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
 | 2 | channel_id | uint16 | Channel ID |
-| 4 | sequence | uint32 | Optional message counter assigned by publisher. If not assigned by publisher, must be recorded by the recorder. |
+| 4 | sequence | uint32 | Optional message sequence count, which should increase by one for each successive message written with the same channel ID. This sequence is expected to roll over from 2<sup>32</sup> to 0. This can be used by readers to detect dropped or out-of-order messages. If not used, all `sequence` values in Message records with the same `channel_id` should be 0. |
 | 8 | log_time | Timestamp | Time at which the message was recorded. |
 | 8 | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time. |
 | N | data | Bytes | Message data, to be decoded according to the schema of the channel. |
