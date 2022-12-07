@@ -591,7 +591,7 @@ private:
 struct MCAP_PUBLIC IndexedMessageReader {
 public:
   IndexedMessageReader(McapReader& reader, const ReadMessageOptions& options,
-                       const std::function<void(const Message&)> onMessage);
+                       const std::function<void(const Message&, RecordOffset)> onMessage);
 
   /**
    * @brief reads the next message out of the MCAP.
@@ -612,6 +612,7 @@ public:
 private:
   struct ChunkSlot {
     ByteArray decompressedChunk;
+    ByteOffset chunkStartOffset;
     int unreadMessages = 0;
   };
   size_t findFreeChunkSlot();
@@ -622,7 +623,7 @@ private:
   LZ4Reader lz4Reader_;
   ReadMessageOptions options_;
   std::unordered_set<ChannelId> selectedChannels_;
-  std::function<void(const Message&)> onMessage_;
+  std::function<void(const Message&, RecordOffset)> onMessage_;
   ReadJobQueue queue_;
   std::vector<ChunkSlot> chunkSlots_;
 };
@@ -675,7 +676,7 @@ struct MCAP_PUBLIC LinearMessageView {
       std::optional<MessageView> curMessageView_;
 
     private:
-      void onMessage(const Message& message);
+      void onMessage(const Message& message, RecordOffset offset);
     };
 
     std::unique_ptr<Impl> impl_;

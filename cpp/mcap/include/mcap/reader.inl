@@ -1623,12 +1623,17 @@ LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataS
                                       std::optional<ByteOffset>) {
       mcapReader_.channels_.insert_or_assign(channel->id, channel);
     };
-    recordReader_->onMessage =
-      std::bind(&LinearMessageView::Iterator::Impl::onMessage, this, std::placeholders::_1);
+    recordReader_->onMessage = [this](const Message& message, ByteOffset messageStartOffset,
+                                      std::optional<ByteOffset> chunkStartOffset) {
+      RecordOffset offset;
+      offset.chunkOffset = chunkStartOffset;
+      offset.offset = messageStartOffset;
+      onMessage(message, offset);
+    };
   } else {
-    indexedMessageReader_.emplace(
-      mcapReader, readMessageOptions_,
-      std::bind(&LinearMessageView::Iterator::Impl::onMessage, this, std::placeholders::_1));
+    indexedMessageReader_.emplace(mcapReader, readMessageOptions_,
+                                  std::bind(&LinearMessageView::Iterator::Impl::onMessage, this,
+                                            std::placeholders::_1, std::placeholders::_2));
   }
 
   increment();
@@ -1638,7 +1643,7 @@ LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataS
  * @brief Receives a message from either the linear TypedRecordReader or IndexedMessageReader.
  * Sets `curMessageView` with the message along with its associated Channel and Schema.
  */
-void LinearMessageView::Iterator::Impl::onMessage(const Message& message) {
+void LinearMessageView::Iterator::Impl::onMessage(const Message& message, RecordOffset offset) {
   // make sure the message is within the expected time range
   if (message.logTime < readMessageOptions_.startTime) {
     return;
@@ -1672,7 +1677,7 @@ void LinearMessageView::Iterator::Impl::onMessage(const Message& message) {
   }
 
   curMessage_ = message;  // copy message, which may be a reference to a temporary
-  curMessageView_.emplace(curMessage_, maybeChannel, maybeSchema);
+  curMessageView_.emplace(curMessage_, maybeChannel, maybeSchema, offset);
 }
 
 void LinearMessageView::Iterator::Impl::increment() {
@@ -1755,8 +1760,9 @@ Status ReadMessageOptions::validate() const {
 }
 
 // IndexedMessageReader ///////////////////////////////////////////////////////////
-IndexedMessageReader::IndexedMessageReader(McapReader& reader, const ReadMessageOptions& options,
-                                           const std::function<void(const Message&)> onMessage)
+IndexedMessageReader::IndexedMessageReader(
+  McapReader& reader, const ReadMessageOptions& options,
+  const std::function<void(const Message&, RecordOffset)> onMessage)
     : mcapReader_(reader)
     , recordReader_(*mcapReader_.dataSource(), 0, 0)
     , options_(options)
@@ -1782,10 +1788,16 @@ IndexedMessageReader::IndexedMessageReader(McapReader& reader, const ReadMessage
   }
   // Initialize the read job queue by finding all of the chunks that need to be read from.
   for (const auto& chunkIndex : mcapReader_.chunkIndexes()) {
+    if (chunkIndex.messageStartTime >= options_.endTime) {
+      // chunk starts after requested time range, skip it.
+      continue;
+    }
+    if (chunkIndex.messageEndTime < options_.startTime) {
+      // chunk end before requested time range starts, skip it.
+      continue;
+    }
     for (const auto& channelId : selectedChannels_) {
-      if (chunkIndex.messageIndexOffsets.find(channelId) != chunkIndex.messageIndexOffsets.end() &&
-          chunkIndex.messageStartTime <= options_.endTime &&
-          chunkIndex.messageEndTime > options_.startTime) {
+      if (chunkIndex.messageIndexOffsets.find(channelId) != chunkIndex.messageIndexOffsets.end()) {
         DecompressChunkJob job;
         job.chunkStartOffset = chunkIndex.chunkStartOffset;
         job.messageIndexEndOffset =
@@ -1845,6 +1857,7 @@ bool IndexedMessageReader::next() {
       // First, find a chunk slot to decompress this chunk into.
       size_t chunkReaderIndex = findFreeChunkSlot();
       auto& chunkSlot = chunkSlots_[chunkReaderIndex];
+      chunkSlot.chunkStartOffset = decompressChunkJob.chunkStartOffset;
       // Point the record reader at the chunk and message indices after it.
       recordReader_.reset(*mcapReader_.dataSource(), decompressChunkJob.chunkStartOffset,
                           decompressChunkJob.messageIndexEndOffset);
@@ -1873,7 +1886,8 @@ bool IndexedMessageReader::next() {
                 if (timestamp >= options_.startTime && timestamp < options_.endTime) {
                   ReadMessageJob job;
                   job.chunkReaderIndex = chunkReaderIndex;
-                  job.offset = byteOffset;
+                  job.offset.offset = byteOffset;
+                  job.offset.chunkOffset = decompressChunkJob.chunkStartOffset;
                   job.timestamp = timestamp;
                   queue_.push(std::move(job));
                   chunkSlot.unreadMessages++;
@@ -1897,7 +1911,7 @@ bool IndexedMessageReader::next() {
       BufferReader reader;
       reader.reset(chunkSlot.decompressedChunk.data(), chunkSlot.decompressedChunk.size(),
                    chunkSlot.decompressedChunk.size());
-      recordReader_.reset(reader, readMessageJob.offset, chunkSlot.decompressedChunk.size());
+      recordReader_.reset(reader, readMessageJob.offset.offset, chunkSlot.decompressedChunk.size());
       auto record = recordReader_.next();
       status_ = recordReader_.status();
       if (!status_.ok()) {
@@ -1914,7 +1928,7 @@ bool IndexedMessageReader::next() {
       if (!status_.ok()) {
         return false;
       }
-      onMessage_(message);
+      onMessage_(message, readMessageJob.offset);
       return true;
     }
   }
