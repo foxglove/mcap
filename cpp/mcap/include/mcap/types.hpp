@@ -6,13 +6,14 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace mcap {
 
-#define MCAP_LIBRARY_VERSION "0.7.0"
+#define MCAP_LIBRARY_VERSION "0.8.0"
 
 using SchemaId = uint16_t;
 using ChannelId = uint16_t;
@@ -349,6 +350,34 @@ struct MCAP_PUBLIC DataEnd {
   uint32_t dataSectionCrc;
 };
 
+struct MCAP_PUBLIC RecordOffset {
+  ByteOffset offset;
+  std::optional<ByteOffset> chunkOffset;
+
+  RecordOffset() = default;
+  explicit RecordOffset(ByteOffset offset_)
+      : offset(offset_){};
+  RecordOffset(ByteOffset offset_, ByteOffset chunkOffset_)
+      : offset(offset_)
+      , chunkOffset(chunkOffset_){};
+
+  bool operator==(const RecordOffset& other) const;
+  bool operator>(const RecordOffset& other) const;
+
+  bool operator!=(const RecordOffset& other) const {
+    return !(*this == other);
+  }
+  bool operator>=(const RecordOffset& other) const {
+    return ((*this == other) || (*this > other));
+  }
+  bool operator<(const RecordOffset& other) const {
+    return !(*this >= other);
+  }
+  bool operator<=(const RecordOffset& other) const {
+    return !(*this > other);
+  }
+};
+
 /**
  * @brief Returned when iterating over Messages in a file, MessageView contains
  * a reference to one Message, a pointer to its Channel, and an optional pointer
@@ -359,11 +388,14 @@ struct MCAP_PUBLIC MessageView {
   const Message& message;
   const ChannelPtr channel;
   const SchemaPtr schema;
+  const RecordOffset messageOffset;
 
-  MessageView(const Message& message, const ChannelPtr channel, const SchemaPtr schema)
+  MessageView(const Message& message, const ChannelPtr channel, const SchemaPtr schema,
+              RecordOffset offset)
       : message(message)
       , channel(channel)
-      , schema(schema) {}
+      , schema(schema)
+      , messageOffset(offset) {}
 };
 
 }  // namespace mcap
