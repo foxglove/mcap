@@ -1,7 +1,7 @@
 import { McapTypes } from "@mcap/core";
-import stringify from "json-stringify-pretty-compact";
 import { chain, snakeCase } from "lodash";
-import { TestVariant } from "variants/types";
+
+import { SerializableMcapRecord } from "../types";
 
 function replacer(_key: string, value: unknown): unknown {
   if (value instanceof Uint8Array) {
@@ -29,19 +29,8 @@ function normalizeRecord(record: McapTypes.TypedMcapRecord) {
     .value();
 }
 
-export function stringifyRecords(
-  records: McapTypes.TypedMcapRecord[],
-  variant: TestVariant,
-): string {
-  const normalizedRecords = records.map(normalizeRecord);
-  const features = Array.from(variant.features.values());
-  return (
-    stringify(
-      {
-        records: normalizedRecords,
-        meta: { variant: { features } },
-      },
-      { replacer },
-    ) + "\n"
-  );
+export function toSerializableMcapRecord(
+  record: McapTypes.TypedMcapRecord,
+): SerializableMcapRecord {
+  return JSON.parse(JSON.stringify(normalizeRecord(record), replacer)) as SerializableMcapRecord;
 }

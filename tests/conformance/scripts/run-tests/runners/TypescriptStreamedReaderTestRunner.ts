@@ -2,10 +2,11 @@ import { McapStreamReader } from "@mcap/core";
 import fs from "fs/promises";
 import { TestVariant } from "variants/types";
 
-import { ReadTestRunner } from "./TestRunner";
-import { stringifyRecords } from "./stringifyRecords";
+import { StreamedReadTestResult } from "../types";
+import { StreamedReadTestRunner } from "./TestRunner";
+import { toSerializableMcapRecord } from "./stringifyRecords";
 
-export default class TypescriptStreamedReaderTestRunner extends ReadTestRunner {
+export default class TypescriptStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "ts-streamed-reader";
   readonly readsDataEnd = true;
 
@@ -13,7 +14,7 @@ export default class TypescriptStreamedReaderTestRunner extends ReadTestRunner {
     return true;
   }
 
-  async runReadTest(filePath: string, variant: TestVariant): Promise<string> {
+  async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const result = [];
     const reader = new McapStreamReader({ validateCrcs: true });
     reader.append(await fs.readFile(filePath));
@@ -28,6 +29,6 @@ export default class TypescriptStreamedReaderTestRunner extends ReadTestRunner {
       throw new Error("Reader not done");
     }
 
-    return stringifyRecords(result, variant);
+    return { records: result.map(toSerializableMcapRecord) };
   }
 }

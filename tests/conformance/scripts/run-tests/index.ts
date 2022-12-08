@@ -9,10 +9,19 @@ import path from "path";
 
 import { splitMcapRecords } from "../../util/splitMcapRecords";
 import generateTestVariants from "../../variants/generateTestVariants";
-import { TestFeatures } from "../../variants/types";
 import runners from "./runners";
-import { ReadTestRunner, WriteTestRunner } from "./runners/TestRunner";
-import { stringifyRecords } from "./runners/stringifyRecords";
+import {
+  IndexedReadTestRunner,
+  StreamedReadTestRunner,
+  WriteTestRunner,
+} from "./runners/TestRunner";
+import { toSerializableMcapRecord } from "./runners/stringifyRecords";
+import {
+  IndexedReadTestResult,
+  SerializableMcapRecord,
+  StreamedReadTestResult,
+  TestCase,
+} from "./types";
 
 type TestOptions = {
   dataDir: string;
@@ -21,20 +30,7 @@ type TestOptions = {
   testRegex?: RegExp;
 };
 
-type TestJson = {
-  records: { type: string }[];
-  meta?: { variant: { features: TestFeatures[] } };
-};
-
-/**
- * @param ignoreDataEnd Used to exempt indexed readers from outputting a dataSectionCrc.
- */
-function normalizeJson(json: string, { ignoreDataEnd }: { ignoreDataEnd: boolean }): string {
-  const data = JSON.parse(json) as TestJson;
-  delete data.meta;
-  if (ignoreDataEnd) {
-    data.records = data.records.filter((record) => record.type !== "DataEnd");
-  }
+function asNormalizedJSON(data: object): string {
   return stableStringify(data, { space: 2 }) + "\n";
 }
 
@@ -43,7 +39,7 @@ function spaceHexString(s: string): string {
 }
 
 async function runReaderTest(
-  runner: ReadTestRunner,
+  runner: StreamedReadTestRunner | IndexedReadTestRunner,
   options: TestOptions,
 ): Promise<{ foundAnyTests: boolean; hadError: boolean }> {
   let foundAnyTests = false;
@@ -63,9 +59,9 @@ async function runReaderTest(
       continue;
     }
 
-    let output: string;
+    let output: StreamedReadTestResult | IndexedReadTestResult;
     try {
-      output = await runner.runReadTest(filePath, variant);
+      output = await runner.runReadTest(filePath);
     } catch (error) {
       console.error(error);
       hadError = true;
@@ -73,18 +69,31 @@ async function runReaderTest(
     }
     const expectedOutputPath = filePath.replace(/\.mcap$/, ".json");
     if (options.update) {
-      await fs.writeFile(expectedOutputPath, output);
-    } else {
-      const expectedOutput = await fs
-        .readFile(expectedOutputPath, { encoding: "utf-8" })
-        .catch(() => undefined);
-      if (expectedOutput == undefined) {
-        console.error(`Error: missing expected output file ${expectedOutputPath}`);
+      if (!(runner instanceof StreamedReadTestRunner)) {
+        console.error(`Error updating test cases: ${runner.name} is not a StreamedReadTestRunner`);
         hadError = true;
         continue;
       }
-      const outputNorm = normalizeJson(output, { ignoreDataEnd: !runner.readsDataEnd });
-      const expectedNorm = normalizeJson(expectedOutput, { ignoreDataEnd: !runner.readsDataEnd });
+      const testCase: TestCase = {
+        records: (output as StreamedReadTestResult).records,
+        meta: { variant: { features: Array.from(variant.features) } },
+      };
+      await fs.writeFile(expectedOutputPath, stableStringify(testCase, { space: 2 }) + "\n");
+    } else {
+      const testCase = await fs
+        .readFile(expectedOutputPath, { encoding: "utf-8" })
+        .catch(() => undefined);
+      if (testCase == undefined) {
+        console.error(`Error: missing test case file ${expectedOutputPath}`);
+        hadError = true;
+        continue;
+      }
+      const expectedTestResult: typeof output = runner.expectedResult(
+        JSON.parse(testCase) as TestCase,
+      );
+
+      const outputNorm = stableStringify(output, { space: 2 }) + "\n";
+      const expectedNorm = stableStringify(expectedTestResult, { space: 2 }) + "\n";
       if (outputNorm !== expectedNorm) {
         console.error(`Error: output did not match expected for ${filePath}:`);
         console.error(
@@ -111,8 +120,9 @@ async function runWriterTest(
       continue;
     }
     foundAnyTests = true;
-    const filePath = path.join(options.dataDir, variant.baseName, `${variant.name}.json`);
-    const basePath = path.basename(filePath);
+    const testCasePath = path.join(options.dataDir, variant.baseName, `${variant.name}.json`);
+    const expectedOutputPath = testCasePath.replace(/\.json$/, ".mcap");
+    const basePath = path.basename(testCasePath);
 
     if (!runner.supportsVariant(variant)) {
       console.log(colors.yellow("unsupported"), basePath);
@@ -121,14 +131,13 @@ async function runWriterTest(
 
     let output: Uint8Array;
     try {
-      output = await runner.runWriteTest(filePath, variant);
+      output = await runner.runWriteTest(testCasePath, variant);
     } catch (error) {
       console.error(error);
       hadError = true;
       continue;
     }
 
-    const expectedOutputPath = filePath.replace(/\.json$/, ".mcap");
     const expectedOutput = await fs.readFile(expectedOutputPath).catch(() => undefined);
     if (expectedOutput == undefined) {
       console.error(`Error: missing expected output file ${expectedOutputPath}`);
@@ -138,29 +147,26 @@ async function runWriterTest(
     const expectedParts = splitMcapRecords(expectedOutput).map(spaceHexString).join("\n");
     const outputParts = splitMcapRecords(output).map(spaceHexString).join("\n");
     if (!expectedOutput.equals(output)) {
-      console.error(colors.red("fail       "), path.basename(filePath));
+      console.error(colors.red("fail       "), path.basename(testCasePath));
       try {
-        const expectedOutputJson = await fs.readFile(filePath, { encoding: "utf-8" });
+        const testCase: TestCase = JSON.parse(
+          await fs.readFile(testCasePath, { encoding: "utf-8" }),
+        ) as TestCase;
         const reader = new McapStreamReader({ validateCrcs: true });
         reader.append(output);
         const records: McapTypes.TypedMcapRecord[] = [];
         for (let record; (record = reader.nextRecord()); ) {
           records.push(record);
         }
+        const actualRecords: SerializableMcapRecord[] = records
+          .map(toSerializableMcapRecord)
+          .filter((r) => r.type !== "MessageIndex");
+        const expectedRecords: SerializableMcapRecord[] = testCase.records;
 
-        const actualOutputJson = stringifyRecords(records, variant);
-        const outputNorm = normalizeJson(actualOutputJson, { ignoreDataEnd: false });
-        const expectedNorm = normalizeJson(expectedOutputJson, { ignoreDataEnd: false });
+        const outputNorm = asNormalizedJSON(actualRecords);
+        const expectedNorm = asNormalizedJSON(expectedRecords);
         if (outputNorm !== expectedNorm) {
-          console.error(
-            Diff.createPatch(
-              path.basename(filePath),
-              expectedNorm,
-              outputNorm,
-              "expected",
-              "output",
-            ),
-          );
+          console.error(Diff.createPatch(basePath, expectedNorm, outputNorm, "expected", "output"));
         }
       } catch (err) {
         console.error("Invalid mcap:", err);
@@ -211,7 +217,7 @@ async function main(options: TestOptions) {
   let hadError = false;
   let foundAnyTests = false;
   for (const runner of enabledRunners) {
-    if (runner instanceof ReadTestRunner) {
+    if (runner instanceof StreamedReadTestRunner || runner instanceof IndexedReadTestRunner) {
       const { hadError: newHadError, foundAnyTests: newFoundAnyTests } = await runReaderTest(
         runner,
         options,

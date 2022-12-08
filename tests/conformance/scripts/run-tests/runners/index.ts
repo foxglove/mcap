@@ -10,12 +10,12 @@ import RustWriterTestRunner from "./RustWriterTestRunner";
 import SwiftIndexedReaderTestRunner from "./SwiftIndexedReaderTestRunner";
 import SwiftStreamedReaderTestRunner from "./SwiftStreamedReaderTestRunner";
 import SwiftWriterTestRunner from "./SwiftWriterTestRunner";
-import { ReadTestRunner, WriteTestRunner } from "./TestRunner";
+import { IndexedReadTestRunner, StreamedReadTestRunner, WriteTestRunner } from "./TestRunner";
 import TypescriptIndexedReaderTestRunner from "./TypescriptIndexedReaderTestRunner";
 import TypescriptStreamedReaderTestRunner from "./TypescriptStreamedReaderTestRunner";
 import TypescriptWriterTestRunner from "./TypescriptWriterTestRunner";
 
-const runners: readonly (ReadTestRunner | WriteTestRunner)[] = [
+const runners: readonly (IndexedReadTestRunner | StreamedReadTestRunner | WriteTestRunner)[] = [
   new CppStreamedReaderTestRunner(),
   new CppStreamedWriterTestRunner(),
   new GoStreamedReaderTestRunner(),

@@ -4,10 +4,11 @@ import YAML from "js-yaml";
 import { KaitaiStream } from "kaitai-struct";
 import KaitaiStructCompiler from "kaitai-struct-compiler";
 import path from "path";
+import { TestVariant } from "variants/types";
 
-import { TestVariant } from "../../../variants/types";
-import { ReadTestRunner } from "./TestRunner";
-import { stringifyRecords } from "./stringifyRecords";
+import { StreamedReadTestResult } from "../types";
+import { StreamedReadTestRunner } from "./TestRunner";
+import { toSerializableMcapRecord } from "./stringifyRecords";
 
 type ParsedRecord =
   | {
@@ -161,15 +162,14 @@ async function compileMcapClass(): Promise<Mcap> {
   return mcapClass;
 }
 
-export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
+export default class KaitaiStructReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "ksy-reader";
-  readonly readsDataEnd = true;
 
   supportsVariant(_variant: TestVariant): boolean {
     return true;
   }
 
-  async runReadTest(filePath: string, variant: TestVariant): Promise<string> {
+  async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const Mcap = await compileMcapClass();
     const mcap = new Mcap(new KaitaiStream((await fs.readFile(filePath)).buffer));
 
@@ -332,6 +332,6 @@ export default class KaitaiStructReaderTestRunner extends ReadTestRunner {
     for (const record of mcap.records) {
       addRecord(record);
     }
-    return stringifyRecords(result, variant);
+    return { records: result.map(toSerializableMcapRecord) };
   }
 }

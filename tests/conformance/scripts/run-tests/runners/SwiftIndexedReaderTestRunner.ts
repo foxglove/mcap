@@ -3,13 +3,13 @@ import path from "path";
 import { promisify } from "util";
 import { TestFeatures, TestVariant } from "variants/types";
 
-import { ReadTestRunner } from "./TestRunner";
+import { IndexedReadTestResult } from "../types";
+import { IndexedReadTestRunner } from "./TestRunner";
 
-export default class SwiftIndexedReaderTestRunner extends ReadTestRunner {
+export default class SwiftIndexedReaderTestRunner extends IndexedReadTestRunner {
   readonly name = "swift-indexed-reader";
-  readonly readsDataEnd = false;
 
-  async runReadTest(filePath: string): Promise<string> {
+  async runReadTest(filePath: string): Promise<IndexedReadTestResult> {
     const { stdout } = await promisify(exec)(
       `./.build/debug/conformance read-indexed ${filePath}`,
       {
@@ -17,7 +17,7 @@ export default class SwiftIndexedReaderTestRunner extends ReadTestRunner {
       },
     );
 
-    return stdout;
+    return JSON.parse(stdout) as IndexedReadTestResult;
   }
 
   supportsVariant({ records, features }: TestVariant): boolean {
