@@ -35,7 +35,7 @@ The [@foxglove/schemas](https://github.com/foxglove/schemas) repo provides pre-d
 - [ROS 2](https://github.com/foxglove/schemas/tree/main/schemas/ros2)
 - [JSON Schema](https://github.com/foxglove/schemas/tree/main/schemas/jsonschema)
 - [Protobuf](https://github.com/foxglove/schemas/tree/main/schemas/proto/foxglove)
-- [Flatbuffers](https://github.com/foxglove/schemas/tree/main/schemas/flatbuffer)
+- [FlatBuffers](https://github.com/foxglove/schemas/tree/main/schemas/flatbuffer)
 - [TypeScript](https://github.com/foxglove/schemas/tree/main/schemas/typescript)
 
 Next, download Foxglove Studio as a [desktop app](https://foxglove.dev/download), or navigate to [studio.foxglove.dev](https://studio.foxglove.dev) in your web browser.

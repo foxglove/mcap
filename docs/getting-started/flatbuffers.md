@@ -1,12 +1,14 @@
 ---
-description: Read, write, and visualize MCAP files containing Flatbuffer data.
+description: Read, write, and visualize MCAP files containing FlatBuffers data.
 ---
 
-# Flatbuffers
+# FlatBuffers
 
 ## Read and write MCAP
 
-If you're starting from scratch, you can write code that allows you to **write your Flatbuffer data to MCAP files** and subsequently **read your Flatbuffer data from your MCAP files**.
+If you're starting from scratch, you can write code that allows **writes your FlatBuffers data to MCAP files** and subsequently **reads your FlatBuffers data from your MCAP files**.
+
+See also the [official FlatBuffers docs](https://google.github.io/flatbuffers/) to learn more about reading and writing FlatBuffers.
 
 ### Examples
 
@@ -14,4 +16,4 @@ If you're starting from scratch, you can write code that allows you to **write y
 
 ## Visualize MCAP
 
-[Foxglove Studio](https://foxglove.dev/studio) supports playing back local and remote MCAP files containing Flatbuffer data using the `flatbuffer` encoding. Note that in order for Foxglove Studio read flatbuffer data from channels in MCAP files, the binary flatbuffer schema (`.bfbs`) must be passed to `data` when calling `registerSchema` to the channel in order to read those messages. They can be compiled using `flatc -b --schema [...args]`, using the `.fbs` files as input.
+[Foxglove Studio](https://foxglove.dev/studio) To play back MCAP files containing FlatBuffers-encoded data in Foxglove Studio, be sure the MCAP Channel's `message_encoding` field is set to `flatbuffer`. Note that in order for Foxglove Studio read flatbuffer data from channels in MCAP files, the [MCAP Schema record](https://mcap.dev/specification/index.html#schema-op0x03) should contain the binary flatbuffer schema (`.bfbs`) content in its `data` field. They can be compiled using `flatc -b --schema [...args]`, using the `.fbs` files as input.
