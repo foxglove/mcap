@@ -5,11 +5,11 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width,initial-scale=1" name="viewport"/>
-<meta content="MCAP can be used for a variety of scenarios throughout your robotics development workflows." name="description"/>
-<link href="https://mcap.dev/getting-started/overview.html" rel="canonical"/>
+<meta content="Read, write, and visualize MCAP files containing FlatBuffers data." name="description"/>
+<link href="https://mcap.dev/getting-started/flatbuffers.html" rel="canonical"/>
 <link href="../img/favicon32.png" rel="icon"/>
 <meta content="mkdocs-1.4.2, mkdocs-material-8.5.8" name="generator"/>
-<title>Overview - MCAP</title>
+<title>FlatBuffers - MCAP</title>
 <link href="../assets/stylesheets/main.20d9efc8.min.css" rel="stylesheet"/>
 <link href="../assets/stylesheets/palette.815d1a91.min.css" rel="stylesheet"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
@@ -20,17 +20,17 @@
 <script data-site="RULHQVMR" defer="" src="https://cdn.usefathom.com/script.js"></script>
 <script>"undefined"!=typeof __md_analytics&&__md_analytics()</script>
 <meta content="website" property="og:type"/>
-<meta content="Overview - MCAP" property="og:title"/>
-<meta content="MCAP can be used for a variety of scenarios throughout your robotics development workflows." property="og:description"/>
-<meta content="https://mcap.dev/assets/images/social/getting-started/overview.png" property="og:image"/>
+<meta content="FlatBuffers - MCAP" property="og:title"/>
+<meta content="Read, write, and visualize MCAP files containing FlatBuffers data." property="og:description"/>
+<meta content="https://mcap.dev/assets/images/social/getting-started/flatbuffers.png" property="og:image"/>
 <meta content="image/png" property="og:image:type"/>
 <meta content="1200" property="og:image:width"/>
 <meta content="630" property="og:image:height"/>
-<meta content="https://mcap.dev/getting-started/overview.html" property="og:url"/>
+<meta content="https://mcap.dev/getting-started/flatbuffers.html" property="og:url"/>
 <meta content="summary_large_image" name="twitter:card"/>
-<meta content="Overview - MCAP" name="twitter:title"/>
-<meta content="MCAP can be used for a variety of scenarios throughout your robotics development workflows." name="twitter:description"/>
-<meta content="https://mcap.dev/assets/images/social/getting-started/overview.png" name="twitter:image"/>
+<meta content="FlatBuffers - MCAP" name="twitter:title"/>
+<meta content="Read, write, and visualize MCAP files containing FlatBuffers data." name="twitter:description"/>
+<meta content="https://mcap.dev/assets/images/social/getting-started/flatbuffers.png" name="twitter:image"/>
 <link href="../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
             html.glightbox-open { overflow: initial; height: 100%; }
             .gdesc-inner { font-size: 0.75rem; }
@@ -46,7 +46,7 @@
 <input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox"/>
 <label class="md-overlay" for="__drawer"></label>
 <div data-md-component="skip">
-<a class="md-skip" href="#overview">
+<a class="md-skip" href="#flatbuffers">
           Skip to content
         </a>
 </div>
@@ -70,7 +70,7 @@
 <div class="md-header__topic" data-md-component="header-topic">
 <span class="md-ellipsis">
             
-              Overview
+              FlatBuffers
             
           </span>
 </div>
@@ -152,8 +152,8 @@
 </ul>
 </nav>
 </li>
-<li class="md-nav__item md-nav__item--active md-nav__item--nested">
-<input checked="" class="md-nav__toggle md-toggle" data-md-toggle="__nav_2" id="__nav_2" type="checkbox"/>
+<li class="md-nav__item md-nav__item--nested">
+<input class="md-nav__toggle md-toggle" data-md-toggle="__nav_2" id="__nav_2" type="checkbox"/>
 <label class="md-nav__link" for="__nav_2">
           Getting Started
           <span class="md-nav__icon md-icon"></span>
@@ -164,43 +164,10 @@
           Getting Started
         </label>
 <ul class="md-nav__list" data-md-scrollfix="">
-<li class="md-nav__item md-nav__item--active">
-<input class="md-nav__toggle md-toggle" data-md-toggle="toc" id="__toc" type="checkbox"/>
-<label class="md-nav__link md-nav__link--active" for="__toc">
-          Overview
-          <span class="md-nav__icon md-icon"></span>
-</label>
-<a class="md-nav__link md-nav__link--active" href="overview.html">
+<li class="md-nav__item">
+<a class="md-nav__link" href="overview.html">
         Overview
       </a>
-<nav aria-label="Table of contents" class="md-nav md-nav--secondary">
-<label class="md-nav__title" for="__toc">
-<span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-<ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
-<li class="md-nav__item">
-<a class="md-nav__link" href="#convert-to-mcap">
-    Convert to MCAP
-  </a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#read-and-write-mcap">
-    Read and write MCAP
-  </a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#inspect-and-visualize-mcap">
-    Inspect and visualize MCAP
-  </a>
-</li>
-<li class="md-nav__item">
-<a class="md-nav__link" href="#store-mcap">
-    Store MCAP
-  </a>
-</li>
-</ul>
-</nav>
 </li>
 <li class="md-nav__item">
 <a class="md-nav__link" href="ros-1.html">
@@ -450,23 +417,22 @@
     </label>
 <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
 <li class="md-nav__item">
-<a class="md-nav__link" href="#convert-to-mcap">
-    Convert to MCAP
-  </a>
-</li>
-<li class="md-nav__item">
 <a class="md-nav__link" href="#read-and-write-mcap">
     Read and write MCAP
   </a>
-</li>
+<nav aria-label="Read and write MCAP" class="md-nav">
+<ul class="md-nav__list">
 <li class="md-nav__item">
-<a class="md-nav__link" href="#inspect-and-visualize-mcap">
-    Inspect and visualize MCAP
+<a class="md-nav__link" href="#examples">
+    Examples
   </a>
 </li>
+</ul>
+</nav>
+</li>
 <li class="md-nav__item">
-<a class="md-nav__link" href="#store-mcap">
-    Store MCAP
+<a class="md-nav__link" href="#visualize-mcap">
+    Visualize MCAP
   </a>
 </li>
 </ul>
@@ -476,77 +442,24 @@
 </div>
 <div class="md-content" data-md-component="content">
 <article class="md-content__inner md-typeset">
-<a class="md-content__button md-icon" href="https://github.com/foxglove/mcap/edit/main/docs/getting-started/overview.md" title="Edit this page">
+<a class="md-content__button md-icon" href="https://github.com/foxglove/mcap/edit/main/docs/getting-started/flatbuffers.md" title="Edit this page">
 <svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83 3.75 3.75M3 17.25V21h3.75L17.81 9.93l-3.75-3.75L3 17.25Z"></path></svg>
 </a>
-<h1 id="overview">Overview</h1>
-<p>You may be interested in using MCAP for a variety of scenarios throughout your robotics development workflows.</p>
-<h2 id="convert-to-mcap">Convert to MCAP</h2>
-<p>If you already have existing ROS data that is not in the MCAP file format, you may want to <strong>convert it into MCAP files</strong>. The easiest way to do this is to <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap#installing">install the MCAP CLI tool</a> and use it to <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap#bag-to-mcap-conversion">convert your existing bag files</a>.</p>
+<h1 id="flatbuffers">FlatBuffers</h1>
 <h2 id="read-and-write-mcap">Read and write MCAP</h2>
-<p>If you’re starting from scratch, you may want to write code to <strong>read and write your own MCAP data</strong>.</p>
-<p>We provide MCAP readers and writers in the following languages, for any of our supported <a href="../home/data-serialization-formats.html">data serialization formats</a>:</p>
+<p>If you’re starting from scratch, you can write code that allows <strong>writes your FlatBuffers data to MCAP files</strong> and subsequently <strong>reads your FlatBuffers data from your MCAP files</strong>.</p>
+<p>See also the <a href="https://google.github.io/flatbuffers/">official FlatBuffers docs</a> to learn more about reading and writing FlatBuffers.</p>
+<h3 id="examples">Examples</h3>
 <ul>
-<li><a href="https://github.com/foxglove/mcap/tree/main/python">Python</a></li>
-<li><a href="https://github.com/foxglove/mcap/tree/main/cpp">C++</a></li>
-<li><a href="https://github.com/foxglove/mcap/tree/main/go">Go</a></li>
-<li><a href="https://github.com/foxglove/mcap/tree/main/swift">Swift</a></li>
-<li><a href="https://github.com/foxglove/mcap/tree/main/typescript">TypeScript</a></li>
-<li><a href="https://github.com/foxglove/mcap/tree/main/rust">Rust</a></li>
+<li><a href="https://github.com/foxglove/mcap/tree/main/typescript/examples/flatbufferswriter">TypeScript</a> - <a href="https://github.com/foxglove/mcap/blob/main/typescript/examples/flatbufferswriter/scripts/main.ts">Writing Foxglove schemas to MCAP file</a></li>
 </ul>
-<h2 id="inspect-and-visualize-mcap">Inspect and visualize MCAP</h2>
-<p>Once you have MCAP data to work with, you may want to <a href="https://github.com/foxglove/mcap/tree/main/go/cli/mcap#examples"><strong>use the mcap CLI to inspect and interact with your MCAP files</strong></a>.</p>
-<p>You can also start visualizing your MCAP data with third-party tools like <a href="https://foxglove.dev/studio">Foxglove Studio</a>. To start leveraging all the visualizations Studio has to offer, you must write messages that adhere to a pre-defined set of Foxglove schemas.</p>
-<p>The <a href="https://github.com/foxglove/schemas">@foxglove/schemas</a> repo provides pre-defined schemas in the following data serialization formats:</p>
-<ul>
-<li><a href="https://github.com/foxglove/schemas/tree/main/schemas/ros1">ROS 1</a></li>
-<li><a href="https://github.com/foxglove/schemas/tree/main/schemas/ros2">ROS 2</a></li>
-<li><a href="https://github.com/foxglove/schemas/tree/main/schemas/jsonschema">JSON Schema</a></li>
-<li><a href="https://github.com/foxglove/schemas/tree/main/schemas/proto/foxglove">Protobuf</a></li>
-<li><a href="https://github.com/foxglove/schemas/tree/main/schemas/flatbuffer">FlatBuffers</a></li>
-<li><a href="https://github.com/foxglove/schemas/tree/main/schemas/typescript">TypeScript</a></li>
-</ul>
-<p>Next, download Foxglove Studio as a <a href="https://foxglove.dev/download">desktop app</a>, or navigate to <a href="https://studio.foxglove.dev">studio.foxglove.dev</a> in your web browser.</p>
-<p><strong>For local MCAP files</strong>, simply drag and drop the file into the Studio app to start playing back your data.</p>
-<p><strong>For remote MCAP files</strong>, select “Open file from URL” when you first load the Studio app, and specify the URL to your remote MCAP file. Open the connection to start playing back your data.</p>
-<p>Add and configure different <a href="https://foxglove.dev/docs/studio/panels/introduction">panels</a> to your <a href="https://foxglove.dev/docs/studio/layouts">layout</a> to visualize different aspects of your data.</p>
-<h2 id="store-mcap">Store MCAP</h2>
-<p><a href="https://console.foxglove.dev">Sign up for a Foxglove account </a> to access the data management features of <a href="https://foxglove.dev/data-platform">Foxglove Data Platform</a> .</p>
-<p>Instead of having to pass around hard drives every time you want to share data, you can start importing your MCAP data into a central repository for all your teammates to access and collaborate on.</p>
-<p>Instead of having to download enormous files to your local machine whenever you want to inspect some data, you can stream your team data directly to whatever environment you’d like for further analysis.</p>
+<h2 id="visualize-mcap">Visualize MCAP</h2>
+<p><a href="https://foxglove.dev/studio">Foxglove Studio</a> To play back MCAP files containing FlatBuffers-encoded data in Foxglove Studio, be sure the MCAP Channel’s <code>message_encoding</code> field is set to <code>flatbuffer</code>. Note that in order for Foxglove Studio to read FlatBuffer data from channels in MCAP files, the <a href="https://mcap.dev/specification/index.html#schema-op0x03">MCAP Schema record</a> should contain the binary flatbuffer schema (<code>.bfbs</code>) content in its <code>data</code> field. They can be compiled using <code>flatc -b --schema [...args]</code>, using the <code>.fbs</code> files as input. For more info, see the <a href="https://mcap.dev/specification/appendix.html#flatbuffer_1">MCAP specification for FlatBuffers encoding</a>.</p>
 </article>
 </div>
 </div>
 </main>
 <footer class="md-footer">
-<nav aria-label="Footer" class="md-footer__inner md-grid">
-<a aria-label="Previous: Data Serialization Formats" class="md-footer__link md-footer__link--prev" href="../home/data-serialization-formats.html" rel="prev">
-<div class="md-footer__button md-icon">
-<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"></path></svg>
-</div>
-<div class="md-footer__title">
-<div class="md-ellipsis">
-<span class="md-footer__direction">
-                Previous
-              </span>
-              Data Serialization Formats
-            </div>
-</div>
-</a>
-<a aria-label="Next: ROS 1" class="md-footer__link md-footer__link--next" href="ros-1.html" rel="next">
-<div class="md-footer__title">
-<div class="md-ellipsis">
-<span class="md-footer__direction">
-                Next
-              </span>
-              ROS 1
-            </div>
-</div>
-<div class="md-footer__button md-icon">
-<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4Z"></path></svg>
-</div>
-</a>
-</nav>
 <div class="md-footer-meta md-typeset">
 <div class="md-footer-meta__inner md-grid">
 <div class="md-copyright">
