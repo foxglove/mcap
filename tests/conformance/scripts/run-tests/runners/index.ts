@@ -1,3 +1,4 @@
+import CppIndexedReaderTestRunner from "./CppIndexedReaderTestRunner";
 import CppStreamedReaderTestRunner from "./CppStreamedReaderTestRunner";
 import CppStreamedWriterTestRunner from "./CppStreamedWriterTestRunner";
 import GoStreamedReaderTestRunner from "./GoStreamedReaderTestRunner";
@@ -16,6 +17,7 @@ import TypescriptStreamedReaderTestRunner from "./TypescriptStreamedReaderTestRu
 import TypescriptWriterTestRunner from "./TypescriptWriterTestRunner";
 
 const runners: readonly (IndexedReadTestRunner | StreamedReadTestRunner | WriteTestRunner)[] = [
+  new CppIndexedReaderTestRunner(),
   new CppStreamedReaderTestRunner(),
   new CppStreamedWriterTestRunner(),
   new GoStreamedReaderTestRunner(),
