@@ -1,23 +1,82 @@
 {
-  "records": [
-    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
-    {
-      "type": "Metadata",
-      "fields": [["metadata", {"foo": "bar"}], ["name", "myMetadata"]]
-    },
-    {"type": "DataEnd", "fields": [["data_section_crc", "864453130"]]},
-    {
-      "type": "MetadataIndex",
-      "fields": [["length", "41"], ["name", "myMetadata"], ["offset", "25"]]
-    },
-    {
-      "type": "Footer",
-      "fields": [
-        ["summary_crc", "1882959022"],
-        ["summary_offset_start", "0"],
-        ["summary_start", "79"]
+  "meta": {
+    "variant": {
+      "features": [
+        "mdx"
       ]
     }
-  ],
-  "meta": {"variant": {"features": ["mdx"]}}
+  },
+  "records": [
+    {
+      "fields": [
+        [
+          "library",
+          ""
+        ],
+        [
+          "profile",
+          ""
+        ]
+      ],
+      "type": "Header"
+    },
+    {
+      "fields": [
+        [
+          "metadata",
+          {
+            "foo": "bar"
+          }
+        ],
+        [
+          "name",
+          "myMetadata"
+        ]
+      ],
+      "type": "Metadata"
+    },
+    {
+      "fields": [
+        [
+          "data_section_crc",
+          "864453130"
+        ]
+      ],
+      "type": "DataEnd"
+    },
+    {
+      "fields": [
+        [
+          "length",
+          "41"
+        ],
+        [
+          "name",
+          "myMetadata"
+        ],
+        [
+          "offset",
+          "25"
+        ]
+      ],
+      "type": "MetadataIndex"
+    },
+    {
+      "fields": [
+        [
+          "summary_crc",
+          "1882959022"
+        ],
+        [
+          "summary_offset_start",
+          "0"
+        ],
+        [
+          "summary_start",
+          "79"
+        ]
+      ],
+      "type": "Footer"
+    }
+  ]
 }

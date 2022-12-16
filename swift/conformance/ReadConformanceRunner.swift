@@ -62,7 +62,7 @@ private func toJson(_ record: Record) -> [String: Any] {
   ]
 }
 
-private func readStreamed(file: FileHandle) -> Data {
+private func readStreamed(file: FileHandle) throws -> Data {
   let reader = MCAPStreamedReader()
   var records: [Record] = []
   while case let data = file.readData(ofLength: 4 * 1024), data.count != 0 {
@@ -77,10 +77,10 @@ private func readStreamed(file: FileHandle) -> Data {
   return data
 }
 
-private func readIndexed(file: FileHandle) -> Data {
+private func readIndexed(file: FileHandle) throws -> Data {
   let reader = try MCAPRandomAccessReader(file)
-  var schemas: [Record] = reader.schemasById.values.map { $0 }
-  var schemas: [Record] = reader.channelsById.values.map ${ $0 }
+  let schemas: [Record] = reader.schemasById.values.map { $0 }.sorted { $0.id < $1.id }
+  let channels: [Record] = reader.channelsById.values.map { $0 }.sorted { $0.id < $1.id }
   var messages: [Record] = []
   let iterator = reader.messageIterator()
   while let message = try iterator.next() {
@@ -139,13 +139,12 @@ enum ReadConformanceRunner {
     let filename = CommandLine.arguments[2]
     let file = try FileHandle(forReadingFrom: URL(fileURLWithPath: filename))
 
-    var records: [Record] = []
     var data = Data()
     switch mode {
     case .streamed:
-      data = try readStreamed(file)
+      data = try readStreamed(file: file)
     case .indexed:
-      data = try readIndexed(file)
+      data = try readIndexed(file: file)
     }
 
     if #available(macOS 10.15.4, *) {

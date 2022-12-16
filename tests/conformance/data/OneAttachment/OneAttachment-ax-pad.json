@@ -1,37 +1,113 @@
 {
-  "records": [
-    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
-    {
-      "type": "Attachment",
-      "fields": [
-        ["create_time", "1"],
-        ["data", ["1", "2", "3"]],
-        ["log_time", "2"],
-        ["media_type", "application/octet-stream"],
-        ["name", "myFile"]
-      ]
-    },
-    {"type": "DataEnd", "fields": [["data_section_crc", "1702036232"]]},
-    {
-      "type": "AttachmentIndex",
-      "fields": [
-        ["create_time", "1"],
-        ["data_size", "3"],
-        ["length", "81"],
-        ["log_time", "2"],
-        ["media_type", "application/octet-stream"],
-        ["name", "myFile"],
-        ["offset", "28"]
-      ]
-    },
-    {
-      "type": "Footer",
-      "fields": [
-        ["summary_crc", "3332471598"],
-        ["summary_offset_start", "0"],
-        ["summary_start", "125"]
+  "meta": {
+    "variant": {
+      "features": [
+        "ax",
+        "pad"
       ]
     }
-  ],
-  "meta": {"variant": {"features": ["ax", "pad"]}}
+  },
+  "records": [
+    {
+      "fields": [
+        [
+          "library",
+          ""
+        ],
+        [
+          "profile",
+          ""
+        ]
+      ],
+      "type": "Header"
+    },
+    {
+      "fields": [
+        [
+          "create_time",
+          "1"
+        ],
+        [
+          "data",
+          [
+            "1",
+            "2",
+            "3"
+          ]
+        ],
+        [
+          "log_time",
+          "2"
+        ],
+        [
+          "media_type",
+          "application/octet-stream"
+        ],
+        [
+          "name",
+          "myFile"
+        ]
+      ],
+      "type": "Attachment"
+    },
+    {
+      "fields": [
+        [
+          "data_section_crc",
+          "1702036232"
+        ]
+      ],
+      "type": "DataEnd"
+    },
+    {
+      "fields": [
+        [
+          "create_time",
+          "1"
+        ],
+        [
+          "data_size",
+          "3"
+        ],
+        [
+          "length",
+          "81"
+        ],
+        [
+          "log_time",
+          "2"
+        ],
+        [
+          "media_type",
+          "application/octet-stream"
+        ],
+        [
+          "name",
+          "myFile"
+        ],
+        [
+          "offset",
+          "28"
+        ]
+      ],
+      "type": "AttachmentIndex"
+    },
+    {
+      "fields": [
+        [
+          "summary_crc",
+          "3332471598"
+        ],
+        [
+          "summary_offset_start",
+          "0"
+        ],
+        [
+          "summary_start",
+          "125"
+        ]
+      ],
+      "type": "Footer"
+    }
+  ]
 }

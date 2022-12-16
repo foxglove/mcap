@@ -1,58 +1,174 @@
 {
-  "records": [
-    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
-    {
-      "type": "Schema",
-      "fields": [
-        ["data", ["4", "5", "6"]],
-        ["encoding", "c"],
-        ["id", "1"],
-        ["name", "Example"]
-      ]
-    },
-    {
-      "type": "Channel",
-      "fields": [
-        ["id", "1"],
-        ["message_encoding", "a"],
-        ["metadata", {"foo": "bar"}],
-        ["schema_id", "1"],
-        ["topic", "example"]
-      ]
-    },
-    {
-      "type": "Message",
-      "fields": [
-        ["channel_id", "1"],
-        ["data", ["1", "2", "3"]],
-        ["log_time", "2"],
-        ["publish_time", "1"],
-        ["sequence", "10"]
-      ]
-    },
-    {"type": "DataEnd", "fields": [["data_section_crc", "2475508533"]]},
-    {
-      "type": "ChunkIndex",
-      "fields": [
-        ["chunk_length", "164"],
-        ["chunk_start_offset", "25"],
-        ["compressed_size", "115"],
-        ["compression", ""],
-        ["message_end_time", "2"],
-        ["message_index_length", "0"],
-        ["message_index_offsets", {}],
-        ["message_start_time", "2"],
-        ["uncompressed_size", "115"]
-      ]
-    },
-    {
-      "type": "Footer",
-      "fields": [
-        ["summary_crc", "3113663073"],
-        ["summary_offset_start", "0"],
-        ["summary_start", "202"]
+  "meta": {
+    "variant": {
+      "features": [
+        "ch",
+        "chx"
       ]
     }
-  ],
-  "meta": {"variant": {"features": ["ch", "chx"]}}
+  },
+  "records": [
+    {
+      "fields": [
+        [
+          "library",
+          ""
+        ],
+        [
+          "profile",
+          ""
+        ]
+      ],
+      "type": "Header"
+    },
+    {
+      "fields": [
+        [
+          "data",
+          [
+            "4",
+            "5",
+            "6"
+          ]
+        ],
+        [
+          "encoding",
+          "c"
+        ],
+        [
+          "id",
+          "1"
+        ],
+        [
+          "name",
+          "Example"
+        ]
+      ],
+      "type": "Schema"
+    },
+    {
+      "fields": [
+        [
+          "id",
+          "1"
+        ],
+        [
+          "message_encoding",
+          "a"
+        ],
+        [
+          "metadata",
+          {
+            "foo": "bar"
+          }
+        ],
+        [
+          "schema_id",
+          "1"
+        ],
+        [
+          "topic",
+          "example"
+        ]
+      ],
+      "type": "Channel"
+    },
+    {
+      "fields": [
+        [
+          "channel_id",
+          "1"
+        ],
+        [
+          "data",
+          [
+            "1",
+            "2",
+            "3"
+          ]
+        ],
+        [
+          "log_time",
+          "2"
+        ],
+        [
+          "publish_time",
+          "1"
+        ],
+        [
+          "sequence",
+          "10"
+        ]
+      ],
+      "type": "Message"
+    },
+    {
+      "fields": [
+        [
+          "data_section_crc",
+          "2475508533"
+        ]
+      ],
+      "type": "DataEnd"
+    },
+    {
+      "fields": [
+        [
+          "chunk_length",
+          "164"
+        ],
+        [
+          "chunk_start_offset",
+          "25"
+        ],
+        [
+          "compressed_size",
+          "115"
+        ],
+        [
+          "compression",
+          ""
+        ],
+        [
+          "message_end_time",
+          "2"
+        ],
+        [
+          "message_index_length",
+          "0"
+        ],
+        [
+          "message_index_offsets",
+          {
+          }
+        ],
+        [
+          "message_start_time",
+          "2"
+        ],
+        [
+          "uncompressed_size",
+          "115"
+        ]
+      ],
+      "type": "ChunkIndex"
+    },
+    {
+      "fields": [
+        [
+          "summary_crc",
+          "3113663073"
+        ],
+        [
+          "summary_offset_start",
+          "0"
+        ],
+        [
+          "summary_start",
+          "202"
+        ]
+      ],
+      "type": "Footer"
+    }
+  ]
 }

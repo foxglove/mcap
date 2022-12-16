@@ -1,54 +1,161 @@
 {
-  "records": [
-    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
-    {
-      "type": "Schema",
-      "fields": [
-        ["data", ["4", "5", "6"]],
-        ["encoding", "c"],
-        ["id", "1"],
-        ["name", "Example"]
-      ]
-    },
-    {
-      "type": "Channel",
-      "fields": [
-        ["id", "1"],
-        ["message_encoding", "a"],
-        ["metadata", {"foo": "bar"}],
-        ["schema_id", "1"],
-        ["topic", "example"]
-      ]
-    },
-    {
-      "type": "Message",
-      "fields": [
-        ["channel_id", "1"],
-        ["data", ["1", "2", "3"]],
-        ["log_time", "2"],
-        ["publish_time", "1"],
-        ["sequence", "10"]
-      ]
-    },
-    {"type": "DataEnd", "fields": [["data_section_crc", "670025892"]]},
-    {
-      "type": "Channel",
-      "fields": [
-        ["id", "1"],
-        ["message_encoding", "a"],
-        ["metadata", {"foo": "bar"}],
-        ["schema_id", "1"],
-        ["topic", "example"]
-      ]
-    },
-    {
-      "type": "Footer",
-      "fields": [
-        ["summary_crc", "2325030161"],
-        ["summary_offset_start", "0"],
-        ["summary_start", "242"]
+  "meta": {
+    "variant": {
+      "features": [
+        "ch",
+        "mx",
+        "rch",
+        "pad"
       ]
     }
-  ],
-  "meta": {"variant": {"features": ["ch", "mx", "rch", "pad"]}}
+  },
+  "records": [
+    {
+      "fields": [
+        [
+          "library",
+          ""
+        ],
+        [
+          "profile",
+          ""
+        ]
+      ],
+      "type": "Header"
+    },
+    {
+      "fields": [
+        [
+          "data",
+          [
+            "4",
+            "5",
+            "6"
+          ]
+        ],
+        [
+          "encoding",
+          "c"
+        ],
+        [
+          "id",
+          "1"
+        ],
+        [
+          "name",
+          "Example"
+        ]
+      ],
+      "type": "Schema"
+    },
+    {
+      "fields": [
+        [
+          "id",
+          "1"
+        ],
+        [
+          "message_encoding",
+          "a"
+        ],
+        [
+          "metadata",
+          {
+            "foo": "bar"
+          }
+        ],
+        [
+          "schema_id",
+          "1"
+        ],
+        [
+          "topic",
+          "example"
+        ]
+      ],
+      "type": "Channel"
+    },
+    {
+      "fields": [
+        [
+          "channel_id",
+          "1"
+        ],
+        [
+          "data",
+          [
+            "1",
+            "2",
+            "3"
+          ]
+        ],
+        [
+          "log_time",
+          "2"
+        ],
+        [
+          "publish_time",
+          "1"
+        ],
+        [
+          "sequence",
+          "10"
+        ]
+      ],
+      "type": "Message"
+    },
+    {
+      "fields": [
+        [
+          "data_section_crc",
+          "670025892"
+        ]
+      ],
+      "type": "DataEnd"
+    },
+    {
+      "fields": [
+        [
+          "id",
+          "1"
+        ],
+        [
+          "message_encoding",
+          "a"
+        ],
+        [
+          "metadata",
+          {
+            "foo": "bar"
+          }
+        ],
+        [
+          "schema_id",
+          "1"
+        ],
+        [
+          "topic",
+          "example"
+        ]
+      ],
+      "type": "Channel"
+    },
+    {
+      "fields": [
+        [
+          "summary_crc",
+          "2325030161"
+        ],
+        [
+          "summary_offset_start",
+          "0"
+        ],
+        [
+          "summary_start",
+          "242"
+        ]
+      ],
+      "type": "Footer"
+    }
+  ]
 }

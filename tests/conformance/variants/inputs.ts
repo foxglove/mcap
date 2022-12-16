@@ -61,7 +61,7 @@ const inputs: TestInput[] = [
     records: [{ type: "Metadata", name: "myMetadata", metadata: new Map([["foo", "bar"]]) }],
   },
   {
-    baseName: "TenMessages",
+    baseName: "TenMessagesOneAttachment",
     records: [
       {
         type: "Schema",
@@ -78,7 +78,16 @@ const inputs: TestInput[] = [
         messageEncoding: "a",
         metadata: new Map([["foo", "bar"]]),
       },
-      ...tenMessages,
+      ...tenMessages.slice(0, 5),
+      {
+        type: "Attachment",
+        name: "myFile",
+        mediaType: "application/octet-stream",
+        logTime: 2n,
+        createTime: 1n,
+        data: new Uint8Array([1, 2, 3]),
+      },
+      ...tenMessages.slice(5, 10),
     ],
   },
 ];
