@@ -69,16 +69,13 @@ async function runReaderTest(
     }
     const expectedOutputPath = filePath.replace(/\.mcap$/, ".json");
     if (options.update) {
-      if (!(runner instanceof StreamedReadTestRunner)) {
-        console.error(`Error updating test cases: ${runner.name} is not a StreamedReadTestRunner`);
-        hadError = true;
-        continue;
+      if (runner instanceof StreamedReadTestRunner) {
+        const testCase: TestCase = {
+          records: (output as StreamedReadTestResult).records,
+          meta: { variant: { features: Array.from(variant.features) } },
+        };
+        await fs.writeFile(expectedOutputPath, asNormalizedJSON(testCase));
       }
-      const testCase: TestCase = {
-        records: (output as StreamedReadTestResult).records,
-        meta: { variant: { features: Array.from(variant.features) } },
-      };
-      await fs.writeFile(expectedOutputPath, stableStringify(testCase, { space: 2 }) + "\n");
     } else {
       const testCase = await fs
         .readFile(expectedOutputPath, { encoding: "utf-8" })
@@ -92,8 +89,8 @@ async function runReaderTest(
         JSON.parse(testCase) as TestCase,
       );
 
-      const outputNorm = stableStringify(output, { space: 2 }) + "\n";
-      const expectedNorm = stableStringify(expectedTestResult, { space: 2 }) + "\n";
+      const outputNorm = asNormalizedJSON(output);
+      const expectedNorm = asNormalizedJSON(expectedTestResult);
       if (outputNorm !== expectedNorm) {
         console.error(`Error: output did not match expected for ${filePath}:`);
         console.error(
