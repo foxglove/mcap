@@ -219,7 +219,7 @@ func (w *Writer) WriteMessage(m *Message) error {
 	if m.LogTime > w.Statistics.MessageEndTime {
 		w.Statistics.MessageEndTime = m.LogTime
 	}
-	if m.LogTime < w.Statistics.MessageStartTime || w.Statistics.MessageStartTime == 0 {
+	if m.LogTime < w.Statistics.MessageStartTime || w.Statistics.MessageCount <= 1 {
 		w.Statistics.MessageStartTime = m.LogTime
 	}
 	return nil
