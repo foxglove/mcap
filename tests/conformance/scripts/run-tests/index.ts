@@ -15,7 +15,7 @@ import {
   StreamedReadTestRunner,
   WriteTestRunner,
 } from "./runners/TestRunner";
-import { toSerializableMcapRecord } from "./runners/stringifyRecords";
+import { toSerializableMcapRecord } from "./toSerializableMcapRecord";
 import {
   IndexedReadTestResult,
   SerializableMcapRecord,

@@ -1,7 +1,7 @@
 import { McapTypes } from "@mcap/core";
 import { chain, snakeCase } from "lodash";
 
-import { SerializableMcapRecord } from "../types";
+import { SerializableMcapRecord } from "./types";
 
 function replacer(_key: string, value: unknown): unknown {
   if (value instanceof Uint8Array) {

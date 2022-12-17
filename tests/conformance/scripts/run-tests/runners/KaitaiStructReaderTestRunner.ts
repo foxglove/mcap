@@ -6,9 +6,9 @@ import KaitaiStructCompiler from "kaitai-struct-compiler";
 import path from "path";
 import { TestVariant } from "variants/types";
 
+import { toSerializableMcapRecord } from "../toSerializableMcapRecord";
 import { StreamedReadTestResult } from "../types";
 import { StreamedReadTestRunner } from "./TestRunner";
-import { toSerializableMcapRecord } from "./stringifyRecords";
 
 type ParsedRecord =
   | {

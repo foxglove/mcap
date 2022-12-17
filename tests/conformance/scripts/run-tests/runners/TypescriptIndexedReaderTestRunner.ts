@@ -2,9 +2,9 @@ import { McapIndexedReader } from "@mcap/core";
 import fs from "fs/promises";
 import { TestFeatures, TestVariant } from "variants/types";
 
+import { toSerializableMcapRecord } from "../toSerializableMcapRecord";
 import { IndexedReadTestResult } from "../types";
 import { IndexedReadTestRunner } from "./TestRunner";
-import { toSerializableMcapRecord } from "./stringifyRecords";
 
 export default class TypescriptIndexedReaderTestRunner extends IndexedReadTestRunner {
   readonly name = "ts-indexed-reader";

@@ -1,5 +1,10 @@
 import { TestFeatures } from "../../variants/types";
 
+export type SerializableMcapRecord = {
+  type: string;
+  fields: [string, string | string[] | Record<string, string>][];
+};
+
 export type IndexedReadTestResult = {
   schemas: SerializableMcapRecord[];
   channels: SerializableMcapRecord[];
@@ -9,11 +14,6 @@ export type IndexedReadTestResult = {
 
 export type StreamedReadTestResult = {
   records: SerializableMcapRecord[];
-};
-
-export type SerializableMcapRecord = {
-  type: string;
-  fields: [string, string | string[] | Record<string, string>][];
 };
 
 export type TestCase = {

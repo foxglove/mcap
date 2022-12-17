@@ -2,9 +2,9 @@ import { McapStreamReader } from "@mcap/core";
 import fs from "fs/promises";
 import { TestVariant } from "variants/types";
 
+import { toSerializableMcapRecord } from "../toSerializableMcapRecord";
 import { StreamedReadTestResult } from "../types";
 import { StreamedReadTestRunner } from "./TestRunner";
-import { toSerializableMcapRecord } from "./stringifyRecords";
 
 export default class TypescriptStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "ts-streamed-reader";
