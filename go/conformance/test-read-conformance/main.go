@@ -169,7 +169,7 @@ type Attachment struct {
 	CRC        uint32
 }
 
-func mcapToJSON(w io.Writer, filepath string) error {
+func readStreamed(w io.Writer, filepath string) error {
 	f, err := os.Open(filepath)
 	if err != nil {
 		return err
@@ -316,9 +316,76 @@ func mcapToJSON(w io.Writer, filepath string) error {
 	return nil
 }
 
+func readIndexed(w io.Writer, filepath string) error {
+	f, err := os.Open(filepath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	result := struct {
+		Messages   []Record `json:"messages"`
+		Schemas    []Record `json:"schemas"`
+		Channels   []Record `json:"channels"`
+		Statistics []Record `json:"statistics"`
+	}{}
+
+	reader, err := mcap.NewReader(f)
+	if err != nil {
+		return err
+	}
+	it, err := reader.Messages()
+	if err != nil {
+		return err
+	}
+	info, err := reader.Info()
+	if err != nil {
+		return err
+	}
+	if info.Statistics != nil {
+		result.Statistics = append(result.Statistics, Record{*info.Statistics})
+	}
+
+	knownSchemaIDs := make(map[uint16]bool)
+	knownChannelIDs := make(map[uint16]bool)
+
+	for {
+		schema, channel, message, err := it.Next(nil)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if _, found := knownSchemaIDs[schema.ID]; !found {
+			knownSchemaIDs[schema.ID] = true
+			result.Schemas = append(result.Schemas, Record{*schema})
+		}
+		if _, found := knownChannelIDs[channel.ID]; !found {
+			knownChannelIDs[channel.ID] = true
+			result.Channels = append(result.Channels, Record{*channel})
+		}
+		result.Messages = append(result.Messages, Record{*message})
+	}
+	serializedOutput, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(serializedOutput)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func main() {
 	filepath := os.Args[1]
-	err := mcapToJSON(os.Stdout, filepath)
+	mode := os.Args[2]
+	var err error
+	if mode == "streamed" {
+		err = readStreamed(os.Stdout, filepath)
+	} else {
+		err = readIndexed(os.Stdout, filepath)
+	}
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

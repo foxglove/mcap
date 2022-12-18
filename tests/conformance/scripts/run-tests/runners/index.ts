@@ -1,6 +1,7 @@
 import CppIndexedReaderTestRunner from "./CppIndexedReaderTestRunner";
 import CppStreamedReaderTestRunner from "./CppStreamedReaderTestRunner";
 import CppStreamedWriterTestRunner from "./CppStreamedWriterTestRunner";
+import GoIndexedReaderTestRunner from "./GoIndexedReaderTestRunner";
 import GoStreamedReaderTestRunner from "./GoStreamedReaderTestRunner";
 import GoStreamedWriterTestRunner from "./GoStreamedWriterTestRunner";
 import KaitaiStructReaderTestRunner from "./KaitaiStructReaderTestRunner";
@@ -20,6 +21,7 @@ const runners: readonly (IndexedReadTestRunner | StreamedReadTestRunner | WriteT
   new CppIndexedReaderTestRunner(),
   new CppStreamedReaderTestRunner(),
   new CppStreamedWriterTestRunner(),
+  new GoIndexedReaderTestRunner(),
   new GoStreamedReaderTestRunner(),
   new GoStreamedWriterTestRunner(),
   new PythonStreamedReaderTestRunner(),

@@ -27,7 +27,7 @@ func TestLexerConformance(t *testing.T) {
 	for _, input := range inputs {
 		t.Run(input, func(t *testing.T) {
 			output := bytes.Buffer{}
-			err := mcapToJSON(&output, input)
+			err := readStreamed(&output, input)
 			assert.Nil(t, err)
 			expectedBytes, err := os.ReadFile(strings.TrimSuffix(input, ".mcap") + ".json")
 			assert.Nil(t, err)
