@@ -219,7 +219,7 @@ func (w *Writer) WriteMessage(m *Message) error {
 	if m.LogTime > w.Statistics.MessageEndTime {
 		w.Statistics.MessageEndTime = m.LogTime
 	}
-	if m.LogTime < w.Statistics.MessageStartTime || w.Statistics.MessageStartTime == 0 {
+	if m.LogTime < w.Statistics.MessageStartTime || w.Statistics.MessageCount <= 1 {
 		w.Statistics.MessageStartTime = m.LogTime
 	}
 	return nil
@@ -464,7 +464,6 @@ func (w *Writer) flushActiveChunk() error {
 	if !w.opts.SkipMessageIndexing {
 		for _, chanID := range w.channelIDs {
 			if messageIndex, ok := w.messageIndexes[chanID]; ok {
-				messageIndex.Insort()
 				messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
 				err = w.WriteMessageIndex(messageIndex)
 				if err != nil {

@@ -19,6 +19,9 @@ conan_basic_setup()
 add_executable(streamed-reader-conformance streamed_reader_conformance.cpp)
 target_link_libraries(streamed-reader-conformance ${CONAN_LIBS})
 
+add_executable(indexed-reader-conformance indexed_reader_conformance.cpp)
+target_link_libraries(indexed-reader-conformance ${CONAN_LIBS})
+
 add_executable(streamed-writer-conformance streamed_writer_conformance.cpp)
 target_link_libraries(streamed-writer-conformance ${CONAN_LIBS})
 

@@ -3,13 +3,13 @@ import path from "path";
 import { promisify } from "util";
 import { TestVariant } from "variants/types";
 
-import { ReadTestRunner } from "./TestRunner";
+import { StreamedReadTestResult } from "../types";
+import { StreamedReadTestRunner } from "./TestRunner";
 
-export default class SwiftStreamedReaderTestRunner extends ReadTestRunner {
+export default class SwiftStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "swift-streamed-reader";
-  readonly readsDataEnd = true;
 
-  async runReadTest(filePath: string): Promise<string> {
+  async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const { stdout } = await promisify(exec)(
       `./.build/debug/conformance read-streamed ${filePath}`,
       {
@@ -17,7 +17,7 @@ export default class SwiftStreamedReaderTestRunner extends ReadTestRunner {
       },
     );
 
-    return stdout;
+    return JSON.parse(stdout) as StreamedReadTestResult;
   }
 
   supportsVariant(_variant: TestVariant): boolean {

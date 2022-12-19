@@ -3,17 +3,17 @@ import { join } from "path";
 import { promisify } from "util";
 import { TestVariant } from "variants/types";
 
-import { ReadTestRunner } from "./TestRunner";
+import { StreamedReadTestResult } from "../types";
+import { StreamedReadTestRunner } from "./TestRunner";
 
-export default class GoStreamedReaderTestRunner extends ReadTestRunner {
+export default class GoStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "go-streamed-reader";
-  readonly readsDataEnd = true;
 
-  async runReadTest(filePath: string): Promise<string> {
-    const { stdout } = await promisify(exec)(`./bin/test-streamed-read-conformance ${filePath}`, {
+  async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
+    const { stdout } = await promisify(exec)(`./bin/test-read-conformance ${filePath} streamed`, {
       cwd: join(__dirname, "../../../../../go/conformance"),
     });
-    return stdout.trim();
+    return JSON.parse(stdout) as StreamedReadTestResult;
   }
 
   supportsVariant(_variant: TestVariant): boolean {

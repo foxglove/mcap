@@ -2,7 +2,6 @@ package mcap
 
 import (
 	"bytes"
-	"container/heap"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -30,8 +29,9 @@ type indexedMessageIterator struct {
 
 	indexHeap rangeIndexHeap
 
-	zstdDecoder *zstd.Decoder
-	lz4Reader   *lz4.Reader
+	zstdDecoder           *zstd.Decoder
+	lz4Reader             *lz4.Reader
+	hasReadSummarySection bool
 }
 
 // parseIndexSection parses the index section of the file and populates the
@@ -58,6 +58,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 
 	// scan the whole summary section
 	if footer.SummaryStart == 0 {
+		it.hasReadSummarySection = true
 		return nil
 	}
 	_, err = it.rs.Seek(int64(footer.SummaryStart), io.SeekStart)
@@ -123,6 +124,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			}
 			it.statistics = stats
 		case TokenFooter:
+			it.hasReadSummarySection = true
 			return nil
 		}
 	}
@@ -200,11 +202,13 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		for i := range messageIndex.Records {
 			timestamp := messageIndex.Records[i].Timestamp
 			if timestamp >= it.start && timestamp < it.end {
-				heap.Push(&it.indexHeap, rangeIndex{
+				if err := it.indexHeap.HeapPush(rangeIndex{
 					chunkIndex:        chunkIndex,
 					messageIndexEntry: &messageIndex.Records[i],
 					buf:               chunkData,
-				})
+				}); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -212,7 +216,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 }
 
 func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, error) {
-	if it.statistics == nil {
+	if !it.hasReadSummarySection {
 		err := it.parseSummarySection()
 		if err != nil {
 			return nil, nil, nil, err
