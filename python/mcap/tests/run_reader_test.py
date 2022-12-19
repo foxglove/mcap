@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Set, Tuple, Union
 from mcap.records import MessageIndex
 from mcap.serialization import stringify_record
 from mcap.stream_reader import StreamReader
-from mcap.reader import make_reader
+from mcap.reader import SeekingReader
 
 
 def main():
@@ -18,7 +18,7 @@ def main():
         ]
         print(json.dumps({"records": records}, indent=2))
     else:
-        reader = make_reader(open(sys.argv[1], "rb"))
+        reader = SeekingReader(open(sys.argv[1], "rb"))
         result: Dict[str, List[Dict[str, Union[str, List[Tuple[str, Any]]]]]] = {
             "schemas": [],
             "channels": [],
