@@ -89,7 +89,7 @@
             <span class="n">summary</span><span class="o">.</span><span class="n">metadata_indexes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">record</span><span class="p">)</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Footer</span><span class="p">):</span>
             <span class="c1"># There is no summary!</span>
-            <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">summary_offset_start</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">summary_start</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="k">return</span> <span class="kc">None</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">summary</span>
@@ -240,7 +240,9 @@
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_item</span><span class="p">,</span> <span class="n">ChunkIndex</span><span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">next_item</span><span class="o">.</span><span class="n">chunk_start_offset</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">+</span> <span class="mi">8</span><span class="p">,</span> <span class="n">io</span><span class="o">.</span><span class="n">SEEK_SET</span><span class="p">)</span>
                 <span class="n">chunk</span> <span class="o">=</span> <span class="n">Chunk</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">ReadDataStream</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="p">))</span>
-                <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">breakup_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="n">validate_crc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_validate_crcs</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">record</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+                    <span class="n">breakup_chunk</span><span class="p">(</span><span class="n">chunk</span><span class="p">,</span> <span class="n">validate_crc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_validate_crcs</span><span class="p">)</span>
+                <span class="p">):</span>
                     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Message</span><span class="p">):</span>
                         <span class="n">channel</span> <span class="o">=</span> <span class="n">summary</span><span class="o">.</span><span class="n">channels</span><span class="p">[</span><span class="n">record</span><span class="o">.</span><span class="n">channel_id</span><span class="p">]</span>
                         <span class="k">if</span> <span class="n">topics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">channel</span><span class="o">.</span><span class="n">topic</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">topics</span><span class="p">:</span>
@@ -250,9 +252,15 @@
                         <span class="k">if</span> <span class="n">end_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">record</span><span class="o">.</span><span class="n">log_time</span> <span class="o">&gt;=</span> <span class="n">end_time</span><span class="p">:</span>
                             <span class="k">continue</span>
                         <span class="n">schema</span> <span class="o">=</span> <span class="n">summary</span><span class="o">.</span><span class="n">schemas</span><span class="p">[</span><span class="n">channel</span><span class="o">.</span><span class="n">schema_id</span><span class="p">]</span>
-                        <span class="n">message_queue</span><span class="o">.</span><span class="n">push</span><span class="p">((</span><span class="n">schema</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">record</span><span class="p">))</span>
+                        <span class="n">message_queue</span><span class="o">.</span><span class="n">push</span><span class="p">(</span>
+                            <span class="p">(</span>
+                                <span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">record</span><span class="p">),</span>
+                                <span class="n">next_item</span><span class="o">.</span><span class="n">chunk_start_offset</span><span class="p">,</span>
+                                <span class="n">index</span><span class="p">,</span>
+                            <span class="p">)</span>
+                        <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">yield</span> <span class="n">next_item</span></div>
+                <span class="k">yield</span> <span class="n">next_item</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
 
 <div class="viewcode-block" id="SeekingReader.get_header"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.SeekingReader.get_header">[docs]</a>    <span class="k">def</span> <span class="nf">get_header</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Header</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot;Reads the Header record from the beginning of the MCAP file.&quot;&quot;&quot;</span>
@@ -274,7 +282,7 @@
             <span class="k">raise</span> <span class="n">McapError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;expected footer at end of MCAP file, found </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">footer</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
-        <span class="k">if</span> <span class="n">footer</span><span class="o">.</span><span class="n">summary_offset_start</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">footer</span><span class="o">.</span><span class="n">summary_start</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_stream</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="n">footer</span><span class="o">.</span><span class="n">summary_start</span><span class="p">,</span> <span class="n">io</span><span class="o">.</span><span class="n">SEEK_SET</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_summary</span> <span class="o">=</span> <span class="n">_read_summary_from_stream_reader</span><span class="p">(</span>
