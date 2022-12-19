@@ -350,7 +350,7 @@ func readIndexed(w io.Writer, filepath string) error {
 
 	for {
 		schema, channel, message, err := it.Next(nil)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
