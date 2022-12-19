@@ -161,21 +161,6 @@ type MessageIndex struct {
 	currentIndex int
 }
 
-// Insort sorts the records of a MessageIndex record by timestamp, using an
-// insertion sort. This can be advantageous as MessageIndex records are often
-// nearly or fully-sorted already.
-func (idx *MessageIndex) Insort() {
-	i := 1
-	for i < len(idx.Entries()) {
-		j := i
-		for j > 0 && idx.Records[j-1].Timestamp > idx.Records[j].Timestamp {
-			idx.Records[j-1], idx.Records[j] = idx.Records[j], idx.Records[j-1]
-			j--
-		}
-		i++
-	}
-}
-
 // Reset resets the MessageIndex to an empty state, to enable reuse.
 func (idx *MessageIndex) Reset() {
 	idx.currentIndex = 0

@@ -62,6 +62,47 @@ private func toJson(_ record: Record) -> [String: Any] {
   ]
 }
 
+private func readStreamed(file: FileHandle) throws -> Data {
+  let reader = MCAPStreamedReader()
+  var records: [Record] = []
+  while case let data = file.readData(ofLength: 4 * 1024), data.count != 0 {
+    reader.append(data)
+    while let record = try reader.nextRecord() {
+      if !(record is MessageIndex) {
+        records.append(record)
+      }
+    }
+  }
+  let data = try JSONSerialization.data(withJSONObject: ["records": records.map(toJson)], options: .prettyPrinted)
+  return data
+}
+
+private func readIndexed(file: FileHandle) throws -> Data {
+  let reader = try MCAPRandomAccessReader(file)
+  let schemas: [Record] = reader.schemasById.values.map { $0 }.sorted { $0.id < $1.id }
+  let channels: [Record] = reader.channelsById.values.map { $0 }.sorted { $0.id < $1.id }
+  var messages: [Record] = []
+  let iterator = reader.messageIterator()
+  while let message = try iterator.next() {
+    messages.append(message)
+  }
+  var statistics: [Record] = []
+  if let statisticRecord = reader.statistics {
+    statistics.append(statisticRecord)
+  }
+
+  let data = try JSONSerialization.data(
+    withJSONObject: [
+      "schemas": schemas.map(toJson),
+      "channels": channels.map(toJson),
+      "messages": messages.map(toJson),
+      "statistics": statistics.map(toJson),
+    ],
+    options: .prettyPrinted
+  )
+  return data
+}
+
 extension FileHandle: IRandomAccessReadable {
   public func size() -> UInt64 {
     if #available(macOS 10.15.4, *) {
@@ -98,41 +139,13 @@ enum ReadConformanceRunner {
     let filename = CommandLine.arguments[2]
     let file = try FileHandle(forReadingFrom: URL(fileURLWithPath: filename))
 
-    var records: [Record] = []
+    var data = Data()
     switch mode {
     case .streamed:
-      let reader = MCAPStreamedReader()
-      while case let data = file.readData(ofLength: 4 * 1024), data.count != 0 {
-        reader.append(data)
-        while let record = try reader.nextRecord() {
-          if !(record is MessageIndex) {
-            records.append(record)
-          }
-        }
-      }
+      data = try readStreamed(file: file)
     case .indexed:
-      let reader = try MCAPRandomAccessReader(file)
-      records.append(reader.header)
-      records.append(contentsOf: reader.schemasById.values.map { $0 })
-      records.append(contentsOf: reader.channelsById.values.map { $0 })
-      let iterator = reader.messageIterator()
-      while let message = try iterator.next() {
-        records.append(message)
-      }
-      records.append(DataEnd(dataSectionCRC: 0))
-      records.append(contentsOf: reader.schemasById.values.map { $0 })
-      records.append(contentsOf: reader.channelsById.values.map { $0 })
-      if let statistics = reader.statistics {
-        records.append(statistics)
-      }
-      records.append(contentsOf: reader.chunkIndexes)
-      records.append(contentsOf: reader.attachmentIndexes)
-      records.append(contentsOf: reader.metadataIndexes)
-      records.append(contentsOf: reader.summaryOffsetsByOpcode.values.sorted { $0.groupStart < $1.groupStart })
-      records.append(reader.footer)
+      data = try readIndexed(file: file)
     }
-
-    let data = try JSONSerialization.data(withJSONObject: ["records": records.map(toJson)], options: .prettyPrinted)
 
     if #available(macOS 10.15.4, *) {
       try FileHandle.standardOutput.write(contentsOf: data)

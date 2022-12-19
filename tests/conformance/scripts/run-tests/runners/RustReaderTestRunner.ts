@@ -3,17 +3,17 @@ import { join } from "path";
 import { promisify } from "util";
 import { TestVariant } from "variants/types";
 
-import { ReadTestRunner } from "./TestRunner";
+import { StreamedReadTestResult } from "../types";
+import { StreamedReadTestRunner } from "./TestRunner";
 
-export default class RustReaderTestRunner extends ReadTestRunner {
+export default class RustReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "rust-streamed-reader";
-  readonly readsDataEnd = true;
 
-  async runReadTest(filePath: string): Promise<string> {
+  async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const { stdout } = await promisify(exec)(`./conformance_reader ${filePath}`, {
       cwd: join(__dirname, "../../../../../rust/target/debug/examples"),
     });
-    return stdout.trim();
+    return JSON.parse(stdout.trim()) as StreamedReadTestResult;
   }
 
   supportsVariant(_variant: TestVariant): boolean {

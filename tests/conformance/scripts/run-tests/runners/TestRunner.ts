@@ -1,14 +1,13 @@
 import { TestVariant } from "../../../variants/types";
+import {
+  SerializableMcapRecord,
+  TestCase,
+  IndexedReadTestResult,
+  StreamedReadTestResult,
+} from "../types";
 
-export abstract class ReadTestRunner {
+export abstract class StreamedReadTestRunner {
   abstract readonly name: string;
-
-  /**
-   * Set this flag to true if the reader is expected to encounter the DataEnd record. Readers that
-   * do not scan the file linearly can set this to false, and the test harness will then expect the
-   * reader *not* to output a DataEnd record with a correct dataSectionCrc.
-   */
-  abstract readonly readsDataEnd: boolean;
 
   /**
    * @returns true if the test variant is supported; false if it is not. If this method returns
@@ -20,9 +19,103 @@ export abstract class ReadTestRunner {
    * Execute the reader test. This may involve calling out to separate process, e.g. with
    * `child_process.exec`.
    * @param filePath A path to a `.mcap` file that should be read.
-   * @returns A JSON-encoded object representing the input file.
+   * @returns a StreamedReadTestResult object.
    */
-  abstract runReadTest(filePath: string, variant: TestVariant): Promise<string>;
+  abstract runReadTest(filePath: string): Promise<StreamedReadTestResult>;
+
+  expectedResult(testCase: TestCase): StreamedReadTestResult {
+    return { records: testCase.records };
+  }
+}
+
+export abstract class IndexedReadTestRunner {
+  abstract readonly name: string;
+
+  /**
+   * @returns true if the test variant is supported; false if it is not. If this method returns
+   * false, this test variant will be skipped.
+   */
+  abstract supportsVariant(variant: TestVariant): boolean;
+
+  /**
+   * Execute the reader test. This may involve calling out to separate process, e.g. with
+   * `child_process.exec`.
+   * @param filePath A path to a `.mcap` file that should be read.
+   * @returns an IndexedReadTestResult object.
+   */
+  abstract runReadTest(filePath: string): Promise<IndexedReadTestResult>;
+
+  expectedResult(testCase: TestCase): IndexedReadTestResult {
+    function findRecordId(record: SerializableMcapRecord): number {
+      for (const [fieldName, fieldValue] of record.fields) {
+        if (fieldName === "id") {
+          return parseInt(fieldValue as string);
+        }
+      }
+      throw new Error(`could not find 'id' field on record: ${JSON.stringify(record)}`);
+    }
+
+    function findLogTime(record: SerializableMcapRecord): bigint {
+      for (const [fieldName, fieldValue] of record.fields) {
+        if (fieldName === "log_time") {
+          return BigInt(fieldValue as string);
+        }
+      }
+      throw new Error(`could not find 'log_time' field on record: ${JSON.stringify(record)}`);
+    }
+
+    const result: IndexedReadTestResult = {
+      schemas: [],
+      channels: [],
+      messages: [],
+      statistics: [],
+    };
+    const knownSchemaIds: Set<number> = new Set();
+    const knownChannelIds: Set<number> = new Set();
+    for (const record of testCase.records) {
+      switch (record.type) {
+        case "Schema":
+          {
+            const id = findRecordId(record);
+            if (!knownSchemaIds.has(id)) {
+              result.schemas.push(record);
+              knownSchemaIds.add(id);
+            }
+          }
+          break;
+        case "Channel":
+          {
+            const id = findRecordId(record);
+            if (!knownChannelIds.has(id)) {
+              result.channels.push(record);
+              knownChannelIds.add(id);
+            }
+          }
+          break;
+        case "Message":
+          result.messages.push(record);
+          break;
+        case "Statistics":
+          result.statistics.push(record);
+          break;
+        default:
+          break;
+      }
+    }
+    result.messages.sort((a, b) => {
+      const timeA = findLogTime(a);
+      const timeB = findLogTime(b);
+      if (timeA > timeB) {
+        return 1;
+      } else if (timeA < timeB) {
+        return -1;
+      }
+      return 0;
+    });
+    result.schemas.sort((a, b) => findRecordId(a) - findRecordId(b));
+    result.channels.sort((a, b) => findRecordId(a) - findRecordId(b));
+    return result;
+  }
 }
 
 export abstract class WriteTestRunner {
