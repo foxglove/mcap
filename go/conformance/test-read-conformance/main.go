@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/foxglove/mcap/go/mcap"
+	"github.com/foxglove/mcap/go/mcap/readopts"
 )
 
 var (
@@ -327,13 +328,18 @@ func readIndexed(w io.Writer, filepath string) error {
 		Schemas    []Record `json:"schemas"`
 		Channels   []Record `json:"channels"`
 		Statistics []Record `json:"statistics"`
-	}{}
+	}{
+		Messages:   make([]Record, 0),
+		Schemas:    make([]Record, 0),
+		Channels:   make([]Record, 0),
+		Statistics: make([]Record, 0),
+	}
 
 	reader, err := mcap.NewReader(f)
 	if err != nil {
 		return err
 	}
-	it, err := reader.Messages()
+	it, err := reader.Messages(readopts.InOrder(readopts.LogTimeOrder))
 	if err != nil {
 		return err
 	}
