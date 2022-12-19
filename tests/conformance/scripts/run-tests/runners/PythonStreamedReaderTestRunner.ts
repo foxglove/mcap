@@ -9,9 +9,12 @@ export default class PythonStreamedReaderTestRunner extends StreamedReadTestRunn
   readonly name = "py-streamed-reader";
 
   async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
-    const { stdout } = await promisify(exec)(`python3 tests/run_reader_test.py ${filePath}`, {
-      cwd: "../../python/mcap",
-    });
+    const { stdout } = await promisify(exec)(
+      `python3 tests/run_reader_test.py ${filePath} streamed`,
+      {
+        cwd: "../../python/mcap",
+      },
+    );
     return JSON.parse(stdout.trim()) as StreamedReadTestResult;
   }
 

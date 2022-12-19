@@ -5,6 +5,7 @@ import GoIndexedReaderTestRunner from "./GoIndexedReaderTestRunner";
 import GoStreamedReaderTestRunner from "./GoStreamedReaderTestRunner";
 import GoStreamedWriterTestRunner from "./GoStreamedWriterTestRunner";
 import KaitaiStructReaderTestRunner from "./KaitaiStructReaderTestRunner";
+import PythonIndexedReaderTestRunner from "./PythonIndexedReaderTestRunner";
 import PythonStreamedReaderTestRunner from "./PythonStreamedReaderTestRunner";
 import PythonWriterTestRunner from "./PythonWriterTestRunner";
 import RustReaderTestRunner from "./RustReaderTestRunner";
@@ -24,6 +25,7 @@ const runners: readonly (IndexedReadTestRunner | StreamedReadTestRunner | WriteT
   new GoIndexedReaderTestRunner(),
   new GoStreamedReaderTestRunner(),
   new GoStreamedWriterTestRunner(),
+  new PythonIndexedReaderTestRunner(),
   new PythonStreamedReaderTestRunner(),
   new PythonWriterTestRunner(),
   new TypescriptIndexedReaderTestRunner(),
