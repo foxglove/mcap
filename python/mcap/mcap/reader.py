@@ -205,7 +205,9 @@ class SeekingReader(McapReader):
             if isinstance(next_item, ChunkIndex):
                 self._stream.seek(next_item.chunk_start_offset + 1 + 8, io.SEEK_SET)
                 chunk = Chunk.read(ReadDataStream(self._stream))
-                for record in breakup_chunk(chunk, validate_crc=self._validate_crcs):
+                for index, record in enumerate(
+                    breakup_chunk(chunk, validate_crc=self._validate_crcs)
+                ):
                     if isinstance(record, Message):
                         channel = summary.channels[record.channel_id]
                         if topics is not None and channel.topic not in topics:
@@ -215,9 +217,15 @@ class SeekingReader(McapReader):
                         if end_time is not None and record.log_time >= end_time:
                             continue
                         schema = summary.schemas[channel.schema_id]
-                        message_queue.push((schema, channel, record))
+                        message_queue.push(
+                            (
+                                (schema, channel, record),
+                                next_item.chunk_start_offset,
+                                index,
+                            )
+                        )
             else:
-                yield next_item
+                yield next_item[0]
 
     def get_header(self) -> Header:
         """Reads the Header record from the beginning of the MCAP file."""

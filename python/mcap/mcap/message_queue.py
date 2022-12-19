@@ -1,9 +1,9 @@
 import heapq
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Optional
 
 from .records import Schema, Channel, Message, ChunkIndex
 
-QueueItem = Union[ChunkIndex, Tuple[Schema, Channel, Message]]
+QueueItem = Union[ChunkIndex, Tuple[Tuple[Schema, Channel, Message], int, int]]
 
 
 class _Orderable:
@@ -12,11 +12,30 @@ class _Orderable:
         self.reverse = reverse
 
     def __lt__(self, other: "_Orderable") -> bool:
+        if self.log_time() == other.log_time():
+            return self._position_less_than(other)
         if self.reverse:
             return self.log_time() > other.log_time()
         return self.log_time() < other.log_time()
 
+    def _position_less_than(self, other: "_Orderable") -> bool:
+        if self.reverse:
+            return other._position_less_than(self)
+
+        this_chunk_offset, this_message_offset = self.position()
+        other_chunk_offset, other_message_offset = other.position()
+        if this_message_offset is None or other_message_offset is None:
+            return this_chunk_offset < other_chunk_offset
+        if this_chunk_offset == other_chunk_offset:
+            return this_message_offset < other_message_offset
+        return this_chunk_offset < other_chunk_offset
+
     def log_time(self) -> int:
+        raise NotImplementedError(
+            "do not instantiate _Orderable directly, use a subclass"
+        )
+
+    def position(self) -> Tuple[int, Optional[int]]:
         raise NotImplementedError(
             "do not instantiate _Orderable directly, use a subclass"
         )
@@ -29,11 +48,17 @@ class _ChunkIndexWrapper(_Orderable):
             return self.item.message_end_time
         return self.item.message_start_time
 
+    def position(self) -> Tuple[int, Optional[int]]:
+        return (self.item.chunk_start_offset, None)
+
 
 class _MessageTupleWrapper(_Orderable):
     def log_time(self) -> int:
-        self.item: Tuple[Schema, Channel, Message]
-        return self.item[2].log_time
+        self.item: Tuple[Tuple[Schema, Channel, Message], int, int]
+        return self.item[0][2].log_time
+
+    def position(self) -> Tuple[int, Optional[int]]:
+        return (self.item[1], self.item[2])
 
 
 class MessageQueue:
