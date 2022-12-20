@@ -14,18 +14,20 @@ import (
 )
 
 var (
-	mergeCompression string
-	mergeChunkSize   int64
-	mergeIncludeCRC  bool
-	mergeChunked     bool
-	mergeOutputFile  string
+	mergeCompression      string
+	mergeCompressionLevel string
+	mergeChunkSize        int64
+	mergeIncludeCRC       bool
+	mergeChunked          bool
+	mergeOutputFile       string
 )
 
 type mergeOpts struct {
-	compression string
-	chunkSize   int64
-	includeCRC  bool
-	chunked     bool
+	compression      mcap.CompressionFormat
+	compressionLevel mcap.CompressionLevel
+	chunkSize        int64
+	includeCRC       bool
+	chunked          bool
 }
 
 // schemaID uniquely identifies a schema across the inputs
@@ -140,7 +142,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 	writer, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Chunked:     m.opts.chunked,
 		ChunkSize:   m.opts.chunkSize,
-		Compression: mcap.CompressionFormat(m.opts.compression),
+		Compression: m.opts.compression,
 		IncludeCRC:  m.opts.includeCRC,
 	})
 	if err != nil {
@@ -259,10 +261,11 @@ var mergeCmd = &cobra.Command{
 			readers = append(readers, f)
 		}
 		opts := mergeOpts{
-			compression: mergeCompression,
-			chunkSize:   mergeChunkSize,
-			includeCRC:  mergeIncludeCRC,
-			chunked:     mergeChunked,
+			compression:      mcap.CompressionFormat(mergeCompression),
+			compressionLevel: mcap.CompressionLevelFromString(mergeCompressionLevel),
+			chunkSize:        mergeChunkSize,
+			includeCRC:       mergeIncludeCRC,
+			chunked:          mergeChunked,
 		}
 		merger := newMCAPMerger(opts)
 		var writer io.Writer
@@ -291,6 +294,13 @@ func init() {
 		"",
 		"zstd",
 		"chunk compression algorithm (supported: zstd, lz4, none)",
+	)
+	mergeCmd.PersistentFlags().StringVarP(
+		&mergeCompressionLevel,
+		"compression-level",
+		"",
+		"default",
+		"compression level to use (supported: fastest, fast, default, slow, slowest)",
 	)
 	mergeCmd.PersistentFlags().StringVarP(
 		&mergeOutputFile,

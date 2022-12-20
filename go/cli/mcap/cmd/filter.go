@@ -23,6 +23,7 @@ type filterFlags struct {
 	includeMetadata    bool
 	includeAttachments bool
 	outputCompression  string
+	compressionLevel   string
 	chunkSize          int64
 }
 
@@ -36,6 +37,7 @@ type filterOpts struct {
 	includeMetadata    bool
 	includeAttachments bool
 	compressionFormat  mcap.CompressionFormat
+	compressionLevel   mcap.CompressionLevel
 	chunkSize          int64
 }
 
@@ -69,6 +71,7 @@ func buildFilterOptions(flags filterFlags) (*filterOpts, error) {
 		return nil, fmt.Errorf("unrecognized compression format '%s': valid options are 'lz4', 'zstd', or 'none'", flags.outputCompression)
 	}
 
+	opts.compressionLevel = mcap.CompressionLevelFromString(flags.compressionLevel)
 	includeTopics, err := compileMatchers(flags.includeTopics)
 	if err != nil {
 		return nil, err
@@ -169,9 +172,10 @@ func filter(
 	opts *filterOpts,
 ) error {
 	mcapWriter, err := mcap.NewWriter(w, &mcap.WriterOptions{
-		Compression: opts.compressionFormat,
-		Chunked:     true,
-		ChunkSize:   opts.chunkSize,
+		Compression:      opts.compressionFormat,
+		CompressionLevel: opts.compressionLevel,
+		Chunked:          true,
+		ChunkSize:        opts.chunkSize,
 	})
 	if err != nil {
 		return err
@@ -368,6 +372,7 @@ usage:
 		includeMetadata := filterCmd.PersistentFlags().Bool("include-metadata", false, "whether to include metadata in the output bag")
 		includeAttachments := filterCmd.PersistentFlags().Bool("include-attachments", false, "whether to include attachments in the output mcap")
 		outputCompression := filterCmd.PersistentFlags().String("output-compression", "zstd", "compression algorithm to use on output file")
+		compressionLevel := filterCmd.PersistentFlags().String("compression-level", "default", "compression level to use with chunk compression")
 		filterCmd.Run = func(cmd *cobra.Command, args []string) {
 			filterOptions, err := buildFilterOptions(filterFlags{
 				output:             *output,
@@ -379,6 +384,7 @@ usage:
 				includeMetadata:    *includeMetadata,
 				includeAttachments: *includeAttachments,
 				outputCompression:  *outputCompression,
+				compressionLevel:   *compressionLevel,
 			})
 			if err != nil {
 				die("configuration error: %s", err)
@@ -400,11 +406,13 @@ usage:
 		output := recoverCmd.PersistentFlags().StringP("output", "o", "", "output filename")
 		chunkSize := recoverCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
 		compression := recoverCmd.PersistentFlags().String("compression", "zstd", "compression algorithm to use on output file")
+		compressionLevel := recoverCmd.PersistentFlags().String("compression-level", "default", "compression level to use with chunk compression")
 		recoverCmd.Run = func(cmd *cobra.Command, args []string) {
 			filterOptions, err := buildFilterOptions(filterFlags{
 				output:             *output,
 				chunkSize:          *chunkSize,
 				outputCompression:  *compression,
+				compressionLevel:   *compressionLevel,
 				includeMetadata:    true,
 				includeAttachments: true,
 			})
@@ -429,11 +437,13 @@ usage:
 		output := compressCmd.PersistentFlags().StringP("output", "o", "", "output filename")
 		chunkSize := compressCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
 		compression := compressCmd.PersistentFlags().String("compression", "zstd", "compression algorithm to use on output file")
+		compressionLevel := compressCmd.PersistentFlags().String("compression-level", "default", "compression level to use with chunk compression")
 		compressCmd.Run = func(cmd *cobra.Command, args []string) {
 			filterOptions, err := buildFilterOptions(filterFlags{
 				output:             *output,
 				chunkSize:          *chunkSize,
 				outputCompression:  *compression,
+				compressionLevel:   *compressionLevel,
 				includeMetadata:    true,
 				includeAttachments: true,
 			})

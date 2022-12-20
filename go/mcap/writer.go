@@ -728,6 +728,9 @@ type WriterOptions struct {
 	// Compression indicates the compression format to use for chunk compression.
 	Compression CompressionFormat
 
+	// CompressionLevel for the compressor if using chunk compression.
+	CompressionLevel CompressionLevel
+
 	// SkipMessageIndexing skips the message and chunk indexes for a chunked
 	// file.
 	SkipMessageIndexing bool
@@ -770,13 +773,17 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	if opts.Chunked {
 		switch opts.Compression {
 		case CompressionZSTD:
-			zw, err := zstd.NewWriter(&compressed, zstd.WithEncoderLevel(zstd.SpeedFastest))
+			zw, err := zstd.NewWriter(&compressed, zstd.WithEncoderLevel(opts.CompressionLevel.zstdLevel()))
 			if err != nil {
 				return nil, err
 			}
 			compressedWriter = newCountingCRCWriter(zw, opts.IncludeCRC)
 		case CompressionLZ4:
-			compressedWriter = newCountingCRCWriter(lz4.NewWriter(&compressed), opts.IncludeCRC)
+			writer := lz4.NewWriter(&compressed)
+			if err := writer.Apply(lz4.CompressionLevelOption(opts.CompressionLevel.lz4Level())); err != nil {
+				return nil, err
+			}
+			compressedWriter = newCountingCRCWriter(writer, opts.IncludeCRC)
 		case CompressionNone:
 			compressedWriter = newCountingCRCWriter(bufCloser{&compressed}, opts.IncludeCRC)
 		default:

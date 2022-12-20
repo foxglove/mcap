@@ -21,11 +21,12 @@ var (
 )
 
 var (
-	convertAmentPrefixPath string
-	convertCompression     string
-	convertChunkSize       int64
-	convertIncludeCRC      bool
-	convertChunked         bool
+	convertAmentPrefixPath  string
+	convertCompression      string
+	convertCompressionLevel string
+	convertChunkSize        int64
+	convertIncludeCRC       bool
+	convertChunked          bool
 )
 
 type FileType string
@@ -95,10 +96,11 @@ var convertCmd = &cobra.Command{
 		}
 
 		opts := &mcap.WriterOptions{
-			IncludeCRC:  convertIncludeCRC,
-			Chunked:     convertChunked,
-			ChunkSize:   convertChunkSize,
-			Compression: compressionFormat,
+			IncludeCRC:       convertIncludeCRC,
+			Chunked:          convertChunked,
+			ChunkSize:        convertChunkSize,
+			Compression:      compressionFormat,
+			CompressionLevel: mcap.CompressionLevelFromString(convertCompressionLevel),
 		}
 
 		switch filetype {
@@ -147,6 +149,13 @@ func init() {
 		"",
 		"zstd",
 		"chunk compression algorithm (supported: zstd, lz4, none)",
+	)
+	convertCmd.PersistentFlags().StringVarP(
+		&convertCompressionLevel,
+		"compression-level",
+		"",
+		"default",
+		"compression level (supported: fastest, fast, default, slow, slowest)",
 	)
 	convertCmd.PersistentFlags().Int64VarP(
 		&convertChunkSize,
