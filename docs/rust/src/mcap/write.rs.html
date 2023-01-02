@@ -973,7 +973,7 @@
             <span class="attribute">#[cfg(not(feature = <span class="string">&quot;zstd&quot;</span>))]
             </span>compression: <span class="prelude-val">None</span>,
             profile: String::new(),
-            chunk_size: <span class="prelude-val">None</span>,
+            chunk_size: <span class="prelude-val">Some</span>(<span class="number">1024 </span>* <span class="number">768</span>),
         }
     }
 }
@@ -1002,7 +1002,7 @@
     <span class="doccomment">/// specifies the target uncompressed size of each chunk.
     ///
     /// Messages will be written to chunks until the uncompressed chunk is larger than the
-    /// target chunk size, at which point th  chunk will be closed and a new one started.
+    /// target chunk size, at which point the chunk will be closed and a new one started.
     /// If `None`, chunks will not be automatically closed and the user must call `flush()` to
     /// begin a new chunk.
     </span><span class="kw">pub fn </span>chunk_size(<span class="self">self</span>, chunk_size: <span class="prelude-ty">Option</span>&lt;u64&gt;) -&gt; <span class="self">Self </span>{
