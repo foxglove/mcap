@@ -118,7 +118,7 @@ impl Default for WriteOptions {
             #[cfg(not(feature = "zstd"))]
             compression: None,
             profile: String::new(),
-            chunk_size: None,
+            chunk_size: Some(1024 * 768),
         }
     }
 }
@@ -147,7 +147,7 @@ impl WriteOptions {
     /// specifies the target uncompressed size of each chunk.
     ///
     /// Messages will be written to chunks until the uncompressed chunk is larger than the
-    /// target chunk size, at which point th  chunk will be closed and a new one started.
+    /// target chunk size, at which point the chunk will be closed and a new one started.
     /// If `None`, chunks will not be automatically closed and the user must call `flush()` to
     /// begin a new chunk.
     pub fn chunk_size(self, chunk_size: Option<u64>) -> Self {
