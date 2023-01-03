@@ -26,6 +26,8 @@ MCAP works well under various workloads, resource constraints, and durability re
 
 ## History
 
+We evaluated [many existing data storage formats in the industry](https://github.com/foxglove/mcap/blob/main/docs/motivation/evaluation-of-robotics-data-recording-file-formats.md) and identified a clear need for a general-purpose, open source data container format – specifically optimized for robotics use cases. Designing this format would solve an industry-wide problem and make it easier for teams to leverage third-party tools and share their own tooling.
+
 ### Before MCAP
 
 Many robotics companies spend valuable in-house resources to develop custom file formats, only to create future work and complicate third-party tool integrations. We built MCAP to allow teams to focus on their core robotics problems and avoid wasting precious time making commodity tools.
@@ -35,7 +37,5 @@ Before MCAP, the format that robotics teams used to store their log data depende
 These existing storage options have several shortcomings. Custom in-house formats lack interoperability and require developing corresponding libraries in multiple languages to read and write files. The ROS 1 bag format is challenging to work with outside of the ROS ecosystem, while the ROS 2 SQLite format is [not fully self-contained](https://github.com/ros2/rosbag2/issues/782), making it difficult for third-party tools to read.
 
 ### After MCAP
-
-We evaluated [many existing data storage formats in the industry](https://github.com/foxglove/mcap/blob/main/docs/motivation/evaluation-of-robotics-data-recording-file-formats.md) and identified a clear need for a general-purpose, open source data container format – specifically optimized for robotics use cases. Designing this format would solve an industry-wide problem and make it easier for teams to leverage third-party tools and share their own tooling.
 
 As a container format, MCAP solves many of these issues. It is self-contained, can embed multiple data streams encoded with different serialization formats in a single file, and even supports metadata and attachments. MCAP files are optimized for both high-performance writing and efficient indexed reading, even over remote connections.
