@@ -560,12 +560,12 @@
 <li>No extra dependencies needed for decoding</li>
 </ul>
 <h2 id="history">History</h2>
+<p>We evaluated <a href="https://github.com/foxglove/mcap/blob/main/docs/motivation/evaluation-of-robotics-data-recording-file-formats.md">many existing data storage formats in the industry</a> and identified a clear need for a general-purpose, open source data container format – specifically optimized for robotics use cases. Designing this format would solve an industry-wide problem and make it easier for teams to leverage third-party tools and share their own tooling.</p>
 <h3 id="before-mcap">Before MCAP</h3>
 <p>Many robotics companies spend valuable in-house resources to develop custom file formats, only to create future work and complicate third-party tool integrations. We built MCAP to allow teams to focus on their core robotics problems and avoid wasting precious time making commodity tools.</p>
 <p>Before MCAP, the format that robotics teams used to store their log data depended mainly on their framework. Those using ROS 1 defaulted to the <a href="http://wiki.ros.org/Bags/Format/2.0">“bag file”</a> format; those on ROS 2 defaulted to a SQLite-based format. Companies that don’t use ROS often employed a custom in-house binary format, such as length-delimited Protobuf, or stored their messages as opaque bytes inside existing file formats such as HDF5.</p>
 <p>These existing storage options have several shortcomings. Custom in-house formats lack interoperability and require developing corresponding libraries in multiple languages to read and write files. The ROS 1 bag format is challenging to work with outside of the ROS ecosystem, while the ROS 2 SQLite format is <a href="https://github.com/ros2/rosbag2/issues/782">not fully self-contained</a>, making it difficult for third-party tools to read.</p>
 <h3 id="after-mcap">After MCAP</h3>
-<p>We evaluated <a href="https://github.com/foxglove/mcap/blob/main/docs/motivation/evaluation-of-robotics-data-recording-file-formats.md">many existing data storage formats in the industry</a> and identified a clear need for a general-purpose, open source data container format – specifically optimized for robotics use cases. Designing this format would solve an industry-wide problem and make it easier for teams to leverage third-party tools and share their own tooling.</p>
 <p>As a container format, MCAP solves many of these issues. It is self-contained, can embed multiple data streams encoded with different serialization formats in a single file, and even supports metadata and attachments. MCAP files are optimized for both high-performance writing and efficient indexed reading, even over remote connections.</p>
 </article>
 </div>
