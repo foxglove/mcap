@@ -6,5 +6,5 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.pyright]
-exclude = ["mcap_ros1/vendor"]
+exclude = ["mcap_ros1/_vendor"]
 

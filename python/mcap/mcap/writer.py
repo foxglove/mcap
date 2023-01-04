@@ -8,7 +8,7 @@ from typing import IO, Any, Dict, List, OrderedDict, Union
 import lz4.frame  # type: ignore
 import zstandard
 
-from .chunk_builder import ChunkBuilder
+from ._chunk_builder import ChunkBuilder
 from .data_stream import RecordBuilder
 from .opcode import Opcode
 from .records import (

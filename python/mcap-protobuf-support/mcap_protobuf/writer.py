@@ -5,7 +5,7 @@ from mcap.writer import Writer as McapWriter
 from mcap.well_known import MessageEncoding
 import mcap
 
-from .schema import register_schema
+from ._schema import register_schema
 from . import __version__
 
 

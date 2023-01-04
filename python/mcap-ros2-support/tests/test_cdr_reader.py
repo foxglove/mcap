@@ -1,7 +1,7 @@
 from io import BytesIO
 from math import inf
 
-from mcap_ros2.cdr import CdrReader, CdrWriter, EncapsulationKind
+from mcap_ros2._cdr import CdrReader, CdrWriter, EncapsulationKind
 
 tf2_msg__TFMessage = (
     "0001000001000000cce0d158f08cf9060a000000626173655f6c696e6b00000006000000"

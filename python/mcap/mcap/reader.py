@@ -23,7 +23,7 @@ from .records import (
 from .stream_reader import StreamReader, breakup_chunk, MAGIC_SIZE
 from .data_stream import RecordBuilder
 from .summary import Summary
-from .message_queue import MessageQueue
+from ._message_queue import MessageQueue
 
 
 def _get_record_size(record: McapRecord):

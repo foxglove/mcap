@@ -128,8 +128,8 @@ class Special:
 
 _SPECIAL_TYPES = {
     genmsg.HEADER:   Special('std_msgs.msg._Header.Header()',     None, 'import std_msgs.msg'),
-    genmsg.TIME:     Special('genpy.Time()',     '%s.canon()', 'from mcap_ros1.vendor import genpy'),
-    genmsg.DURATION: Special('genpy.Duration()', '%s.canon()', 'from mcap_ros1.vendor import genpy'),
+    genmsg.TIME:     Special('genpy.Time()',     '%s.canon()', 'from mcap_ros1._vendor import genpy'),
+    genmsg.DURATION: Special('genpy.Duration()', '%s.canon()', 'from mcap_ros1._vendor import genpy'),
     }
 
 
@@ -823,7 +823,7 @@ def msg_generator(msg_context, spec, search_path):
     yield 'import codecs'
     yield 'import sys'
     yield 'python3 = True if sys.hexversion > 0x03000000 else False'
-    yield 'from mcap_ros1.vendor import genpy\nimport struct\n'
+    yield 'from mcap_ros1._vendor import genpy\nimport struct\n'
     import_strs = []
     for t in spec.types:
         import_strs.extend(compute_import(msg_context, spec.package, t))
