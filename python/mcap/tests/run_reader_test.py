@@ -28,7 +28,7 @@ def main():
         known_schemas: Set[int] = set()
         known_channels: Set[int] = set()
         for schema, channel, message in reader.iter_messages():
-            if schema.id not in known_schemas:
+            if schema is not None and schema.id not in known_schemas:
                 result["schemas"].append(stringify_record(schema))
                 known_schemas.add(schema.id)
 
