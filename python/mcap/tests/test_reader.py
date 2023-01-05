@@ -3,8 +3,11 @@ import os
 from pathlib import Path
 import pytest
 from typing import IO, Tuple, Type
+from io import BytesIO
+import json
 
 from mcap.reader import make_reader, SeekingReader, NonSeekingReader, McapReader
+from mcap.writer import Writer
 from mcap.records import Schema, Channel, Message
 
 DEMO_MCAP = (
@@ -113,3 +116,26 @@ def test_non_seeking_used_once():
         _ = list(reader.iter_metadata())
         with pytest.raises(RuntimeError):
             _ = list(reader.iter_metadata())
+
+
+def test_decode_messages():
+    buf = BytesIO()
+    writer = Writer(buf)
+
+    writer.start()
+    channel_id = writer.register_channel("/messages", "json", schema_id=0)
+    for index in range(10):
+        writer.add_message(
+            channel_id, index, json.dumps({"index": index}).encode("utf8"), index
+        )
+    writer.finish()
+
+    reader = make_reader(buf)
+
+    for schema, channel, message, decoded_message in reader.iter_and_decode_messages(
+        {"json": lambda _, m: json.loads(m.data)}
+    ):
+        assert schema is None
+        assert isinstance(channel, Channel)
+        assert isinstance(message, Message)
+        assert isinstance(decoded_message, dict)

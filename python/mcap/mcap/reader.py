@@ -1,6 +1,6 @@
 """ High-level classes for reading content out of MCAP data sources. """
 from abc import ABC, abstractmethod
-from typing import Iterable, Tuple, Iterator, Dict, Optional, List, IO
+from typing import Iterable, Tuple, Iterator, Dict, Optional, List, IO, Any, Callable
 import io
 
 from .data_stream import ReadDataStream
@@ -122,6 +122,38 @@ class McapReader(ABC):
             yielded in descending log time order.
         """
         raise NotImplementedError()
+
+    def iter_and_decode_messages(
+        self,
+        decoders: Dict[str, Callable[[Optional[Schema], Message], Any]],
+        topics: Optional[Iterable[str]] = None,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        log_time_order: bool = True,
+        reverse: bool = False,
+    ) -> Iterator[Tuple[Optional[Schema], Channel, Message, Any]]:
+        """iterates through the messages in an MCAP and deserializes their message content.
+        :param decoders: a dict of ``{message encoding: decoder}``, where ``decoder`` is a
+            callable which returns the deserialized message content.
+        :param topics: if not None, only messages from these topics will be returned.
+        :param start_time: an integer nanosecond timestamp. if provided, messages logged before this
+            timestamp are not included.
+        :param end_time: an integer nanosecond timestamp. if provided, messages logged after this
+            timestamp are not included.
+        :param log_time_order: if True, messages will be yielded in ascending log time order. If
+            False, messages will be yielded in the order they appear in the MCAP file.
+        :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
+            yielded in descending log time order.
+        """
+        for schema, channel, message in self.iter_messages(
+            topics, start_time, end_time, log_time_order, reverse
+        ):
+            decode = decoders.get(channel.message_encoding)
+            if decode is None:
+                raise McapError(
+                    f"no decoder provided for message encoding {channel.message_encoding}"
+                )
+            yield (schema, channel, message, decode(schema, message))
 
     @abstractmethod
     def get_header(self) -> Header:
