@@ -27,7 +27,7 @@ ignorePaths:
   - Pipfile*
   - mkdocs.yml
   - fathom.html
-  - vendor
+  - _vendor
   - rust
   - cpp/examples/protobuf/proto
 
