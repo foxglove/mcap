@@ -3,7 +3,9 @@ from typing import Union, Tuple, List, Optional
 
 from .records import Schema, Channel, Message, ChunkIndex
 
-QueueItem = Union[ChunkIndex, Tuple[Tuple[Schema, Channel, Message], int, int]]
+QueueItem = Union[
+    ChunkIndex, Tuple[Tuple[Optional[Schema], Channel, Message], int, int]
+]
 
 
 class _Orderable:
