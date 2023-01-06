@@ -624,7 +624,7 @@ private:
   ReadMessageOptions options_;
   std::unordered_set<ChannelId> selectedChannels_;
   std::function<void(const Message&, RecordOffset)> onMessage_;
-  ReadJobQueue queue_;
+  internal::ReadJobQueue queue_;
   std::vector<ChunkSlot> chunkSlots_;
 };
 

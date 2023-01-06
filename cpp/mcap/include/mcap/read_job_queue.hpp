@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <variant>
 
-namespace mcap {
+namespace mcap::internal {
 
 // Helper for writing compile-time exhaustive variant visitors.
 template <class>
@@ -144,4 +144,4 @@ public:
   }
 };
 
-}  // namespace mcap
+}  // namespace mcap::internal

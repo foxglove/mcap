@@ -678,9 +678,9 @@ TEST_CASE("Read Order", "[reader][writer]") {
 
 TEST_CASE("ReadJobQueue order", "[reader]") {
   SECTION("successive chunks with out-of-order timestamps") {
-    mcap::ReadJobQueue q(false);
+    mcap::internal::ReadJobQueue q(false);
     {
-      mcap::DecompressChunkJob chunk;
+      mcap::internal::DecompressChunkJob chunk;
       chunk.messageStartTime = 100;
       chunk.messageEndTime = 200;
       chunk.chunkStartOffset = 1000;
@@ -688,7 +688,7 @@ TEST_CASE("ReadJobQueue order", "[reader]") {
       q.push(std::move(chunk));
     }
     {
-      mcap::DecompressChunkJob chunk;
+      mcap::internal::DecompressChunkJob chunk;
       chunk.messageStartTime = 0;
       chunk.messageEndTime = 100;
       chunk.chunkStartOffset = 2000;
@@ -698,19 +698,19 @@ TEST_CASE("ReadJobQueue order", "[reader]") {
 
     {
       auto result = q.pop();
-      REQUIRE(std::get<mcap::DecompressChunkJob>(result).messageStartTime == 0);
-      REQUIRE(std::get<mcap::DecompressChunkJob>(result).chunkStartOffset == 2000);
+      REQUIRE(std::get<mcap::internal::DecompressChunkJob>(result).messageStartTime == 0);
+      REQUIRE(std::get<mcap::internal::DecompressChunkJob>(result).chunkStartOffset == 2000);
     }
     {
       auto result = q.pop();
-      REQUIRE(std::get<mcap::DecompressChunkJob>(result).messageStartTime == 100);
-      REQUIRE(std::get<mcap::DecompressChunkJob>(result).chunkStartOffset == 1000);
+      REQUIRE(std::get<mcap::internal::DecompressChunkJob>(result).messageStartTime == 100);
+      REQUIRE(std::get<mcap::internal::DecompressChunkJob>(result).chunkStartOffset == 1000);
     }
   }
   SECTION("reverse time order: successive chunks with out-of-order timestamps") {
-    mcap::ReadJobQueue q(true);
+    mcap::internal::ReadJobQueue q(true);
     {
-      mcap::DecompressChunkJob chunk;
+      mcap::internal::DecompressChunkJob chunk;
       chunk.messageStartTime = 100;
       chunk.messageEndTime = 200;
       chunk.chunkStartOffset = 1000;
@@ -718,7 +718,7 @@ TEST_CASE("ReadJobQueue order", "[reader]") {
       q.push(std::move(chunk));
     }
     {
-      mcap::DecompressChunkJob chunk;
+      mcap::internal::DecompressChunkJob chunk;
       chunk.messageStartTime = 0;
       chunk.messageEndTime = 100;
       chunk.chunkStartOffset = 2000;
@@ -728,15 +728,15 @@ TEST_CASE("ReadJobQueue order", "[reader]") {
 
     {
       auto result = q.pop();
-      REQUIRE(std::holds_alternative<mcap::DecompressChunkJob>(result));
-      REQUIRE(std::get<mcap::DecompressChunkJob>(result).messageStartTime == 100);
-      REQUIRE(std::get<mcap::DecompressChunkJob>(result).chunkStartOffset == 1000);
+      REQUIRE(std::holds_alternative<mcap::internal::DecompressChunkJob>(result));
+      REQUIRE(std::get<mcap::internal::DecompressChunkJob>(result).messageStartTime == 100);
+      REQUIRE(std::get<mcap::internal::DecompressChunkJob>(result).chunkStartOffset == 1000);
     }
     {
       auto result = q.pop();
-      REQUIRE(std::holds_alternative<mcap::DecompressChunkJob>(result));
-      REQUIRE(std::get<mcap::DecompressChunkJob>(result).messageStartTime == 0);
-      REQUIRE(std::get<mcap::DecompressChunkJob>(result).chunkStartOffset == 2000);
+      REQUIRE(std::holds_alternative<mcap::internal::DecompressChunkJob>(result));
+      REQUIRE(std::get<mcap::internal::DecompressChunkJob>(result).messageStartTime == 0);
+      REQUIRE(std::get<mcap::internal::DecompressChunkJob>(result).chunkStartOffset == 2000);
     }
   }
 }
