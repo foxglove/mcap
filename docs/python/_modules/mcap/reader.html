@@ -143,7 +143,7 @@
         <span class="n">end_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">log_time_order</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">reverse</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Schema</span><span class="p">,</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">Schema</span><span class="p">],</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]]:</span>
         <span class="sd">&quot;&quot;&quot;iterates through the messages in an MCAP.</span>
 
 <span class="sd">        :param topics: if not None, only messages from these topics will be returned.</span>
@@ -208,7 +208,7 @@
         <span class="n">end_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">log_time_order</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">reverse</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Schema</span><span class="p">,</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">Schema</span><span class="p">],</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]]:</span>
         <span class="sd">&quot;&quot;&quot;iterates through the messages in an MCAP.</span>
 
 <span class="sd">        :param topics: if not None, only messages from these topics will be returned.</span>
@@ -251,7 +251,10 @@
                             <span class="k">continue</span>
                         <span class="k">if</span> <span class="n">end_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">record</span><span class="o">.</span><span class="n">log_time</span> <span class="o">&gt;=</span> <span class="n">end_time</span><span class="p">:</span>
                             <span class="k">continue</span>
-                        <span class="n">schema</span> <span class="o">=</span> <span class="n">summary</span><span class="o">.</span><span class="n">schemas</span><span class="p">[</span><span class="n">channel</span><span class="o">.</span><span class="n">schema_id</span><span class="p">]</span>
+                        <span class="k">if</span> <span class="n">channel</span><span class="o">.</span><span class="n">schema_id</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                            <span class="n">schema</span> <span class="o">=</span> <span class="kc">None</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">schema</span> <span class="o">=</span> <span class="n">summary</span><span class="o">.</span><span class="n">schemas</span><span class="p">[</span><span class="n">channel</span><span class="o">.</span><span class="n">schema_id</span><span class="p">]</span>
                         <span class="n">message_queue</span><span class="o">.</span><span class="n">push</span><span class="p">(</span>
                             <span class="p">(</span>
                                 <span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">record</span><span class="p">),</span>
@@ -357,7 +360,7 @@
         <span class="n">end_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">log_time_order</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">reverse</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Schema</span><span class="p">,</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">Schema</span><span class="p">],</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]]:</span>
         <span class="sd">&quot;&quot;&quot;Iterates through the messages in an MCAP.</span>
 
 <span class="sd">        :param topics: if not None, only messages from these topics will be returned.</span>
@@ -390,13 +393,13 @@
         <span class="n">topics</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Iterable</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">start_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">end_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Schema</span><span class="p">,</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">Schema</span><span class="p">],</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Message</span><span class="p">]]:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_check_spent</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stream_reader</span><span class="o">.</span><span class="n">records</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Schema</span><span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_schemas</span><span class="p">[</span><span class="n">record</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">record</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">Channel</span><span class="p">):</span>
-                <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">schema_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schemas</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">schema_id</span> <span class="o">!=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">record</span><span class="o">.</span><span class="n">schema_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schemas</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="n">McapError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">&quot;no schema record found with id </span><span class="si">{</span><span class="n">record</span><span class="o">.</span><span class="n">schema_id</span><span class="si">}</span><span class="s2">&quot;</span>
                     <span class="p">)</span>
@@ -413,7 +416,10 @@
                     <span class="k">continue</span>
                 <span class="k">if</span> <span class="n">end_time</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">record</span><span class="o">.</span><span class="n">log_time</span> <span class="o">&gt;=</span> <span class="n">end_time</span><span class="p">:</span>
                     <span class="k">continue</span>
-                <span class="n">schema</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schemas</span><span class="p">[</span><span class="n">channel</span><span class="o">.</span><span class="n">schema_id</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">channel</span><span class="o">.</span><span class="n">schema_id</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">schema</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">schema</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schemas</span><span class="p">[</span><span class="n">channel</span><span class="o">.</span><span class="n">schema_id</span><span class="p">]</span>
                 <span class="k">yield</span> <span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">record</span><span class="p">)</span>
 
 <div class="viewcode-block" id="NonSeekingReader.get_summary"><a class="viewcode-back" href="../../mcap-apidoc/mcap.reader.html#mcap.reader.NonSeekingReader.get_summary">[docs]</a>    <span class="k">def</span> <span class="nf">get_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Summary</span><span class="p">]:</span>

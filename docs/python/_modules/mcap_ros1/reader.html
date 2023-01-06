@@ -41,7 +41,7 @@
 <span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
 <span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">PathLike</span>
 
-<span class="kn">from</span> <span class="nn">.decoder</span> <span class="kn">import</span> <span class="n">Decoder</span>
+<span class="kn">from</span> <span class="nn">.decoder</span> <span class="kn">import</span> <span class="n">Decoder</span><span class="p">,</span> <span class="n">McapROS1DecodeError</span>
 
 <span class="kn">from</span> <span class="nn">mcap.records</span> <span class="kn">import</span> <span class="n">Message</span><span class="p">,</span> <span class="n">Channel</span><span class="p">,</span> <span class="n">Schema</span>
 <span class="kn">from</span> <span class="nn">mcap.reader</span> <span class="kn">import</span> <span class="n">McapReader</span><span class="p">,</span> <span class="n">make_reader</span>
@@ -99,6 +99,10 @@
         <span class="k">for</span> <span class="n">schema</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">reader</span><span class="o">.</span><span class="n">iter_messages</span><span class="p">(</span>
             <span class="n">topics</span><span class="p">,</span> <span class="n">start_time</span><span class="p">,</span> <span class="n">end_time</span><span class="p">,</span> <span class="n">log_time_order</span><span class="p">,</span> <span class="n">reverse</span>
         <span class="p">):</span>
+            <span class="k">if</span> <span class="n">schema</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">McapROS1DecodeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;cannot decode schemaless channel with encoding </span><span class="si">{</span><span class="n">channel</span><span class="o">.</span><span class="n">message_encoding</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
             <span class="k">yield</span> <span class="n">McapROS1Message</span><span class="p">(</span>
                 <span class="n">ros_msg</span><span class="o">=</span><span class="n">decoder</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">schema</span><span class="o">=</span><span class="n">schema</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">),</span>
                 <span class="n">message</span><span class="o">=</span><span class="n">message</span><span class="p">,</span>
