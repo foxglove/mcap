@@ -499,7 +499,8 @@ Status McapWriter::write(const Message& message) {
     const auto& channel = channels_[channelIndex];
 
     // Check if the Schema record needs to be written
-    if (writtenSchemas_.find(channel.schemaId) == writtenSchemas_.end()) {
+    if ((channel.schemaId != 0) &&
+        (writtenSchemas_.find(channel.schemaId) == writtenSchemas_.end())) {
       const size_t schemaIndex = channel.schemaId - 1;
       if (schemaIndex >= schemas_.size()) {
         const auto msg = internal::StrCat("invalid schema id ", channel.schemaId);

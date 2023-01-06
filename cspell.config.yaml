@@ -71,6 +71,7 @@ words:
   - rosbag
   - rosmsg
   - rostime
+  - schemaless
   - serde
   - stoull
   - struct

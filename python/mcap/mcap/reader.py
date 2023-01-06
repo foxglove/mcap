@@ -108,7 +108,7 @@ class McapReader(ABC):
         end_time: Optional[int] = None,
         log_time_order: bool = True,
         reverse: bool = False,
-    ) -> Iterator[Tuple[Schema, Channel, Message]]:
+    ) -> Iterator[Tuple[Optional[Schema], Channel, Message]]:
         """iterates through the messages in an MCAP.
 
         :param topics: if not None, only messages from these topics will be returned.
@@ -173,7 +173,7 @@ class SeekingReader(McapReader):
         end_time: Optional[int] = None,
         log_time_order: bool = True,
         reverse: bool = False,
-    ) -> Iterator[Tuple[Schema, Channel, Message]]:
+    ) -> Iterator[Tuple[Optional[Schema], Channel, Message]]:
         """iterates through the messages in an MCAP.
 
         :param topics: if not None, only messages from these topics will be returned.
@@ -216,7 +216,10 @@ class SeekingReader(McapReader):
                             continue
                         if end_time is not None and record.log_time >= end_time:
                             continue
-                        schema = summary.schemas[channel.schema_id]
+                        if channel.schema_id == 0:
+                            schema = None
+                        else:
+                            schema = summary.schemas[channel.schema_id]
                         message_queue.push(
                             (
                                 (schema, channel, record),
@@ -322,7 +325,7 @@ class NonSeekingReader(McapReader):
         end_time: Optional[int] = None,
         log_time_order: bool = True,
         reverse: bool = False,
-    ) -> Iterator[Tuple[Schema, Channel, Message]]:
+    ) -> Iterator[Tuple[Optional[Schema], Channel, Message]]:
         """Iterates through the messages in an MCAP.
 
         :param topics: if not None, only messages from these topics will be returned.
@@ -355,13 +358,13 @@ class NonSeekingReader(McapReader):
         topics: Optional[Iterable[str]] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
-    ) -> Iterator[Tuple[Schema, Channel, Message]]:
+    ) -> Iterator[Tuple[Optional[Schema], Channel, Message]]:
         self._check_spent()
         for record in self._stream_reader.records:
             if isinstance(record, Schema):
                 self._schemas[record.id] = record
             if isinstance(record, Channel):
-                if record.schema_id not in self._schemas:
+                if record.schema_id != 0 and record.schema_id not in self._schemas:
                     raise McapError(
                         f"no schema record found with id {record.schema_id}"
                     )
@@ -378,7 +381,10 @@ class NonSeekingReader(McapReader):
                     continue
                 if end_time is not None and record.log_time >= end_time:
                     continue
-                schema = self._schemas[channel.schema_id]
+                if channel.schema_id == 0:
+                    schema = None
+                else:
+                    schema = self._schemas[channel.schema_id]
                 yield (schema, channel, record)
 
     def get_summary(self) -> Optional[Summary]:
