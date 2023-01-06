@@ -364,7 +364,7 @@ class NonSeekingReader(McapReader):
             if isinstance(record, Schema):
                 self._schemas[record.id] = record
             if isinstance(record, Channel):
-                if record.schema_id not in self._schemas:
+                if record.schema_id != 0 and record.schema_id not in self._schemas:
                     raise McapError(
                         f"no schema record found with id {record.schema_id}"
                     )
