@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "variant": {
+      "features": [
+        "ch",
+        "mx",
+        "chx"
+      ]
+    }
+  },
+  "records": [
+    {
+      "fields": [
+        [
+          "library",
+          ""
+        ],
+        [
+          "profile",
+          ""
+        ]
+      ],
+      "type": "Header"
+    },
+    {
+      "fields": [
+        [
+          "id",
+          "1"
+        ],
+        [
+          "message_encoding",
+          "text"
+        ],
+        [
+          "metadata",
+          {
+          }
+        ],
+        [
+          "schema_id",
+          "0"
+        ],
+        [
+          "topic",
+          "example"
+        ]
+      ],
+      "type": "Channel"
+    },
+    {
+      "fields": [
+        [
+          "channel_id",
+          "1"
+        ],
+        [
+          "data",
+          [
+            "1",
+            "2",
+            "3"
+          ]
+        ],
+        [
+          "log_time",
+          "2"
+        ],
+        [
+          "publish_time",
+          "1"
+        ],
+        [
+          "sequence",
+          "10"
+        ]
+      ],
+      "type": "Message"
+    },
+    {
+      "fields": [
+        [
+          "data_section_crc",
+          "3511088359"
+        ]
+      ],
+      "type": "DataEnd"
+    },
+    {
+      "fields": [
+        [
+          "chunk_length",
+          "119"
+        ],
+        [
+          "chunk_start_offset",
+          "25"
+        ],
+        [
+          "compressed_size",
+          "70"
+        ],
+        [
+          "compression",
+          ""
+        ],
+        [
+          "message_end_time",
+          "2"
+        ],
+        [
+          "message_index_length",
+          "31"
+        ],
+        [
+          "message_index_offsets",
+          {
+            "1": "144"
+          }
+        ],
+        [
+          "message_start_time",
+          "2"
+        ],
+        [
+          "uncompressed_size",
+          "70"
+        ]
+      ],
+      "type": "ChunkIndex"
+    },
+    {
+      "fields": [
+        [
+          "summary_crc",
+          "2005462604"
+        ],
+        [
+          "summary_offset_start",
+          "0"
+        ],
+        [
+          "summary_start",
+          "188"
+        ]
+      ],
+      "type": "Footer"
+    }
+  ]
+}
