@@ -1,9 +1,9 @@
 import { crc32Init, crc32Update, crc32Final, crc32 } from "@foxglove/crc";
 
-import { ChunkBuilder } from "./ChunkBuilder";
 import { IWritable } from "./IWritable";
-import { McapRecordBuilder } from "./McapRecordBuilder";
 import { Opcode } from "./constants";
+import { ChunkBuilder } from "./internal/ChunkBuilder";
+import { McapRecordBuilder } from "./internal/McapRecordBuilder";
 import {
   Schema,
   Channel,

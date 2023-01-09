@@ -1,7 +1,7 @@
 import { crc32 } from "@foxglove/crc";
 
 import { BufferBuilder } from "./BufferBuilder";
-import { MCAP_MAGIC, Opcode } from "./constants";
+import { MCAP_MAGIC, Opcode } from "../constants";
 import {
   Attachment,
   AttachmentIndex,
@@ -18,7 +18,7 @@ import {
   Schema,
   Statistics,
   SummaryOffset,
-} from "./types";
+} from "../types";
 
 type Options = {
   /** Add an unspecified number of extra padding bytes at the end of each record */

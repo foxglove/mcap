@@ -1,5 +1,5 @@
+import { Channel, Message, MessageIndex, Schema } from "../types";
 import { McapRecordBuilder } from "./McapRecordBuilder";
-import { Channel, Message, MessageIndex, Schema } from "./types";
 
 type ChunkBuilderOptions = {
   useMessageIndex?: boolean;

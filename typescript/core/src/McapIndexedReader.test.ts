@@ -1,11 +1,11 @@
 import { crc32 } from "@foxglove/crc";
 
-import { ChunkBuilder } from "./ChunkBuilder";
 import { McapIndexedReader } from "./McapIndexedReader";
-import { McapRecordBuilder } from "./McapRecordBuilder";
 import { McapWriter } from "./McapWriter";
 import { TempBuffer } from "./TempBuffer";
 import { MCAP_MAGIC, Opcode } from "./constants";
+import { ChunkBuilder } from "./internal/ChunkBuilder";
+import { McapRecordBuilder } from "./internal/McapRecordBuilder";
 import {
   record,
   uint64LE,
