@@ -9,7 +9,7 @@ from mcap.well_known import SchemaEncoding
 from mcap.writer import Writer as McapWriter
 
 from . import __version__
-from .dynamic import EncoderFunction, serialize_dynamic
+from ._dynamic import EncoderFunction, serialize_dynamic
 
 
 class McapROS2WriteError(McapError):
