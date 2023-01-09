@@ -1,7 +1,0 @@
-mcap.message\_queue module
-==========================
-
-.. automodule:: mcap.message_queue
-   :members:
-   :undoc-members:
-   :show-inheritance:

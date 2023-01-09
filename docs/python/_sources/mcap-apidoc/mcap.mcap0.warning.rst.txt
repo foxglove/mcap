@@ -1,7 +1,0 @@
-mcap.mcap0.warning module
-=========================
-
-.. automodule:: mcap.mcap0.warning
-   :members:
-   :undoc-members:
-   :show-inheritance:

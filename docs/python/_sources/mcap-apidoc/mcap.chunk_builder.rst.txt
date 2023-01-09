@@ -1,7 +1,0 @@
-mcap.chunk\_builder module
-==========================
-
-.. automodule:: mcap.chunk_builder
-   :members:
-   :undoc-members:
-   :show-inheritance:

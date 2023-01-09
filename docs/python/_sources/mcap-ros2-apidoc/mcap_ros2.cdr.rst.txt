@@ -1,7 +1,0 @@
-mcap\_ros2.cdr module
-=====================
-
-.. automodule:: mcap_ros2.cdr
-   :members:
-   :undoc-members:
-   :show-inheritance:
