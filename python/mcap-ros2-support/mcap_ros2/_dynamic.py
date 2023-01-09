@@ -5,8 +5,8 @@ from io import BytesIO
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from .cdr import CdrReader, CdrWriter
-from .vendor.rosidl_adapter.parser import (
+from ._cdr import CdrReader, CdrWriter
+from ._vendor.rosidl_adapter.parser import (
     Field,
     MessageSpecification,
     Type,
