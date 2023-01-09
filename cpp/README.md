@@ -106,3 +106,15 @@ for full details. The high-level interfaces for reading and writing are
    - Update [`all/conandata.yml`](https://github.com/conan-io/conan-center-index/blob/master/recipes/mcap/all/conandata.yml) to add an entry pointing at the tarball from the new release tag. <!-- cspell: word conandata -->
    - Follow the instructions for [developing recipes locally](https://github.com/conan-io/conan-center-index/blob/master/docs/developing_recipes_locally.md) to test the recipe.
    - Examples of previous changes to the mcap recipe: https://github.com/conan-io/conan-center-index/commits/master/recipes/mcap
+
+## Changes to APIs
+
+This project uses a [semantic version](https://semver.org) number to notify users of changes to public APIs.
+This semantic version can be read from `types.hpp`, defined as `MCAP_LIBRARY_VERSION`.
+
+The public API includes names that can be included from the `.hpp` files in `include/mcap`, excluding anything namespaced under `mcap::internal`.
+
+This API version does not cover the compiled ABI of the library. Projects including `mcap` are expected
+to compile it from source as part of their build process.
+
+Build rules in CMake or `conanfile.py` files are not covered as part of this public API.
