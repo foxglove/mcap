@@ -24,6 +24,7 @@ ignorePaths:
   - package.xml
   - "*_pb2.py"
   - "*.pyc"
+  - "*.webp"
   - Pipfile*
   - mkdocs.yml
   - fathom.html
