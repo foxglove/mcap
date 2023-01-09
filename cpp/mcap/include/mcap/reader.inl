@@ -1798,7 +1798,7 @@ IndexedMessageReader::IndexedMessageReader(
     }
     for (const auto& channelId : selectedChannels_) {
       if (chunkIndex.messageIndexOffsets.find(channelId) != chunkIndex.messageIndexOffsets.end()) {
-        DecompressChunkJob job;
+        internal::DecompressChunkJob job;
         job.chunkStartOffset = chunkIndex.chunkStartOffset;
         job.messageIndexEndOffset =
           chunkIndex.chunkStartOffset + chunkIndex.chunkLength + chunkIndex.messageIndexLength;
@@ -1848,8 +1848,8 @@ void IndexedMessageReader::decompressChunk(const Chunk& chunk,
 bool IndexedMessageReader::next() {
   while (queue_.len() != 0) {
     auto nextItem = queue_.pop();
-    if (std::holds_alternative<DecompressChunkJob>(nextItem)) {
-      const auto& decompressChunkJob = std::get<DecompressChunkJob>(nextItem);
+    if (std::holds_alternative<internal::DecompressChunkJob>(nextItem)) {
+      const auto& decompressChunkJob = std::get<internal::DecompressChunkJob>(nextItem);
       // The job here is to decompress the chunk into a slot, then use the message
       // indices after the chunk to push ReadMessageJobs onto the queue for every message
       // in that chunk that needs to be read.
@@ -1884,7 +1884,7 @@ bool IndexedMessageReader::next() {
             if (selectedChannels_.find(messageIndex.channelId) != selectedChannels_.end()) {
               for (const auto& [timestamp, byteOffset] : messageIndex.records) {
                 if (timestamp >= options_.startTime && timestamp < options_.endTime) {
-                  ReadMessageJob job;
+                  internal::ReadMessageJob job;
                   job.chunkReaderIndex = chunkReaderIndex;
                   job.offset.offset = byteOffset;
                   job.offset.chunkOffset = decompressChunkJob.chunkStartOffset;
@@ -1902,9 +1902,9 @@ bool IndexedMessageReader::next() {
             return false;
         }
       }
-    } else if (std::holds_alternative<ReadMessageJob>(nextItem)) {
+    } else if (std::holds_alternative<internal::ReadMessageJob>(nextItem)) {
       // Read the message out of the already-decompressed chunk.
-      const auto& readMessageJob = std::get<ReadMessageJob>(nextItem);
+      const auto& readMessageJob = std::get<internal::ReadMessageJob>(nextItem);
       auto& chunkSlot = chunkSlots_[readMessageJob.chunkReaderIndex];
       assert(chunkSlot.unreadMessages > 0);
       chunkSlot.unreadMessages--;

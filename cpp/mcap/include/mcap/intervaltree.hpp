@@ -9,9 +9,7 @@
 #include <memory>
 #include <vector>
 
-namespace mcap {
-
-namespace internal {
+namespace mcap::internal {
 
 template <class Scalar, typename Value>
 class Interval {
@@ -302,6 +300,4 @@ private:
   Scalar center;
 };
 
-}  // namespace internal
-
-}  // namespace mcap
+}  // namespace mcap::internal
