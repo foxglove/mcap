@@ -8,7 +8,7 @@ theme:
   name: material
   custom_dir: "docs/theme"
   favicon: img/favicon32.png
-  logo: img/mcap.png
+  logo: img/mcap240.webp
   icon:
     repo: fontawesome/brands/github
   palette:
