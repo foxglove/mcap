@@ -12,7 +12,7 @@ MCAP is a modular container file format for recording timestamped [pub/sub](http
 
 MCAP files are designed to work well under various workloads, resource constraints, and durability requirements.
 
-A [Kaitai Struct](http://kaitai.io) description for the MCAP format is provided at [mcap.ksy](mcap.ksy).
+A [Kaitai Struct](http://kaitai.io) description for the MCAP format is provided at [mcap.ksy](https://github.com/foxglove/mcap/blob/main/docs/specification/mcap.ksy).
 
 ## File Structure
 
