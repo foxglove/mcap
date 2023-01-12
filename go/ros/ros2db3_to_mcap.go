@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -25,31 +27,42 @@ func getSchema(encoding string, rosType string, directories []string) ([]byte, e
 	}
 	baseType := parts[2]
 	rosPkg := parts[0]
+
 	for _, dir := range directories {
-		schemaIndexPath := path.Join(
-			dir, "share", "ament_index",
-			"resource_index", "rosidl_interfaces", rosPkg, // cspell:disable-line
-		)
-		schemaIndex, err := os.ReadFile(schemaIndexPath)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
+		var content []byte
+		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
 			}
-			return nil, fmt.Errorf("failed to read schema index: %w", err)
-		}
-		lines := strings.Split(string(schemaIndex), "\n")
-		for _, line := range lines {
-			if line == fmt.Sprintf("msg/%s.%s", baseType, encoding) {
-				schemaPath := path.Join(dir, "share", rosPkg, "msg", baseType+"."+encoding)
-				schema, err := os.ReadFile(schemaPath)
-				if err != nil {
-					return nil, fmt.Errorf("failed to read schema: %w", err)
+			if content != nil {
+				return nil
+			}
+			mode := info.Mode()
+			if !mode.IsRegular() && (mode&fs.ModeSymlink == 0) {
+				// This is not a file or a symlink, skip it.
+				return nil
+			}
+			parts := strings.Split(path, string(os.PathSeparator))
+			expectedParts := []string{rosPkg, "msg", baseType + "." + encoding}
+			if len(parts) < len(expectedParts) {
+				return nil
+			}
+			for i, expectedPart := range expectedParts {
+				if parts[len(parts)-len(expectedParts)+i] != expectedPart {
+					return nil
 				}
-				return schema, nil
 			}
+			content, err = os.ReadFile(path)
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+		if content != nil {
+			return content, nil
 		}
 	}
-	return nil, fmt.Errorf("schema not found")
+	return nil, errors.New("schema not found")
 }
 
 func getSchemas(encoding string, directories []string, types []string) (map[string][]byte, error) {

@@ -32,6 +32,22 @@ func TestDB3MCAPConversion(t *testing.T) {
 			7,
 		},
 		{
+			"galactic bag with irregular msg def search path",
+			"../../testdata/db3/chatter.db3",
+			"./testdata/irregular_galactic",
+			"/chatter",
+			"std_msgs/msg/String",
+			7,
+		},
+		{
+			"galactic bag with irregular msg def search path using symlinked install",
+			"../../testdata/db3/chatter.db3",
+			"./testdata/galactic_irregular_symlinks",
+			"/chatter",
+			"std_msgs/msg/String",
+			7,
+		},
+		{
 			"eloquent bag",
 			"../../testdata/db3/eloquent-twist.db3",
 			"./testdata/eloquent",
