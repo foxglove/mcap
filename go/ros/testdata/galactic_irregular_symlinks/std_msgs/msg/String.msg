@@ -1,1 +1,0 @@
-../../../irregular_galactic/std_msgs/msg/String.msg
