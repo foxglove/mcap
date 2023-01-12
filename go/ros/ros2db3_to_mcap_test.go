@@ -149,3 +149,9 @@ func TestMessageTopicRegex(t *testing.T) {
 		})
 	}
 }
+
+func TestSchemaFinding(t *testing.T) {
+	content, err := getSchema("msg", "jupiter_msgs/msg/Descriptor", []string{"./testdata/get_schema_workspace"})
+	assert.Nil(t, err)
+	assert.Equal(t, "# is a descriptor\n", string(content))
+}
