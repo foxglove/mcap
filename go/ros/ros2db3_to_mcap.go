@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -18,6 +17,7 @@ import (
 
 var (
 	messageTopicRegex = regexp.MustCompile(`\w+/msg/.*`)
+	errSchemaNotFound = errors.New("schema not found")
 )
 
 func getSchema(encoding string, rosType string, directories []string) ([]byte, error) {
@@ -27,42 +27,32 @@ func getSchema(encoding string, rosType string, directories []string) ([]byte, e
 	}
 	baseType := parts[2]
 	rosPkg := parts[0]
-
 	for _, dir := range directories {
-		var content []byte
-		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if content != nil {
-				return nil
-			}
-			mode := info.Mode()
-			if !mode.IsRegular() && (mode&fs.ModeSymlink == 0) {
-				// This is not a file or a symlink, skip it.
-				return nil
-			}
-			parts := strings.Split(path, string(os.PathSeparator))
-			expectedParts := []string{rosPkg, "msg", baseType + "." + encoding}
-			if len(parts) < len(expectedParts) {
-				return nil
-			}
-			for i, expectedPart := range expectedParts {
-				if parts[len(parts)-len(expectedParts)+i] != expectedPart {
-					return nil
-				}
-			}
-			content, err = os.ReadFile(path)
-			return err
-		})
+		schemaIndexPath := path.Join(
+			dir, "share", "ament_index",
+			"resource_index", "rosidl_interfaces", rosPkg, // cspell:disable-line
+		)
+		schemaIndex, err := os.ReadFile(schemaIndexPath)
 		if err != nil {
-			return nil, err
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return nil, fmt.Errorf("failed to read schema index: %w", err)
 		}
-		if content != nil {
-			return content, nil
+		lines := strings.Split(string(schemaIndex), "\n")
+		for _, line := range lines {
+			expectedMsgDefFilename := baseType + "." + encoding
+			if _, filename := filepath.Split(line); filename == expectedMsgDefFilename {
+				schemaPath := path.Join(dir, "share", rosPkg, line)
+				schema, err := os.ReadFile(schemaPath)
+				if err != nil {
+					return nil, fmt.Errorf("failed to read schema: %w", err)
+				}
+				return schema, nil
+			}
 		}
 	}
-	return nil, errors.New("schema not found")
+	return nil, errSchemaNotFound
 }
 
 func getSchemas(encoding string, directories []string, types []string) (map[string][]byte, error) {
