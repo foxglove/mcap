@@ -137,10 +137,13 @@ func getSchemas(encoding string, directories []string, types []string) (map[stri
 				}
 
 				// if it's not a primitive, we need to look it up
-				qualifiedType := fieldToQualifiedROSType(baseType, parentPackage)
+				qualifiedType, err := fieldToQualifiedROSType(baseType, parentPackage)
+				if err != nil {
+					return nil, err
+				}
 				fieldSchema, err := getSchema(encoding, qualifiedType, directories)
 				if err != nil {
-					return nil, fmt.Errorf("failed to find schema for %s: %w", baseType, err)
+					return nil, fmt.Errorf("failed to find schema for %s: %w", qualifiedType, err)
 				}
 				subdefinitions = append(subdefinitions, struct {
 					parentPackage string
@@ -158,12 +161,26 @@ func getSchemas(encoding string, directories []string, types []string) (map[stri
 	return messageDefinitions, nil
 }
 
-func fieldToQualifiedROSType(fieldType, rosPackage string) string {
+/// fieldToQualifiedROSType converts a field name as found in a message definition
+/// into a canonical "qualified" ROS message type name, with the form <packageName>/msg/<typename>.
+/// Types can be named in .msg definitions in three ways. For some type Foo in package "bar_msgs":
+/// 1. `Foo`, when referenced in another message definition in package `bar`
+/// 2. `bar_msgs/Foo`
+/// 3. `bar_msgs/msg/Foo`
+/// For all of the above this function returns `bar_msgs/msg/Foo`.
+func fieldToQualifiedROSType(fieldType, rosPackage string) (string, error) {
 	parts := strings.FieldsFunc(fieldType, func(c rune) bool { return c == '/' })
-	if len(parts) == 1 {
-		return path.Join(rosPackage, "msg", fieldType)
+	switch len(parts) {
+	case 1:
+		return path.Join(rosPackage, "msg", fieldType), nil
+	case 2:
+		return path.Join(parts[0], "msg", parts[1]), nil
+	case 3:
+		if parts[1] == "msg" {
+			return fieldType, nil
+		}
 	}
-	return path.Join(parts[0], "msg", parts[1])
+	return "", fmt.Errorf("cannot qualify field type %s in package %s", fieldType, rosPackage)
 }
 
 type topicsRecord struct {

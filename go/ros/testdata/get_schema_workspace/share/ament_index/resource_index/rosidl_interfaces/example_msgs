@@ -1,2 +1,5 @@
 msg/Descriptor.msg
+msg/Triangle.msg
+msg/Square.msg
 other_subdir/CustomSubdirectory.msg
+other_subdir/ReferencesOtherDefinitions.msg

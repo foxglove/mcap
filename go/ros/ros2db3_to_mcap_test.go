@@ -119,6 +119,34 @@ int32 foo
 `
 		assert.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
 	})
+	t.Run("schema name resolution works for all forms", func(t *testing.T) {
+		schemas, err := getSchemas(
+			"msg",
+			[]string{"./testdata/get_schema_workspace"},
+			[]string{"example_msgs/msg/ReferencesOtherDefinitions"},
+		)
+		assert.Nil(t, err)
+		schema, present := schemas["example_msgs/msg/ReferencesOtherDefinitions"]
+		assert.True(t, present)
+		expectedSchema := `
+# reference to message in same package
+Descriptor descriptor
+# qualified with package name
+example_msgs/Triangle triangle
+# qualified with package name
+example_msgs/msg/Square square
+================================================================================
+MSG: example_msgs/Descriptor
+# is a descriptor
+================================================================================
+MSG: example_msgs/Triangle
+# is a triangle
+================================================================================
+MSG: example_msgs/Square
+# is a square
+`
+		assert.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
+	})
 }
 
 func TestMessageTopicRegex(t *testing.T) {
