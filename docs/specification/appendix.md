@@ -82,7 +82,7 @@ The top-level message definition is present first, with no delimiter. All depend
 - One line containing exactly 80 `=` characters
 - One line containing `MSG: <package resource name>` for that type. The space between `MSG:` and the package resource name is mandatory. The package resource name does not include a file extension.
 
-This format can be reproduced using [gendeps --cat](http://wiki.ros.org/roslib/gentools).
+This format can be reproduced using [`gendeps --cat`](http://wiki.ros.org/roslib/gentools).
 
 ### ros2msg
 
