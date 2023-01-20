@@ -304,7 +304,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             (current_chunk_size, self.options.chunk_size)
         {
             if current_chunk_size > target {
-                self.finish_chunk()?;
+                self.finish_chunk()?.flush()?;
             }
         }
 
