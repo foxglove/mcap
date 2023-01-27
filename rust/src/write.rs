@@ -304,7 +304,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             (current_chunk_size, self.options.chunk_size)
         {
             if current_chunk_size > target {
-                self.finish_chunk()?.flush()?;
+                self.finish_chunk()?;
             }
         }
 
@@ -384,8 +384,23 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
     /// (Of course, this depends heavily on the entropy of what's being compressed!
     /// A stream of zeroes will compress great at any chunk size, and a stream
     /// of random data will compress terribly at any chunk size.)
+    ///
+    /// Use [Self::flush_writer()] if you want to flush without terminating the chunk.  
+    /// Use [Self::finish_chunk()] if you want to finish a chunk without flushing the writer.
     pub fn flush(&mut self) -> McapResult<()> {
         self.finish_chunk()?.flush()?;
+        Ok(())
+    }
+
+    /// Flush the underlying [writer](Write)
+    ///
+    /// Note that flushing the writer mid-chunk means that
+    /// if the writer is interrupted afterwards the readers will have to
+    /// recover a half-written chunk, probably with an unfinished compresion stream.
+    ///
+    /// Unlike [Self::flush()] this method does not terminate the current chunk.
+    pub fn flush_writer(&mut self) -> McapResult<()> {
+        self.flush()?;
         Ok(())
     }
 
@@ -418,7 +433,15 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
     }
 
     /// Finish the current chunk, if we have one.
-    fn finish_chunk(&mut self) -> McapResult<&mut W> {
+    ///
+    /// Note that lossless compression schemes like LZ4 and Zstd improve
+    /// as they go, so larger chunks will tend to have better compression.
+    /// (Of course, this depends heavily on the entropy of what's being compressed!
+    /// A stream of zeroes will compress great at any chunk size, and a stream
+    /// of random data will compress terribly at any chunk size.)
+    ///
+    /// Unlike [Self::flush()] this method does not flush the [writer](Writer).
+    pub fn finish_chunk(&mut self) -> McapResult<&mut W> {
         // See above
         let prev_writer = self.writer.take().expect(Self::WHERE_WRITER);
 
