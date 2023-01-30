@@ -108,6 +108,8 @@ pub struct WriteOptions {
     compression: Option<Compression>,
     profile: String,
     chunk_size: Option<u64>,
+    #[cfg(feature = "zstd")]
+    zstd_worker_threads: u32,
 }
 
 impl Default for WriteOptions {
@@ -115,6 +117,8 @@ impl Default for WriteOptions {
         Self {
             #[cfg(feature = "zstd")]
             compression: Some(Compression::Zstd),
+            #[cfg(feature = "zstd")]
+            zstd_worker_threads: num_cpus::get_physical() as u32,
             #[cfg(not(feature = "zstd"))]
             compression: None,
             profile: String::new(),
@@ -132,6 +136,24 @@ impl WriteOptions {
     pub fn compression(self, compression: Option<Compression>) -> Self {
         Self {
             compression,
+            ..self
+        }
+    }
+
+    #[cfg(feature = "zstd")]
+    /// Override the number of threads used for zstd compression.
+    /// By default it will use up the number of physical cores.
+    /// 
+    /// * If `zstd_worker_threads == 0`, then multithreaded compression
+    ///   will be disabled.
+    /// * If `zstd_worker_threads >= 1`, then compression will be done 
+    ///   in separate threads.
+    ///
+    /// So even `n_workers = 1` may increase performance by separating
+    /// IO and compression.
+    pub fn zstd_worker_threads(self, zstd_worker_threads: u32) -> Self {
+        Self {
+            zstd_worker_threads,
             ..self
         }
     }
@@ -406,7 +428,12 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             WriteMode::Raw(w) => {
                 // It's chunkin time.
                 self.stats.chunk_count += 1;
-                WriteMode::Chunk(ChunkWriter::new(w, self.options.compression)?)
+                WriteMode::Chunk(ChunkWriter::new(
+                    w,
+                    self.options.compression,
+                    #[cfg(feature = "zstd")]
+                    self.options.zstd_worker_threads,
+                )?)
             }
             chunk => chunk,
         });
@@ -691,7 +718,11 @@ struct ChunkWriter<W: Write> {
 }
 
 impl<W: Write + Seek> ChunkWriter<W> {
-    fn new(mut writer: W, compression: Option<Compression>) -> McapResult<Self> {
+    fn new(
+        mut writer: W,
+        compression: Option<Compression>,
+        #[cfg(feature = "zstd")] zstd_worker_threads: u32,
+    ) -> McapResult<Self> {
         let header_start = writer.stream_position()?;
 
         op_and_len(&mut writer, op::CHUNK, !0)?;
@@ -719,7 +750,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
             #[cfg(feature = "zstd")]
             Some(Compression::Zstd) => {
                 let mut enc = zstd::Encoder::new(writer, 0)?;
-                enc.multithread(num_cpus::get_physical() as u32)?;
+                enc.multithread(zstd_worker_threads)?;
                 Compressor::Zstd(enc)
             }
             Some(Compression::Lz4) => {
