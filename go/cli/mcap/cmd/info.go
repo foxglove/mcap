@@ -78,7 +78,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			fmt.Fprintf(buf, "[%s/%s (%.2f%%)] ",
 				humanBytes(v.uncompressedSize), humanBytes(v.compressedSize), compressionRatio)
 			if durationInSeconds > 0 {
-				fmt.Fprintf(buf, "[%s/sec] ", humanBytes(v.compressedSize/uint64(durationInSeconds)))
+				fmt.Fprintf(buf, "[%s/sec] ", humanBytes(uint64(float64(v.compressedSize)/durationInSeconds)))
 			}
 			fmt.Fprintf(buf, "\n")
 		}
