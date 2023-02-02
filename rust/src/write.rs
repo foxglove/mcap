@@ -143,10 +143,10 @@ impl WriteOptions {
     #[cfg(feature = "zstd")]
     /// Override the number of threads used for zstd compression.
     /// By default it will use up the number of physical cores.
-    /// 
+    ///
     /// * If `zstd_worker_threads == 0`, then multithreaded compression
     ///   will be disabled.
-    /// * If `zstd_worker_threads >= 1`, then compression will be done 
+    /// * If `zstd_worker_threads >= 1`, then compression will be done
     ///   in separate threads.
     ///
     /// So even `n_workers = 1` may increase performance by separating
