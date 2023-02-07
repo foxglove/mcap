@@ -1,0 +1,47 @@
+{
+ "graph_lock": {
+  "nodes": {
+   "0": {
+    "options": "benchmark:enable_exceptions=True\nbenchmark:enable_lto=False\nbenchmark:fPIC=True\nbenchmark:shared=False",
+    "requires": [
+     "1",
+     "2"
+    ],
+    "path": "conanfile.py",
+    "context": "host"
+   },
+   "1": {
+    "ref": "benchmark/1.7.0",
+    "options": "enable_exceptions=True\nenable_lto=False\nfPIC=True\nshared=False",
+    "package_id": "6ffd97553e96f917fad2fb55bed2ff9792012f38",
+    "context": "host"
+   },
+   "2": {
+    "ref": "mcap/0.9.0",
+    "options": "lz4:fPIC=True\nlz4:shared=False\nzstd:fPIC=True\nzstd:shared=False\nzstd:threading=True",
+    "package_id": "5ab84d6acfe1f23c4fae0ab88f26e3a396351ac9",
+    "prev": "0",
+    "requires": [
+     "3",
+     "4"
+    ],
+    "context": "host"
+   },
+   "3": {
+    "ref": "lz4/1.9.4",
+    "options": "fPIC=True\nshared=False",
+    "package_id": "240c2182163325b213ca6886a7614c8ed2bf1738",
+    "context": "host"
+   },
+   "4": {
+    "ref": "zstd/1.5.2",
+    "options": "fPIC=True\nshared=False\nthreading=True",
+    "package_id": "21fe575bc61c7876dbea6bcaa88c986c622ccc02",
+    "context": "host"
+   }
+  },
+  "revisions_enabled": false
+ },
+ "version": "0.4",
+ "profile_host": "[settings]\narch=armv8\narch_build=armv8\nbuild_type=Release\ncompiler=apple-clang\ncompiler.libcxx=libc++\ncompiler.version=14\nos=Macos\nos_build=Macos\n[options]\n[build_requires]\n[env]\n"
+}

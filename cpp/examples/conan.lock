@@ -1,0 +1,72 @@
+{
+ "graph_lock": {
+  "nodes": {
+   "0": {
+    "options": "catch2:default_reporter=None\ncatch2:with_main=False\ncatch2:with_prefix=False\nprotobuf:debug_suffix=True\nprotobuf:fPIC=True\nprotobuf:lite=False\nprotobuf:shared=False\nprotobuf:with_rtti=True\nprotobuf:with_zlib=True\nzlib:fPIC=True\nzlib:shared=False",
+    "requires": [
+     "1",
+     "4",
+     "6",
+     "7"
+    ],
+    "path": "conanfile.py",
+    "context": "host"
+   },
+   "1": {
+    "ref": "mcap/0.9.0",
+    "options": "lz4:fPIC=True\nlz4:shared=False\nzstd:fPIC=True\nzstd:shared=False\nzstd:threading=True",
+    "package_id": "5ab84d6acfe1f23c4fae0ab88f26e3a396351ac9",
+    "prev": "0",
+    "requires": [
+     "2",
+     "3"
+    ],
+    "context": "host"
+   },
+   "2": {
+    "ref": "lz4/1.9.4",
+    "options": "fPIC=True\nshared=False",
+    "package_id": "240c2182163325b213ca6886a7614c8ed2bf1738",
+    "context": "host"
+   },
+   "3": {
+    "ref": "zstd/1.5.2",
+    "options": "fPIC=True\nshared=False\nthreading=True",
+    "package_id": "21fe575bc61c7876dbea6bcaa88c986c622ccc02",
+    "context": "host"
+   },
+   "4": {
+    "ref": "protobuf/3.21.1",
+    "options": "debug_suffix=True\nfPIC=True\nlite=False\nshared=False\nwith_rtti=True\nwith_zlib=True\nzlib:fPIC=True\nzlib:shared=False",
+    "package_id": "be2a0a2807bb180398bafcdcd02b31ceea4093ed",
+    "requires": [
+     "5"
+    ],
+    "context": "host"
+   },
+   "5": {
+    "ref": "zlib/1.2.12",
+    "options": "fPIC=True\nshared=False",
+    "package_id": "240c2182163325b213ca6886a7614c8ed2bf1738",
+    "context": "host"
+   },
+   "6": {
+    "ref": "nlohmann_json/3.10.5",
+    "options": "",
+    "package_id": "5ab84d6acfe1f23c4fae0ab88f26e3a396351ac9",
+    "prev": "0",
+    "context": "host"
+   },
+   "7": {
+    "ref": "catch2/2.13.8",
+    "options": "default_reporter=None\nwith_main=False\nwith_prefix=False",
+    "package_id": "5ab84d6acfe1f23c4fae0ab88f26e3a396351ac9",
+    "prev": "0",
+    "context": "host"
+   }
+  },
+  "revisions_enabled": false
+ },
+ "version": "0.4",
+ "profile_host": "[settings]\narch=armv8\narch_build=armv8\nbuild_type=Release\ncompiler=apple-clang\ncompiler.libcxx=libc++\ncompiler.version=14\nos=Macos\nos_build=Macos\n[options]\n[build_requires]\n[env]\n"
+}
