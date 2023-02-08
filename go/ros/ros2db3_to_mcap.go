@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 
 var (
 	messageTopicRegex = regexp.MustCompile(`\w+/msg/.*`)
+	errSchemaNotFound = errors.New("schema not found")
 )
 
 func getSchema(encoding string, rosType string, directories []string) ([]byte, error) {
@@ -39,8 +41,9 @@ func getSchema(encoding string, rosType string, directories []string) ([]byte, e
 		}
 		lines := strings.Split(string(schemaIndex), "\n")
 		for _, line := range lines {
-			if line == fmt.Sprintf("msg/%s.%s", baseType, encoding) {
-				schemaPath := path.Join(dir, "share", rosPkg, "msg", baseType+"."+encoding)
+			expectedMsgDefFilename := baseType + "." + encoding
+			if _, filename := filepath.Split(line); filename == expectedMsgDefFilename {
+				schemaPath := path.Join(dir, "share", rosPkg, line)
 				schema, err := os.ReadFile(schemaPath)
 				if err != nil {
 					return nil, fmt.Errorf("failed to read schema: %w", err)
@@ -49,7 +52,7 @@ func getSchema(encoding string, rosType string, directories []string) ([]byte, e
 			}
 		}
 	}
-	return nil, fmt.Errorf("schema not found")
+	return nil, errSchemaNotFound
 }
 
 func getSchemas(encoding string, directories []string, types []string) (map[string][]byte, error) {

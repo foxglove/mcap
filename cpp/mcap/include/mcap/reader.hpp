@@ -3,6 +3,7 @@
 #include "intervaltree.hpp"
 #include "read_job_queue.hpp"
 #include "types.hpp"
+#include "visibility.hpp"
 #include <cstdio>
 #include <fstream>
 #include <map>
@@ -39,7 +40,7 @@ enum struct ReadSummaryMethod {
 /**
  * @brief An abstract interface for reading MCAP data.
  */
-struct IReadable {
+struct MCAP_PUBLIC IReadable {
   virtual ~IReadable() = default;
 
   /**
@@ -71,7 +72,7 @@ struct IReadable {
  * @brief IReadable implementation wrapping a FILE* pointer created by fopen()
  * and a read buffer.
  */
-class FileReader final : public IReadable {
+class MCAP_PUBLIC FileReader final : public IReadable {
 public:
   FileReader(std::FILE* file);
 
@@ -88,7 +89,7 @@ private:
 /**
  * @brief IReadable implementation wrapping a std::ifstream input file stream.
  */
-class FileStreamReader final : public IReadable {
+class MCAP_PUBLIC FileStreamReader final : public IReadable {
 public:
   FileStreamReader(std::ifstream& stream);
 
@@ -105,7 +106,7 @@ private:
 /**
  * @brief An abstract interface for compressed readers.
  */
-class ICompressedReader : public IReadable {
+class MCAP_PUBLIC ICompressedReader : public IReadable {
 public:
   virtual ~ICompressedReader() = default;
 
@@ -131,7 +132,7 @@ public:
  * @brief A "null" compressed reader that directly passes through uncompressed
  * data. No internal buffers are allocated.
  */
-class BufferReader final : public ICompressedReader {
+class MCAP_PUBLIC BufferReader final : public ICompressedReader {
 public:
   void reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) override;
   uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override;
@@ -153,7 +154,7 @@ private:
  * @brief ICompressedReader implementation that decompresses Zstandard
  * (https://facebook.github.io/zstd/) data.
  */
-class ZStdReader final : public ICompressedReader {
+class MCAP_PUBLIC ZStdReader final : public ICompressedReader {
 public:
   void reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) override;
   uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override;
@@ -187,7 +188,7 @@ private:
  * @brief ICompressedReader implementation that decompresses LZ4
  * (https://lz4.github.io/lz4/) data.
  */
-class LZ4Reader final : public ICompressedReader {
+class MCAP_PUBLIC LZ4Reader final : public ICompressedReader {
 public:
   void reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) override;
   uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override;
@@ -227,7 +228,7 @@ struct LinearMessageView;
 /**
  * @brief Options for reading messages out of an MCAP file.
  */
-struct ReadMessageOptions {
+struct MCAP_PUBLIC ReadMessageOptions {
 public:
   /**
    * @brief Only messages with log timestamps greater or equal to startTime will be included.
@@ -267,7 +268,7 @@ public:
 /**
  * @brief Provides a read interface to an MCAP file.
  */
-class McapReader final {
+class MCAP_PUBLIC McapReader final {
 public:
   ~McapReader();
 
@@ -487,7 +488,7 @@ private:
  * @brief A low-level interface for parsing MCAP-style TLV records from a data
  * source.
  */
-struct RecordReader {
+struct MCAP_PUBLIC RecordReader {
   ByteOffset offset;
   ByteOffset endOffset;
 
@@ -507,7 +508,7 @@ private:
   Record curRecord_;
 };
 
-struct TypedChunkReader {
+struct MCAP_PUBLIC TypedChunkReader {
   std::function<void(const SchemaPtr, ByteOffset)> onSchema;
   std::function<void(const ChannelPtr, ByteOffset)> onChannel;
   std::function<void(const Message&, ByteOffset)> onMessage;
@@ -539,7 +540,7 @@ private:
  * @brief A mid-level interface for parsing and validating MCAP records from a
  * data source.
  */
-struct TypedRecordReader {
+struct MCAP_PUBLIC TypedRecordReader {
   std::function<void(const Header&, ByteOffset)> onHeader;
   std::function<void(const Footer&, ByteOffset)> onFooter;
   std::function<void(const SchemaPtr, ByteOffset, std::optional<ByteOffset>)> onSchema;
@@ -587,10 +588,10 @@ private:
  *  - noMessageIndex: false
  *  - noSummary: false
  */
-struct IndexedMessageReader {
+struct MCAP_PUBLIC IndexedMessageReader {
 public:
   IndexedMessageReader(McapReader& reader, const ReadMessageOptions& options,
-                       const std::function<void(const Message&)> onMessage);
+                       const std::function<void(const Message&, RecordOffset)> onMessage);
 
   /**
    * @brief reads the next message out of the MCAP.
@@ -611,6 +612,7 @@ public:
 private:
   struct ChunkSlot {
     ByteArray decompressedChunk;
+    ByteOffset chunkStartOffset;
     int unreadMessages = 0;
   };
   size_t findFreeChunkSlot();
@@ -621,16 +623,16 @@ private:
   LZ4Reader lz4Reader_;
   ReadMessageOptions options_;
   std::unordered_set<ChannelId> selectedChannels_;
-  std::function<void(const Message&)> onMessage_;
-  ReadJobQueue queue_;
+  std::function<void(const Message&, RecordOffset)> onMessage_;
+  internal::ReadJobQueue queue_;
   std::vector<ChunkSlot> chunkSlots_;
 };
 
 /**
  * @brief An iterable view of Messages in an MCAP file.
  */
-struct LinearMessageView {
-  struct Iterator {
+struct MCAP_PUBLIC LinearMessageView {
+  struct MCAP_PUBLIC Iterator {
     using iterator_category = std::input_iterator_tag;
     using difference_type = int64_t;
     using value_type = MessageView;
@@ -641,8 +643,8 @@ struct LinearMessageView {
     pointer operator->() const;
     Iterator& operator++();
     void operator++(int);
-    friend bool operator==(const Iterator& a, const Iterator& b);
-    friend bool operator!=(const Iterator& a, const Iterator& b);
+    MCAP_PUBLIC friend bool operator==(const Iterator& a, const Iterator& b);
+    MCAP_PUBLIC friend bool operator!=(const Iterator& a, const Iterator& b);
 
   private:
     friend LinearMessageView;
@@ -674,7 +676,7 @@ struct LinearMessageView {
       std::optional<MessageView> curMessageView_;
 
     private:
-      void onMessage(const Message& message);
+      void onMessage(const Message& message, RecordOffset offset);
     };
 
     std::unique_ptr<Impl> impl_;
@@ -705,5 +707,5 @@ private:
 }  // namespace mcap
 
 #ifdef MCAP_IMPLEMENTATION
-#include "reader.inl"
+#  include "reader.inl"
 #endif

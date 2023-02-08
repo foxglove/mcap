@@ -81,8 +81,14 @@ func (h *rangeIndexHeap) Less(i, j int) bool {
 	case readopts.FileOrder:
 		return h.filePositionLess(i, j)
 	case readopts.LogTimeOrder:
+		if h.timestamp(i) == h.timestamp(j) {
+			return h.filePositionLess(i, j)
+		}
 		return h.timestamp(i) < h.timestamp(j)
 	case readopts.ReverseLogTimeOrder:
+		if h.timestamp(i) == h.timestamp(j) {
+			return h.filePositionLess(j, i)
+		}
 		return h.timestamp(i) > h.timestamp(j)
 	}
 	h.lastErr = fmt.Errorf("ReadOrder case not handled: %v", h.order)

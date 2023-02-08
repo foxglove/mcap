@@ -145,6 +145,7 @@ func RewriteMCAP(w io.Writer, r io.ReadSeeker, fns ...func(writer *mcap.Writer) 
 	if err != nil {
 		return fmt.Errorf("failed to open mcap reader: %w", err)
 	}
+	defer reader.Close()
 	info, err := reader.Info()
 	if err != nil {
 		return fmt.Errorf("failed to get mcap info")
@@ -163,13 +164,24 @@ func RewriteMCAP(w io.Writer, r io.ReadSeeker, fns ...func(writer *mcap.Writer) 
 		return fmt.Errorf("failed to seek to reader start: %w", err)
 	}
 	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{
-		SkipMagic:   false,
-		ValidateCRC: false,
-		EmitChunks:  false,
+		SkipMagic:         false,
+		ValidateChunkCRCs: false,
+		EmitChunks:        false,
+		AttachmentCallback: func(ar *mcap.AttachmentReader) error {
+			return writer.WriteAttachment(&mcap.Attachment{
+				LogTime:    ar.LogTime,
+				CreateTime: ar.CreateTime,
+				Name:       ar.Name,
+				MediaType:  ar.MediaType,
+				DataSize:   ar.DataSize,
+				Data:       ar.Data(),
+			})
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to construct lexer: %w", err)
 	}
+	defer lexer.Close()
 	buf := make([]byte, 1024)
 	schemas := make(map[uint16]bool)
 	channels := make(map[uint16]bool)
@@ -224,15 +236,6 @@ func RewriteMCAP(w io.Writer, r io.ReadSeeker, fns ...func(writer *mcap.Writer) 
 				return fmt.Errorf("failed to parse metadata: %w", err)
 			}
 			err = writer.WriteMetadata(record)
-			if err != nil {
-				return fmt.Errorf("failed to write metadata: %w", err)
-			}
-		case mcap.TokenAttachment:
-			record, err := mcap.ParseAttachment(token)
-			if err != nil {
-				return fmt.Errorf("failed to parse metadata: %w", err)
-			}
-			err = writer.WriteAttachment(record)
 			if err != nil {
 				return fmt.Errorf("failed to write metadata: %w", err)
 			}

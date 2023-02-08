@@ -6,8 +6,6 @@ The Python, C++, Go, and TypeScript MCAP libraries are actively developed. This 
 
 **Note**: This does not mean that their APIs are stable.
 
-The Swift MCAP library is experimental, and not actively developed. This means that PRs contributing bug-fixes are welcome, but GitHub Issues regarding it will not be prioritized.
-
 ## Feature Matrix
 
 |  | Python | C++ | Go | TypeScript | Swift | Rust |

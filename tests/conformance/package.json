@@ -31,7 +31,6 @@
     "eslint-plugin-prettier": "4.0.0",
     "js-yaml": "4.1.0",
     "json-stable-stringify": "1.0.1",
-    "json-stringify-pretty-compact": "3.0.0",
     "kaitai-struct": "0.9.0",
     "kaitai-struct-compiler": "0.9.0",
     "lodash": "4.17.21",

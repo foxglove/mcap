@@ -6,7 +6,7 @@ try:
     # by decode().
     from genpy import dynamic  # type: ignore
 except ImportError:
-    from .vendor.genpy import dynamic  # type: ignore
+    from ._vendor.genpy import dynamic  # type: ignore
 
 from mcap.exceptions import McapError
 from mcap.records import Message, Schema

@@ -134,7 +134,7 @@ jobs:
           cache: yarn
       - uses: swift-actions/setup-swift@v1
         with:
-          swift-version: "5.6"
+          swift-version: "5.7"
       - run: swift build
       - run: yarn install --frozen-lockfile
       - run: yarn test:conformance:generate-inputs --verify
@@ -189,7 +189,28 @@ jobs:
       - run: make ci-format-check
       - run: make ci
       - run: make test-host
+      - run: make test-examples-host
       - run: make run-examples-host
+
+  cpp-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: cpp
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          lfs: "true"
+      - uses: actions/cache@v3
+        with:
+          path: ~/.conan/data
+          key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.7
+      - run: pip install conan~=1.0
+      - run: bash build.sh --build-tests-only
+      - run: ./test/build/Debug/bin/unit-tests
 
   typescript:
     runs-on: ubuntu-latest
@@ -239,7 +260,6 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: 3.7
-          cache: pipenv
       - uses: satackey/action-docker-layer-caching@v0.0.11
         continue-on-error: true
       - run: pip install pipenv==2022.7.24
@@ -425,7 +445,7 @@ jobs:
         id: extract-version
         run: |
           printf "::set-output name=%s::%s\n" version-number "${GITHUB_REF#refs/tags/releases/mcap-cli/v}"
-      - uses: mislav/bump-homebrew-formula-action@fcd7e28e549f14d3aebc53b4d9e929de579f372f
+      - uses: mislav/bump-homebrew-formula-action@a1aa5acee0698beefeac8f69f2eb8a5f292bf8bb
         with:
           formula-name: mcap
           push-to: foxglove/homebrew-core
@@ -446,7 +466,7 @@ jobs:
           lfs: true
       - uses: swift-actions/setup-swift@v1
         with:
-          swift-version: "5.6"
+          swift-version: "5.7"
       - run: docker run -t --rm -v $(pwd):/work -w /work ghcr.io/realm/swiftlint:0.49.1
       - run: docker run -t --rm -v $(pwd):/work ghcr.io/nicklockwood/swiftformat:0.49.18 --lint /work
       - run: swift build

@@ -6,7 +6,7 @@ from typing import IO, Union, Any, Dict, Iterator, Optional, Iterable
 from datetime import datetime
 from os import PathLike
 
-from .decoder import Decoder
+from .decoder import Decoder, McapROS1DecodeError
 
 from mcap.records import Message, Channel, Schema
 from mcap.reader import McapReader, make_reader
@@ -64,6 +64,10 @@ def read_ros1_messages(
         for schema, channel, message in reader.iter_messages(
             topics, start_time, end_time, log_time_order, reverse
         ):
+            if schema is None:
+                raise McapROS1DecodeError(
+                    f"cannot decode schemaless channel with encoding {channel.message_encoding}"
+                )
             yield McapROS1Message(
                 ros_msg=decoder.decode(schema=schema, message=message),
                 message=message,

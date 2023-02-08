@@ -2,8 +2,8 @@ go 1.18
 
 use (
 	./cli/mcap
-	./conformance/test-streamed-read-conformance
-	./conformance/test-streamed-write-conformance
+	./conformance/test-read-conformance
+	./conformance/test-write-conformance
 	./mcap
 	./ros
 )

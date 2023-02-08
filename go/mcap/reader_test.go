@@ -107,7 +107,7 @@ func TestReadPrefixedBytes(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
-			s, off, err := readPrefixedBytes(c.data, 0)
+			s, off, err := getPrefixedBytes(c.data, 0)
 			assert.ErrorIs(t, c.expectedError, err)
 			assert.Equal(t, c.expectedBytes, s)
 			assert.Equal(t, c.expectedOffset, off)
@@ -169,7 +169,7 @@ func TestReadPrefixedMap(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
-			output, offset, err := readPrefixedMap(c.input, 0)
+			output, offset, err := getPrefixedMap(c.input, 0)
 			assert.ErrorIs(t, err, c.err)
 			assert.Equal(t, offset, c.newOffset)
 			assert.Equal(t, output, c.output)
@@ -209,7 +209,7 @@ func TestReadPrefixedString(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
-			s, off, err := readPrefixedString(c.data, 0)
+			s, off, err := getPrefixedString(c.data, 0)
 			assert.ErrorIs(t, c.expectedError, err)
 			assert.Equal(t, c.expectedString, s)
 			assert.Equal(t, c.expectedOffset, off)
@@ -484,6 +484,7 @@ func TestMCAPInfo(t *testing.T) {
 			[]*Attachment{
 				{
 					Name: "my attachment",
+					Data: &bytes.Buffer{},
 				},
 			},
 		},

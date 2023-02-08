@@ -4,6 +4,9 @@ default: build
 dev-image:
 	docker build -t mcap_cpp_dev -f dev.Dockerfile .
 
+dev-shell: dev-image
+	docker run --rm -v $(CURDIR):/src -it mcap_cpp_dev /bin/bash
+
 .PHONY: build
 build: dev-image
 	docker run -t --rm -v $(CURDIR):/src mcap_cpp_dev
@@ -56,6 +59,14 @@ run-examples: dev-image
 .PHONY: run-examples-host
 run-examples-host:
 	./run_examples.sh
+
+.PHONY: test-examples
+test-examples: dev-image
+	docker run -t --rm -v $(CURDIR):/src mcap_cpp_ci examples/build/Release/bin/example_protobuf_unit_tests
+
+.PHONY: test-examples-host
+test-examples-host:
+	./examples/build/Release/bin/example_protobuf_unit_tests
 
 .PHONY: ci-image
 ci-image: hdoc-build

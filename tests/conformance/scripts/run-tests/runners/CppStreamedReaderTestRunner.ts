@@ -3,17 +3,17 @@ import { join } from "path";
 import { promisify } from "util";
 import { TestVariant } from "variants/types";
 
-import { ReadTestRunner } from "./TestRunner";
+import { StreamedReadTestResult } from "../types";
+import { StreamedReadTestRunner } from "./TestRunner";
 
-export default class CppStreamedReaderTestRunner extends ReadTestRunner {
+export default class CppStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "cpp-streamed-reader";
-  readonly readsDataEnd = true;
 
-  async runReadTest(filePath: string): Promise<string> {
+  async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const { stdout } = await promisify(exec)(`./streamed-reader-conformance ${filePath}`, {
       cwd: join(__dirname, "../../../../../cpp/test/build/Debug/bin"),
     });
-    return stdout.trim();
+    return JSON.parse(stdout) as StreamedReadTestResult;
   }
 
   supportsVariant(_variant: TestVariant): boolean {

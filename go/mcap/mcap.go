@@ -1,8 +1,10 @@
 package mcap
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 )
 
@@ -159,21 +161,6 @@ type MessageIndex struct {
 	currentIndex int
 }
 
-// Insort sorts the records of a MessageIndex record by timestamp, using an
-// insertion sort. This can be advantageous as MessageIndex records are often
-// nearly or fully-sorted already.
-func (idx *MessageIndex) Insort() {
-	i := 1
-	for i < len(idx.Entries()) {
-		j := i
-		for j > 0 && idx.Records[j-1].Timestamp > idx.Records[j].Timestamp {
-			idx.Records[j-1], idx.Records[j] = idx.Records[j], idx.Records[j-1]
-			j--
-		}
-		i++
-	}
-}
-
 // Reset resets the MessageIndex to an empty state, to enable reuse.
 func (idx *MessageIndex) Reset() {
 	idx.currentIndex = 0
@@ -218,8 +205,60 @@ type Attachment struct {
 	CreateTime uint64
 	Name       string
 	MediaType  string
-	Data       []byte
-	CRC        uint32
+	DataSize   uint64
+	Data       io.Reader
+}
+
+// AttachmentReader represents an attachment for handling in a streaming manner.
+type AttachmentReader struct {
+	LogTime    uint64
+	CreateTime uint64
+	Name       string
+	MediaType  string
+	DataSize   uint64
+
+	data       *io.LimitedReader
+	baseReader io.Reader
+	crcReader  *crcReader
+	crc        *uint32
+}
+
+// ComputedCRC discards any remaining data in the Data portion of the
+// AttachmentReader, then returns the checksum computed from the fields of the
+// attachment up to the CRC. If it is called before the data portion of the
+// reader has been fully consumed, an error will be returned. If the
+// AttachmentReader has been created with a crcReader that is instructed not to
+// compute the CRC, this will return a CRC of zero.
+func (ar *AttachmentReader) ComputedCRC() (uint32, error) {
+	if ar.data.N > 0 {
+		return 0, fmt.Errorf("attachment CRC requested with unhandled data")
+	}
+	return ar.crcReader.Checksum(), nil
+}
+
+// ParsedCRC returns the CRC from the crc field of the record. It must be called
+// after the data field has been handled. If ParsedCRC is called before the data
+// reader is exhausted, an error is returned.
+func (ar *AttachmentReader) ParsedCRC() (uint32, error) {
+	if ar.crc != nil {
+		return *ar.crc, nil
+	}
+	if ar.data.N > 0 {
+		return 0, fmt.Errorf("attachment CRC requested with unhandled data")
+	}
+	buf := make([]byte, 4)
+	_, err := io.ReadFull(ar.baseReader, buf)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read CRC: %w", err)
+	}
+	crc := binary.LittleEndian.Uint32(buf)
+	ar.crc = &crc
+	return crc, nil
+}
+
+// Data returns a reader over the data section of the attachment.
+func (ar *AttachmentReader) Data() io.Reader {
+	return ar.data
 }
 
 // AttachmentIndex records contain the location of attachments in the file. An

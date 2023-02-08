@@ -237,11 +237,6 @@ async function convert(filePath: string, options: { indexed: boolean }) {
     library: "mcap typescript bag2proto",
   });
 
-  await mcapFile.addMetadata({
-    name: "original file info",
-    metadata: new Map([["path", mcapFilePath]]),
-  });
-
   const topicToDetailMap = new Map<string, TopicDetail>();
 
   for (const [, connection] of bag.connections) {

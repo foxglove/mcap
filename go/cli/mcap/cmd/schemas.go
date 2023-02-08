@@ -107,6 +107,7 @@ var schemasCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to get reader: %w", err)
 			}
+			defer reader.Close()
 			info, err := reader.Info()
 			if err != nil {
 				return fmt.Errorf("failed to get info: %w", err)

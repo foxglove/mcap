@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"hash/crc32"
 	"io"
 	"math"
 	"sort"
@@ -15,6 +14,10 @@ import (
 
 // ErrUnknownSchema is returned when a schema ID is not known to the writer.
 var ErrUnknownSchema = errors.New("unknown schema")
+
+// ErrAttachmentDataSizeIncorrect is returned when the length of a written
+// attachment does not match the length supplied.
+var ErrAttachmentDataSizeIncorrect = errors.New("attachment content length incorrect")
 
 // Writer is a writer for the MCAP format.
 type Writer struct {
@@ -216,7 +219,7 @@ func (w *Writer) WriteMessage(m *Message) error {
 	if m.LogTime > w.Statistics.MessageEndTime {
 		w.Statistics.MessageEndTime = m.LogTime
 	}
-	if m.LogTime < w.Statistics.MessageStartTime || w.Statistics.MessageStartTime == 0 {
+	if m.LogTime < w.Statistics.MessageStartTime || w.Statistics.MessageCount <= 1 {
 		w.Statistics.MessageStartTime = m.LogTime
 	}
 	return nil
@@ -245,27 +248,55 @@ func (w *Writer) WriteMessageIndex(idx *MessageIndex) error {
 // contain auxiliary artifacts such as text, core dumps, calibration data, or
 // other arbitrary data. Attachment records must not appear within a chunk.
 func (w *Writer) WriteAttachment(a *Attachment) error {
-	msglen := 4 + len(a.Name) + 8 + 8 + 4 + len(a.MediaType) + 8 + len(a.Data) + 4
-	w.ensureSized(msglen)
-	offset := putUint64(w.msg, a.LogTime)
-	offset += putUint64(w.msg[offset:], a.CreateTime)
-	offset += putPrefixedString(w.msg[offset:], a.Name)
-	offset += putPrefixedString(w.msg[offset:], a.MediaType)
-	offset += putUint64(w.msg[offset:], uint64(len(a.Data)))
-	offset += copy(w.msg[offset:], a.Data)
-	crc := crc32.ChecksumIEEE(w.msg[:offset])
-	offset += putUint32(w.msg[offset:], crc)
-	attachmentOffset := w.w.Size()
-	c, err := w.writeRecord(w.w, OpAttachment, w.msg[:offset])
+	bufferLen := 1 + // opcode
+		8 + // record length
+		8 + // log time
+		8 + // create time
+		4 + len(a.Name) + // name
+		4 + len(a.MediaType) + // media type
+		8 // content length
+	w.ensureSized(bufferLen)
+
+	offset, err := putByte(w.msg, byte(OpAttachment))
 	if err != nil {
 		return err
 	}
+	offset += putUint64(w.msg[offset:], uint64(bufferLen)+a.DataSize+4-9)
+	offset += putUint64(w.msg[offset:], a.LogTime)
+	offset += putUint64(w.msg[offset:], a.CreateTime)
+	offset += putPrefixedString(w.msg[offset:], a.Name)
+	offset += putPrefixedString(w.msg[offset:], a.MediaType)
+	offset += putUint64(w.msg[offset:], a.DataSize)
+
+	attachmentOffset := w.w.Size()
+	// leading 9 bytes not included in CRC
+	_, err = w.w.Write(w.msg[:9])
+	if err != nil {
+		return err
+	}
+	crcWriter := newCRCWriter(w.w)
+	_, err = crcWriter.Write(w.msg[9:offset])
+	if err != nil {
+		return fmt.Errorf("failed to write attachment metadata: %w", err)
+	}
+	bytesWritten, err := io.Copy(crcWriter, a.Data)
+	if err != nil {
+		return fmt.Errorf("failed to write attachment data: %w", err)
+	}
+	if uint64(bytesWritten) != a.DataSize {
+		return ErrAttachmentDataSizeIncorrect
+	}
+	putUint32(w.msg[:4], crcWriter.Checksum())
+	_, err = w.w.Write(w.msg[:4])
+	if err != nil {
+		return fmt.Errorf("failed to write attachment crc: %w", err)
+	}
 	w.AttachmentIndexes = append(w.AttachmentIndexes, &AttachmentIndex{
 		Offset:     attachmentOffset,
-		Length:     uint64(c),
+		Length:     uint64(bufferLen) + a.DataSize + 4,
 		LogTime:    a.LogTime,
 		CreateTime: a.CreateTime,
-		DataSize:   uint64(len(a.Data)),
+		DataSize:   a.DataSize,
 		Name:       a.Name,
 		MediaType:  a.MediaType,
 	})
@@ -433,7 +464,6 @@ func (w *Writer) flushActiveChunk() error {
 	if !w.opts.SkipMessageIndexing {
 		for _, chanID := range w.channelIDs {
 			if messageIndex, ok := w.messageIndexes[chanID]; ok {
-				messageIndex.Insort()
 				messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
 				err = w.WriteMessageIndex(messageIndex)
 				if err != nil {

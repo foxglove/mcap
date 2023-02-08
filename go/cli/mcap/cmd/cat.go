@@ -192,6 +192,7 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				die("Failed to create reader: %s", err)
 			}
+			defer reader.Close()
 			it, err := reader.Messages(getReadOpts(false)...)
 			if err != nil {
 				die("Failed to read messages: %s", err)
@@ -213,6 +214,7 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to create reader: %w", err)
 			}
+			defer reader.Close()
 			it, err := reader.Messages(getReadOpts(true)...)
 			if err != nil {
 				return fmt.Errorf("failed to read messages: %w", err)

@@ -1,4 +1,4 @@
-.. mdinclude:: ../mcap/README.md
+.. mdinclude:: ../README.md
 
 Usage Examples
 --------------
