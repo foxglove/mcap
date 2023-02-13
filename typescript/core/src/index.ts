@@ -9,3 +9,4 @@ export * as McapConstants from "./constants";
 export type { IWritable } from "./IWritable";
 
 export * from "./hasMcapPrefix";
+export * from "./parse";

@@ -34,8 +34,10 @@ export class McapIndexedReader {
   private readable: IReadable;
   private decompressHandlers?: DecompressHandlers;
 
-  private startTime: bigint | undefined;
-  private endTime: bigint | undefined;
+  private messageStartTime: bigint | undefined;
+  private messageEndTime: bigint | undefined;
+  private attachmentStartTime: bigint | undefined;
+  private attachmentEndTime: bigint | undefined;
 
   private constructor(args: McapIndexedReaderArgs) {
     this.readable = args.readable;
@@ -51,11 +53,20 @@ export class McapIndexedReader {
     this.footer = args.footer;
 
     for (const chunk of args.chunkIndexes) {
-      if (this.startTime == undefined || chunk.messageStartTime < this.startTime) {
-        this.startTime = chunk.messageStartTime;
+      if (this.messageStartTime == undefined || chunk.messageStartTime < this.messageStartTime) {
+        this.messageStartTime = chunk.messageStartTime;
       }
-      if (this.endTime == undefined || chunk.messageEndTime > this.endTime) {
-        this.endTime = chunk.messageEndTime;
+      if (this.messageEndTime == undefined || chunk.messageEndTime > this.messageEndTime) {
+        this.messageEndTime = chunk.messageEndTime;
+      }
+    }
+
+    for (const attachment of args.attachmentIndexes) {
+      if (this.attachmentStartTime == undefined || attachment.logTime < this.attachmentStartTime) {
+        this.attachmentStartTime = attachment.logTime;
+      }
+      if (this.attachmentEndTime == undefined || attachment.logTime > this.attachmentEndTime) {
+        this.attachmentEndTime = attachment.logTime;
       }
     }
   }
@@ -305,9 +316,16 @@ export class McapIndexedReader {
       startTime?: bigint;
       endTime?: bigint;
       reverse?: boolean;
+      validateCrcs?: boolean;
     } = {},
   ): AsyncGenerator<TypedMcapRecords["Message"], void, void> {
-    const { topics, startTime = this.startTime, endTime = this.endTime, reverse = false } = args;
+    const {
+      topics,
+      startTime = this.messageStartTime,
+      endTime = this.messageEndTime,
+      reverse = false,
+      validateCrcs,
+    } = args;
 
     if (startTime == undefined || endTime == undefined) {
       return;
@@ -363,7 +381,7 @@ export class McapIndexedReader {
       const result = parseRecord({
         view: chunkView,
         startOffset: Number(offset),
-        validateCrcs: true,
+        validateCrcs: validateCrcs ?? true,
       });
       if (!result.record) {
         throw this.errorWithLibrary(
@@ -388,6 +406,89 @@ export class McapIndexedReader {
         chunkCursors.pop();
         chunkViewCache.delete(cursor.chunkIndex.chunkStartOffset);
       }
+    }
+  }
+
+  async *readMetadata(
+    args: {
+      name?: string;
+    } = {},
+  ): AsyncGenerator<TypedMcapRecords["Metadata"], void, void> {
+    const { name } = args;
+
+    for (const metadataIndex of this.metadataIndexes) {
+      if (name != undefined && metadataIndex.name !== name) {
+        continue;
+      }
+      const metadataData = await this.readable.read(metadataIndex.offset, metadataIndex.length);
+      const metadataResult = parseRecord({
+        view: new DataView(metadataData.buffer, metadataData.byteOffset, metadataData.byteLength),
+        startOffset: 0,
+        validateCrcs: false,
+      });
+      if (metadataResult.record?.type !== "Metadata") {
+        throw this.errorWithLibrary(
+          `Metadata data at offset ${
+            metadataIndex.offset
+          } does not point to metadata record (found ${String(metadataResult.record?.type)})`,
+        );
+      }
+      yield metadataResult.record;
+    }
+  }
+
+  async *readAttachments(
+    args: {
+      name?: string;
+      mediaType?: string;
+      startTime?: bigint;
+      endTime?: bigint;
+      validateCrcs?: boolean;
+    } = {},
+  ): AsyncGenerator<TypedMcapRecords["Attachment"], void, void> {
+    const {
+      name,
+      mediaType,
+      startTime = this.attachmentStartTime,
+      endTime = this.attachmentEndTime,
+      validateCrcs,
+    } = args;
+
+    if (startTime == undefined || endTime == undefined) {
+      return;
+    }
+
+    for (const attachmentIndex of this.attachmentIndexes) {
+      if (name != undefined && attachmentIndex.name !== name) {
+        continue;
+      }
+      if (mediaType != undefined && attachmentIndex.mediaType !== mediaType) {
+        continue;
+      }
+      if (attachmentIndex.logTime > endTime || attachmentIndex.logTime < startTime) {
+        continue;
+      }
+      const attachmentData = await this.readable.read(
+        attachmentIndex.offset,
+        attachmentIndex.length,
+      );
+      const attachmentResult = parseRecord({
+        view: new DataView(
+          attachmentData.buffer,
+          attachmentData.byteOffset,
+          attachmentData.byteLength,
+        ),
+        startOffset: 0,
+        validateCrcs: validateCrcs ?? true,
+      });
+      if (attachmentResult.record?.type !== "Attachment") {
+        throw this.errorWithLibrary(
+          `Attachment data at offset ${
+            attachmentIndex.offset
+          } does not point to attachment record (found ${String(attachmentResult.record?.type)})`,
+        );
+      }
+      yield attachmentResult.record;
     }
   }
 
