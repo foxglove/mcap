@@ -305,9 +305,16 @@ export class McapIndexedReader {
       startTime?: bigint;
       endTime?: bigint;
       reverse?: boolean;
+      validateCrcs?: boolean;
     } = {},
   ): AsyncGenerator<TypedMcapRecords["Message"], void, void> {
-    const { topics, startTime = this.startTime, endTime = this.endTime, reverse = false } = args;
+    const {
+      topics,
+      startTime = this.startTime,
+      endTime = this.endTime,
+      reverse = false,
+      validateCrcs,
+    } = args;
 
     if (startTime == undefined || endTime == undefined) {
       return;
@@ -363,7 +370,7 @@ export class McapIndexedReader {
       const result = parseRecord({
         view: chunkView,
         startOffset: Number(offset),
-        validateCrcs: true,
+        validateCrcs: validateCrcs ?? true,
       });
       if (!result.record) {
         throw this.errorWithLibrary(
@@ -388,6 +395,89 @@ export class McapIndexedReader {
         chunkCursors.pop();
         chunkViewCache.delete(cursor.chunkIndex.chunkStartOffset);
       }
+    }
+  }
+
+  async *readMetadata(
+    args: {
+      name?: string;
+    } = {},
+  ): AsyncGenerator<TypedMcapRecords["Metadata"], void, void> {
+    const { name } = args;
+
+    for (const metadataIndex of this.metadataIndexes) {
+      if (name != undefined && metadataIndex.name !== name) {
+        continue;
+      }
+      const metadataData = await this.readable.read(metadataIndex.offset, metadataIndex.length);
+      const metadataResult = parseRecord({
+        view: new DataView(metadataData.buffer, metadataData.byteOffset, metadataData.byteLength),
+        startOffset: 0,
+        validateCrcs: false,
+      });
+      if (metadataResult.record?.type !== "Metadata") {
+        throw this.errorWithLibrary(
+          `Metadata data at offset ${
+            metadataIndex.offset
+          } does not point to metadata record (found ${String(metadataResult.record?.type)})`,
+        );
+      }
+      yield metadataResult.record;
+    }
+  }
+
+  async *readAttachments(
+    args: {
+      name?: string;
+      mediaType?: string;
+      startTime?: bigint;
+      endTime?: bigint;
+      validateCrcs?: boolean;
+    } = {},
+  ): AsyncGenerator<TypedMcapRecords["Attachment"], void, void> {
+    const {
+      name,
+      mediaType,
+      startTime = this.startTime,
+      endTime = this.endTime,
+      validateCrcs,
+    } = args;
+
+    if (startTime == undefined || endTime == undefined) {
+      return;
+    }
+
+    for (const attachmentIndex of this.attachmentIndexes) {
+      if (name != undefined && attachmentIndex.name !== name) {
+        continue;
+      }
+      if (mediaType != undefined && attachmentIndex.mediaType !== mediaType) {
+        continue;
+      }
+      if (attachmentIndex.logTime > endTime || attachmentIndex.logTime < startTime) {
+        continue;
+      }
+      const attachmentData = await this.readable.read(
+        attachmentIndex.offset,
+        attachmentIndex.length,
+      );
+      const attachmentResult = parseRecord({
+        view: new DataView(
+          attachmentData.buffer,
+          attachmentData.byteOffset,
+          attachmentData.byteLength,
+        ),
+        startOffset: 0,
+        validateCrcs: validateCrcs ?? true,
+      });
+      if (attachmentResult.record?.type !== "Attachment") {
+        throw this.errorWithLibrary(
+          `Attachment data at offset ${
+            attachmentIndex.offset
+          } does not point to attachment record (found ${String(attachmentResult.record?.type)})`,
+        );
+      }
+      yield attachmentResult.record;
     }
   }
 
