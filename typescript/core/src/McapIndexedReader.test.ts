@@ -811,4 +811,268 @@ describe("McapIndexedReader", () => {
       expect(collected).toEqual([messageB1, messageB2].reverse());
     }
   });
+
+  it("reads metadata records", async () => {
+    const data = [
+      ...MCAP_MAGIC,
+      ...record(Opcode.HEADER, [
+        ...string(""), // profile
+        ...string(""), // library
+      ]),
+    ];
+    const metadata1Start = data.length;
+    data.push(
+      ...record(Opcode.METADATA, [
+        ...string("foo"), // name
+        ...keyValues(string, string, [
+          ["a", "1"],
+          ["b", "2"],
+        ]), // metadata
+      ]),
+    );
+    const metadata2Start = data.length;
+    data.push(
+      ...record(Opcode.METADATA, [
+        ...string("bar"), // name
+        ...keyValues(string, string, [
+          ["x", "10"],
+          ["y", "20"],
+        ]), // metadata
+      ]),
+    );
+    const metadata3Start = data.length;
+    data.push(
+      ...record(Opcode.METADATA, [
+        ...string("foo"), // name
+        ...keyValues(string, string, [["b", "4"]]), // metadata
+      ]),
+    );
+    const dataEndStart = data.length;
+    data.push(
+      ...record(Opcode.DATA_END, [
+        ...uint32LE(0), // data crc
+      ]),
+    );
+    const summaryStart = data.length;
+    data.push(
+      ...record(Opcode.METADATA_INDEX, [
+        ...uint64LE(BigInt(metadata1Start)), // offset
+        ...uint64LE(BigInt(metadata2Start - metadata1Start)), // length
+        ...string("foo"), // name
+      ]),
+      ...record(Opcode.METADATA_INDEX, [
+        ...uint64LE(BigInt(metadata2Start)), // offset
+        ...uint64LE(BigInt(metadata3Start - metadata2Start)), // length
+        ...string("bar"), // name
+      ]),
+      ...record(Opcode.METADATA_INDEX, [
+        ...uint64LE(BigInt(metadata3Start)), // offset
+        ...uint64LE(BigInt(dataEndStart - metadata3Start)), // length
+        ...string("foo"), // name
+      ]),
+      ...record(Opcode.FOOTER, [
+        ...uint64LE(BigInt(summaryStart)), // summary offset
+        ...uint64LE(0n), // summary start offset
+        ...uint32LE(0), // summary crc
+      ]),
+      ...MCAP_MAGIC,
+    );
+    const readable = makeReadable(new Uint8Array(data));
+    const reader = await McapIndexedReader.Initialize({ readable });
+
+    expect(reader.metadataIndexes).toHaveLength(3);
+
+    let metadata = await collect(reader.readMetadata());
+    expect(metadata).toEqual([
+      {
+        name: "foo",
+        metadata: new Map([
+          ["a", "1"],
+          ["b", "2"],
+        ]),
+        type: "Metadata",
+      },
+      {
+        name: "bar",
+        metadata: new Map([
+          ["x", "10"],
+          ["y", "20"],
+        ]),
+        type: "Metadata",
+      },
+      {
+        name: "foo",
+        metadata: new Map([["b", "4"]]),
+        type: "Metadata",
+      },
+    ]);
+
+    metadata = await collect(reader.readMetadata({ name: "bar" }));
+    expect(metadata).toEqual([
+      {
+        name: "bar",
+        metadata: new Map([
+          ["x", "10"],
+          ["y", "20"],
+        ]),
+        type: "Metadata",
+      },
+    ]);
+  });
+
+  it("reads attachment records", async () => {
+    const data = [
+      ...MCAP_MAGIC,
+      ...record(Opcode.HEADER, [
+        ...string(""), // profile
+        ...string(""), // library
+      ]),
+    ];
+    const attachment1Start = data.length;
+    data.push(
+      ...record(Opcode.ATTACHMENT, [
+        ...uint64LE(1n), // log time
+        ...uint64LE(2n), // create time
+        ...string("foo"), // name
+        ...string("text/plain"), // media type
+        ...uint64LE(5n), // data length
+        ...new Uint8Array([0x68, 0x65, 0x6c, 0x6c, 0x6f]), // data
+        ...uint32LE(0), // data crc
+      ]),
+    );
+    const attachment2Start = data.length;
+    data.push(
+      ...record(Opcode.ATTACHMENT, [
+        ...uint64LE(4n), // log time
+        ...uint64LE(5n), // create time
+        ...string("bar"), // name
+        ...string("application/octet-stream"), // media type
+        ...uint64LE(3n), // data length
+        ...new Uint8Array([1, 2, 3]), // data
+        ...uint32LE(0), // data crc
+      ]),
+    );
+    const attachment3Start = data.length;
+    data.push(
+      ...record(Opcode.ATTACHMENT, [
+        ...uint64LE(6n), // log time
+        ...uint64LE(7n), // create time
+        ...string("foo"), // name
+        ...string("application/json"), // media type
+        ...uint64LE(2n), // data length
+        ...new Uint8Array([0x7b, 0x7d]), // data
+        ...uint32LE(0), // data crc
+      ]),
+    );
+    const dataEndStart = data.length;
+    data.push(
+      ...record(Opcode.DATA_END, [
+        ...uint32LE(0), // data crc
+      ]),
+    );
+    const summaryStart = data.length;
+    data.push(
+      ...record(Opcode.ATTACHMENT_INDEX, [
+        ...uint64LE(BigInt(attachment1Start)), // offset
+        ...uint64LE(BigInt(attachment2Start - attachment1Start)), // length
+        ...uint64LE(1n), // log time
+        ...uint64LE(2n), // create time
+        ...uint64LE(5n), // data size
+        ...string("foo"), // name
+        ...string("text/plain"), // media type
+      ]),
+      ...record(Opcode.ATTACHMENT_INDEX, [
+        ...uint64LE(BigInt(attachment2Start)), // offset
+        ...uint64LE(BigInt(attachment3Start - attachment2Start)), // length
+        ...uint64LE(4n), // log time
+        ...uint64LE(5n), // create time
+        ...uint64LE(3n), // data size
+        ...string("bar"), // name
+        ...string("application/octet-stream"), // media type
+      ]),
+      ...record(Opcode.ATTACHMENT_INDEX, [
+        ...uint64LE(BigInt(attachment3Start)), // offset
+        ...uint64LE(BigInt(dataEndStart - attachment3Start)), // length
+        ...uint64LE(6n), // log time
+        ...uint64LE(7n), // create time
+        ...uint64LE(2n), // data size
+        ...string("foo"), // name
+        ...string("application/json"), // media type
+      ]),
+      ...record(Opcode.FOOTER, [
+        ...uint64LE(BigInt(summaryStart)), // summary offset
+        ...uint64LE(0n), // summary start offset
+        ...uint32LE(0), // summary crc
+      ]),
+      ...MCAP_MAGIC,
+    );
+    const readable = makeReadable(new Uint8Array(data));
+    const reader = await McapIndexedReader.Initialize({ readable });
+
+    expect(reader.attachmentIndexes).toHaveLength(3);
+
+    let attachments = await collect(reader.readAttachments());
+    expect(attachments).toEqual([
+      {
+        name: "foo",
+        logTime: 1n,
+        createTime: 2n,
+        mediaType: "text/plain",
+        data: new Uint8Array([0x68, 0x65, 0x6c, 0x6c, 0x6f]),
+        type: "Attachment",
+      },
+      {
+        name: "bar",
+        logTime: 4n,
+        createTime: 5n,
+        mediaType: "application/octet-stream",
+        data: new Uint8Array([1, 2, 3]),
+        type: "Attachment",
+      },
+      {
+        name: "foo",
+        logTime: 6n,
+        createTime: 7n,
+        mediaType: "application/json",
+        data: new Uint8Array([0x7b, 0x7d]),
+        type: "Attachment",
+      },
+    ]);
+
+    attachments = await collect(reader.readAttachments({ name: "bar" }));
+    expect(attachments).toEqual([
+      {
+        name: "bar",
+        logTime: 4n,
+        createTime: 5n,
+        mediaType: "application/octet-stream",
+        data: new Uint8Array([1, 2, 3]),
+        type: "Attachment",
+      },
+    ]);
+
+    attachments = await collect(reader.readAttachments({ mediaType: "application/json" }));
+    expect(attachments).toEqual([
+      {
+        name: "foo",
+        logTime: 6n,
+        createTime: 7n,
+        mediaType: "application/json",
+        data: new Uint8Array([0x7b, 0x7d]),
+        type: "Attachment",
+      },
+    ]);
+
+    attachments = await collect(reader.readAttachments({ startTime: 3n, endTime: 5n }));
+    expect(attachments).toEqual([
+      {
+        name: "bar",
+        logTime: 4n,
+        createTime: 5n,
+        mediaType: "application/octet-stream",
+        data: new Uint8Array([1, 2, 3]),
+        type: "Attachment",
+      },
+    ]);
+  });
 });
