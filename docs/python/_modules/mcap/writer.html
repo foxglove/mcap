@@ -109,8 +109,10 @@
 <span class="sd">        use_statistics: Write statistics record.</span>
 <span class="sd">        use_summary_offsets: Write summary offset records.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__should_close</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__should_close</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">RawIOBase</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span> <span class="o">=</span> <span class="n">BufferedWriter</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -358,7 +360,9 @@
         <span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__record_builder</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">MCAP0_MAGIC</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">MCAP0_MAGIC</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">__should_close</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="Writer.register_channel"><a class="viewcode-back" href="../../mcap-apidoc/mcap.writer.html#mcap.writer.Writer.register_channel">[docs]</a>    <span class="k">def</span> <span class="nf">register_channel</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
