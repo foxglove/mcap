@@ -34,8 +34,10 @@ export class McapIndexedReader {
   private readable: IReadable;
   private decompressHandlers?: DecompressHandlers;
 
-  private startTime: bigint | undefined;
-  private endTime: bigint | undefined;
+  private messageStartTime: bigint | undefined;
+  private messageEndTime: bigint | undefined;
+  private attachmentStartTime: bigint | undefined;
+  private attachmentEndTime: bigint | undefined;
 
   private constructor(args: McapIndexedReaderArgs) {
     this.readable = args.readable;
@@ -51,20 +53,20 @@ export class McapIndexedReader {
     this.footer = args.footer;
 
     for (const chunk of args.chunkIndexes) {
-      if (this.startTime == undefined || chunk.messageStartTime < this.startTime) {
-        this.startTime = chunk.messageStartTime;
+      if (this.messageStartTime == undefined || chunk.messageStartTime < this.messageStartTime) {
+        this.messageStartTime = chunk.messageStartTime;
       }
-      if (this.endTime == undefined || chunk.messageEndTime > this.endTime) {
-        this.endTime = chunk.messageEndTime;
+      if (this.messageEndTime == undefined || chunk.messageEndTime > this.messageEndTime) {
+        this.messageEndTime = chunk.messageEndTime;
       }
     }
 
     for (const attachment of args.attachmentIndexes) {
-      if (this.startTime == undefined || attachment.logTime < this.startTime) {
-        this.startTime = attachment.logTime;
+      if (this.attachmentStartTime == undefined || attachment.logTime < this.attachmentStartTime) {
+        this.attachmentStartTime = attachment.logTime;
       }
-      if (this.endTime == undefined || attachment.logTime > this.endTime) {
-        this.endTime = attachment.logTime;
+      if (this.attachmentEndTime == undefined || attachment.logTime > this.attachmentEndTime) {
+        this.attachmentEndTime = attachment.logTime;
       }
     }
   }
@@ -319,8 +321,8 @@ export class McapIndexedReader {
   ): AsyncGenerator<TypedMcapRecords["Message"], void, void> {
     const {
       topics,
-      startTime = this.startTime,
-      endTime = this.endTime,
+      startTime = this.messageStartTime,
+      endTime = this.messageEndTime,
       reverse = false,
       validateCrcs,
     } = args;
@@ -447,8 +449,8 @@ export class McapIndexedReader {
     const {
       name,
       mediaType,
-      startTime = this.startTime,
-      endTime = this.endTime,
+      startTime = this.attachmentStartTime,
+      endTime = this.attachmentEndTime,
       validateCrcs,
     } = args;
 
