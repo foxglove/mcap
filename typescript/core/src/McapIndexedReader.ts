@@ -58,6 +58,15 @@ export class McapIndexedReader {
         this.endTime = chunk.messageEndTime;
       }
     }
+
+    for (const attachment of args.attachmentIndexes) {
+      if (this.startTime == undefined || attachment.logTime < this.startTime) {
+        this.startTime = attachment.logTime;
+      }
+      if (this.endTime == undefined || attachment.logTime > this.endTime) {
+        this.endTime = attachment.logTime;
+      }
+    }
   }
 
   private errorWithLibrary(message: string): Error {
