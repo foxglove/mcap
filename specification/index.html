@@ -942,7 +942,7 @@
 <p>The optional summary offset section contains <a href="#summary-offset-op0x0E">Summary Offset</a> records for fast lookup of summary section records.</p>
 <p>The summary offset section aids random access reading.</p>
 <h2 id="records">Records</h2>
-<p>MCAP files may contain a variety of records. Records are identified by a single-byte <strong>opcode</strong>. Record opcodes in the range 0x01-0x7F are reserved for future MCAP format usage. 0x80-0xFF are reserved for application extensions and user proposals.</p>
+<p>MCAP files may contain a variety of records. Records are identified by a single-byte <strong>opcode</strong>. Record opcodes in the range 0x01-0x7F are reserved for future MCAP format usage. 0x80-0xFF are reserved for application extensions and user proposals. 0x00 is not a valid opcode.</p>
 <p>All MCAP records are serialized as follows:</p>
 <div class="highlight"><pre><span></span><code>&lt;record type&gt;&lt;record content length&gt;&lt;record content&gt;
 </code></pre></div>
