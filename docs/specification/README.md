@@ -92,7 +92,7 @@ The summary offset section aids random access reading.
 
 ## Records
 
-MCAP files may contain a variety of records. Records are identified by a single-byte **opcode**. Record opcodes in the range 0x01-0x7F are reserved for future MCAP format usage. 0x80-0xFF are reserved for application extensions and user proposals.
+MCAP files may contain a variety of records. Records are identified by a single-byte **opcode**. Record opcodes in the range 0x01-0x7F are reserved for future MCAP format usage. 0x80-0xFF are reserved for application extensions and user proposals. 0x00 is not a valid opcode.
 
 All MCAP records are serialized as follows:
 
