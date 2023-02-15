@@ -8,7 +8,7 @@ from typing import IO, Any, Dict, List, OrderedDict, Union
 import lz4.frame  # type: ignore
 import zstandard
 
-from .chunk_builder import ChunkBuilder
+from ._chunk_builder import ChunkBuilder
 from .data_stream import RecordBuilder
 from .opcode import Opcode
 from .records import (
@@ -74,8 +74,10 @@ class Writer:
         use_statistics: Write statistics record.
         use_summary_offsets: Write summary offset records.
         """
+        self.__should_close = False
         if isinstance(output, str):
             self.__stream = open(output, "wb")
+            self.__should_close = True
         elif isinstance(output, RawIOBase):
             self.__stream = BufferedWriter(output)
         else:
@@ -324,6 +326,8 @@ class Writer:
 
         self.__flush()
         self.__stream.write(MCAP0_MAGIC)
+        if self.__should_close:
+            self.__stream.close()
 
     def register_channel(
         self,

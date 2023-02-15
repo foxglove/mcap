@@ -37,7 +37,7 @@ RUN if [ "$IMAGE" = "ubuntu:focal" ]; then \
   update-alternatives --install /usr/bin/git-clang-format git-clang-format /usr/bin/git-clang-format-13 100 \
   ; fi
 
-RUN pip --no-cache-dir install conan==1.51.3
+RUN pip --no-cache-dir install conan~=1.0
 
 WORKDIR /mcap/cpp
 

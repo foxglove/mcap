@@ -168,10 +168,6 @@ func filter(
 	w io.Writer,
 	opts *filterOpts,
 ) error {
-	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{ValidateCRC: true, EmitInvalidChunks: opts.recover})
-	if err != nil {
-		return err
-	}
 	mcapWriter, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Compression: opts.compressionFormat,
 		Chunked:     true,
@@ -182,6 +178,38 @@ func filter(
 	}
 
 	var numMessages, numAttachments, numMetadata uint64
+
+	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{
+		ValidateChunkCRCs: true,
+		EmitInvalidChunks: opts.recover,
+		AttachmentCallback: func(ar *mcap.AttachmentReader) error {
+			if !opts.includeAttachments {
+				return nil
+			}
+			if ar.LogTime < opts.start {
+				return nil
+			}
+			if ar.LogTime >= opts.end {
+				return nil
+			}
+			err = mcapWriter.WriteAttachment(&mcap.Attachment{
+				LogTime:    ar.LogTime,
+				CreateTime: ar.CreateTime,
+				Name:       ar.Name,
+				MediaType:  ar.MediaType,
+				DataSize:   ar.DataSize,
+				Data:       ar.Data(),
+			})
+			if err != nil {
+				return err
+			}
+			numAttachments++
+			return nil
+		},
+	})
+	if err != nil {
+		return err
+	}
 
 	defer func() {
 		err := mcapWriter.Close()
@@ -204,13 +232,16 @@ func filter(
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
-			if opts.recover && errors.Is(err, io.ErrUnexpectedEOF) {
-				fmt.Println("Input file was truncated.")
-				return nil
-			}
-			if opts.recover && token == mcap.TokenInvalidChunk {
-				fmt.Printf("Invalid chunk encountered, skipping: %s\n", err)
-				continue
+			if opts.recover {
+				var expected *mcap.ErrTruncatedRecord
+				if errors.As(err, &expected) {
+					fmt.Println(expected.Error())
+					return nil
+				}
+				if token == mcap.TokenInvalidChunk {
+					fmt.Printf("Invalid chunk encountered, skipping: %s\n", err)
+					continue
+				}
 			}
 			return err
 		}
@@ -237,16 +268,25 @@ func filter(
 			if err != nil {
 				return err
 			}
+			// if any topics match an includeTopic, add it.
 			for _, matcher := range opts.includeTopics {
 				if matcher.MatchString(channel.Topic) {
 					channels[channel.ID] = markableChannel{channel, false}
 				}
 			}
-			for _, matcher := range opts.excludeTopics {
-				if !matcher.MatchString(channel.Topic) {
+			// if a topic does not match any excludeTopic, add it.
+			if len(opts.excludeTopics) != 0 {
+				shouldInclude := true
+				for _, matcher := range opts.excludeTopics {
+					if matcher.MatchString(channel.Topic) {
+						shouldInclude = false
+					}
+				}
+				if shouldInclude {
 					channels[channel.ID] = markableChannel{channel, false}
 				}
 			}
+			// if neither exclude or include topics are specified, add all channels.
 			if len(opts.includeTopics) == 0 && len(opts.excludeTopics) == 0 {
 				channels[channel.ID] = markableChannel{channel, false}
 			}
@@ -285,24 +325,6 @@ func filter(
 				return err
 			}
 			numMessages++
-		case mcap.TokenAttachment:
-			if !opts.includeAttachments {
-				continue
-			}
-			attachment, err := mcap.ParseAttachment(data)
-			if err != nil {
-				return err
-			}
-			if attachment.LogTime < opts.start {
-				continue
-			}
-			if attachment.LogTime >= opts.end {
-				continue
-			}
-			if err = mcapWriter.WriteAttachment(attachment); err != nil {
-				return err
-			}
-			numAttachments++
 		case mcap.TokenMetadata:
 			if !opts.includeMetadata {
 				continue

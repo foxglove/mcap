@@ -149,3 +149,32 @@ func TestMessageTopicRegex(t *testing.T) {
 		})
 	}
 }
+
+func TestSchemaFinding(t *testing.T) {
+	cases := []struct {
+		rosType         string
+		expectedContent string
+		err             error
+	}{
+		{
+			"example_msgs/msg/Descriptor",
+			"# is a descriptor\n",
+			nil,
+		},
+		{
+			"example_msgs/msg/CustomSubdirectory",
+			"# is in a custom subdirectory\n",
+			nil,
+		},
+		{
+			"example_msgs/msg/NotHereAtAll",
+			"",
+			errSchemaNotFound,
+		},
+	}
+	for _, c := range cases {
+		content, err := getSchema("msg", c.rosType, []string{"./testdata/get_schema_workspace"})
+		assert.Equal(t, c.err, err)
+		assert.Equal(t, c.expectedContent, string(content))
+	}
+}

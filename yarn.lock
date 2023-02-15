@@ -654,6 +654,13 @@
     "@foxglove/rostime" "^1.1.0"
     heap "^0.2.6"
 
+"@foxglove/rosmsg-msgs-common@^2.0.0":
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/@foxglove/rosmsg-msgs-common/-/rosmsg-msgs-common-2.1.0.tgz#8d348db60dc69670916ca9dc56999abb6de4134f"
+  integrity sha512-Lxu3CEb+Ko1hrLu1bIqvvoc8DvGW1FAA21sWW0MoTPTgoQ1Rnpke2Z4H6O78C8DwXPzXAqZIisgxfFM9NYiHPA==
+  dependencies:
+    "@foxglove/rosmsg" "^3.1.0"
+
 "@foxglove/rosmsg-serialization@1.2.3", "@foxglove/rosmsg-serialization@^1.2.3":
   version "1.2.3"
   resolved "https://registry.yarnpkg.com/@foxglove/rosmsg-serialization/-/rosmsg-serialization-1.2.3.tgz#742adc7a322357b0a19aaebb4fe7c2c557f55e92"
@@ -677,20 +684,45 @@
   dependencies:
     md5-typescript "^1.0.5"
 
+"@foxglove/rosmsg@^3.1.0":
+  version "3.1.0"
+  resolved "https://registry.yarnpkg.com/@foxglove/rosmsg/-/rosmsg-3.1.0.tgz#edbe3e2e743a5cc89df8195889a054e639230916"
+  integrity sha512-uvL3a3PRusrQw4tg91tsXfPMCWjsKV35nAaHkzPqRt4bZRzO2DAUMavCltjRux5Hc8WLPYWt77iUSk3KfxqUZQ==
+  dependencies:
+    md5-typescript "^1.0.5"
+
 "@foxglove/rostime@^1.1.0":
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/@foxglove/rostime/-/rostime-1.1.1.tgz#6d9ec8e2264d7a44fa5066ce38cafed84d3c657a"
   integrity sha512-EI+rNLYRcrMHeyRsDuWjyDuTPwu9ZgQIk28RTsTxq1jO2zYFHuBni3TTC78BluS1QZD/iLxUeiGCfJl4eizB9A==
+
+"@foxglove/schemas@^0.7.1":
+  version "0.7.1"
+  resolved "https://registry.yarnpkg.com/@foxglove/schemas/-/schemas-0.7.1.tgz#d757152dfcf9c79dce0e26eedcc7c5462df3007e"
+  integrity sha512-9S6P6F1iZjSgoTzlyrDnzfxs2Mpc+v0fvcPo+JU5XeRiUdvAuohsXk/TR9ju/ZzGIGEhNFYACsu0KiRmtlc9bg==
+  dependencies:
+    "@foxglove/rosmsg-msgs-common" "^2.0.0"
+    tslib "^2"
 
 "@foxglove/tsconfig@1.1.0":
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/@foxglove/tsconfig/-/tsconfig-1.1.0.tgz#48c37fffd6f349c3ee08a60fc62ccf636f3b59a6"
   integrity sha512-qZU4MtXVgPhDBFazSEx7yDEuEg8cPHXFQVhBaUABZkCBdcnEE9sxlgEt0gSikF4fRtY6COGIJPVRflnPJXjJKA==
 
-"@foxglove/wasm-bz2@^0.0.4":
+"@foxglove/wasm-bz2@0.0.4":
   version "0.0.4"
   resolved "https://registry.yarnpkg.com/@foxglove/wasm-bz2/-/wasm-bz2-0.0.4.tgz#f34bb8ee434995e133a06e070d0e8067d2f0ea0f"
   integrity sha512-/JLg0pVqpL2UwwObsxcIyFHD5imn4sthE7FHIThHCfI9+93ezCfKmTNo1gdn9xxWNobfcpDcv/3jJrr/RhbaNg==
+
+"@foxglove/wasm-lz4@1.0.2":
+  version "1.0.2"
+  resolved "https://registry.yarnpkg.com/@foxglove/wasm-lz4/-/wasm-lz4-1.0.2.tgz#ce8e27ae9c039058a033e288043f38acee3d1e2b"
+  integrity sha512-qwGOVLITlMBwuI+Vf09xWkTtbQldaCKchGEiFNZzsY0Q6ZXnHFhFgl4UAew7Xaq0wCv5YB7hqYsHmSrFIVSjCg==
+
+"@foxglove/wasm-zstd@1.0.1":
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/@foxglove/wasm-zstd/-/wasm-zstd-1.0.1.tgz#41f97f9c1ed5d10790603376fbecda7ce2145fe5"
+  integrity sha512-hqKTO45Sl+kSq9SDqM9xi5L+GncjFEZIJgYEkGTlpJXTfhy1Gf+a+3epWMcE0tLUKmzM77dtu8snape/J+7ueQ==
 
 "@humanwhocodes/config-array@^0.5.0":
   version "0.5.0"
@@ -2444,6 +2476,11 @@ flat-cache@^3.0.4:
     flatted "^3.1.0"
     rimraf "^3.0.2"
 
+flatbuffers@^22.10.26:
+  version "22.10.26"
+  resolved "https://registry.yarnpkg.com/flatbuffers/-/flatbuffers-22.10.26.tgz#1b92e9559f5253ca7dc54e2b0eb63d2bcdbe329b"
+  integrity sha512-sdO3emf/BlLfOogW6KwHuXg16APR/E86jNacDXfSInPzt8SSEzxlHcqDekfM/IJ1CGC5bvDksfNufNhS8h1FRA==
+
 flatted@^3.1.0:
   version "3.2.4"
   resolved "https://registry.yarnpkg.com/flatted/-/flatted-3.2.4.tgz#28d9969ea90661b5134259f312ab6aa7929ac5e2"
@@ -3446,11 +3483,6 @@ json-stable-stringify@1.0.1:
   integrity sha1-mnWdOcXy/1A/1TAGRu1EX4jE+a8=
   dependencies:
     jsonify "~0.0.0"
-
-json-stringify-pretty-compact@3.0.0:
-  version "3.0.0"
-  resolved "https://registry.yarnpkg.com/json-stringify-pretty-compact/-/json-stringify-pretty-compact-3.0.0.tgz#f71ef9d82ef16483a407869556588e91b681d9ab"
-  integrity sha512-Rc2suX5meI0S3bfdZuA7JMFBGkJ875ApfVyq2WHELjBiiG22My/l7/8zPpH/CfFVQHuVLd8NLR0nv6vi0BYYKA==
 
 json2csv@^5.0.6:
   version "5.0.7"
@@ -4781,11 +4813,6 @@ walker@^1.0.7:
   dependencies:
     makeerror "1.0.12"
 
-wasm-lz4@2.0.0:
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/wasm-lz4/-/wasm-lz4-2.0.0.tgz#f0e8cab698c8037f7259a66c8fc698ad87e01933"
-  integrity sha512-eXm4WpHRuS2O1yOOLGTyDDit+gBJ5wV6/VhR4b0p289pQDABu03eBfGvzua5YJN6teiIskH3eE4SyQTG4/HV9w==
-
 webidl-conversions@^5.0.0:
   version "5.0.0"
   resolved "https://registry.yarnpkg.com/webidl-conversions/-/webidl-conversions-5.0.0.tgz#ae59c8a00b121543a2acc65c0434f57b0fc11aff"
@@ -4940,8 +4967,3 @@ yocto-queue@^0.1.0:
   version "0.1.0"
   resolved "https://registry.yarnpkg.com/yocto-queue/-/yocto-queue-0.1.0.tgz#0294eb3dee05028d31ee1a5fa2c556a6aaf10a1b"
   integrity sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==
-
-zstd-codec@^0.1.4:
-  version "0.1.4"
-  resolved "https://registry.yarnpkg.com/zstd-codec/-/zstd-codec-0.1.4.tgz#6abb311b63cfacbd06e72797ee6c6e1c7c65248c"
-  integrity sha512-KYnWoFWgGtWyQEKNnUcb3u8ZtKO8dn5d8u+oGpxPlopqsPyv60U8suDyfk7Z7UtAO6Sk5i1aVcAs9RbaB1n36A==

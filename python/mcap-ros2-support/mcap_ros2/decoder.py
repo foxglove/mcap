@@ -6,7 +6,7 @@ from mcap.exceptions import McapError
 from mcap.records import Message, Schema
 from mcap.well_known import SchemaEncoding
 
-from .dynamic import DecodedMessage, DecoderFunction, generate_dynamic
+from ._dynamic import DecodedMessage, DecoderFunction, generate_dynamic
 
 
 class McapROS2DecodeError(McapError):

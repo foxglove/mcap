@@ -20,8 +20,8 @@ func TestLexUnchunkedFile(t *testing.T) {
 		channelInfo(),
 		message(),
 		message(),
-		record(OpAttachment),
-		record(OpAttachment),
+		attachment(),
+		attachment(),
 		channelInfo(),
 		record(OpAttachmentIndex),
 		footer(),
@@ -33,8 +33,6 @@ func TestLexUnchunkedFile(t *testing.T) {
 		TokenChannel,
 		TokenMessage,
 		TokenMessage,
-		TokenAttachment,
-		TokenAttachment,
 		TokenChannel,
 		TokenAttachmentIndex,
 		TokenFooter,
@@ -75,7 +73,7 @@ func TestRejectsTooLargeChunks(t *testing.T) {
 	file := file(header(), bigChunk, footer())
 	lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
 		MaxDecompressedChunkSize: 999,
-		ValidateCRC:              true,
+		ValidateChunkCRCs:        true,
 	})
 	assert.Nil(t, err)
 	_, _, err = lexer.Next(nil)
@@ -131,7 +129,7 @@ func TestBadMagic(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			_, err := NewLexer(bytes.NewReader(c.magic))
-			assert.ErrorIs(t, err, ErrBadMagic)
+			assert.IsType(t, &ErrBadMagic{}, err)
 		})
 	}
 }
@@ -165,7 +163,7 @@ func TestLexChunkedFile(t *testing.T) {
 						footer(),
 					)
 					lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
-						ValidateCRC: validateCRC,
+						ValidateChunkCRCs: validateCRC,
 					})
 					assert.Nil(t, err)
 					expected := []TokenType{
@@ -176,8 +174,6 @@ func TestLexChunkedFile(t *testing.T) {
 						TokenChannel,
 						TokenMessage,
 						TokenMessage,
-						TokenAttachment,
-						TokenAttachment,
 						TokenFooter,
 					}
 					for i, expectedTokenType := range expected {
@@ -224,7 +220,7 @@ func TestChunkCRCValidation(t *testing.T) {
 			footer(),
 		)
 		lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
-			ValidateCRC: true,
+			ValidateChunkCRCs: true,
 		})
 		assert.Nil(t, err)
 		expected := []TokenType{
@@ -235,8 +231,6 @@ func TestChunkCRCValidation(t *testing.T) {
 			TokenChannel,
 			TokenMessage,
 			TokenMessage,
-			TokenAttachment,
-			TokenAttachment,
 			TokenFooter,
 		}
 		for i, expectedTokenType := range expected {
@@ -254,7 +248,7 @@ func TestChunkCRCValidation(t *testing.T) {
 			footer(),
 		)
 		lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
-			ValidateCRC: true,
+			ValidateChunkCRCs: true,
 		})
 		assert.Nil(t, err)
 		expected := []TokenType{
@@ -265,8 +259,6 @@ func TestChunkCRCValidation(t *testing.T) {
 			TokenChannel,
 			TokenMessage,
 			TokenMessage,
-			TokenAttachment,
-			TokenAttachment,
 			TokenFooter,
 		}
 		for i, expectedTokenType := range expected {
@@ -289,7 +281,7 @@ func TestChunkCRCValidation(t *testing.T) {
 			footer(),
 		)
 		lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
-			ValidateCRC: true,
+			ValidateChunkCRCs: true,
 		})
 		assert.Nil(t, err)
 		expected := []TokenType{
@@ -307,6 +299,80 @@ func TestChunkCRCValidation(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.True(t, strings.Contains(err.Error(), "invalid chunk CRC"))
 	})
+}
+
+func TestAttachmentHandling(t *testing.T) {
+	cases := []struct {
+		assertion      string
+		attachmentData []byte
+		attachment     *Attachment
+	}{
+		{
+			"empty attachment",
+			[]byte{},
+			&Attachment{
+				LogTime:    0,
+				CreateTime: 0,
+				Name:       "empty",
+				MediaType:  "mediaType",
+				DataSize:   0,
+			},
+		},
+		{
+			"nonempty attachment",
+			[]byte{0x01, 0x02, 0x03, 0x04},
+			&Attachment{
+				LogTime:    0,
+				CreateTime: 0,
+				Name:       "nonempty",
+				MediaType:  "media",
+				DataSize:   4,
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.assertion, func(t *testing.T) {
+			c.attachment.Data = bytes.NewReader(c.attachmentData)
+			file := &bytes.Buffer{}
+			writer, err := NewWriter(file, &WriterOptions{})
+			assert.Nil(t, err)
+			assert.Nil(t, writer.WriteHeader(&Header{
+				Profile: "",
+				Library: "",
+			}))
+			assert.Nil(t, writer.WriteAttachment(c.attachment))
+			assert.Nil(t, writer.Close())
+
+			var called bool
+			lexer, err := NewLexer(file, &LexerOptions{
+				ComputeAttachmentCRCs: true,
+				AttachmentCallback: func(ar *AttachmentReader) error {
+					assert.Equal(t, c.attachment.LogTime, ar.LogTime)
+					assert.Equal(t, c.attachment.CreateTime, ar.CreateTime)
+					assert.Equal(t, c.attachment.Name, ar.Name)
+					assert.Equal(t, c.attachment.MediaType, ar.MediaType)
+					data, err := io.ReadAll(ar.Data())
+					assert.Nil(t, err)
+					assert.Equal(t, c.attachmentData, data)
+					computedCRC, err := ar.ComputedCRC()
+					assert.Nil(t, err)
+					parsedCRC, err := ar.ParsedCRC()
+					assert.Nil(t, err)
+					assert.Equal(t, computedCRC, parsedCRC)
+					called = true
+					return nil
+				},
+			})
+
+			for !errors.Is(err, io.EOF) {
+				_, _, err = lexer.Next(nil)
+				if !errors.Is(err, io.EOF) {
+					assert.Nil(t, err)
+				}
+			}
+			assert.True(t, called)
+		})
+	}
 }
 
 func TestChunkEmission(t *testing.T) {
@@ -329,16 +395,14 @@ func TestChunkEmission(t *testing.T) {
 						footer(),
 					)
 					lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
-						ValidateCRC: validateCRC,
-						EmitChunks:  true,
+						ValidateChunkCRCs: validateCRC,
+						EmitChunks:        true,
 					})
 					assert.Nil(t, err)
 					expected := []TokenType{
 						TokenHeader,
 						TokenChunk,
 						TokenChunk,
-						TokenAttachment,
-						TokenAttachment,
 						TokenFooter,
 					}
 					for i, expectedTokenType := range expected {
@@ -385,7 +449,7 @@ func BenchmarkLexer(b *testing.B) {
 					var tokens, bytecount int64
 					reader.Reset(input)
 					lexer, err := NewLexer(reader, &LexerOptions{
-						ValidateCRC: validateCRC,
+						ValidateChunkCRCs: validateCRC,
 					})
 					assert.Nil(b, err)
 					for {

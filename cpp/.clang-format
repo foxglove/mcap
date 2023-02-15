@@ -17,6 +17,7 @@ FixNamespaceComments: true
 PointerAlignment: Left
 ReflowComments: true
 SortIncludes: true
+IndentPPDirectives: AfterHash
 
 IncludeCategories:
   - Regex: "^<mcap"

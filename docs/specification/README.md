@@ -12,7 +12,7 @@ MCAP is a modular container file format for recording timestamped [pub/sub](http
 
 MCAP files are designed to work well under various workloads, resource constraints, and durability requirements.
 
-A [Kaitai Struct](http://kaitai.io) description for the MCAP format is provided at [mcap.ksy](mcap.ksy).
+A [Kaitai Struct](http://kaitai.io) description for the MCAP format is provided at [mcap.ksy](https://github.com/foxglove/mcap/blob/main/docs/specification/mcap.ksy).
 
 ## File Structure
 
@@ -92,7 +92,7 @@ The summary offset section aids random access reading.
 
 ## Records
 
-MCAP files may contain a variety of records. Records are identified by a single-byte **opcode**. Record opcodes in the range 0x01-0x7F are reserved for future MCAP format usage. 0x80-0xFF are reserved for application extensions and user proposals.
+MCAP files may contain a variety of records. Records are identified by a single-byte **opcode**. Record opcodes in the range 0x01-0x7F are reserved for future MCAP format usage. 0x80-0xFF are reserved for application extensions and user proposals. 0x00 is not a valid opcode.
 
 All MCAP records are serialized as follows:
 

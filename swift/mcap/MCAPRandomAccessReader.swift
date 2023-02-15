@@ -1,7 +1,7 @@
 import Algorithms
-import Collections
 import CRC
 import struct Foundation.Data
+import HeapModule
 
 public protocol IRandomAccessReadable {
   /**

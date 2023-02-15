@@ -14,6 +14,7 @@ ignorePaths:
   - bin
   - dist
   - yarn-error.log
+  - "*.csv"
   - "*.Dockerfile"
   - Dockerfile
   - "*.mcap"
@@ -23,14 +24,17 @@ ignorePaths:
   - package.xml
   - "*_pb2.py"
   - "*.pyc"
+  - "*.webp"
   - Pipfile*
   - mkdocs.yml
   - fathom.html
-  - vendor
+  - _vendor
   - rust
+  - cpp/examples/protobuf/proto
 
 words:
   - bagfile
+  - bfbs
   - callerid
   - cbor
   - cmake
@@ -40,7 +44,9 @@ words:
   - datetime
   - deserialization
   - distro
+  - elems
   - flatbuffer
+  - flatbuffers
   - flatc
   - fwrite
   - gendeps
@@ -66,6 +72,7 @@ words:
   - rosbag
   - rosmsg
   - rostime
+  - schemaless
   - serde
   - stoull
   - struct

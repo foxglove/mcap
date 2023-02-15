@@ -25,6 +25,16 @@ func decimalTime(t time.Time) string {
 	return fmt.Sprintf("%d.%09d", seconds, nanoseconds)
 }
 
+func humanBytes(numBytes uint64) string {
+	prefixes := []string{"B", "KiB", "MiB", "GiB"}
+	displayedValue := float64(numBytes)
+	prefixIndex := 0
+	for ; displayedValue > 1024 && prefixIndex < len(prefixes); prefixIndex++ {
+		displayedValue = displayedValue / 1024
+	}
+	return fmt.Sprintf("%.2f %s", displayedValue, prefixes[prefixIndex])
+}
+
 func printInfo(w io.Writer, info *mcap.Info) error {
 	buf := &bytes.Buffer{}
 	fmt.Fprintf(buf, "library: %s\n", info.Header.Library)
@@ -65,10 +75,10 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		for k, v := range compressionFormatStats {
 			compressionRatio := 100 * (1 - float64(v.compressedSize)/float64(v.uncompressedSize))
 			fmt.Fprintf(buf, "\t%s: [%d/%d chunks] ", k, v.count, chunkCount)
-			fmt.Fprintf(buf, "[%.2d MB/%.2d MB (%.2f%%)] ",
-				(v.uncompressedSize / (1024 * 1024)), (v.compressedSize / (1024 * 1024)), compressionRatio)
+			fmt.Fprintf(buf, "[%s/%s (%.2f%%)] ",
+				humanBytes(v.uncompressedSize), humanBytes(v.compressedSize), compressionRatio)
 			if durationInSeconds > 0 {
-				fmt.Fprintf(buf, "[%.2f MB/sec] ", float64(v.compressedSize/(1024*1024))/durationInSeconds)
+				fmt.Fprintf(buf, "[%s/sec] ", humanBytes(uint64(float64(v.compressedSize)/durationInSeconds)))
 			}
 			fmt.Fprintf(buf, "\n")
 		}
@@ -138,6 +148,7 @@ var infoCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to get reader: %w", err)
 			}
+			defer reader.Close()
 			info, err := reader.Info()
 			if err != nil {
 				return fmt.Errorf("failed to get info: %w", err)

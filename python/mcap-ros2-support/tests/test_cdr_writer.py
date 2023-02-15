@@ -1,6 +1,6 @@
 from io import BytesIO
 
-from mcap_ros2.cdr import CdrReader, CdrWriter
+from mcap_ros2._cdr import CdrReader, CdrWriter
 
 
 tf2_msg__TFMessage = (

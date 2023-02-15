@@ -49,11 +49,11 @@ template <typename... T>
 }
 
 inline uint32_t KeyValueMapSize(const KeyValueMap& map) {
-  uint32_t size = 0;
+  size_t size = 0;
   for (const auto& [key, value] : map) {
     size += 4 + key.size() + 4 + value.size();
   }
-  return size;
+  return (uint32_t)(size);
 }
 
 inline const std::string CompressionString(Compression compression) {

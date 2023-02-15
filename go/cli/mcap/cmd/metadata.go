@@ -83,6 +83,7 @@ var listMetadataCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to build mcap reader: %w", err)
 			}
+			defer reader.Close()
 			info, err := reader.Info()
 			if err != nil {
 				return fmt.Errorf("failed to read info: %w", err)
@@ -154,6 +155,7 @@ var getMetadataCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to build reader: %w", err)
 			}
+			defer reader.Close()
 			info, err := reader.Info()
 			if err != nil {
 				return fmt.Errorf("failed to collect mcap info: %w", err)

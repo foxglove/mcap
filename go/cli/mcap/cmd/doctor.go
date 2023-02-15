@@ -105,14 +105,15 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 	uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
 
 	lexer, err := mcap.NewLexer(uncompressedBytesReader, &mcap.LexerOptions{
-		SkipMagic:   true,
-		ValidateCRC: true,
-		EmitChunks:  true,
+		SkipMagic:         true,
+		ValidateChunkCRCs: true,
+		EmitChunks:        true,
 	})
 	if err != nil {
 		doctor.error("Failed to make lexer for chunk bytes", err)
 		return
 	}
+	defer lexer.Close()
 
 	var minLogTime uint64 = math.MaxUint64
 	var maxLogTime uint64
@@ -124,7 +125,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			die("Failed to read token: %s", err)
+			doctor.fatalf("Failed to read next token: %s", err)
 		}
 		if len(data) > len(msg) {
 			msg = data
@@ -140,8 +141,12 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 				doctor.error("Failed to parse schema:", err)
 			}
 
-			if schema.Encoding == "" && len(schema.Data) > 0 {
-				doctor.error("Schema.data field should not be set when Schema.encoding is empty")
+			if schema.Encoding == "" {
+				if len(schema.Data) == 0 {
+					doctor.warn("Schema with ID: %d, Name: %s has empty Encoding and Data fields", schema.ID, schema.Name)
+				} else {
+					doctor.error("Schema with ID: %d has empty Encoding but Data contains: %s", schema.ID, string(schema.Data))
+				}
 			}
 
 			if schema.ID == 0 {
@@ -205,13 +210,14 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 
 func (doctor *mcapDoctor) Examine() error {
 	lexer, err := mcap.NewLexer(doctor.reader, &mcap.LexerOptions{
-		SkipMagic:   false,
-		ValidateCRC: true,
-		EmitChunks:  true,
+		SkipMagic:         false,
+		ValidateChunkCRCs: true,
+		EmitChunks:        true,
 	})
 	if err != nil {
 		doctor.fatal(err)
 	}
+	defer lexer.Close()
 
 	var lastMessageTime uint64
 	var lastToken mcap.TokenType
@@ -230,7 +236,7 @@ func (doctor *mcapDoctor) Examine() error {
 				}
 				break
 			}
-			die("Failed to read token: %s", err)
+			doctor.fatalf("Failed to read next token: %s", err)
 		}
 		lastToken = tokenType
 		if len(data) > len(msg) {
@@ -261,8 +267,12 @@ func (doctor *mcapDoctor) Examine() error {
 				doctor.error("Failed to parse schema:", err)
 			}
 
-			if schema.Encoding == "" && len(schema.Data) > 0 {
-				doctor.error("Schema.data field should not be set when Schema.encoding is empty")
+			if schema.Encoding == "" {
+				if len(schema.Data) == 0 {
+					doctor.warn("Schema with ID: %d, Name: %s has empty Encoding and Data fields", schema.ID, schema.Name)
+				} else {
+					doctor.error("Schema with ID: %d has empty Encoding but Data contains: %s", schema.ID, string(schema.Data))
+				}
 			}
 
 			if schema.ID == 0 {
@@ -326,11 +336,6 @@ func (doctor *mcapDoctor) Examine() error {
 				doctor.error("Multiple chunk indexes found for chunk at offset", chunkIndex.ChunkStartOffset)
 			}
 			doctor.chunkIndexes[chunkIndex.ChunkStartOffset] = chunkIndex
-		case mcap.TokenAttachment:
-			_, err := mcap.ParseAttachment(data)
-			if err != nil {
-				doctor.error("Failed to parse attachment:", err)
-			}
 		case mcap.TokenAttachmentIndex:
 			_, err := mcap.ParseAttachmentIndex(data)
 			if err != nil {
@@ -423,7 +428,7 @@ func (doctor *mcapDoctor) Examine() error {
 	if doctor.errorCount == 0 {
 		return nil
 	} else {
-		return fmt.Errorf("Encountered %d errors", doctor.errorCount)
+		return fmt.Errorf("encountered %d errors", doctor.errorCount)
 	}
 }
 

@@ -107,6 +107,7 @@ fn write_record<W: Write>(w: &mut W, r: &Record) -> io::Result<()> {
 pub struct WriteOptions {
     compression: Option<Compression>,
     profile: String,
+    chunk_size: Option<u64>,
 }
 
 impl Default for WriteOptions {
@@ -117,6 +118,7 @@ impl Default for WriteOptions {
             #[cfg(not(feature = "zstd"))]
             compression: None,
             profile: String::new(),
+            chunk_size: Some(1024 * 768),
         }
     }
 }
@@ -126,6 +128,7 @@ impl WriteOptions {
         Self::default()
     }
 
+    /// Specifies the compression that should be used on chunks.
     pub fn compression(self, compression: Option<Compression>) -> Self {
         Self {
             compression,
@@ -133,9 +136,23 @@ impl WriteOptions {
         }
     }
 
+    /// specifies the profile that should be written to the MCAP Header record.
     pub fn profile<S: Into<String>>(self, profile: S) -> Self {
         Self {
             profile: profile.into(),
+            ..self
+        }
+    }
+
+    /// specifies the target uncompressed size of each chunk.
+    ///
+    /// Messages will be written to chunks until the uncompressed chunk is larger than the
+    /// target chunk size, at which point the chunk will be closed and a new one started.
+    /// If `None`, chunks will not be automatically closed and the user must call `flush()` to
+    /// begin a new chunk.
+    pub fn chunk_size(self, chunk_size: Option<u64>) -> Self {
+        Self {
+            chunk_size: chunk_size,
             ..self
         }
     }
@@ -152,7 +169,7 @@ impl WriteOptions {
 /// and check for errors when done; otherwise the result will be unwrapped on drop.
 pub struct Writer<'a, W: Write + Seek> {
     writer: Option<WriteMode<W>>,
-    compression: Option<Compression>,
+    options: WriteOptions,
     schemas: HashMap<Schema<'a>, u16>,
     channels: HashMap<Channel<'a>, u16>,
     stats: records::Statistics,
@@ -172,14 +189,14 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         write_record(
             &mut writer,
             &Record::Header(records::Header {
-                profile: opts.profile,
+                profile: opts.profile.clone(),
                 library: String::from("mcap-rs-") + env!("CARGO_PKG_VERSION"),
             }),
         )?;
 
         Ok(Self {
             writer: Some(WriteMode::Raw(writer)),
-            compression: opts.compression,
+            options: opts,
             schemas: HashMap::new(),
             channels: HashMap::new(),
             stats: records::Statistics::default(),
@@ -276,6 +293,20 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             .channel_message_counts
             .entry(header.channel_id)
             .or_insert(0) += 1;
+
+        // if the current chunk is larger than our target chunk size, finish it
+        // and start a new one.
+        let current_chunk_size = match &self.writer {
+            Some(WriteMode::Chunk(cw)) => Some(cw.compressor.position()),
+            _ => None,
+        };
+        if let (Some(current_chunk_size), Some(target)) =
+            (current_chunk_size, self.options.chunk_size)
+        {
+            if current_chunk_size > target {
+                self.finish_chunk()?;
+            }
+        }
 
         self.chunkin_time()?.write_message(header, data)?;
         Ok(())
@@ -375,7 +406,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             WriteMode::Raw(w) => {
                 // It's chunkin time.
                 self.stats.chunk_count += 1;
-                WriteMode::Chunk(ChunkWriter::new(w, self.compression)?)
+                WriteMode::Chunk(ChunkWriter::new(w, self.options.compression)?)
             }
             chunk => chunk,
         });

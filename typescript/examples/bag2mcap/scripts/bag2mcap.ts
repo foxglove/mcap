@@ -10,12 +10,13 @@ import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import { Time } from "@foxglove/rosmsg-serialization";
 import { toNanoSec } from "@foxglove/rostime";
 import Bzip2 from "@foxglove/wasm-bz2";
+import decompressLZ4 from "@foxglove/wasm-lz4";
+import zstd from "@foxglove/wasm-zstd";
 import { McapWriter, IWritable, McapTypes } from "@mcap/core";
 import { program } from "commander";
 import { open, FileHandle } from "fs/promises";
 import protobufjs from "protobufjs";
 import descriptor from "protobufjs/ext/descriptor";
-import decompressLZ4 from "wasm-lz4";
 
 const builtinSrc = `
 syntax = "proto3";
@@ -214,6 +215,7 @@ class FileHandleWritable implements IWritable {
 
 async function convert(filePath: string, options: { indexed: boolean }) {
   await decompressLZ4.isLoaded;
+  await zstd.isLoaded;
   const bzip2 = await Bzip2.init();
 
   const bag = new Bag(new FileReader(filePath));
@@ -230,16 +232,15 @@ async function convert(filePath: string, options: { indexed: boolean }) {
     useStatistics: true,
     useChunks: options.indexed,
     useChunkIndex: options.indexed,
+    compressChunk: (data) => ({
+      compression: "zstd",
+      compressedData: zstd.compress(data, 19),
+    }),
   });
 
   await mcapFile.start({
     profile: "",
-    library: "mcap typescript bag2proto",
-  });
-
-  await mcapFile.addMetadata({
-    name: "original file info",
-    metadata: new Map([["path", mcapFilePath]]),
+    library: "mcap typescript bag2mcap",
   });
 
   const topicToDetailMap = new Map<string, TopicDetail>();

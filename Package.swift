@@ -7,22 +7,20 @@ let package = Package(
   platforms: [.macOS(.v10_15)], // for async/await
   products: [
     .library(name: "MCAP", targets: ["MCAP"]),
-    .library(name: "CRC", targets: ["CRC", "crc-tests"]),
-    .executable(name: "conformance", targets: ["conformance"]),
   ],
   dependencies: [
     .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0"),
     .package(url: "https://github.com/apple/swift-algorithms", from: "1.0.0"),
 
     // Use pre-release version for Heap
-    .package(url: "https://github.com/apple/swift-collections", revision: "418378107c87a4b312e29a51f773ce0e4e12e199"),
+    .package(url: "https://github.com/apple/swift-collections", revision: "53a8adc54374f620002a3b6401d39e0feb3c57ae"),
   ],
   targets: [
     .target(
       name: "MCAP",
       dependencies: [
         "CRC",
-        .product(name: "Collections", package: "swift-collections"),
+        .product(name: "HeapModule", package: "swift-collections"),
         .product(name: "Algorithms", package: "swift-algorithms"),
       ],
       path: "swift/mcap"

@@ -10,7 +10,7 @@ import (
 	"github.com/foxglove/mcap/go/mcap/readopts"
 )
 
-func readPrefixedString(data []byte, offset int) (s string, newoffset int, err error) {
+func getPrefixedString(data []byte, offset int) (s string, newoffset int, err error) {
 	if len(data[offset:]) < 4 {
 		return "", 0, io.ErrShortBuffer
 	}
@@ -21,7 +21,7 @@ func readPrefixedString(data []byte, offset int) (s string, newoffset int, err e
 	return string(data[offset+4 : offset+length+4]), offset + 4 + length, nil
 }
 
-func readPrefixedBytes(data []byte, offset int) (s []byte, newoffset int, err error) {
+func getPrefixedBytes(data []byte, offset int) (s []byte, newoffset int, err error) {
 	if len(data[offset:]) < 4 {
 		return nil, 0, io.ErrShortBuffer
 	}
@@ -32,7 +32,7 @@ func readPrefixedBytes(data []byte, offset int) (s []byte, newoffset int, err er
 	return data[offset+4 : offset+length+4], offset + 4 + length, nil
 }
 
-func readPrefixedMap(data []byte, offset int) (result map[string]string, newoffset int, err error) {
+func getPrefixedMap(data []byte, offset int) (result map[string]string, newoffset int, err error) {
 	var key, value string
 	var inset int
 	m := make(map[string]string)
@@ -41,11 +41,11 @@ func readPrefixedMap(data []byte, offset int) (result map[string]string, newoffs
 		return nil, 0, fmt.Errorf("failed to read map length: %w", err)
 	}
 	for uint32(offset+inset) < uint32(offset)+maplen {
-		key, inset, err = readPrefixedString(data[offset:], inset)
+		key, inset, err = getPrefixedString(data[offset:], inset)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to read map key: %w", err)
 		}
-		value, inset, err = readPrefixedString(data[offset:], inset)
+		value, inset, err = getPrefixedString(data[offset:], inset)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to read map value: %w", err)
 		}
@@ -58,6 +58,7 @@ type Reader struct {
 	l        *Lexer
 	r        io.Reader
 	rs       io.ReadSeeker
+	header   *Header
 	channels map[uint16]*Channel
 }
 
@@ -141,34 +142,16 @@ func (r *Reader) Messages(
 	return r.unindexedIterator(ro.Topics, uint64(ro.Start), uint64(ro.End)), nil
 }
 
-func (r *Reader) readHeader() (*Header, error) {
-	_, err := r.rs.Seek(8, io.SeekStart)
-	if err != nil {
-		return nil, fmt.Errorf("failed to seek to header: %w", err)
-	}
-	buf := make([]byte, 9)
-	_, err = io.ReadFull(r.rs, buf)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read header length: %w", err)
-	}
-	if opcode := buf[0]; opcode != byte(OpHeader) {
-		return nil, fmt.Errorf("unexpected opcode %d in header", opcode)
-	}
-	buf = make([]byte, binary.LittleEndian.Uint64(buf[1:]))
-	_, err = io.ReadFull(r.rs, buf)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read header: %w", err)
-	}
-	return ParseHeader(buf)
+// Get the Header record from this MCAP.
+func (r *Reader) Header() *Header {
+	return r.header
 }
 
+// Info scans the summary section to form a structure describing characteristics
+// of the underlying mcap file.
 func (r *Reader) Info() (*Info, error) {
-	header, err := r.readHeader()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read header: %w", err)
-	}
 	it := r.indexedMessageIterator(nil, 0, math.MaxUint64, readopts.FileOrder)
-	err = it.parseSummarySection()
+	err := it.parseSummarySection()
 	if err != nil {
 		return nil, err
 	}
@@ -180,8 +163,13 @@ func (r *Reader) Info() (*Info, error) {
 		AttachmentIndexes: it.attachmentIndexes,
 		MetadataIndexes:   it.metadataIndexes,
 		Schemas:           it.schemas,
-		Header:            header,
+		Header:            r.header,
 	}, nil
+}
+
+// Close the reader.
+func (r *Reader) Close() {
+	r.l.Close()
 }
 
 func NewReader(r io.Reader) (*Reader, error) {
@@ -195,10 +183,23 @@ func NewReader(r io.Reader) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer lexer.Close()
+	token, headerData, err := lexer.Next(nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not read MCAP header when opening reader: %w", err)
+	}
+	if token != TokenHeader {
+		return nil, fmt.Errorf("expected first record in MCAP to be a Header, found %v", headerData)
+	}
+	header, err := ParseHeader(headerData)
+	if err != nil {
+		return nil, err
+	}
 	return &Reader{
 		l:        lexer,
 		r:        r,
 		rs:       rs,
+		header:   header,
 		channels: make(map[uint16]*Channel),
 	}, nil
 }

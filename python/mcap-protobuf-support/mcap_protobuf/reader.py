@@ -7,7 +7,7 @@ from typing import IO, Union, Any, Dict, Iterator, Optional, Iterable
 from datetime import datetime
 from os import PathLike
 
-from .decoder import Decoder
+from .decoder import Decoder, McapProtobufDecodeError
 
 from mcap.records import Message, Channel
 from mcap.reader import McapReader, make_reader
@@ -65,6 +65,11 @@ def read_protobuf_messages(
         for schema, channel, message in reader.iter_messages(
             topics, start_time, end_time, log_time_order, reverse
         ):
+            if schema is None:
+                raise McapProtobufDecodeError(
+                    f"cannot decode schemaless channel with encoding: {channel.message_encoding}"
+                )
+
             yield McapProtobufMessage(
                 proto_msg=decoder.decode(schema=schema, message=message),
                 message=message,
