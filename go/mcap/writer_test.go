@@ -327,13 +327,13 @@ func TestIndexStructures(t *testing.T) {
 			MessageStartTime: 1,
 			MessageEndTime:   1,
 			ChunkStartOffset: 105,
-			ChunkLength:      145,
+			ChunkLength:      144,
 			MessageIndexOffsets: map[uint16]uint64{
-				1: 250,
+				1: 249,
 			},
 			MessageIndexLength: 31,
 			Compression:        "zstd",
-			CompressedSize:     92,
+			CompressedSize:     91,
 			UncompressedSize:   110,
 		}, chunkIndex)
 	})

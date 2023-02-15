@@ -716,6 +716,26 @@ func (w *Writer) writeRecord(writer io.Writer, op OpCode, data []byte) (int, err
 	return c, nil
 }
 
+type CompressionLevel int
+
+const (
+	// Default is the default "pretty fast" compression option.
+	// This is roughly equivalent to the default Zstandard mode (level 3).
+	CompressionLevelDefault CompressionLevel = iota
+
+	// Fastest will choose the fastest reasonable compression. This is roughly
+	// equivalent to the fastest LZ4/Zstandard modes.
+	CompressionLevelFastest
+
+	// Better will yield better compression than the default.
+	// For zstd, this is about level 7-8 with ~ 2x-3x the default CPU usage.
+	CompressionLevelBetter
+
+	// Best will choose the best available compression option. This will offer the
+	// best compression no matter the CPU cost.
+	CompressionLevelBest
+)
+
 // WriterOptions are options for the MCAP Writer.
 type WriterOptions struct {
 	// IncludeCRC specifies whether to compute CRC checksums in the output.
@@ -727,6 +747,9 @@ type WriterOptions struct {
 	ChunkSize int64
 	// Compression indicates the compression format to use for chunk compression.
 	Compression CompressionFormat
+	// CompressionLevel controls the speed vs. compression ratio tradeoff. The
+	// exact interpretation of this value depends on the compression format.
+	CompressionLevel CompressionLevel
 
 	// SkipMessageIndexing skips the message and chunk indexes for a chunked
 	// file.
@@ -759,6 +782,38 @@ type WriterOptions struct {
 	OverrideLibrary bool
 }
 
+// Convert an MCAP compression level to the corresponding lz4.CompressionLevel.
+func encoderLevelFromLZ4(level CompressionLevel) lz4.CompressionLevel {
+	switch level {
+	case CompressionLevelDefault:
+		return lz4.Level3
+	case CompressionLevelFastest:
+		return lz4.Fast
+	case CompressionLevelBetter:
+		return lz4.Level6
+	case CompressionLevelBest:
+		return lz4.Level9
+	default:
+		return lz4.Level3
+	}
+}
+
+// Convert an MCAP compression level to the corresponding zstd.EncoderLevel.
+func encoderLevelFromZstd(level CompressionLevel) zstd.EncoderLevel {
+	switch level {
+	case CompressionLevelDefault:
+		return zstd.SpeedDefault
+	case CompressionLevelFastest:
+		return zstd.SpeedFastest
+	case CompressionLevelBetter:
+		return zstd.SpeedBetterCompression
+	case CompressionLevelBest:
+		return zstd.SpeedBestCompression
+	default:
+		return zstd.SpeedDefault
+	}
+}
+
 // NewWriter returns a new MCAP writer.
 func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	writer := newWriteSizer(w, opts.IncludeCRC)
@@ -770,13 +825,17 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	if opts.Chunked {
 		switch opts.Compression {
 		case CompressionZSTD:
-			zw, err := zstd.NewWriter(&compressed, zstd.WithEncoderLevel(zstd.SpeedFastest))
+			level := encoderLevelFromZstd(opts.CompressionLevel)
+			zw, err := zstd.NewWriter(&compressed, zstd.WithEncoderLevel(level))
 			if err != nil {
 				return nil, err
 			}
 			compressedWriter = newCountingCRCWriter(zw, opts.IncludeCRC)
 		case CompressionLZ4:
-			compressedWriter = newCountingCRCWriter(lz4.NewWriter(&compressed), opts.IncludeCRC)
+			level := encoderLevelFromLZ4(opts.CompressionLevel)
+			lzw := lz4.NewWriter(&compressed)
+			_ = lzw.Apply(lz4.CompressionLevelOption(level))
+			compressedWriter = newCountingCRCWriter(lzw, opts.IncludeCRC)
 		case CompressionNone:
 			compressedWriter = newCountingCRCWriter(bufCloser{&compressed}, opts.IncludeCRC)
 		default:
