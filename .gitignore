@@ -8,3 +8,6 @@ __docs__
 dist
 site/
 .cache
+
+*.db3-shm
+*.db3-wal
