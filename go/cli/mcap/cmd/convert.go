@@ -95,10 +95,11 @@ var convertCmd = &cobra.Command{
 		}
 
 		opts := &mcap.WriterOptions{
-			IncludeCRC:  convertIncludeCRC,
-			Chunked:     convertChunked,
-			ChunkSize:   convertChunkSize,
-			Compression: compressionFormat,
+			IncludeCRC:       convertIncludeCRC,
+			Chunked:          convertChunked,
+			ChunkSize:        convertChunkSize,
+			Compression:      compressionFormat,
+			CompressionLevel: 3,
 		}
 
 		switch filetype {

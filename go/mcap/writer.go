@@ -727,6 +727,10 @@ type WriterOptions struct {
 	ChunkSize int64
 	// Compression indicates the compression format to use for chunk compression.
 	Compression CompressionFormat
+	// CompressionLevel is passed to the compression library to change the speed
+	// vs. compression ratio tradeoff. The meaning of this value depends on the
+	// compression library used.
+	CompressionLevel int
 
 	// SkipMessageIndexing skips the message and chunk indexes for a chunked
 	// file.
@@ -759,6 +763,32 @@ type WriterOptions struct {
 	OverrideLibrary bool
 }
 
+// Convert an integer compression level to the corresponding lz4.CompressionLevel.
+func encoderLevelFromLZ4(level int) lz4.CompressionLevel {
+	switch {
+	case level <= 0:
+		return lz4.Fast
+	case level == 1:
+		return lz4.Level1
+	case level == 2:
+		return lz4.Level2
+	case level == 3:
+		return lz4.Level3
+	case level == 4:
+		return lz4.Level4
+	case level == 5:
+		return lz4.Level5
+	case level == 6:
+		return lz4.Level6
+	case level == 7:
+		return lz4.Level7
+	case level == 8:
+		return lz4.Level8
+	default:
+		return lz4.Level9
+	}
+}
+
 // NewWriter returns a new MCAP writer.
 func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	writer := newWriteSizer(w, opts.IncludeCRC)
@@ -770,13 +800,17 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	if opts.Chunked {
 		switch opts.Compression {
 		case CompressionZSTD:
-			zw, err := zstd.NewWriter(&compressed, zstd.WithEncoderLevel(zstd.SpeedDefault))
+			level := zstd.EncoderLevelFromZstd(opts.CompressionLevel)
+			zw, err := zstd.NewWriter(&compressed, zstd.WithEncoderLevel(level))
 			if err != nil {
 				return nil, err
 			}
 			compressedWriter = newCountingCRCWriter(zw, opts.IncludeCRC)
 		case CompressionLZ4:
-			compressedWriter = newCountingCRCWriter(lz4.NewWriter(&compressed), opts.IncludeCRC)
+			level := encoderLevelFromLZ4(opts.CompressionLevel)
+			lzw := lz4.NewWriter(&compressed)
+			lzw.Apply(lz4.CompressionLevelOption(level))
+			compressedWriter = newCountingCRCWriter(lzw, opts.IncludeCRC)
 		case CompressionNone:
 			compressedWriter = newCountingCRCWriter(bufCloser{&compressed}, opts.IncludeCRC)
 		default:

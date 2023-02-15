@@ -169,9 +169,10 @@ func filter(
 	opts *filterOpts,
 ) error {
 	mcapWriter, err := mcap.NewWriter(w, &mcap.WriterOptions{
-		Compression: opts.compressionFormat,
-		Chunked:     true,
-		ChunkSize:   opts.chunkSize,
+		Compression:      opts.compressionFormat,
+		CompressionLevel: 3,
+		Chunked:          true,
+		ChunkSize:        opts.chunkSize,
 	})
 	if err != nil {
 		return err

@@ -138,10 +138,11 @@ func outputProfile(profiles []string) string {
 
 func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 	writer, err := mcap.NewWriter(w, &mcap.WriterOptions{
-		Chunked:     m.opts.chunked,
-		ChunkSize:   m.opts.chunkSize,
-		Compression: mcap.CompressionFormat(m.opts.compression),
-		IncludeCRC:  m.opts.includeCRC,
+		Chunked:          m.opts.chunked,
+		ChunkSize:        m.opts.chunkSize,
+		Compression:      mcap.CompressionFormat(m.opts.compression),
+		CompressionLevel: 3,
+		IncludeCRC:       m.opts.includeCRC,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create writer: %w", err)
