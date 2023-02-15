@@ -127,11 +127,10 @@ func inferWriterOptions(info *mcap.Info) *mcap.WriterOptions {
 	// approximating those of the first chunk.
 	idx := info.ChunkIndexes[0]
 	return &mcap.WriterOptions{
-		IncludeCRC:       true,
-		Chunked:          true,
-		ChunkSize:        int64(idx.ChunkLength),
-		Compression:      idx.Compression,
-		CompressionLevel: 3,
+		IncludeCRC:  true,
+		Chunked:     true,
+		ChunkSize:   int64(idx.ChunkLength),
+		Compression: idx.Compression,
 	}
 }
 
