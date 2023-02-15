@@ -809,7 +809,7 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 		case CompressionLZ4:
 			level := encoderLevelFromLZ4(opts.CompressionLevel)
 			lzw := lz4.NewWriter(&compressed)
-			lzw.Apply(lz4.CompressionLevelOption(level))
+			_ = lzw.Apply(lz4.CompressionLevelOption(level))
 			compressedWriter = newCountingCRCWriter(lzw, opts.IncludeCRC)
 		case CompressionNone:
 			compressedWriter = newCountingCRCWriter(bufCloser{&compressed}, opts.IncludeCRC)
