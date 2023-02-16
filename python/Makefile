@@ -24,6 +24,7 @@ examples: pipenv
 	pipenv run python examples/raw/writer.py example_mcaps/raw.mcap
 	pipenv run python examples/raw/reader.py example_mcaps/raw.mcap
 	cd examples/protobuf && pipenv run python writer.py $(CURDIR)/example_mcaps/protobuf.mcap
+	cd examples/protobuf && pipenv run python image_example.py $(CURDIR)/example_mcaps/image.mcap
 	cd examples/protobuf && pipenv run python point_cloud_example.py $(CURDIR)/example_mcaps/point_cloud.mcap
 	cd examples/protobuf && pipenv run python reader.py $(CURDIR)/example_mcaps/protobuf.mcap
 	cd examples/protobuf && pipenv run python reader.py $(CURDIR)/example_mcaps/point_cloud.mcap

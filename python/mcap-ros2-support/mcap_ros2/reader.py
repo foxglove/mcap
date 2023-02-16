@@ -67,7 +67,6 @@ def read_ros2_messages(
         for schema, channel, message in reader.iter_messages(
             topics, start_time, end_time, log_time_order, reverse
         ):
-
             if schema is None:
                 raise McapROS2DecodeError(
                     f"cannot decode schemaless channel with encoding: {channel.message_encoding}"
