@@ -17,12 +17,16 @@ from foxglove_schemas_protobuf.Quaternion_pb2 import Quaternion
 
 
 def main():
+    if len(sys.argv) != 2:
+        print(f"Usage: {sys.argv[0]} <output.mcap>")
+        sys.exit(1)
+
     with open(sys.argv[1], "wb") as f, Writer(f) as writer:
         fields = [
-            PackedElementField(name="x", offset=0, type=7),
-            PackedElementField(name="y", offset=4, type=7),
-            PackedElementField(name="z", offset=8, type=7),
-            PackedElementField(name="intensity", offset=12, type=7),
+            PackedElementField(name="x", offset=0, type=PackedElementField.FLOAT32),
+            PackedElementField(name="y", offset=4, type=PackedElementField.FLOAT32),
+            PackedElementField(name="z", offset=8, type=PackedElementField.FLOAT32),
+            PackedElementField(name="intensity", offset=12, type=PackedElementField.FLOAT32),
         ]
         pose = Pose(
             position=Vector3(x=0, y=0, z=0),

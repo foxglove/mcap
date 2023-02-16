@@ -29,16 +29,12 @@
   ],
   "python.analysis.extraPaths": [
     "./python/mcap",
+    "./python/mcap-protobuf-support",
     "./python/mcap-ros1-support",
     "./python/mcap-ros2-support"
   ],
 
-  "gopls": {
-    "build.experimentalWorkspaceModule": true
-  },
-
   // https://github.com/microsoft/vscode-cpptools/issues/722
   "C_Cpp.autoAddFileAssociations": false,
-  "C_Cpp.default.cppStandard": "c++17",
-  "lldb.library": "/Library/Developer/CommandLineTools/Library/PrivateFrameworks/LLDB.framework"
+  "C_Cpp.default.cppStandard": "c++17"
 }

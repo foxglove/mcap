@@ -30,7 +30,7 @@ cd examples
 You should now be able to run the examples:
 
 ```bash
-pipenv run python point_cloud_example.py
+pipenv run python point_cloud_example.py output.mcap
 ```
 
 ## Stay in touch
