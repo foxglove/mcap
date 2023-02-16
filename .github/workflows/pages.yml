@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: 3.7
       - name: Install pipenv
-        run: pip install pipenv==2022.7.24
+        run: pip install pipenv==2023.2.4
 
       - name: Install dependencies
         run: pipenv install --deploy
@@ -39,8 +39,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: satackey/action-docker-layer-caching@v0.0.11
-        continue-on-error: true
 
       - run: mkdir __docs__
       - name: Generate C++ documentation
