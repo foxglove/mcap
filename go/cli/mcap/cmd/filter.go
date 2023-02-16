@@ -314,12 +314,12 @@ func filter(
 					if err = mcapWriter.WriteSchema(schema.Schema); err != nil {
 						return err
 					}
-					schema.written = true
+					schemas[channel.SchemaID] = markableSchema{schema.Schema, true}
 				}
 				if err = mcapWriter.WriteChannel(channel.Channel); err != nil {
 					return err
 				}
-				channel.written = true
+				channels[message.ChannelID] = markableChannel{channel.Channel, true}
 			}
 			if err = mcapWriter.WriteMessage(message); err != nil {
 				return err

@@ -61,6 +61,71 @@ func writeFilterTestInput(t *testing.T, w io.Writer) {
 	}))
 	assert.Nil(t, writer.Close())
 }
+func TestPassthrough(t *testing.T) {
+	opts := &filterOpts{
+		compressionFormat:  mcap.CompressionLZ4,
+		start:              0,
+		end:                1000,
+		includeAttachments: true,
+		includeMetadata:    true,
+	}
+
+	writeBuf := bytes.Buffer{}
+	readBuf := bytes.Buffer{}
+
+	writeFilterTestInput(t, &readBuf)
+	assert.Nil(t, filter(&readBuf, &writeBuf, opts))
+	attachmentCounter := 0
+	metadataCounter := 0
+	schemaCounter := 0
+	messageCounter := map[uint16]int{
+		1: 0,
+		2: 0,
+		3: 0,
+	}
+	channelCounter := map[uint16]int{
+		1: 0,
+		2: 0,
+		3: 0,
+	}
+	lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
+		AttachmentCallback: func(ar *mcap.AttachmentReader) error {
+			attachmentCounter++
+			return nil
+		},
+	})
+	assert.Nil(t, err)
+	defer lexer.Close()
+	for {
+		token, record, err := lexer.Next(nil)
+		if err != nil {
+			assert.ErrorIs(t, err, io.EOF)
+			break
+		}
+		switch token {
+		case mcap.TokenMessage:
+			message, err := mcap.ParseMessage(record)
+			assert.Nil(t, err)
+			messageCounter[message.ChannelID]++
+		case mcap.TokenChannel:
+			channel, err := mcap.ParseChannel(record)
+			assert.Nil(t, err)
+			channelCounter[channel.ID]++
+		case mcap.TokenSchema:
+			schemaCounter++
+		case mcap.TokenMetadata:
+			metadataCounter++
+		}
+	}
+	assert.Equal(t, 1, attachmentCounter)
+	assert.Equal(t, 1, metadataCounter)
+	assert.InDeltaMapValues(t, map[uint16]int{1: 100, 2: 100, 3: 100}, messageCounter, 0.0)
+	// schemas and channels should be duplicated once into the summary section
+	assert.Equal(t, 2, schemaCounter)
+	assert.InDeltaMapValues(t, map[uint16]int{1: 2, 2: 2, 3: 2}, channelCounter, 0.0)
+
+}
+
 func TestFiltering(t *testing.T) {
 	cases := []struct {
 		name                    string
