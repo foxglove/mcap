@@ -51,8 +51,6 @@ jobs:
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
-      - uses: satackey/action-docker-layer-caching@v0.0.11
-        continue-on-error: true
       - run: cd cpp && make ci
       - run: yarn install --frozen-lockfile
       - run: yarn test:conformance:generate-inputs --verify
@@ -184,8 +182,6 @@ jobs:
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
-      - uses: satackey/action-docker-layer-caching@v0.0.11
-        continue-on-error: true
       - run: make ci-format-check
       - run: make ci
       - run: make test-host
@@ -260,9 +256,7 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: 3.7
-      - uses: satackey/action-docker-layer-caching@v0.0.11
-        continue-on-error: true
-      - run: pip install pipenv==2022.7.24
+      - run: pip install pipenv==2023.2.4
       - run: make lint
       - run: make test
       - run: make examples
