@@ -9,9 +9,6 @@
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/alabaster.css" />
     <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
-    <script src="../../_static/jquery.js"></script>
-    <script src="../../_static/underscore.js"></script>
-    <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
     <script src="../../_static/doctools.js"></script>
     <script src="../../_static/sphinx_highlight.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
@@ -84,7 +81,7 @@
 
 
 <div class="viewcode-block" id="Writer"><a class="viewcode-back" href="../../mcap-apidoc/mcap.writer.html#mcap.writer.Writer">[docs]</a><span class="k">class</span> <span class="nc">Writer</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;Writes MCAP data.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Writes MCAP data.&quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -98,7 +95,7 @@
         <span class="n">use_statistics</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">use_summary_offsets</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        output: The stream to which data should be written.</span>
 <span class="sd">        chunk_size: The maximum size of individual data chunks in a chunked file.</span>
 <span class="sd">        compression: Compression to apply to chunk data, if any.</span>
@@ -148,7 +145,7 @@
 <div class="viewcode-block" id="Writer.add_attachment"><a class="viewcode-back" href="../../mcap-apidoc/mcap.writer.html#mcap.writer.Writer.add_attachment">[docs]</a>    <span class="k">def</span> <span class="nf">add_attachment</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">create_time</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">log_time</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">media_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span>
     <span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Adds an attachment to the file.</span>
 
 <span class="sd">        :param log_time: Time at which the attachment was recorded.</span>
@@ -190,7 +187,7 @@
         <span class="n">publish_time</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">sequence</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Adds a new message to the file. If chunking is enabled the message will be added to the</span>
 <span class="sd">        current chunk.</span>
 
@@ -227,7 +224,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="Writer.add_metadata"><a class="viewcode-back" href="../../mcap-apidoc/mcap.writer.html#mcap.writer.Writer.add_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">add_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Adds key-value metadata to the file.</span>
 
 <span class="sd">        :param name: A name to associate with the metadata.</span>
@@ -246,7 +243,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">__flush</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="Writer.finish"><a class="viewcode-back" href="../../mcap-apidoc/mcap.writer.html#mcap.writer.Writer.finish">[docs]</a>    <span class="k">def</span> <span class="nf">finish</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Writes any final indexes, summaries etc to the file. Note that it does</span>
 <span class="sd">        not close the underlying output stream.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
@@ -371,7 +368,7 @@
         <span class="n">schema_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">metadata</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{},</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Registers a new message channel. Returns the numeric id of the new channel.</span>
 
 <span class="sd">        :param schema_id: The schema for messages on this channel. A schema_id of 0 indicates there</span>
@@ -399,7 +396,7 @@
         <span class="k">return</span> <span class="n">channel_id</span></div>
 
 <div class="viewcode-block" id="Writer.register_schema"><a class="viewcode-back" href="../../mcap-apidoc/mcap.writer.html#mcap.writer.Writer.register_schema">[docs]</a>    <span class="k">def</span> <span class="nf">register_schema</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">encoding</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Registers a new message schema. Returns the new integer schema id.</span>
 
 <span class="sd">        :param name: An identifier for the schema.</span>
@@ -420,7 +417,7 @@
         <span class="k">return</span> <span class="n">schema_id</span></div>
 
 <div class="viewcode-block" id="Writer.start"><a class="viewcode-back" href="../../mcap-apidoc/mcap.writer.html#mcap.writer.Writer.start">[docs]</a>    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">profile</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">library</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">LIBRARY_IDENTIFIER</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Starts writing to the output stream.</span>
 
 <span class="sd">        :param profile: The profile is used for indicating requirements for fields</span>
@@ -573,8 +570,8 @@
       
       
       
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.2.3</a>
-      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 6.1.3</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
       
     </div>
 
