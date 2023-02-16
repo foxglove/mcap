@@ -82,5 +82,5 @@ class Writer:
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_, exc_type_, tb_):
+    def __exit__(self, exc_: Any, exc_type_: Any, tb_: Any):
         self.finish()

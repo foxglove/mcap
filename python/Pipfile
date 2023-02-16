@@ -28,6 +28,7 @@ pytest = "*"
 pyright = "*"
 PyYaml = "*"
 sphinx = "*"
+tomli = "*"
 std_msgs = {version = "*", index = "ros"}
 genpy = { version = "*", index = "ros"}
 genmsg = { version = "*", index = "ros"}
