@@ -61,6 +61,8 @@ def write_file(features: List[str], expected_records: List[Dict[str, Any]]) -> b
         use_chunking="ch" in features,
         use_statistics="st" in features,
         use_summary_offsets="sum" in features,
+        enable_crcs=True,
+        enable_data_crcs=True,
     )
     for line in expected_records:
         type, fields = line["type"], line["fields"]

@@ -56,7 +56,7 @@ class Writer:
             published.
         :param sequence: an optional sequence count for messages on this topic.
         """
-        msg_typename = type(message).DESCRIPTOR.full_name
+        msg_typename: str = type(message).DESCRIPTOR.full_name
         if topic in self._channels:
             channel_id = self._channels[topic]
             schema_id, schema_name = self._schemas[topic]
