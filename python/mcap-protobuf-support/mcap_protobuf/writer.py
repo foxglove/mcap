@@ -1,7 +1,8 @@
 import time
-from typing import Optional, Dict, Any, Tuple
+from io import BufferedWriter
+from typing import Optional, Dict, Any, Tuple, Union, IO
 
-from mcap.writer import Writer as McapWriter
+from mcap.writer import CompressionType, Writer as McapWriter
 from mcap.well_known import MessageEncoding
 import mcap
 
@@ -20,8 +21,19 @@ class Writer:
     MCAP file.
     """
 
-    def __init__(self, output):
-        self._writer = McapWriter(output)
+    def __init__(
+        self,
+        output: Union[str, IO[Any], BufferedWriter],
+        chunk_size: int = 1024 * 1024,
+        compression: CompressionType = CompressionType.ZSTD,
+        enable_crcs: bool = True,
+    ):
+        self._writer = McapWriter(
+            output,
+            chunk_size=chunk_size,
+            compression=compression,
+            enable_crcs=enable_crcs,
+        )
         self._schemas: Dict[str, Tuple[int, str]] = {}
         self._channels: Dict[str, int] = {}
         self._finished = False
@@ -44,7 +56,7 @@ class Writer:
             published.
         :param sequence: an optional sequence count for messages on this topic.
         """
-        msg_typename = type(message).DESCRIPTOR.full_name
+        msg_typename: str = type(message).DESCRIPTOR.full_name
         if topic in self._channels:
             channel_id = self._channels[topic]
             schema_id, schema_name = self._schemas[topic]

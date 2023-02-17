@@ -62,6 +62,8 @@ class Writer:
         use_chunking: bool = True,
         use_statistics: bool = True,
         use_summary_offsets: bool = True,
+        enable_crcs: bool = True,
+        enable_data_crcs: bool = False,
     ):
         """
         output: The stream to which data should be written.
@@ -108,6 +110,8 @@ class Writer:
         self.__summary_offsets: List[SummaryOffset] = []
         self.__use_statistics = use_statistics
         self.__use_summary_offsets = use_summary_offsets
+        self.__enable_crcs = enable_crcs
+        self.__enable_data_crcs = enable_data_crcs
         self.__data_section_crc = 0
 
     def add_attachment(
@@ -304,17 +308,19 @@ class Writer:
         summary_data = summary_builder.end()
         summary_length = len(summary_data)
 
-        summary_crc = zlib.crc32(summary_data)
-        summary_crc = zlib.crc32(
-            struct.pack(
-                "<BQQQ",  # cspell:disable-line
-                Opcode.FOOTER,
-                8 + 8 + 4,
-                0 if summary_length == 0 else summary_start,
-                summary_offset_start,
-            ),
-            summary_crc,
-        )
+        summary_crc = 0
+        if self.__enable_crcs:
+            summary_crc = zlib.crc32(summary_data)
+            summary_crc = zlib.crc32(
+                struct.pack(
+                    "<BQQQ",  # cspell:disable-line
+                    Opcode.FOOTER,
+                    8 + 8 + 4,
+                    0 if summary_length == 0 else summary_start,
+                    summary_offset_start,
+                ),
+                summary_crc,
+            )
 
         self.__stream.write(summary_data)
 
@@ -394,13 +400,15 @@ class Writer:
             information for use in debugging.
         """
         self.__stream.write(MCAP0_MAGIC)
-        self.__data_section_crc = zlib.crc32(MCAP0_MAGIC, self.__data_section_crc)
+        if self.__enable_data_crcs:
+            self.__data_section_crc = zlib.crc32(MCAP0_MAGIC, self.__data_section_crc)
         Header(profile, library).write(self.__record_builder)
         self.__flush()
 
     def __flush(self):
         data = self.__record_builder.end()
-        self.__data_section_crc = zlib.crc32(data, self.__data_section_crc)
+        if self.__enable_data_crcs:
+            self.__data_section_crc = zlib.crc32(data, self.__data_section_crc)
         self.__stream.write(data)
 
     def __finalize_chunk(self):
@@ -427,7 +435,7 @@ class Writer:
             data=compressed_data,
             message_start_time=self.__chunk_builder.message_start_time,
             message_end_time=self.__chunk_builder.message_end_time,
-            uncompressed_crc=zlib.crc32(chunk_data),
+            uncompressed_crc=zlib.crc32(chunk_data) if self.__enable_crcs else 0,
             uncompressed_size=len(chunk_data),
         )
 
