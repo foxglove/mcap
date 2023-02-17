@@ -18,6 +18,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	verbose bool
+)
+
 type mcapDoctor struct {
 	reader io.ReadSeeker
 
@@ -454,7 +458,9 @@ func main(cmd *cobra.Command, args []string) {
 		if remote {
 			doctor.warn("Will read full remote file")
 		}
-		fmt.Printf("Examining %s\n", args[0])
+		if verbose {
+			fmt.Printf("Examining %s\n", args[0])
+		}
 		return doctor.Examine()
 	})
 	if err != nil {
@@ -470,4 +476,6 @@ var doctorCommand = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(doctorCommand)
+
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 }
