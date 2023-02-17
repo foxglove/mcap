@@ -3,8 +3,8 @@ import path from "path";
 import { promisify } from "util";
 import { TestFeatures, TestVariant } from "variants/types";
 
-import { IndexedReadTestResult } from "../types";
 import { IndexedReadTestRunner } from "./TestRunner";
+import { IndexedReadTestResult } from "../types";
 
 export default class SwiftIndexedReaderTestRunner extends IndexedReadTestRunner {
   readonly name = "swift-indexed-reader";

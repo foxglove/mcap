@@ -352,14 +352,14 @@ public:
   /**
    * @brief Returns an iterable view with `begin()` and `end()` methods for
    * iterating Messages in the MCAP file.
-   * Uses the options from `options` to select the messsages that are yielded.
+   * Uses the options from `options` to select the messages that are yielded.
    */
   LinearMessageView readMessages(const ProblemCallback& onProblem,
                                  const ReadMessageOptions& options);
 
   /**
    * @brief Returns starting and ending byte offsets that must be read to
-   * iterate all messges in the given time range. If `readSummary()` has been
+   * iterate all messages in the given time range. If `readSummary()` has been
    * successfully called and the recording contains Chunk records, this range
    * will be narrowed to Chunk records that contain messages in the given time
    * range. Otherwise, this range will be the entire Data section if the Data

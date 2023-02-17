@@ -7,8 +7,6 @@ import stableStringify from "json-stable-stringify";
 import { chunk } from "lodash";
 import path from "path";
 
-import { splitMcapRecords } from "../../util/splitMcapRecords";
-import generateTestVariants from "../../variants/generateTestVariants";
 import runners from "./runners";
 import {
   IndexedReadTestRunner,
@@ -22,6 +20,8 @@ import {
   StreamedReadTestResult,
   TestCase,
 } from "./types";
+import { splitMcapRecords } from "../../util/splitMcapRecords";
+import generateTestVariants from "../../variants/generateTestVariants";
 
 type TestOptions = {
   dataDir: string;

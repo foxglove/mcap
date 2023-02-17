@@ -125,7 +125,7 @@ class McapReader(ABC):
 
     @abstractmethod
     def get_header(self) -> Header:
-        """Reads the Header recors from the beginning of the MCAP file."""
+        """Reads the Header records from the beginning of the MCAP file."""
         raise NotImplementedError()
 
     @abstractmethod

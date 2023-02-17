@@ -29,6 +29,7 @@ ignorePaths:
   - mkdocs.yml
   - fathom.html
   - _vendor
+  - go
   - rust
   - cpp/examples/protobuf/proto
 
@@ -39,6 +40,7 @@ words:
   - cbor
   - cmake
   - conanfile
+  - conans
   - crc
   - crcs
   - datetime
@@ -53,10 +55,12 @@ words:
   - genpy
   - gentools
   - golangci
+  - inputfile
   - jsonschema
   - kaitai
   - libmcap
   - mcap
+  - msgdef
   - nanos
   - nanosec
   - noenv
@@ -65,6 +69,7 @@ words:
   - parseable
   - pipenv
   - pointcloud
+  - pointclouds
   - proto
   - protobuf
   - protoc
