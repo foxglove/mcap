@@ -383,10 +383,10 @@ public:
   /**
    * @brief Write a metadata record to the output stream.
    *
-   * @param metdata  Named group of key/value string pairs to add.
+   * @param metadata Named group of key/value string pairs to add.
    * @return A non-zero error code on failure.
    */
-  Status write(const Metadata& metdata);
+  Status write(const Metadata& metadata);
 
   /**
    * @brief Current MCAP file-level statistics. This is written as a Statistics

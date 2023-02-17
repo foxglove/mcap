@@ -43,7 +43,7 @@ def test_parse_tfmessage():
     assert reader.decoded_bytes() == len(data)
 
 
-def test_parse_parameterevent():
+def test_parse_parameter_event():
     data = bytes.fromhex(rcl_interfaces__ParameterEvent)
     reader = CdrReader(data)
 

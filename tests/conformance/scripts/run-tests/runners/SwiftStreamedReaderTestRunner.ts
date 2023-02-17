@@ -3,8 +3,8 @@ import path from "path";
 import { promisify } from "util";
 import { TestVariant } from "variants/types";
 
-import { StreamedReadTestResult } from "../types";
 import { StreamedReadTestRunner } from "./TestRunner";
+import { StreamedReadTestResult } from "../types";
 
 export default class SwiftStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "swift-streamed-reader";

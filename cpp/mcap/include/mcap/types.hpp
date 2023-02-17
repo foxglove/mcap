@@ -318,7 +318,7 @@ struct MCAP_PUBLIC Metadata {
 };
 
 /**
- * @brief Metdata Index records are found in the Summary section, providing
+ * @brief Metadata Index records are found in the Summary section, providing
  * summary information for a single Metadata record.
  */
 struct MCAP_PUBLIC MetadataIndex {

@@ -3,8 +3,8 @@ import { join } from "path";
 import { promisify } from "util";
 import { TestVariant } from "variants/types";
 
-import { StreamedReadTestResult } from "../types";
 import { StreamedReadTestRunner } from "./TestRunner";
+import { StreamedReadTestResult } from "../types";
 
 export default class CppStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "cpp-streamed-reader";
