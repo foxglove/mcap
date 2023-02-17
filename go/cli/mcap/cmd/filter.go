@@ -64,6 +64,7 @@ func buildFilterOptions(flags filterFlags) (*filterOpts, error) {
 	case "lz4":
 		opts.compressionFormat = mcap.CompressionLZ4
 	case "none":
+	case "":
 		opts.compressionFormat = mcap.CompressionNone
 	default:
 		return nil, fmt.Errorf("unrecognized compression format '%s': valid options are 'lz4', 'zstd', or 'none'", flags.outputCompression)
@@ -420,7 +421,7 @@ usage:
 	{
 		var compressCmd = &cobra.Command{
 			Use:   "compress [file]",
-			Short: "Compress data in an MCAP file",
+			Short: "Create a compressed copy of an MCAP file",
 			Long: `This subcommand copies data in an MCAP file to a new file, compressing the output.
 
 usage:
@@ -443,5 +444,32 @@ usage:
 			run(filterOptions, args)
 		}
 		rootCmd.AddCommand(compressCmd)
+	}
+
+	{
+		var decompressCmd = &cobra.Command{
+			Use:   "decompress [file]",
+			Short: "Create an uncompressed copy of an MCAP file",
+			Long: `This subcommand copies data in an MCAP file to a new file, decompressing the output.
+
+usage:
+  mcap decompress in.mcap -o out.mcap`,
+		}
+		output := decompressCmd.PersistentFlags().StringP("output", "o", "", "output filename")
+		chunkSize := decompressCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
+		decompressCmd.Run = func(cmd *cobra.Command, args []string) {
+			filterOptions, err := buildFilterOptions(filterFlags{
+				output:             *output,
+				chunkSize:          *chunkSize,
+				outputCompression:  "none",
+				includeMetadata:    true,
+				includeAttachments: true,
+			})
+			if err != nil {
+				die("configuration error: %s", err)
+			}
+			run(filterOptions, args)
+		}
+		rootCmd.AddCommand(decompressCmd)
 	}
 }
