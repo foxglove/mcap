@@ -842,7 +842,7 @@ TEST_CASE("RecordOffset equality operators", "[reader]") {
     REQUIRE(b >= a);
   }
 
-  SECTION("equally-offsetted records in different chunks") {
+  SECTION("equally-offset records in different chunks") {
     mcap::RecordOffset a(10, 30);
     mcap::RecordOffset b(10, 40);
 
@@ -862,7 +862,7 @@ TEST_CASE("RecordOffset equality operators", "[reader]") {
     REQUIRE(b >= a);
   }
 
-  SECTION("oppositely-offsetted records in different chunks") {
+  SECTION("oppositely-offset records in different chunks") {
     mcap::RecordOffset a(20, 30);
     mcap::RecordOffset b(10, 40);
 

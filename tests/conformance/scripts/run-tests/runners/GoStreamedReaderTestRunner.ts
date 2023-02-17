@@ -3,8 +3,8 @@ import { join } from "path";
 import { promisify } from "util";
 import { TestVariant } from "variants/types";
 
-import { StreamedReadTestResult } from "../types";
 import { StreamedReadTestRunner } from "./TestRunner";
+import { StreamedReadTestResult } from "../types";
 
 export default class GoStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "go-streamed-reader";

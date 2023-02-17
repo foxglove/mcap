@@ -3,8 +3,8 @@ import { join } from "path";
 import { promisify } from "util";
 import { TestVariant, TestFeatures } from "variants/types";
 
-import { IndexedReadTestResult } from "../types";
 import { IndexedReadTestRunner } from "./TestRunner";
+import { IndexedReadTestResult } from "../types";
 
 export default class GoIndexedReaderTestRunner extends IndexedReadTestRunner {
   readonly name = "go-indexed-reader";

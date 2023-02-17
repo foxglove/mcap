@@ -2,8 +2,8 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { TestVariant, TestFeatures } from "variants/types";
 
-import { IndexedReadTestResult } from "../types";
 import { IndexedReadTestRunner } from "./TestRunner";
+import { IndexedReadTestResult } from "../types";
 
 export default class PythonIndexedReaderTestRunner extends IndexedReadTestRunner {
   readonly name = "py-indexed-reader";

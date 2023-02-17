@@ -76,7 +76,7 @@ bool RecordOffset::operator>(const RecordOffset& other) const {
     }
   }
   if (other.chunkOffset != std::nullopt) {
-    // other messsage is in a chunk, this is not, compare file-level offsets.
+    // other message is in a chunk, this is not, compare file-level offsets.
     return (offset > *other.chunkOffset);
   }
   // neither message is in a chunk, compare file-level offsets.

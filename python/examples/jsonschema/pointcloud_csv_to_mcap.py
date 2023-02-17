@@ -29,8 +29,8 @@ from mcap.well_known import SchemaEncoding, MessageEncoding
 # tutorial-csv-decode-start
 def point_reader(csv_path: typing.Union[str, Path]):
     with open(csv_path, "r") as f:
-        for timestring, i, _, x, y, z, _, _, _ in csv.reader(f):
-            timestamp = datetime.datetime.strptime(timestring, "%Y%m%dT%H%M%S.%f")
+        for time_string, i, _, x, y, z, _, _, _ in csv.reader(f):
+            timestamp = datetime.datetime.strptime(time_string, "%Y%m%dT%H%M%S.%f")
             yield (timestamp, float(i), float(x), float(y), float(z))
             # tutorial-csv-decode-end
 
