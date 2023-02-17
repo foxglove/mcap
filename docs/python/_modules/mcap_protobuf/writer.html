@@ -31,9 +31,10 @@
             
   <h1>Source code for mcap_protobuf.writer</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">time</span>
-<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BufferedWriter</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span><span class="p">,</span> <span class="n">IO</span>
 
-<span class="kn">from</span> <span class="nn">mcap.writer</span> <span class="kn">import</span> <span class="n">Writer</span> <span class="k">as</span> <span class="n">McapWriter</span>
+<span class="kn">from</span> <span class="nn">mcap.writer</span> <span class="kn">import</span> <span class="n">CompressionType</span><span class="p">,</span> <span class="n">Writer</span> <span class="k">as</span> <span class="n">McapWriter</span>
 <span class="kn">from</span> <span class="nn">mcap.well_known</span> <span class="kn">import</span> <span class="n">MessageEncoding</span>
 <span class="kn">import</span> <span class="nn">mcap</span>
 
@@ -52,8 +53,19 @@
 <span class="sd">    MCAP file.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span> <span class="o">=</span> <span class="n">McapWriter</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">output</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">IO</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">BufferedWriter</span><span class="p">],</span>
+        <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span>
+        <span class="n">compression</span><span class="p">:</span> <span class="n">CompressionType</span> <span class="o">=</span> <span class="n">CompressionType</span><span class="o">.</span><span class="n">ZSTD</span><span class="p">,</span>
+        <span class="n">enable_crcs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span> <span class="o">=</span> <span class="n">McapWriter</span><span class="p">(</span>
+            <span class="n">output</span><span class="p">,</span>
+            <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+            <span class="n">compression</span><span class="o">=</span><span class="n">compression</span><span class="p">,</span>
+            <span class="n">enable_crcs</span><span class="o">=</span><span class="n">enable_crcs</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_schemas</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_channels</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span> <span class="o">=</span> <span class="kc">False</span>
@@ -76,7 +88,7 @@
 <span class="sd">            published.</span>
 <span class="sd">        :param sequence: an optional sequence count for messages on this topic.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">msg_typename</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">message</span><span class="p">)</span><span class="o">.</span><span class="n">DESCRIPTOR</span><span class="o">.</span><span class="n">full_name</span>
+        <span class="n">msg_typename</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">message</span><span class="p">)</span><span class="o">.</span><span class="n">DESCRIPTOR</span><span class="o">.</span><span class="n">full_name</span>
         <span class="k">if</span> <span class="n">topic</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels</span><span class="p">:</span>
             <span class="n">channel_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels</span><span class="p">[</span><span class="n">topic</span><span class="p">]</span>
             <span class="n">schema_id</span><span class="p">,</span> <span class="n">schema_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_schemas</span><span class="p">[</span><span class="n">topic</span><span class="p">]</span>

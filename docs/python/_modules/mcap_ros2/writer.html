@@ -38,7 +38,7 @@
 <span class="kn">from</span> <span class="nn">mcap.exceptions</span> <span class="kn">import</span> <span class="n">McapError</span>
 <span class="kn">from</span> <span class="nn">mcap.records</span> <span class="kn">import</span> <span class="n">Schema</span>
 <span class="kn">from</span> <span class="nn">mcap.well_known</span> <span class="kn">import</span> <span class="n">SchemaEncoding</span>
-<span class="kn">from</span> <span class="nn">mcap.writer</span> <span class="kn">import</span> <span class="n">Writer</span> <span class="k">as</span> <span class="n">McapWriter</span>
+<span class="kn">from</span> <span class="nn">mcap.writer</span> <span class="kn">import</span> <span class="n">CompressionType</span><span class="p">,</span> <span class="n">Writer</span> <span class="k">as</span> <span class="n">McapWriter</span>
 
 <span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">__version__</span>
 <span class="kn">from</span> <span class="nn">._dynamic</span> <span class="kn">import</span> <span class="n">EncoderFunction</span><span class="p">,</span> <span class="n">serialize_dynamic</span>
@@ -56,8 +56,19 @@
 
 
 <div class="viewcode-block" id="Writer"><a class="viewcode-back" href="../../mcap-ros2-apidoc/mcap_ros2.writer.html#mcap_ros2.writer.Writer">[docs]</a><span class="k">class</span> <span class="nc">Writer</span><span class="p">:</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">IO</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">BufferedWriter</span><span class="p">]):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span> <span class="o">=</span> <span class="n">McapWriter</span><span class="p">(</span><span class="n">output</span><span class="o">=</span><span class="n">output</span><span class="p">)</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">output</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">IO</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">BufferedWriter</span><span class="p">],</span>
+        <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span>
+        <span class="n">compression</span><span class="p">:</span> <span class="n">CompressionType</span> <span class="o">=</span> <span class="n">CompressionType</span><span class="o">.</span><span class="n">ZSTD</span><span class="p">,</span>
+        <span class="n">enable_crcs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span> <span class="o">=</span> <span class="n">McapWriter</span><span class="p">(</span>
+            <span class="n">output</span><span class="o">=</span><span class="n">output</span><span class="p">,</span>
+            <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+            <span class="n">compression</span><span class="o">=</span><span class="n">compression</span><span class="p">,</span>
+            <span class="n">enable_crcs</span><span class="o">=</span><span class="n">enable_crcs</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_encoders</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">EncoderFunction</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_channel_ids</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_writer</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="n">profile</span><span class="o">=</span><span class="s2">&quot;ros2&quot;</span><span class="p">,</span> <span class="n">library</span><span class="o">=</span><span class="n">_library_identifier</span><span class="p">())</span>
@@ -108,9 +119,10 @@
             <span class="n">type_dict</span> <span class="o">=</span> <span class="n">serialize_dynamic</span><span class="p">(</span>  <span class="c1"># type: ignore</span>
                 <span class="n">schema</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">schema</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
             <span class="p">)</span>
-            <span class="n">encoder</span> <span class="o">=</span> <span class="n">type_dict</span><span class="p">[</span><span class="n">schema</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">encoder</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Check if schema.name is in type_dict</span>
+            <span class="k">if</span> <span class="n">schema</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">type_dict</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="n">McapROS2WriteError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;schema parsing failed for &quot;</span><span class="si">{</span><span class="n">schema</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">&quot;&#39;</span><span class="p">)</span>
+            <span class="n">encoder</span> <span class="o">=</span> <span class="n">type_dict</span><span class="p">[</span><span class="n">schema</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_encoders</span><span class="p">[</span><span class="n">schema</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">encoder</span>
 
         <span class="k">if</span> <span class="n">topic</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel_ids</span><span class="p">:</span>

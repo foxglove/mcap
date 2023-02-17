@@ -73,9 +73,9 @@
             <span class="n">type_dict</span> <span class="o">=</span> <span class="n">generate_dynamic</span><span class="p">(</span>  <span class="c1"># type: ignore</span>
                 <span class="n">schema</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">schema</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span>
             <span class="p">)</span>
-            <span class="n">decoder</span> <span class="o">=</span> <span class="n">type_dict</span><span class="p">[</span><span class="n">schema</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">decoder</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">schema</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">type_dict</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="n">McapROS2DecodeError</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;schema parsing failed for &quot;</span><span class="si">{</span><span class="n">schema</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">&quot;&#39;</span><span class="p">)</span>
+            <span class="n">decoder</span> <span class="o">=</span> <span class="n">type_dict</span><span class="p">[</span><span class="n">schema</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_decoders</span><span class="p">[</span><span class="n">schema</span><span class="o">.</span><span class="n">id</span><span class="p">]</span> <span class="o">=</span> <span class="n">decoder</span>
 
         <span class="n">ros_msg</span> <span class="o">=</span> <span class="n">decoder</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>

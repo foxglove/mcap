@@ -32,7 +32,7 @@
   <h1>Source code for mcap_ros1.writer</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span> <span class="nn">io</span> <span class="kn">import</span> <span class="n">BufferedWriter</span><span class="p">,</span> <span class="n">BytesIO</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">IO</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
-<span class="kn">from</span> <span class="nn">mcap.writer</span> <span class="kn">import</span> <span class="n">Writer</span> <span class="k">as</span> <span class="n">McapWriter</span>
+<span class="kn">from</span> <span class="nn">mcap.writer</span> <span class="kn">import</span> <span class="n">CompressionType</span><span class="p">,</span> <span class="n">Writer</span> <span class="k">as</span> <span class="n">McapWriter</span>
 <span class="kn">import</span> <span class="nn">mcap</span>
 <span class="kn">import</span> <span class="nn">time</span>
 
@@ -45,8 +45,19 @@
 
 
 <div class="viewcode-block" id="Writer"><a class="viewcode-back" href="../../mcap-ros1-apidoc/mcap_ros1.writer.html#mcap_ros1.writer.Writer">[docs]</a><span class="k">class</span> <span class="nc">Writer</span><span class="p">:</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">IO</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">BufferedWriter</span><span class="p">]):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">__writer</span> <span class="o">=</span> <span class="n">McapWriter</span><span class="p">(</span><span class="n">output</span><span class="o">=</span><span class="n">output</span><span class="p">)</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">output</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">IO</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">BufferedWriter</span><span class="p">],</span>
+        <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span>
+        <span class="n">compression</span><span class="p">:</span> <span class="n">CompressionType</span> <span class="o">=</span> <span class="n">CompressionType</span><span class="o">.</span><span class="n">ZSTD</span><span class="p">,</span>
+        <span class="n">enable_crcs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__writer</span> <span class="o">=</span> <span class="n">McapWriter</span><span class="p">(</span>
+            <span class="n">output</span><span class="o">=</span><span class="n">output</span><span class="p">,</span>
+            <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+            <span class="n">compression</span><span class="o">=</span><span class="n">compression</span><span class="p">,</span>
+            <span class="n">enable_crcs</span><span class="o">=</span><span class="n">enable_crcs</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__schema_ids</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__channel_ids</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__writer</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="n">profile</span><span class="o">=</span><span class="s2">&quot;ros1&quot;</span><span class="p">,</span> <span class="n">library</span><span class="o">=</span><span class="n">_library_identifier</span><span class="p">())</span>
@@ -115,7 +126,7 @@
     <span class="k">def</span> <span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span>
 
-    <span class="k">def</span> <span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_</span><span class="p">,</span> <span class="n">exc_type_</span><span class="p">,</span> <span class="n">tb_</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">exc_type_</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">tb_</span><span class="p">:</span> <span class="n">Any</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">finish</span><span class="p">()</span></div>
 </pre></div>
 
