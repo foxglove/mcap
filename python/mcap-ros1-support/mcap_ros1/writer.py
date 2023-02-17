@@ -1,6 +1,6 @@
 from io import BufferedWriter, BytesIO
 from typing import IO, Any, Dict, Optional, Union
-from mcap.writer import Writer as McapWriter
+from mcap.writer import CompressionType, Writer as McapWriter
 import mcap
 import time
 
@@ -13,8 +13,19 @@ def _library_identifier():
 
 
 class Writer:
-    def __init__(self, output: Union[str, IO[Any], BufferedWriter]):
-        self.__writer = McapWriter(output=output)
+    def __init__(
+        self,
+        output: Union[str, IO[Any], BufferedWriter],
+        chunk_size: int = 1024 * 1024,
+        compression: CompressionType = CompressionType.ZSTD,
+        enable_crcs: bool = True,
+    ):
+        self.__writer = McapWriter(
+            output=output,
+            chunk_size=chunk_size,
+            compression=compression,
+            enable_crcs=enable_crcs,
+        )
         self.__schema_ids: Dict[str, int] = {}
         self.__channel_ids: Dict[str, int] = {}
         self.__writer.start(profile="ros1", library=_library_identifier())
@@ -83,5 +94,5 @@ class Writer:
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_, exc_type_, tb_):
+    def __exit__(self, exc_: Any, exc_type_: Any, tb_: Any):
         self.finish()

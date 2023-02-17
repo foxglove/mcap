@@ -6,7 +6,7 @@ import mcap
 from mcap.exceptions import McapError
 from mcap.records import Schema
 from mcap.well_known import SchemaEncoding
-from mcap.writer import Writer as McapWriter
+from mcap.writer import CompressionType, Writer as McapWriter
 
 from . import __version__
 from ._dynamic import EncoderFunction, serialize_dynamic
@@ -24,8 +24,19 @@ def _library_identifier():
 
 
 class Writer:
-    def __init__(self, output: Union[str, IO[Any], BufferedWriter]):
-        self._writer = McapWriter(output=output)
+    def __init__(
+        self,
+        output: Union[str, IO[Any], BufferedWriter],
+        chunk_size: int = 1024 * 1024,
+        compression: CompressionType = CompressionType.ZSTD,
+        enable_crcs: bool = True,
+    ):
+        self._writer = McapWriter(
+            output=output,
+            chunk_size=chunk_size,
+            compression=compression,
+            enable_crcs=enable_crcs,
+        )
         self._encoders: Dict[int, EncoderFunction] = {}
         self._channel_ids: Dict[str, int] = {}
         self._writer.start(profile="ros2", library=_library_identifier())
@@ -76,9 +87,10 @@ class Writer:
             type_dict = serialize_dynamic(  # type: ignore
                 schema.name, schema.data.decode()
             )
-            encoder = type_dict[schema.name]
-            if encoder is None:
+            # Check if schema.name is in type_dict
+            if schema.name not in type_dict:
                 raise McapROS2WriteError(f'schema parsing failed for "{schema.name}"')
+            encoder = type_dict[schema.name]
             self._encoders[schema.id] = encoder
 
         if topic not in self._channel_ids:

@@ -41,9 +41,9 @@ class Decoder:
             type_dict = generate_dynamic(  # type: ignore
                 schema.name, schema.data.decode()
             )
-            decoder = type_dict[schema.name]
-            if decoder is None:
+            if schema.name not in type_dict:
                 raise McapROS2DecodeError(f'schema parsing failed for "{schema.name}"')
+            decoder = type_dict[schema.name]
             self._decoders[schema.id] = decoder
 
         ros_msg = decoder(message.data)
