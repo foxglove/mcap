@@ -65,7 +65,7 @@ The last record in the data section MUST be the [Data End](#data-end-op0x0F) rec
 
 #### Use of chunk records
 
-MCAP files can have Schema, Channel, and Message records written directly to the data section, or they can be written into Chunk records to facilitate indexing and compression. Schema, Channel, and Message records must either all be written inside chunks, or all outside of chunks. Reader implementations may assume that if any Chunk records exist, all Schema, Channel, and Message records can be found inside Chunk records.
+MCAP files can have Schema, Channel, and Message records written directly to the data section, or they can be written into Chunk records to facilitate indexing and compression. Schema, Channel, and Message records must either all be written inside chunks, or all outside of chunks. Reader implementations may assume that if any Chunk records exist, all Schema, Channel, and Message records in the data section can be found inside Chunk records.
 
 ### Summary Section
 
