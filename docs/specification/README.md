@@ -59,7 +59,6 @@ The following records are allowed to appear in the data section:
 - [Chunk](#chunk-op0x06)
 - [Message Index](#message-index-op0x07)
 - [Metadata](#metadata-op0x0C)
-
 - [Data End](#data-end-op0x0F)
 
 The last record in the data section MUST be the [Data End](#data-end-op0x0F) record.
