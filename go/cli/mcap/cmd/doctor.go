@@ -22,6 +22,14 @@ var (
 	verbose bool
 )
 
+type chunkingState int
+
+const (
+	chunkingUnknown        chunkingState = 0
+	dataSectionIsChunked   chunkingState = 1
+	dataSectionIsUnChunked chunkingState = 2
+)
+
 type mcapDoctor struct {
 	reader io.ReadSeeker
 
@@ -227,6 +235,7 @@ func (doctor *mcapDoctor) Examine() error {
 	var lastToken mcap.TokenType
 	var dataEnd *mcap.DataEnd
 	var footer *mcap.Footer
+	var chunkingState chunkingState = chunkingUnknown
 	msg := make([]byte, 1024)
 	for {
 		tokenType, data, err := lexer.Next(msg)
@@ -270,6 +279,11 @@ func (doctor *mcapDoctor) Examine() error {
 			if err != nil {
 				doctor.error("Failed to parse schema:", err)
 			}
+			if chunkingState != dataSectionIsChunked {
+				chunkingState = dataSectionIsUnChunked
+			} else {
+				doctor.error("encountered a Schema record in data section that includes Chunk records")
+			}
 
 			if schema.Encoding == "" {
 				if len(schema.Data) == 0 {
@@ -289,6 +303,11 @@ func (doctor *mcapDoctor) Examine() error {
 			if err != nil {
 				doctor.error("Error parsing Channel: %s", err)
 			}
+			if chunkingState != dataSectionIsChunked {
+				chunkingState = dataSectionIsUnChunked
+			} else {
+				doctor.error("encountered a Channel record in data section that includes Chunk records")
+			}
 
 			doctor.channels[channel.ID] = channel
 
@@ -299,6 +318,11 @@ func (doctor *mcapDoctor) Examine() error {
 			message, err := mcap.ParseMessage(data)
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
+			}
+			if chunkingState != dataSectionIsChunked {
+				chunkingState = dataSectionIsUnChunked
+			} else {
+				doctor.error("encountered a Message record in data section that includes Chunk records")
 			}
 			channel := doctor.channels[message.ChannelID]
 			if channel == nil {
@@ -324,7 +348,11 @@ func (doctor *mcapDoctor) Examine() error {
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
 			}
-
+			if chunkingState != dataSectionIsUnChunked {
+				chunkingState = dataSectionIsChunked
+			} else {
+				doctor.error("encountered a Chunk record in data section that includes Schema, Channel, or Message records")
+			}
 			doctor.examineChunk(chunk)
 		case mcap.TokenMessageIndex:
 			_, err := mcap.ParseMessageIndex(data)
