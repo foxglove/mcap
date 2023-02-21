@@ -9,8 +9,10 @@
 #include "foxglove/ImageAnnotations.pb.h"
 #include "mcap/writer.hpp"
 #include "zfp.h"
+#include <cmath>
 
-constexpr int64_t NS_PER_S = int64_t(NSEC_PER_SEC);
+constexpr int64_t NS_PER_S = 1000000000;
+constexpr int64_t NS_PER_MS = 1000000;
 
 void timestamp(google::protobuf::Timestamp* ts, int64_t time_ns) {
   ts->set_seconds(time_ns / NS_PER_S);
@@ -29,7 +31,7 @@ void writeMessage(mcap::McapWriter& writer, int i, mcap::ChannelId channelId,
   mcap::Message msg;
   msg.channelId = channelId;
   msg.sequence = i;
-  msg.publishTime = i * NSEC_PER_MSEC * 100;
+  msg.publishTime = i * NS_PER_MS * 100;
   msg.logTime = msg.publishTime;
   msg.data = reinterpret_cast<const std::byte*>(serialized.data());
   msg.dataSize = serialized.size();
@@ -50,7 +52,7 @@ void writeFrame(mcap::McapWriter& writer, int i, mcap::ChannelId imageChannelId,
 
   int64_t time_ns = i * 100000000;  // step time by 0.1 seconds
 
-  // foglove.CompressedImage
+  // foxglove.CompressedImage
   {
     // Create a `width`x`height` floating-point depth image with a moving gradient
     float maxDist = std::sqrt(float(width * width + height * height));
