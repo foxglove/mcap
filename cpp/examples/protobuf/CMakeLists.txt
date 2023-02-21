@@ -32,6 +32,16 @@ add_executable(example_protobuf_writer writer.cpp BuildFileDescriptorSet.cpp)
 target_link_libraries(example_protobuf_writer ${CONAN_LIBS} foxglove_proto_lib)
 target_compile_definitions(example_protobuf_writer PRIVATE _USE_MATH_DEFINES)
 
+# This example requires ignoring errors in the protobuf library headers
+add_executable(example_write_zfp_images write_zfp_images.cpp BuildFileDescriptorSet.cpp)
+target_link_libraries(example_write_zfp_images ${CONAN_LIBS} foxglove_proto_lib)
+target_compile_definitions(example_write_zfp_images PRIVATE _USE_MATH_DEFINES)
+if (MSVC)
+    target_compile_options(example_write_zfp_images PUBLIC /wd4100)
+else()
+    target_compile_options(example_write_zfp_images PUBLIC -Wno-error=unused-parameter)
+endif()
+
 add_executable(example_protobuf_dynamic_reader dynamic_reader.cpp)
 target_link_libraries(example_protobuf_dynamic_reader ${CONAN_LIBS} ${Protobuf_LIBRARIES})
 if (MSVC)
