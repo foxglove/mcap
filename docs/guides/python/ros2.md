@@ -18,6 +18,7 @@ We’ll start with our imports:
 import argparse
 from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
+from std_msgs.msg import String
 import rosbag2_py
 ```
 
@@ -60,7 +61,11 @@ def main():
 
     args = parser.parse_args()
     for topic, msg, timestamp in read_messages(args.input):
-        print(f"{topic} ({type(msg).__name__}) [{timestamp}]: '{msg.data}'")
+        if isinstance(msg, String):
+            print(f"{topic} [{timestamp}]: '{msg.data}'")
+        else:
+            print(f"{topic} [{timestamp}]: ({type(msg).__name__})")
+
 
 if __name__ == "__main__":
     main()
