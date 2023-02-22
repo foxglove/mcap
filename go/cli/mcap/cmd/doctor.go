@@ -227,6 +227,7 @@ func (doctor *mcapDoctor) Examine() error {
 	var lastToken mcap.TokenType
 	var dataEnd *mcap.DataEnd
 	var footer *mcap.Footer
+	var messageOutsideChunk bool
 	msg := make([]byte, 1024)
 	for {
 		tokenType, data, err := lexer.Next(msg)
@@ -300,6 +301,7 @@ func (doctor *mcapDoctor) Examine() error {
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
 			}
+			messageOutsideChunk = true
 			channel := doctor.channels[message.ChannelID]
 			if channel == nil {
 				doctor.error("Got a Message record for channel: %d before a channel info.", message.ChannelID)
@@ -324,17 +326,22 @@ func (doctor *mcapDoctor) Examine() error {
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
 			}
-
 			doctor.examineChunk(chunk)
 		case mcap.TokenMessageIndex:
 			_, err := mcap.ParseMessageIndex(data)
 			if err != nil {
 				doctor.error("Failed to parse message index:", err)
 			}
+			if messageOutsideChunk {
+				doctor.warn("encountered a message index in file with message records outside chunks. Messages outside of chunks cannot be indexed and will be missed by indexed readers.")
+			}
 		case mcap.TokenChunkIndex:
 			chunkIndex, err := mcap.ParseChunkIndex(data)
 			if err != nil {
 				doctor.error("Failed to parse chunk index:", err)
+			}
+			if messageOutsideChunk {
+				doctor.warn("encountered a chunk index in file with message records outside chunks. Messages outside of chunks cannot be indexed and will be missed by indexed readers.")
 			}
 			if _, ok := doctor.chunkIndexes[chunkIndex.ChunkStartOffset]; ok {
 				doctor.error("Multiple chunk indexes found for chunk at offset", chunkIndex.ChunkStartOffset)
