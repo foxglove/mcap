@@ -178,7 +178,7 @@ The message encoding and schema must match that of the Channel record correspond
 
 A Chunk contains a batch of Schema, Channel, and Message records. The batch of records contained in a chunk may be compressed or uncompressed.
 
-All messages in the chunk must reference channels recorded earlier in the file (in a previous chunk or earlier in the current chunk).
+All messages in the chunk must reference channels recorded earlier in the file (in a previous chunk, earlier in the current chunk, or earlier in the data section).
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
