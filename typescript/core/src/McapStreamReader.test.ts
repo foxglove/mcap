@@ -588,4 +588,70 @@ describe("McapStreamReader", () => {
     });
     expect(reader.done()).toBe(true);
   });
+
+  it("allows parsing to start at an offset into the file", () => {
+    const channel = record(Opcode.CHANNEL, [
+      ...uint16LE(1), // channel id
+      ...uint16LE(0), // schema id
+      ...string("myTopic"), // topic
+      ...string("plain/text"), // message encoding
+      ...keyValues(string, string, []), // user data
+    ]);
+    const fullMcap = new Uint8Array([
+      ...MCAP_MAGIC,
+      ...record(Opcode.CHUNK, [
+        ...uint64LE(0n), // start_time
+        ...uint64LE(0n), // end_time
+        ...uint64LE(BigInt(channel.byteLength)), // decompressed size
+        ...uint32LE(0), // decompressed crc32
+        ...string(""), // compression
+        ...uint64LE(BigInt(channel.byteLength)),
+        ...channel,
+      ]),
+      ...record(Opcode.DATA_END, [
+        ...uint32LE(0), // data section crc
+      ]),
+      ...record(Opcode.FOOTER, [
+        ...uint64LE(0n), // summary start
+        ...uint64LE(0n), // summary offset start
+        ...uint32LE(0), // summary crc
+      ]),
+      ...MCAP_MAGIC,
+    ]);
+
+    const magicReader = new McapStreamReader();
+    magicReader.append(fullMcap.slice(MCAP_MAGIC.length));
+    expect(() => magicReader.nextRecord()).toThrow("Expected MCAP magic");
+
+    const reader = new McapStreamReader({ noMagicPrefix: true, includeChunks: true });
+    reader.append(fullMcap.slice(MCAP_MAGIC.length));
+    expect(reader.nextRecord()).toEqual({
+      type: "Chunk",
+      messageStartTime: 0n,
+      messageEndTime: 0n,
+      uncompressedSize: BigInt(channel.byteLength),
+      uncompressedCrc: 0,
+      compression: "",
+      records: channel,
+    });
+    expect(reader.nextRecord()).toEqual({
+      type: "Channel",
+      id: 1,
+      schemaId: 0,
+      topic: "myTopic",
+      messageEncoding: "plain/text",
+      metadata: new Map(),
+    });
+    expect(reader.nextRecord()).toEqual({
+      type: "DataEnd",
+      dataSectionCrc: 0,
+    });
+    expect(reader.nextRecord()).toEqual({
+      type: "Footer",
+      summaryStart: 0n,
+      summaryOffsetStart: 0n,
+      summaryCrc: 0,
+    });
+    expect(reader.done()).toBe(true);
+  });
 });

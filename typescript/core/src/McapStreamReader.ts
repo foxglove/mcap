@@ -3,7 +3,7 @@ import { crc32 } from "@foxglove/crc";
 import StreamBuffer from "./StreamBuffer";
 import { MCAP_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
-import { Channel, DecompressHandlers, TypedMcapRecord, TypedMcapRecords } from "./types";
+import { Channel, DecompressHandlers, McapMagic, TypedMcapRecord, TypedMcapRecords } from "./types";
 
 type McapReaderOptions = {
   /**
@@ -22,6 +22,13 @@ type McapReaderOptions = {
    * When set to true (the default), chunk CRCs will be validated. Set to false to improve performance.
    */
   validateCrcs?: boolean;
+
+  /**
+   * When set to true, the reader will not expect a magic prefix at the beginning of the stream.
+   * This is useful when reading a stream that contains a fragment of an MCAP file, or when
+   * reading starts in the middle of an MCAP file.
+   */
+  noMagicPrefix?: boolean;
 };
 
 /**
@@ -47,6 +54,7 @@ export default class McapStreamReader {
   private decompressHandlers;
   private includeChunks;
   private validateCrcs;
+  private noMagicPrefix;
   private doneReading = false;
   private generator = this.read();
   private channelsById = new Map<number, TypedMcapRecords["Channel"]>();
@@ -55,10 +63,12 @@ export default class McapStreamReader {
     includeChunks = false,
     decompressHandlers = {},
     validateCrcs = true,
+    noMagicPrefix = false,
   }: McapReaderOptions = {}) {
     this.includeChunks = includeChunks;
     this.decompressHandlers = decompressHandlers;
     this.validateCrcs = validateCrcs;
+    this.noMagicPrefix = noMagicPrefix;
   }
 
   /** @returns True if a valid, complete mcap file has been parsed. */
@@ -118,8 +128,8 @@ export default class McapStreamReader {
   }
 
   private *read(): Generator<TypedMcapRecord | undefined, TypedMcapRecord | undefined, void> {
-    {
-      let magic, usedBytes;
+    if (!this.noMagicPrefix) {
+      let magic: McapMagic | undefined, usedBytes: number | undefined;
       while ((({ magic, usedBytes } = parseMagic(this.buffer.view, 0)), !magic)) {
         yield;
       }
