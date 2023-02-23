@@ -17,9 +17,11 @@ func prepInput(t *testing.T, w io.Writer, schemaID uint16, channelID uint16, top
 	assert.Nil(t, err)
 
 	assert.Nil(t, writer.WriteHeader(&mcap.Header{Profile: "testprofile"}))
-	assert.Nil(t, writer.WriteSchema(&mcap.Schema{
-		ID: schemaID,
-	}))
+	if schemaID != 0 {
+		assert.Nil(t, writer.WriteSchema(&mcap.Schema{
+			ID: schemaID,
+		}))
+	}
 	assert.Nil(t, writer.WriteChannel(&mcap.Channel{
 		ID:       channelID,
 		SchemaID: schemaID,
@@ -95,4 +97,32 @@ func TestMultiChannelInput(t *testing.T) {
 	assert.Equal(t, 100, messages["/foo"])
 	assert.Equal(t, 100, messages["/bar"])
 	assert.Equal(t, 100, messages["/baz"])
+}
+func TestSchemalessChannelInput(t *testing.T) {
+	buf1 := &bytes.Buffer{}
+	buf2 := &bytes.Buffer{}
+	prepInput(t, buf1, 0, 1, "/foo")
+	prepInput(t, buf2, 1, 1, "/bar")
+	merger := newMCAPMerger(mergeOpts{})
+	output := &bytes.Buffer{}
+	assert.Nil(t, merger.mergeInputs(output, []io.Reader{buf1, buf2}))
+
+	// output should now be a well-formed mcap
+	reader, err := mcap.NewReader(output)
+	assert.Nil(t, err)
+	assert.Equal(t, reader.Header().Profile, "testprofile")
+	it, err := reader.Messages(readopts.UsingIndex(false))
+	assert.Nil(t, err)
+	messages := make(map[string]int)
+	schemaIDs := make(map[uint16]int)
+	err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
+		messages[channel.Topic]++
+		schemaIDs[channel.SchemaID]++
+		return nil
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, 100, messages["/foo"])
+	assert.Equal(t, 100, messages["/bar"])
+	assert.Equal(t, 100, schemaIDs[0])
+	assert.Equal(t, 100, schemaIDs[1])
 }
