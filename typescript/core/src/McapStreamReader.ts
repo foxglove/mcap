@@ -128,14 +128,12 @@ export default class McapStreamReader {
   }
 
   private *read(): Generator<TypedMcapRecord | undefined, TypedMcapRecord | undefined, void> {
-    {
-      if (!this.noMagicPrefix) {
-        let magic: McapMagic | undefined, usedBytes: number | undefined;
-        while ((({ magic, usedBytes } = parseMagic(this.buffer.view, 0)), !magic)) {
-          yield;
-        }
-        this.buffer.consume(usedBytes);
+    if (!this.noMagicPrefix) {
+      let magic: McapMagic | undefined, usedBytes: number | undefined;
+      while ((({ magic, usedBytes } = parseMagic(this.buffer.view, 0)), !magic)) {
+        yield;
       }
+      this.buffer.consume(usedBytes);
     }
 
     let header: TypedMcapRecords["Header"] | undefined;
