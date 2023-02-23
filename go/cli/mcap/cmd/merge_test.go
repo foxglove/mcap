@@ -114,11 +114,15 @@ func TestSchemalessChannelInput(t *testing.T) {
 	it, err := reader.Messages(readopts.UsingIndex(false))
 	assert.Nil(t, err)
 	messages := make(map[string]int)
+	schemaIDs := make(map[uint16]int)
 	err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
 		messages[channel.Topic]++
+		schemaIDs[channel.SchemaID]++
 		return nil
 	})
 	assert.Nil(t, err)
 	assert.Equal(t, 100, messages["/foo"])
 	assert.Equal(t, 100, messages["/bar"])
+	assert.Equal(t, 100, schemaIDs[0])
+	assert.Equal(t, 100, schemaIDs[1])
 }
