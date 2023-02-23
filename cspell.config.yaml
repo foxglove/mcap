@@ -36,7 +36,6 @@ ignorePaths:
 words:
   - bagfile
   - bfbs
-  - bitstream
   - callerid
   - cbor
   - cmake
