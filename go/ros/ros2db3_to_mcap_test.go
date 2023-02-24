@@ -86,7 +86,7 @@ func TestDB3MCAPConversion(t *testing.T) {
 
 func TestMergesNonNewlineDelimitedSchemas(t *testing.T) {
 	schemas, err := getSchemas(
-		"msg", []string{"./testdata/galactic"},
+		[]string{"./testdata/galactic"},
 		[]string{"package_a/msg/NoNewline"})
 	assert.Nil(t, err)
 	schema := schemas["package_a/msg/NoNewline"]
@@ -105,7 +105,7 @@ int32 foo
 }
 
 func TestBoundedFields(t *testing.T) {
-	schemas, err := getSchemas("msg", []string{"./testdata/galactic"}, []string{"package_a/msg/BoundedField"})
+	schemas, err := getSchemas([]string{"./testdata/galactic"}, []string{"package_a/msg/BoundedField"})
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(schemas))
 	schema := schemas["package_a/msg/BoundedField"]
@@ -134,7 +134,7 @@ int32 foo
 
 func TestSchemaComposition(t *testing.T) {
 	t.Run("schema dependencies are resolved", func(t *testing.T) {
-		schemas, err := getSchemas("msg", []string{"./testdata/galactic"}, []string{"package_a/msg/TypeA"})
+		schemas, err := getSchemas([]string{"./testdata/galactic"}, []string{"package_a/msg/TypeA"})
 		assert.Nil(t, err)
 
 		schema := schemas["package_a/msg/TypeA"]
@@ -201,7 +201,7 @@ func TestSchemaFinding(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		content, err := getSchema("msg", c.rosType, []string{"./testdata/get_schema_workspace"})
+		content, err := getSchema(c.rosType, []string{"./testdata/get_schema_workspace"})
 		assert.Equal(t, c.err, err)
 		assert.Equal(t, c.expectedContent, string(content))
 	}

@@ -20,7 +20,7 @@ var (
 	errSchemaNotFound = errors.New("schema not found")
 )
 
-func getSchema(encoding string, rosType string, directories []string) ([]byte, error) {
+func getSchema(rosType string, directories []string) ([]byte, error) {
 	parts := strings.FieldsFunc(rosType, func(c rune) bool { return c == '/' })
 	if len(parts) < 3 {
 		return nil, fmt.Errorf("expected type %s to match <package>/msg/<type>", rosType)
@@ -41,7 +41,7 @@ func getSchema(encoding string, rosType string, directories []string) ([]byte, e
 		}
 		lines := strings.Split(string(schemaIndex), "\n")
 		for _, line := range lines {
-			expectedMsgDefFilename := baseType + "." + encoding
+			expectedMsgDefFilename := baseType + ".msg"
 			if _, filename := filepath.Split(line); filename == expectedMsgDefFilename {
 				schemaPath := path.Join(dir, "share", rosPkg, line)
 				schema, err := os.ReadFile(schemaPath)
@@ -55,12 +55,12 @@ func getSchema(encoding string, rosType string, directories []string) ([]byte, e
 	return nil, errSchemaNotFound
 }
 
-func getSchemas(encoding string, directories []string, types []string) (map[string][]byte, error) {
+func getSchemas(directories []string, types []string) (map[string][]byte, error) {
 	messageDefinitions := make(map[string][]byte)
 	for _, rosType := range types {
 		rosPackage := strings.Split(rosType, "/")[0]
 		messageDefinition := &bytes.Buffer{}
-		schema, err := getSchema(encoding, rosType, directories)
+		schema, err := getSchema(rosType, directories)
 		if err != nil {
 			return nil, fmt.Errorf("failed to find schema for %s: %w", rosType, err)
 		}
@@ -139,7 +139,7 @@ func getSchemas(encoding string, directories []string, types []string) (map[stri
 
 				// if it's not a primitive, we need to look it up
 				qualifiedType := fieldToQualifiedROSType(fieldType, parentPackage)
-				fieldSchema, err := getSchema(encoding, qualifiedType, directories)
+				fieldSchema, err := getSchema(qualifiedType, directories)
 				if err != nil {
 					return nil, fmt.Errorf("failed to find schema for %s: %w", fieldType, err)
 				}
@@ -267,7 +267,7 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, opts *mcap.WriterOptions, searchdirs []s
 	for i := range topics {
 		types[i] = topics[i].typ
 	}
-	schemas, err := getSchemas("msg", searchdirs, types)
+	schemas, err := getSchemas(searchdirs, types)
 	if err != nil {
 		return err
 	}
