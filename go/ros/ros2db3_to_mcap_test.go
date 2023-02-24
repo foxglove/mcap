@@ -104,6 +104,34 @@ int32 foo
 	assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(string(schema)))
 }
 
+func TestBoundedFields(t *testing.T) {
+	schemas, err := getSchemas("msg", []string{"./testdata/galactic"}, []string{"package_a/msg/BoundedField"})
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(schemas))
+	schema := schemas["package_a/msg/BoundedField"]
+	expectedSchema := `
+# Bounded field examples from
+# https://docs.ros.org/en/humble/Concepts/About-ROS-Interfaces.html
+
+int32[] unbounded_integer_array
+int32[5] five_integers_array
+int32[<=5] up_to_five_integers_array
+
+string string_of_unbounded_size
+string<=10 up_to_ten_characters_string
+
+string[<=5] up_to_five_unbounded_strings
+string<=10[] unbounded_array_of_string_up_to_ten_characters_each
+string<=10[<=5] up_to_five_strings_up_to_ten_characters_each
+
+package_b/TypeB[<=10]
+================================================================================
+MSG: package_b/TypeB
+int32 foo
+`
+	assert.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
+}
+
 func TestSchemaComposition(t *testing.T) {
 	t.Run("schema dependencies are resolved", func(t *testing.T) {
 		schemas, err := getSchemas("msg", []string{"./testdata/galactic"}, []string{"package_a/msg/TypeA"})

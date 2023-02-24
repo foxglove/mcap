@@ -119,15 +119,16 @@ func getSchemas(encoding string, directories []string, types []string) (map[stri
 				}
 				fieldType := parts[0]
 
-				// it may be an array, but we just care about the base type
-				baseType := fieldType
-				arrayParts := strings.FieldsFunc(fieldType, func(c rune) bool { return c == '[' })
-				if len(arrayParts) > 1 {
-					baseType = arrayParts[0]
+				// bounded fields & arrays
+				if i := strings.Index(fieldType, "["); i > 0 {
+					fieldType = fieldType[:i]
+				}
+				if i := strings.Index(fieldType, "<"); i > 0 {
+					fieldType = fieldType[:i]
 				}
 
 				// if it's a primitive, no action required
-				if Primitives[baseType] {
+				if Primitives[fieldType] {
 					continue
 				}
 
@@ -137,10 +138,10 @@ func getSchemas(encoding string, directories []string, types []string) (map[stri
 				}
 
 				// if it's not a primitive, we need to look it up
-				qualifiedType := fieldToQualifiedROSType(baseType, parentPackage)
+				qualifiedType := fieldToQualifiedROSType(fieldType, parentPackage)
 				fieldSchema, err := getSchema(encoding, qualifiedType, directories)
 				if err != nil {
-					return nil, fmt.Errorf("failed to find schema for %s: %w", baseType, err)
+					return nil, fmt.Errorf("failed to find schema for %s: %w", fieldType, err)
 				}
 				subdefinitions = append(subdefinitions, struct {
 					parentPackage string
