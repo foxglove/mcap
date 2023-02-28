@@ -72,6 +72,8 @@
 
 
 <div class="viewcode-block" id="IndexType"><a class="viewcode-back" href="../../mcap-apidoc/mcap.writer.html#mcap.writer.IndexType">[docs]</a><span class="k">class</span> <span class="nc">IndexType</span><span class="p">(</span><span class="n">Flag</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Determines what indexes should be written to the MCAP file. If in doubt, choose ALL.&quot;&quot;&quot;</span>
+
     <span class="n">NONE</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
     <span class="n">ATTACHMENT</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
     <span class="n">CHUNK</span> <span class="o">=</span> <span class="n">auto</span><span class="p">()</span>
@@ -81,7 +83,19 @@
 
 
 <div class="viewcode-block" id="Writer"><a class="viewcode-back" href="../../mcap-apidoc/mcap.writer.html#mcap.writer.Writer">[docs]</a><span class="k">class</span> <span class="nc">Writer</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Writes MCAP data.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Writes MCAP data.</span>
+
+<span class="sd">    :param output: A filename or stream to write to.</span>
+<span class="sd">    :param chunk_size: The maximum size of individual data chunks in a chunked file.</span>
+<span class="sd">    :param compression: Compression to apply to chunk data, if any.</span>
+<span class="sd">    :param index_types: Indexes to write to the file. See IndexType for possibilities.</span>
+<span class="sd">    :param repeat_channels: Repeat channel information at the end of the file.</span>
+<span class="sd">    :param repeat_schemas: Repeat schemas at the end of the file.</span>
+<span class="sd">    :param use_chunking: Group data in chunks.</span>
+<span class="sd">    :param use_statistics: Write statistics record.</span>
+<span class="sd">    :param use_summary_offsets: Write summary offset records.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -97,17 +111,6 @@
         <span class="n">enable_crcs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">enable_data_crcs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        output: The stream to which data should be written.</span>
-<span class="sd">        chunk_size: The maximum size of individual data chunks in a chunked file.</span>
-<span class="sd">        compression: Compression to apply to chunk data, if any.</span>
-<span class="sd">        index_types: Indexes to write to the file. See IndexType for possibilities.</span>
-<span class="sd">        repeat_channels: Repeat channel information at the end of the file.</span>
-<span class="sd">        repeat_schemas: Repeat schemas at the end of the file.</span>
-<span class="sd">        use_chunking: Group data in chunks.</span>
-<span class="sd">        use_statistics: Write statistics record.</span>
-<span class="sd">        use_summary_offsets: Write summary offset records.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">__should_close</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">__stream</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span>
