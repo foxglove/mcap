@@ -25,6 +25,24 @@
       "program": "${workspaceFolder}/cpp/test/build/Debug/bin/unit-tests",
       "args": [],
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug conformance",
+      "program": "${workspaceFolder:mcap}/.build/debug/conformance",
+      "args": [],
+      "cwd": "${workspaceFolder:mcap}",
+      "preLaunchTask": "swift: Build Debug conformance"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Release conformance",
+      "program": "${workspaceFolder:mcap}/.build/release/conformance",
+      "args": [],
+      "cwd": "${workspaceFolder:mcap}",
+      "preLaunchTask": "swift: Build Release conformance"
     }
   ]
 }
