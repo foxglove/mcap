@@ -4,9 +4,9 @@
 import protobufjs from "protobufjs";
 import { FileDescriptorSet } from "protobufjs/ext/descriptor";
 
-export function protobufToDescriptor(
-  root: protobufjs.Root,
-): ReturnType<protobufjs.Root["toDescriptor"]> {
+export type ProtobufDescriptor = ReturnType<protobufjs.Root["toDescriptor"]>;
+
+export function protobufToDescriptor(root: protobufjs.Root): ProtobufDescriptor {
   return root.toDescriptor("proto3");
 }
 

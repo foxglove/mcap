@@ -1,12 +1,14 @@
-import { McapTypes } from "@mcap/core";
+type DecompressHandlers = {
+  [compression: string]: (buffer: Uint8Array, decompressedSize: bigint) => Uint8Array;
+};
 
-let handlersPromise: Promise<McapTypes.DecompressHandlers> | undefined;
-export async function loadDecompressHandlers(): Promise<McapTypes.DecompressHandlers> {
+let handlersPromise: Promise<DecompressHandlers> | undefined;
+export async function loadDecompressHandlers(): Promise<DecompressHandlers> {
   return await (handlersPromise ??= _loadDecompressHandlers());
 }
 
 // eslint-disable-next-line no-underscore-dangle
-async function _loadDecompressHandlers(): Promise<McapTypes.DecompressHandlers> {
+async function _loadDecompressHandlers(): Promise<DecompressHandlers> {
   const [decompressZstd, decompressLZ4, bzip2] = await Promise.all([
     import("@foxglove/wasm-zstd").then(async (mod) => {
       await mod.isLoaded;

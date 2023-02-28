@@ -12,13 +12,25 @@
     "email": "support@foxglove.dev"
   },
   "homepage": "https://foxglove.dev/",
-  "module": "dist/esm/src/index.js",
-  "main": "dist/cjs/src/index.js",
-  "typings": "dist/esm/src/index.d.ts",
+  "module": "dist/esm/index.js",
+  "main": "dist/cjs/index.js",
+  "typings": "dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    },
+    "./nodejs": {
+      "import": "./dist/esm/nodejs/index.js",
+      "require": "./dist/cjs/nodejs/index.js"
+    }
+  },
   "typedocMain": "src/index.ts",
   "files": [
     "dist",
-    "src"
+    "src",
+    "nodejs.d.ts",
+    "nodejs.js"
   ],
   "scripts": {
     "prepack": "tsc -b tsconfig.json tsconfig.cjs.json",
@@ -57,7 +69,6 @@
     "@foxglove/wasm-bz2": "^0.1.1",
     "@foxglove/wasm-lz4": "^1.0.2",
     "@foxglove/wasm-zstd": "^1.0.1",
-    "@mcap/core": "^1.2.0",
     "@protobufjs/base64": "^1.1.2",
     "flatbuffers": "^23.1.21",
     "flatbuffers_reflection": "^0.0.3",
