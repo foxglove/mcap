@@ -22,6 +22,7 @@
   "devDependencies": {
     "@foxglove/eslint-plugin": "0.21.0",
     "@mcap/core": "*",
+    "@mcap/support": "*",
     "@types/node": "18.13.0",
     "eslint": "8.34.0",
     "eslint-config-prettier": "8.6.0",
