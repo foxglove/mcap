@@ -14,6 +14,7 @@ ignorePaths:
   - bin
   - dist
   - yarn-error.log
+  - "*.bfbs"
   - "*.csv"
   - "*.Dockerfile"
   - Dockerfile
@@ -79,6 +80,7 @@ words:
   - rostime
   - schemaless
   - serde
+  - sfixed
   - stoull
   - struct
   - swiftformat

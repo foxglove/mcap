@@ -7,7 +7,8 @@
     "outDir": "./dist/esm",
     "lib": ["es2020", "dom"],
     "paths": {
-      "@mcap/core": ["../../core/src"]
+      "@mcap/core": ["../../core/src"],
+      "@mcap/support": ["../../support/src"]
     },
 
     // required for tsconfig-paths https://github.com/dividab/tsconfig-paths/issues/143

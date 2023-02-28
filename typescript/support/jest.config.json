@@ -1,0 +1,16 @@
+{
+  "testMatch": ["<rootDir>/src/**/*.test.ts"],
+  "transform": {
+    "^.+\\.ts$": "ts-jest"
+  },
+  "globals": {
+    "ts-jest": {
+      "diagnostics": {
+        "//": "add 6133 (unused variables) to default ignore codes",
+        "ignoreCodes": [6059, 18002, 18003, 6133]
+      }
+    }
+  },
+  "//": "Native find is slow because it does not exclude files: https://github.com/facebook/jest/pull/11264#issuecomment-825377579",
+  "haste": { "forceNodeFilesystemAPI": true }
+}
