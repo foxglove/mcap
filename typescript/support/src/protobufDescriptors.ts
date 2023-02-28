@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="../typings/protobufjs.d.ts" />
 
 import protobufjs from "protobufjs";
@@ -9,9 +10,7 @@ export function protobufToDescriptor(
   return root.toDescriptor("proto3");
 }
 
-export function protobufFromDescriptor(
-  descriptorSet: protobufjs.Message<{}>,
-): protobufjs.Root {
+export function protobufFromDescriptor(descriptorSet: protobufjs.Message): protobufjs.Root {
   return protobufjs.Root.fromDescriptor(descriptorSet);
 }
 

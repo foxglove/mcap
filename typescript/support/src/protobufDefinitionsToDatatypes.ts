@@ -1,6 +1,5 @@
-import protobufjs from "protobufjs";
-
 import { MessageDefinitionField } from "@foxglove/message-definition";
+import protobufjs from "protobufjs";
 
 import { MessageDefinitionMap } from "./types";
 

@@ -1,3 +1,7 @@
+/* eslint @typescript-eslint/no-explicit-any: 0 */
+/* eslint @typescript-eslint/no-unsafe-member-access: 0 */
+/* eslint @typescript-eslint/no-unsafe-call: 0 */
+
 import { ByteBuffer, Builder } from "flatbuffers";
 import { Schema, BaseType, Type } from "flatbuffers_reflection";
 import fs from "fs";

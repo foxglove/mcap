@@ -1,7 +1,6 @@
+import { MessageDefinitionField } from "@foxglove/message-definition";
 import { ByteBuffer } from "flatbuffers";
 import { BaseType, Schema, SchemaT, FieldT, Parser, Table } from "flatbuffers_reflection";
-
-import { MessageDefinitionField } from "@foxglove/message-definition";
 
 import { MessageDefinitionMap } from "./types";
 
@@ -43,7 +42,6 @@ function typeForSimpleField(type: BaseType): string {
   }
 }
 
-// eslint-disable-next-line no-restricted-syntax
 function flatbufferString(unchecked: string | Uint8Array | null | undefined): string {
   if (typeof unchecked === "string") {
     return unchecked;
@@ -76,6 +74,7 @@ function typeForField(schema: SchemaT, field: FieldT): MessageDefinitionField[] 
         if (enums == undefined) {
           throw new Error(
             `Invalid schema, missing enum values for field type ${
+              // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
               schema.enums[field.type.index]?.name
             }`,
           );
@@ -178,6 +177,7 @@ export function parseFlatbufferSchema(
   if (typeIndex === -1) {
     if (schema.rootTable?.name !== schemaName) {
       throw new Error(
+        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
         `Type "${schemaName}" is not available in the schema for "${schema.rootTable?.name}".`,
       );
     }

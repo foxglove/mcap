@@ -1,6 +1,8 @@
-import * as base64 from "@protobufjs/base64";
+/* eslint @typescript-eslint/no-unsafe-member-access: 0 */
+/* eslint @typescript-eslint/no-unsafe-assignment: 0 */
 
 import { MessageDefinitionField } from "@foxglove/message-definition";
+import * as base64 from "@protobufjs/base64";
 
 import { MessageDefinitionMap } from "./types";
 

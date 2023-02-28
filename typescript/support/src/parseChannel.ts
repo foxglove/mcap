@@ -1,15 +1,14 @@
-import { FileDescriptorSet, IFileDescriptorSet } from "protobufjs/ext/descriptor";
-
 import { MessageDefinition } from "@foxglove/message-definition";
 import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import { MessageReader } from "@foxglove/rosmsg-serialization";
 import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
+import { FileDescriptorSet, IFileDescriptorSet } from "protobufjs/ext/descriptor";
 
 import { parseFlatbufferSchema } from "./parseFlatbufferSchema";
 import { parseJsonSchema } from "./parseJsonSchema";
 import { protobufDefinitionsToDatatypes, stripLeadingDot } from "./protobufDefinitionsToDatatypes";
-import { MessageDefinitionMap } from "./types";
 import { protobufFromDescriptor } from "./protobufDescriptors";
+import { MessageDefinitionMap } from "./types";
 
 type Channel = {
   messageEncoding: string;
@@ -53,11 +52,11 @@ export function parseChannel(channel: Channel): ParsedChannel {
     }
     const textDecoder = new TextDecoder();
     let datatypes: MessageDefinitionMap = new Map();
-    let deserializer = (data: ArrayBufferView) => JSON.parse(textDecoder.decode(data));
+    let deserializer = (data: ArrayBufferView) => JSON.parse(textDecoder.decode(data)) as unknown;
     if (channel.schema != undefined) {
       const schema =
         channel.schema.data.length > 0
-          ? JSON.parse(textDecoder.decode(channel.schema.data))
+          ? (JSON.parse(textDecoder.decode(channel.schema.data)) as unknown)
           : undefined;
       if (schema != undefined) {
         if (typeof schema !== "object") {
