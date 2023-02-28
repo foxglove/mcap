@@ -40,6 +40,8 @@ class CompressionType(Enum):
 
 
 class IndexType(Flag):
+    """Determines what indexes should be written to the MCAP file. If in doubt, choose ALL."""
+
     NONE = auto()
     ATTACHMENT = auto()
     CHUNK = auto()
@@ -49,7 +51,19 @@ class IndexType(Flag):
 
 
 class Writer:
-    """Writes MCAP data."""
+    """
+    Writes MCAP data.
+
+    :param output: A filename or stream to write to.
+    :param chunk_size: The maximum size of individual data chunks in a chunked file.
+    :param compression: Compression to apply to chunk data, if any.
+    :param index_types: Indexes to write to the file. See IndexType for possibilities.
+    :param repeat_channels: Repeat channel information at the end of the file.
+    :param repeat_schemas: Repeat schemas at the end of the file.
+    :param use_chunking: Group data in chunks.
+    :param use_statistics: Write statistics record.
+    :param use_summary_offsets: Write summary offset records.
+    """
 
     def __init__(
         self,
@@ -65,17 +79,6 @@ class Writer:
         enable_crcs: bool = True,
         enable_data_crcs: bool = False,
     ):
-        """
-        output: The stream to which data should be written.
-        chunk_size: The maximum size of individual data chunks in a chunked file.
-        compression: Compression to apply to chunk data, if any.
-        index_types: Indexes to write to the file. See IndexType for possibilities.
-        repeat_channels: Repeat channel information at the end of the file.
-        repeat_schemas: Repeat schemas at the end of the file.
-        use_chunking: Group data in chunks.
-        use_statistics: Write statistics record.
-        use_summary_offsets: Write summary offset records.
-        """
         self.__should_close = False
         if isinstance(output, str):
             self.__stream = open(output, "wb")
