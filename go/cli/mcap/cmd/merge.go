@@ -187,7 +187,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 			return fmt.Errorf("failed to read first message on input %d: %w", inputID, err)
 		}
 		if schema != nil {
-			schema.ID, err = m.addSchema(writer, inputID, schema)
+			_, err = m.addSchema(writer, inputID, schema)
 			if err != nil {
 				return fmt.Errorf("failed to add initial schema for input %d: %w", inputID, err)
 			}
@@ -214,7 +214,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 		// Pull the next message off the iterator, to replace the one just
 		// popped from the queue. Before pushing this message, it must be
 		// renumbered and the related channels/schemas may need to be inserted.
-		newSchema, newChannel, newMessage, err := iterators[msg.InputID].Next(nil)
+		schema, channel, message, err := iterators[msg.InputID].Next(nil)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				// if the iterator is empty, skip this read. No further messages
@@ -226,22 +226,26 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 			}
 			return fmt.Errorf("failed to pull next message: %w", err)
 		}
+		newChannel := *channel
+		newMessage := *message
 
 		// if the channel is unknown, need to add it to the output
 		var ok bool
 		newMessage.ChannelID, ok = m.outputChannelID(msg.InputID, newChannel.ID)
 		if !ok {
-			_, ok := m.outputSchemaID(msg.InputID, newSchema.ID)
-			if !ok {
-				// if the schema is unknown, add it to the output
-				m.addSchema(writer, msg.InputID, newSchema)
+			if schema != nil {
+				_, ok := m.outputSchemaID(msg.InputID, schema.ID)
+				if !ok {
+					// if the schema is unknown, add it to the output
+					m.addSchema(writer, msg.InputID, schema)
+				}
 			}
-			newMessage.ChannelID, err = m.addChannel(writer, msg.InputID, newChannel)
+			newMessage.ChannelID, err = m.addChannel(writer, msg.InputID, &newChannel)
 			if err != nil {
 				return fmt.Errorf("failed to add channel: %w", err)
 			}
 		}
-		heap.Push(pq, utils.NewTaggedMessage(msg.InputID, newMessage))
+		heap.Push(pq, utils.NewTaggedMessage(msg.InputID, &newMessage))
 	}
 	return writer.Close()
 }
