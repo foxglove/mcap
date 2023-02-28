@@ -13,12 +13,12 @@ import Bzip2 from "@foxglove/wasm-bz2";
 import decompressLZ4 from "@foxglove/wasm-lz4";
 import zstd from "@foxglove/wasm-zstd";
 import { McapWriter, McapTypes } from "@mcap/core";
+import { ProtobufDescriptor, protobufToDescriptor } from "@mcap/support";
+import { FileHandleWritable } from "@mcap/support/nodejs";
 import { program } from "commander";
 import { open } from "fs/promises";
 import protobufjs from "protobufjs";
 import descriptor from "protobufjs/ext/descriptor";
-import { ProtobufDescriptor, protobufToDescriptor } from "@mcap/support";
-import { FileHandleWritable } from "@mcap/support/nodejs";
 
 const builtinSrc = `
 syntax = "proto3";

@@ -8,12 +8,12 @@ import {
   McapStreamReader,
   McapTypes,
 } from "@mcap/core";
+import { loadDecompressHandlers, protobufFromBinaryDescriptor } from "@mcap/support";
 import { program } from "commander";
 import { createReadStream } from "fs";
 import fs from "fs/promises";
 import { isEqual } from "lodash";
 import { performance } from "perf_hooks";
-import { loadDecompressHandlers, protobufFromBinaryDescriptor } from "@mcap/support";
 
 type Channel = McapTypes.Channel;
 type TypedMcapRecord = McapTypes.TypedMcapRecord;
