@@ -177,7 +177,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          lfs: "true"
+          lfs: true
       - uses: actions/cache@v3
         with:
           path: ~/.conan/data
@@ -198,7 +198,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          lfs: "true"
+          lfs: true
       - uses: actions/cache@v3
         with:
           path: ~/.conan/data
@@ -214,6 +214,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          lfs: true
       - uses: actions/setup-node@v3
         with:
           node-version: 16.x
