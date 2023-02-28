@@ -907,6 +907,11 @@
     tsutils "^3"
     typescript "^4"
 
+"@foxglove/message-definition@^0.2.0":
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/@foxglove/message-definition/-/message-definition-0.2.0.tgz#e31922e58e57d224717bcfbd20d3cbaad709dc6b"
+  integrity sha512-IQHIGCvBZR8GIua9nEpS+hsMF3gm1bfbrrnjG0rgtcFBWiNuKbzx4vIP8OIwDC+8wtwcFdfJhf4Vp5TPFiUUcQ==
+
 "@foxglove/rosbag@0.2.3":
   version "0.2.3"
   resolved "https://registry.yarnpkg.com/@foxglove/rosbag/-/rosbag-0.2.3.tgz#bcba9c099dfdbb6a8fd27535d3c322805ea68d78"
@@ -924,12 +929,27 @@
   dependencies:
     "@foxglove/rosmsg" "^3.1.0"
 
+"@foxglove/rosmsg-msgs-common@^3.0.0":
+  version "3.0.0"
+  resolved "https://registry.yarnpkg.com/@foxglove/rosmsg-msgs-common/-/rosmsg-msgs-common-3.0.0.tgz#d5f09b9e1feb43eb21aedc12ab23bc47787558e4"
+  integrity sha512-MSruqgOtT+PrQO2wqprvB0dA7ZbPKM9AqDcdOQFo/e8RIjXfgMsio64kmYHYXF8iHcutqoAaTHxi74XMwRzwzg==
+  dependencies:
+    "@foxglove/message-definition" "^0.2.0"
+    "@foxglove/rosmsg" "^4.0.0"
+
 "@foxglove/rosmsg-serialization@1.5.3", "@foxglove/rosmsg-serialization@^1.5.2":
   version "1.5.3"
   resolved "https://registry.yarnpkg.com/@foxglove/rosmsg-serialization/-/rosmsg-serialization-1.5.3.tgz#82c311d81c1aec4319880ecb37208a2a74b1164a"
   integrity sha512-T0JBYljwN4qTWTkNGq1nxi/Y9Z1GnI10s6rN7P/sTAKLr+QpR1rC+Ag7RHLGUYqBPuFu8Mth1IGPGEufW18xEw==
   dependencies:
     "@foxglove/rosmsg" "^3.1.0"
+
+"@foxglove/rosmsg-serialization@^2.0.0":
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/@foxglove/rosmsg-serialization/-/rosmsg-serialization-2.0.0.tgz#40e6babdcb8e02e1b70d3bcce049ac996b7201be"
+  integrity sha512-SvhpGm5v/I8ieNOc/H9XR/UxLlhKqDBOdLfhGkufzSEBpJxR86mT9xYzZam9AYT0gEvxOwGDIaRvIuvkyxU0RA==
+  dependencies:
+    "@foxglove/message-definition" "^0.2.0"
 
 "@foxglove/rosmsg2-serialization@1.1.1":
   version "1.1.1"
@@ -940,11 +960,28 @@
     "@foxglove/rosmsg" "^3.1.0"
     "@foxglove/rostime" "^1.1.2"
 
+"@foxglove/rosmsg2-serialization@^2.0.0":
+  version "2.0.0"
+  resolved "https://registry.yarnpkg.com/@foxglove/rosmsg2-serialization/-/rosmsg2-serialization-2.0.0.tgz#4d5f54108690914d5ea5387ce93fce9c5681d7ed"
+  integrity sha512-EJppfp/VeQyyV/UsvAkuXULIbMQn1u2fLU49Mx4yYWX1owsgSKMCOliCmoTgwAjGWL3CzwhUV5iR8tptVroJSA==
+  dependencies:
+    "@foxglove/cdr" "^2.0.0"
+    "@foxglove/message-definition" "^0.2.0"
+    "@foxglove/rostime" "^1.1.2"
+
 "@foxglove/rosmsg@3.1.0", "@foxglove/rosmsg@^3.1.0":
   version "3.1.0"
   resolved "https://registry.yarnpkg.com/@foxglove/rosmsg/-/rosmsg-3.1.0.tgz#edbe3e2e743a5cc89df8195889a054e639230916"
   integrity sha512-uvL3a3PRusrQw4tg91tsXfPMCWjsKV35nAaHkzPqRt4bZRzO2DAUMavCltjRux5Hc8WLPYWt77iUSk3KfxqUZQ==
   dependencies:
+    md5-typescript "^1.0.5"
+
+"@foxglove/rosmsg@^4.0.0":
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/@foxglove/rosmsg/-/rosmsg-4.0.0.tgz#b0f1b57db4bfe2ea00f1d5904caeedb2d13bccb0"
+  integrity sha512-MuTAcA4U+wzlhUIHYgfBrjTDE/kzukWmhyI8suKgmjlnVjrpyzDNiMYsV5lU0KTW6noGKtqu46ZtxWSEWsOsEg==
+  dependencies:
+    "@foxglove/message-definition" "^0.2.0"
     md5-typescript "^1.0.5"
 
 "@foxglove/rostime@^1.1.2":
@@ -960,24 +997,32 @@
     "@foxglove/rosmsg-msgs-common" "^2.0.0"
     tslib "^2"
 
+"@foxglove/schemas@^1.1.0":
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/@foxglove/schemas/-/schemas-1.1.0.tgz#d3080995a8ba596630d33572c746a19fe4513319"
+  integrity sha512-ojkDY1C/jTCvuh7ctm0jyhdIRlOL0R0jCsISeCw2/U9VzuF/AQtZfLZKDEOfAIa/MVnt3EQVHhOb3oaWetXMzA==
+  dependencies:
+    "@foxglove/rosmsg-msgs-common" "^3.0.0"
+    tslib "^2.5.0"
+
 "@foxglove/tsconfig@1.1.0":
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/@foxglove/tsconfig/-/tsconfig-1.1.0.tgz#48c37fffd6f349c3ee08a60fc62ccf636f3b59a6"
   integrity sha512-qZU4MtXVgPhDBFazSEx7yDEuEg8cPHXFQVhBaUABZkCBdcnEE9sxlgEt0gSikF4fRtY6COGIJPVRflnPJXjJKA==
 
-"@foxglove/wasm-bz2@0.1.1":
+"@foxglove/wasm-bz2@0.1.1", "@foxglove/wasm-bz2@^0.1.1":
   version "0.1.1"
   resolved "https://registry.yarnpkg.com/@foxglove/wasm-bz2/-/wasm-bz2-0.1.1.tgz#d3bf629b7caf747a0278ed2efb9c38644b6d3439"
   integrity sha512-huMVZ//J9S1TAh689pj7U5tstbmtGhH1g9/HCj9jE3UPaLF83dTeJIOLE0+pe16ha1iH4QRvYgv35aykikHkvA==
   dependencies:
     tslib "^2"
 
-"@foxglove/wasm-lz4@1.0.2":
+"@foxglove/wasm-lz4@1.0.2", "@foxglove/wasm-lz4@^1.0.2":
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/@foxglove/wasm-lz4/-/wasm-lz4-1.0.2.tgz#ce8e27ae9c039058a033e288043f38acee3d1e2b"
   integrity sha512-qwGOVLITlMBwuI+Vf09xWkTtbQldaCKchGEiFNZzsY0Q6ZXnHFhFgl4UAew7Xaq0wCv5YB7hqYsHmSrFIVSjCg==
 
-"@foxglove/wasm-zstd@1.0.1":
+"@foxglove/wasm-zstd@1.0.1", "@foxglove/wasm-zstd@^1.0.1":
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/@foxglove/wasm-zstd/-/wasm-zstd-1.0.1.tgz#41f97f9c1ed5d10790603376fbecda7ce2145fe5"
   integrity sha512-hqKTO45Sl+kSq9SDqM9xi5L+GncjFEZIJgYEkGTlpJXTfhy1Gf+a+3epWMcE0tLUKmzM77dtu8snape/J+7ueQ==
@@ -2841,6 +2886,11 @@ flatbuffers@^23.1.21:
   resolved "https://registry.yarnpkg.com/flatbuffers/-/flatbuffers-23.1.21.tgz#a677f0e79484ce70070e22994c12e2bdeb005133"
   integrity sha512-7ztssjhUCQKCd7MwQNlQDwNam8iL4reBAMHglf024amlVRn/aIo7B8+ee/igKxxK5B7Wp4nWe4sTYg8lpK2CAQ==
 
+flatbuffers_reflection@^0.0.3:
+  version "0.0.3"
+  resolved "https://registry.yarnpkg.com/flatbuffers_reflection/-/flatbuffers_reflection-0.0.3.tgz#16a4e83c354e5cc871f05f763f20e161c0db2816"
+  integrity sha512-qP4yT0U2ouqp+kgootXdLaRl9O5tj8YM1Dpcucs3E14u6NvyWqHZ7/JdfhhWnSI9qnZVWVIrn0bnBME2l2nXBg==
+
 flatted@^3.1.0:
   version "3.2.4"
   resolved "https://registry.yarnpkg.com/flatted/-/flatted-3.2.4.tgz#28d9969ea90661b5134259f312ab6aa7929ac5e2"
@@ -4457,7 +4507,7 @@ prompts@^2.0.1:
     kleur "^3.0.3"
     sisteransi "^1.0.5"
 
-protobufjs@7.2.2:
+protobufjs@7.2.2, protobufjs@^7.2.2:
   version "7.2.2"
   resolved "https://registry.yarnpkg.com/protobufjs/-/protobufjs-7.2.2.tgz#2af401d8c547b9476fb37ffc65782cf302342ca3"
   integrity sha512-++PrQIjrom+bFDPpfmqXfAGSQs40116JRrqqyf53dymUMvvb5d/LMRyicRoF1AUKoXVS1/IgJXlEgcpr4gTF3Q==

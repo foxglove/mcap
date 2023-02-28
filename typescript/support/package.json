@@ -1,0 +1,48 @@
+{
+  "name": "@mcap/support",
+  "version": "0.1.0",
+  "description": "Common schema and message parsing logic for use with MCAP and related protocols",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/foxglove/mcap.git"
+  },
+  "author": {
+    "name": "Foxglove Technologies",
+    "email": "support@foxglove.dev"
+  },
+  "homepage": "https://foxglove.dev/",
+  "module": "dist/esm/src/index.js",
+  "main": "dist/cjs/src/index.js",
+  "typings": "dist/esm/src/index.d.ts",
+  "typedocMain": "src/index.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "prepack": "tsc -b tsconfig.json tsconfig.cjs.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint:ci": "eslint --report-unused-disable-directives .",
+    "lint": "eslint --report-unused-disable-directives --fix .",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "typescript": "4.9.5"
+  },
+  "dependencies": {
+    "@foxglove/message-definition": "^0.2.0",
+    "@foxglove/rosmsg": "^4.0.0",
+    "@foxglove/rosmsg-serialization": "^2.0.0",
+    "@foxglove/rosmsg2-serialization": "^2.0.0",
+    "@foxglove/schemas": "^1.1.0",
+    "@foxglove/wasm-bz2": "^0.1.1",
+    "@foxglove/wasm-lz4": "^1.0.2",
+    "@foxglove/wasm-zstd": "^1.0.1",
+    "@mcap/core": "^1.2.0",
+    "@protobufjs/base64": "^1.1.2",
+    "flatbuffers": "^23.1.21",
+    "flatbuffers_reflection": "^0.0.3",
+    "protobufjs": "^7.2.2"
+  }
+}
