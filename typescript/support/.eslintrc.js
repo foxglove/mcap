@@ -1,7 +1,7 @@
 /* eslint-env node */
 module.exports = {
   env: { es2020: true },
-  ignorePatterns: ["dist"],
+  ignorePatterns: ["dist", "nodejs.d.ts", "nodejs.js"],
   extends: ["plugin:@foxglove/base", "plugin:@foxglove/jest"],
   overrides: [
     {
