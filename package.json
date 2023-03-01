@@ -5,7 +5,6 @@
       "typescript/core",
       "typescript/benchmarks",
       "typescript/examples/*",
-      "typescript/support",
       "tests/conformance"
     ]
   },

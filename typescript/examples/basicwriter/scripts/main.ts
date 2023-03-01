@@ -1,6 +1,24 @@
-import { McapWriter } from "@mcap/core";
-import { open } from "fs/promises";
-import { FileHandleWritable } from "@mcap/support/nodejs";
+import { McapWriter, IWritable } from "@mcap/core";
+import { open, FileHandle } from "fs/promises";
+
+// Mcap IWritable interface for nodejs FileHandle
+class FileHandleWritable implements IWritable {
+  private handle: FileHandle;
+  private totalBytesWritten = 0;
+
+  constructor(handle: FileHandle) {
+    this.handle = handle;
+  }
+
+  async write(buffer: Uint8Array): Promise<void> {
+    const written = await this.handle.write(buffer);
+    this.totalBytesWritten += written.bytesWritten;
+  }
+
+  position(): bigint {
+    return BigInt(this.totalBytesWritten);
+  }
+}
 
 async function main() {
   const mcapFilePath = "output.mcap";
