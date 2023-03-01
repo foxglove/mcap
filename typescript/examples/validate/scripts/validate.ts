@@ -1,6 +1,8 @@
 import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import { LazyMessageReader as ROS1LazyMessageReader } from "@foxglove/rosmsg-serialization";
 import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
+import decompressLZ4 from "@foxglove/wasm-lz4";
+import zstd from "@foxglove/wasm-zstd";
 import {
   hasMcapPrefix,
   McapConstants,
@@ -8,14 +10,16 @@ import {
   McapStreamReader,
   McapTypes,
 } from "@mcap/core";
-import { loadDecompressHandlers, protobufFromBinaryDescriptor } from "@mcap/support";
 import { program } from "commander";
 import { createReadStream } from "fs";
 import fs from "fs/promises";
 import { isEqual } from "lodash";
 import { performance } from "perf_hooks";
+import protobufjs from "protobufjs";
+import { FileDescriptorSet } from "protobufjs/ext/descriptor";
 
 type Channel = McapTypes.Channel;
+type DecompressHandlers = McapTypes.DecompressHandlers;
 type TypedMcapRecord = McapTypes.TypedMcapRecord;
 
 function log(...data: unknown[]) {
@@ -83,7 +87,13 @@ async function validate(
   filePath: string,
   { deserialize, dump, stream }: { deserialize: boolean; dump: boolean; stream: boolean },
 ) {
-  const decompressHandlers = await loadDecompressHandlers();
+  await decompressLZ4.isLoaded;
+  await zstd.isLoaded;
+
+  const decompressHandlers: DecompressHandlers = {
+    lz4: (buffer, decompressedSize) => decompressLZ4(buffer, Number(decompressedSize)),
+    zstd: (buffer, decompressedSize) => zstd.decompress(buffer, Number(decompressedSize)),
+  };
 
   const recordCounts = new Map<TypedMcapRecord["type"], number>();
   const schemasById = new Map<number, McapTypes.TypedMcapRecords["Schema"]>();
@@ -151,7 +161,7 @@ async function validate(
           );
           messageDeserializer = (data) => reader.readMessage(data);
         } else if (record.messageEncoding === "protobuf") {
-          const root = protobufFromBinaryDescriptor(schema.data);
+          const root = protobufjs.Root.fromDescriptor(FileDescriptorSet.decode(schema.data));
           const type = root.lookupType(schema.name);
 
           messageDeserializer = (data) =>
