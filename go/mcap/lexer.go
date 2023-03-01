@@ -16,6 +16,7 @@ import (
 var ErrNestedChunk = errors.New("detected nested chunk")
 var ErrChunkTooLarge = errors.New("chunk exceeds configured maximum size")
 var ErrRecordTooLarge = errors.New("record exceeds configured maximum size")
+var ErrInvalidZeroOpcode = errors.New("invalid zero opcode")
 
 type errInvalidChunkCrc struct {
 	expected uint32
@@ -289,7 +290,7 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 		case OpSummaryOffset:
 			return TokenSummaryOffset, record, nil
 		case OpReserved:
-			return TokenError, nil, fmt.Errorf("invalid zero opcode")
+			return TokenError, nil, ErrInvalidZeroOpcode
 		default:
 			continue // skip unrecognized opcodes
 		}
