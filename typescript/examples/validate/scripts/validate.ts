@@ -9,6 +9,7 @@ import {
   McapTypes,
 } from "@mcap/core";
 import { loadDecompressHandlers, protobufFromBinaryDescriptor } from "@mcap/support";
+import { FileHandleReadable } from "@mcap/support/nodejs";
 import { program } from "commander";
 import { createReadStream } from "fs";
 import fs from "fs/promises";
@@ -221,29 +222,8 @@ async function validate(
   if (!stream) {
     const handle = await fs.open(filePath, "r");
     try {
-      let buffer = new ArrayBuffer(4096);
       const reader = await McapIndexedReader.Initialize({
-        readable: {
-          size: async () => BigInt((await handle.stat()).size),
-          read: async (offset, length) => {
-            if (offset > Number.MAX_SAFE_INTEGER || length > Number.MAX_SAFE_INTEGER) {
-              throw new Error(`Read too large: offset ${offset}, length ${length}`);
-            }
-            if (length > buffer.byteLength) {
-              buffer = new ArrayBuffer(Number(length * 2n));
-            }
-            const result = await handle.read({
-              buffer: new DataView(buffer, 0, Number(length)),
-              position: Number(offset),
-            });
-            if (result.bytesRead !== Number(length)) {
-              throw new Error(
-                `Read only ${result.bytesRead} bytes from offset ${offset}, expected ${length}`,
-              );
-            }
-            return new Uint8Array(result.buffer.buffer, result.buffer.byteOffset, result.bytesRead);
-          },
-        },
+        readable: new FileHandleReadable(handle),
         decompressHandlers,
       });
       for (const record of reader.schemasById.values()) {

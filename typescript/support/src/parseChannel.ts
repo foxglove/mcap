@@ -37,7 +37,7 @@ function parsedDefinitionsToDatatypes(
 
 /**
  * Process a channel/schema and extract information that can be used to deserialize messages on the
- * channel, and schemas in the format expected by Studio's RosDatatypes.
+ * channel, and schemas into @foxglove/message-definition format.
  *
  * See:
  * - https://github.com/foxglove/mcap/blob/main/docs/specification/well-known-message-encodings.md
