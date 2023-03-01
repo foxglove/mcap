@@ -1,6 +1,5 @@
 *.png filter=lfs diff=lfs merge=lfs -text
 *.mcap filter=lfs diff=lfs merge=lfs -text
-*.bfbs filter=lfs diff=lfs merge=lfs -text
 testdata/mcap/demo.mcap filter=lfs diff=lfs merge=lfs -text
 testdata/ filter=lfs diff=lfs merge=lfs -text
 tests/conformance/data/** linguist-generated=true
