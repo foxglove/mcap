@@ -47,6 +47,33 @@ func TestROS1MSGParser(t *testing.T) {
 			},
 		},
 		{
+			"two primitive fields with type and name separated by tab and space",
+			"",
+			`string	 foo
+			 int32 	bar
+			 float32	 	baz`,
+			[]Field{
+				{
+					Name: "foo",
+					Type: Type{
+						BaseType: "string",
+					},
+				},
+				{
+					Name: "bar",
+					Type: Type{
+						BaseType: "int32",
+					},
+				},
+				{
+					Name: "baz",
+					Type: Type{
+						BaseType: "float32",
+					},
+				},
+			},
+		},
+		{
 			"primitive variable-length array",
 			"",
 			`bool[] foo`,
