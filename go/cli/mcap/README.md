@@ -8,7 +8,10 @@ details.
 ### Installing:
 
 Either install from [releases
-binaries](https://github.com/foxglove/mcap/releases), from [Homebrew](https://formulae.brew.sh/formula/mcap#default), or by using go.
+binaries](https://github.com/foxglove/mcap/releases) or from [Homebrew](https://formulae.brew.sh/formula/mcap#default).
+
+> Note: Installing via 'go install' is not recommended, and is not guaranteed
+> to work.
 
 #### From release binaries
 
