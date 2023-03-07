@@ -35,6 +35,19 @@ func humanBytes(numBytes uint64) string {
 	return fmt.Sprintf("%.2f %s", displayedValue, prefixes[prefixIndex])
 }
 
+func getDurationNs(start uint64, end uint64) float64 {
+	// subtracts start from end, returning the result as a 64-bit float.
+	// float64 can store the entire range of possible durations [-2**64 - 1, 2**64 - 1],
+	// albeit with some loss of precision.
+	diff := end - start
+	signMultiplier := 1.0
+	if start > end {
+		diff = start - end
+		signMultiplier = -1.0
+	}
+	return float64(diff) * signMultiplier
+}
+
 func printInfo(w io.Writer, info *mcap.Info) error {
 	buf := &bytes.Buffer{}
 	fmt.Fprintf(buf, "library: %s\n", info.Header.Library)
@@ -45,7 +58,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
 		start = info.Statistics.MessageStartTime
 		end = info.Statistics.MessageEndTime
-		durationNs := float64(end) - float64(start)
+		durationNs := getDurationNs(start, end)
 		durationInSeconds = durationNs / 1e9
 		starttime := time.Unix(int64(start/1e9), int64(start%1e9))
 		endtime := time.Unix(int64(end/1e9), int64(end%1e9))
