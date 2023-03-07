@@ -37,7 +37,7 @@ func humanBytes(numBytes uint64) string {
 
 func getDurationNs(start uint64, end uint64) float64 {
 	// subtracts start from end, returning the result as a 64-bit float.
-	// float64 can store the entire range of possible durations [-2**64 - 1, 2**64 - 1],
+	// float64 can represent the entire range of possible durations (-2**64, 2**64),
 	// albeit with some loss of precision.
 	diff := end - start
 	signMultiplier := 1.0
