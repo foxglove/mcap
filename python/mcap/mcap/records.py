@@ -479,8 +479,8 @@ class Statistics(McapRecord):
         counts_end = stream.count + channel_message_counts_length
         while stream.count < counts_end:
             channel_id = stream.read2()
-            message_count = stream.read8()
-            message_counts[channel_id] = message_count
+            channel_message_count = stream.read8()
+            message_counts[channel_id] = channel_message_count
         return Statistics(
             attachment_count=attachment_count,
             channel_count=channel_count,
