@@ -511,8 +511,8 @@
         <span class="n">counts_end</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">count</span> <span class="o">+</span> <span class="n">channel_message_counts_length</span>
         <span class="k">while</span> <span class="n">stream</span><span class="o">.</span><span class="n">count</span> <span class="o">&lt;</span> <span class="n">counts_end</span><span class="p">:</span>
             <span class="n">channel_id</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read2</span><span class="p">()</span>
-            <span class="n">message_count</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
-            <span class="n">message_counts</span><span class="p">[</span><span class="n">channel_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">message_count</span>
+            <span class="n">channel_message_count</span> <span class="o">=</span> <span class="n">stream</span><span class="o">.</span><span class="n">read8</span><span class="p">()</span>
+            <span class="n">message_counts</span><span class="p">[</span><span class="n">channel_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">channel_message_count</span>
         <span class="k">return</span> <span class="n">Statistics</span><span class="p">(</span>
             <span class="n">attachment_count</span><span class="o">=</span><span class="n">attachment_count</span><span class="p">,</span>
             <span class="n">channel_count</span><span class="o">=</span><span class="n">channel_count</span><span class="p">,</span>
