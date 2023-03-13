@@ -110,7 +110,7 @@ func printMessages(
 			}
 			continue
 		}
-		if schema == nil {
+		if schema == nil || schema.Encoding == "" {
 			switch channel.MessageEncoding {
 			case "cbor":
 				var v map[string]interface{}

@@ -118,13 +118,21 @@ def test_out_of_order_messages():
     assert chunk_index.message_start_time == 0
     assert chunk_index.message_end_time == 100
 
-def test_generate_sample_cbor_data():
+@pytest.mark.parametrize(
+    "null_schema", [(True,), (False,)]
+)
+def test_generate_sample_cbor_data(null_schema: bool):
     file = NamedTemporaryFile("w+b")
     writer = Writer(file, compression=CompressionType.ZSTD)
     writer.start(library="test")
+    schema_id = writer.register_schema(
+        name="sample",
+        encoding="",
+        data="".encode()
+    )
 
     channel_id = writer.register_channel(
-        schema_id=0,
+        schema_id=0 if null_schema else schema_id,
         topic="sample_topic",
         message_encoding="cbor",
     )
