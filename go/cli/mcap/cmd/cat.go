@@ -124,12 +124,11 @@ func printMessages(
 				if _, err = msg.Write(encoded); err != nil {
 					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
-			case "json":
+			// Default encompasses json, which is encoded as UTF8 bytes
+			default:
 				if _, err = msg.Write(message.Data); err != nil {
 					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
-			default:
-				return fmt.Errorf("For schemaless encodings, JSON output only supports: JSON and CBOR. Found: %s", channel.MessageEncoding)
 			}
 		} else {
 			switch schema.Encoding {
@@ -177,12 +176,11 @@ func printMessages(
 				if _, err = msg.Write(bytes); err != nil {
 					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
-			case "jsonschema":
+			// Default encompasses json, which is encoded as UTF8 bytes
+			default:
 				if _, err = msg.Write(message.Data); err != nil {
 					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
-			default:
-				return fmt.Errorf("JSON output only supported for the following encodings - with schema: ros1msg, protobuf, and JSON; schemaless: JSON and CBOR. Found: %s", schema.Encoding)
 			}
 		}
 		target.Topic = channel.Topic

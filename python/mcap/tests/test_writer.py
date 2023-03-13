@@ -119,7 +119,7 @@ def test_out_of_order_messages():
     assert chunk_index.message_end_time == 100
 
 @pytest.mark.parametrize(
-    "null_schema,encoding", [(True, "cbor"), (False, "cbor"), (False, "json")]
+    "null_schema,encoding", [(True, "cbor"), (False, "cbor"), (True, "json"), (True, "unknown")]
 )
 def test_generate_sample_schemaless_data(null_schema: bool, encoding: str):
     file = NamedTemporaryFile("w+b")
@@ -131,12 +131,12 @@ def test_generate_sample_schemaless_data(null_schema: bool, encoding: str):
         data="".encode()
     )
 
+    channel_id = writer.register_channel(
+        schema_id=0 if null_schema else schema_id,
+        topic="sample_topic",
+        message_encoding=encoding,
+    )
     if encoding == "cbor":
-        channel_id = writer.register_channel(
-            schema_id=0 if null_schema else schema_id,
-            topic="sample_topic",
-            message_encoding="cbor",
-        )
         writer.add_message(
             channel_id=channel_id,
             log_time=0,
@@ -144,11 +144,6 @@ def test_generate_sample_schemaless_data(null_schema: bool, encoding: str):
             publish_time=0,
         )
     elif encoding == "json":
-        channel_id = writer.register_channel(
-            schema_id=0 if null_schema else schema_id,
-            topic="sample_topic",
-            message_encoding="json",
-        )
         writer.add_message(
             channel_id=channel_id,
             log_time=0,
@@ -156,7 +151,42 @@ def test_generate_sample_schemaless_data(null_schema: bool, encoding: str):
             publish_time=0,
         )
     else:
-        raise AssertionError()
+        # Unrecognized encoding gets encoded as bytes
+        writer.add_message(
+            channel_id=channel_id,
+            log_time=0,
+            data=b'{"sample": "test"}',
+            publish_time=0,
+        )
+
+    writer.finish()
+    file.seek(0)
+    result = subprocess.run(['mcap', 'cat', '--json', file.name], stdout=subprocess.PIPE)
+    assert result.stdout == b'{"topic":"sample_topic","sequence":0,"log_time":0.000000000,"publish_time":0.000000000,"data":{"sample":"test"}}\n'
+
+
+def test_generate_unrecognized_encoding():
+    file = NamedTemporaryFile("w+b")
+    writer = Writer(file, compression=CompressionType.ZSTD)
+    writer.start(library="test")
+    schema_id = writer.register_schema(
+        name="sample",
+        encoding="unrecognized",
+        data="".encode()
+    )
+
+    channel_id = writer.register_channel(
+        schema_id=schema_id,
+        topic="sample_topic",
+        message_encoding="unknown",
+    )
+    # Unrecognized encoding will print raw bytes
+    writer.add_message(
+        channel_id=channel_id,
+        log_time=0,
+        data=b'{"sample": "test"}',
+        publish_time=0,
+    )
 
     writer.finish()
     file.seek(0)
