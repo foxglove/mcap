@@ -16,6 +16,7 @@ import (
 	"github.com/foxglove/mcap/go/cli/mcap/utils/ros"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/foxglove/mcap/go/mcap/readopts"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -109,57 +110,80 @@ func printMessages(
 			}
 			continue
 		}
-		switch schema.Encoding {
-		case "ros1msg":
-			transcoder, ok := transcoders[channel.SchemaID]
-			if !ok {
-				packageName := strings.Split(schema.Name, "/")[0]
-				transcoder, err = ros.NewJSONTranscoder(packageName, schema.Data)
+		if schema == nil {
+			switch channel.MessageEncoding {
+			case "cbor":
+				var v map[string]interface{}
+				if err = cbor.Unmarshal(message.Data, &v); err != nil {
+					return fmt.Errorf("failed to decode cbor: %w", err)
+				}
+				encoded, err := json.Marshal(v)
 				if err != nil {
-					return fmt.Errorf("failed to build transcoder for %s: %w", channel.Topic, err)
+					return fmt.Errorf("failed to encode object into json: %w", err)
 				}
-				transcoders[channel.SchemaID] = transcoder
-			}
-			msgReader.Reset(message.Data)
-			err = transcoder.Transcode(msg, msgReader)
-			if err != nil {
-				return fmt.Errorf("failed to transcode %s record on %s: %w", schema.Name, channel.Topic, err)
-			}
-		case "protobuf":
-			messageDescriptor, ok := descriptors[channel.SchemaID]
-			if !ok {
-				fileDescriptorSet := &descriptorpb.FileDescriptorSet{}
-				if err := proto.Unmarshal(schema.Data, fileDescriptorSet); err != nil {
-					return fmt.Errorf("failed to build file descriptor set: %w", err)
+				if _, err = msg.Write(encoded); err != nil {
+					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
-				files, err := protodesc.FileOptions{}.NewFiles(fileDescriptorSet)
+			case "json":
+				if _, err = msg.Write(message.Data); err != nil {
+					return fmt.Errorf("failed to write message bytes: %w", err)
+				}
+			default:
+				return fmt.Errorf("For schemaless encodings, JSON output only supports: JSON and CBOR. Found: %s", channel.MessageEncoding)
+			}
+		} else {
+			switch schema.Encoding {
+			case "ros1msg":
+				transcoder, ok := transcoders[channel.SchemaID]
+				if !ok {
+					packageName := strings.Split(schema.Name, "/")[0]
+					transcoder, err = ros.NewJSONTranscoder(packageName, schema.Data)
+					if err != nil {
+						return fmt.Errorf("failed to build transcoder for %s: %w", channel.Topic, err)
+					}
+					transcoders[channel.SchemaID] = transcoder
+				}
+				msgReader.Reset(message.Data)
+				err = transcoder.Transcode(msg, msgReader)
 				if err != nil {
-					return fmt.Errorf("failed to create file descriptor: %w", err)
+					return fmt.Errorf("failed to transcode %s record on %s: %w", schema.Name, channel.Topic, err)
 				}
-				descriptor, err := files.FindDescriptorByName(protoreflect.FullName(schema.Name))
+			case "protobuf":
+				messageDescriptor, ok := descriptors[channel.SchemaID]
+				if !ok {
+					fileDescriptorSet := &descriptorpb.FileDescriptorSet{}
+					if err := proto.Unmarshal(schema.Data, fileDescriptorSet); err != nil {
+						return fmt.Errorf("failed to build file descriptor set: %w", err)
+					}
+					files, err := protodesc.FileOptions{}.NewFiles(fileDescriptorSet)
+					if err != nil {
+						return fmt.Errorf("failed to create file descriptor: %w", err)
+					}
+					descriptor, err := files.FindDescriptorByName(protoreflect.FullName(schema.Name))
+					if err != nil {
+						return fmt.Errorf("failed to find descriptor: %w", err)
+					}
+					messageDescriptor = descriptor.(protoreflect.MessageDescriptor)
+					descriptors[channel.SchemaID] = messageDescriptor
+				}
+				protoMsg := dynamicpb.NewMessage(messageDescriptor.(protoreflect.MessageDescriptor))
+				if err := proto.Unmarshal(message.Data, protoMsg); err != nil {
+					return fmt.Errorf("failed to parse message: %w", err)
+				}
+				bytes, err := protojson.Marshal(protoMsg)
 				if err != nil {
-					return fmt.Errorf("failed to find descriptor: %w", err)
+					return fmt.Errorf("failed to marshal message: %w", err)
 				}
-				messageDescriptor = descriptor.(protoreflect.MessageDescriptor)
-				descriptors[channel.SchemaID] = messageDescriptor
+				if _, err = msg.Write(bytes); err != nil {
+					return fmt.Errorf("failed to write message bytes: %w", err)
+				}
+			case "jsonschema":
+				if _, err = msg.Write(message.Data); err != nil {
+					return fmt.Errorf("failed to write message bytes: %w", err)
+				}
+			default:
+				return fmt.Errorf("JSON output only supported for the following encodings - with schema: ros1msg, protobuf, and JSON; schemaless: JSON and CBOR. Found: %s", schema.Encoding)
 			}
-			protoMsg := dynamicpb.NewMessage(messageDescriptor.(protoreflect.MessageDescriptor))
-			if err := proto.Unmarshal(message.Data, protoMsg); err != nil {
-				return fmt.Errorf("failed to parse message: %w", err)
-			}
-			bytes, err := protojson.Marshal(protoMsg)
-			if err != nil {
-				return fmt.Errorf("failed to marshal message: %w", err)
-			}
-			if _, err = msg.Write(bytes); err != nil {
-				return fmt.Errorf("failed to write message bytes: %w", err)
-			}
-		case "jsonschema":
-			if _, err = msg.Write(message.Data); err != nil {
-				return fmt.Errorf("failed to write message bytes: %w", err)
-			}
-		default:
-			return fmt.Errorf("JSON output only supported for ros1msg, protobuf, and JSON schemas")
 		}
 		target.Topic = channel.Topic
 		target.Sequence = message.Sequence

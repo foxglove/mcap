@@ -1,9 +1,11 @@
 import contextlib
 import json
 from io import BytesIO
-from tempfile import TemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryFile
 from typing import List
 import zlib
+import cbor2
+import subprocess
 
 import lz4.frame
 import pytest
@@ -42,7 +44,7 @@ def generate_sample_data(compression: CompressionType):
     writer.add_message(
         channel_id=channel_id,
         log_time=0,
-        data=json.dumps({"sample": "test"}).encode("utf-8"),
+        data=json.dumps({"sample": "test"}).encode(encoding="utf-8"),
         publish_time=0,
     )
 
@@ -115,3 +117,26 @@ def test_out_of_order_messages():
     chunk_index = next(r for r in records if isinstance(r, ChunkIndex))
     assert chunk_index.message_start_time == 0
     assert chunk_index.message_end_time == 100
+
+def test_generate_sample_cbor_data():
+    file = NamedTemporaryFile("w+b")
+    writer = Writer(file, compression=CompressionType.ZSTD)
+    writer.start(library="test")
+
+    channel_id = writer.register_channel(
+        schema_id=0,
+        topic="sample_topic",
+        message_encoding="cbor",
+    )
+
+    writer.add_message(
+        channel_id=channel_id,
+        log_time=0,
+        data=cbor2.dumps({"sample": "test"}),
+        publish_time=0,
+    )
+
+    writer.finish()
+    file.seek(0)
+    result = subprocess.run(['mcap', 'cat', '--json', file.name], stdout=subprocess.PIPE)
+    assert result.stdout == b'{"topic":"sample_topic","sequence":0,"log_time":0.000000000,"publish_time":0.000000000,"data":{"sample":"test"}}\n'
