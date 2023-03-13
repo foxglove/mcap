@@ -108,7 +108,7 @@ private:
  */
 class MCAP_PUBLIC ICompressedReader : public IReadable {
 public:
-  virtual ~ICompressedReader() = default;
+  virtual ~ICompressedReader() override = default;
 
   /**
    * @brief Reset the reader state, clearing any internal buffers and state, and
@@ -212,7 +212,7 @@ public:
   LZ4Reader& operator=(const LZ4Reader&) = delete;
   LZ4Reader(LZ4Reader&&) = delete;
   LZ4Reader& operator=(LZ4Reader&&) = delete;
-  ~LZ4Reader();
+  ~LZ4Reader() override;
 
 private:
   void* decompressionContext_ = nullptr;  // LZ4F_dctx*
