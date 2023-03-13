@@ -777,6 +777,10 @@ type WriterOptions struct {
 	// SkipSummaryOffsets skips summary offset records.
 	SkipSummaryOffsets bool
 
+	// SkipMagic skips the magic bytes at the start of the file. This may be
+	// useful for resuming writes midway through a file.
+	SkipMagic bool
+
 	// OverrideLibrary causes the default header library to be overridden, not
 	// appended to.
 	OverrideLibrary bool
@@ -817,8 +821,10 @@ func encoderLevelFromZstd(level CompressionLevel) zstd.EncoderLevel {
 // NewWriter returns a new MCAP writer.
 func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	writer := newWriteSizer(w, opts.IncludeCRC)
-	if _, err := writer.Write(Magic); err != nil {
-		return nil, err
+	if !opts.SkipMagic {
+		if _, err := writer.Write(Magic); err != nil {
+			return nil, err
+		}
 	}
 	compressed := bytes.Buffer{}
 	var compressedWriter *countingCRCWriter
