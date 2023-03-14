@@ -3,6 +3,7 @@ package mcap
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 
@@ -65,9 +66,28 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	if err != nil {
 		return fmt.Errorf("failed to seek to summary start")
 	}
+
+	summarySection := make([]byte, footer.SummaryOffsetStart-footer.SummaryStart)
+	_, err = io.ReadFull(it.rs, summarySection)
+	if err != nil {
+		return fmt.Errorf("failed to read summary section")
+	}
+
+	lexer, err := NewLexer(bytes.NewReader(summarySection), &LexerOptions{
+		SkipMagic: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create lexer: %w", err)
+	}
+	defer lexer.Close()
+
 	for {
-		tokenType, record, err := it.lexer.Next(nil)
+		tokenType, record, err := lexer.Next(nil)
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				it.hasReadSummarySection = true
+				return nil
+			}
 			return fmt.Errorf("failed to get next token: %w", err)
 		}
 		switch tokenType {
@@ -123,9 +143,6 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 				return fmt.Errorf("failed to parse statistics: %w", err)
 			}
 			it.statistics = stats
-		case TokenFooter:
-			it.hasReadSummarySection = true
-			return nil
 		}
 	}
 }
