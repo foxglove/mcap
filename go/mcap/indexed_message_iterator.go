@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 
@@ -79,10 +78,6 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	for {
 		tokenType, record, err := lexer.Next(nil)
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				it.hasReadSummarySection = true
-				return nil
-			}
 			return fmt.Errorf("failed to get next token: %w", err)
 		}
 		switch tokenType {
@@ -138,6 +133,9 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 				return fmt.Errorf("failed to parse statistics: %w", err)
 			}
 			it.statistics = stats
+		case TokenFooter:
+			it.hasReadSummarySection = true
+			return nil
 		}
 	}
 }
