@@ -1,6 +1,7 @@
 package mcap
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
@@ -67,13 +68,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 		return fmt.Errorf("failed to seek to summary start")
 	}
 
-	summarySection := make([]byte, footer.SummaryOffsetStart-footer.SummaryStart)
-	_, err = io.ReadFull(it.rs, summarySection)
-	if err != nil {
-		return fmt.Errorf("failed to read summary section")
-	}
-
-	lexer, err := NewLexer(bytes.NewReader(summarySection), &LexerOptions{
+	lexer, err := NewLexer(bufio.NewReader(it.rs), &LexerOptions{
 		SkipMagic: true,
 	})
 	if err != nil {
