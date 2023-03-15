@@ -66,7 +66,7 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
           go-version: 1.18.x
       - run: cd go && make build-conformance-binaries
@@ -349,7 +349,7 @@ jobs:
       run:
         working-directory: go
     steps:
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
           go-version: 1.18.x
       - uses: actions/checkout@v3
@@ -411,7 +411,7 @@ jobs:
         with:
           fetch-depth: "0"
       - run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
           go-version: 1.18.x
       - name: Setup environment
