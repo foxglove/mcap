@@ -16,7 +16,6 @@ import (
 	"github.com/foxglove/mcap/go/cli/mcap/utils/ros"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/foxglove/mcap/go/mcap/readopts"
-	"github.com/fxamacker/cbor/v2"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -112,24 +111,12 @@ func printMessages(
 		}
 		if schema == nil || schema.Encoding == "" {
 			switch channel.MessageEncoding {
-			case "cbor":
-				var v map[string]interface{}
-				if err = cbor.Unmarshal(message.Data, &v); err != nil {
-					return fmt.Errorf("failed to decode cbor: %w", err)
-				}
-				encoded, err := json.Marshal(v)
-				if err != nil {
-					return fmt.Errorf("failed to encode object into json: %w", err)
-				}
-				if _, err = msg.Write(encoded); err != nil {
-					return fmt.Errorf("failed to write message bytes: %w", err)
-				}
 			case "json":
 				if _, err = msg.Write(message.Data); err != nil {
 					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
 			default:
-				return fmt.Errorf("For schemaless encodings, JSON output only supports: JSON and CBOR. Found: %s", channel.MessageEncoding)
+				return fmt.Errorf("For schemaless encodings, JSON output only supports: JSON. Found: %s", channel.MessageEncoding)
 			}
 		} else {
 			switch schema.Encoding {
@@ -182,7 +169,7 @@ func printMessages(
 					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
 			default:
-				return fmt.Errorf("JSON output only supported for the following encodings - with schema: ros1msg, protobuf, and JSON; schemaless: JSON and CBOR. Found: %s", schema.Encoding)
+				return fmt.Errorf("JSON output only supported for the following encodings - with schema: ros1msg, protobuf, and JSON; schemaless: JSON. Found: %s", schema.Encoding)
 			}
 		}
 		target.Topic = channel.Topic
