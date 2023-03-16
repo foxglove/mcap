@@ -213,6 +213,9 @@ export class ChunkCursor {
 
       result.record.records.sort(([logTimeA], [logTimeB]) => Number(logTimeA - logTimeB));
       if (reverse) {
+        // If we used `logTimeB - logTimeA` as the comparator for reverse iteration, messages with
+        // the same timestamp would not be in reverse order. To avoid this problem we use reverse()
+        // instead.
         result.record.records.reverse();
       }
 
