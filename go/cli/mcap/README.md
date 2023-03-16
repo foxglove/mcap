@@ -32,7 +32,7 @@ To install using [Homebrew](https://brew.sh) on macOS or Linux, run:
 
     brew install mcap
 
-#### Using go
+#### Using go (not recommended)
 
 To install from the latest commit, use
 

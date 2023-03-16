@@ -116,7 +116,7 @@ func printMessages(
 					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
 			default:
-				return fmt.Errorf("For schemaless encodings, JSON output only supports: JSON. Found: %s", channel.MessageEncoding)
+				return fmt.Errorf("For schema-less channels, JSON output is only supported with 'json' message encoding. Found: %s", channel.MessageEncoding)
 			}
 		} else {
 			switch schema.Encoding {
@@ -169,7 +169,7 @@ func printMessages(
 					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
 			default:
-				return fmt.Errorf("JSON output only supported for the following encodings - with schema: ros1msg, protobuf, and JSON; schemaless: JSON. Found: %s", schema.Encoding)
+				return fmt.Errorf("JSON output only supported for ros1msg, protobuf, and json schemas. Found: %s", schema.Encoding)
 			}
 		}
 		target.Topic = channel.Topic
