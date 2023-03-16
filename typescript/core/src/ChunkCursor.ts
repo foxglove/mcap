@@ -211,10 +211,9 @@ export class ChunkCursor {
         continue;
       }
 
+      result.record.records.sort(([logTimeA], [logTimeB]) => Number(logTimeA - logTimeB));
       if (reverse) {
-        result.record.records.sort(([logTimeA], [logTimeB]) => Number(logTimeB - logTimeA));
-      } else {
-        result.record.records.sort(([logTimeA], [logTimeB]) => Number(logTimeA - logTimeB));
+        result.record.records.reverse();
       }
 
       for (let i = 0; i < result.record.records.length; i++) {
