@@ -37,6 +37,8 @@ words:
   - bagfile
   - bfbs
   - callerid
+  - capnp
+  - capnproto
   - cbor
   - cmake
   - conanfile
