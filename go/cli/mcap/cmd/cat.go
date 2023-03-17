@@ -250,5 +250,4 @@ func init() {
 	catCmd.PersistentFlags().StringVarP(&catTopics, "topics", "", "", "comma-separated list of topics")
 	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false,
 		`print messages as JSON. Supported message encodings: ros1msg, protobuf, and JSON.`)
-		Supported schema-less encodings: json.`)
 }
