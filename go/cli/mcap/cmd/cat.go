@@ -169,7 +169,7 @@ func printMessages(
 					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
 			default:
-				return fmt.Errorf("JSON output only supported for ros1msg, protobuf, and json schemas. Found: %s", schema.Encoding)
+				return fmt.Errorf("JSON output only supported for ros1msg, protobuf, and jsonschema schemas. Found: %s", schema.Encoding)
 			}
 		}
 		target.Topic = channel.Topic
@@ -248,5 +248,7 @@ func init() {
 	catCmd.PersistentFlags().Int64VarP(&catStart, "start-secs", "", 0, "start time")
 	catCmd.PersistentFlags().Int64VarP(&catEnd, "end-secs", "", math.MaxInt64, "end time")
 	catCmd.PersistentFlags().StringVarP(&catTopics, "topics", "", "", "comma-separated list of topics")
-	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false, "print messages as JSON")
+	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false,
+		`print messages as JSON. Supported schema encodings: ros1msg, protobuf, and jsonschema. 
+		Supported schema-less encodings: json.`)
 }
