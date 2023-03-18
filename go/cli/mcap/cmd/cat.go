@@ -249,5 +249,5 @@ func init() {
 	catCmd.PersistentFlags().Int64VarP(&catEnd, "end-secs", "", math.MaxInt64, "end time")
 	catCmd.PersistentFlags().StringVarP(&catTopics, "topics", "", "", "comma-separated list of topics")
 	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false,
-		`print messages as JSON. Supported message encodings: ros1msg, protobuf, and JSON.`)
+		`print messages as JSON. Supported message encodings: ros1, protobuf, and json.`)
 }
