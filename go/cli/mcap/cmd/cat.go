@@ -109,57 +109,68 @@ func printMessages(
 			}
 			continue
 		}
-		switch schema.Encoding {
-		case "ros1msg":
-			transcoder, ok := transcoders[channel.SchemaID]
-			if !ok {
-				packageName := strings.Split(schema.Name, "/")[0]
-				transcoder, err = ros.NewJSONTranscoder(packageName, schema.Data)
+		if schema == nil || schema.Encoding == "" {
+			switch channel.MessageEncoding {
+			case "json":
+				if _, err = msg.Write(message.Data); err != nil {
+					return fmt.Errorf("failed to write message bytes: %w", err)
+				}
+			default:
+				return fmt.Errorf("For schema-less channels, JSON output is only supported with 'json' message encoding. Found: %s", channel.MessageEncoding)
+			}
+		} else {
+			switch schema.Encoding {
+			case "ros1msg":
+				transcoder, ok := transcoders[channel.SchemaID]
+				if !ok {
+					packageName := strings.Split(schema.Name, "/")[0]
+					transcoder, err = ros.NewJSONTranscoder(packageName, schema.Data)
+					if err != nil {
+						return fmt.Errorf("failed to build transcoder for %s: %w", channel.Topic, err)
+					}
+					transcoders[channel.SchemaID] = transcoder
+				}
+				msgReader.Reset(message.Data)
+				err = transcoder.Transcode(msg, msgReader)
 				if err != nil {
-					return fmt.Errorf("failed to build transcoder for %s: %w", channel.Topic, err)
+					return fmt.Errorf("failed to transcode %s record on %s: %w", schema.Name, channel.Topic, err)
 				}
-				transcoders[channel.SchemaID] = transcoder
-			}
-			msgReader.Reset(message.Data)
-			err = transcoder.Transcode(msg, msgReader)
-			if err != nil {
-				return fmt.Errorf("failed to transcode %s record on %s: %w", schema.Name, channel.Topic, err)
-			}
-		case "protobuf":
-			messageDescriptor, ok := descriptors[channel.SchemaID]
-			if !ok {
-				fileDescriptorSet := &descriptorpb.FileDescriptorSet{}
-				if err := proto.Unmarshal(schema.Data, fileDescriptorSet); err != nil {
-					return fmt.Errorf("failed to build file descriptor set: %w", err)
+			case "protobuf":
+				messageDescriptor, ok := descriptors[channel.SchemaID]
+				if !ok {
+					fileDescriptorSet := &descriptorpb.FileDescriptorSet{}
+					if err := proto.Unmarshal(schema.Data, fileDescriptorSet); err != nil {
+						return fmt.Errorf("failed to build file descriptor set: %w", err)
+					}
+					files, err := protodesc.FileOptions{}.NewFiles(fileDescriptorSet)
+					if err != nil {
+						return fmt.Errorf("failed to create file descriptor: %w", err)
+					}
+					descriptor, err := files.FindDescriptorByName(protoreflect.FullName(schema.Name))
+					if err != nil {
+						return fmt.Errorf("failed to find descriptor: %w", err)
+					}
+					messageDescriptor = descriptor.(protoreflect.MessageDescriptor)
+					descriptors[channel.SchemaID] = messageDescriptor
 				}
-				files, err := protodesc.FileOptions{}.NewFiles(fileDescriptorSet)
+				protoMsg := dynamicpb.NewMessage(messageDescriptor.(protoreflect.MessageDescriptor))
+				if err := proto.Unmarshal(message.Data, protoMsg); err != nil {
+					return fmt.Errorf("failed to parse message: %w", err)
+				}
+				bytes, err := protojson.Marshal(protoMsg)
 				if err != nil {
-					return fmt.Errorf("failed to create file descriptor: %w", err)
+					return fmt.Errorf("failed to marshal message: %w", err)
 				}
-				descriptor, err := files.FindDescriptorByName(protoreflect.FullName(schema.Name))
-				if err != nil {
-					return fmt.Errorf("failed to find descriptor: %w", err)
+				if _, err = msg.Write(bytes); err != nil {
+					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
-				messageDescriptor = descriptor.(protoreflect.MessageDescriptor)
-				descriptors[channel.SchemaID] = messageDescriptor
+			case "jsonschema":
+				if _, err = msg.Write(message.Data); err != nil {
+					return fmt.Errorf("failed to write message bytes: %w", err)
+				}
+			default:
+				return fmt.Errorf("JSON output only supported for ros1msg, protobuf, and jsonschema schemas. Found: %s", schema.Encoding)
 			}
-			protoMsg := dynamicpb.NewMessage(messageDescriptor.(protoreflect.MessageDescriptor))
-			if err := proto.Unmarshal(message.Data, protoMsg); err != nil {
-				return fmt.Errorf("failed to parse message: %w", err)
-			}
-			bytes, err := protojson.Marshal(protoMsg)
-			if err != nil {
-				return fmt.Errorf("failed to marshal message: %w", err)
-			}
-			if _, err = msg.Write(bytes); err != nil {
-				return fmt.Errorf("failed to write message bytes: %w", err)
-			}
-		case "jsonschema":
-			if _, err = msg.Write(message.Data); err != nil {
-				return fmt.Errorf("failed to write message bytes: %w", err)
-			}
-		default:
-			return fmt.Errorf("JSON output only supported for ros1msg, protobuf, and JSON schemas")
 		}
 		target.Topic = channel.Topic
 		target.Sequence = message.Sequence
@@ -237,5 +248,6 @@ func init() {
 	catCmd.PersistentFlags().Int64VarP(&catStart, "start-secs", "", 0, "start time")
 	catCmd.PersistentFlags().Int64VarP(&catEnd, "end-secs", "", math.MaxInt64, "end time")
 	catCmd.PersistentFlags().StringVarP(&catTopics, "topics", "", "", "comma-separated list of topics")
-	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false, "print messages as JSON")
+	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false,
+		`print messages as JSON. Supported message encodings: ros1, protobuf, and json.`)
 }
