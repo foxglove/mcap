@@ -38,6 +38,8 @@ To install from the latest commit, use
 
     go install github.com/foxglove/mcap/go/cli/mcap@latest
 
+Ensure that the go installation directory is in your path (e.g. `$HOME/go/bin` by default on Ubuntu).
+
 ### Examples:
 
 #### Bag to mcap conversion
