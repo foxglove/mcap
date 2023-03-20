@@ -675,6 +675,57 @@ describe("McapIndexedReader", () => {
     }
   });
 
+  it("handles multiple messages at same timestamp", async () => {
+    const tempBuffer = new TempBuffer();
+    const writer = new McapWriter({ writable: tempBuffer });
+    await writer.start({ library: "", profile: "" });
+    const channelId1 = await writer.registerChannel({
+      topic: "test1",
+      schemaId: 0,
+      messageEncoding: "",
+      metadata: new Map(),
+    });
+    const message1: TypedMcapRecords["Message"] = {
+      type: "Message",
+      channelId: channelId1,
+      sequence: 1,
+      logTime: 0n,
+      publishTime: 0n,
+      data: new Uint8Array([1]),
+    };
+    const message2: TypedMcapRecords["Message"] = {
+      type: "Message",
+      channelId: channelId1,
+      sequence: 2,
+      logTime: 0n,
+      publishTime: 0n,
+      data: new Uint8Array([2]),
+    };
+    const message3: TypedMcapRecords["Message"] = {
+      type: "Message",
+      channelId: channelId1,
+      sequence: 3,
+      logTime: 0n,
+      publishTime: 0n,
+      data: new Uint8Array([3]),
+    };
+    await writer.addMessage(message1);
+    await writer.addMessage(message2);
+    await writer.addMessage(message3);
+    await writer.end();
+
+    for (const reverse of [true, false]) {
+      let expected = [message1, message2, message3];
+      if (reverse) {
+        expected = expected.reverse();
+      }
+
+      const reader = await McapIndexedReader.Initialize({ readable: tempBuffer });
+
+      expect(await collect(reader.readMessages({ reverse }))).toEqual(expected);
+    }
+  });
+
   it("ensure that chunks are loaded only when needed", async () => {
     const channelA: TypedMcapRecord = {
       type: "Channel",

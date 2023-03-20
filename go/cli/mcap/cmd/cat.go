@@ -129,7 +129,7 @@ func printMessages(
 					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
 			default:
-				return fmt.Errorf("For schemaless encodings, JSON output only supports: JSON and CBOR. Found: %s", channel.MessageEncoding)
+				return fmt.Errorf("For schema-less channels, JSON output is only supported with 'json' and 'cbor' message encodings. Found: %s", channel.MessageEncoding)
 			}
 		} else {
 			switch schema.Encoding {
@@ -182,7 +182,7 @@ func printMessages(
 					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
 			default:
-				return fmt.Errorf("JSON output only supported for the following encodings - with schema: ros1msg, protobuf, and JSON; schemaless: JSON and CBOR. Found: %s", schema.Encoding)
+				return fmt.Errorf("JSON output only supported for ros1msg, protobuf, and jsonschema schemas. Found: %s", schema.Encoding)
 			}
 		}
 		target.Topic = channel.Topic
@@ -261,5 +261,6 @@ func init() {
 	catCmd.PersistentFlags().Int64VarP(&catStart, "start-secs", "", 0, "start time")
 	catCmd.PersistentFlags().Int64VarP(&catEnd, "end-secs", "", math.MaxInt64, "end time")
 	catCmd.PersistentFlags().StringVarP(&catTopics, "topics", "", "", "comma-separated list of topics")
-	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false, "print messages as JSON")
+	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false,
+		`print messages as JSON. Supported message encodings: ros1, protobuf, cbor, and json.`)
 }

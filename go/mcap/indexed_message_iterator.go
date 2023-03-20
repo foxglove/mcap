@@ -1,6 +1,7 @@
 package mcap
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"fmt"
@@ -65,8 +66,17 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	if err != nil {
 		return fmt.Errorf("failed to seek to summary start")
 	}
+
+	lexer, err := NewLexer(bufio.NewReader(it.rs), &LexerOptions{
+		SkipMagic: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create lexer: %w", err)
+	}
+	defer lexer.Close()
+
 	for {
-		tokenType, record, err := it.lexer.Next(nil)
+		tokenType, record, err := lexer.Next(nil)
 		if err != nil {
 			return fmt.Errorf("failed to get next token: %w", err)
 		}

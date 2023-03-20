@@ -356,10 +356,10 @@ struct MCAP_PUBLIC RecordOffset {
 
   RecordOffset() = default;
   explicit RecordOffset(ByteOffset offset_)
-      : offset(offset_){};
+      : offset(offset_) {}
   RecordOffset(ByteOffset offset_, ByteOffset chunkOffset_)
       : offset(offset_)
-      , chunkOffset(chunkOffset_){};
+      , chunkOffset(chunkOffset_) {}
 
   bool operator==(const RecordOffset& other) const;
   bool operator>(const RecordOffset& other) const;

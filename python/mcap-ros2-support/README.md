@@ -17,7 +17,7 @@ pip install mcap-ros2-support
 from mcap_ros2.reader import read_ros2_messages
 
 for msg in read_ros2_messages("my_data.mcap"):
-    print(f"{msg.topic}: f{msg.ros_msg}")
+    print(f"{msg.channel.topic}: f{msg.ros_msg}")
 ```
 
 ## Stay in touch
