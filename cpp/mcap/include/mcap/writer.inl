@@ -640,6 +640,30 @@ Status McapWriter::write(const Metadata& metadata) {
   return StatusCode::Success;
 }
 
+void McapWriter::setChunkOptions(size_t chunkSize, Compression type, CompressionLevel level) {
+  closeLastChunk();
+
+  uncompressedChunk_.reset();
+  lz4Chunk_.reset();
+  zstdChunk_.reset();
+
+  chunkSize_ = chunkSize;
+  compression_ = type;
+
+  switch (type) {
+    case Compression::None:
+    default:
+      uncompressedChunk_ = std::make_unique<BufferWriter>();
+      break;
+    case Compression::Lz4:
+      lz4Chunk_ = std::make_unique<LZ4Writer>(level, chunkSize);
+      break;
+    case Compression::Zstd:
+      zstdChunk_ = std::make_unique<ZStdWriter>(level, chunkSize);
+      break;
+  }
+}
+
 const Statistics& McapWriter::statistics() const {
   return statistics_;
 }
