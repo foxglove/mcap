@@ -389,6 +389,17 @@ public:
   Status write(const Metadata& metadata);
 
   /**
+   * @brief Set the chunk size, compression type, and compression level to use
+   * for the next Chunk record. This will close any open chunk and start a new
+   * one with the specified options.
+   *
+   * @param chunkSize Upper limit of the chunk size in bytes.
+   * @param type Compression type to use.
+   * @param level Compression level to use.
+   */
+  void setChunkOptions(size_t chunkSize, Compression type, CompressionLevel level);
+
+  /**
    * @brief Current MCAP file-level statistics. This is written as a Statistics
    * record in the Summary section of the MCAP file.
    */
