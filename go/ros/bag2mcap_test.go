@@ -92,59 +92,34 @@ func BenchmarkBag2MCAP(b *testing.B) {
 func TestChannelIdForConnection(t *testing.T) {
 	cases := []struct {
 		label             string
-		connId            uint32
-		knownConnIds      []uint32
+		connID            uint32
 		expectedErr       error
-		expectedChannelId uint16
-		expectedNewLength int
+		expectedChannelID uint16
 	}{
 		{
-			"no known connections",
+			"less than uint16 MAX",
 			10,
-			[]uint32{},
 			nil,
-			0,
-			1,
+			10,
 		},
 		{
-			"adding a new connection",
-			10,
-			[]uint32{100},
+			"equal to uint16 max",
+			math.MaxUint16,
 			nil,
-			1,
-			2,
-		},
-		{
-			"re-using an existing connection",
-			10,
-			[]uint32{10},
-			nil,
-			0,
-			1,
-		},
-		{
-			"maxed out number of connections, but this connection is known",
-			0,
-			make([]uint32, math.MaxUint16),
-			nil,
-			0,
 			math.MaxUint16,
 		},
 		{
-			"maxed out number of connections, can't add any more",
-			10,
-			make([]uint32, math.MaxUint16),
+			"too much",
+			math.MaxUint16 + 1,
 			ErrTooManyConnections,
 			0,
-			math.MaxUint16,
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.label, func(t *testing.T) {
-			channelID, err := channelIDForConnection(&c.knownConnIds, c.connId)
+			channelID, err := channelIDForConnection(c.connID)
 			assert.ErrorIs(t, err, c.expectedErr)
-			assert.Equal(t, c.expectedChannelId, channelID)
-			assert.Equal(t, c.expectedNewLength, len(c.knownConnIds))
+			assert.Equal(t, c.expectedChannelID, channelID)
 		})
 	}
 }

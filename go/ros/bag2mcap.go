@@ -19,7 +19,7 @@ var (
 )
 
 var (
-	ErrTooManyConnections = fmt.Errorf("bag contains more than %d connection IDs", math.MaxUint16)
+	ErrTooManyConnections = fmt.Errorf("bag contains connection ID > %d", math.MaxUint16)
 )
 
 type BagOp byte
@@ -245,21 +245,11 @@ func processBag(
 	return nil
 }
 
-func channelIDForConnection(knownConnIds *[]uint32, connId uint32) (uint16, error) {
-	// search the known set of connection IDs - we're assuming this linear search is faster
-	// than a hashmap for most bags with <1000 connections.
-	for index, knownConnId := range *knownConnIds {
-		if connId == knownConnId {
-			return uint16(index), nil
-		}
-	}
-	// need to add a new connection ID
-	if len(*knownConnIds) >= math.MaxUint16 {
+func channelIDForConnection(connID uint32) (uint16, error) {
+	if connID > math.MaxUint16 {
 		return 0, ErrTooManyConnections
 	}
-	*knownConnIds = append(*knownConnIds, connId)
-	newChannelId := len(*knownConnIds) - 1
-	return uint16(newChannelId), nil
+	return uint16(connID), nil
 }
 
 func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
@@ -276,7 +266,6 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
 		return err
 	}
 	seq := uint32(0)
-	connIds := make([]uint32, 0)
 	schemas := make(map[string]uint16)
 	return processBag(r,
 		func(header, data []byte) error {
@@ -314,7 +303,7 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
 				}
 				schemas[key] = schemaID
 			}
-			channelID, err := channelIDForConnection(&connIds, connID)
+			channelID, err := channelIDForConnection(connID)
 			if err != nil {
 				return err
 			}
@@ -338,7 +327,7 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
 				return err
 			}
 			nsecs := rosTimeToNanoseconds(time)
-			channelID, err := channelIDForConnection(&connIds, connID)
+			channelID, err := channelIDForConnection(connID)
 			if err != nil {
 				return err
 			}
