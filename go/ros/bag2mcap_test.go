@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -84,6 +85,66 @@ func BenchmarkBag2MCAP(b *testing.B) {
 				megabytesRead := stats.Size() / (1024 * 1024)
 				b.ReportMetric(float64(megabytesRead)/elapsed.Seconds(), "MB/sec")
 			}
+		})
+	}
+}
+
+func TestChannelIdForConnection(t *testing.T) {
+	cases := []struct {
+		label             string
+		connId            uint32
+		knownConnIds      []uint32
+		expectedErr       error
+		expectedChannelId uint16
+		expectedNewLength int
+	}{
+		{
+			"no known connections",
+			10,
+			[]uint32{},
+			nil,
+			0,
+			1,
+		},
+		{
+			"adding a new connection",
+			10,
+			[]uint32{100},
+			nil,
+			1,
+			2,
+		},
+		{
+			"re-using an existing connection",
+			10,
+			[]uint32{10},
+			nil,
+			0,
+			1,
+		},
+		{
+			"maxed out number of connections, but this connection is known",
+			0,
+			make([]uint32, math.MaxUint16),
+			nil,
+			0,
+			math.MaxUint16,
+		},
+		{
+			"maxed out number of connections, can't add any more",
+			10,
+			make([]uint32, math.MaxUint16),
+			ErrTooManyConnections,
+			0,
+			math.MaxUint16,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.label, func(t *testing.T) {
+			channelID, err := channelIDForConnection(&c.knownConnIds, c.connId)
+			assert.ErrorIs(t, err, c.expectedErr)
+			assert.Equal(t, c.expectedChannelId, channelID)
+			assert.Equal(t, c.expectedNewLength, len(c.knownConnIds))
 		})
 	}
 }
