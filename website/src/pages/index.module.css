@@ -1,0 +1,117 @@
+/**
+ * CSS files with the .module.css suffix will be treated as CSS modules
+ * and scoped locally.
+ */
+
+.hero {
+  --bg-color: #0c4471;
+  padding: 2rem 0;
+  background-color: var(--bg-color);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--bg-color) 85%, white),
+    var(--bg-color)
+  );
+  color: white;
+  text-align: center;
+}
+
+[data-theme="dark"] .hero {
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--bg-color) 85%, black),
+    var(--bg-color)
+  );
+}
+
+.heroLogo {
+  display: flex;
+  margin: auto;
+  justify-content: center;
+  align-items: center;
+}
+
+.heroLogo h1 {
+  display: none;
+}
+
+.blurb {
+  max-width: 60rem;
+  margin: 1.5rem auto;
+}
+
+.heroButtonPrimary,
+.heroButtonSecondary {
+  display: inline-block;
+  margin: 0 0.5rem;
+  padding: 0.5rem 2rem;
+  font-size: 1.125rem;
+  font-weight: bold;
+  border-radius: var(--ifm-button-border-radius);
+}
+
+.heroButtonPrimary:hover,
+.heroButtonSecondary:hover {
+  text-decoration: none;
+  box-shadow: 0 0 5px 0 rgb(0 0 0 / 0.1);
+  filter: brightness(105%);
+}
+
+.heroButtonPrimary {
+  color: white;
+  background-color: #6f3be8;
+}
+
+.heroButtonPrimary:hover {
+  color: white;
+}
+
+.heroButtonSecondary {
+  color: #222;
+  background-color: #ddd;
+}
+
+.heroButtonSecondary:hover {
+  color: var(--ifm-link-hover-color);
+}
+
+@media (min-width: 640px) {
+  .heroLogo h1 {
+    display: block;
+    margin: 2rem 5rem;
+    font-size: 3rem;
+  }
+}
+
+@media (min-width: 996px) {
+  .hero {
+    padding: 4rem 0;
+  }
+}
+
+.section {
+  padding: 4rem 0;
+}
+
+.featureGrid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 2rem 3rem;
+  text-align: center;
+}
+
+@media (min-width: 640px) {
+  .featureGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 996px) {
+  .featureGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.featureIcon {
+  display: inline-block;
+  width: 60px;
+  height: auto;
+}

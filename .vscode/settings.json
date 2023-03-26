@@ -1,6 +1,12 @@
 // -*- jsonc -*-
 {
   "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.trimTrailingWhitespace": true,
 
   "typescript.tsdk": "node_modules/typescript/lib",
   "prettier.prettierPath": "./node_modules/prettier",
@@ -16,17 +22,14 @@
     "**/node_modules": true,
     "tests/conformance/data": true,
     "python/**/build": true,
-    "python/docs/*-apidoc": true,
+    "python/docs/*-apidoc": true
   },
 
   "python.formatting.provider": "black",
   "python.analysis.typeCheckingMode": "strict",
   "python.linting.flake8Enabled": true,
   "python.linting.enabled": true,
-  "python.linting.flake8Args": [
-    "--config",
-    "python/.flake8"
-  ],
+  "python.linting.flake8Args": ["--config", "python/.flake8"],
   "python.analysis.extraPaths": [
     "./python/mcap",
     "./python/mcap-protobuf-support",
