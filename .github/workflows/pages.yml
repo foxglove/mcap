@@ -63,7 +63,7 @@ jobs:
       - run: mkdir __docs__
       - name: Generate TypeScript documentation
         run: |
-          yarn install --frozen-lockfile
+          yarn install --immutable
           yarn typedoc
 
       - run: tar -czf docs-typescript.tgz __docs__/typescript
