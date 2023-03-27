@@ -17,6 +17,7 @@
     "test:conformance:generate-inputs": "yarn workspace @foxglove/mcap-conformance generate-inputs --data-dir \"$(pwd)/tests/conformance/data\"",
     "test:conformance": "yarn workspace @foxglove/mcap-conformance run-tests --data-dir \"$(pwd)/tests/conformance/data\""
   },
+  "packageManager": "yarn@3.5.0",
   "devDependencies": {
     "cspell": "^6.26.3",
     "prettier": "^2.8.4",
