@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/pierrec/lz4/v4"
@@ -15,6 +16,10 @@ import (
 
 var (
 	BagMagic = []byte("#ROSBAG V2.0\n")
+)
+
+var (
+	ErrTooManyConnections = fmt.Errorf("bag contains connection ID > %d", math.MaxUint16)
 )
 
 type BagOp byte
@@ -240,6 +245,13 @@ func processBag(
 	return nil
 }
 
+func channelIDForConnection(connID uint32) (uint16, error) {
+	if connID > math.MaxUint16 {
+		return 0, ErrTooManyConnections
+	}
+	return uint16(connID), nil
+}
+
 func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
 	writer, err := mcap.NewWriter(w, opts)
 	if err != nil {
@@ -261,7 +273,7 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
 			if err != nil {
 				return err
 			}
-			connID := binary.LittleEndian.Uint16(conn)
+			connID := binary.LittleEndian.Uint32(conn)
 			topic, err := extractHeaderValue(header, headerTopic)
 			if err != nil {
 				return err
@@ -291,8 +303,12 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
 				}
 				schemas[key] = schemaID
 			}
+			channelID, err := channelIDForConnection(connID)
+			if err != nil {
+				return err
+			}
 			channelInfo := &mcap.Channel{
-				ID:              connID,
+				ID:              channelID,
 				Topic:           string(topic),
 				MessageEncoding: "ros1",
 				SchemaID:        schemas[key],
@@ -305,14 +321,18 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
 			if err != nil {
 				return err
 			}
-			connID := binary.LittleEndian.Uint16(conn)
+			connID := binary.LittleEndian.Uint32(conn)
 			time, err := extractHeaderValue(header, headerTime)
 			if err != nil {
 				return err
 			}
 			nsecs := rosTimeToNanoseconds(time)
+			channelID, err := channelIDForConnection(connID)
+			if err != nil {
+				return err
+			}
 			err = writer.WriteMessage(&mcap.Message{
-				ChannelID:   connID,
+				ChannelID:   channelID,
 				Sequence:    seq,
 				LogTime:     nsecs,
 				PublishTime: nsecs,
