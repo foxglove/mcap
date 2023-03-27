@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -84,6 +85,41 @@ func BenchmarkBag2MCAP(b *testing.B) {
 				megabytesRead := stats.Size() / (1024 * 1024)
 				b.ReportMetric(float64(megabytesRead)/elapsed.Seconds(), "MB/sec")
 			}
+		})
+	}
+}
+
+func TestChannelIdForConnection(t *testing.T) {
+	cases := []struct {
+		label             string
+		connID            uint32
+		expectedErr       error
+		expectedChannelID uint16
+	}{
+		{
+			"less than uint16 MAX",
+			10,
+			nil,
+			10,
+		},
+		{
+			"equal to uint16 max",
+			math.MaxUint16,
+			nil,
+			math.MaxUint16,
+		},
+		{
+			"too much",
+			math.MaxUint16 + 1,
+			ErrTooManyConnections,
+			0,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.label, func(t *testing.T) {
+			channelID, err := channelIDForConnection(c.connID)
+			assert.ErrorIs(t, err, c.expectedErr)
+			assert.Equal(t, c.expectedChannelID, channelID)
 		})
 	}
 }
