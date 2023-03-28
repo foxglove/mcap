@@ -15,13 +15,16 @@
   "module": "dist/esm/src/index.js",
   "main": "dist/cjs/src/index.js",
   "typings": "dist/esm/src/index.d.ts",
-  "typedocMain": "src/index.ts",
+  "typedoc": {
+    "entryPoint": "src/index.ts"
+  },
   "files": [
     "dist",
     "src"
   ],
   "scripts": {
-    "prepack": "tsc -b tsconfig.json tsconfig.cjs.json",
+    "build": "tsc -b tsconfig.json tsconfig.cjs.json",
+    "prepack": "yarn build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",

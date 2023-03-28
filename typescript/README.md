@@ -1,33 +1,8 @@
 # TypeScript libraries for MCAP
 
-Install dependencies:
+[MCAP](https://github.com/foxglove/mcap) is a modular container format and logging library for pub/sub messages with arbitrary message serialization. It is primarily intended for use in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
 
-```
-corepack enable
-yarn install
-```
+The following NPM packages are provided for use with JavaScript and TypeScript:
 
-Run lint/tests:
-
-```
-yarn workspace @mcap/core lint
-yarn workspace @mcap/core test
-```
-
-Read and validate an MCAP file:
-
-```
-yarn workspace @foxglove/mcap-example-validate validate file.mcap
-```
-
-Run benchmarks:
-
-```
-yarn workspace @foxglove/mcap-benchmarks bench
-```
-
-Run benchmarks with Chrome debugger attached to use profiling tools:
-
-```
-yarn workspace @foxglove/mcap-benchmarks bench:debug
-```
+- **@mcap/core** – low-level readers and writers
+- **@mcap/support** – support for well-known compression formats and encodings, and Node.js and browser environments

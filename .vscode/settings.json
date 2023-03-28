@@ -17,16 +17,15 @@
     "tests/conformance/data": true,
     "python/**/build": true,
     "python/docs/*-apidoc": true,
+    ".yarn/**": true,
+    "yarn.lock": true
   },
 
   "python.formatting.provider": "black",
   "python.analysis.typeCheckingMode": "strict",
   "python.linting.flake8Enabled": true,
   "python.linting.enabled": true,
-  "python.linting.flake8Args": [
-    "--config",
-    "python/.flake8"
-  ],
+  "python.linting.flake8Args": ["--config", "python/.flake8"],
   "python.analysis.extraPaths": [
     "./python/mcap",
     "./python/mcap-protobuf-support",

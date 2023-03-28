@@ -7,3 +7,11 @@ The `@mcap/core` package provides low-level readers and writers for the MCAP for
 ## Examples
 
 Examples of how to use the `@mcap/core` APIs can be found in the [TypeScript examples folder](https://github.com/foxglove/mcap/tree/main/typescript/examples) in the MCAP repo.
+
+## License
+
+`@mcap/core` is licensed under the [MIT License](https://opensource.org/licenses/MIT).
+
+## Stay in touch
+
+Join our [Slack channel](https://foxglove.dev/join-slack) to ask questions, share feedback, and stay up to date on what our team is working on.

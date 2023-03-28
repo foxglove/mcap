@@ -4,6 +4,8 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "./dist/esm",
-    "lib": ["es2020", "dom"]
+    "lib": ["es2020", "dom"],
+    "composite": true,
+    "incremental": true
   }
 }

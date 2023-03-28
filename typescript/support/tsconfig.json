@@ -2,8 +2,10 @@
   "extends": "@foxglove/tsconfig/base",
   "include": ["./src/**/*"],
   "compilerOptions": {
-    "rootDir": "./src",
     "outDir": "./dist/esm",
-    "lib": ["es2020", "dom"]
-  }
+    "lib": ["es2020", "dom"],
+    "composite": true,
+    "incremental": true
+  },
+  "references": [{ "path": "../core" }]
 }
