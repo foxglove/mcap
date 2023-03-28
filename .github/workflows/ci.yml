@@ -19,7 +19,7 @@ jobs:
           node-version: 16.x
           cache: yarn
 
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --immutable
       - run: echo '::add-matcher::.github/cspell-problem-matcher.json'
       - run: yarn spellcheck --no-progress
 
@@ -33,7 +33,7 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --immutable
       - run: yarn workspace @foxglove/mcap-conformance lint:ci
       - run: yarn workspace @foxglove/mcap-conformance typecheck
 
@@ -52,7 +52,7 @@ jobs:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
       - run: cd cpp && make ci
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner cpp-
 
@@ -70,7 +70,7 @@ jobs:
         with:
           go-version: 1.18.x
       - run: cd go && make build-conformance-binaries
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner go-
 
@@ -88,7 +88,7 @@ jobs:
         with:
           python-version: 3.7
       - run: cd python && pip install -e mcap
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner py-
 
@@ -102,7 +102,7 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner ts-
 
@@ -116,7 +116,7 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner ksy-
 
@@ -134,7 +134,7 @@ jobs:
         with:
           swift-version: "5.7"
       - run: swift build
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner swift-
 
@@ -153,7 +153,7 @@ jobs:
           toolchain: stable
           default: true
       - run: cd rust && cargo build --example=conformance_reader
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner rust-
 
@@ -166,7 +166,7 @@ jobs:
           node-version: 16.x
           cache: yarn
 
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --immutable
       - run: yarn docs:lint
 
   cpp:
@@ -221,7 +221,7 @@ jobs:
           node-version: 16.x
           cache: yarn
           registry-url: https://registry.npmjs.org
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --immutable
       - run: yarn workspace @mcap/core lint:ci
       - run: yarn workspace @mcap/core typecheck
       - run: yarn workspace @mcap/core test
@@ -249,7 +249,7 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-      - run: yarn install --frozen-lockfile
+      - run: yarn install --immutable
       - run: yarn workspace @foxglove/mcap-example-validate lint:ci
       - run: yarn workspace @foxglove/mcap-example-validate typecheck
       - run: yarn workspace @foxglove/mcap-benchmarks lint:ci

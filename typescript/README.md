@@ -1,5 +1,12 @@
 # TypeScript libraries for MCAP
 
+Install dependencies:
+
+```
+corepack enable
+yarn install
+```
+
 Run lint/tests:
 
 ```

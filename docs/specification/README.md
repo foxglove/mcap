@@ -279,8 +279,8 @@ A metadata record contains arbitrary user data in key-value pairs.
 
 | Bytes | Name | Type | Description |
 | --- | --- | --- | --- |
-| 4 + N | name | String | Example: `map_metadata`. |
-| 4 + N | metadata | `Map<string, string>` | Example keys: `robot_id`, `git_sha`, `timezone`, `run_id`. |
+| 4 + N | name | String | Example: `my_company_name_hardware_info`. |
+| 4 + N | metadata | `Map<string, string>` | Example keys: `part_id`, `serial`, `board_revision` |
 
 ### Metadata Index (op=0x0D)
 
