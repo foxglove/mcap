@@ -304,9 +304,9 @@ func TestRecover(t *testing.T) {
 		assert.Equal(t, 0, attachmentCounter)
 		assert.Equal(t, 0, metadataCounter)
 		assert.InDeltaMapValues(t, map[uint16]int{
-			1: 87,
-			2: 87,
-			3: 87,
+			1: 88,
+			2: 88,
+			3: 88,
 		}, messageCounter, 0.0)
 	})
 

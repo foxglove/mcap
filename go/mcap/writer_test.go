@@ -150,6 +150,7 @@ func TestChunkedReadWrite(t *testing.T) {
 			buf := &bytes.Buffer{}
 			w, err := NewWriter(buf, &WriterOptions{
 				Chunked:         true,
+				ChunkSize:       1,
 				Compression:     compression,
 				IncludeCRC:      true,
 				OverrideLibrary: true,
@@ -174,6 +175,12 @@ func TestChunkedReadWrite(t *testing.T) {
 					"callerid": "100", // cspell:disable-line
 				},
 			}))
+			assert.Nil(t, w.WriteChannel(&Channel{
+				ID:              2,
+				Topic:           "/test2",
+				MessageEncoding: "ros1",
+				SchemaID:        1,
+			}))
 			assert.Nil(t, w.WriteMessage(&Message{
 				ChannelID:   1,
 				Sequence:    0,
@@ -186,13 +193,25 @@ func TestChunkedReadWrite(t *testing.T) {
 					4,
 				},
 			}))
+			assert.Nil(t, w.WriteMessage(&Message{
+				ChannelID:   2,
+				Sequence:    0,
+				LogTime:     100,
+				PublishTime: 100,
+				Data: []byte{
+					1,
+					2,
+					3,
+					4,
+				},
+			}))
 			assert.Nil(t, w.Close())
-			assert.Equal(t, 1, len(w.ChunkIndexes))
+			assert.Equal(t, 2, len(w.ChunkIndexes))
 			assert.Equal(t, 0, len(w.AttachmentIndexes))
-			assert.Equal(t, uint64(1), w.Statistics.MessageCount)
+			assert.Equal(t, uint64(2), w.Statistics.MessageCount)
 			assert.Equal(t, uint32(0), w.Statistics.AttachmentCount)
-			assert.Equal(t, uint32(1), w.Statistics.ChannelCount)
-			assert.Equal(t, uint32(1), w.Statistics.ChunkCount)
+			assert.Equal(t, uint32(2), w.Statistics.ChannelCount)
+			assert.Equal(t, uint32(2), w.Statistics.ChunkCount)
 			assert.Equal(t, int(w.Offset()), buf.Len())
 			lexer, err := NewLexer(buf)
 			assert.Nil(t, err)
@@ -201,12 +220,19 @@ func TestChunkedReadWrite(t *testing.T) {
 				TokenHeader,
 				TokenSchema,
 				TokenChannel,
+				TokenChannel,
+				TokenMessage,
+				// Note: one message index per chunk, meaning that message indices for channels
+				// not present in the chunk are not written.
+				TokenMessageIndex,
 				TokenMessage,
 				TokenMessageIndex,
 				TokenDataEnd,
 				TokenSchema,
 				TokenChannel,
+				TokenChannel,
 				TokenStatistics,
+				TokenChunkIndex,
 				TokenChunkIndex,
 				TokenSummaryOffset,
 				TokenSummaryOffset,
