@@ -463,7 +463,8 @@ func (w *Writer) flushActiveChunk() error {
 	messageIndexOffsets := make(map[uint16]uint64)
 	if !w.opts.SkipMessageIndexing {
 		for _, chanID := range w.channelIDs {
-			if messageIndex, ok := w.messageIndexes[chanID]; ok {
+			messageIndex, ok := w.messageIndexes[chanID]
+			if ok && !messageIndex.IsEmpty() {
 				messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
 				err = w.WriteMessageIndex(messageIndex)
 				if err != nil {
