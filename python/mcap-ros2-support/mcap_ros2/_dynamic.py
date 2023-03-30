@@ -205,11 +205,11 @@ def read_message(
     :param data: The message payload to deserialize.
     :return: The deserialized message.
     """
-    msgdef = msgdefs[schema_name]
+    msgdef = msgdefs.get(schema_name)
     if msgdef is None:
         raise ValueError(f'Message definition not found for "{schema_name}"')
     reader = CdrReader(data)
-    return _read_complex_type(msgdef.msg_name, msgdef.fields, msgdefs, reader)
+    return _read_complex_type(msgdef, msgdefs, reader)
 
 
 def encode_message(
@@ -224,7 +224,7 @@ def encode_message(
     :param ros2_msg: The message to serialize.
     :return: The serialized message.
     """
-    msgdef = msgdefs[schema_name]
+    msgdef = msgdefs.get(schema_name)
     if msgdef is None:
         raise ValueError(f'Message definition not found for "{schema_name}"')
     output = BytesIO()
@@ -246,28 +246,29 @@ def _make_encode_message(
 
 
 def _read_complex_type(
-    msg_name: str,
-    fields: List[Field],
+    msgdef: MessageSpecification,
     msgdefs: Dict[str, MessageSpecification],
     reader: CdrReader,
 ) -> DecodedMessage:
     Msg = type(
-        msg_name,
+        msgdef.msg_name,
         (SimpleNamespace,),
         {
-            "__name__": msg_name,
-            "__slots__": [field.name for field in fields],
+            "__name__": msgdef.msg_name,
+            "__slots__": [field.name for field in msgdef.fields],
             "__repr__": __repr__,
             "__str__": __repr__,
+            "_type": str(msgdef.base_type),
+            "_full_text": str(msgdef),
         },
     )
     msg = Msg()
 
-    for field in fields:
+    for field in msgdef.fields:
         ftype = field.type
         if not ftype.is_primitive_type():
             # Complex type
-            nested_definition = msgdefs[f"{ftype.pkg_name}/{ftype.type}"]
+            nested_definition = msgdefs.get(f"{ftype.pkg_name}/{ftype.type}")
             if nested_definition is None:
                 raise ValueError(
                     f'Message definition not found for field "{field.name}" with '
@@ -283,8 +284,7 @@ def _read_complex_type(
                 )
                 array = [
                     _read_complex_type(
-                        nested_definition.msg_name,
-                        nested_definition.fields,
+                        nested_definition,
                         msgdefs,
                         reader,
                     )
@@ -293,8 +293,7 @@ def _read_complex_type(
                 setattr(msg, field.name, array)
             else:
                 value = _read_complex_type(
-                    nested_definition.msg_name,
-                    nested_definition.fields,
+                    nested_definition,
                     msgdefs,
                     reader,
                 )
@@ -302,7 +301,7 @@ def _read_complex_type(
         else:
             # Primitive type
             if ftype.is_array:
-                array_parser_fn = ARRAY_PARSERS[ftype.type]
+                array_parser_fn = ARRAY_PARSERS.get(ftype.type)
                 if array_parser_fn is None:
                     raise NotImplementedError(
                         f"Parsing for type {ftype.type}[] is not implemented"
@@ -316,7 +315,7 @@ def _read_complex_type(
                 value = array_parser_fn(reader, array_length)
                 setattr(msg, field.name, value)
             else:
-                parser_fn = FIELD_PARSERS[ftype.type]
+                parser_fn = FIELD_PARSERS.get(ftype.type)
                 if parser_fn is None:
                     raise NotImplementedError(
                         f"Parsing for type {ftype.type} is not implemented"
@@ -338,7 +337,7 @@ def _write_complex_type(
         ftype = field.type
         if not ftype.is_primitive_type():
             # Complex type
-            nested_definition = msgdefs[f"{ftype.pkg_name}/{ftype.type}"]
+            nested_definition = msgdefs.get(f"{ftype.pkg_name}/{ftype.type}")
             if nested_definition is None:
                 raise ValueError(
                     f'Message definition not found for field "{field.name}" with '
@@ -448,7 +447,7 @@ def _write_complex_type(
                         # Write the byte array values
                         writer.write_bytes(byte_array)
                 else:
-                    array_writer_fn = ARRAY_WRITERS[ftype.type]
+                    array_writer_fn = ARRAY_WRITERS.get(ftype.type)
                     if array_writer_fn is None:
                         raise NotImplementedError(
                             f"Writing for type {ftype.type}[] is not implemented"
@@ -484,7 +483,7 @@ def _write_complex_type(
                         # Write the array values
                         array_writer_fn(writer, array)
             else:
-                writer_fn = FIELD_WRITERS[ftype.type]
+                writer_fn = FIELD_WRITERS.get(ftype.type)
                 if writer_fn is None:
                     raise NotImplementedError(
                         f"Writing for type {ftype.type} is not implemented"
