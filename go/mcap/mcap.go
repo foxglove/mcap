@@ -166,6 +166,10 @@ func (idx *MessageIndex) Reset() {
 	idx.currentIndex = 0
 }
 
+func (idx *MessageIndex) IsEmpty() bool {
+	return idx.currentIndex == 0
+}
+
 // Entries lists the entries in the message index.
 func (idx *MessageIndex) Entries() []MessageIndexEntry {
 	return idx.Records[:idx.currentIndex]
