@@ -32,7 +32,8 @@ ignorePaths:
   - go
   - rust
   - cpp/examples/protobuf/proto
-  - flak.nix
+  - flake.nix
+  - flake.lock
 
 words:
   - bagfile
