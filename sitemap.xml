@@ -2,102 +2,102 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://mcap.dev/index.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/support-matrix.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/getting-started/flatbuffers.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/getting-started/json.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/getting-started/overview.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/getting-started/protobuf.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/getting-started/ros-1.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/getting-started/ros-2.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/guides/cpp/protobuf.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/guides/python/json.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/guides/python/protobuf.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/guides/python/ros1.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/guides/python/ros2.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/home/data-serialization-formats.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/home/messages-channels-and-schemas.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/motivation/evaluation-of-robotics-data-recording-file-formats.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/performance-comparison/rosbag2-plugin-comparison.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/specification/index.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/specification/appendix.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
     <url>
          <loc>https://mcap.dev/specification/explanatory-notes.html</loc>
-         <lastmod>2023-03-29</lastmod>
+         <lastmod>2023-03-30</lastmod>
          <changefreq>daily</changefreq>
     </url>
 </urlset>
