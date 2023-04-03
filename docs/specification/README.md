@@ -312,6 +312,53 @@ A Data End record indicates the end of the data section.
 | --- | --- | --- | --- |
 | 4 | data_section_crc | uint32 | CRC32 of all bytes from the beginning of the file up to the DataEnd record. A value of 0 indicates the CRC32 is not available. |
 
+### Custom Statistic (op=0x10)
+
+Records some statistic about the MCAP content not covered by the [Statistics](#statistics-op0x0b) record.
+
+| Bytes | Name           | Type    | Description                               |
+| ----- | -------------- | ------- | ----------------------------------------- |
+| 4 + N | name           | string  | the human-readable name of the statistic. |
+| 8     | value          | float64 | The statistic value.                      |
+| 4 + N | subject        | string  | The subject of this statistic.            |
+| 4 + N | display_format | string  | how this statistic should be displayed.   |
+
+#### Custom statistic subjects
+
+Custom Statistics specify a subject, which indicates what this statistic is about. Some subjects are well-known:
+
+| Subject | Description |
+| --- | --- |
+| `messages` | a statistics about all messages |
+| `channels` | a statistic about all channels |
+| `schemas` | a statistic about all schemas |
+| `metadatas` | a statistic about all metadata records |
+| `attachments` | a statistic about all attachment records |
+| `chunks` | a statistic about all chunks |
+| `this_channel` | a statistic about the channel record immediately preceding |
+| `this_schema` | a statistic about the schema record immediately preceding |
+| `this_metadata` | a statistic about a metadata record in the Data section, indicated by the MetadataIndex record immediately preceding |
+| `this_attachment` | a statistic about a attachment record in the Data section, indicated by the AttachmentIndex record immediately preceding |
+| `this_chunk` | a statistic about a chunk record in the Data section, indicated by the ChunkIndex record immediately preceding |
+
+All other subjects not prefixed with `_` are reserved. The empty string `""` is not a valid subject.
+
+#### Custom statistic display format
+
+Custom statistics include a `display_format` string which indicates how the statistic should be presented to human readers. SI units should be used where applicable.
+
+TODO fully specify format syntax
+
+##### Examples
+
+| `display_format` | Displayed result | Description |
+| --- | --- | --- |
+| `""` | `1234.567890000` | Default display |
+| `"{.2}m/s"` | `1234.56m/s` | Limited decimal places with SI units |
+| `"{.2M}B"` | `1.23kB` | Limited decimal places with metric prefix |
+| `"{M}B"` | `1.234567890000kB` | Metric prefix with no limit on decimal places |
+| `"{.2e}"` | `1.23e3` | Scientific units |
+
 ## Serialization
 
 ### Fixed-width types
