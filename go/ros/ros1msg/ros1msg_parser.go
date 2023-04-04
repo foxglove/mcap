@@ -77,9 +77,13 @@ func resolveDependentFields(
 			// type with its parent package.
 			// 3. The type may be "Header". This is a special case that needs to
 			// translate to std_msgs/Header.
+
+			// Start by assuming the parent package of the field is that of the overall type.
+			fieldParentPackage := parentPackage
+
 			typeIsQualified := strings.Contains(fieldType, "/")
 			if typeIsQualified {
-				parentPackage = strings.Split(fieldType, "/")[0]
+				fieldParentPackage = strings.Split(fieldType, "/")[0]
 			}
 			subdefinition, typeIsPresent := dependencies[fieldType]
 			switch {
@@ -91,14 +95,14 @@ func resolveDependentFields(
 					return nil, fmt.Errorf("dependency Header not found")
 				}
 			case !typeIsPresent && !typeIsQualified:
-				qualifiedType := parentPackage + "/" + fieldType
+				qualifiedType := fieldParentPackage + "/" + fieldType
 				subdefinition, ok = dependencies[qualifiedType]
 				if !ok {
 					return nil, fmt.Errorf("dependency %s not found", qualifiedType)
 				}
 			}
 			recordFields, err = resolveDependentFields(
-				parentPackage,
+				fieldParentPackage,
 				dependencies,
 				subdefinition,
 			)
