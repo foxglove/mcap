@@ -276,6 +276,72 @@ func TestROS1MSGParser(t *testing.T) {
 			},
 		},
 		{
+			"relative type different from parent type",
+			"my_package",
+			`my_package/MyType foo
+			===
+			MSG: my_package/MyType
+			my_other_package/MyOtherType foo
+			TypeInParentPackage bar
+			===
+			MSG: my_package/TypeInParentPackage
+			my_other_package/MyOtherType foo
+			===
+			MSG: my_other_package/MyOtherType
+			string data
+			`,
+			[]Field{
+				{
+					Name: "foo",
+					Type: Type{
+						BaseType: "my_package/MyType",
+						IsRecord: true,
+						Fields: []Field{
+							{
+								Name: "foo",
+								Type: Type{
+									BaseType: "my_other_package/MyOtherType",
+									IsRecord: true,
+									Fields: []Field{
+										{
+											Name: "data",
+											Type: Type{
+												BaseType: "string",
+											},
+										},
+									},
+								},
+							},
+							{
+								Name: "bar",
+								Type: Type{
+									BaseType: "TypeInParentPackage",
+									IsRecord: true,
+									Fields: []Field{
+										{
+											Name: "foo",
+											Type: Type{
+												BaseType: "my_other_package/MyOtherType",
+												IsRecord: true,
+												Fields: []Field{
+													{
+														Name: "data",
+														Type: Type{
+															BaseType: "string",
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
 			"uses tabs instead of spaces",
 			"",
 			"string foo\t# no spaces for me",
