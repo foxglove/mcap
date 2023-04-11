@@ -23,7 +23,8 @@ var (
 )
 
 type mcapDoctor struct {
-	reader io.ReadSeeker
+	reader   io.ReadSeeker
+	filename string
 
 	channels map[uint16]*mcap.Channel
 	schemas  map[uint16]*mcap.Schema
@@ -39,24 +40,35 @@ type mcapDoctor struct {
 	errorCount uint32
 }
 
+func (doctor *mcapDoctor) logStdout(level string, format string, v ...any) {
+	fmt.Printf("%s\t[%s]\t", doctor.filename, level)
+	fmt.Printf(format, v...)
+	fmt.Print("\n")
+}
+
+func (doctor *mcapDoctor) info(format string, v ...any) {
+	if verbose {
+		doctor.logStdout("INFO", format, v...)
+	}
+}
+
 func (doctor *mcapDoctor) warn(format string, v ...any) {
-	color.Yellow(format, v...)
+	color.Set(color.FgYellow)
+	doctor.logStdout("WARN", format, v...)
+	color.Unset()
 }
 
 func (doctor *mcapDoctor) error(format string, v ...any) {
-	color.Red(format, v...)
 	doctor.errorCount += 1
-}
-
-func (doctor *mcapDoctor) fatal(v ...any) {
 	color.Set(color.FgRed)
-	fmt.Println(v...)
+	doctor.logStdout("ERROR", format, v...)
 	color.Unset()
-	os.Exit(1)
 }
 
-func (doctor *mcapDoctor) fatalf(format string, v ...any) {
-	color.Red(format, v...)
+func (doctor *mcapDoctor) fatal(format string, v ...any) {
+	color.Set(color.FgRed)
+	doctor.logStdout("FATAL", format, v...)
+	color.Unset()
 	os.Exit(1)
 }
 
@@ -129,7 +141,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			doctor.fatalf("Failed to read next token: %s", err)
+			doctor.fatal("Failed to read next token: %s", err)
 		}
 		if len(data) > len(msg) {
 			msg = data
@@ -142,7 +154,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 		case mcap.TokenSchema:
 			schema, err := mcap.ParseSchema(data)
 			if err != nil {
-				doctor.error("Failed to parse schema:", err)
+				doctor.error("Failed to parse schema: %s", err)
 			}
 
 			if schema.Encoding == "" {
@@ -213,13 +225,14 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 }
 
 func (doctor *mcapDoctor) Examine() error {
+	doctor.info("starting examination")
 	lexer, err := mcap.NewLexer(doctor.reader, &mcap.LexerOptions{
 		SkipMagic:         false,
 		ValidateChunkCRCs: true,
 		EmitChunks:        true,
 	})
 	if err != nil {
-		doctor.fatal(err)
+		doctor.fatal("%s", err)
 	}
 	defer lexer.Close()
 
@@ -241,7 +254,7 @@ func (doctor *mcapDoctor) Examine() error {
 				}
 				break
 			}
-			doctor.fatalf("Failed to read next token: %s", err)
+			doctor.fatal("Failed to read next token: %s", err)
 		}
 		lastToken = tokenType
 		if len(data) > len(msg) {
@@ -384,7 +397,7 @@ func (doctor *mcapDoctor) Examine() error {
 		case mcap.TokenError:
 			// this is the value of the tokenType when there is an error
 			// from the lexer, which we caught at the top.
-			doctor.fatalf("Failed to parse:", err)
+			doctor.fatal("Failed to parse:", err)
 		}
 	}
 
@@ -437,15 +450,17 @@ func (doctor *mcapDoctor) Examine() error {
 		}
 	}
 	if doctor.errorCount == 0 {
+		doctor.info("finished OK")
 		return nil
 	} else {
 		return fmt.Errorf("encountered %d errors", doctor.errorCount)
 	}
 }
 
-func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
+func newMcapDoctor(reader io.ReadSeeker, filename string) *mcapDoctor {
 	return &mcapDoctor{
 		reader:       reader,
+		filename:     filename,
 		channels:     make(map[uint16]*mcap.Channel),
 		schemas:      make(map[uint16]*mcap.Schema),
 		chunkIndexes: make(map[uint64]*mcap.ChunkIndex),
@@ -455,28 +470,26 @@ func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
 
 func main(cmd *cobra.Command, args []string) {
 	ctx := context.Background()
-	if len(args) != 1 {
+	if len(args) < 1 {
 		fmt.Println("An MCAP file argument is required.")
 		os.Exit(1)
 	}
-	filename := args[0]
-	err := utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
-		doctor := newMcapDoctor(rs)
-		if remote {
-			doctor.warn("Will read full remote file")
+	for _, filename := range args {
+		err := utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
+			doctor := newMcapDoctor(rs, filename)
+			if remote {
+				doctor.warn("Will read full remote file")
+			}
+			return doctor.Examine()
+		})
+		if err != nil {
+			die("Doctor command failed: %s", err)
 		}
-		if verbose {
-			fmt.Printf("Examining %s\n", args[0])
-		}
-		return doctor.Examine()
-	})
-	if err != nil {
-		die("Doctor command failed: %s", err)
 	}
 }
 
 var doctorCommand = &cobra.Command{
-	Use:   "doctor <file>",
+	Use:   "doctor <file> [<file> ...]",
 	Short: "Check an MCAP file structure",
 	Run:   main,
 }
