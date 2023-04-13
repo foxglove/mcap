@@ -33,8 +33,6 @@ var (
 	catFormatJSON bool
 )
 
-type DecimalTime uint64
-
 func digits(n uint64) int {
 	if n == 0 {
 		return 1
@@ -47,9 +45,9 @@ func digits(n uint64) int {
 	return count
 }
 
-func (t DecimalTime) MarshalJSON() ([]byte, error) {
-	seconds := uint64(t) / 1e9
-	nanoseconds := uint64(t) % 1e9
+func formatDecimalTime(t uint64) []byte {
+	seconds := t / 1e9
+	nanoseconds := t % 1e9
 	requiredLength := digits(seconds) + 1 + 9
 	buf := make([]byte, 0, requiredLength)
 	buf = strconv.AppendInt(buf, int64(seconds), 10)
@@ -58,84 +56,109 @@ func (t DecimalTime) MarshalJSON() ([]byte, error) {
 		buf = append(buf, '0')
 	}
 	buf = strconv.AppendInt(buf, int64(nanoseconds), 10)
-	return buf, nil
+	return buf
 }
 
 type Message struct {
 	Topic       string          `json:"topic"`
 	Sequence    uint32          `json:"sequence"`
-	LogTime     DecimalTime     `json:"log_time"`
-	PublishTime DecimalTime     `json:"publish_time"`
+	LogTime     uint64          `json:"log_time"`
+	PublishTime uint64          `json:"publish_time"`
 	Data        json.RawMessage `json:"data"`
+	buf         *bytes.Buffer
 }
 
-func (m Message) Write(w io.Writer) error {
-	_, err := w.Write([]byte("{"))
+type jsonOutputWriter struct {
+	w   io.Writer
+	buf *bytes.Buffer
+}
+
+func newJSONOutputWriter(w io.Writer) *jsonOutputWriter {
+	return &jsonOutputWriter{
+		w:   w,
+		buf: &bytes.Buffer{},
+	}
+}
+
+func (w *jsonOutputWriter) writeMessage(
+	topic string,
+	sequence uint32,
+	logTime uint64,
+	publishTime uint64,
+	data []byte,
+) error {
+	w.buf.Reset()
+	_, err := w.buf.Write([]byte("{"))
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write([]byte(`"topic":`))
+	_, err = w.buf.Write([]byte(`"topic":`))
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write([]byte(`"`))
+	_, err = w.buf.Write([]byte(`"`))
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write([]byte(m.Topic))
+	_, err = w.buf.Write([]byte(topic))
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write([]byte(`",`))
+	_, err = w.buf.Write([]byte(`",`))
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write([]byte(`"sequence":`))
+	_, err = w.buf.Write([]byte(`"sequence":`))
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write([]byte(strconv.FormatUint(uint64(m.Sequence), 10)))
+	_, err = w.buf.Write([]byte(strconv.FormatUint(uint64(sequence), 10)))
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write([]byte(`,"log_time":`))
+	_, err = w.buf.Write([]byte(`,"log_time":`))
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write([]byte(`"` + strconv.FormatUint(uint64(m.LogTime), 10) + `"`))
+	_, err = w.buf.Write(formatDecimalTime(logTime))
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write([]byte(`,"publish_time":`))
+	_, err = w.buf.Write([]byte(`,"publish_time":`))
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write([]byte(`"` + strconv.FormatUint(uint64(m.PublishTime), 10) + `"`))
+	_, err = w.buf.Write(formatDecimalTime(publishTime))
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write([]byte(`,"data":`))
+	_, err = w.buf.Write([]byte(`,"data":`))
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write(m.Data)
+	_, err = w.buf.Write(data)
 	if err != nil {
 		return err
 	}
 
-	_, err = w.Write([]byte("}\n"))
+	_, err = w.buf.Write([]byte("}\n"))
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(w.w, w.buf)
 	if err != nil {
 		return err
 	}
@@ -166,7 +189,7 @@ func printMessages(
 	buf := make([]byte, 1024*1024)
 	transcoders := make(map[uint16]*ros.JSONTranscoder)
 	descriptors := make(map[uint16]protoreflect.MessageDescriptor)
-	target := Message{}
+	jsonWriter := newJSONOutputWriter(w)
 	for {
 		schema, channel, message, err := it.Next(buf)
 		if err != nil {
@@ -246,12 +269,13 @@ func printMessages(
 				return fmt.Errorf("JSON output only supported for ros1msg, protobuf, and jsonschema schemas. Found: %s", schema.Encoding)
 			}
 		}
-		target.Topic = channel.Topic
-		target.Sequence = message.Sequence
-		target.LogTime = DecimalTime(message.LogTime)
-		target.PublishTime = DecimalTime(message.PublishTime)
-		target.Data = msg.Bytes()
-		err = target.Write(w)
+		err = jsonWriter.writeMessage(
+			channel.Topic,
+			message.Sequence,
+			message.LogTime,
+			message.PublishTime,
+			msg.Bytes(),
+		)
 		if err != nil {
 			return fmt.Errorf("failed to write encoded message: %s", err)
 		}
