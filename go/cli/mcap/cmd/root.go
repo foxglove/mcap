@@ -2,17 +2,55 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"runtime/pprof"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var cfgFile string
+var profile bool
+
+var profileCloser func()
+
+func makeProfileCloser(profile bool) func() {
+	if !profile {
+		return func() {}
+	}
+	t := time.Now().Unix()
+	cpuprofile := fmt.Sprintf("cpu-%d.prof", t)
+	memprofile := fmt.Sprintf("mem-%d.prof", t)
+	cpuprof, err := os.Create(cpuprofile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	memprof, err := os.Create(memprofile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	pprof.StartCPUProfile(cpuprof)
+	return func() {
+		pprof.StopCPUProfile()
+		cpuprof.Close()
+
+		pprof.WriteHeapProfile(memprof)
+		memprof.Close()
+		fmt.Fprintf(os.Stderr, "Wrote profiles to %s and %s\n", cpuprofile, memprofile)
+	}
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "mcap",
 	Short: "\U0001F52A Officially the top-rated CLI tool for slicing and dicing MCAP files.",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		profileCloser = makeProfileCloser(profile)
+	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		profileCloser()
+	},
 }
 
 var PleaseRedirect = "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe"
@@ -29,6 +67,7 @@ func die(s string, args ...any) {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "Config file (default is $HOME/.mcap.yaml)")
+	rootCmd.PersistentFlags().BoolVar(&profile, "profile", false, "Record pprof profiles of command execution. Profiles will be written to timestamped files (mem-<time>.prof and cpu-<time>.prof). Defaults to false.")
 	rootCmd.InitDefaultVersionFlag()
 }
 
