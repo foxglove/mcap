@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"runtime/pprof"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -20,18 +19,19 @@ func makeProfileCloser(profile bool) func() {
 	if !profile {
 		return func() {}
 	}
-	t := time.Now().Unix()
-	cpuprofile := fmt.Sprintf("cpu-%d.prof", t)
-	memprofile := fmt.Sprintf("mem-%d.prof", t)
-	cpuprof, err := os.Create(cpuprofile)
-	if err != nil {
-		log.Fatal(err)
-	}
+
+	cpuprofile := "mcap-cpu.prof"
+	memprofile := "mcap-mem.prof"
 	memprof, err := os.Create(memprofile)
 	if err != nil {
 		log.Fatal(err)
 	}
+	cpuprof, err := os.Create(cpuprofile)
+	if err != nil {
+		log.Fatal(err)
+	}
 	pprof.StartCPUProfile(cpuprof)
+
 	return func() {
 		pprof.StopCPUProfile()
 		cpuprof.Close()
@@ -67,7 +67,7 @@ func die(s string, args ...any) {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "Config file (default is $HOME/.mcap.yaml)")
-	rootCmd.PersistentFlags().BoolVar(&profile, "profile", false, "Record pprof profiles of command execution. Profiles will be written to timestamped files (mem-<time>.prof and cpu-<time>.prof). Defaults to false.")
+	rootCmd.PersistentFlags().BoolVar(&profile, "profile", false, "Record pprof profiles of command execution. Profiles will be written to files mcap-mem.prof and mcap-cpu.prof. Defaults to false.")
 	rootCmd.InitDefaultVersionFlag()
 }
 
