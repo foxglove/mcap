@@ -1,10 +1,10 @@
 """ High-level classes for reading content out of MCAP data sources. """
 from abc import ABC, abstractmethod
-from typing import Iterable, Tuple, Iterator, Dict, Optional, List, IO
+from typing import Iterable, Tuple, Iterator, Dict, Optional, List, IO, Any, Callable
 import io
 
 from .data_stream import ReadDataStream
-from .exceptions import McapError
+from .exceptions import McapError, DecoderNotFoundError
 from .records import (
     Attachment,
     McapRecord,
@@ -87,6 +87,10 @@ def _chunks_matching_topics(
     return out
 
 
+DecoderDict = Dict[str, Callable[[Schema, Message], Any]]
+SchemalessDecoderDict = Dict[str, Callable[[Message], Any]]
+
+
 class McapReader(ABC):
     """Reads data out of an MCAP file, using the summary section where available to efficiently
     read only the parts of the file that are needed.
@@ -94,11 +98,19 @@ class McapReader(ABC):
     :param stream: a file-like object for reading the source data from.
     :param validate_crcs: if ``True``, will validate Chunk and DataEnd CRC values as messages are
         read.
+    :param decoders: a dictionary of {message_encoding: decoder_function} for decoding messages.
+        Decoder functions will be called with a Schema and a Message argument.
+    :param schemaless_decoders: a dictionary of {message_encoding: decoder_function} for decoding
+        messages. Decoder functions will be called with a single Message argument.
     """
 
-    @abstractmethod
-    def __init__(self, stream: IO[bytes], validate_crcs: bool = False):
-        raise NotImplementedError()
+    def __init__(
+        self,
+        decoders: Optional[DecoderDict] = None,
+        schemaless_decoders: Optional[SchemalessDecoderDict] = None,
+    ):
+        self._decoders = decoders if decoders else {}
+        self._schemaless_decoders = schemaless_decoders if schemaless_decoders else {}
 
     @abstractmethod
     def iter_messages(
@@ -122,6 +134,60 @@ class McapReader(ABC):
             yielded in descending log time order.
         """
         raise NotImplementedError()
+
+    def iter_decoded_messages(
+        self,
+        topics: Optional[Iterable[str]] = None,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        log_time_order: bool = True,
+        reverse: bool = False,
+    ) -> Iterator[Tuple[Optional[Schema], Channel, Message, Any]]:
+        """iterates through messages in an MCAP, decoding their contents.
+        :param topics: if not None, only messages from these topics will be returned.
+        :param start_time: an integer nanosecond timestamp. if provided, messages logged before this
+            timestamp are not included.
+        :param end_time: an integer nanosecond timestamp. if provided, messages logged after this
+            timestamp are not included.
+        :param log_time_order: if True, messages will be yielded in ascending log time order. If
+            False, messages will be yielded in the order they appear in the MCAP file.
+        :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
+            yielded in descending log time order.
+        """
+        message_iterator = self.iter_messages(
+            topics, start_time, end_time, log_time_order, reverse
+        )
+
+        for schema, channel, message in message_iterator:
+            if schema is None:
+                schemaless_decoder = self._schemaless_decoders.get(
+                    channel.message_encoding
+                )
+                if schemaless_decoder is not None:
+                    yield schema, channel, message, schemaless_decoder(message)
+                    continue
+                available_decoders = ", ".join(self._schemaless_decoders)
+                raise DecoderNotFoundError(
+                    f"Decoder not found for schemaless message encoding {channel.message_encoding}."
+                    f" Available decoders: {available_decoders}"
+                )
+            decoder = self._decoders.get(channel.message_encoding)
+            if decoder is not None:
+                yield schema, channel, message, decoder(schema, message)
+                continue
+            # some message encodings can be decoded with or without a schema, such as JSON.
+            schemaless_decoder = self._schemaless_decoders.get(channel.message_encoding)
+            if schemaless_decoder is not None:
+                yield schema, channel, message, schemaless_decoder(message)
+                continue
+            available_decoders = ", ".join(
+                set(self._decoders) | set(self._schemaless_decoders)
+            )
+            raise DecoderNotFoundError(
+                f"Decoder not found for message encoding {channel.message_encoding},"
+                f" schema encoding {schema.encoding}."
+                f" Available decoders: {available_decoders}"
+            )
 
     @abstractmethod
     def get_header(self) -> Header:
@@ -161,7 +227,14 @@ class SeekingReader(McapReader):
         data section CRC, use :py:class:`NonSeekingReader`.
     """
 
-    def __init__(self, stream: IO[bytes], validate_crcs: bool = False):
+    def __init__(
+        self,
+        stream: IO[bytes],
+        validate_crcs: bool = False,
+        decoders: Optional[DecoderDict] = None,
+        schemaless_decoders: Optional[SchemalessDecoderDict] = None,
+    ):
+        super().__init__(decoders, schemaless_decoders)
         self._stream = stream
         self._validate_crcs = validate_crcs
         self._summary: Optional[Summary] = None
@@ -295,7 +368,14 @@ class NonSeekingReader(McapReader):
     :param validate_crcs: if ``True``, will validate chunk and data section CRC values.
     """
 
-    def __init__(self, stream: IO[bytes], validate_crcs: bool = False):
+    def __init__(
+        self,
+        stream: IO[bytes],
+        validate_crcs: bool = False,
+        decoders: Optional[DecoderDict] = None,
+        schemaless_decoders: Optional[SchemalessDecoderDict] = None,
+    ):
+        super().__init__(decoders, schemaless_decoders)
         self._stream_reader = StreamReader(stream, validate_crcs=validate_crcs)
         self._schemas: Dict[int, Schema] = {}
         self._channels: Dict[int, Channel] = {}
