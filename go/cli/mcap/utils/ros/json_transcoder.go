@@ -3,7 +3,6 @@ package ros
 import (
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -210,8 +209,7 @@ func (t *JSONTranscoder) string(w io.Writer, r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	enc := json.NewEncoder(w)
-	err = enc.Encode(string(t.buf[:length]))
+	_, err = w.Write([]byte(strconv.QuoteToASCII(string(t.buf[:length]))))
 	if err != nil {
 		return err
 	}
@@ -462,8 +460,8 @@ func (t *JSONTranscoder) record(fields []recordField) converter {
 			buf[0] = '"'
 			buf[1+len(field.name)] = '"'
 			buf[2+len(field.name)] = ':'
-			copy(buf[1:], field.name)
-			_, err := w.Write(buf[:3+len(field.name)])
+			n := copy(buf[1:], field.name)
+			_, err := w.Write(buf[:3+n])
 			if err != nil {
 				return fmt.Errorf("failed to write field %s name: %w", field.name, err)
 			}
