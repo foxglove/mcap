@@ -150,6 +150,24 @@ func TestJSONTranscoding(t *testing.T) {
 			},
 			`{"foo":{"bar":{"baz":"hello"}}}`,
 		},
+		{
+			"array of record",
+			"",
+			`Foo[] foo
+			===
+			MSG: Foo
+			string bar
+			string baz
+			`,
+			[]byte{
+				0x02, 0x00, 0x00, 0x00, // two elements
+				0x03, 0x00, 0x00, 0x00, 'b', 'a', 'z',
+				0x03, 0x00, 0x00, 0x00, 'b', 'a', 'z',
+				0x03, 0x00, 0x00, 0x00, 'b', 'a', 'z',
+				0x03, 0x00, 0x00, 0x00, 'b', 'a', 'z',
+			},
+			`{"foo":[{"bar":"baz","baz":"baz"},{"bar":"baz","baz":"baz"}]}`,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
@@ -159,7 +177,7 @@ func TestJSONTranscoding(t *testing.T) {
 			assert.Nil(t, err)
 			err = transcoder.Transcode(buf, bytes.NewReader(c.input))
 			assert.Nil(t, err)
-			assert.JSONEq(t, c.expectedJSON, buf.String())
+			assert.Equal(t, c.expectedJSON, buf.String())
 		})
 	}
 }
@@ -438,7 +456,7 @@ func TestSingleRecordConversion(t *testing.T) {
 			converter := transcoder.record(c.fields)
 			err := converter(buf, bytes.NewBuffer(c.input))
 			assert.Nil(t, err)
-			assert.JSONEq(t, c.output, buf.String())
+			assert.Equal(t, c.output, buf.String())
 		})
 	}
 }
