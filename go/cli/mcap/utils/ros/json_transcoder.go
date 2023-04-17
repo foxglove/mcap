@@ -298,13 +298,30 @@ func (t *JSONTranscoder) float32(w io.Writer, r io.Reader) error {
 	}
 	x := binary.LittleEndian.Uint32(t.buf[:4])
 	float := float64(math.Float32frombits(x))
-	t.formattedNumber = strconv.AppendFloat(t.formattedNumber, float, 'f', -1, 32)
+	t.formattedNumber = formatFloat(t.formattedNumber, float, 32)
 	_, err = w.Write(t.formattedNumber)
 	if err != nil {
 		return err
 	}
 	t.formattedNumber = t.formattedNumber[:0]
 	return nil
+}
+
+// formatFloat represents floating point numbers as JSON values. NaN and infinity are represented
+// as strings consistent with `protojson` output.
+// https://protobuf.dev/programming-guides/proto3/#json
+func formatFloat(buf []byte, float float64, precision int) []byte {
+	switch {
+	case math.IsNaN(float):
+		buf = append(buf, []byte(`"NaN"`)...)
+	case math.IsInf(float, 1):
+		buf = append(buf, []byte(`"Infinity"`)...)
+	case math.IsInf(float, -1):
+		buf = append(buf, []byte(`"-Infinity"`)...)
+	default:
+		buf = strconv.AppendFloat(buf, float, 'f', -1, precision)
+	}
+	return buf
 }
 
 func (t *JSONTranscoder) float64(w io.Writer, r io.Reader) error {
@@ -314,7 +331,7 @@ func (t *JSONTranscoder) float64(w io.Writer, r io.Reader) error {
 	}
 	x := binary.LittleEndian.Uint64(t.buf[:8])
 	float := math.Float64frombits(x)
-	t.formattedNumber = strconv.AppendFloat(t.formattedNumber, float, 'f', -1, 64)
+	t.formattedNumber = formatFloat(t.formattedNumber, float, 64)
 	_, err = w.Write(t.formattedNumber)
 	if err != nil {
 		return err

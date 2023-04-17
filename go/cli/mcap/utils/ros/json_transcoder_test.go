@@ -325,6 +325,42 @@ func TestSingleRecordConversion(t *testing.T) {
 			`{"foo":3.14159}`,
 		},
 		{
+			"float32 NaN",
+			"",
+			[]recordField{
+				{
+					name:      "foo",
+					converter: transcoder.float32,
+				},
+			},
+			[]byte{0, 0, 192, 127},
+			`{"foo":"NaN"}`,
+		},
+		{
+			"float32 Infinity",
+			"",
+			[]recordField{
+				{
+					name:      "foo",
+					converter: transcoder.float32,
+				},
+			},
+			[]byte{0, 0, 128, 127},
+			`{"foo":"Infinity"}`,
+		},
+		{
+			"float32 -Infinity",
+			"",
+			[]recordField{
+				{
+					name:      "foo",
+					converter: transcoder.float32,
+				},
+			},
+			[]byte{0, 0, 128, 255},
+			`{"foo":"-Infinity"}`,
+		},
+		{
 			"float64",
 			"",
 			[]recordField{
@@ -335,6 +371,42 @@ func TestSingleRecordConversion(t *testing.T) {
 			},
 			[]byte{24, 106, 203, 110, 105, 118, 1, 64},
 			`{"foo":2.18281828459045}`,
+		},
+		{
+			"float64 NaN",
+			"",
+			[]recordField{
+				{
+					name:      "foo",
+					converter: transcoder.float64,
+				},
+			},
+			[]byte{1, 0, 0, 0, 0, 0, 248, 127},
+			`{"foo":"NaN"}`,
+		},
+		{
+			"float64 Infinity",
+			"",
+			[]recordField{
+				{
+					name:      "foo",
+					converter: transcoder.float64,
+				},
+			},
+			[]byte{0, 0, 0, 0, 0, 0, 240, 127},
+			`{"foo":"Infinity"}`,
+		},
+		{
+			"float64 -Infinity",
+			"",
+			[]recordField{
+				{
+					name:      "foo",
+					converter: transcoder.float64,
+				},
+			},
+			[]byte{0, 0, 0, 0, 0, 0, 240, 255},
+			`{"foo":"-Infinity"}`,
 		},
 		{
 			"time",
