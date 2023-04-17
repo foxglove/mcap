@@ -1,4 +1,4 @@
-from typing import Dict, Any, Type
+from typing import Dict, Any, Type, Callable, Optional
 
 try:
     # If the user has genpy on their PATH from an existing ROS1 environment, use that.
@@ -10,7 +10,8 @@ except ImportError:
 
 from mcap.exceptions import McapError
 from mcap.records import Message, Schema
-from mcap.well_known import SchemaEncoding
+from mcap.well_known import SchemaEncoding, MessageEncoding
+from mcap.decoder import DecoderFactory as McapDecoderFactory
 
 
 class McapROS1DecodeError(McapError):
@@ -19,35 +20,30 @@ class McapROS1DecodeError(McapError):
     pass
 
 
-class Decoder:
+class DecoderFactory(McapDecoderFactory):
     def __init__(self):
-        """Decodes ROS1 messages from MCAP Message records."""
         self._types: Dict[int, Type[Any]] = {}
 
-    def decode(self, schema: Schema, message: Message) -> Any:
-        """Takes a Message record from an MCAP along with its associated Schema,
-        and returns the decoded ROS1 message from within.
-
-        :param schema: The message schema record from the MCAP.
-        :type schema: mcap.records.Schema
-        :param message: The message record containing content to be decoded.
-        :type message: mcap.records.Message
-        :raises McapROS1DecodeError: if the content could not be decoded as a ROS1 message with
-            the given schema.
-        :return: The decoded message content.
-        """
-        if schema.encoding != SchemaEncoding.ROS1:
-            raise McapROS1DecodeError(
-                f"can't decode schema with encoding {schema.encoding}"
-            )
+    def decoder_for(
+        self, message_encoding: str, schema: Optional[Schema]
+    ) -> Optional[Callable[[bytes], Any]]:
+        if (
+            message_encoding != MessageEncoding.ROS1
+            or schema is None
+            or schema.encoding == SchemaEncoding.ROS1
+        ):
+            return None
         generated_type = self._types.get(schema.id)
         if generated_type is None:
-            type_dict = dynamic.generate_dynamic(  # type: ignore
+            type_dict: Dict[str, Type[Any]] = dynamic.generate_dynamic(  # type: ignore
                 schema.name, schema.data.decode()
             )
             generated_type = type_dict[schema.name]
             self._types[schema.id] = generated_type
 
-        ros_msg = generated_type()
-        ros_msg.deserialize(message.data)
-        return ros_msg
+        def decoder(data: bytes):
+            ros_msg = generated_type()
+            ros_msg.deserialize(bytes)
+            return ros_msg
+
+        return decoder

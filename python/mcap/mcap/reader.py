@@ -1,6 +1,17 @@
-""" High-level classes for reading content out of MCAP data sources. """
+""" High-level classes for reading content out of MCAP data sources.
+"""
 from abc import ABC, abstractmethod
-from typing import Iterable, Tuple, Iterator, Dict, Optional, List, IO, Any, Callable
+from typing import (
+    Iterable,
+    Tuple,
+    Iterator,
+    Dict,
+    Optional,
+    List,
+    IO,
+    Any,
+    Callable,
+)
 import io
 
 from .data_stream import ReadDataStream
@@ -24,6 +35,7 @@ from .stream_reader import StreamReader, breakup_chunk, MAGIC_SIZE
 from .data_stream import RecordBuilder
 from .summary import Summary
 from ._message_queue import MessageQueue
+from .decoder import DecoderFactory
 
 
 def _get_record_size(record: McapRecord):
@@ -87,10 +99,6 @@ def _chunks_matching_topics(
     return out
 
 
-DecoderDict = Dict[str, Callable[[Schema, Message], Any]]
-SchemalessDecoderDict = Dict[str, Callable[[Message], Any]]
-
-
 class McapReader(ABC):
     """Reads data out of an MCAP file, using the summary section where available to efficiently
     read only the parts of the file that are needed.
@@ -99,18 +107,17 @@ class McapReader(ABC):
     :param validate_crcs: if ``True``, will validate Chunk and DataEnd CRC values as messages are
         read.
     :param decoders: a dictionary of {message_encoding: decoder_function} for decoding messages.
-        Decoder functions will be called with a Schema and a Message argument.
-    :param schemaless_decoders: a dictionary of {message_encoding: decoder_function} for decoding
-        messages. Decoder functions will be called with a single Message argument.
     """
+
+    # Registered decoders: support modules can register themselves as default decoders
+    # on import.
 
     def __init__(
         self,
-        decoders: Optional[DecoderDict] = None,
-        schemaless_decoders: Optional[SchemalessDecoderDict] = None,
+        decoder_factories: Iterable[DecoderFactory] = (),
     ):
-        self._decoders = decoders if decoders else {}
-        self._schemaless_decoders = schemaless_decoders if schemaless_decoders else {}
+        self._decoder_factories = decoder_factories
+        self._decoders: dict[int, Callable[[bytes], Any]] = {}
 
     @abstractmethod
     def iter_messages(
@@ -144,6 +151,7 @@ class McapReader(ABC):
         reverse: bool = False,
     ) -> Iterator[Tuple[Optional[Schema], Channel, Message, Any]]:
         """iterates through messages in an MCAP, decoding their contents.
+
         :param topics: if not None, only messages from these topics will be returned.
         :param start_time: an integer nanosecond timestamp. if provided, messages logged before this
             timestamp are not included.
@@ -158,36 +166,24 @@ class McapReader(ABC):
             topics, start_time, end_time, log_time_order, reverse
         )
 
-        for schema, channel, message in message_iterator:
-            if schema is None:
-                schemaless_decoder = self._schemaless_decoders.get(
-                    channel.message_encoding
-                )
-                if schemaless_decoder is not None:
-                    yield schema, channel, message, schemaless_decoder(message)
-                    continue
-                available_decoders = ", ".join(self._schemaless_decoders)
-                raise DecoderNotFoundError(
-                    f"Decoder not found for schemaless message encoding {channel.message_encoding}."
-                    f" Available decoders: {available_decoders}"
-                )
-            decoder = self._decoders.get(channel.message_encoding)
+        def decoded_message(
+            schema: Optional[Schema], channel: Channel, message: Message
+        ) -> Any:
+            decoder = self._decoders.get(message.channel_id)
             if decoder is not None:
-                yield schema, channel, message, decoder(schema, message)
-                continue
-            # some message encodings can be decoded with or without a schema, such as JSON.
-            schemaless_decoder = self._schemaless_decoders.get(channel.message_encoding)
-            if schemaless_decoder is not None:
-                yield schema, channel, message, schemaless_decoder(message)
-                continue
-            available_decoders = ", ".join(
-                set(self._decoders) | set(self._schemaless_decoders)
-            )
+                return decoder(message.data)
+            for factory in self._decoder_factories:
+                decoder = factory.decoder_for(channel.message_encoding, schema)
+                if decoder is not None:
+                    self._decoders[message.channel_id] = decoder
+                    return decoder(message.data)
+
             raise DecoderNotFoundError(
-                f"Decoder not found for message encoding {channel.message_encoding},"
-                f" schema encoding {schema.encoding}."
-                f" Available decoders: {available_decoders}"
+                f"no decoder factory supplied for message encoding {channel.message_encoding}, schema {schema}"
             )
+
+        for schema, channel, message in message_iterator:
+            yield schema, channel, message, decoded_message(schema, channel, message)
 
     @abstractmethod
     def get_header(self) -> Header:
@@ -210,11 +206,19 @@ class McapReader(ABC):
         raise NotImplementedError()
 
 
-def make_reader(stream: IO[bytes], validate_crcs: bool = False) -> McapReader:
+def make_reader(
+    stream: IO[bytes],
+    validate_crcs: bool = False,
+    decoder_factories: Iterable[DecoderFactory] = (),
+) -> McapReader:
     """constructs the appropriate McapReader implementation for this data source."""
     if stream.seekable():
-        return SeekingReader(stream, validate_crcs=validate_crcs)
-    return NonSeekingReader(stream, validate_crcs=validate_crcs)
+        return SeekingReader(
+            stream, validate_crcs=validate_crcs, decoder_factories=decoder_factories
+        )
+    return NonSeekingReader(
+        stream, validate_crcs=validate_crcs, decoder_factories=decoder_factories
+    )
 
 
 class SeekingReader(McapReader):
@@ -231,10 +235,9 @@ class SeekingReader(McapReader):
         self,
         stream: IO[bytes],
         validate_crcs: bool = False,
-        decoders: Optional[DecoderDict] = None,
-        schemaless_decoders: Optional[SchemalessDecoderDict] = None,
+        decoder_factories: Iterable[DecoderFactory] = (),
     ):
-        super().__init__(decoders, schemaless_decoders)
+        super().__init__(decoder_factories=decoder_factories)
         self._stream = stream
         self._validate_crcs = validate_crcs
         self._summary: Optional[Summary] = None
@@ -258,6 +261,7 @@ class SeekingReader(McapReader):
             False, messages will be yielded in the order they appear in the MCAP file.
         :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
             yielded in descending log time order.
+
         """
         summary = self.get_summary()
         if summary is None or len(summary.chunk_indexes) == 0:
@@ -372,10 +376,9 @@ class NonSeekingReader(McapReader):
         self,
         stream: IO[bytes],
         validate_crcs: bool = False,
-        decoders: Optional[DecoderDict] = None,
-        schemaless_decoders: Optional[SchemalessDecoderDict] = None,
+        decoder_factories: Iterable[DecoderFactory] = (),
     ):
-        super().__init__(decoders, schemaless_decoders)
+        super().__init__(decoder_factories=decoder_factories)
         self._stream_reader = StreamReader(stream, validate_crcs=validate_crcs)
         self._schemas: Dict[int, Schema] = {}
         self._channels: Dict[int, Channel] = {}

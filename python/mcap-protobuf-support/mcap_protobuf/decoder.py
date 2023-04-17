@@ -1,11 +1,12 @@
 from collections import Counter
-from typing import Dict, Any, Type, Iterable
+from typing import Dict, Any, Type, Iterable, Optional, Callable
 
 from google.protobuf.descriptor_pb2 import FileDescriptorSet, FileDescriptorProto
 from google.protobuf.message_factory import MessageFactory
 from mcap.exceptions import McapError
-from mcap.records import Message, Schema
-from mcap.well_known import SchemaEncoding
+from mcap.records import Schema
+from mcap.well_known import SchemaEncoding, MessageEncoding
+from mcap.decoder import DecoderFactory as McapDecoderFactory
 
 
 class McapProtobufDecodeError(McapError):
@@ -14,7 +15,7 @@ class McapProtobufDecodeError(McapError):
     pass
 
 
-class Decoder:
+class DecoderFactory(McapDecoderFactory):
     def __init__(self):
         """Decodes Protobuf messages from MCAP message records."""
         self._types: Dict[int, Type[Any]] = {}
@@ -76,22 +77,16 @@ class Decoder:
             [file_descriptor.name for file_descriptor in file_descriptors]
         )
 
-    def decode(self, schema: Schema, message: Message) -> Any:
-        """Takes a Message record from an MCAP along with its associated Schema,
-        and returns the decoded protobuf message from within.
+    def decoder_for(
+        self, message_encoding: str, schema: Optional[Schema]
+    ) -> Optional[Callable[[bytes], Any]]:
+        if (
+            message_encoding != MessageEncoding.Protobuf
+            or schema is None
+            or schema.encoding != SchemaEncoding.Protobuf
+        ):
+            return None
 
-        :param schema: The message schema record from the MCAP.
-        :type schema: mcap.records.Schema
-        :param message: The message record containing content to be decoded.
-        :type message: mcap.records.Message
-        :raises McapProtobufDecodeError: if the content could not be decoded as a protobuf message
-            with the given schema.
-        :return: The decoded message content.
-        """
-        if schema.encoding != SchemaEncoding.Protobuf:
-            raise McapProtobufDecodeError(
-                f"can't decode schema with encoding {schema.encoding}"
-            )
         generated = self._types.get(schema.id)
         if generated is None:
             fds = FileDescriptorSet.FromString(schema.data)
@@ -109,6 +104,10 @@ class Decoder:
             raise McapError(
                 f"FileDescriptorSet for type {schema.name} is missing that schema"
             )
-        proto_msg = generated()
-        proto_msg.ParseFromString(message.data)
-        return proto_msg
+
+        def decoder(data: bytes) -> Any:
+            proto_msg = generated()
+            proto_msg.ParseFromString(data)
+            return proto_msg
+
+        return decoder
