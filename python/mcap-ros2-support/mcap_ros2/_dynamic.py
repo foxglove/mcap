@@ -258,7 +258,7 @@ def _read_complex_type(
             "__slots__": [field.name for field in msgdef.fields],
             "__repr__": __repr__,
             "__str__": __repr__,
-            "_type": str(msgdef.base_type),
+            "_type": f"{msgdef.base_type.pkg_name}/msg/{msgdef.base_type.type}",
             "_full_text": str(msgdef),
         },
     )

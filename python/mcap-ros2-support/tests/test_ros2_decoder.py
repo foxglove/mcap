@@ -13,7 +13,7 @@ def test_ros2_decoder():
             assert schema is not None
             ros_msg = decoder.decode(schema, message)
             assert ros_msg.data == f"string message {index}"
-            assert ros_msg._type == "std_msgs/String"
+            assert ros_msg._type == "std_msgs/msg/String"
             assert ros_msg._full_text == "# std_msgs/String\nstring data"
             count += 1
         assert count == 10
