@@ -2,17 +2,67 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"runtime"
+	"runtime/pprof"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var cfgFile string
+var pprofProfile bool
+
+var profileCloser func()
+
+func makeProfileCloser(pprofProfile bool) func() {
+	if !pprofProfile {
+		return func() {}
+	}
+
+	cpuprofile := "mcap-cpu.prof"
+	memprofile := "mcap-mem.prof"
+	blockprofile := "mcap-block.pprof"
+	memprof, err := os.Create(memprofile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	cpuprof, err := os.Create(cpuprofile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	pprof.StartCPUProfile(cpuprof)
+
+	runtime.SetBlockProfileRate(100e6)
+	blockProfile, err := os.Create(blockprofile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return func() {
+		pprof.StopCPUProfile()
+		cpuprof.Close()
+
+		pprof.WriteHeapProfile(memprof)
+		memprof.Close()
+
+		pprof.Lookup("block").WriteTo(blockProfile, 0)
+		blockProfile.Close()
+
+		fmt.Fprintf(os.Stderr, "Wrote profiles to %s, %s, and %s\n", cpuprofile, memprofile, blockprofile)
+	}
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "mcap",
 	Short: "\U0001F52A Officially the top-rated CLI tool for slicing and dicing MCAP files.",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		profileCloser = makeProfileCloser(pprofProfile)
+	},
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		profileCloser()
+	},
 }
 
 var PleaseRedirect = "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe"
@@ -29,6 +79,7 @@ func die(s string, args ...any) {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "Config file (default is $HOME/.mcap.yaml)")
+	rootCmd.PersistentFlags().BoolVar(&pprofProfile, "pprof-profile", false, "Record pprof profiles of command execution. Profiles will be written to files mcap-mem.prof, mcap-cpu.prof, and mcap-block.pprof. Defaults to false.")
 	rootCmd.InitDefaultVersionFlag()
 }
 
