@@ -293,8 +293,14 @@ func (doctor *mcapDoctor) Examine() error {
 
 			doctor.channels[channel.ID] = channel
 
-			if _, ok := doctor.schemas[channel.SchemaID]; !ok {
-				doctor.error("Encountered Channel (%d) with unknown Schema (%d)", channel.ID, channel.SchemaID)
+			if channel.SchemaID != 0 {
+				if _, ok := doctor.schemas[channel.SchemaID]; !ok {
+					doctor.error(
+						"Encountered Channel (%d) with unknown Schema (%d)",
+						channel.ID,
+						channel.SchemaID,
+					)
+				}
 			}
 		case mcap.TokenMessage:
 			message, err := mcap.ParseMessage(data)
