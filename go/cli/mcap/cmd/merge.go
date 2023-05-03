@@ -139,7 +139,7 @@ func outputProfile(profiles []string) string {
 	return firstProfile
 }
 
-func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
+func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 	writer, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Chunked:     m.opts.chunked,
 		ChunkSize:   m.opts.chunkSize,
@@ -161,16 +161,16 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 	// message off. Insert the schema and channel into the output with
 	// renumbered IDs, and load the message (with renumbered IDs) into the
 	// priority queue.
-	for inputID, inputReader := range inputs {
-		reader, err := mcap.NewReader(inputReader)
+	for inputID, input := range inputs {
+		reader, err := mcap.NewReader(input.reader)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to open reader on %s: %w", input.name, err)
 		}
 		defer reader.Close()
 		profiles[inputID] = reader.Header().Profile
 		iterator, err := reader.Messages(readopts.UsingIndex(false))
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to read messages on %s: %w", input.name, err)
 		}
 		iterators[inputID] = iterator
 	}
@@ -178,23 +178,24 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 		return err
 	}
 	for inputID, iterator := range iterators {
+		inputName := inputs[inputID].name
 		schema, channel, message, err := iterator.Next(nil)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				// the file may be an empty mcap. if so, just ignore it.
 				continue
 			}
-			return fmt.Errorf("failed to read first message on input %d: %w", inputID, err)
+			return fmt.Errorf("failed to read first message on input %s: %w", inputName, err)
 		}
 		if schema != nil {
 			_, err = m.addSchema(writer, inputID, schema)
 			if err != nil {
-				return fmt.Errorf("failed to add initial schema for input %d: %w", inputID, err)
+				return fmt.Errorf("failed to add initial schema for input %s: %w", inputName, err)
 			}
 		}
 		message.ChannelID, err = m.addChannel(writer, inputID, channel)
 		if err != nil {
-			return fmt.Errorf("failed to add initial channel for input %d: %w", inputID, err)
+			return fmt.Errorf("failed to add initial channel for input %s: %w", inputName, err)
 		}
 		// push the first message onto the priority queue
 		heap.Push(pq, utils.NewTaggedMessage(inputID, message))
@@ -224,7 +225,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 				// will break.
 				continue
 			}
-			return fmt.Errorf("failed to pull next message: %w", err)
+			return fmt.Errorf("failed to pull next message on %s: %w", inputs[msg.InputID].name, err)
 		}
 
 		// if the channel is unknown, need to add it to the output
@@ -237,18 +238,23 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []io.Reader) error {
 					// if the schema is unknown, add it to the output
 					_, err := m.addSchema(writer, msg.InputID, newSchema)
 					if err != nil {
-						return fmt.Errorf("failed to add schema: %w", err)
+						return fmt.Errorf("failed to add schema from %s: %w", inputs[msg.InputID].name, err)
 					}
 				}
 			}
 			newMessage.ChannelID, err = m.addChannel(writer, msg.InputID, newChannel)
 			if err != nil {
-				return fmt.Errorf("failed to add channel: %w", err)
+				return fmt.Errorf("failed to add channel from %s: %w", inputs[msg.InputID].name, err)
 			}
 		}
 		heap.Push(pq, utils.NewTaggedMessage(msg.InputID, newMessage))
 	}
 	return writer.Close()
+}
+
+type namedReader struct {
+	name   string
+	reader io.Reader
 }
 
 // mergeCmd represents the merge command
@@ -259,14 +265,14 @@ var mergeCmd = &cobra.Command{
 		if mergeOutputFile == "" && !utils.StdoutRedirected() {
 			die(PleaseRedirect)
 		}
-		var readers []io.Reader
+		var readers []namedReader
 		for _, arg := range args {
 			f, err := os.Open(arg)
 			if err != nil {
 				die("failed to open %s: %s\n", arg, err)
 			}
 			defer f.Close()
-			readers = append(readers, f)
+			readers = append(readers, namedReader{name: arg, reader: f})
 		}
 		opts := mergeOpts{
 			compression: mergeCompression,
