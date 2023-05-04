@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"testing"
 
@@ -48,7 +49,12 @@ func TestMCAPMerging(t *testing.T) {
 			chunked: chunked,
 		})
 		output := &bytes.Buffer{}
-		assert.Nil(t, merger.mergeInputs(output, []io.Reader{buf1, buf2, buf3}))
+		inputs := []namedReader{
+			{"buf1", buf1},
+			{"buf2", buf2},
+			{"buf3", buf3},
+		}
+		assert.Nil(t, merger.mergeInputs(output, inputs))
 
 		// output should now be a well-formed mcap
 		reader, err := mcap.NewReader(output)
@@ -115,7 +121,7 @@ func TestChannelsWithSameSchema(t *testing.T) {
 		chunked: true,
 	})
 	output := &bytes.Buffer{}
-	assert.Nil(t, merger.mergeInputs(output, []io.Reader{buf}))
+	assert.Nil(t, merger.mergeInputs(output, []namedReader{{"buf", buf}}))
 	reader, err := mcap.NewReader(bytes.NewReader(output.Bytes()))
 	assert.Nil(t, err)
 	info, err := reader.Info()
@@ -134,11 +140,19 @@ func TestMultiChannelInput(t *testing.T) {
 	prepInput(t, buf2, 1, 1, "/bar")
 	merger := newMCAPMerger(mergeOpts{})
 	multiChannelInput := &bytes.Buffer{}
-	assert.Nil(t, merger.mergeInputs(multiChannelInput, []io.Reader{buf1, buf2}))
+	inputs := []namedReader{
+		{"buf1", buf1},
+		{"buf2", buf2},
+	}
+	assert.Nil(t, merger.mergeInputs(multiChannelInput, inputs))
 	buf3 := &bytes.Buffer{}
 	prepInput(t, buf3, 2, 2, "/baz")
 	output := &bytes.Buffer{}
-	assert.Nil(t, merger.mergeInputs(output, []io.Reader{multiChannelInput, buf3}))
+	inputs2 := []namedReader{
+		{"multiChannelInput", multiChannelInput},
+		{"buf3", buf3},
+	}
+	assert.Nil(t, merger.mergeInputs(output, inputs2))
 	reader, err := mcap.NewReader(output)
 	assert.Nil(t, err)
 	defer reader.Close()
@@ -162,7 +176,11 @@ func TestSchemalessChannelInput(t *testing.T) {
 	prepInput(t, buf2, 1, 1, "/bar")
 	merger := newMCAPMerger(mergeOpts{})
 	output := &bytes.Buffer{}
-	assert.Nil(t, merger.mergeInputs(output, []io.Reader{buf1, buf2}))
+	inputs := []namedReader{
+		{"buf1", buf1},
+		{"buf2", buf2},
+	}
+	assert.Nil(t, merger.mergeInputs(output, inputs))
 
 	// output should now be a well-formed mcap
 	reader, err := mcap.NewReader(output)
@@ -212,7 +230,10 @@ func TestMultipleSchemalessChannelSingleInput(t *testing.T) {
 
 	merger := newMCAPMerger(mergeOpts{})
 	output := &bytes.Buffer{}
-	assert.Nil(t, merger.mergeInputs(output, []io.Reader{buf}))
+	inputs := []namedReader{
+		{"buf", buf},
+	}
+	assert.Nil(t, merger.mergeInputs(output, inputs))
 
 	// output should now be a well-formed mcap
 	reader, err := mcap.NewReader(output)
@@ -231,4 +252,53 @@ func TestMultipleSchemalessChannelSingleInput(t *testing.T) {
 	assert.Equal(t, 1, messages["/foo"])
 	assert.Equal(t, 1, messages["/bar"])
 	assert.Equal(t, 2, schemaIDs[0])
+}
+
+func TestBadInputGivesNamedErrors(t *testing.T) {
+	cases := []struct {
+		assertion   string
+		input       func() *bytes.Buffer
+		errContains string
+	}{
+		{
+			"bad magic",
+			func() *bytes.Buffer {
+				buf := &bytes.Buffer{}
+				prepInput(t, buf, 0, 1, "/foo")
+				buf.Bytes()[0] = 0x00
+				return buf
+			},
+			"Invalid magic",
+		},
+		{
+			"bad content",
+			func() *bytes.Buffer {
+				buf := &bytes.Buffer{}
+				prepInput(t, buf, 0, 1, "/foo")
+				for i := 3000; i < 4000; i++ {
+					buf.Bytes()[i] = 0x00
+				}
+				return buf
+			},
+			"invalid zero opcode",
+		},
+	}
+	for _, c := range cases {
+		for _, chunked := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s chunked %v", c.assertion, chunked), func(t *testing.T) {
+				buf := c.input()
+				merger := newMCAPMerger(mergeOpts{
+					chunked: chunked,
+				})
+				inputs := []namedReader{
+					{"filename", buf},
+				}
+				output := &bytes.Buffer{}
+				err := merger.mergeInputs(output, inputs)
+				assert.NotNil(t, err)
+				assert.ErrorContains(t, err, "filename")
+				assert.ErrorContains(t, err, c.errContains)
+			})
+		}
+	}
 }
