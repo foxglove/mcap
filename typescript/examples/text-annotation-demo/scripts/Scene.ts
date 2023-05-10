@@ -58,7 +58,7 @@ export default class Scene {
       distortion_model: "rational_polynomial",
       D: [],
       K: [fx, 0, cx, 0, fy, cy, 0, 0, 1],
-      R: [1, 0, 0, 1, 0, 0, 1, 0, 0],
+      R: [1, 0, 0, 0, 1, 0, 0, 0, 1],
       P: [fx, 0, cx, 0, 0, fy, cy, 0, 0, 0, 1, 0],
     };
 
