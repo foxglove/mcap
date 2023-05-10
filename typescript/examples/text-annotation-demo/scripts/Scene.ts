@@ -72,6 +72,7 @@ export default class Scene {
       width: this.width,
       height: this.height,
       encoding: "rgb8",
+      // required for encoding Uint8Array in `json` encoding
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore
       data: Buffer.from(this.image.getData()).toString("base64"),
@@ -99,12 +100,11 @@ export default class Scene {
           x: this.ball.pos.x * this.width - this.ballRadius * 2,
           y: this.ball.pos.y * this.height + this.ballRadius * 2,
         },
-        // floor points
       ].map((point) => ({ x: Math.floor(point.x), y: Math.floor(point.y) })),
       outline_colors: [],
       thickness: 1,
       outline_color: { r: 0, g: 0, b: 1, a: 1 },
-      fill_color: { r: 0, g: 0, b: 1, a: 0.0 },
+      fill_color: { r: 0, g: 0, b: 1, a: 0.3 },
     };
 
     return {

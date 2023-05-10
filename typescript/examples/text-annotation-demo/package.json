@@ -2,7 +2,7 @@
   "name": "@foxglove/text-annotation-demo",
   "version": "0.0.0",
   "private": true,
-  "description": "MCAP validation example",
+  "description": "Demo foxglove.TextAnnotations",
   "license": "MIT",
   "repository": {
     "type": "git",

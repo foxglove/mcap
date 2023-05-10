@@ -9,19 +9,6 @@ import { open, FileHandle } from "fs/promises";
 
 import Scene from "./Scene";
 
-/**
- * Convert an integer number of nanoseconds to Time
- * @param nsec Nanoseconds integer
- * @returns Time object
- */
-export function fromNanoSec(nsec: bigint): Time {
-  // From https://github.com/ros/roscpp_core/blob/86720717c0e1200234cc0a3545a255b60fb541ec/rostime/include/ros/impl/time.h#L63
-  // and https://github.com/ros/roscpp_core/blob/7583b7d38c6e1c2e8623f6d98559c483f7a64c83/rostime/src/time.cpp#L536
-  //
-  // Note: BigInt(1e9) is slower than writing out the number
-  return { sec: Number(nsec / 1_000_000_000n), nsec: Number(nsec % 1_000_000_000n) };
-}
-
 // Mcap IWritable interface for nodejs FileHandle
 class FileHandleWritable implements IWritable {
   private handle: FileHandle;
@@ -100,8 +87,6 @@ async function main() {
     metadata: new Map(),
   });
 
-  let currentTimeSeconds = 0;
-
   const scene = new Scene({
     width: 800,
     height: 600,
@@ -110,7 +95,13 @@ async function main() {
     gravityCoeff: 0.005,
   });
 
-  while (currentTimeSeconds < lengthSeconds) {
+  const deltaBetweenFrames = 1 / framesPerSecond;
+
+  for (
+    let currentTimeSeconds = 0;
+    currentTimeSeconds < lengthSeconds;
+    currentTimeSeconds += deltaBetweenFrames
+  ) {
     scene.renderScene();
 
     const bigTime = BigInt(Math.floor(currentTimeSeconds * 1_000_000_000));
@@ -137,11 +128,22 @@ async function main() {
       logTime: bigTime,
       data: Buffer.from(JSON.stringify(scene.getImageAnnotations(rosTime))),
     });
-
-    currentTimeSeconds += 1 / framesPerSecond;
   }
 
   await mcapFile.end();
+}
+
+/**
+ * Convert an integer number of nanoseconds to Time
+ * @param nsec Nanoseconds integer
+ * @returns Time object
+ */
+function fromNanoSec(nsec: bigint): Time {
+  // From https://github.com/ros/roscpp_core/blob/86720717c0e1200234cc0a3545a255b60fb541ec/rostime/include/ros/impl/time.h#L63
+  // and https://github.com/ros/roscpp_core/blob/7583b7d38c6e1c2e8623f6d98559c483f7a64c83/rostime/src/time.cpp#L536
+  //
+  // Note: BigInt(1e9) is slower than writing out the number
+  return { sec: Number(nsec / 1_000_000_000n), nsec: Number(nsec % 1_000_000_000n) };
 }
 
 void main();
