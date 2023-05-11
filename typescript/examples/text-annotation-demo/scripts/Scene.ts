@@ -11,7 +11,7 @@ type SceneParams = {
   width: number;
   height: number;
   ballRadius: number;
-  gravityCoeff: number;
+  gravityCoefficient: number;
   frameId: string;
 };
 
@@ -26,18 +26,18 @@ export default class Scene {
   public height: number;
   public aspect: number;
   public ballRadius: number;
-  public gravityCoeff: number;
+  public gravityCoefficient: number;
   public frameId: string;
 
   private ball: Ball;
 
-  constructor({ width, height, ballRadius, gravityCoeff = 0.005, frameId }: SceneParams) {
+  constructor({ width, height, ballRadius, gravityCoefficient = 0.005, frameId }: SceneParams) {
     this.image = new Image(width, height);
     this.width = width;
     this.height = height;
     this.aspect = width / height;
     this.ballRadius = ballRadius;
-    this.gravityCoeff = gravityCoeff;
+    this.gravityCoefficient = gravityCoefficient;
     this.frameId = frameId;
     this.ball = {
       pos: { x: 0.25, y: 0.5 },
@@ -140,7 +140,7 @@ export default class Scene {
   public animateBall(): void {
     this.ball.pos.x += this.ball.vel.x;
     this.ball.pos.y += this.ball.vel.y;
-    this.ball.vel.y += this.gravityCoeff;
+    this.ball.vel.y += this.gravityCoefficient;
     if (this.ball.pos.x < 0 || this.ball.pos.x > 1) {
       this.ball.vel.x *= -0.8;
       this.ball.pos.x = Math.max(0, Math.min(1, this.ball.pos.x));
@@ -167,7 +167,7 @@ export default class Scene {
   }
 }
 
-// 2555
+// 255
 type Color = [number, number, number];
 
 class Image {

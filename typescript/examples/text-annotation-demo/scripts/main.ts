@@ -92,7 +92,7 @@ async function main() {
     height: 600,
     frameId: "cam",
     ballRadius: 5,
-    gravityCoeff: 0.005,
+    gravityCoefficient: 0.005,
   });
 
   const deltaBetweenFrames = 1 / framesPerSecond;
