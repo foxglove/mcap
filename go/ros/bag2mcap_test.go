@@ -89,6 +89,26 @@ func BenchmarkBag2MCAP(b *testing.B) {
 	}
 }
 
+func TestConvertsBz2(t *testing.T) {
+	inputfile := "testdata/markers.bz2.bag"
+	f, err := os.Open(inputfile)
+	assert.Nil(t, err)
+	opts := &mcap.WriterOptions{
+		IncludeCRC:  true,
+		Chunked:     true,
+		ChunkSize:   4 * 1024 * 1024,
+		Compression: "",
+	}
+	output := &bytes.Buffer{}
+	assert.Nil(t, Bag2MCAP(output, f, opts))
+
+	reader, err := mcap.NewReader(bytes.NewReader(output.Bytes()))
+	assert.Nil(t, err)
+	info, err := reader.Info()
+	assert.Nil(t, err)
+	assert.Equal(t, 10, int(info.Statistics.MessageCount))
+}
+
 func TestChannelIdForConnection(t *testing.T) {
 	cases := []struct {
 		label             string
