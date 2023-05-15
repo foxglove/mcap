@@ -882,3 +882,21 @@ TEST_CASE("RecordOffset equality operators", "[reader]") {
     REQUIRE(b >= a);
   }
 }
+
+TEST_CASE("parsing", "header") {
+  Buffer buffer;
+  writeExampleFile(buffer);
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("myprofile");
+  opts.library = "mylibrary";
+  requireOk(writer.open(buffer, opts));
+  requireOk(writer.close());
+
+  mcap::McapReader reader;
+  auto status = reader.open(buffer);
+  requireOk(status);
+
+  auto header = reader.header();
+  REQUIRE(header.profile == "myprofile");
+  REQUIRE(header.library == "mylibrary");
+}
