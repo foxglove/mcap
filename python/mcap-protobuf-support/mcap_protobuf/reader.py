@@ -89,7 +89,7 @@ class McapProtobufMessage:
     :ivar channel_metadata: the metadata associated with this protobuf topic, if any.
     :ivar log_time_ns: the time this message was logged by the recorder, as a POSIX nanosecond
         timestamp.
-    :ivar log_time_ns: the time this message was published, as a POSIX nanosecond
+    :ivar publish_time_ns: the time this message was published, as a POSIX nanosecond
         timestamp.
     """
 
