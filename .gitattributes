@@ -9,3 +9,4 @@ cpp/examples/protobuf/proto/** linguist-vendored=true linguist-generated=true
 python/mcap-ros1-support/mcap_ros1/vendor/** linguist-vendored=true
 tests/conformance/data/** linguist-generated=true
 typescript/examples/flatbuffer/output/** linguist-generated=true
+go/ros/testdata/markers.bz2.bag filter=lfs diff=lfs merge=lfs -text

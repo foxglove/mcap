@@ -65,23 +65,6 @@ func getUint32(buf []byte, offset int) (result uint32, newoffset int, err error)
 	return binary.LittleEndian.Uint32(buf[offset:]), offset + 4, nil
 }
 
-type ResettableReader interface {
-	io.Reader
-	Reset(io.Reader)
-}
-
-type resettableByteReader struct {
-	r io.Reader
-}
-
-func (r *resettableByteReader) Read(p []byte) (int, error) {
-	return r.r.Read(p)
-}
-
-func (r *resettableByteReader) Reset(reader io.Reader) {
-	r.r = reader
-}
-
 func extractHeaderValue(header []byte, key []byte) ([]byte, error) {
 	var fieldlen uint32
 	var err error
@@ -128,9 +111,7 @@ func processBag(
 	buf := make([]byte, 8)
 	data := make([]byte, 1024*1024)
 	chunkData := make([]byte, 1024*1024)
-
-	var chunkReader ResettableReader
-	var activeReader, baseReader io.Reader
+	var chunkReader, activeReader, baseReader io.Reader
 	baseReader = r
 	activeReader = r
 	for {
@@ -203,23 +184,15 @@ func processBag(
 			r := bytes.NewReader(chunkData[:datalen])
 			switch string(compression) {
 			case "lz4":
-				if chunkReader == nil {
-					chunkReader = lz4.NewReader(r)
+				if v, ok := chunkReader.(*lz4.Reader); ok {
+					v.Reset(r)
 				} else {
-					chunkReader.Reset(r)
+					chunkReader = lz4.NewReader(r)
 				}
 			case "bz2":
-				if chunkReader == nil {
-					chunkReader = &resettableByteReader{bzip2.NewReader(r)}
-				} else {
-					chunkReader.Reset(r)
-				}
+				chunkReader = bzip2.NewReader(r)
 			case "none":
-				if chunkReader == nil {
-					chunkReader = &resettableByteReader{r}
-				} else {
-					chunkReader.Reset(r)
-				}
+				chunkReader = r
 			default:
 				return fmt.Errorf("unsupported compression: %s", compression)
 			}
