@@ -725,8 +725,11 @@ Status McapReader::ParseHeader(const Record& record, Header* header) {
       !status.ok()) {
     return status;
   }
-  const uint64_t maxSize = record.dataSize - 4 - header->profile.size();
-  if (auto status = internal::ParseString(record.data, maxSize, &header->library); !status.ok()) {
+  const size_t libraryOffset = 4 + header->profile.size();
+  const std::byte* libraryData = &(record.data[libraryOffset]);
+  const size_t maxSize = record.dataSize - libraryOffset;
+  auto status = internal::ParseString(libraryData, maxSize, &header->library);
+  if (!status.ok()) {
     return status;
   }
   return StatusCode::Success;
