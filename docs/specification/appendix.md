@@ -107,6 +107,28 @@ The IDL definition of the type specified by `name` along with all dependent type
 - a line containing exactly 80 `=` characters, then
 - A line containing only `IDL: <package resource name>` for that definition. The space between `IDL:` and the package resource name is mandatory. The package resource name does not include a file extension.
 
+### omgidl
+
+The `omgidl` schema encoding stores [OMG IDL](https://www.omg.org/spec/IDL/4.2/About-IDL) definitions for (X)CDR-encoded messages.
+
+- `name`: The globally-scoped name of the message type, eg. `mycompany::mymodule::MyType`
+- `encoding`: `omgidl`
+- `data`: valid OMG IDL definition file contents with a definition for the message type and all referenced types.
+
+#### Producing `schema.data` for the `omgidl` schema encoding
+
+Most commonly, IDL definitions for separate types are stored in separate files, and use C++ preprocessor `#include` statements to include definitions for types referenced in that definition.
+
+For the `omgidl` schema encoding, the `data` field needs to contain all of those definitions in a single block of bytes. One way to produce this is to use a C++ compiler to resolve those `#include` directives:
+
+```bash
+# Run from the root of your IDL definition tree, or use additional `-I` arguments to indicate your
+# full include path to the `cpp` utility.
+# The `cpp` output may contain debugging lines such as "# 1 "mycompany/mymodule/MyType.idl",
+# the grep command here is intended to filter those out.
+$ cpp -I. mycompany/mymodule/MyType.idl | grep -v "^# \d" > all_definitions.idl
+```
+
 ### jsonschema
 
 - `name`: May contain any value
