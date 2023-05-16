@@ -197,21 +197,29 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 		}
 	}
 
-	if minLogTime != chunk.MessageStartTime && chunkMessageCount != 0 {
-		doctor.error("Chunk.message_start_time %d does not match the earliest message log time %d",
-			chunk.MessageStartTime, minLogTime)
-	}
+	if chunkMessageCount != 0 {
+		if minLogTime != chunk.MessageStartTime {
+			doctor.error(
+				"Chunk.message_start_time %d does not match the earliest message log time %d",
+				chunk.MessageStartTime,
+				minLogTime,
+			)
+		}
 
-	if maxLogTime != chunk.MessageEndTime && chunkMessageCount != 0 {
-		doctor.error("Chunk.message_end_time %d does not match the latest message log time %d",
-			chunk.MessageEndTime, maxLogTime)
-	}
+		if maxLogTime != chunk.MessageEndTime && chunkMessageCount != 0 {
+			doctor.error(
+				"Chunk.message_end_time %d does not match the latest message log time %d",
+				chunk.MessageEndTime,
+				maxLogTime,
+			)
+		}
 
-	if minLogTime < doctor.minLogTime {
-		doctor.minLogTime = minLogTime
-	}
-	if maxLogTime > doctor.maxLogTime {
-		doctor.maxLogTime = maxLogTime
+		if minLogTime < doctor.minLogTime {
+			doctor.minLogTime = minLogTime
+		}
+		if maxLogTime > doctor.maxLogTime {
+			doctor.maxLogTime = maxLogTime
+		}
 	}
 }
 
