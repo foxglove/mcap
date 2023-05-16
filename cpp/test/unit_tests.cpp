@@ -882,3 +882,22 @@ TEST_CASE("RecordOffset equality operators", "[reader]") {
     REQUIRE(b >= a);
   }
 }
+
+TEST_CASE("parsing", "header") {
+  Buffer buffer;
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("my-profile");
+  opts.library = "my-library";
+  writer.open(buffer, opts);
+  writer.close();
+
+  mcap::McapReader reader;
+  auto status = reader.open(buffer);
+  requireOk(status);
+
+  auto header = reader.header();
+  REQUIRE(header != std::nullopt);
+
+  REQUIRE(header->library == "my-library");
+  REQUIRE(header->profile == "my-profile");
+}
