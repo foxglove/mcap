@@ -121,6 +121,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 
 	var minLogTime uint64 = math.MaxUint64
 	var maxLogTime uint64
+	var chunkMessageCount uint64
 
 	msg := make([]byte, 1024)
 	for {
@@ -186,7 +187,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 			if message.LogTime > maxLogTime {
 				maxLogTime = message.LogTime
 			}
-
+			chunkMessageCount++
 			doctor.messageCount++
 
 		default:
@@ -194,12 +195,12 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 		}
 	}
 
-	if minLogTime != chunk.MessageStartTime {
+	if minLogTime != chunk.MessageStartTime && chunkMessageCount != 0 {
 		doctor.error("Chunk.message_start_time %d does not match the earliest message log time %d",
 			chunk.MessageStartTime, minLogTime)
 	}
 
-	if maxLogTime != chunk.MessageEndTime {
+	if maxLogTime != chunk.MessageEndTime && chunkMessageCount != 0 {
 		doctor.error("Chunk.message_end_time %d does not match the latest message log time %d",
 			chunk.MessageEndTime, maxLogTime)
 	}
