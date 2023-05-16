@@ -66,6 +66,7 @@ words:
   - noenv
   - nsec
   - nsecs
+  - omgidl
   - parseable
   - pipenv
   - pointcloud
