@@ -41,6 +41,10 @@ The Channel `message_encoding` field describes the encoding for all messages wit
 
 - `message_encoding`: [`json`](https://www.json.org/json-en.html)
 
+### mime
+
+- `message_encoding`: [`mime`](https://datatracker.ietf.org/doc/html/rfc6838)
+
 ## Well-known schema encodings
 
 The Schema `encoding` field describes the encoding of a Channel's schema. Typically, this is related to the Channel's `message_encoding`, but they are separate concepts (e.g. there are multiple schema languages for `json`).
@@ -112,6 +116,12 @@ The IDL definition of the type specified by `name` along with all dependent type
 - `name`: May contain any value
 - `encoding`: `jsonschema`
 - `data`: [JSON Schema](https://json-schema.org)
+
+### mime type
+
+- `name`: [MIME type](https://www.iana.org/assignments/media-types/media-types.xhtml), e.g. `text/plain`
+- `encoding`: `mime`
+- `data`: Must be empty (0 bytes)
 
 ## Well-known profiles
 
