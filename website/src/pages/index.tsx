@@ -27,7 +27,7 @@ const FeatureList: FeatureItem[] = [
       "MCAP is a container format, allowing you to record and replay binary messages in any format, such as Protobuf, DDS (CDR), ROS, JSON, etc.",
   },
   {
-    title: "High performance writing",
+    title: "High-performance writing",
     Icon: icons.SportsCarConvertible,
     description:
       "MCAP utilizes a row-oriented, append-only design. This minimizes disk I/O, and reduces the risk of data corruption during an unclean shutdown. ",
