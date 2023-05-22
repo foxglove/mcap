@@ -57,7 +57,7 @@
 
 .heroButtonPrimary {
   color: white;
-  background-color: #6f3be8;
+  background-color: var(--foxglove-blurple);
 }
 
 .heroButtonPrimary:hover {
@@ -66,11 +66,11 @@
 
 .heroButtonSecondary {
   color: #222;
-  background-color: #ddd;
+  background-color: #eee;
 }
 
 .heroButtonSecondary:hover {
-  color: var(--ifm-link-hover-color);
+  color: var(--foxglove-blurple);
 }
 
 @media (min-width: 640px) {
