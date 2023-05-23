@@ -1,3 +1,4 @@
+/docs/rust/* https://docs.rs/mcap/latest/:splat 308
 /performance-comparison/rosbag2-plugin-comparison.html https://adrian-website.mcap.pages.dev/guides/benchmarks/rosbag2-storage-plugins 308
 /specification/appendix.html /spec/registry 308
 /specification/index.html /spec 308
