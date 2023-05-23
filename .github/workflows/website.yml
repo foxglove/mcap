@@ -1,0 +1,132 @@
+name: Website
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["*"]
+
+jobs:
+  docs-home:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          lfs: true
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16.x
+          cache: yarn
+
+      - run: corepack enable && yarn install --immutable
+
+      - run: yarn build
+        working-directory: website
+
+      - run: yarn typedoc --out website/build/docs/typescript
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: public
+          path: website/build
+          retention-days: 1
+
+  docs-cpp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - run: make -C cpp ci-docs
+
+      - run: tar -czf docs-cpp.tgz __docs__/cpp
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: docs-cpp
+          path: docs-cpp.tgz
+          retention-days: 1
+
+  docs-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.7
+
+      - run: pip install pipenv
+
+      - run: make -C python docs
+
+      - run: tar -czf docs-python.tgz __docs__/python
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: docs-python
+          path: docs-python.tgz
+          retention-days: 1
+
+  docs-swift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: swift-actions/setup-swift@v1
+        with:
+          swift-version: "5.7"
+
+      - run: mkdir __docs__
+
+      - run: |
+          swift package \
+            --allow-writing-to-directory __docs__ \
+            generate-documentation --target MCAP \
+            --output-path __docs__/swift \
+            --disable-indexing \
+            --transform-for-static-hosting \
+            --hosting-base-path docs/swift
+
+      # https://github.com/actions/upload-artifact/issues/85
+      - run: tar -czf docs-swift.tgz __docs__/swift
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: docs-swift
+          path: docs-swift.tgz
+          retention-days: 1
+
+  docs-deploy:
+    runs-on: ubuntu-latest
+    needs:
+      - docs-home
+      - docs-cpp
+      - docs-python
+      - docs-swift
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      # need checkout so that cloudflare can detect git commit
+      - uses: actions/checkout@v3
+
+      - uses: actions/download-artifact@v3
+
+      - name: Extract API docs
+        run: |
+          for f in docs-*/*.tgz; do
+            (set -x; tar -xf $f)
+          done
+          mkdir -p public/docs
+          mv -v __docs__/* public/docs
+
+      - name: Deploy
+        uses: cloudflare/pages-action@v1
+        with:
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          apiToken: ${{ secrets.CLOUDFLARE_TOKEN }}
+          gitHubToken: ${{ github.token }}
+          branch: ${{ github.head_ref || github.ref_name }}
+          projectName: mcap
+          directory: public
