@@ -16,10 +16,7 @@
 }
 
 [data-theme="dark"] .hero {
-  background-image: radial-gradient(
-    color-mix(in srgb, var(--bg-color) 85%, black),
-    var(--bg-color)
-  );
+  --bg-color: #303846;
 }
 
 .heroLogo {
@@ -40,6 +37,7 @@
 
 .heroButtonPrimary,
 .heroButtonSecondary {
+  --button-color-highlight: #2e8555;
   display: inline-block;
   margin: 0 0.5rem;
   padding: 0.5rem 2rem;
@@ -57,7 +55,7 @@
 
 .heroButtonPrimary {
   color: white;
-  background-color: var(--foxglove-blurple);
+  background-color: var(--button-color-highlight);
 }
 
 .heroButtonPrimary:hover {
@@ -70,7 +68,7 @@
 }
 
 .heroButtonSecondary:hover {
-  color: var(--foxglove-blurple);
+  color: var(--button-color-highlight);
 }
 
 @media (min-width: 640px) {
