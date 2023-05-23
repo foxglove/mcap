@@ -3,7 +3,7 @@ sidebar_label: Registry
 sidebar_position: 2
 ---
 
-# MCAP File Format Registry
+# MCAP Format Registry
 
 This document describes well-known values for MCAP files.
 

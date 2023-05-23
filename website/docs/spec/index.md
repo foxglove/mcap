@@ -3,7 +3,7 @@ sidebar_label: Specification
 sidebar_position: 1
 ---
 
-# MCAP File Format Specification
+# MCAP Format Specification
 
 [compression_formats]: ./registry.md#well-known-compression-formats
 [message_encodings]: ./registry.md#well-known-message-encodings
