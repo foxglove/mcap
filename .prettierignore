@@ -3,3 +3,4 @@
 python/Pipfile.lock
 tests/conformance/data/**/*.json
 typescript/examples/flatbuffer/output/**/*.ts
+website/.docusaurus

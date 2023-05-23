@@ -208,6 +208,7 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: corepack enable && yarn install --immutable
       - run: yarn dedupe --check
+      - run: yarn prettier:check
       - run: yarn workspace @mcap/core lint:ci
       - run: yarn workspace @mcap/core typecheck
       - run: yarn workspace @mcap/core test
