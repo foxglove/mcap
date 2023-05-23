@@ -43,8 +43,9 @@ type Writer struct {
 	compressed       *bytes.Buffer
 	compressedWriter *countingCRCWriter
 
-	currentChunkStartTime uint64
-	currentChunkEndTime   uint64
+	currentChunkStartTime    uint64
+	currentChunkEndTime      uint64
+	currentChunkMessageCount uint64
 
 	opts *WriterOptions
 
@@ -198,6 +199,7 @@ func (w *Writer) WriteMessage(m *Message) error {
 		if err != nil {
 			return err
 		}
+		w.currentChunkMessageCount++
 		if m.LogTime > w.currentChunkEndTime {
 			w.currentChunkEndTime = m.LogTime
 		}
@@ -427,8 +429,11 @@ func (w *Writer) flushActiveChunk() error {
 	uncompressedlen := w.compressedWriter.Size()
 	msglen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8 + compressedlen
 	chunkStartOffset := w.w.Size()
-	start := w.currentChunkStartTime
-	end := w.currentChunkEndTime
+	var start, end uint64
+	if w.currentChunkMessageCount != 0 {
+		start = w.currentChunkStartTime
+		end = w.currentChunkEndTime
+	}
 
 	// when writing a chunk, we don't go through writerecord to avoid needing to
 	// materialize the compressed data again. Instead, write the leading bytes
@@ -476,13 +481,9 @@ func (w *Writer) flushActiveChunk() error {
 
 	messageIndexEnd := w.w.Size()
 	messageIndexLength := messageIndexEnd - chunkEndOffset
-	var chunkStart uint64
-	if w.currentChunkStartTime != math.MaxUint64 {
-		chunkStart = w.currentChunkStartTime
-	}
 	w.ChunkIndexes = append(w.ChunkIndexes, &ChunkIndex{
-		MessageStartTime:    chunkStart,
-		MessageEndTime:      w.currentChunkEndTime,
+		MessageStartTime:    start,
+		MessageEndTime:      end,
 		ChunkStartOffset:    chunkStartOffset,
 		ChunkLength:         chunkEndOffset - chunkStartOffset,
 		MessageIndexOffsets: messageIndexOffsets,
@@ -497,6 +498,7 @@ func (w *Writer) flushActiveChunk() error {
 	w.Statistics.ChunkCount++
 	w.currentChunkStartTime = math.MaxUint64
 	w.currentChunkEndTime = 0
+	w.currentChunkMessageCount = 0
 	return nil
 }
 
@@ -847,16 +849,17 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 		}
 	}
 	return &Writer{
-		w:                     writer,
-		buf:                   make([]byte, 32),
-		channels:              make(map[uint16]*Channel),
-		schemas:               make(map[uint16]*Schema),
-		messageIndexes:        make(map[uint16]*MessageIndex),
-		uncompressed:          &bytes.Buffer{},
-		compressed:            &compressed,
-		compressedWriter:      compressedWriter,
-		currentChunkStartTime: math.MaxUint64,
-		currentChunkEndTime:   0,
+		w:                        writer,
+		buf:                      make([]byte, 32),
+		channels:                 make(map[uint16]*Channel),
+		schemas:                  make(map[uint16]*Schema),
+		messageIndexes:           make(map[uint16]*MessageIndex),
+		uncompressed:             &bytes.Buffer{},
+		compressed:               &compressed,
+		compressedWriter:         compressedWriter,
+		currentChunkStartTime:    math.MaxUint64,
+		currentChunkEndTime:      0,
+		currentChunkMessageCount: 0,
 		Statistics: &Statistics{
 			ChannelMessageCounts: make(map[uint16]uint64),
 			MessageStartTime:     0,
