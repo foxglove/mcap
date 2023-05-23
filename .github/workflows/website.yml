@@ -122,8 +122,7 @@ jobs:
           mv -v __docs__/* public/docs
 
       - name: Deploy
-        # https://github.com/cloudflare/pages-action/pull/70#issuecomment-1556104600
-        uses: cloudflare/pages-action@09ef98de2f7109541029b235a5dc1e40c80d0400
+        uses: cloudflare/pages-action@v1
         with:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           apiToken: ${{ secrets.CLOUDFLARE_TOKEN }}
