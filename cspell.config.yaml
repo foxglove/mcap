@@ -24,6 +24,7 @@ ignorePaths:
   - package.xml
   - "*_pb2.py"
   - "*.pyc"
+  - "*.svg"
   - "*.webp"
   - Pipfile*
   - mkdocs.yml
@@ -39,6 +40,7 @@ words:
   - callerid
   - cbor
   - cmake
+  - colcon
   - conanfile
   - conans
   - crc
@@ -55,10 +57,12 @@ words:
   - genpy
   - gentools
   - golangci
+  - infima
   - inputfile
   - jsonschema
   - kaitai
   - libmcap
+  - matplotlib
   - mcap
   - msgdef
   - nanos
@@ -66,6 +70,7 @@ words:
   - noenv
   - nsec
   - nsecs
+  - numpy
   - parseable
   - pipenv
   - pointcloud
@@ -79,6 +84,7 @@ words:
   - rostime
   - schemaless
   - serde
+  - srgb
   - stoull
   - struct
   - swiftformat
@@ -89,6 +95,7 @@ words:
   - unchunked
   - unindexed
   - velodyne
+  - webp
   - zstandard
   - zstd
 
