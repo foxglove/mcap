@@ -19,8 +19,15 @@
   --bg-color: #303846;
 }
 
+@media (min-width: 996px) {
+  .hero {
+    padding: 4rem 0;
+  }
+}
+
 .heroLogo {
   display: flex;
+  gap: 2rem;
   margin: auto;
   justify-content: center;
   align-items: center;
@@ -28,6 +35,14 @@
 
 .heroLogo h1 {
   display: none;
+  margin: 0;
+}
+
+@media (min-width: 640px) {
+  .heroLogo h1 {
+    display: block;
+    font-size: 3rem;
+  }
 }
 
 .blurb {
@@ -69,20 +84,6 @@
 
 .heroButtonSecondary:hover {
   color: var(--button-color-highlight);
-}
-
-@media (min-width: 640px) {
-  .heroLogo h1 {
-    display: block;
-    margin: 2rem 5rem;
-    font-size: 3rem;
-  }
-}
-
-@media (min-width: 996px) {
-  .hero {
-    padding: 4rem 0;
-  }
 }
 
 .section {
