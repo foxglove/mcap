@@ -5,6 +5,7 @@ import Layout from "@theme/Layout";
 import * as icons from "../icons";
 
 import styles from "./index.module.css";
+import { McapRecordingDemo } from "../components/McapRecordingDemo";
 
 type FeatureItem = {
   title: string;
@@ -109,6 +110,7 @@ export default function Home() {
               API Reference
             </Link>
           </div>
+          <McapRecordingDemo />
         </div>
       </header>
 

@@ -1,5 +1,7 @@
 // @ts-check
 
+const path = require("path");
+const webpack = require("webpack");
 const lightCodeTheme = require("prism-react-renderer/themes/github");
 const darkCodeTheme = require("prism-react-renderer/themes/dracula");
 
@@ -23,6 +25,40 @@ const config = {
     defaultLocale: "en",
     locales: ["en"],
   },
+
+  plugins: [
+    (_context, _options) => ({
+      name: "MCAP website custom webpack config",
+      configureWebpack(config, _isServer, _utils, _content) {
+        return {
+          mergeStrategy: {
+            "resolve.extensions": "replace",
+          },
+          module: {
+            rules: [{ test: /\.wasm$/, type: "asset/resource" }],
+          },
+          resolve: {
+            extensions:
+              config.resolve?.extensions?.filter((ext) => ext !== ".wasm") ??
+              [],
+            alias: {
+              "@mcap/core": path.resolve(__dirname, "../typescript/core/src"),
+            },
+            fallback: {
+              path: require.resolve("path-browserify"),
+              fs: false,
+            },
+          },
+          plugins: [
+            new webpack.ProvidePlugin({
+              Buffer: ["buffer", "Buffer"],
+              process: "process/browser",
+            }),
+          ],
+        };
+      },
+    }),
+  ],
 
   presets: [
     [
