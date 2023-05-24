@@ -127,11 +127,13 @@ export function McapRecordingDemo(): JSX.Element {
     if (!recording || !recordMouse) {
       return;
     }
-    const handleMouseEvent = (event: MouseEvent) => {
+    const handleMouseEvent = (event: PointerEvent) => {
       addMouseEventMessage({ clientX: event.clientX, clientY: event.clientY });
     };
+    window.addEventListener("pointerdown", handleMouseEvent);
     window.addEventListener("pointermove", handleMouseEvent);
     return () => {
+      window.removeEventListener("pointerdown", handleMouseEvent);
       window.removeEventListener("pointermove", handleMouseEvent);
     };
   }, [addMouseEventMessage, recording, recordMouse]);
