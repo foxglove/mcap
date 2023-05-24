@@ -18,10 +18,10 @@ type State = {
   messageCount: number;
   chunkCount: number;
 
-  latestMessages: Array<MouseEventMessage | ProtobufObject<PoseInFrame>>;
+  latestMessages: Array<MouseEventMessage | DeviceOrientationEvent>;
 
   addMouseEventMessage: (msg: MouseEventMessage) => void;
-  addPoseMessage: (msg: ProtobufObject<PoseInFrame>) => void;
+  addPoseMessage: (msg: DeviceOrientationEvent) => void;
   addCameraImage: (blob: Blob) => void;
   closeAndRestart: () => Promise<Blob>;
 };
@@ -47,8 +47,8 @@ const useStore = create<State>((set) => {
         latestMessages: [...state.latestMessages, msg].slice(-3),
       }));
     },
-    addPoseMessage(msg: ProtobufObject<PoseInFrame>) {
-      void recorder.addPose(msg);
+    addPoseMessage(msg: DeviceOrientationEvent) {
+      void recorder.addPose(deviceOrientationToPose(msg));
       set((state) => ({
         latestMessages: [...state.latestMessages, msg].slice(-3),
       }));
@@ -131,7 +131,7 @@ export function McapRecordingDemo(): JSX.Element {
       addMouseEventMessage({ clientX: event.clientX, clientY: event.clientY });
     };
     const handleDeviceOrientationEvent = (event: DeviceOrientationEvent) => {
-      addPoseMessage(deviceOrientationToPose(event));
+      addPoseMessage(event);
     };
     window.addEventListener("pointermove", handleMouseEvent);
     window.addEventListener("deviceorientation", handleDeviceOrientationEvent);
@@ -319,17 +319,12 @@ export function McapRecordingDemo(): JSX.Element {
           {state.latestMessages
             .map((msg) => {
               if ("clientX" in msg) {
-                return `mouse x: ${msg.clientX.toFixed(
-                  1
-                )} y: ${msg.clientY.toFixed(1)}`;
+                return `mouse x=${msg.clientX.toFixed()} y=${msg.clientY.toFixed()}`;
               } else {
-                return `pose ${msg.pose.orientation.x.toFixed(
-                  2
-                )} ${msg.pose.orientation.y.toFixed(
-                  2
-                )} ${msg.pose.orientation.z.toFixed(
-                  2
-                )} ${msg.pose.orientation.w.toFixed(2)}`;
+                const alpha = (msg.alpha ?? 0).toFixed();
+                const beta = (msg.beta ?? 0).toFixed();
+                const gamma = (msg.gamma ?? 0).toFixed();
+                return `pose ɑ=${alpha}° β=${beta}° γ=${gamma}°`;
               }
             })
             .join("\n")}
