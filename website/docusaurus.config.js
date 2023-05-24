@@ -39,6 +39,8 @@ const config = {
           },
           resolve: {
             extensions:
+              // Having .wasm as an auto-detected extension for imports breaks some
+              // @foxglove/wasm-zstd behavior
               config.resolve?.extensions?.filter((ext) => ext !== ".wasm") ??
               [],
             alias: {

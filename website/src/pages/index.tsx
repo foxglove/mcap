@@ -5,7 +5,7 @@ import Layout from "@theme/Layout";
 import * as icons from "../icons";
 
 import styles from "./index.module.css";
-import { McapRecordingDemo } from "../components/McapRecordingDemo";
+import { McapRecordingDemo } from "../components/McapRecordingDemo/McapRecordingDemo";
 
 type FeatureItem = {
   title: string;
@@ -110,6 +110,9 @@ export default function Home() {
               API Reference
             </Link>
           </div>
+          <p className={styles.blurb}>
+            Or try recording an MCAP file right now in your browser:
+          </p>
           <McapRecordingDemo />
         </div>
       </header>
