@@ -176,29 +176,34 @@ export function McapRecordingDemo(): JSX.Element {
     };
   }, [addCameraImage, recordVideo, recording]);
 
-  const onRecordClick = useCallback((event: React.MouseEvent) => {
-    event.preventDefault();
-    setRecording((oldValue) => !oldValue);
-  }, []);
+  const onRecordClick = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault();
+      if (recording) {
+        setRecording(false);
+        return;
+      }
+      setRecording((oldValue) => !oldValue);
 
-  useEffect(() => {
-    setOrientationPermissionError(false);
-    if (
-      recording &&
-      recordOrientation &&
-      typeof DeviceOrientationEvent !== "undefined" &&
-      "requestPermission" in DeviceOrientationEvent &&
-      typeof DeviceOrientationEvent.requestPermission === "function"
-    ) {
-      void Promise.resolve(DeviceOrientationEvent.requestPermission())
-        .then((result) => {
-          if (result !== "granted") {
-            setOrientationPermissionError(true);
-          }
-        })
-        .catch(console.error);
-    }
-  }, [recordOrientation, recording]);
+      // Requesting orientation permission must be done as part of a user gesture
+      setOrientationPermissionError(false);
+      if (
+        recordOrientation &&
+        typeof DeviceOrientationEvent !== "undefined" &&
+        "requestPermission" in DeviceOrientationEvent &&
+        typeof DeviceOrientationEvent.requestPermission === "function"
+      ) {
+        void Promise.resolve(DeviceOrientationEvent.requestPermission())
+          .then((result) => {
+            if (result !== "granted") {
+              setOrientationPermissionError(true);
+            }
+          })
+          .catch(console.error);
+      }
+    },
+    [recordOrientation, recording]
+  );
 
   const onDownloadClick = useCallback(
     (event: React.MouseEvent) => {
