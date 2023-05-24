@@ -1,14 +1,16 @@
 /* eslint-env node */
 module.exports = {
   env: {
-    es2020: true,
+    es2022: true,
+  },
+  parserOptions: {
+    ecmaVersion: 2022,
   },
   ignorePatterns: ["dist"],
   extends: [
     "plugin:@foxglove/base",
     "plugin:@foxglove/react",
     "plugin:@foxglove/jest",
-    "plugin:storybook/recommended",
   ],
   overrides: [
     {

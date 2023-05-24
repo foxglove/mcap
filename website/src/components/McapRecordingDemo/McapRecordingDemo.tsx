@@ -1,24 +1,28 @@
 // cspell:word millis
 
-import React from "react";
+import Link from "@docusaurus/Link";
 import { fromMillis } from "@foxglove/rostime";
 import { PoseInFrame } from "@foxglove/schemas";
-import { useCallback, useEffect, useRef, useState } from "react";
+import cx from "classnames";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { create } from "zustand";
+
+import styles from "./McapRecordingDemo.module.css";
 import {
   MouseEventMessage,
   ProtobufObject,
   Recorder,
   toProtobufTime,
 } from "./Recorder";
-import Link from "@docusaurus/Link";
+import { startVideoCapture } from "./videoCapture";
 
 type State = {
   bytesWritten: bigint;
-  messageCount: number;
+  messageCount: bigint;
   chunkCount: number;
 
-  latestMessages: Array<MouseEventMessage | DeviceOrientationEvent>;
+  latestMouse: MouseEventMessage | undefined;
+  latestOrientation: DeviceOrientationEvent | undefined;
 
   addMouseEventMessage: (msg: MouseEventMessage) => void;
   addPoseMessage: (msg: DeviceOrientationEvent) => void;
@@ -40,18 +44,15 @@ const useStore = create<State>((set) => {
     bytesWritten: recorder.bytesWritten,
     messageCount: recorder.messageCount,
     chunkCount: recorder.chunkCount,
-    latestMessages: [],
+    latestMouse: undefined,
+    latestOrientation: undefined,
     addMouseEventMessage(msg: MouseEventMessage) {
       void recorder.addMouseEvent(msg);
-      set((state) => ({
-        latestMessages: [...state.latestMessages, msg].slice(-3),
-      }));
+      set({ latestMouse: msg });
     },
     addPoseMessage(msg: DeviceOrientationEvent) {
       void recorder.addPose(deviceOrientationToPose(msg));
-      set((state) => ({
-        latestMessages: [...state.latestMessages, msg].slice(-3),
-      }));
+      set({ latestOrientation: msg });
     },
     addCameraImage(blob: Blob) {
       void recorder.addCameraImage(blob);
@@ -108,14 +109,14 @@ const hasMouse = window.matchMedia("(hover: hover)").matches;
 export function McapRecordingDemo(): JSX.Element {
   const state = useStore();
 
-  // Automatically start recording if we believe the device has a mouse (which means it is likely
-  // not to support orientation events)
-  const [recording, setRecording] = useState(hasMouse);
+  const [recording, setRecording] = useState(false);
   const [orientationPermissionError, setOrientationPermissionError] =
     useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [recordingVideo, setRecordingVideo] = useState(false);
+  const [recordVideo, setRecordVideo] = useState(false);
+  const [recordMouse, setRecordMouse] = useState(true);
+  const [recordOrientation, setRecordOrientation] = useState(true);
   const [videoStarted, setVideoStarted] = useState(false);
   const [videoPermissionError, setVideoPermissionError] = useState(false);
   const [downloadClicked, setDownloadClicked] = useState(false);
@@ -123,121 +124,81 @@ export function McapRecordingDemo(): JSX.Element {
   const { addCameraImage, addMouseEventMessage, addPoseMessage } = state;
 
   useEffect(() => {
-    if (!recording) {
+    if (!recording || !recordMouse) {
       return;
     }
-
     const handleMouseEvent = (event: MouseEvent) => {
       addMouseEventMessage({ clientX: event.clientX, clientY: event.clientY });
     };
+    window.addEventListener("pointermove", handleMouseEvent);
+    return () => {
+      window.removeEventListener("pointermove", handleMouseEvent);
+    };
+  }, [addMouseEventMessage, recording, recordMouse]);
+
+  useEffect(() => {
+    if (!recording || !recordOrientation) {
+      return;
+    }
     const handleDeviceOrientationEvent = (event: DeviceOrientationEvent) => {
       addPoseMessage(event);
     };
-    window.addEventListener("pointermove", handleMouseEvent);
     window.addEventListener("deviceorientation", handleDeviceOrientationEvent);
     return () => {
-      window.removeEventListener("pointermove", handleMouseEvent);
       window.removeEventListener(
         "deviceorientation",
         handleDeviceOrientationEvent
       );
     };
-  }, [addMouseEventMessage, addPoseMessage, recording]);
+  }, [addPoseMessage, recording, recordOrientation]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!recordingVideo || !video) {
+    if (!recording || !recordVideo || !video) {
       return;
     }
-    const controller = new AbortController();
-    void (async (signal: AbortSignal) => {
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      } catch (error) {
+
+    setVideoStarted(false);
+    setVideoPermissionError(false);
+
+    const stopCapture = startVideoCapture({
+      video,
+      frameDurationSec: 1 / 30,
+      onStart: () => setVideoStarted(true),
+      onError: (err) => {
+        console.error(err);
         setVideoPermissionError(true);
-        return;
-      }
-      if (signal.aborted) {
-        return;
-      }
-      video.srcObject = stream;
-      try {
-        await video.play();
-      } catch (error) {
-        // Interrupted: https://developer.chrome.com/blog/play-request-was-interrupted/
-        console.error(error);
-        return;
-      }
-
-      if (!signal.aborted) {
-        setVideoStarted(true);
-      }
-
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-
-      let framePromise: Promise<void> | undefined;
-      const frameDurationSec = 1 / 30;
-      const interval = setInterval(() => {
-        if (framePromise) {
-          // last frame is not yet complete, skip frame
-          return;
-        }
-        framePromise = new Promise((resolve) => {
-          ctx?.drawImage(video, 0, 0);
-          canvas.toBlob(
-            (blob) => {
-              if (blob && !signal.aborted) {
-                addCameraImage(blob);
-              }
-              resolve();
-              framePromise = undefined;
-            },
-            "image/jpeg",
-            0.8
-          );
-        });
-      }, frameDurationSec * 1000);
-
-      const cleanup = () => {
-        clearInterval(interval);
-        for (const track of stream.getTracks()) {
-          track.stop();
-        }
-      };
-      if (signal.aborted) {
-        cleanup();
-      } else {
-        signal.addEventListener("abort", cleanup);
-      }
-    })(controller.signal);
-
+      },
+      onFrame: (blob) => addCameraImage(blob),
+    });
     return () => {
-      controller.abort();
+      stopCapture();
     };
-  }, [addCameraImage, recordingVideo]);
+  }, [addCameraImage, recordVideo, recording]);
 
-  const onStartRecording = useCallback((event: React.MouseEvent) => {
+  const onRecordClick = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
-    void (async () => {
-      if (
-        typeof DeviceOrientationEvent !== "undefined" &&
-        "requestPermission" in DeviceOrientationEvent &&
-        typeof DeviceOrientationEvent.requestPermission === "function"
-      ) {
-        const result: unknown =
-          await DeviceOrientationEvent.requestPermission();
-        if (result !== "granted") {
-          setOrientationPermissionError(true);
-        }
-      }
-      // Even if a permission error was encountered, we can record pointer events
-      setRecording(true);
-    })();
+    setRecording((oldValue) => !oldValue);
   }, []);
+
+  useEffect(() => {
+    setOrientationPermissionError(false);
+    if (
+      recording &&
+      recordOrientation &&
+      typeof DeviceOrientationEvent !== "undefined" &&
+      "requestPermission" in DeviceOrientationEvent &&
+      typeof DeviceOrientationEvent.requestPermission === "function"
+    ) {
+      void Promise.resolve(DeviceOrientationEvent.requestPermission())
+        .then((result) => {
+          if (result !== "granted") {
+            setOrientationPermissionError(true);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [recordOrientation, recording]);
 
   const onDownloadClick = useCallback(
     (event: React.MouseEvent) => {
@@ -247,7 +208,18 @@ export function McapRecordingDemo(): JSX.Element {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = "demo.mcap";
+
+        // Create a date+time string in the local timezone to use as the filename
+        const date = new Date();
+        const localTime = new Date(
+          date.getTime() - date.getTimezoneOffset() * 60_000
+        )
+          .toISOString()
+          .replace(/\..+$/, "")
+          .replace("T", "_")
+          .replaceAll(":", "-");
+
+        link.download = `demo_${localTime}.mcap`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -259,35 +231,51 @@ export function McapRecordingDemo(): JSX.Element {
   );
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <label>
-        <input
-          type="checkbox"
-          checked={recordingVideo}
-          disabled={!recording}
-          onChange={(event) => {
-            setVideoStarted(false);
-            setRecordingVideo(event.target.checked);
-          }}
-        />
-        Enable camera recording
-      </label>
-      <div
-        style={{
-          display: "flex",
-          gap: 16,
-          flexWrap: "wrap",
-          justifyContent: "center",
-        }}
-      >
-        {recordingVideo && !videoPermissionError && (
+    <div className={styles.container}>
+      <div className={styles.badge}>Try it out!</div>
+      <div>Record an MCAP file right now in your browser:</div>
+      <fieldset className={styles.sensors}>
+        <legend>Sensors</legend>
+
+        <label>
+          <input
+            type="checkbox"
+            checked={recordVideo}
+            onChange={(event) => setRecordVideo(event.target.checked)}
+          />
+          Camera
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={recordMouse}
+            onChange={(event) => setRecordMouse(event.target.checked)}
+          />
+          Mouse position
+        </label>
+        {!hasMouse && (
+          <label>
+            <input
+              type="checkbox"
+              checked={recordOrientation}
+              onChange={(event) => setRecordOrientation(event.target.checked)}
+            />
+            Orientation
+          </label>
+        )}
+      </fieldset>
+      {orientationPermissionError && (
+        <div style={{ color: "red" }}>
+          Allow permission to use device orientation
+        </div>
+      )}
+      {videoPermissionError && (
+        <div style={{ color: "red" }}>
+          Allow permission to record camera images
+        </div>
+      )}
+      <div className={styles.recordingDetails}>
+        {recording && recordVideo && !videoPermissionError && (
           <div style={{ width: 150, height: 100, position: "relative" }}>
             <video
               ref={videoRef}
@@ -309,102 +297,55 @@ export function McapRecordingDemo(): JSX.Element {
             )}
           </div>
         )}
-        <div
-          style={{
-            textAlign: "left",
-            whiteSpace: "pre-line",
-            font: "var(--ifm-code-font-size) / var(--ifm-pre-line-height) var(--ifm-font-family-monospace)",
-          }}
-        >
-          {state.latestMessages
-            .map((msg) => {
-              if ("clientX" in msg) {
-                return `mouse x=${msg.clientX.toFixed()} y=${msg.clientY.toFixed()}`;
-              } else {
-                const alpha = (msg.alpha ?? 0).toFixed();
-                const beta = (msg.beta ?? 0).toFixed();
-                const gamma = (msg.gamma ?? 0).toFixed();
-                return `pose ɑ=${alpha}° β=${beta}° γ=${gamma}°`;
-              }
-            })
-            .join("\n")}
-        </div>
-        <div
-          style={{
-            textAlign: "left",
-            whiteSpace: "pre-line",
-            font: "var(--ifm-code-font-size) / var(--ifm-pre-line-height) var(--ifm-font-family-monospace)",
-          }}
-        >
-          {`\
-Messages: ${state.messageCount}
-Chunks: ${state.chunkCount}
-`}
-        </div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {recording ? (
-            <Link
-              href="#"
-              style={{
-                backgroundColor: "#81df8c",
-                margin: "0 0.5rem",
-                padding: "0.5rem 2rem",
-                fontSize: "1.125rem",
-                fontWeight: "bold",
-                borderRadius: "var(--ifm-button-border-radius)",
-              }}
-              onClick={onDownloadClick}
-            >
-              Download MCAP file ({formatBytes(Number(state.bytesWritten))})
-            </Link>
-          ) : (
-            <Link
-              href="#"
-              style={{
-                backgroundColor: "#ff9797",
-                margin: "0 0.5rem",
-                padding: "0.5rem 2rem",
-                fontSize: "1.125rem",
-                fontWeight: "bold",
-                borderRadius: "var(--ifm-button-border-radius)",
-              }}
-              onClick={onStartRecording}
-            >
-              <div
-                style={{
-                  display: "inline-block",
-                  width: "1em",
-                  height: "1em",
-                  borderRadius: "50%",
-                  backgroundColor: "currentcolor",
-                  verticalAlign: "middle",
-                }}
-              ></div>{" "}
-              Start recording MCAP file
-            </Link>
-          )}
-          {downloadClicked && (
-            <div style={{ fontSize: "0.75rem" }}>
-              ✨ Try opening the file in{" "}
-              <Link to="https://studio.foxglove.dev/">Foxglove Studio</Link>!
-            </div>
-          )}
-        </div>
-        {orientationPermissionError && (
-          <div style={{ color: "red" }}>
-            Allow permission to use device orientation
+        {recording && (
+          <div className={styles.log}>
+            {recordMouse && state.latestMouse && (
+              <div>
+                mouse x={state.latestMouse.clientX.toFixed()} y=
+                {state.latestMouse.clientY.toFixed()}
+              </div>
+            )}
+            {recordOrientation && state.latestOrientation && (
+              <div>
+                pose ɑ={(state.latestOrientation.alpha ?? 0).toFixed()}° β=
+                {(state.latestOrientation.beta ?? 0).toFixed()}° γ=
+                {(state.latestOrientation.gamma ?? 0).toFixed()}°
+              </div>
+            )}
+            <div>messages: {state.messageCount.toString()}</div>
+            <div>chunks: {state.chunkCount}</div>
           </div>
         )}
-        {videoPermissionError && (
-          <div style={{ color: "red" }}>
-            Allow permission to record camera images
+      </div>
+      <Link
+        href="#"
+        className={cx("button", "button--danger", {
+          ["button--outline"]: !recording,
+        })}
+        onClick={onRecordClick}
+      >
+        <div
+          className={cx(styles.recordingDot, {
+            [styles.recordingDotActive!]: recording,
+          })}
+        />
+        {recording ? "Stop recording" : "Start recording"}
+      </Link>
+      <div className={styles.downloadContainer}>
+        {state.messageCount > 0 && (
+          <Link
+            href="#"
+            className="button button--success"
+            onClick={onDownloadClick}
+          >
+            Download MCAP file ({formatBytes(Number(state.bytesWritten))})
+          </Link>
+        )}
+        {downloadClicked && (
+          <div className={styles.downloadInfo}>
+            ✨ Try inspecting the file with the{" "}
+            <Link to="/guides/cli">MCAP CLI</Link>, or open it in{" "}
+            <Link to="https://studio.foxglove.dev/">Foxglove Studio</Link>!
           </div>
         )}
       </div>

@@ -5,8 +5,9 @@ import descriptor from "protobufjs/ext/descriptor";
 declare module "protobufjs" {
   interface ReflectionObject {
     toDescriptor(
-      protoVersion: string,
-    ): protobufjs.Message<descriptor.IFileDescriptorSet> & descriptor.IFileDescriptorSet;
+      protoVersion: string
+    ): protobufjs.Message<descriptor.IFileDescriptorSet> &
+      descriptor.IFileDescriptorSet;
   }
   declare namespace ReflectionObject {
     export const fromDescriptor: (desc: protobufjs.Message) => protobufjs.Root;

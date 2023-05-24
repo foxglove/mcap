@@ -9,6 +9,7 @@
     "paths": {
       "@mcap/core": ["../typescript/core/src"]
     },
+    "moduleResolution": "node",
 
     // Settings from @foxglove/tsconfig/base
     "newLine": "lf",

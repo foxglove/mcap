@@ -21,8 +21,9 @@ jobs:
 
       - run: corepack enable && yarn install --immutable
 
-      - run: yarn build
-        working-directory: website
+      - run: yarn workspace website lint:ci
+      - run: yarn workspace website typecheck
+      - run: yarn workspace website build
 
       - run: yarn typedoc --out website/build/docs/typescript
 

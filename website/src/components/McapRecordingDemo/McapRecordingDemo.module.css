@@ -1,0 +1,80 @@
+.container {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #b6d1ec;
+  padding: 2em 1em;
+  gap: 6px;
+}
+
+[data-theme="dark"] .container {
+  background-color: #313452;
+}
+
+.badge {
+  position: absolute;
+  top: 0;
+  transform: translate(0%, -50%);
+  font-weight: bold;
+  background: #9465de;
+  color: white;
+  padding: 4px 16px;
+  border-radius: 100px;
+}
+
+.sensors {
+  display: flex;
+  gap: 16px;
+  border: 2px solid black;
+  border-radius: 4px;
+}
+
+@media screen and (max-width: 500px) {
+  .sensors {
+    flex-direction: column;
+  }
+}
+
+.recordingDot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  position: relative;
+  bottom: 1px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background-color: currentColor;
+  vertical-align: middle;
+}
+
+.recordingDotActive {
+  border-radius: 0;
+}
+
+.recordingDetails {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.log {
+  text-align: left;
+  white-space: pre-line;
+  font: var(--ifm-code-font-size) / var(--ifm-pre-line-height)
+    var(--ifm-font-family-monospace);
+}
+
+.downloadContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.downloadInfo {
+  font-size: 0.75rem;
+  text-align: center;
+}

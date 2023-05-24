@@ -5,6 +5,7 @@ import zstd from "@foxglove/wasm-zstd";
 import { McapWriter } from "@mcap/core";
 import { EventEmitter } from "eventemitter3";
 import Queue from "promise-queue";
+
 import { ProtobufChannelInfo, addProtobufChannel } from "./addProtobufChannel";
 
 export type ProtobufObject<Message> = {
@@ -49,7 +50,7 @@ export class Recorder extends EventEmitter<RecorderEvents> {
 
   #blobParts: Uint8Array[] = [];
   bytesWritten = 0n;
-  messageCount = 0;
+  messageCount = 0n;
   chunkCount = 0;
 
   constructor() {
@@ -62,7 +63,7 @@ export class Recorder extends EventEmitter<RecorderEvents> {
       await zstd.isLoaded;
       this.#blobParts = [];
       this.bytesWritten = 0n;
-      this.messageCount = 0;
+      this.messageCount = 0n;
       this.chunkCount = 0;
       this.#writer = new McapWriter({
         chunkSize: 5 * 1024,
@@ -74,7 +75,6 @@ export class Recorder extends EventEmitter<RecorderEvents> {
           write: async (buffer: Uint8Array) => {
             this.#blobParts.push(buffer);
             this.bytesWritten += BigInt(buffer.byteLength);
-            this.chunkCount++;
             this.#emit();
           },
         },
@@ -121,6 +121,8 @@ export class Recorder extends EventEmitter<RecorderEvents> {
   }
 
   #emit() {
+    this.chunkCount = this.#writer?.statistics?.chunkCount ?? 0;
+    this.messageCount = this.#writer?.statistics?.messageCount ?? 0n;
     this.emit("update");
   }
 

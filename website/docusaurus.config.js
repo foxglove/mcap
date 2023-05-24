@@ -1,9 +1,11 @@
 // @ts-check
+/* eslint-env node */
+/* eslint-disable filenames/match-exported */
 
 const path = require("path");
-const webpack = require("webpack");
-const lightCodeTheme = require("prism-react-renderer/themes/github");
 const darkCodeTheme = require("prism-react-renderer/themes/dracula");
+const lightCodeTheme = require("prism-react-renderer/themes/github");
+const webpack = require("webpack");
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -172,6 +174,9 @@ const config = {
       prism: {
         theme: lightCodeTheme,
         darkTheme: darkCodeTheme,
+      },
+      colorMode: {
+        respectPrefersColorScheme: true,
       },
     }),
 };
