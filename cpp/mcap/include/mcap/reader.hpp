@@ -428,6 +428,12 @@ public:
    */
   const std::vector<ChunkIndex>& chunkIndexes() const;
 
+  /**
+   * @brief Returns all of the parsed MetadataIndex records. Call `readSummary()`
+   * first to fully populate this data structure.
+   */
+  const std::multimap<std::string, MetadataIndex>& metadataIndexes() const;
+
   // The following static methods are used internally for parsing MCAP records
   // and do not need to be called directly unless you are implementing your own
   // reader functionality or tests.

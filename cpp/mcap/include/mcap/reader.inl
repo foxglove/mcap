@@ -637,6 +637,10 @@ const std::vector<ChunkIndex>& McapReader::chunkIndexes() const {
   return chunkIndexes_;
 }
 
+const std::multimap<std::string, MetadataIndex>& McapReader::metadataIndexes() const {
+  return metadataIndexes_;
+}
+
 Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record* record) {
   // Check that we can read at least 9 bytes (opcode + length)
   auto maxSize = reader.size() - offset;
