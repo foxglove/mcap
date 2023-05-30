@@ -431,6 +431,7 @@ public:
   /**
    * @brief Returns all of the parsed MetadataIndex records. Call `readSummary()`
    * first to fully populate this data structure.
+   * The multimap's keys are the `name` field from each indexed Metadata.
    */
   const std::multimap<std::string, MetadataIndex>& metadataIndexes() const;
 
