@@ -123,6 +123,17 @@ export function McapRecordingDemo(): JSX.Element {
 
   const { addCameraImage, addMouseEventMessage, addPoseMessage } = state;
 
+  // Automatically pause recording after 30 seconds to avoid unbounded growth
+  useEffect(() => {
+    if (!recording) {
+      return;
+    }
+    const timeout = setTimeout(() => setRecording(false), 30000);
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [recording]);
+
   useEffect(() => {
     if (!recording || !recordMouse) {
       return;
