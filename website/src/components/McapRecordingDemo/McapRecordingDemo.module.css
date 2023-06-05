@@ -1,40 +1,55 @@
 .container {
-  display: flex;
   position: relative;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background-color: #b6d1ec;
+  background-color: rgba(148, 101, 222, 0.06);
   padding: 2em 1em;
-  gap: 6px;
 }
 
 [data-theme="dark"] .container {
-  background-color: #313452;
+  background-color: rgba(173, 150, 208, 0.33);
 }
 
-.badge {
-  position: absolute;
-  top: 0;
-  transform: translate(0%, -50%);
-  font-weight: bold;
-  background: #9465de;
-  color: white;
-  padding: 4px 16px;
-  border-radius: 100px;
+.container h2 {
+  margin: 0;
+  font-weight: 800;
+}
+
+.column {
+  margin: 0 auto;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.column hr {
+  align-self: stretch;
+  margin: 0.5em 0;
+  background-color: #e0e0e0;
+}
+
+.subhead {
+  color: #616161;
 }
 
 .sensors {
   display: flex;
-  gap: 16px;
-  border: 2px solid black;
-  border-radius: 4px;
+  gap: 4px 16px;
+  flex-wrap: wrap;
+}
+.sensors input[type="checkbox"] {
+  vertical-align: middle;
+  margin: 2px 4px 4px 0;
 }
 
 @media screen and (max-width: 500px) {
   .sensors {
+    /* flex-direction: column;
+    align-items: flex-start; */
+  }
+
+  .recordingControls {
     flex-direction: column;
-    align-items: flex-start;
   }
 }
 
@@ -54,18 +69,71 @@
   border-radius: 0;
 }
 
-.recordingDetails {
+.recordingControls {
   display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 32px;
   justify-content: center;
 }
 
-.log {
-  text-align: left;
-  white-space: pre-line;
-  font: var(--ifm-code-font-size) / var(--ifm-pre-line-height)
-    var(--ifm-font-family-monospace);
+.recordingControlsColumn {
+  flex: 1 1 33%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.recordingButtons {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  justify-content: center;
+}
+
+.downloadButton {
+  padding: 6px;
+}
+
+.recordingStatsSection h4 {
+  margin: 0;
+}
+
+.videoContainer {
+  background-color: #6f3be80f;
+  border: 1px solid #e0e0e0;
+  font-size: 0.8rem;
+  padding: 0.5rem;
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  max-width: 200px;
+  align-self: center;
+  position: relative;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.videoContainer video {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+}
+
+.videoPlaceholderText {
+  font-weight: 600;
+}
+
+.videoLoadingIndicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.error {
+  color: #db3553;
+  font-weight: 600;
 }
 
 .downloadContainer {
@@ -76,6 +144,16 @@
 }
 
 .downloadInfo {
-  font-size: 0.75rem;
-  text-align: center;
+  font-weight: 600;
+  font-size: 0.8rem;
+  border: 1px solid #6f3be87f;
+  background-color: #fafafa7f;
+  padding: 6px 6px 6px 12px;
+  margin-bottom: 16px;
+}
+
+.downloadInfoCloseButton {
+  float: right;
+  font-size: 1rem;
+  padding: 0 4px;
 }

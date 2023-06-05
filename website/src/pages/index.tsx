@@ -119,13 +119,6 @@ export default function Home(): JSX.Element {
           </div>
         </div>
       </header>
-      <BrowserOnly>
-        {() => (
-          <Suspense fallback={""}>
-            <McapRecordingDemo />
-          </Suspense>
-        )}
-      </BrowserOnly>
 
       <div className={styles.section}>
         <div className="container">
@@ -136,6 +129,14 @@ export default function Home(): JSX.Element {
           </div>
         </div>
       </div>
+
+      <BrowserOnly>
+        {() => (
+          <Suspense fallback={""}>
+            <McapRecordingDemo />
+          </Suspense>
+        )}
+      </BrowserOnly>
     </Layout>
   );
 }

@@ -71,7 +71,7 @@ function formatBytes(totalBytes: number) {
     bytes /= 1024;
     unit++;
   }
-  return `${bytes.toFixed(2)} ${units[unit]!}`;
+  return `${bytes.toFixed(unit === 0 ? 0 : 1)} ${units[unit]!}`;
 }
 
 const RADIANS_PER_DEGREE = Math.PI / 180;
@@ -119,7 +119,7 @@ export function McapRecordingDemo(): JSX.Element {
   const [recordOrientation, setRecordOrientation] = useState(true);
   const [videoStarted, setVideoStarted] = useState(false);
   const [videoPermissionError, setVideoPermissionError] = useState(false);
-  const [downloadClicked, setDownloadClicked] = useState(false);
+  const [showDownloadInfo, setShowDownloadInfo] = useState(false);
 
   const { addCameraImage, addMouseEventMessage, addPoseMessage } = state;
 
@@ -231,131 +231,160 @@ export function McapRecordingDemo(): JSX.Element {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-        setDownloadClicked(true);
+        setShowDownloadInfo(true);
       })();
     },
     [state]
   );
 
   return (
-    <div className={styles.container}>
-      <div className={styles.badge}>Try it out!</div>
-      <div>Record an MCAP file right now in your browser:</div>
-      <fieldset className={styles.sensors}>
-        <legend>Sensors</legend>
-
-        <label>
-          <input
-            type="checkbox"
-            checked={recordVideo}
-            onChange={(event) => setRecordVideo(event.target.checked)}
-          />
-          Camera
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={recordMouse}
-            onChange={(event) => setRecordMouse(event.target.checked)}
-          />
-          Mouse position
-        </label>
-        {!hasMouse && (
+    <section className={styles.container}>
+      <div className={styles.column}>
+        <header>
+          <h2>Try it out</h2>
+          <div className={styles.subhead}>
+            Record an MCAP file right now, in your browser.
+          </div>
+        </header>
+        <div className={styles.sensors}>
           <label>
             <input
               type="checkbox"
-              checked={recordOrientation}
-              onChange={(event) => setRecordOrientation(event.target.checked)}
+              checked={recordVideo}
+              onChange={(event) => setRecordVideo(event.target.checked)}
             />
-            Orientation
+            Camera
           </label>
-        )}
-      </fieldset>
-      {orientationPermissionError && (
-        <div style={{ color: "red" }}>
-          Allow permission to use device orientation
-        </div>
-      )}
-      {videoPermissionError && (
-        <div style={{ color: "red" }}>
-          Allow permission to record camera images
-        </div>
-      )}
-      <div className={styles.recordingDetails}>
-        {recording && recordVideo && !videoPermissionError && (
-          <div style={{ width: 150, height: 100, position: "relative" }}>
-            <video
-              ref={videoRef}
-              style={{ width: "100%", height: "100%" }}
-              muted
-              playsInline
+          <label>
+            <input
+              type="checkbox"
+              checked={recordMouse}
+              onChange={(event) => setRecordMouse(event.target.checked)}
             />
-            {!videoStarted && (
-              <div
-                style={{
-                  position: "absolute",
-                  left: "50%",
-                  top: "50%",
-                  transform: `translate(-50%,-50%)`,
-                }}
-              >
-                <progress />
-              </div>
-            )}
+            Mouse position
+          </label>
+          {!hasMouse && (
+            <label>
+              <input
+                type="checkbox"
+                checked={recordOrientation}
+                onChange={(event) => setRecordOrientation(event.target.checked)}
+              />
+              Orientation
+            </label>
+          )}
+        </div>
+        {orientationPermissionError && (
+          <div className={styles.error}>
+            Allow permission to use device orientation
           </div>
         )}
-        {recording && (
-          <div className={styles.log}>
+
+        <hr />
+
+        {showDownloadInfo && (
+          <div className={styles.downloadInfo}>
+            <button
+              aria-label="Close"
+              className={cx("clean-btn", styles.downloadInfoCloseButton)}
+              type="button"
+              onClick={() => setShowDownloadInfo(false)}
+            >
+              <span aria-hidden="true">&times;</span>
+            </button>
+            Try inspecting the file with the{" "}
+            <Link to="/guides/cli">MCAP CLI</Link>, or open it in{" "}
+            <Link to="https://studio.foxglove.dev/">Foxglove Studio</Link>.
+          </div>
+        )}
+
+        <div className={styles.recordingControls}>
+          <div className={styles.recordingControlsColumn}>
+            <Link
+              href="#"
+              className={cx("button", "button--danger", {
+                ["button--outline"]: !recording,
+              })}
+              onClick={onRecordClick}
+            >
+              <div
+                className={cx(styles.recordingDot, {
+                  [styles.recordingDotActive!]: recording,
+                })}
+              />
+              {recording ? "Stop recording" : "Start recording"}
+            </Link>
+            {state.messageCount > 0 && (
+              <Link
+                href="#"
+                className={cx(
+                  "button",
+                  "button--success",
+                  styles.downloadButton
+                )}
+                onClick={onDownloadClick}
+              >
+                Download ({formatBytes(Number(state.bytesWritten))})
+              </Link>
+            )}
+          </div>
+
+          <div className={styles.recordingControlsColumn}>
             {recordMouse && state.latestMouse && (
-              <div>
-                mouse x={state.latestMouse.clientX.toFixed()} y=
-                {state.latestMouse.clientY.toFixed()}
-              </div>
+              <>
+                <div className={styles.recordingStatsSection}>
+                  <h4>Mouse position</h4>
+                  <div>X: {state.latestMouse.clientX.toFixed(1)}</div>
+                  <div>Y: {state.latestMouse.clientY.toFixed(1)}</div>
+                </div>
+                <hr />
+              </>
             )}
             {recordOrientation && state.latestOrientation && (
-              <div>
-                pose ɑ={(state.latestOrientation.alpha ?? 0).toFixed()}° β=
-                {(state.latestOrientation.beta ?? 0).toFixed()}° γ=
-                {(state.latestOrientation.gamma ?? 0).toFixed()}°
-              </div>
+              <>
+                <div className={styles.recordingStatsSection}>
+                  <h4>Device orientation</h4>
+                  <div>
+                    Roll: {(state.latestOrientation.gamma ?? 0).toFixed()}°
+                  </div>
+                  <div>
+                    Pitch: {(state.latestOrientation.beta ?? 0).toFixed()}°
+                  </div>
+                  <div>
+                    Yaw: {(state.latestOrientation.alpha ?? 0).toFixed()}°
+                  </div>
+                </div>
+                <hr />
+              </>
             )}
-            <div>messages: {state.messageCount.toString()}</div>
-            <div>chunks: {state.chunkCount}</div>
+            <div className={styles.recordingStatsSection}>
+              <div>Messages: {state.messageCount.toString()}</div>
+              <div>Chunks: {state.chunkCount}</div>
+            </div>
           </div>
-        )}
-      </div>
-      <Link
-        href="#"
-        className={cx("button", "button--danger", {
-          ["button--outline"]: !recording,
-        })}
-        onClick={onRecordClick}
-      >
-        <div
-          className={cx(styles.recordingDot, {
-            [styles.recordingDotActive!]: recording,
-          })}
-        />
-        {recording ? "Stop recording" : "Start recording"}
-      </Link>
-      <div className={styles.downloadContainer}>
-        {state.messageCount > 0 && (
-          <Link
-            href="#"
-            className="button button--success"
-            onClick={onDownloadClick}
-          >
-            Download MCAP file ({formatBytes(Number(state.bytesWritten))})
-          </Link>
-        )}
-        {downloadClicked && (
-          <div className={styles.downloadInfo}>
-            ✨ Try inspecting the file with the{" "}
-            <Link to="/guides/cli">MCAP CLI</Link>, or open it in{" "}
-            <Link to="https://studio.foxglove.dev/">Foxglove Studio</Link>!
+
+          <div className={styles.recordingControlsColumn}>
+            <div className={styles.videoContainer}>
+              {videoPermissionError ? (
+                <div className={styles.error}>
+                  Allow permission to record camera images
+                </div>
+              ) : recording && recordVideo ? (
+                <>
+                  <video ref={videoRef} muted playsInline />
+                  {!videoStarted && (
+                    <progress className={styles.videoLoadingIndicator} />
+                  )}
+                </>
+              ) : (
+                <div className={styles.videoPlaceholderText}>
+                  Activate camera to record video
+                </div>
+              )}
+            </div>
           </div>
-        )}
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
