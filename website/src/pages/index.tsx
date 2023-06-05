@@ -56,7 +56,7 @@ const FeatureList: FeatureItem[] = [
     title: "Optional compression",
     Icon: icons.ZipFile,
     description:
-      "Data can be compressed using lz4 or zstd, while still supporting efficient indexed reads and chunk-based decompression.",
+      "Data can be compressed using lz4 or zstd, while still supporting efficient indexed reads using chunk-based decompression.",
   },
   {
     title: "Multilingual",
