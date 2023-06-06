@@ -254,7 +254,8 @@ export function McapRecordingDemo(): JSX.Element {
         <header>
           <h2>Try it out</h2>
           <div className={styles.subhead}>
-            Record an MCAP file right now, in your browser.
+            Record an MCAP file right from your browser. Select sensors, create
+            a recording, then download. (Data never leaves your local computer.)
           </div>
         </header>
         <div className={styles.sensors}>
@@ -387,10 +388,13 @@ export function McapRecordingDemo(): JSX.Element {
                     <progress className={styles.videoLoadingIndicator} />
                   )}
                 </>
-              ) : (
-                <div className={styles.videoPlaceholderText}>
+              ) : recordVideo ? undefined : (
+                <span
+                  className={styles.videoPlaceholderText}
+                  onClick={() => setRecordVideo(true)}
+                >
                   Activate camera to record video
-                </div>
+                </span>
               )}
             </div>
           </div>
