@@ -50,11 +50,18 @@
   margin: 1.5rem auto;
 }
 
+.heroButtons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
 .heroButtonPrimary,
 .heroButtonSecondary {
   --button-color-highlight: #2e8555;
   display: inline-block;
-  margin: 0 0.5rem;
   padding: 0.5rem 2rem;
   font-size: 1.125rem;
   font-weight: bold;

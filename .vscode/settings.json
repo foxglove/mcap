@@ -12,7 +12,7 @@
   "prettier.prettierPath": "./node_modules/prettier",
   "eslint.packageManager": "yarn",
   "eslint.options": {
-    "reportUnusedDisableDirectives": true
+    "reportUnusedDisableDirectives": "error"
   },
   "jest.jestCommandLine": "yarn workspace @mcap/core test",
 

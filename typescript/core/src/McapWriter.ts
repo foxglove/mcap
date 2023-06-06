@@ -59,7 +59,7 @@ export class McapWriter {
   private chunkSize: number;
   private dataSectionCrc = crc32Init();
 
-  private statistics: Statistics | undefined;
+  public statistics: Statistics | undefined;
   private useSummaryOffsets: boolean;
   private repeatSchemas: boolean;
   private repeatChannels: boolean;
