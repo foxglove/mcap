@@ -258,8 +258,8 @@ export function McapRecordingDemo(): JSX.Element {
             this flexible file format.
           </p>
           <p className={styles.subhead}>
-            Select sensor data to record in your MCAP file. All data is recorded
-            and saved locally.
+            Select sensor data to record. All data is recorded and saved
+            locally.
           </p>
         </header>
         <div className={styles.sensors}>
@@ -414,7 +414,7 @@ export function McapRecordingDemo(): JSX.Element {
                   className={styles.videoPlaceholderText}
                   onClick={() => setRecordVideo(true)}
                 >
-                  Activate camera to record video
+                  Enable “Camera” to record video
                 </span>
               )}
             </div>
