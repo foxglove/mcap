@@ -253,10 +253,14 @@ export function McapRecordingDemo(): JSX.Element {
       <div className={styles.column}>
         <header>
           <h2>Try it out</h2>
-          <div className={styles.subhead}>
-            Record an MCAP file right from your browser. Select sensors, create
-            a recording, then download. (Data never leaves your device.)
-          </div>
+          <p className={styles.subhead}>
+            Record sensor data to an MCAP file right now, for a hands-on look at
+            this flexible file format.
+          </p>
+          <p className={styles.subhead}>
+            Select sensor data to record in your MCAP file. All data is recorded
+            and saved locally.
+          </p>
         </header>
         <div className={styles.sensors}>
           <label>
@@ -336,7 +340,7 @@ export function McapRecordingDemo(): JSX.Element {
                 )}
                 onClick={onDownloadClick}
               >
-                Download ({formatBytes(Number(state.bytesWritten))})
+                Download recording ({formatBytes(Number(state.bytesWritten))})
               </Link>
             )}
           </div>
@@ -346,8 +350,12 @@ export function McapRecordingDemo(): JSX.Element {
               <>
                 <div className={styles.recordingStatsSection}>
                   <h4>Mouse position</h4>
-                  <div>X: {state.latestMouse.clientX.toFixed(1)}</div>
-                  <div>Y: {state.latestMouse.clientY.toFixed(1)}</div>
+                  <div>
+                    <var>X</var>: {state.latestMouse.clientX.toFixed(1)}
+                  </div>
+                  <div>
+                    <var>Y</var>: {state.latestMouse.clientY.toFixed(1)}
+                  </div>
                 </div>
                 <hr />
               </>
@@ -357,21 +365,34 @@ export function McapRecordingDemo(): JSX.Element {
                 <div className={styles.recordingStatsSection}>
                   <h4>Device orientation</h4>
                   <div>
-                    Roll: {(state.latestOrientation.gamma ?? 0).toFixed()}°
+                    <var>Roll</var>:{" "}
+                    {(state.latestOrientation.gamma ?? 0).toFixed()}°
                   </div>
                   <div>
-                    Pitch: {(state.latestOrientation.beta ?? 0).toFixed()}°
+                    <var>Pitch</var>:{" "}
+                    {(state.latestOrientation.beta ?? 0).toFixed()}°
                   </div>
                   <div>
-                    Yaw: {(state.latestOrientation.alpha ?? 0).toFixed()}°
+                    <var>Yaw</var>:{" "}
+                    {(state.latestOrientation.alpha ?? 0).toFixed()}°
                   </div>
                 </div>
                 <hr />
               </>
             )}
             <div className={styles.recordingStatsSection}>
-              <div>Messages: {state.messageCount.toString()}</div>
-              <div>Chunks: {state.chunkCount}</div>
+              <div>
+                <Link href="/guides/concepts" target="_blank">
+                  <var>Messages</var>
+                </Link>
+                : {state.messageCount.toString()}
+              </div>
+              <div>
+                <Link href="/spec#use-of-chunk-records" target="_blank">
+                  <var>Chunks</var>
+                </Link>
+                : {state.chunkCount}
+              </div>
             </div>
           </div>
 
