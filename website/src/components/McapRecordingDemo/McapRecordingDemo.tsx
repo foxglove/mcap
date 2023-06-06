@@ -255,7 +255,7 @@ export function McapRecordingDemo(): JSX.Element {
           <h2>Try it out</h2>
           <div className={styles.subhead}>
             Record an MCAP file right from your browser. Select sensors, create
-            a recording, then download. (Data never leaves your local computer.)
+            a recording, then download. (Data never leaves your device.)
           </div>
         </header>
         <div className={styles.sensors}>
