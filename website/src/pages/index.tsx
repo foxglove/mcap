@@ -22,59 +22,59 @@ type FeatureItem = {
 
 const FeatureList: FeatureItem[] = [
   {
-    title: "Pub/Sub logging",
+    title: "Pub/sub logging",
     Icon: icons.Robot,
     description:
-      "MCAP is ideal for storing multiple channels of timestamped log data, such as pub/sub messages or multimodal sensor data.",
+      "Store multiple channels of timestamped log data, like pub/sub messages or multimodal sensor data.",
   },
 
   {
-    title: "Serialization agnostic",
+    title: "Serialization-agnostic container format",
     Icon: icons.DrawerEnvelope,
     description:
-      "MCAP is a container format, allowing you to record and replay binary messages in any format, such as Protobuf, DDS (CDR), ROS, JSON, etc.",
+      "Record and replay binary messages in any format – like Protobuf, DDS (CDR), ROS, JSON, and more.",
   },
   {
     title: "High-performance writing",
     Icon: icons.SportsCarConvertible,
     description:
-      "MCAP utilizes a row-oriented, append-only design. This minimizes disk I/O, and reduces the risk of data corruption during an unclean shutdown. ",
+      "Leverage MCAP's append-only design to minimize disk I/O and reduce the risk of data corruption during an unclean shutdown.",
   },
   {
-    title: "Self-contained",
+    title: "Self-contained files",
     Icon: icons.ShipmentPackage,
     description:
-      "MCAP files are fully self-contained, including schemas required to deserialize each channel. Older files always remain readable, even as your codebase evolves.",
+      "Store your data alongside the schemas required to deserialize it, so your files can remain readable – even as your codebase evolves.",
   },
   {
     title: "Efficient seeking",
     Icon: icons.Turntable,
     description:
-      "MCAP files contain an optional index, allowing for fast, efficient reading, even over a low-bandwidth internet connection.",
+      "Enjoy fast indexed reading – even over a low-bandwidth internet connection.",
   },
   {
     title: "Optional compression",
     Icon: icons.ZipFile,
     description:
-      "Data can be compressed using lz4 or zstd, while still supporting efficient indexed reads using chunk-based decompression.",
+      "Choose between compressing your data with lz4 or zstd, while still leveraging chunk-based decompression for efficient reading.",
   },
   {
-    title: "Multilingual",
+    title: "Multilingual support",
     Icon: icons.ChatTranslate,
     description:
-      "MCAP reader and writer libraries are available in many languages, including C++, Go, Python, Rust, Swift, and Typescript.",
+      "Take advantage of MCAP reader and writer libraries in C++, Go, Python, Rust, Swift, Typescript, and more.",
   },
   {
-    title: "Flexible",
+    title: "Flexibility",
     Icon: icons.YogaLegGrabStretch,
     description:
-      "Features such as chunking, indexing, CRC checksums, and compression are optional. You choose the right tradeoffs for your application.",
+      "Leverage optional features like chunking, indexing, CRC checksums, and compression to make the right tradeoffs for your application.",
   },
   {
-    title: "Production grade",
+    title: "Production-grade performance",
     Icon: icons.ArmyWoman1,
     description:
-      "MCAP is used in production by a wide range of companies, from autonomous vehicles to drones, and is the default log format in ROS 2.",
+      "Find yourself among the robotics companies that trust MCAP, the default log format for ROS 2, as the new industry standard.",
   },
 ];
 
