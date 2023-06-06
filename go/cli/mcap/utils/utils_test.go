@@ -45,3 +45,31 @@ func TestGetScheme(t *testing.T) {
 		})
 	}
 }
+
+func TestDefaultString(t *testing.T) {
+	cases := []struct {
+		assertion string
+		args      []string
+		output    string
+	}{
+		{
+			"first string",
+			[]string{"hello", "goodbye"},
+			"hello",
+		},
+		{
+			"second string",
+			[]string{"", "hello"},
+			"hello",
+		},
+		{
+			"empty",
+			[]string{"", ""},
+			"",
+		},
+	}
+
+	for _, c := range cases {
+		assert.Equal(t, c.output, DefaultString(c.args...))
+	}
+}
