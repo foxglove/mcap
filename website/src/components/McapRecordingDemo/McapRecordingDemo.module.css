@@ -34,14 +34,9 @@
 }
 
 .subhead {
-  color: #616161;
   line-height: 1.5;
   margin-top: 8px;
   margin-bottom: 0;
-}
-
-[data-theme="dark"] .subhead {
-  color: inherit;
 }
 
 .sensors {
