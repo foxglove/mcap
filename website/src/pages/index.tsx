@@ -1,10 +1,18 @@
-import React from "react";
+/* eslint-disable filenames/match-exported */
+import BrowserOnly from "@docusaurus/BrowserOnly";
 import Link from "@docusaurus/Link";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import Layout from "@theme/Layout";
-import * as icons from "../icons";
+import React, { Suspense } from "react";
 
 import styles from "./index.module.css";
+import * as icons from "../icons";
+
+// Async import is needed to avoid errors from WASM loading during Docusaurus build.
+const McapRecordingDemo = React.lazy(async () => ({
+  default: (await import("../components/McapRecordingDemo/McapRecordingDemo"))
+    .McapRecordingDemo,
+}));
 
 type FeatureItem = {
   title: string;
@@ -80,7 +88,7 @@ function Feature({ title, Icon, description }: FeatureItem) {
   );
 }
 
-export default function Home() {
+export default function Home(): JSX.Element {
   const { siteConfig } = useDocusaurusContext();
   const blurb =
     'MCAP (pronounced "em-cap") is an open source container file format for multimodal log data. ' +
@@ -101,7 +109,7 @@ export default function Home() {
             ></img>
           </div>
           <p className={styles.blurb}>{blurb}</p>
-          <div>
+          <div className={styles.heroButtons}>
             <Link className={styles.heroButtonPrimary} to="/guides">
               Get Started
             </Link>
@@ -121,6 +129,14 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      <BrowserOnly>
+        {() => (
+          <Suspense fallback={""}>
+            <McapRecordingDemo />
+          </Suspense>
+        )}
+      </BrowserOnly>
     </Layout>
   );
 }

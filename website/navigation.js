@@ -1,4 +1,5 @@
 // @ts-check
+/* eslint-env node */
 
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
 const navigation = {
