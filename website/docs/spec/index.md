@@ -84,8 +84,8 @@ The following records are allowed to appear in the summary section:
 - [Channel](#channel-op0x04)
 - [Chunk Index](#chunk-index-op0x08)
 - [Attachment Index](#attachment-index-op0x0A)
-- [Statistics](#statistics-op0x0B)
 - [Metadata Index](#metadata-index-op0x0D)
+- [Statistics](#statistics-op0x0B)
 
 All records in the summary section MUST be grouped by opcode.
 
@@ -244,6 +244,25 @@ Attachment records must not appear within a chunk.
 | 8 + N | data        | uint64 length-prefixed Bytes | Attachment data.                                                                                                         |
 | 4     | crc         | uint32                       | CRC32 checksum of preceding fields in the record. A value of zero indicates that CRC validation should not be performed. |
 
+### Metadata (op=0x0C)
+
+A metadata record contains arbitrary user data in key-value pairs.
+
+| Bytes | Name     | Type                  | Description                                         |
+| ----- | -------- | --------------------- | --------------------------------------------------- |
+| 4 + N | name     | String                | Example: `my_company_name_hardware_info`.           |
+| 4 + N | metadata | `Map<string, string>` | Example keys: `part_id`, `serial`, `board_revision` |
+
+### Data End (op=0x0F)
+
+A Data End record indicates the end of the data section.
+
+> Why? When reading a file from start to end, there is ambiguity when the data section ends and the summary section starts because some records (i.e. Channel) can repeat for summary data. The Data End record provides a clear delineation the data section has ended.
+
+| Bytes | Name             | Type   | Description                                                                                                                    |
+| ----- | ---------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| 4     | data_section_crc | uint32 | CRC32 of all bytes from the beginning of the file up to the DataEnd record. A value of 0 indicates the CRC32 is not available. |
+
 ### Attachment Index (op=0x0A)
 
 An Attachment Index record contains the location of an attachment in the file. An Attachment Index record exists for every Attachment record in the file.
@@ -257,6 +276,16 @@ An Attachment Index record contains the location of an attachment in the file. A
 | 8     | data_size   | uint64    | Size of the attachment data.                                                                 |
 | 4 + N | name        | String    | Name of the attachment.                                                                      |
 | 4 + N | media_type  | String    | [Media type](https://en.wikipedia.org/wiki/Media_type) of the attachment (e.g "text/plain"). |
+
+### Metadata Index (op=0x0D)
+
+A metadata index record contains the location of a metadata record within the file.
+
+| Bytes | Name   | Type   | Description                                                          |
+| ----- | ------ | ------ | -------------------------------------------------------------------- |
+| 8     | offset | uint64 | Byte offset from the start of the file to the metadata record.       |
+| 8     | length | uint64 | Total byte length of the record, including opcode and length prefix. |
+| 4 + N | name   | String | Name of the metadata record.                                         |
 
 ### Statistics (op=0x0B)
 
@@ -278,25 +307,6 @@ When using a Statistics record with a non-empty channel_message_counts, the Summ
 
 > Why? The typical use case for tools is to provide a listing of the types and quantities of messages stored in the file. Without an easy to access copy of the Channel records, tools would need to linearly scan the file for Channel records to display what types of messages exist in the file.
 
-### Metadata (op=0x0C)
-
-A metadata record contains arbitrary user data in key-value pairs.
-
-| Bytes | Name     | Type                  | Description                                         |
-| ----- | -------- | --------------------- | --------------------------------------------------- |
-| 4 + N | name     | String                | Example: `my_company_name_hardware_info`.           |
-| 4 + N | metadata | `Map<string, string>` | Example keys: `part_id`, `serial`, `board_revision` |
-
-### Metadata Index (op=0x0D)
-
-A metadata index record contains the location of a metadata record within the file.
-
-| Bytes | Name   | Type   | Description                                                          |
-| ----- | ------ | ------ | -------------------------------------------------------------------- |
-| 8     | offset | uint64 | Byte offset from the start of the file to the metadata record.       |
-| 8     | length | uint64 | Total byte length of the record, including opcode and length prefix. |
-| 4 + N | name   | String | Name of the metadata record.                                         |
-
 ### Summary Offset (op=0x0E)
 
 A Summary Offset record contains the location of records within the summary section. Each Summary Offset record corresponds to a group of summary records with the same opcode.
@@ -306,16 +316,6 @@ A Summary Offset record contains the location of records within the summary sect
 | 1     | group_opcode | uint8  | The opcode of all records in the group.                                  |
 | 8     | group_start  | uint64 | Byte offset from the start of the file of the first record in the group. |
 | 8     | group_length | uint64 | Total byte length of all records in the group.                           |
-
-### Data End (op=0x0F)
-
-A Data End record indicates the end of the data section.
-
-> Why? When reading a file from start to end, there is ambiguity when the data section ends and the summary section starts because some records (i.e. Channel) can repeat for summary data. The Data End record provides a clear delineation the data section has ended.
-
-| Bytes | Name             | Type   | Description                                                                                                                    |
-| ----- | ---------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| 4     | data_section_crc | uint32 | CRC32 of all bytes from the beginning of the file up to the DataEnd record. A value of 0 indicates the CRC32 is not available. |
 
 ## Serialization
 
