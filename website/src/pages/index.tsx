@@ -111,10 +111,10 @@ export default function Home(): JSX.Element {
           <p className={styles.blurb}>{blurb}</p>
           <div className={styles.heroButtons}>
             <Link className={styles.heroButtonPrimary} to="/guides">
-              Get Started
+              Get started
             </Link>
             <Link className={styles.heroButtonSecondary} to="/reference">
-              API Reference
+              API reference
             </Link>
           </div>
         </div>
