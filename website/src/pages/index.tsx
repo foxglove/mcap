@@ -56,7 +56,7 @@ const FeatureList: FeatureItem[] = [
     title: "Optional compression",
     Icon: icons.ZipFile,
     description:
-      "Choose between compressing your data with lz4 or zstd, while still leveraging chunk-based decompression for efficient reading.",
+      "Choose between LZ4 or Zstandard for chunk-based compression, without compromising efficient reading.",
   },
   {
     title: "Multilingual support",
