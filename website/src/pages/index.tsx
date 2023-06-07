@@ -44,7 +44,7 @@ const FeatureList: FeatureItem[] = [
     title: "Self-contained files",
     Icon: icons.ShipmentPackage,
     description:
-      "Store your data alongside the schemas required to deserialize it, so your files can remain readable – even as your codebase evolves.",
+      "Store your data alongside the schemas required to deserialize it, so your files can remain readable even as your codebase evolves.",
   },
   {
     title: "Efficient seeking",
