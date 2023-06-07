@@ -50,7 +50,7 @@ const FeatureList: FeatureItem[] = [
     title: "Efficient seeking",
     Icon: icons.Turntable,
     description:
-      "Enjoy fast indexed reading – even over a low-bandwidth internet connection.",
+      "Enjoy fast indexed reading, even over a low-bandwidth connection.",
   },
   {
     title: "Optional compression",
