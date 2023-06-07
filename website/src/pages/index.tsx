@@ -59,7 +59,7 @@ const FeatureList: FeatureItem[] = [
       "Choose between LZ4 or Zstandard for chunk-based compression, without compromising efficient reading.",
   },
   {
-    title: "Multilingual support",
+    title: "Broad language support",
     Icon: icons.ChatTranslate,
     description:
       "Take advantage of native MCAP reader and writer libraries in C++, Go, Python, Rust, Swift, and TypeScript.",
