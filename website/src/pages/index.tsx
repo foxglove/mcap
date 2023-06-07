@@ -29,7 +29,7 @@ const FeatureList: FeatureItem[] = [
   },
 
   {
-    title: "Serialization-agnostic container format",
+    title: "Serialization-agnostic format",
     Icon: icons.DrawerEnvelope,
     description:
       "Record and replay binary messages in any format – like Protobuf, DDS (CDR), ROS, JSON, and more.",
@@ -38,7 +38,7 @@ const FeatureList: FeatureItem[] = [
     title: "High-performance writing",
     Icon: icons.SportsCarConvertible,
     description:
-      "Leverage MCAP's append-only design to minimize disk I/O and reduce the risk of data corruption during an unclean shutdown.",
+      "Use MCAP's row-oriented, append-only design to minimize disk I/O and reduce the risk of data corruption during unclean shutdowns.",
   },
   {
     title: "Self-contained files",
@@ -50,31 +50,31 @@ const FeatureList: FeatureItem[] = [
     title: "Efficient seeking",
     Icon: icons.Turntable,
     description:
-      "Enjoy fast indexed reading, even over a low-bandwidth connection.",
+      "Get fast indexed reading, even over a low-bandwidth connection.",
   },
   {
     title: "Optional compression",
     Icon: icons.ZipFile,
     description:
-      "Choose between LZ4 or Zstandard for chunk-based compression, without compromising efficient reading.",
+      "Choose between LZ4 or Zstandard for chunk-based compression, while still supporting efficient indexed reads.",
   },
   {
     title: "Broad language support",
     Icon: icons.ChatTranslate,
     description:
-      "Take advantage of native MCAP reader and writer libraries in C++, Go, Python, Rust, Swift, and TypeScript.",
+      "Use native MCAP reader and writer libraries in C++, Go, Python, Rust, Swift, and TypeScript.",
   },
   {
     title: "Flexibility",
     Icon: icons.YogaLegGrabStretch,
     description:
-      "Leverage optional features like chunking, indexing, CRC checksums, and compression to make the right tradeoffs for your application.",
+      "Configure optional features like chunking, indexing, CRC checksums, and compression to make the right tradeoffs for your application.",
   },
   {
-    title: "Production-grade performance",
+    title: "Production-grade standards",
     Icon: icons.ArmyWoman1,
     description:
-      "Find yourself among the robotics companies that trust MCAP, the default log format for ROS 2, as the new industry standard.",
+      "Become one of the many robotics companies that deploy MCAP in production. As the default log format for ROS 2, MCAP offers long-term support and technical robustness.",
   },
 ];
 
@@ -111,10 +111,10 @@ export default function Home(): JSX.Element {
           <p className={styles.blurb}>{blurb}</p>
           <div className={styles.heroButtons}>
             <Link className={styles.heroButtonPrimary} to="/guides">
-              Get started
+              Get Started
             </Link>
             <Link className={styles.heroButtonSecondary} to="/reference">
-              API reference
+              API Reference
             </Link>
           </div>
         </div>
