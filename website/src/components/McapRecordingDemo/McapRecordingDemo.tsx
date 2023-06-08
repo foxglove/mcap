@@ -254,8 +254,8 @@ export function McapRecordingDemo(): JSX.Element {
         <header>
           <h2>Try it out now</h2>
           <p className={styles.subhead}>
-            Select sensor data to record to an MCAP file. All data is recorded and saved
-            locally.
+            Select sensor data to record to an MCAP file. All data is recorded
+            and saved locally.
           </p>
         </header>
         <div className={styles.sensors}>
