@@ -14,6 +14,7 @@ import (
 
 var (
 	addAttachmentLogTime      uint64
+	addAttachmentName         string
 	addAttachmentCreationTime uint64
 	addAttachmentFilename     string
 	addAttachmentMediaType    string
@@ -166,7 +167,7 @@ var addAttachmentCmd = &cobra.Command{
 				return w.WriteAttachment(&mcap.Attachment{
 					LogTime:    logTime,
 					CreateTime: createTime,
-					Name:       addAttachmentFilename,
+					Name:       utils.DefaultString(addAttachmentName, addAttachmentFilename),
 					MediaType:  addAttachmentMediaType,
 					DataSize:   uint64(contentLength),
 					Data:       attachment,
@@ -186,6 +187,7 @@ var addAttachmentCmd = &cobra.Command{
 func init() {
 	addCmd.AddCommand(addAttachmentCmd)
 	addAttachmentCmd.PersistentFlags().StringVarP(&addAttachmentFilename, "file", "f", "", "filename of attachment to add")
+	addAttachmentCmd.PersistentFlags().StringVarP(&addAttachmentName, "name", "n", "", "name of attachment to add (defaults to filename)")
 	addAttachmentCmd.PersistentFlags().StringVarP(&addAttachmentMediaType, "content-type", "", "application/octet-stream", "content type of attachment")
 	addAttachmentCmd.PersistentFlags().Uint64VarP(&addAttachmentLogTime, "log-time", "", 0, "attachment log time in nanoseconds (defaults to current timestamp)")
 	addAttachmentCmd.PersistentFlags().Uint64VarP(&addAttachmentLogTime, "creation-time", "", 0, "attachment creation time in nanoseconds (defaults to ctime)")

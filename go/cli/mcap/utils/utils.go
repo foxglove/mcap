@@ -268,3 +268,14 @@ func PrettyJSON(data []byte) (string, error) {
 	}
 	return indented.String(), nil
 }
+
+// DefaultString returns the first of the provided strings that is nonempty, or
+// an empty string if they are all empty.
+func DefaultString(strings ...string) string {
+	for _, s := range strings {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
+}

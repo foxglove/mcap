@@ -1,4 +1,4 @@
-# API Reference
+# API reference
 
 MCAP libraries are available for [C++](https://github.com/foxglove/mcap/tree/main/cpp), [Go](https://github.com/foxglove/mcap/tree/main/go), [Python](https://github.com/foxglove/mcap/tree/main/python), [Rust](https://github.com/foxglove/mcap/tree/main/rust), [Swift](https://github.com/foxglove/mcap/tree/main/swift), and [TypeScript](https://github.com/foxglove/mcap/tree/main/typescript). All libraries are tested for conformance with the MCAP specification.
 
