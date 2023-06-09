@@ -112,7 +112,7 @@ The IDL definition of the type specified by `name` along with all dependent type
 
 The `omgidl` schema encoding stores [OMG IDL](https://www.omg.org/spec/IDL/4.2/About-IDL) definitions for (X)CDR-encoded messages.
 
-- `name`: The globally-scoped name of the message type, eg. `toplevel_module::my_module::MyType`
+- `name`: The globally-scoped name of the message type, eg. `top_level_module::my_module::MyType`
 - `encoding`: `omgidl`
 - `data`: valid OMG IDL definition file contents with a definition for the message type and all referenced types.
 
@@ -129,27 +129,27 @@ One way to produce this is to use a C++ compiler to resolve those `#include` dir
 ```bash
 # Run from the root of your IDL definition tree, or use additional `-I` arguments to indicate your
 # full include path to the compiler.
-# The `gcc` output may contain debugging lines such as "# 1 "toplevel_module/my_module/MyType.idl",
+# The `gcc` output may contain debugging lines such as "# 1 "top_level_module/my_module/MyType.idl",
 # the grep command here is intended to filter those out.
-$ gcc -E -I. toplevel_module/my_module/MyType.idl | grep -v "^# \d" > all_definitions.idl
+$ gcc -E -I. top_level_module/my_module/MyType.idl | grep -v "^# \d" > all_definitions.idl
 ```
 
 For the following files:
 
-```cpp title=toplevel_module/my_module/MyType.idl
-#include "toplevel_module/other_module/OtherType.idl"
+```cpp title=top_level_module/my_module/MyType.idl
+#include "top_level_module/other_module/OtherType.idl"
 
-module toplevel_module {
+module top_level_module {
   module my_module {
     struct MyType {
-      toplevel_module::other_module::OtherType val;
+      top_level_module::other_module::OtherType val;
     }
   }
 }
 ```
 
-```cpp title=toplevel_module/other_module/OtherType.idl
-module toplevel_module {
+```cpp title=top_level_module/other_module/OtherType.idl
+module top_level_module {
   module other_module {
     struct OtherType {
       float val;
@@ -161,7 +161,7 @@ module toplevel_module {
 This should produce:
 
 ```cpp title=schema.data
-module toplevel_module {
+module top_level_module {
   module other_module {
     struct OtherType {
       float val;
@@ -169,16 +169,16 @@ module toplevel_module {
   }
 }
 
-module toplevel_module {
+module top_level_module {
   module my_module {
     struct MyType {
-      toplevel_module::other_module::OtherType val;
+      top_level_module::other_module::OtherType val;
     }
   }
 }
 ```
 
-For this example, `schema.name` should be set to `toplevel_module::my_module::MyType`.
+For this example, `schema.name` should be set to `top_level_module::my_module::MyType`.
 
 ### jsonschema
 
