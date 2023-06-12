@@ -44,7 +44,7 @@ const FeatureList: FeatureItem[] = [
     title: "Self-contained",
     Icon: icons.ShipmentPackage,
     description:
-      "Store your data alongside the schemas required to deserialize it, so your files can remain readable even as your codebase evolves.",
+      "MCAP stores message schemas alongside data, so your files remain readable in the future even as your codebase evolves.",
   },
   {
     title: "Efficient seeking",
