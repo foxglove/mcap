@@ -74,7 +74,7 @@ const FeatureList: FeatureItem[] = [
     title: "Production-grade",
     Icon: icons.ArmyWoman1,
     description:
-      "Become one of the many robotics companies that deploy MCAP in production. As the default log format for ROS 2, MCAP offers long-term support and technical robustness.",
+      "MCAP is used in production by a wide range of companies, from autonomous vehicles to drones, and is the default log format in ROS 2.",
   },
 ];
 
