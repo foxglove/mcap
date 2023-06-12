@@ -65,7 +65,7 @@ const FeatureList: FeatureItem[] = [
       "Use native MCAP reader and writer libraries in C++, Go, Python, Rust, Swift, and TypeScript.",
   },
   {
-    title: "Flexibility",
+    title: "Flexible",
     Icon: icons.YogaLegGrabStretch,
     description:
       "Configure optional features like chunking, indexing, CRC checksums, and compression to make the right tradeoffs for your application.",
