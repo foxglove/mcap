@@ -62,7 +62,7 @@ const FeatureList: FeatureItem[] = [
     title: "Broad language support",
     Icon: icons.ChatTranslate,
     description:
-      "Use native MCAP reader and writer libraries in C++, Go, Python, Rust, Swift, and TypeScript.",
+      "Native reader and writer libraries are available in C++, Go, Python, Rust, Swift, and TypeScript.",
   },
   {
     title: "Flexible",
