@@ -25,7 +25,7 @@ const FeatureList: FeatureItem[] = [
     title: "Pub/sub logging",
     Icon: icons.Robot,
     description:
-      "Store multiple channels of timestamped log data, including pub/sub messages or multimodal sensor data.",
+      "Store multiple channels of timestamped log data, such as pub/sub messages or multimodal sensor data.",
   },
 
   {
