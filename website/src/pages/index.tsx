@@ -41,7 +41,7 @@ const FeatureList: FeatureItem[] = [
       "Use MCAP's row-oriented, append-only design to minimize disk I/O and reduce the risk of data corruption during unclean shutdowns.",
   },
   {
-    title: "Self-contained files",
+    title: "Self-contained",
     Icon: icons.ShipmentPackage,
     description:
       "Store your data alongside the schemas required to deserialize it, so your files can remain readable even as your codebase evolves.",
