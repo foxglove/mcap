@@ -38,7 +38,7 @@ const FeatureList: FeatureItem[] = [
     title: "High-performance writing",
     Icon: icons.SportsCarConvertible,
     description:
-      "Use MCAP's row-oriented, append-only design to minimize disk I/O and reduce the risk of data corruption during unclean shutdowns.",
+      "MCAP uses a row-oriented, append-only design to minimize disk I/O and reduce the risk of data corruption during unclean shutdowns.",
   },
   {
     title: "Self-contained",
