@@ -71,7 +71,7 @@ const FeatureList: FeatureItem[] = [
       "Configure optional features like chunking, indexing, CRC checksums, and compression to make the right tradeoffs for your application.",
   },
   {
-    title: "Production-grade standards",
+    title: "Production-grade",
     Icon: icons.ArmyWoman1,
     description:
       "Become one of the many robotics companies that deploy MCAP in production. As the default log format for ROS 2, MCAP offers long-term support and technical robustness.",
