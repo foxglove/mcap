@@ -29,7 +29,7 @@ const FeatureList: FeatureItem[] = [
   },
 
   {
-    title: "Serialization-agnostic format",
+    title: "Serialization-agnostic",
     Icon: icons.DrawerEnvelope,
     description:
       "Record and replay binary messages in any format – like Protobuf, DDS (CDR), ROS, JSON, and more.",
