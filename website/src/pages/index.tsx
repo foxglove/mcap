@@ -50,7 +50,7 @@ const FeatureList: FeatureItem[] = [
     title: "Efficient seeking",
     Icon: icons.Turntable,
     description:
-      "Get fast indexed reading, even over a low-bandwidth connection.",
+      "MCAP files contain an optional index, allowing for fast, efficient reading, even over a low-bandwidth internet connection.",
   },
   {
     title: "Optional compression",
