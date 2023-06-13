@@ -9,7 +9,7 @@ except ImportError:
     from ._vendor.genpy import dynamic  # type: ignore
 
 from mcap.exceptions import McapError
-from mcap.records import Message, Schema
+from mcap.records import Schema
 from mcap.well_known import SchemaEncoding, MessageEncoding
 from mcap.decoder import DecoderFactory as McapDecoderFactory
 
@@ -30,7 +30,7 @@ class DecoderFactory(McapDecoderFactory):
         if (
             message_encoding != MessageEncoding.ROS1
             or schema is None
-            or schema.encoding == SchemaEncoding.ROS1
+            or schema.encoding != SchemaEncoding.ROS1
         ):
             return None
         generated_type = self._types.get(schema.id)
@@ -43,7 +43,7 @@ class DecoderFactory(McapDecoderFactory):
 
         def decoder(data: bytes):
             ros_msg = generated_type()
-            ros_msg.deserialize(bytes)
+            ros_msg.deserialize(data)
             return ros_msg
 
         return decoder

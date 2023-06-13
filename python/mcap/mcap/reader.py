@@ -179,7 +179,8 @@ class McapReader(ABC):
                     return decoder(message.data)
 
             raise DecoderNotFoundError(
-                f"no decoder factory supplied for message encoding {channel.message_encoding}, schema {schema}"
+                f"no decoder factory supplied for message encoding {channel.message_encoding}, "
+                f"schema {schema}"
             )
 
         for schema, channel, message in message_iterator:

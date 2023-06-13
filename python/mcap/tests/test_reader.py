@@ -2,12 +2,13 @@
 import os
 from pathlib import Path
 import pytest
-from typing import IO, Tuple, Type, Union
+from typing import IO, Tuple, Type, Union, Optional, Any
 import json
 
 from mcap.reader import make_reader, SeekingReader, NonSeekingReader, McapReader
 from mcap.writer import Writer
 from mcap.records import Schema, Channel, Message
+from mcap.decoder import DecoderFactory
 from mcap.exceptions import DecoderNotFoundError
 
 DEMO_MCAP = (
@@ -117,17 +118,30 @@ def test_decode_schemaless(
     write_json_mcap(filepath)
 
     with open(filepath, "rb") as f:
-
-        def json_decoder(message: Message):
-            return json.loads(message.data)
-
-        reader = reader_cls(f, schemaless_decoders={"json": json_decoder})
+        reader = reader_cls(
+            f, decoder_factories=[JsonDecoderFactory(require_schema=False)]
+        )
         results = [
             (schema, value) for (schema, _, _, value) in reader.iter_decoded_messages()
         ]
         assert results[0] == (None, {"a": 0})
         assert results[1][0] is not None
         assert results[1][1] == {"a": 1}
+
+
+class JsonDecoderFactory(DecoderFactory):
+    def __init__(self, require_schema: bool = True):
+        self._require_schema = require_schema
+
+    def decoder_for(self, message_encoding: str, schema: Optional[Schema]):
+        def decoder(message_data: bytes) -> Any:
+            return json.loads(message_data)
+
+        if message_encoding != "json":
+            return None
+        if self._require_schema and schema is None:
+            return None
+        return decoder
 
 
 @pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
@@ -137,17 +151,14 @@ def test_decode_with_schema(
     filepath = tmpdir / "json.mcap"
     write_json_mcap(filepath)
 
-    def json_decoder(schema: Schema, message: Message):
-        return json.loads(message.data)
-
     # should throw DecoderNotFound when it encounters the schemaless channel /a.
     with open(filepath, "rb") as f:
-        reader = reader_cls(f, decoders={"json": json_decoder})
+        reader = reader_cls(f, decoder_factories=[JsonDecoderFactory()])
         with pytest.raises(DecoderNotFoundError):
             for _ in reader.iter_decoded_messages():
                 pass
     with open(filepath, "rb") as f:
-        reader = reader_cls(f, decoders={"json": json_decoder})
+        reader = reader_cls(f, decoder_factories=[JsonDecoderFactory()])
         results = [
             (schema, value)
             for (schema, _, _, value) in reader.iter_decoded_messages(topics=["/b"])

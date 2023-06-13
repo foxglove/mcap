@@ -1,9 +1,9 @@
 """Decoder class for decoding ROS2 messages from MCAP files."""
 
-from typing import Dict, Optional, Callable, Any
+from typing import Dict, Optional, Callable
 
 from mcap.exceptions import McapError
-from mcap.records import Message, Schema
+from mcap.records import Schema
 from mcap.well_known import SchemaEncoding, MessageEncoding
 from mcap.decoder import DecoderFactory as McapDecoderFactory
 
@@ -31,11 +31,7 @@ class DecoderFactory(McapDecoderFactory):
             return None
 
         decoder = self._decoders.get(schema.id)
-        if decoder is not None:
-            if schema.encoding != SchemaEncoding.ROS2:
-                raise McapROS2DecodeError(
-                    f'can\'t parse schema with encoding "{schema.encoding}"'
-                )
+        if decoder is None:
             type_dict = generate_dynamic(  # type: ignore
                 schema.name, schema.data.decode()
             )
