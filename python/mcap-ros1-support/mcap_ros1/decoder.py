@@ -53,12 +53,14 @@ class DecoderFactory(McapDecoderFactory):
 class Decoder:
     def __init__(self):
         warnings.warn(
-            "Decoder class is deprecated, use DecoderFactory as an argument to make_reader instead",
+            """The :py:class:`mcap_ros1.decoder.Decoder` class is deprecated.
+For similar functionality, instantiate the :py:class:`mcap.reader.McapReader` with a
+:py:class:`mcap_ros1.decoder.DecoderFactory` instance.""",
             DeprecationWarning,
         )
-        self.decoder_factory = DecoderFactory()
+        self._decoder_factory = DecoderFactory()
 
     def decode(self, schema: Schema, message: Message) -> Any:
-        return self.decoder_factory.decoder_for(MessageEncoding.ROS1, schema)(
-            message.data
-        )
+        decoder = self._decoder_factory.decoder_for(MessageEncoding.ROS1, schema)
+        assert decoder is not None
+        return decoder(message.data)
