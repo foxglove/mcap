@@ -1,4 +1,5 @@
 from typing import Dict, Any, Type, Callable, Optional
+import warnings
 
 try:
     # If the user has genpy on their PATH from an existing ROS1 environment, use that.
@@ -9,7 +10,7 @@ except ImportError:
     from ._vendor.genpy import dynamic  # type: ignore
 
 from mcap.exceptions import McapError
-from mcap.records import Schema
+from mcap.records import Schema, Message
 from mcap.well_known import SchemaEncoding, MessageEncoding
 from mcap.decoder import DecoderFactory as McapDecoderFactory
 
@@ -47,3 +48,17 @@ class DecoderFactory(McapDecoderFactory):
             return ros_msg
 
         return decoder
+
+
+class Decoder:
+    def __init__(self):
+        warnings.warn(
+            "Decoder class is deprecated, use DecoderFactory as an argument to make_reader instead",
+            DeprecationWarning,
+        )
+        self.decoder_factory = DecoderFactory()
+
+    def decode(self, schema: Schema, message: Message) -> Any:
+        return self.decoder_factory.decoder_for(MessageEncoding.ROS1, schema)(
+            message.data
+        )

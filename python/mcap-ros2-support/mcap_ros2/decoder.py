@@ -1,9 +1,10 @@
 """Decoder class for decoding ROS2 messages from MCAP files."""
 
-from typing import Dict, Optional, Callable
+from typing import Dict, Optional, Callable, Any
+import warnings
 
 from mcap.exceptions import McapError
-from mcap.records import Schema
+from mcap.records import Schema, Message
 from mcap.well_known import SchemaEncoding, MessageEncoding
 from mcap.decoder import DecoderFactory as McapDecoderFactory
 
@@ -40,3 +41,17 @@ class DecoderFactory(McapDecoderFactory):
             decoder = type_dict[schema.name]
             self._decoders[schema.id] = decoder
         return decoder
+
+
+class Decoder:
+    def __init__(self):
+        warnings.warn(
+            "Decoder class is deprecated, use DecoderFactory as an argument to make_reader instead",
+            DeprecationWarning,
+        )
+        self.decoder_factory = DecoderFactory()
+
+    def decode(self, schema: Schema, message: Message) -> Any:
+        return self.decoder_factory.decoder_for(MessageEncoding.CDR, schema)(
+            message.data
+        )

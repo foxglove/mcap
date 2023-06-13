@@ -1,10 +1,11 @@
 from collections import Counter
 from typing import Dict, Any, Type, Iterable, Optional, Callable
+import warnings
 
 from google.protobuf.descriptor_pb2 import FileDescriptorSet, FileDescriptorProto
 from google.protobuf.message_factory import MessageFactory
 from mcap.exceptions import McapError
-from mcap.records import Schema
+from mcap.records import Schema, Message
 from mcap.well_known import SchemaEncoding, MessageEncoding
 from mcap.decoder import DecoderFactory as McapDecoderFactory
 
@@ -111,3 +112,17 @@ class DecoderFactory(McapDecoderFactory):
             return proto_msg
 
         return decoder
+
+
+class Decoder:
+    def __init__(self):
+        warnings.warn(
+            "Decoder class is deprecated, use DecoderFactory as an argument to make_reader instead",
+            DeprecationWarning,
+        )
+        self.decoder_factory = DecoderFactory()
+
+    def decode(self, schema: Schema, message: Message) -> Any:
+        return self.decoder_factory.decoder_for(MessageEncoding.Protobuf, schema)(
+            message.data
+        )
