@@ -12,7 +12,7 @@ import AndurilLight from "./companies/anduril-color.svg";
 import CocoLight from "./companies/coco-color.svg";
 import FoxgloveLight from "./companies/foxglove-color.svg";
 import NorLabLight from "./companies/norlab-color.svg";
-import OpenRoboticsLight from "./companies/openrobotics-color.svg";
+import ROSLight from "./companies/ros-color.svg";
 import PlotJugglerLight from "./companies/plotjuggler-color.svg";
 import TangramLight from "./companies/tangram-color.svg";
 
@@ -20,7 +20,7 @@ import AndurilDark from "./companies/anduril-white.svg";
 import CocoDark from "./companies/coco-white.svg";
 import FoxgloveDark from "./companies/foxglove-white.svg";
 import NorlabDark from "./companies/norlab-white.svg";
-import OpenRoboticsDark from "./companies/openrobotics-light.svg";
+import ROSDark from "./companies/ros-white.svg";
 import PlotJugglerDark from "./companies/plotjuggler-white.svg";
 import TangramDark from "./companies/tangram-white.svg";
 
@@ -29,7 +29,7 @@ const LightModeLogos = [
   CocoLight,
   FoxgloveLight,
   NorLabLight,
-  OpenRoboticsLight,
+  ROSLight,
   PlotJugglerLight,
   TangramLight,
 ];
@@ -39,7 +39,7 @@ const DarkModeLogos = [
   CocoDark,
   FoxgloveDark,
   NorlabDark,
-  OpenRoboticsDark,
+  ROSDark,
   PlotJugglerDark,
   TangramDark,
 ];
