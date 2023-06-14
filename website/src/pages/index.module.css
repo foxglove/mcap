@@ -121,3 +121,18 @@
   width: 60px;
   height: auto;
 }
+
+.companyIcon {
+  display: inline-block;
+  height: 60px;
+  width: auto;
+  margin: 50px auto 10px;
+}
+
+[data-theme="light"] .darkMode {
+  display: none;
+}
+
+[data-theme="dark"] .lightMode {
+  display: none;
+}
