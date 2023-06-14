@@ -138,19 +138,19 @@ export default function Home(): JSX.Element {
           <h2 style={{ textAlign: "center" }}>
             Trusted by leading robotics teams
           </h2>
-          <div className={styles.featureGrid}>
+          <div className={styles.logoGrid}>
             {LightModeLogos.map((Logo, idx) => (
               <Logo
                 key={idx}
                 role="img"
-                className={`${styles.lightMode} ${styles.companyIcon}`}
+                className={`${styles.lightMode} ${styles.logoIcon}`}
               />
             ))}
             {DarkModeLogos.map((Logo, idx) => (
               <Logo
                 key={idx}
                 role="img"
-                className={`${styles.darkMode} ${styles.companyIcon}`}
+                className={`${styles.darkMode} ${styles.logoIcon}`}
               />
             ))}
           </div>

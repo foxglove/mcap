@@ -122,11 +122,30 @@
   height: auto;
 }
 
-.companyIcon {
+.logoGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2rem 3rem;
+  text-align: center;
+}
+
+@media (min-width: 640px) {
+  .logoGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 996px) {
+  .logoGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.logoIcon {
   display: inline-block;
-  height: 60px;
+  height: 40px;
   width: auto;
-  margin: 50px auto 10px;
+  margin: 40px auto 10px;
 }
 
 [data-theme="light"] .darkMode {
