@@ -1,18 +1,61 @@
-type VideoCaptureParams = {
+type VideoStreamParams = {
   /** Video element to attach to the camera */
   video: HTMLVideoElement;
-  /** Frame interval in seconds */
-  frameDurationSec: number;
-  /** Called when video capture has started */
+  /** Called when video stream has started */
   onStart: () => void;
   /** Called when an error is encountered */
   onError: (error: Error) => void;
+};
+
+/**
+ * Prompts the user for camera permission and displays video in the provided <video> element
+ * @returns A function to stop the stream and clean up resources
+ */
+export function startVideoStream(params: VideoStreamParams): () => void {
+  let canceled = false;
+  let stream: MediaStream | undefined;
+  navigator.mediaDevices
+    .getUserMedia({ video: true })
+    .then(async (videoStream) => {
+      if (canceled) {
+        return;
+      }
+      stream = videoStream;
+      params.video.srcObject = videoStream;
+      await params.video.play();
+      if (canceled) {
+        return;
+      }
+      params.onStart();
+    })
+    .catch((err) => {
+      if (canceled) {
+        return;
+      }
+      params.onError(err as Error);
+    });
+
+  return () => {
+    canceled = true;
+    if (stream) {
+      for (const track of stream.getTracks()) {
+        track.stop();
+      }
+    }
+  };
+}
+
+type VideoCaptureParams = {
+  /** Video element to capture */
+  video: HTMLVideoElement;
+  /** Frame interval in seconds */
+  frameDurationSec: number;
   /** Called when each frame has been converted to an image */
   onFrame: (blob: Blob) => void;
 };
 
 /**
- * Prompts the user for camera permission and begins capturing frames
+ * Begins capturing frames from a <video> element
  * @returns A function to stop the capture and clean up resources
  */
 export function startVideoCapture(params: VideoCaptureParams): () => void {
@@ -27,30 +70,7 @@ async function startVideoCaptureAsync(
   params: VideoCaptureParams,
   signal: AbortSignal
 ) {
-  const { video, onStart, onFrame, onError, frameDurationSec } = params;
-  let stream: MediaStream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: true });
-  } catch (error) {
-    onError(error as Error);
-    return;
-  }
-  if (signal.aborted) {
-    return;
-  }
-  video.srcObject = stream;
-  try {
-    await video.play();
-  } catch (error) {
-    // Interrupted: https://developer.chrome.com/blog/play-request-was-interrupted/
-    console.error(error);
-    return;
-  }
-
-  if (!signal.aborted) {
-    onStart();
-  }
-
+  const { video, onFrame, frameDurationSec } = params;
   const canvas = document.createElement("canvas");
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -80,9 +100,6 @@ async function startVideoCaptureAsync(
 
   const cleanup = () => {
     clearInterval(interval);
-    for (const track of stream.getTracks()) {
-      track.stop();
-    }
   };
   if (signal.aborted) {
     cleanup();
