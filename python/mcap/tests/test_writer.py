@@ -1,16 +1,17 @@
 import contextlib
-import json
 from io import BytesIO
+import json
 from tempfile import TemporaryFile
 from typing import List
 import zlib
 
 import lz4.frame
-import pytest
 
-from mcap.writer import CompressionType, Writer
 from mcap.records import Chunk, ChunkIndex, Statistics
 from mcap.stream_reader import StreamReader
+from mcap.writer import CompressionType, Writer
+
+import pytest
 
 
 @contextlib.contextmanager

@@ -2,14 +2,14 @@
 capability. For more low-level control, consider using the underlying
 :py:class:`mcap_ros1.decoder.Decoder` and :py:class:`mcap.reader.McapReader` objects directly.
 """
-from typing import IO, Union, Any, Dict, Iterator, Optional, Iterable
 from datetime import datetime
 from os import PathLike
+from typing import Any, Dict, IO, Iterable, Iterator, Optional, Union
+
+from mcap.reader import make_reader, McapReader
+from mcap.records import Channel, Message, Schema
 
 from .decoder import Decoder, McapROS1DecodeError
-
-from mcap.records import Message, Channel, Schema
-from mcap.reader import McapReader, make_reader
 
 
 def read_ros1_messages(

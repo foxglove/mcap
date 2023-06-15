@@ -1,8 +1,9 @@
 from io import BufferedWriter, BytesIO
-from typing import IO, Any, Dict, Optional, Union
-from mcap.writer import CompressionType, Writer as McapWriter
-import mcap
 import time
+from typing import Any, Dict, IO, Optional, Union
+
+import mcap
+from mcap.writer import CompressionType, Writer as McapWriter
 
 from . import __version__
 

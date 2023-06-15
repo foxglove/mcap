@@ -1,14 +1,10 @@
 # This example writes a single point cloud message.
 from io import BytesIO
 from random import random
-from typing import List
 import struct
-import time
 import sys
-
-from mcap_protobuf.writer import Writer
-
-from google.protobuf.timestamp_pb2 import Timestamp
+import time
+from typing import List
 
 from foxglove_schemas_protobuf.CameraCalibration_pb2 import CameraCalibration
 from foxglove_schemas_protobuf.CircleAnnotation_pb2 import CircleAnnotation
@@ -16,6 +12,8 @@ from foxglove_schemas_protobuf.Color_pb2 import Color
 from foxglove_schemas_protobuf.ImageAnnotations_pb2 import ImageAnnotations
 from foxglove_schemas_protobuf.Point2_pb2 import Point2
 from foxglove_schemas_protobuf.RawImage_pb2 import RawImage
+from google.protobuf.timestamp_pb2 import Timestamp
+from mcap_protobuf.writer import Writer
 
 
 def main():

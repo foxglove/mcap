@@ -1,11 +1,12 @@
 from io import BytesIO
 
-from mcap_protobuf.writer import Writer
+from google.protobuf.duration_pb2 import Duration
+from google.protobuf.timestamp_pb2 import Timestamp
+
 from mcap_protobuf.reader import read_protobuf_messages
+from mcap_protobuf.writer import Writer
 
 import pytest
-from google.protobuf.timestamp_pb2 import Timestamp
-from google.protobuf.duration_pb2 import Duration
 
 
 def test_write_one():

@@ -1,7 +1,7 @@
-import json
-import sys
 from io import BytesIO
+import json
 from pathlib import Path
+import sys
 from typing import Any, Dict, List, Set, Type
 
 from mcap.records import (

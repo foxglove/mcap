@@ -2,9 +2,9 @@
 import argparse
 
 from rclpy.serialization import serialize_message
+import rosbag2_py
 from std_msgs.msg import String
 
-import rosbag2_py
 
 TOPIC_NAME = "/chatter"
 

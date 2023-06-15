@@ -2,10 +2,10 @@ import json
 import sys
 from typing import Any, Dict, List, Set, Tuple, Union
 
+from mcap.reader import SeekingReader
 from mcap.records import MessageIndex
 from mcap.serialization import stringify_record
 from mcap.stream_reader import StreamReader
-from mcap.reader import SeekingReader
 
 
 def main():

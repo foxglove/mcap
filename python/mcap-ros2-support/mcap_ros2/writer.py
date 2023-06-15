@@ -1,5 +1,5 @@
-import time
 from io import BufferedWriter
+import time
 from typing import Any, Dict, IO, Optional, Union
 
 import mcap

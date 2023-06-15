@@ -15,13 +15,13 @@ import base64
 import csv
 import datetime
 import json
+from pathlib import Path
 import struct
 import typing
-from pathlib import Path
 
 # tutorial-mcap-imports-start
+from mcap.well_known import MessageEncoding, SchemaEncoding
 from mcap.writer import Writer
-from mcap.well_known import SchemaEncoding, MessageEncoding
 
 # tutorial-mcap-imports-end
 

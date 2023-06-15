@@ -1,11 +1,12 @@
 """tests for the McapReader implementations."""
 import os
 from pathlib import Path
-import pytest
 from typing import IO, Tuple, Type
 
-from mcap.reader import make_reader, SeekingReader, NonSeekingReader, McapReader
-from mcap.records import Schema, Channel, Message
+from mcap.reader import make_reader, McapReader, NonSeekingReader, SeekingReader
+from mcap.records import Channel, Message, Schema
+
+import pytest
 
 DEMO_MCAP = (
     Path(__file__).parent.parent.parent.parent / "testdata" / "mcap" / "demo.mcap"

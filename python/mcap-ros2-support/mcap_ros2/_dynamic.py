@@ -1,7 +1,7 @@
 """ROS2 message definition parsing and message deserialization."""
 
-import re
 from io import BytesIO
+import re
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -9,8 +9,8 @@ from ._cdr import CdrReader, CdrWriter
 from ._vendor.rosidl_adapter.parser import (
     Field,
     MessageSpecification,
-    Type,
     parse_message_string,
+    Type,
 )
 
 # cSpell:words ftype wstring msgdefs

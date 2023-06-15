@@ -1,11 +1,14 @@
-import struct
-import zlib
 from collections import defaultdict
-from enum import Enum, Flag, auto
+from enum import auto, Enum, Flag
 from io import BufferedWriter, RawIOBase
-from typing import IO, Any, Dict, List, OrderedDict, Union
+import struct
+from typing import Any, Dict, IO, List, OrderedDict, Union
+import zlib
 
 import lz4.frame  # type: ignore
+
+from mcap import __version__
+
 import zstandard
 
 from ._chunk_builder import ChunkBuilder
@@ -27,7 +30,6 @@ from .records import (
     Statistics,
     SummaryOffset,
 )
-from mcap import __version__
 
 MCAP0_MAGIC = struct.pack("<8B", 137, 77, 67, 65, 80, 48, 13, 10)
 LIBRARY_IDENTIFIER = f"python mcap {__version__}"

@@ -1,4 +1,4 @@
-from typing import Dict, Any, Type
+from typing import Any, Dict, Type
 
 try:
     # If the user has genpy on their PATH from an existing ROS1 environment, use that.

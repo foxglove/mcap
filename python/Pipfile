@@ -22,6 +22,7 @@ mcap-ros2-support = { editable = true, path = "mcap-ros2-support" }
 black = "*"
 build = "*"
 flake8 = "*"
+flake8-import-order = "*"
 m2r2 = "*"
 pipenv = "*"
 pytest = "*"

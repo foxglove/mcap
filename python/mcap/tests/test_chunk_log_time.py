@@ -1,5 +1,5 @@
-import json
 from io import BytesIO
+import json
 
 from mcap.records import ChunkIndex
 from mcap.stream_reader import StreamReader

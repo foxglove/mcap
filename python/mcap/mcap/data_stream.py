@@ -1,7 +1,7 @@
-import zlib
-import struct
 from io import BytesIO
+import struct
 from typing import IO, Optional
+import zlib
 
 from .exceptions import EndOfFile
 from .opcode import Opcode

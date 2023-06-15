@@ -2,14 +2,13 @@ from io import BytesIO
 from pathlib import Path
 from typing import Type
 
-import pytest
-
+from mcap.data_stream import RecordBuilder
+from mcap.reader import McapReader, NonSeekingReader, SeekingReader
+from mcap.records import Chunk, DataEnd
 from mcap.stream_reader import CRCValidationError, StreamReader
 from mcap.writer import MCAP0_MAGIC
-from mcap.records import Chunk, DataEnd
-from mcap.reader import SeekingReader, NonSeekingReader, McapReader
 
-from mcap.data_stream import RecordBuilder
+import pytest
 
 DEMO_MCAP = (
     Path(__file__).parent.parent.parent.parent / "testdata" / "mcap" / "demo.mcap"

@@ -1,29 +1,28 @@
 """ High-level classes for reading content out of MCAP data sources. """
 from abc import ABC, abstractmethod
-from typing import Iterable, Tuple, Iterator, Dict, Optional, List, IO
 import io
+from typing import Dict, IO, Iterable, Iterator, List, Optional, Tuple
 
-from .data_stream import ReadDataStream
+from ._message_queue import MessageQueue
+from .data_stream import ReadDataStream, RecordBuilder
 from .exceptions import McapError
 from .records import (
     Attachment,
-    McapRecord,
-    Schema,
+    AttachmentIndex,
     Channel,
+    Chunk,
+    ChunkIndex,
+    Footer,
     Header,
+    McapRecord,
     Message,
     Metadata,
-    ChunkIndex,
-    Statistics,
-    Chunk,
-    Footer,
     MetadataIndex,
-    AttachmentIndex,
+    Schema,
+    Statistics,
 )
-from .stream_reader import StreamReader, breakup_chunk, MAGIC_SIZE
-from .data_stream import RecordBuilder
+from .stream_reader import breakup_chunk, MAGIC_SIZE, StreamReader
 from .summary import Summary
-from ._message_queue import MessageQueue
 
 
 def _get_record_size(record: McapRecord):

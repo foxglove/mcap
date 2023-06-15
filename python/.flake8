@@ -1,5 +1,6 @@
 [flake8]
 max-line-length = 100
+import-order-style = google
 exclude =
   **/build/**,
   examples/protobuf/*pb2.py,
@@ -8,4 +9,4 @@ exclude =
   mcap-ros1-support/mcap_ros1/_vendor/genmsg/*.py,
   mcap-ros2-support/mcap_ros2/_vendor/rosidl_adapter/*.py,
 # E203 is not PEP8 compliant, W503/Q000 conflict with black formatting
-extend-ignore = E203 W503 Q000
+extend-ignore = E203 W503 Q000 I202

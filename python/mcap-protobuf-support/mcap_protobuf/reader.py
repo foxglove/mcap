@@ -3,14 +3,14 @@ capability. For more low-level control, consider using the underlying
 :py:class:`mcap_protobuf.decoder.Decoder` and :py:class:`mcap.reader.McapReader` objects
 directly.
 """
-from typing import IO, Union, Any, Dict, Iterator, Optional, Iterable
 from datetime import datetime
 from os import PathLike
+from typing import Any, Dict, IO, Iterable, Iterator, Optional, Union
+
+from mcap.reader import make_reader, McapReader
+from mcap.records import Channel, Message
 
 from .decoder import Decoder, McapProtobufDecodeError
-
-from mcap.records import Message, Channel
-from mcap.reader import McapReader, make_reader
 
 
 def read_protobuf_messages(

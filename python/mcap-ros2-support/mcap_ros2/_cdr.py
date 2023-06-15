@@ -1,8 +1,8 @@
 """Decoding of CDR (Common Data Representation) data."""
 
-import struct
 from enum import IntEnum
 from io import BufferedWriter
+import struct
 from typing import Any, BinaryIO, Callable, List, Tuple, Union
 
 

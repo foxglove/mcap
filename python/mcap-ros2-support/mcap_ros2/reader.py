@@ -10,7 +10,7 @@ from datetime import datetime
 from os import PathLike
 from typing import Any, IO, Iterable, Iterator, Optional, Union
 
-from mcap.reader import McapReader, make_reader
+from mcap.reader import make_reader, McapReader
 from mcap.records import Channel, Message, Schema
 
 from .decoder import Decoder, McapROS2DecodeError

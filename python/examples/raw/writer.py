@@ -1,6 +1,6 @@
-from time import time_ns
 import json
 import sys
+from time import time_ns
 
 from mcap.writer import Writer
 

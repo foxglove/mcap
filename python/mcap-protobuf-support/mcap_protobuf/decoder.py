@@ -1,8 +1,9 @@
 from collections import Counter
-from typing import Dict, Any, Type, Iterable
+from typing import Any, Dict, Iterable, Type
 
-from google.protobuf.descriptor_pb2 import FileDescriptorSet, FileDescriptorProto
+from google.protobuf.descriptor_pb2 import FileDescriptorProto, FileDescriptorSet
 from google.protobuf.message_factory import MessageFactory
+
 from mcap.exceptions import McapError
 from mcap.records import Message, Schema
 from mcap.well_known import SchemaEncoding
