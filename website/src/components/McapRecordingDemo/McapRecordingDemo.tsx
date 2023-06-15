@@ -123,6 +123,11 @@ export function McapRecordingDemo(): JSX.Element {
 
   const { addCameraImage, addMouseEventMessage, addPoseMessage } = state;
 
+  const canStartRecording =
+    recordMouse ||
+    (!hasMouse && recordOrientation) ||
+    (recordVideo && !videoPermissionError);
+
   // Automatically pause recording after 30 seconds to avoid unbounded growth
   useEffect(() => {
     if (!recording) {
@@ -330,6 +335,7 @@ export function McapRecordingDemo(): JSX.Element {
               href="#"
               className={cx("button", "button--danger", {
                 ["button--outline"]: !recording,
+                disabled: !recording && !canStartRecording,
               })}
               onClick={onRecordClick}
             >
