@@ -14,7 +14,7 @@ import {
   Recorder,
   toProtobufTime,
 } from "./Recorder";
-import { startVideoCapture } from "./videoCapture";
+import { startVideoCapture, startVideoStream } from "./videoCapture";
 
 type State = {
   bytesWritten: bigint;
@@ -123,6 +123,11 @@ export function McapRecordingDemo(): JSX.Element {
 
   const { addCameraImage, addMouseEventMessage, addPoseMessage } = state;
 
+  const canStartRecording =
+    recordMouse ||
+    (!hasMouse && recordOrientation) ||
+    (recordVideo && !videoPermissionError);
+
   // Automatically pause recording after 30 seconds to avoid unbounded growth
   useEffect(() => {
     if (!recording) {
@@ -167,27 +172,41 @@ export function McapRecordingDemo(): JSX.Element {
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!recording || !recordVideo || !video) {
+    if (!recordVideo || !video) {
       return;
     }
 
-    setVideoStarted(false);
-    setVideoPermissionError(false);
-
-    const stopCapture = startVideoCapture({
+    const cleanup = startVideoStream({
       video,
-      frameDurationSec: 1 / 30,
       onStart: () => setVideoStarted(true),
       onError: (err) => {
         console.error(err);
         setVideoPermissionError(true);
       },
+    });
+
+    return () => {
+      cleanup();
+      setVideoStarted(false);
+      setVideoPermissionError(false);
+    };
+  }, [recordVideo]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!recording || !recordVideo || !video || !videoStarted) {
+      return;
+    }
+
+    const stopCapture = startVideoCapture({
+      video,
+      frameDurationSec: 1 / 30,
       onFrame: (blob) => addCameraImage(blob),
     });
     return () => {
       stopCapture();
     };
-  }, [addCameraImage, recordVideo, recording]);
+  }, [addCameraImage, recordVideo, recording, videoStarted]);
 
   const onRecordClick = useCallback(
     (event: React.MouseEvent) => {
@@ -316,6 +335,7 @@ export function McapRecordingDemo(): JSX.Element {
               href="#"
               className={cx("button", "button--danger", {
                 ["button--outline"]: !recording,
+                disabled: !recording && !canStartRecording,
               })}
               onClick={onRecordClick}
             >
@@ -398,14 +418,14 @@ export function McapRecordingDemo(): JSX.Element {
                 <div className={styles.error}>
                   Allow permission to record camera images
                 </div>
-              ) : recording && recordVideo ? (
+              ) : recordVideo ? (
                 <>
                   <video ref={videoRef} muted playsInline />
                   {!videoStarted && (
                     <progress className={styles.videoLoadingIndicator} />
                   )}
                 </>
-              ) : recordVideo ? undefined : (
+              ) : (
                 <span
                   className={styles.videoPlaceholderText}
                   onClick={() => setRecordVideo(true)}
