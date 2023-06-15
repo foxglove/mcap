@@ -35,6 +35,7 @@ ignorePaths:
   - cpp/examples/protobuf/proto
 
 words:
+  - Anduril
   - bagfile
   - bfbs
   - callerid
@@ -68,6 +69,7 @@ words:
   - nanos
   - nanosec
   - noenv
+  - Norlab
   - nsec
   - nsecs
   - numpy
