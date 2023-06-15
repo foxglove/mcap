@@ -148,6 +148,12 @@
   margin: auto;
 }
 
+@media (min-width: 640px) {
+  .logoIcon {
+    width: 80%;
+  }
+}
+
 [data-theme="light"] .darkMode {
   display: none;
 }

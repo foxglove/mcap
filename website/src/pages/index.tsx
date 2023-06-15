@@ -133,7 +133,13 @@ export default function Home(): JSX.Element {
         </div>
       </div>
 
-      <div className={styles.section} style={{ border: "32px solid #303846" }}>
+      <div
+        className={styles.section}
+        style={{
+          border: "2rem solid #303846",
+          padding: "2rem",
+        }}
+      >
         <div className="container">
           <div className={styles.logoGrid}>
             {LightModeLogos.map((Logo, idx) => (
