@@ -183,6 +183,7 @@ export function McapRecordingDemo(): JSX.Element {
     return () => {
       cleanup();
       setVideoStarted(false);
+      setVideoPermissionError(false);
     };
   }, [recordVideo]);
 
