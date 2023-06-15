@@ -1,13 +1,14 @@
 import sys
 
-from mcap_ros1.reader import read_ros1_messages
+from mcap.reader import make_reader
+from mcap_ros1.decoder import DecoderFactory
 
 
 def main():
-    for msg in read_ros1_messages(sys.argv[1]):
-        print(
-            f"{msg.topic} [{msg.log_time}] ({type(msg.ros_msg).__name__}): {msg.ros_msg.data}"
-        )
+    with open(sys.argv[1], "rb") as infile:
+        reader = make_reader(infile, decoder_factories=[DecoderFactory()])
+        for schema, channel, message, ros_msg in reader.iter_decoded_messages():
+            print(f"{channel.topic} {schema.name} [{message.log_time}]: {ros_msg.data}")
 
 
 if __name__ == "__main__":

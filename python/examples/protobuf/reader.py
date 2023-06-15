@@ -1,11 +1,14 @@
 import sys
 
-from mcap_protobuf.reader import read_protobuf_messages
+from mcap.reader import make_reader
+from mcap_protobuf.decoder import DecoderFactory
 
 
 def main():
-    for msg in read_protobuf_messages(sys.argv[1]):
-        print(f"{msg.topic} [{msg.log_time}]: {msg.proto_msg}")
+    with open(sys.argv[1], "rb") as infile:
+        reader = make_reader(infile, decoder_factories=[DecoderFactory()])
+        for schema, channel, message, proto_msg in reader.iter_decoded_messages():
+            print(f"{channel.topic} {schema.name} [{message.log_time}]: {proto_msg}")
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from typing import (
     IO,
     Any,
     Callable,
+    NamedTuple,
 )
 import io
 
@@ -99,6 +100,15 @@ def _chunks_matching_topics(
     return out
 
 
+class DecodedMessageTuple(NamedTuple):
+    """Yielded from every iteration of :py:meth:`~mcap.reader.McapReader.iter_decoded_messages`."""
+
+    schema: Optional[Schema]
+    channel: Channel
+    message: Message
+    decoded_message: Any
+
+
 class McapReader(ABC):
     """Reads data out of an MCAP file, using the summary section where available to efficiently
     read only the parts of the file that are needed.
@@ -151,7 +161,7 @@ class McapReader(ABC):
         end_time: Optional[int] = None,
         log_time_order: bool = True,
         reverse: bool = False,
-    ) -> Iterator[Tuple[Optional[Schema], Channel, Message, Any]]:
+    ) -> Iterator[DecodedMessageTuple]:
         """iterates through messages in an MCAP, decoding their contents.
 
         :param topics: if not None, only messages from these topics will be returned.
@@ -186,7 +196,9 @@ class McapReader(ABC):
             )
 
         for schema, channel, message in message_iterator:
-            yield schema, channel, message, decoded_message(schema, channel, message)
+            yield DecodedMessageTuple(
+                schema, channel, message, decoded_message(schema, channel, message)
+            )
 
     @abstractmethod
     def get_header(self) -> Header:

@@ -1,16 +1,14 @@
-"""A simple example of reading ROS2 messages from an MCAP file without a ROS2 environment."""
-
 import sys
 
-from mcap_ros2.reader import read_ros2_messages
+from mcap.reader import make_reader
+from mcap_ros1.decoder import DecoderFactory
 
 
 def main():
-    """Read all ROS2 messages from the given MCAP file and print them."""
-    for msg in read_ros2_messages(sys.argv[1]):
-        print(
-            f"{msg.channel.topic} [{msg.log_time}] ({type(msg.ros_msg).__name__}): {msg.ros_msg}"
-        )
+    with open(sys.argv[1], "rb") as infile:
+        reader = make_reader(infile, decoder_factories=[DecoderFactory()])
+        for schema, channel, message, ros_msg in reader.iter_decoded_messages():
+            print(f"{channel.topic} {schema.name} [{message.log_time}]: {ros_msg.data}")
 
 
 if __name__ == "__main__":
