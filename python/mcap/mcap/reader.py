@@ -106,7 +106,9 @@ class McapReader(ABC):
     :param stream: a file-like object for reading the source data from.
     :param validate_crcs: if ``True``, will validate Chunk and DataEnd CRC values as messages are
         read.
-    :param decoders: a dictionary of {message_encoding: decoder_function} for decoding messages.
+    :param decoder_factories: An iterable of :py:class:`~mcap.decoder.DecoderFactory`
+        instances which can provide decoding functionality to
+        :py:meth:`~mcap.reader.McapReader.iter_decoded_messages`.
     """
 
     # Registered decoders: support modules can register themselves as default decoders
@@ -230,6 +232,9 @@ class SeekingReader(McapReader):
         does not validate the data section CRC in the DataEnd record because it is designed not to
         read the entire data section when reading messages. To read messages while validating the
         data section CRC, use :py:class:`NonSeekingReader`.
+    :param decoder_factories: An iterable of :py:class:`~mcap.decoder.DecoderFactory`
+        instances which can provide decoding functionality to
+        :py:meth:`~mcap.reader.McapReader.iter_decoded_messages`.
     """
 
     def __init__(
@@ -371,6 +376,9 @@ class NonSeekingReader(McapReader):
 
     :param stream: a file-like object for reading the source data from.
     :param validate_crcs: if ``True``, will validate chunk and data section CRC values.
+    :param decoder_factories: An iterable of :py:class:`~mcap.decoder.DecoderFactory`
+        instances which can provide decoding functionality to
+        :py:meth:`~mcap.reader.McapReader.iter_decoded_messages`.
     """
 
     def __init__(

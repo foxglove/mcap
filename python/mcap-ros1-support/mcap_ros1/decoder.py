@@ -22,6 +22,10 @@ class McapROS1DecodeError(McapError):
 
 
 class DecoderFactory(McapDecoderFactory):
+    """Provides functionality to an :py:class:`~mcap.reader.McapReader` to decode ROS 1 messages.
+    Requires a valid `ros1msg` schema to decode messages.
+    """
+
     def __init__(self):
         self._types: Dict[int, Type[Any]] = {}
 
@@ -51,6 +55,13 @@ class DecoderFactory(McapDecoderFactory):
 
 
 class Decoder:
+    """Decodes ROS 1 messages.
+
+    .. deprecated:: 0.8.0
+      Use :py:class:`~mcap_ros1.decoder.DecoderFactory` with :py:class:`~mcap.reader.McapReader`
+      instead.
+    """
+
     def __init__(self):
         warnings.warn(
             """The :py:class:`mcap_ros1.decoder.Decoder` class is deprecated.

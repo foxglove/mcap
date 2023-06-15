@@ -18,6 +18,11 @@ class McapROS2DecodeError(McapError):
 
 
 class DecoderFactory(McapDecoderFactory):
+    """Provides functionality to an :py:class:`~mcap.reader.McapReader` to decode CDR-encoded
+    messages. Requires valid `ros2msg` schema to decode messages. Schemas written in IDL are not
+    currently supported.
+    """
+
     def __init__(self):
         self._decoders: Dict[int, DecoderFunction] = {}
 
@@ -44,11 +49,18 @@ class DecoderFactory(McapDecoderFactory):
 
 
 class Decoder:
+    """Decodes ROS 2 messages.
+
+    .. deprecated:: 0.5.0
+      Use :py:class:`~mcap_ros2.decoder.DecoderFactory` with :py:class:`~mcap.reader.McapReader`
+      instead.
+    """
+
     def __init__(self):
         warnings.warn(
-            """The :py:class:`mcap_ros2.decoder.Decoder` class is deprecated.
-For similar functionality, instantiate the :py:class:`mcap.reader.McapReader` with a
-:py:class:`mcap_ros2.decoder.DecoderFactory` instance.""",
+            """The `mcap_ros2.decoder.Decoder` class is deprecated.
+For similar functionality, instantiate the `mcap.reader.McapReader` with a
+`mcap_ros2.decoder.DecoderFactory` instance.""",
             DeprecationWarning,
         )
         self._decoder_factory = DecoderFactory()

@@ -1,3 +1,1 @@
-__version__ = "0.7.0"
-
-"""does this show up?"""
+__version__ = "0.8.0"

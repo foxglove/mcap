@@ -17,8 +17,11 @@ class McapProtobufDecodeError(McapError):
 
 
 class DecoderFactory(McapDecoderFactory):
+    """Provides functionality to an :py:class:`~mcap.reader.McapReader` to decode protobuf
+    messages. Requires valid `protobuf` schemas to decode messages.
+    """
+
     def __init__(self):
-        """Decodes Protobuf messages from MCAP message records."""
         self._types: Dict[int, Type[Any]] = {}
 
     def _get_message_classes(self, file_descriptors: Iterable[FileDescriptorProto]):
@@ -115,11 +118,18 @@ class DecoderFactory(McapDecoderFactory):
 
 
 class Decoder:
+    """Decodes Protobuf messages.
+
+    .. deprecated:: 0.3.0
+      Use :py:class:`~mcap_protobuf.decoder.DecoderFactory` with :py:class:`~mcap.reader.McapReader`
+      instead.
+    """
+
     def __init__(self):
         warnings.warn(
-            """The :py:class:`mcap_protobuf.decoder.Decoder` class is deprecated.
-For similar functionality, instantiate the :py:class:`mcap.reader.McapReader` with a
-:py:class:`mcap_protobuf.decoder.DecoderFactory` instance.""",
+            """The `mcap_protobuf.decoder.Decoder` class is deprecated.
+For similar functionality, instantiate the `mcap.reader.McapReader` with a
+`mcap_protobuf.decoder.DecoderFactory` instance.""",
             DeprecationWarning,
         )
         self._decoder_factory = DecoderFactory()
