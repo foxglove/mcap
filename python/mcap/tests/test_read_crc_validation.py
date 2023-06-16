@@ -1,13 +1,13 @@
 from io import BytesIO
 from pathlib import Path
-from typing import Type
+from typing import Type, Union
 
 import pytest
 
 from mcap.stream_reader import CRCValidationError, StreamReader
 from mcap.writer import MCAP0_MAGIC
 from mcap.records import Chunk, DataEnd
-from mcap.reader import SeekingReader, NonSeekingReader, McapReader
+from mcap.reader import SeekingReader, NonSeekingReader
 
 from mcap.data_stream import RecordBuilder
 
@@ -57,7 +57,9 @@ def produce_corrupted_mcap(filename: Path, to_corrupt: str) -> bytes:
 
 
 @pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
-def test_validation_passes(reader_cls: Type[McapReader]):
+def test_validation_passes(
+    reader_cls: Union[Type[SeekingReader], Type[NonSeekingReader]]
+):
     with open(DEMO_MCAP, "rb") as f:
         reader = reader_cls(f, validate_crcs=True)
         for _ in reader.iter_messages():
@@ -69,7 +71,9 @@ def test_validation_passes(reader_cls: Type[McapReader]):
 
 
 @pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
-def test_crc_chunk_validation(reader_cls: Type[McapReader]):
+def test_crc_chunk_validation(
+    reader_cls: Union[Type[SeekingReader], Type[NonSeekingReader]]
+):
     content = produce_corrupted_mcap(DEMO_MCAP, "chunk")
     reader = reader_cls(BytesIO(content), validate_crcs=True)
     with pytest.raises(CRCValidationError):

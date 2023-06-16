@@ -1,7 +1,13 @@
 from io import BytesIO
 
-from mcap_ros2.reader import read_ros2_messages
+from mcap.reader import make_reader
+from mcap_ros2.decoder import DecoderFactory
 from mcap_ros2.writer import Writer as Ros2Writer
+
+
+def read_ros2_messages(stream: BytesIO):
+    reader = make_reader(stream, decoder_factories=[DecoderFactory()])
+    return reader.iter_decoded_messages()
 
 
 def test_write_messages():
@@ -21,11 +27,10 @@ def test_write_messages():
 
     output.seek(0)
     for index, msg in enumerate(read_ros2_messages(output)):
-        print(msg.ros_msg)
         assert msg.channel.topic == "/test"
         assert msg.schema.name == "test_msgs/TestData"
-        assert msg.ros_msg.a == f"string message {index}"
-        assert msg.ros_msg.b == index
-        assert msg.log_time_ns == index
-        assert msg.publish_time_ns == index
-        assert msg.sequence_count == index
+        assert msg.decoded_message.a == f"string message {index}"
+        assert msg.decoded_message.b == index
+        assert msg.message.log_time == index
+        assert msg.message.publish_time == index
+        assert msg.message.sequence == index
