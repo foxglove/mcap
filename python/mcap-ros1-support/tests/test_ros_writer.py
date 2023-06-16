@@ -1,8 +1,14 @@
 from io import BytesIO
 
-from mcap_ros1.reader import read_ros1_messages
+from mcap_ros1.decoder import DecoderFactory
+from mcap.reader import make_reader
 from mcap_ros1.writer import Writer as Ros1Writer
 from std_msgs.msg import String  # type: ignore
+
+
+def read_ros1_messages(stream: BytesIO):
+    reader = make_reader(stream, decoder_factories=[DecoderFactory()])
+    return reader.iter_decoded_messages()
 
 
 def test_write_messages():
@@ -14,6 +20,6 @@ def test_write_messages():
 
     output.seek(0)
     for index, msg in enumerate(read_ros1_messages(output)):
-        assert msg.topic == "/chatter"
-        assert msg.ros_msg.data == f"string message {index}"
-        assert msg.log_time_ns == index
+        assert msg.channel.topic == "/chatter"
+        assert msg.decoded_message.data == f"string message {index}"
+        assert msg.message.log_time == index
