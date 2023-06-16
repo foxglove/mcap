@@ -113,16 +113,10 @@ class McapReader(ABC):
     """Reads data out of an MCAP file, using the summary section where available to efficiently
     read only the parts of the file that are needed.
 
-    :param stream: a file-like object for reading the source data from.
-    :param validate_crcs: if ``True``, will validate Chunk and DataEnd CRC values as messages are
-        read.
     :param decoder_factories: An iterable of :py:class:`~mcap.decoder.DecoderFactory`
         instances which can provide decoding functionality to
         :py:meth:`~mcap.reader.McapReader.iter_decoded_messages`.
     """
-
-    # Registered decoders: support modules can register themselves as default decoders
-    # on import.
 
     def __init__(
         self,
