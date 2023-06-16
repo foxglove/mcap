@@ -1,7 +1,7 @@
 import heapq
-from typing import Union, Tuple, List, Optional
+from typing import List, Optional, Tuple, Union
 
-from .records import Schema, Channel, Message, ChunkIndex
+from .records import Channel, ChunkIndex, Message, Schema
 
 QueueItem = Union[
     ChunkIndex, Tuple[Tuple[Optional[Schema], Channel, Message], int, int]

@@ -11,10 +11,10 @@ String(data="hello")
 String(data="goodbye")
 """
 
+import warnings
 from datetime import datetime
 from os import PathLike
-from typing import Any, IO, Iterable, Iterator, Optional, Union
-import warnings
+from typing import IO, Any, Iterable, Iterator, Optional, Union
 
 from mcap.reader import McapReader, make_reader
 from mcap.records import Channel, Message, Schema

@@ -32,6 +32,7 @@ std_msgs = {version = "*", index = "ros"}
 genpy = { version = "*", index = "ros"}
 genmsg = { version = "*", index = "ros"}
 typing_extensions = "*"
+isort = "*"
 
 [requires]
 python_version = "3"

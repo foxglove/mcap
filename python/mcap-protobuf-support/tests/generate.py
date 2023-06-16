@@ -6,7 +6,6 @@ sys.path.append(os.path.dirname(__file__))  # for test_proto imports
 from typing import IO, Any  # noqa: #402
 
 from mcap_protobuf.writer import Writer  # noqa: #402
-
 from test_proto.complex_message_pb2 import ComplexMessage  # noqa: #402
 from test_proto.intermediate_message_1_pb2 import IntermediateMessage1  # noqa: #402
 from test_proto.intermediate_message_2_pb2 import IntermediateMessage2  # noqa: #402

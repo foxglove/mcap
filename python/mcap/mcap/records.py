@@ -1,6 +1,6 @@
+import zlib
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
-import zlib
 
 from .data_stream import ReadDataStream, RecordBuilder
 from .opcode import Opcode

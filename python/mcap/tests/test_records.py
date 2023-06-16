@@ -1,7 +1,8 @@
-from mcap.records import Statistics
-from mcap.data_stream import RecordBuilder
-from mcap.stream_reader import StreamReader
 from io import BytesIO
+
+from mcap.data_stream import RecordBuilder
+from mcap.records import Statistics
+from mcap.stream_reader import StreamReader
 
 
 def test_statistics_serialization():

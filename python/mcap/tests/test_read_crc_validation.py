@@ -4,12 +4,11 @@ from typing import Type, Union
 
 import pytest
 
+from mcap.data_stream import RecordBuilder
+from mcap.reader import NonSeekingReader, SeekingReader
+from mcap.records import Chunk, DataEnd
 from mcap.stream_reader import CRCValidationError, StreamReader
 from mcap.writer import MCAP0_MAGIC
-from mcap.records import Chunk, DataEnd
-from mcap.reader import SeekingReader, NonSeekingReader
-
-from mcap.data_stream import RecordBuilder
 
 DEMO_MCAP = (
     Path(__file__).parent.parent.parent.parent / "testdata" / "mcap" / "demo.mcap"

@@ -1,10 +1,9 @@
 """script that reads ROS2 messages from an MCAP bag using the rosbag2_py API."""
 import argparse
 
+import rosbag2_py
 from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
-
-import rosbag2_py
 
 
 def read_messages(input_bag: str):
