@@ -57,7 +57,7 @@ class DecoderFactory(McapDecoderFactory):
 class Decoder:
     """Decodes ROS 1 messages.
 
-    .. deprecated:: 0.8.0
+    .. deprecated:: 0.7.0
       Use :py:class:`~mcap_ros1.decoder.DecoderFactory` with :py:class:`~mcap.reader.McapReader`
       instead.
     """
