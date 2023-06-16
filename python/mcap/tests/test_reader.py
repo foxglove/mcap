@@ -40,8 +40,15 @@ def test_make_not_seeking(pipe: Tuple[IO[bytes], IO[bytes]]):
     assert isinstance(reader, NonSeekingReader)
 
 
-@pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
-def test_all_messages(reader_cls: Union[Type[SeekingReader], Type[NonSeekingReader]]):
+READER_SUBCLASSES = [SeekingReader, NonSeekingReader]
+# We use this union rather than the base class McapReader so that the type-checker does not
+# complain about instantiating the class with arguments that the base class constructor does not
+# take.
+AnyReaderSubclass = Union[Type[SeekingReader], Type[NonSeekingReader]]
+
+
+@pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
+def test_all_messages(reader_cls: AnyReaderSubclass):
     """test that we can find all messages correctly with all reader implementations."""
     with open(DEMO_MCAP, "rb") as f:
         reader: McapReader = reader_cls(f)
@@ -55,8 +62,8 @@ def test_all_messages(reader_cls: Union[Type[SeekingReader], Type[NonSeekingRead
         assert count == 1606
 
 
-@pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
-def test_time_range(reader_cls: Union[Type[SeekingReader], Type[NonSeekingReader]]):
+@pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
+def test_time_range(reader_cls: AnyReaderSubclass):
     """test that we can filter by time range with all reader implementations."""
     with open(DEMO_MCAP, "rb") as f:
         reader: McapReader = reader_cls(f)
@@ -76,10 +83,8 @@ def test_time_range(reader_cls: Union[Type[SeekingReader], Type[NonSeekingReader
         assert count == 825
 
 
-@pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
-def test_only_diagnostics(
-    reader_cls: Union[Type[SeekingReader], Type[NonSeekingReader]]
-):
+@pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
+def test_only_diagnostics(reader_cls: AnyReaderSubclass):
     """test that we can filter by topic with all reader implementations."""
     with open(DEMO_MCAP, "rb") as f:
         reader: McapReader = reader_cls(f)
@@ -110,10 +115,8 @@ def write_json_mcap(filepath: Path):
         writer.finish()
 
 
-@pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
-def test_decode_schemaless(
-    reader_cls: Union[Type[SeekingReader], Type[NonSeekingReader]], tmpdir: Path
-):
+@pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
+def test_decode_schemaless(reader_cls: AnyReaderSubclass, tmpdir: Path):
     filepath = tmpdir / "json.mcap"
     write_json_mcap(filepath)
 
@@ -144,10 +147,8 @@ class JsonDecoderFactory(DecoderFactory):
         return decoder
 
 
-@pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
-def test_decode_with_schema(
-    reader_cls: Union[Type[SeekingReader], Type[NonSeekingReader]], tmpdir: Path
-):
+@pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
+def test_decode_with_schema(reader_cls: AnyReaderSubclass, tmpdir: Path):
     filepath = tmpdir / "json.mcap"
     write_json_mcap(filepath)
 

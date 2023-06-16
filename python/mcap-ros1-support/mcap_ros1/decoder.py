@@ -73,5 +73,5 @@ For similar functionality, instantiate the :py:class:`mcap.reader.McapReader` wi
 
     def decode(self, schema: Schema, message: Message) -> Any:
         decoder = self._decoder_factory.decoder_for(MessageEncoding.ROS1, schema)
-        assert decoder is not None
+        assert decoder is not None, "failed to construct a ROS1 decoder"
         return decoder(message.data)

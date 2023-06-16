@@ -136,5 +136,5 @@ For similar functionality, instantiate the `mcap.reader.McapReader` with a
 
     def decode(self, schema: Schema, message: Message) -> Any:
         decoder = self._decoder_factory.decoder_for(MessageEncoding.Protobuf, schema)
-        assert decoder is not None
+        assert decoder is not None, "failed to construct a Protobuf decoder"
         return decoder(message.data)
