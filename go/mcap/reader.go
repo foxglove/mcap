@@ -155,7 +155,6 @@ func (r *Reader) Info() (*Info, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return &Info{
 		Statistics:        it.statistics,
 		Channels:          it.channels,
@@ -163,6 +162,7 @@ func (r *Reader) Info() (*Info, error) {
 		AttachmentIndexes: it.attachmentIndexes,
 		MetadataIndexes:   it.metadataIndexes,
 		Schemas:           it.schemas,
+		Footer:            it.footer,
 		Header:            r.header,
 	}, nil
 }

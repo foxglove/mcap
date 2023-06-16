@@ -27,6 +27,7 @@ type indexedMessageIterator struct {
 	chunkIndexes      []*ChunkIndex
 	attachmentIndexes []*AttachmentIndex
 	metadataIndexes   []*MetadataIndex
+	footer            *Footer
 
 	indexHeap rangeIndexHeap
 
@@ -56,6 +57,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	if err != nil {
 		return fmt.Errorf("failed to parse footer: %w", err)
 	}
+	it.footer = footer
 
 	// scan the whole summary section
 	if footer.SummaryStart == 0 {

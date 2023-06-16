@@ -520,7 +520,8 @@ func makePrefixedMap(m map[string]string) []byte {
 	return buf
 }
 
-func (w *Writer) writeChunkIndex(idx *ChunkIndex) error {
+// WriteChunkIndex writes a chunk index record to the output.
+func (w *Writer) WriteChunkIndex(idx *ChunkIndex) error {
 	messageIndexLength := len(idx.MessageIndexOffsets) * (2 + 8)
 	msglen := 8 + 8 + 8 + 8 + 4 + messageIndexLength + 8 + 4 + len(idx.Compression) + 8 + 8
 	w.ensureSized(msglen)
@@ -603,7 +604,7 @@ func (w *Writer) writeSummarySection() ([]*SummaryOffset, error) {
 		if len(w.ChunkIndexes) > 0 {
 			chunkIndexOffset := w.w.Size()
 			for _, chunkIndex := range w.ChunkIndexes {
-				err := w.writeChunkIndex(chunkIndex)
+				err := w.WriteChunkIndex(chunkIndex)
 				if err != nil {
 					return offsets, fmt.Errorf("failed to write chunk index: %w", err)
 				}
@@ -783,6 +784,10 @@ type WriterOptions struct {
 	// OverrideLibrary causes the default header library to be overridden, not
 	// appended to.
 	OverrideLibrary bool
+
+	// SkipMagic causes the writer to skip writing magic bytes at the start of
+	// the file. This may be useful for writing a partial section of records.
+	SkipMagic bool
 }
 
 // Convert an MCAP compression level to the corresponding lz4.CompressionLevel.
@@ -820,8 +825,10 @@ func encoderLevelFromZstd(level CompressionLevel) zstd.EncoderLevel {
 // NewWriter returns a new MCAP writer.
 func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	writer := newWriteSizer(w, opts.IncludeCRC)
-	if _, err := writer.Write(Magic); err != nil {
-		return nil, err
+	if !opts.SkipMagic {
+		if _, err := writer.Write(Magic); err != nil {
+			return nil, err
+		}
 	}
 	compressed := bytes.Buffer{}
 	var compressedWriter *countingCRCWriter

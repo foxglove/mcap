@@ -328,6 +328,7 @@ type Info struct {
 	MetadataIndexes   []*MetadataIndex
 	AttachmentIndexes []*AttachmentIndex
 	Header            *Header
+	Footer            *Footer
 }
 
 // ChannelCounts counts the number of messages on each channel in an Info.
