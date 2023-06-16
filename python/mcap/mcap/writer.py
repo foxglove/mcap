@@ -8,6 +8,8 @@ from typing import IO, Any, Dict, List, OrderedDict, Union
 import lz4.frame  # type: ignore
 import zstandard
 
+from mcap import __version__
+
 from ._chunk_builder import ChunkBuilder
 from .data_stream import RecordBuilder
 from .opcode import Opcode
@@ -27,7 +29,6 @@ from .records import (
     Statistics,
     SummaryOffset,
 )
-from mcap import __version__
 
 MCAP0_MAGIC = struct.pack("<8B", 137, 77, 67, 65, 80, 48, 13, 10)
 LIBRARY_IDENTIFIER = f"python mcap {__version__}"

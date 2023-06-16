@@ -1,12 +1,12 @@
 from io import BytesIO
 
-from mcap.reader import make_reader
-from mcap_protobuf.writer import Writer
-from mcap_protobuf.decoder import DecoderFactory
-
 import pytest
-from google.protobuf.timestamp_pb2 import Timestamp
 from google.protobuf.duration_pb2 import Duration
+from google.protobuf.timestamp_pb2 import Timestamp
+from mcap_protobuf.decoder import DecoderFactory
+from mcap_protobuf.writer import Writer
+
+from mcap.reader import make_reader
 
 
 def read_protobuf_messages(stream: BytesIO):

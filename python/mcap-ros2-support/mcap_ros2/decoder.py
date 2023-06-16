@@ -1,12 +1,12 @@
 """Decoder class for decoding ROS2 messages from MCAP files."""
 
-from typing import Dict, Optional, Callable, Any
 import warnings
+from typing import Any, Callable, Dict, Optional
 
-from mcap.exceptions import McapError
-from mcap.records import Schema, Message
-from mcap.well_known import SchemaEncoding, MessageEncoding
 from mcap.decoder import DecoderFactory as McapDecoderFactory
+from mcap.exceptions import McapError
+from mcap.records import Message, Schema
+from mcap.well_known import MessageEncoding, SchemaEncoding
 
 from ._dynamic import DecodedMessage, DecoderFunction, generate_dynamic
 

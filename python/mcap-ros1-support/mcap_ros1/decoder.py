@@ -1,5 +1,5 @@
-from typing import Dict, Any, Type, Callable, Optional
 import warnings
+from typing import Any, Callable, Dict, Optional, Type
 
 try:
     # If the user has genpy on their PATH from an existing ROS1 environment, use that.
@@ -9,10 +9,10 @@ try:
 except ImportError:
     from ._vendor.genpy import dynamic  # type: ignore
 
-from mcap.exceptions import McapError
-from mcap.records import Schema, Message
-from mcap.well_known import SchemaEncoding, MessageEncoding
 from mcap.decoder import DecoderFactory as McapDecoderFactory
+from mcap.exceptions import McapError
+from mcap.records import Message, Schema
+from mcap.well_known import MessageEncoding, SchemaEncoding
 
 
 class McapROS1DecodeError(McapError):

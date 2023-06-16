@@ -1,6 +1,6 @@
 from abc import ABC
+from typing import Any, Callable, Optional
 
-from typing import Optional, Callable, Any
 from .records import Schema
 
 

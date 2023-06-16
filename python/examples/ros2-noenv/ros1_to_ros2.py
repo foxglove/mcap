@@ -6,12 +6,11 @@ import re
 import sys
 from typing import Dict
 
+from mcap_ros1.reader import read_ros1_messages
+from mcap_ros2.writer import Writer as Ros2McapWriter
+
 from mcap.reader import make_reader
 from mcap.records import Schema
-
-from mcap_ros1.reader import read_ros1_messages
-
-from mcap_ros2.writer import Writer as Ros2McapWriter
 
 
 def main():

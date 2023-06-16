@@ -1,15 +1,16 @@
 """tests for the McapReader implementations."""
+import json
 import os
 from pathlib import Path
-import pytest
-from typing import IO, Tuple, Type, Union, Optional, Any
-import json
+from typing import IO, Any, Optional, Tuple, Type, Union
 
-from mcap.reader import make_reader, SeekingReader, NonSeekingReader, McapReader
-from mcap.writer import Writer
-from mcap.records import Schema, Channel, Message
+import pytest
+
 from mcap.decoder import DecoderFactory
 from mcap.exceptions import DecoderNotFoundError
+from mcap.reader import McapReader, NonSeekingReader, SeekingReader, make_reader
+from mcap.records import Channel, Message, Schema
+from mcap.writer import Writer
 
 DEMO_MCAP = (
     Path(__file__).parent.parent.parent.parent / "testdata" / "mcap" / "demo.mcap"

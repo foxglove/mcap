@@ -1,19 +1,17 @@
 # This example writes a single point cloud message.
+import struct
+import sys
+import time
 from io import BytesIO
 from random import random
-import struct
-import time
-import sys
 
-from mcap_protobuf.writer import Writer
-
-from google.protobuf.timestamp_pb2 import Timestamp
-
-from foxglove_schemas_protobuf.PointCloud_pb2 import PointCloud
 from foxglove_schemas_protobuf.PackedElementField_pb2 import PackedElementField
+from foxglove_schemas_protobuf.PointCloud_pb2 import PointCloud
 from foxglove_schemas_protobuf.Pose_pb2 import Pose
-from foxglove_schemas_protobuf.Vector3_pb2 import Vector3
 from foxglove_schemas_protobuf.Quaternion_pb2 import Quaternion
+from foxglove_schemas_protobuf.Vector3_pb2 import Vector3
+from google.protobuf.timestamp_pb2 import Timestamp
+from mcap_protobuf.writer import Writer
 
 
 def main():

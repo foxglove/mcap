@@ -1,9 +1,8 @@
-from mcap.reader import make_reader
-
 from py_mcap_demo.reader import read_messages
 from py_mcap_demo.writer import write_to
-
 from std_msgs.msg import String
+
+from mcap.reader import make_reader
 
 
 def test_write_then_read(tmp_path):

@@ -43,6 +43,7 @@ lint: pipenv
 	pipenv run black --check --diff --color mcap-protobuf-support
 	pipenv run black --check --diff --color --extend-exclude="_vendor" mcap-ros1-support
 	pipenv run black --check --diff --color --extend-exclude="_vendor" mcap-ros2-support
+	pipenv run isort .
 	cd mcap && pipenv run pyright
 	cd mcap-protobuf-support && pipenv run pyright mcap_protobuf
 	cd mcap-ros1-support && pipenv run pyright mcap_ros1
