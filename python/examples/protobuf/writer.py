@@ -1,7 +1,7 @@
 import sys
-from mcap_protobuf.writer import Writer
 
 from complex_message_pb2 import ComplexMessage
+from mcap_protobuf.writer import Writer
 from simple_message_pb2 import SimpleMessage
 
 

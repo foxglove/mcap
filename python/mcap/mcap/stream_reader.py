@@ -1,9 +1,10 @@
 import struct
-from io import BufferedReader, BytesIO, RawIOBase
-from typing import Iterator, List, Optional, Tuple, Union, IO
-import zstandard
 import zlib
+from io import BufferedReader, BytesIO, RawIOBase
+from typing import IO, Iterator, List, Optional, Tuple, Union
+
 import lz4.frame  # type: ignore
+import zstandard
 
 from .data_stream import ReadDataStream
 from .exceptions import InvalidMagic

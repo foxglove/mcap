@@ -1,5 +1,5 @@
-import zlib
 import struct
+import zlib
 from io import BytesIO
 from typing import IO, Optional
 

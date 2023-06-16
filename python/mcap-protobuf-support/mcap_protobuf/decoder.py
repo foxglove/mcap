@@ -1,13 +1,14 @@
-from collections import Counter
-from typing import Dict, Any, Type, Iterable, Optional, Callable
 import warnings
+from collections import Counter
+from typing import Any, Callable, Dict, Iterable, Optional, Type
 
-from google.protobuf.descriptor_pb2 import FileDescriptorSet, FileDescriptorProto
+from google.protobuf.descriptor_pb2 import FileDescriptorProto, FileDescriptorSet
 from google.protobuf.message_factory import MessageFactory
-from mcap.exceptions import McapError
-from mcap.records import Schema, Message
-from mcap.well_known import SchemaEncoding, MessageEncoding
+
 from mcap.decoder import DecoderFactory as McapDecoderFactory
+from mcap.exceptions import McapError
+from mcap.records import Message, Schema
+from mcap.well_known import MessageEncoding, SchemaEncoding
 
 
 class McapProtobufDecodeError(McapError):

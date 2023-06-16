@@ -1,7 +1,7 @@
 from typing import List
 
-from mcap.records import ChunkIndex, Message, Schema, Channel
 from mcap._message_queue import MessageQueue, QueueItem
+from mcap.records import Channel, ChunkIndex, Message, Schema
 
 
 def dummy_chunk_index(start_time: int, end_time: int, chunk_offset: int) -> ChunkIndex:

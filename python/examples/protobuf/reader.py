@@ -1,7 +1,8 @@
 import sys
 
-from mcap.reader import make_reader
 from mcap_protobuf.decoder import DecoderFactory
+
+from mcap.reader import make_reader
 
 
 def main():

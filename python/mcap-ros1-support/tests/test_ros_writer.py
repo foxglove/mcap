@@ -1,9 +1,10 @@
 from io import BytesIO
 
 from mcap_ros1.decoder import DecoderFactory
-from mcap.reader import make_reader
 from mcap_ros1.writer import Writer as Ros1Writer
 from std_msgs.msg import String  # type: ignore
+
+from mcap.reader import make_reader
 
 
 def read_ros1_messages(stream: BytesIO):

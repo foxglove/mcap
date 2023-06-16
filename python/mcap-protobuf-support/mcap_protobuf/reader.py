@@ -10,15 +10,15 @@ instantiate the :py:class:`mcap.reader.McapReader` with a
 MyProtoClass(data="hello")
 MyProtoClass(data="goodbye")
 """
-from typing import IO, Union, Any, Dict, Iterator, Optional, Iterable
+import warnings
 from datetime import datetime
 from os import PathLike
-import warnings
+from typing import IO, Any, Dict, Iterable, Iterator, Optional, Union
+
+from mcap.reader import McapReader, make_reader
+from mcap.records import Channel, Message
 
 from .decoder import DecoderFactory
-
-from mcap.records import Message, Channel
-from mcap.reader import McapReader, make_reader
 
 warnings.warn(__doc__, DeprecationWarning)
 

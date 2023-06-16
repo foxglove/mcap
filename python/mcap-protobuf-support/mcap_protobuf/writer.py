@@ -1,13 +1,14 @@
 import time
 from io import BufferedWriter
-from typing import Optional, Dict, Any, Tuple, Union, IO
+from typing import IO, Any, Dict, Optional, Tuple, Union
 
-from mcap.writer import CompressionType, Writer as McapWriter
-from mcap.well_known import MessageEncoding
 import mcap
+from mcap.well_known import MessageEncoding
+from mcap.writer import CompressionType
+from mcap.writer import Writer as McapWriter
 
-from .schema import register_schema
 from . import __version__
+from .schema import register_schema
 
 
 def _library_identifier():
