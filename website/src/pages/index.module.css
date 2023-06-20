@@ -121,3 +121,55 @@
   width: 60px;
   height: auto;
 }
+
+.logosSection {
+  padding: 4rem 2rem;
+}
+
+[data-theme="light"] .logosSection {
+  background-color: rgba(148, 101, 222, 0.06);
+}
+
+[data-theme="dark"] .logosSection {
+  background-color: #303846;
+}
+
+.logoGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2rem 3rem;
+  text-align: center;
+}
+
+@media (min-width: 640px) {
+  .logoGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 996px) {
+  .logoGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.logoIcon {
+  display: inline-block;
+  height: auto;
+  width: 100%;
+  margin: auto;
+}
+
+@media (min-width: 640px) {
+  .logoIcon {
+    width: 80%;
+  }
+}
+
+[data-theme="light"] .darkMode {
+  display: none;
+}
+
+[data-theme="dark"] .lightMode {
+  display: none;
+}
