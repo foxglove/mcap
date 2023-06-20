@@ -78,9 +78,12 @@ const FeatureList: FeatureItem[] = [
   },
 ];
 
+const LightModeLogos = icons.LightModeLogos;
+const DarkModeLogos = icons.DarkModeLogos;
+
 function Feature({ title, Icon, description }: FeatureItem) {
   return (
-    <div className={styles.featureItem}>
+    <div>
       <Icon role="img" className={styles.featureIcon} />
       <h3>{title}</h3>
       <p>{description}</p>
@@ -125,6 +128,27 @@ export default function Home(): JSX.Element {
           <div className={styles.featureGrid}>
             {FeatureList.map((props, idx) => (
               <Feature key={idx} {...props} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className={`${styles.section ?? ""} ${styles.logosSection ?? ""}`}>
+        <div className="container">
+          <div className={styles.logoGrid}>
+            {LightModeLogos.map((Logo, idx) => (
+              <Logo
+                key={idx}
+                role="img"
+                className={`${styles.lightMode ?? ""} ${styles.logoIcon ?? ""}`}
+              />
+            ))}
+            {DarkModeLogos.map((Logo, idx) => (
+              <Logo
+                key={idx}
+                role="img"
+                className={`${styles.darkMode ?? ""} ${styles.logoIcon ?? ""}`}
+              />
             ))}
           </div>
         </div>
