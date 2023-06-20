@@ -122,6 +122,18 @@
   height: auto;
 }
 
+.logosSection {
+  padding: 4rem 2rem;
+}
+
+[data-theme="light"] .logosSection {
+  background-color: rgba(148, 101, 222, 0.06);
+}
+
+[data-theme="dark"] .logosSection {
+  background-color: #303846;
+}
+
 .logoGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
