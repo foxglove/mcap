@@ -19,14 +19,20 @@ import YogaLegGrabStretch from "./yoga-leg-grab-stretch.svg";
 import ZipFile from "./zip-file.svg";
 
 const LightModeLogos = [
-  AndurilLight,
-  CocoLight,
-  NorLabLight,
-  ROSLight,
-  TangramLight,
+  { href: "https://www.anduril.com/", Logo: AndurilLight },
+  { href: "https://cocodelivery.com/", Logo: CocoLight },
+  { href: "https://norlab.ulaval.ca/", Logo: NorLabLight },
+  { href: "https://ros.org/", Logo: ROSLight },
+  { href: "https://www.tangramvision.com/", Logo: TangramLight },
 ];
 
-const DarkModeLogos = [AndurilDark, CocoDark, NorlabDark, ROSDark, TangramDark];
+const DarkModeLogos = [
+  { href: "https://www.anduril.com/", Logo: AndurilDark },
+  { href: "https://cocodelivery.com/", Logo: CocoDark },
+  { href: "https://norlab.ulaval.ca/", Logo: NorlabDark },
+  { href: "https://ros.org/", Logo: ROSDark },
+  { href: "https://www.tangramvision.com/", Logo: TangramDark },
+];
 
 export {
   ArmyWoman1,

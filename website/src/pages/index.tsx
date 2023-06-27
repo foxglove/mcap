@@ -135,20 +135,21 @@ export default function Home(): JSX.Element {
 
       <div className={`${styles.section ?? ""} ${styles.logosSection ?? ""}`}>
         <div className="container">
-          <div className={styles.logoGrid}>
-            {LightModeLogos.map((Logo, idx) => (
-              <Logo
-                key={idx}
-                role="img"
-                className={`${styles.lightMode ?? ""} ${styles.logoIcon ?? ""}`}
-              />
+          <h2 className={styles.logosHeader}>
+            Trusted by leading robotics teams
+          </h2>
+          <div className={`${styles.logoGrid ?? ""} ${styles.lightMode ?? ""}`}>
+            {LightModeLogos.map(({ href, Logo }, idx) => (
+              <a key={idx} href={href}>
+                <Logo role="img" className={styles.logoIcon} />
+              </a>
             ))}
-            {DarkModeLogos.map((Logo, idx) => (
-              <Logo
-                key={idx}
-                role="img"
-                className={`${styles.darkMode ?? ""} ${styles.logoIcon ?? ""}`}
-              />
+          </div>
+          <div className={`${styles.logoGrid ?? ""} ${styles.darkMode ?? ""}`}>
+            {DarkModeLogos.map(({ href, Logo }, idx) => (
+              <a key={idx} href={href}>
+                <Logo role="img" className={styles.logoIcon} />
+              </a>
             ))}
           </div>
         </div>
