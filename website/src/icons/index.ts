@@ -18,21 +18,14 @@ import Turntable from "./turntable.svg";
 import YogaLegGrabStretch from "./yoga-leg-grab-stretch.svg";
 import ZipFile from "./zip-file.svg";
 
-const LightModeLogos = [
-  { href: "https://www.anduril.com/", Logo: AndurilLight },
-  { href: "https://cocodelivery.com/", Logo: CocoLight },
-  { href: "https://norlab.ulaval.ca/", Logo: NorLabLight },
-  { href: "https://ros.org/", Logo: ROSLight },
-  { href: "https://www.tangramvision.com/", Logo: TangramLight },
+const Logos = [
+  { href: "https://www.anduril.com/", LightModeLogo: AndurilLight, DarkModeLogo: AndurilDark },
+  { href: "https://cocodelivery.com/", LightModeLogo: CocoLight, DarkModeLogo: CocoDark },
+  { href: "https://norlab.ulaval.ca/", LightModeLogo: NorLabLight, DarkModeLogo: NorlabDark },
+  { href: "https://ros.org/", LightModeLogo: ROSLight, DarkModeLogo: ROSDark },
+  { href: "https://www.tangramvision.com/", LightModeLogo: TangramLight, DarkModeLogo: TangramDark },
 ];
 
-const DarkModeLogos = [
-  { href: "https://www.anduril.com/", Logo: AndurilDark },
-  { href: "https://cocodelivery.com/", Logo: CocoDark },
-  { href: "https://norlab.ulaval.ca/", Logo: NorlabDark },
-  { href: "https://ros.org/", Logo: ROSDark },
-  { href: "https://www.tangramvision.com/", Logo: TangramDark },
-];
 
 export {
   ArmyWoman1,
@@ -44,6 +37,5 @@ export {
   Turntable,
   YogaLegGrabStretch,
   ZipFile,
-  LightModeLogos,
-  DarkModeLogos,
+  Logos,
 };
