@@ -100,16 +100,17 @@ var addMetadataCmd = &cobra.Command{
 	Use:   "metadata",
 	Short: "Add metadata to an MCAP file",
 	Run: func(cmd *cobra.Command, args []string) {
-		ctx := context.Background()
 		if len(args) != 1 {
 			die("Unexpected number of args")
 		}
 		filename := args[0]
-		tempName := filename + ".new"
-		tmpfile, err := os.Create(tempName)
+
+		f, err := os.OpenFile(filename, os.O_RDWR, os.ModePerm)
 		if err != nil {
-			die("failed to create temp file: %s", err)
+			die("failed to open file: %s", err)
 		}
+		defer f.Close()
+
 		metadata := make(map[string]string)
 		for _, kv := range addMetadataKeyValues {
 			parts := strings.FieldsFunc(kv, func(c rune) bool {
@@ -120,23 +121,17 @@ var addMetadataCmd = &cobra.Command{
 			}
 			metadata[parts[0]] = parts[1]
 		}
-		err = utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
-			if remote {
-				die("not supported on remote MCAP files")
-			}
-			return utils.RewriteMCAP(tmpfile, rs, func(w *mcap.Writer) error {
-				return w.WriteMetadata(&mcap.Metadata{
+		err = utils.AmendMCAP(f,
+			nil,
+			[]*mcap.Metadata{
+				{
 					Name:     addMetadataName,
 					Metadata: metadata,
-				})
-			})
-		})
+				},
+			},
+		)
 		if err != nil {
-			die("failed to add metadata: %s", err)
-		}
-		err = os.Rename(tempName, filename)
-		if err != nil {
-			die("failed to rename temporary output: %s", err)
+			die("failed to add metadata: %s. You may need to run `mcap recover` to repair the file.", err)
 		}
 	},
 }

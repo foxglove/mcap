@@ -1,0 +1,177 @@
+.container {
+  position: relative;
+  background-color: #ffffff;
+  padding: 2em 1em;
+}
+
+.container var {
+  font-style: normal;
+  font-weight: 600;
+}
+
+[data-theme="dark"] .container {
+  background-color: #242526;
+}
+
+.container h2 {
+  margin-bottom: 4px;
+  font-weight: 800;
+}
+
+.column {
+  margin: 0 auto;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.column hr {
+  align-self: stretch;
+  margin: 0.5em 0;
+  background-color: #e0e0e0;
+}
+
+.subhead {
+  line-height: 1.5;
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+.sensors {
+  display: flex;
+  gap: 4px 16px;
+  flex-wrap: wrap;
+}
+.sensors input[type="checkbox"] {
+  vertical-align: middle;
+  margin: 2px 4px 4px 0;
+}
+
+@media screen and (max-width: 500px) {
+  .sensors {
+    /* flex-direction: column;
+    align-items: flex-start; */
+  }
+
+  .recordingControls {
+    flex-direction: column;
+  }
+}
+
+.recordingDot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  position: relative;
+  bottom: 1px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background-color: currentColor;
+  vertical-align: middle;
+}
+
+.recordingDotActive {
+  border-radius: 0;
+}
+
+.recordingControls {
+  display: flex;
+  gap: 32px;
+  justify-content: center;
+}
+
+.recordingControlsColumn {
+  flex: 1 1 33%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.recordingButtons {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  justify-content: center;
+}
+
+.downloadButton {
+  padding: 6px;
+  white-space: normal;
+}
+
+.recordingStatsSection h4 {
+  margin: 0;
+}
+
+.videoContainer {
+  background-color: #6f3be80f;
+  border: 1px solid #e0e0e0;
+  font-size: 0.8rem;
+  padding: 0.5rem;
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  max-width: 200px;
+  align-self: center;
+  position: relative;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .videoContainer {
+  background-color: transparent;
+}
+
+.videoContainer video {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+}
+
+.videoPlaceholderText {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.videoLoadingIndicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.error {
+  color: #db3553;
+  font-weight: 600;
+}
+
+.downloadContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.downloadInfo {
+  font-weight: 600;
+  font-size: 0.8rem;
+  border: 1px solid #6f3be87f;
+  background-color: #fafafa7f;
+  padding: 6px 6px 6px 12px;
+  margin-bottom: 16px;
+}
+
+[data-theme="dark"] .downloadInfo {
+  background-color: transparent;
+  border-color: #585858;
+}
+
+.downloadInfoCloseButton {
+  float: right;
+  font-size: 1rem;
+  padding: 0 4px;
+}

@@ -3,7 +3,6 @@ package ros
 import (
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -210,8 +209,7 @@ func (t *JSONTranscoder) string(w io.Writer, r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	enc := json.NewEncoder(w)
-	err = enc.Encode(string(t.buf[:length]))
+	_, err = w.Write([]byte(strconv.QuoteToASCII(string(t.buf[:length]))))
 	if err != nil {
 		return err
 	}
@@ -300,13 +298,30 @@ func (t *JSONTranscoder) float32(w io.Writer, r io.Reader) error {
 	}
 	x := binary.LittleEndian.Uint32(t.buf[:4])
 	float := float64(math.Float32frombits(x))
-	t.formattedNumber = strconv.AppendFloat(t.formattedNumber, float, 'f', -1, 32)
+	t.formattedNumber = formatFloat(t.formattedNumber, float, 32)
 	_, err = w.Write(t.formattedNumber)
 	if err != nil {
 		return err
 	}
 	t.formattedNumber = t.formattedNumber[:0]
 	return nil
+}
+
+// formatFloat represents floating point numbers as JSON values. NaN and infinity are represented
+// as strings consistent with `protojson` output.
+// https://protobuf.dev/programming-guides/proto3/#json
+func formatFloat(buf []byte, float float64, precision int) []byte {
+	switch {
+	case math.IsNaN(float):
+		buf = append(buf, []byte(`"NaN"`)...)
+	case math.IsInf(float, 1):
+		buf = append(buf, []byte(`"Infinity"`)...)
+	case math.IsInf(float, -1):
+		buf = append(buf, []byte(`"-Infinity"`)...)
+	default:
+		buf = strconv.AppendFloat(buf, float, 'f', -1, precision)
+	}
+	return buf
 }
 
 func (t *JSONTranscoder) float64(w io.Writer, r io.Reader) error {
@@ -316,7 +331,7 @@ func (t *JSONTranscoder) float64(w io.Writer, r io.Reader) error {
 	}
 	x := binary.LittleEndian.Uint64(t.buf[:8])
 	float := math.Float64frombits(x)
-	t.formattedNumber = strconv.AppendFloat(t.formattedNumber, float, 'f', -1, 64)
+	t.formattedNumber = formatFloat(t.formattedNumber, float, 64)
 	_, err = w.Write(t.formattedNumber)
 	if err != nil {
 		return err
@@ -462,8 +477,8 @@ func (t *JSONTranscoder) record(fields []recordField) converter {
 			buf[0] = '"'
 			buf[1+len(field.name)] = '"'
 			buf[2+len(field.name)] = ':'
-			copy(buf[1:], field.name)
-			_, err := w.Write(buf[:3+len(field.name)])
+			n := copy(buf[1:], field.name)
+			_, err := w.Write(buf[:3+n])
 			if err != nil {
 				return fmt.Errorf("failed to write field %s name: %w", field.name, err)
 			}

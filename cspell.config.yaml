@@ -25,6 +25,7 @@ ignorePaths:
   - package.xml
   - "*_pb2.py"
   - "*.pyc"
+  - "*.svg"
   - "*.webp"
   - Pipfile*
   - mkdocs.yml
@@ -35,11 +36,13 @@ ignorePaths:
   - cpp/examples/protobuf/proto
 
 words:
+  - Anduril
   - bagfile
   - bfbs
   - callerid
   - cbor
   - cmake
+  - colcon
   - conanfile
   - conans
   - crc
@@ -56,17 +59,21 @@ words:
   - genpy
   - gentools
   - golangci
+  - infima
   - inputfile
   - jsonschema
   - kaitai
   - libmcap
+  - matplotlib
   - mcap
   - msgdef
   - nanos
   - nanosec
   - noenv
+  - Norlab
   - nsec
   - nsecs
+  - numpy
   - parseable
   - pipenv
   - pointcloud
@@ -81,6 +88,7 @@ words:
   - schemaless
   - serde
   - sfixed
+  - srgb
   - stoull
   - struct
   - swiftformat
@@ -91,8 +99,10 @@ words:
   - unchunked
   - unindexed
   - velodyne
+  - webp
   - zstandard
   - zstd
+  - zustand
 
 languageSettings:
   - languageId: "markdown"

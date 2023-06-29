@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"database/sql"
 	"errors"
@@ -101,9 +102,12 @@ var convertCmd = &cobra.Command{
 			Compression: compressionFormat,
 		}
 
+		bw := bufio.NewWriter(w)
+		defer bw.Flush()
+
 		switch filetype {
 		case FileTypeRos1:
-			err = ros.Bag2MCAP(w, f, opts)
+			err = ros.Bag2MCAP(bw, f, opts)
 			if err != nil && !errors.Is(err, io.EOF) {
 				die("failed to convert file: %s", err)
 			}
@@ -120,7 +124,7 @@ var convertCmd = &cobra.Command{
 				amentPath += string(os.PathListSeparator) + prefixPath
 			}
 			dirs := strings.FieldsFunc(amentPath, func(c rune) bool { return (c == os.PathListSeparator) })
-			err = ros.DB3ToMCAP(w, db, opts, dirs)
+			err = ros.DB3ToMCAP(bw, db, opts, dirs)
 			if err != nil {
 				die("failed to convert file: %s", err)
 			}

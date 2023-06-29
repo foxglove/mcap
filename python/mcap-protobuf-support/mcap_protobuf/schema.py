@@ -1,6 +1,8 @@
 from typing import Any, Set
+
 from google.protobuf.descriptor import FileDescriptor
 from google.protobuf.descriptor_pb2 import FileDescriptorSet
+
 from mcap.writer import Writer as McapWriter
 
 

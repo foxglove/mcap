@@ -1,4 +1,5 @@
-from typing import Dict, Any, Type
+import warnings
+from typing import Any, Callable, Dict, Optional, Type
 
 try:
     # If the user has genpy on their PATH from an existing ROS1 environment, use that.
@@ -8,9 +9,10 @@ try:
 except ImportError:
     from ._vendor.genpy import dynamic  # type: ignore
 
+from mcap.decoder import DecoderFactory as McapDecoderFactory
 from mcap.exceptions import McapError
 from mcap.records import Message, Schema
-from mcap.well_known import SchemaEncoding
+from mcap.well_known import MessageEncoding, SchemaEncoding
 
 
 class McapROS1DecodeError(McapError):
@@ -19,35 +21,57 @@ class McapROS1DecodeError(McapError):
     pass
 
 
-class Decoder:
+class DecoderFactory(McapDecoderFactory):
+    """Provides functionality to an :py:class:`~mcap.reader.McapReader` to decode ROS 1 messages.
+    Requires a valid `ros1msg` schema to decode messages.
+    """
+
     def __init__(self):
-        """Decodes ROS1 messages from MCAP Message records."""
         self._types: Dict[int, Type[Any]] = {}
 
-    def decode(self, schema: Schema, message: Message) -> Any:
-        """Takes a Message record from an MCAP along with its associated Schema,
-        and returns the decoded ROS1 message from within.
-
-        :param schema: The message schema record from the MCAP.
-        :type schema: mcap.records.Schema
-        :param message: The message record containing content to be decoded.
-        :type message: mcap.records.Message
-        :raises McapROS1DecodeError: if the content could not be decoded as a ROS1 message with
-            the given schema.
-        :return: The decoded message content.
-        """
-        if schema.encoding != SchemaEncoding.ROS1:
-            raise McapROS1DecodeError(
-                f"can't decode schema with encoding {schema.encoding}"
-            )
+    def decoder_for(
+        self, message_encoding: str, schema: Optional[Schema]
+    ) -> Optional[Callable[[bytes], Any]]:
+        if (
+            message_encoding != MessageEncoding.ROS1
+            or schema is None
+            or schema.encoding != SchemaEncoding.ROS1
+        ):
+            return None
         generated_type = self._types.get(schema.id)
         if generated_type is None:
-            type_dict = dynamic.generate_dynamic(  # type: ignore
+            type_dict: Dict[str, Type[Any]] = dynamic.generate_dynamic(  # type: ignore
                 schema.name, schema.data.decode()
             )
             generated_type = type_dict[schema.name]
             self._types[schema.id] = generated_type
 
-        ros_msg = generated_type()
-        ros_msg.deserialize(message.data)
-        return ros_msg
+        def decoder(data: bytes):
+            ros_msg = generated_type()
+            ros_msg.deserialize(data)
+            return ros_msg
+
+        return decoder
+
+
+class Decoder:
+    """Decodes ROS 1 messages.
+
+    .. deprecated:: 0.7.0
+      Use :py:class:`~mcap_ros1.decoder.DecoderFactory` with :py:class:`~mcap.reader.McapReader`
+      instead.
+    """
+
+    def __init__(self):
+        warnings.warn(
+            """The :py:class:`mcap_ros1.decoder.Decoder` class is deprecated.
+For similar functionality, instantiate the :py:class:`mcap.reader.McapReader` with a
+:py:class:`mcap_ros1.decoder.DecoderFactory` instance.""",
+            DeprecationWarning,
+        )
+        self._decoder_factory = DecoderFactory()
+
+    def decode(self, schema: Schema, message: Message) -> Any:
+        decoder = self._decoder_factory.decoder_for(MessageEncoding.ROS1, schema)
+        assert decoder is not None, "failed to construct a ROS1 decoder"
+        return decoder(message.data)

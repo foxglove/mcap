@@ -18,8 +18,7 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-
-      - run: yarn install --immutable
+      - run: corepack enable && yarn install --immutable
       - run: echo '::add-matcher::.github/cspell-problem-matcher.json'
       - run: yarn spellcheck --no-progress
 
@@ -33,7 +32,7 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-      - run: yarn install --immutable
+      - run: corepack enable && yarn install --immutable
       - run: yarn workspace @foxglove/mcap-conformance lint:ci
       - run: yarn workspace @foxglove/mcap-conformance typecheck
 
@@ -52,7 +51,7 @@ jobs:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
       - run: cd cpp && make ci
-      - run: yarn install --immutable
+      - run: corepack enable && yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner cpp-
 
@@ -66,11 +65,11 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
-          go-version: 1.18.x
+          go-version-file: go/go.work
       - run: cd go && make build-conformance-binaries
-      - run: yarn install --immutable
+      - run: corepack enable && yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner go-
 
@@ -88,7 +87,7 @@ jobs:
         with:
           python-version: 3.7
       - run: cd python && pip install -e mcap
-      - run: yarn install --immutable
+      - run: corepack enable && yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner py-
 
@@ -102,7 +101,7 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-      - run: yarn install --immutable
+      - run: corepack enable && yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner ts-
 
@@ -116,7 +115,7 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-      - run: yarn install --immutable
+      - run: corepack enable && yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner ksy-
 
@@ -134,7 +133,7 @@ jobs:
         with:
           swift-version: "5.7"
       - run: swift build
-      - run: yarn install --immutable
+      - run: corepack enable && yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner swift-
 
@@ -153,21 +152,9 @@ jobs:
           toolchain: stable
           default: true
       - run: cd rust && cargo build --example=conformance_reader
-      - run: yarn install --immutable
+      - run: corepack enable && yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner rust-
-
-  docs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 16.x
-          cache: yarn
-
-      - run: yarn install --immutable
-      - run: yarn docs:lint
 
   cpp:
     runs-on: ubuntu-latest
@@ -221,7 +208,9 @@ jobs:
           node-version: 16.x
           cache: yarn
           registry-url: https://registry.npmjs.org
-      - run: yarn install --immutable
+      - run: corepack enable && yarn install --immutable
+      - run: yarn dedupe --check
+      - run: yarn prettier:check
       - run: yarn workspace @mcap/core lint:ci
       - run: yarn workspace @mcap/core typecheck
       - run: yarn workspace @mcap/core test
@@ -249,13 +238,17 @@ jobs:
         with:
           node-version: 16.x
           cache: yarn
-      - run: yarn install --immutable
-      - run: yarn workspace @foxglove/mcap-example-validate lint:ci
-      - run: yarn workspace @foxglove/mcap-example-validate typecheck
+      - run: corepack enable && yarn install --immutable
       - run: yarn workspace @foxglove/mcap-benchmarks lint:ci
       - run: yarn workspace @foxglove/mcap-benchmarks typecheck
+      - run: yarn workspace @foxglove/mcap-example-validate lint:ci
+      - run: yarn workspace @foxglove/mcap-example-validate typecheck
       - run: yarn workspace @foxglove/mcap-example-bag2mcap lint:ci
       - run: yarn workspace @foxglove/mcap-example-bag2mcap typecheck
+      - run: yarn workspace @foxglove/mcap-example-basicwriter lint:ci
+      - run: yarn workspace @foxglove/mcap-example-basicwriter lint:ci
+      - run: yarn workspace @foxglove/mcap-example-flatbufferswriter typecheck
+      - run: yarn workspace @foxglove/mcap-example-flatbufferswriter typecheck
 
   python:
     runs-on: ubuntu-latest
@@ -360,12 +353,12 @@ jobs:
       run:
         working-directory: go
     steps:
-      - uses: actions/setup-go@v3
-        with:
-          go-version: 1.18.x
       - uses: actions/checkout@v3
         with:
           lfs: true
+      - uses: actions/setup-go@v4
+        with:
+          go-version-file: go/go.work
       - name: install golangci-lint
         run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.49.0
       - run: make lint
@@ -422,9 +415,9 @@ jobs:
         with:
           fetch-depth: "0"
       - run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v4
         with:
-          go-version: 1.18.x
+          go-version-file: go/go.work
       - name: Setup environment
         run: ${{ matrix.setup }}
       - name: Build binary

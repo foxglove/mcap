@@ -1,0 +1,188 @@
+/**
+ * CSS files with the .module.css suffix will be treated as CSS modules
+ * and scoped locally.
+ */
+
+.hero {
+  --bg-color: #0c4471;
+  padding: 2rem 0;
+  background-color: var(--bg-color);
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--bg-color) 85%, white),
+    var(--bg-color)
+  );
+  color: white;
+  text-align: center;
+}
+
+[data-theme="dark"] .hero {
+  --bg-color: #303846;
+}
+
+@media (min-width: 996px) {
+  .hero {
+    padding: 4rem 0;
+  }
+}
+
+.heroLogo {
+  display: flex;
+  gap: 2rem;
+  margin: auto;
+  justify-content: center;
+  align-items: center;
+}
+
+.heroLogo h1 {
+  display: none;
+  margin: 0;
+}
+
+@media (min-width: 640px) {
+  .heroLogo h1 {
+    display: block;
+    font-size: 3rem;
+  }
+}
+
+.blurb {
+  max-width: 60rem;
+  margin: 1.5rem auto;
+}
+
+.heroButtons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.heroButtonPrimary,
+.heroButtonSecondary {
+  --button-color-highlight: #2e8555;
+  display: inline-block;
+  padding: 0.5rem 2rem;
+  font-size: 1.125rem;
+  font-weight: bold;
+  border-radius: var(--ifm-button-border-radius);
+}
+
+.heroButtonPrimary:hover,
+.heroButtonSecondary:hover {
+  text-decoration: none;
+  box-shadow: 0 0 5px 0 rgb(0 0 0 / 0.1);
+  filter: brightness(105%);
+}
+
+.heroButtonPrimary {
+  color: white;
+  background-color: var(--button-color-highlight);
+}
+
+.heroButtonPrimary:hover {
+  color: white;
+}
+
+.heroButtonSecondary {
+  color: #222;
+  background-color: #eee;
+}
+
+.heroButtonSecondary:hover {
+  color: var(--button-color-highlight);
+}
+
+.section {
+  padding: 4rem 0;
+}
+
+.featureGrid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 2rem 3rem;
+  text-align: center;
+}
+
+@media (min-width: 640px) {
+  .featureGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 996px) {
+  .featureGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.featureIcon {
+  display: inline-block;
+  width: 60px;
+  height: auto;
+}
+
+.logosHeader {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.logosSection {
+  padding: 4rem 2rem;
+}
+
+.logosSection a {
+  display: flex;
+}
+
+.logosSection a svg {
+  align-self: center;
+}
+
+[data-theme="light"] .logosSection {
+  background-color: rgba(148, 101, 222, 0.06);
+}
+
+[data-theme="dark"] .logosSection {
+  background-color: #303846;
+}
+
+.logoGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2rem 3rem;
+  text-align: center;
+}
+
+@media (min-width: 640px) {
+  .logoGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 996px) {
+  .logoGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.logoIcon {
+  display: inline-block;
+  height: auto;
+  width: 100%;
+  margin: auto;
+}
+
+@media (min-width: 640px) {
+  .logoIcon {
+    width: 80%;
+  }
+}
+
+[data-theme="light"] .darkMode {
+  display: none;
+}
+
+[data-theme="dark"] .lightMode {
+  display: none;
+}

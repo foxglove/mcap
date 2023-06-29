@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -32,8 +33,6 @@ var (
 	catFormatJSON bool
 )
 
-type DecimalTime uint64
-
 func digits(n uint64) int {
 	if n == 0 {
 		return 1
@@ -46,9 +45,9 @@ func digits(n uint64) int {
 	return count
 }
 
-func (t DecimalTime) MarshalJSON() ([]byte, error) {
-	seconds := uint64(t) / 1e9
-	nanoseconds := uint64(t) % 1e9
+func formatDecimalTime(t uint64) []byte {
+	seconds := t / 1e9
+	nanoseconds := t % 1e9
 	requiredLength := digits(seconds) + 1 + 9
 	buf := make([]byte, 0, requiredLength)
 	buf = strconv.AppendInt(buf, int64(seconds), 10)
@@ -57,15 +56,114 @@ func (t DecimalTime) MarshalJSON() ([]byte, error) {
 		buf = append(buf, '0')
 	}
 	buf = strconv.AppendInt(buf, int64(nanoseconds), 10)
-	return buf, nil
+	return buf
 }
 
 type Message struct {
 	Topic       string          `json:"topic"`
 	Sequence    uint32          `json:"sequence"`
-	LogTime     DecimalTime     `json:"log_time"`
-	PublishTime DecimalTime     `json:"publish_time"`
+	LogTime     uint64          `json:"log_time"`
+	PublishTime uint64          `json:"publish_time"`
 	Data        json.RawMessage `json:"data"`
+	buf         *bytes.Buffer
+}
+
+type jsonOutputWriter struct {
+	w   io.Writer
+	buf *bytes.Buffer
+}
+
+func newJSONOutputWriter(w io.Writer) *jsonOutputWriter {
+	return &jsonOutputWriter{
+		w:   w,
+		buf: &bytes.Buffer{},
+	}
+}
+
+func (w *jsonOutputWriter) writeMessage(
+	topic string,
+	sequence uint32,
+	logTime uint64,
+	publishTime uint64,
+	data []byte,
+) error {
+	w.buf.Reset()
+	_, err := w.buf.Write([]byte("{"))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.buf.Write([]byte(`"topic":`))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.buf.Write([]byte(`"`))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.buf.Write([]byte(topic))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.buf.Write([]byte(`",`))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.buf.Write([]byte(`"sequence":`))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.buf.Write([]byte(strconv.FormatUint(uint64(sequence), 10)))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.buf.Write([]byte(`,"log_time":`))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.buf.Write(formatDecimalTime(logTime))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.buf.Write([]byte(`,"publish_time":`))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.buf.Write(formatDecimalTime(publishTime))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.buf.Write([]byte(`,"data":`))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.buf.Write(data)
+	if err != nil {
+		return err
+	}
+
+	_, err = w.buf.Write([]byte("}\n"))
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(w.w, w.buf)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func getReadOpts(useIndex bool) []readopts.ReadOpt {
@@ -91,8 +189,7 @@ func printMessages(
 	buf := make([]byte, 1024*1024)
 	transcoders := make(map[uint16]*ros.JSONTranscoder)
 	descriptors := make(map[uint16]protoreflect.MessageDescriptor)
-	encoder := json.NewEncoder(w)
-	target := Message{}
+	jsonWriter := newJSONOutputWriter(w)
 	for {
 		schema, channel, message, err := it.Next(buf)
 		if err != nil {
@@ -172,12 +269,13 @@ func printMessages(
 				return fmt.Errorf("JSON output only supported for ros1msg, protobuf, and jsonschema schemas. Found: %s", schema.Encoding)
 			}
 		}
-		target.Topic = channel.Topic
-		target.Sequence = message.Sequence
-		target.LogTime = DecimalTime(message.LogTime)
-		target.PublishTime = DecimalTime(message.PublishTime)
-		target.Data = msg.Bytes()
-		err = encoder.Encode(target)
+		err = jsonWriter.writeMessage(
+			channel.Topic,
+			message.Sequence,
+			message.LogTime,
+			message.PublishTime,
+			msg.Bytes(),
+		)
 		if err != nil {
 			return fmt.Errorf("failed to write encoded message: %s", err)
 		}
@@ -198,6 +296,10 @@ var catCmd = &cobra.Command{
 		// read stdin if no filename has been provided and data is available on stdin.
 		readingStdin := (stat.Mode()&os.ModeCharDevice == 0 && len(args) == 0)
 		// stdin is a special case, since we can't seek
+
+		output := bufio.NewWriter(os.Stdout)
+		defer output.Flush()
+
 		if readingStdin {
 			reader, err := mcap.NewReader(os.Stdin)
 			if err != nil {
@@ -208,7 +310,7 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				die("Failed to read messages: %s", err)
 			}
-			err = printMessages(ctx, os.Stdout, it, catFormatJSON)
+			err = printMessages(ctx, output, it, catFormatJSON)
 			if err != nil {
 				die("Failed to print messages: %s", err)
 			}
@@ -230,7 +332,7 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to read messages: %w", err)
 			}
-			err = printMessages(ctx, os.Stdout, it, catFormatJSON)
+			err = printMessages(ctx, output, it, catFormatJSON)
 			if err != nil {
 				return fmt.Errorf("failed to print messages: %w", err)
 			}

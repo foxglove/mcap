@@ -121,6 +121,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 
 	var minLogTime uint64 = math.MaxUint64
 	var maxLogTime uint64
+	var chunkMessageCount uint64
 
 	msg := make([]byte, 1024)
 	for {
@@ -165,8 +166,10 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 			}
 
 			doctor.channels[channel.ID] = channel
-			if _, ok := doctor.schemas[channel.SchemaID]; !ok {
-				doctor.error("Encountered Channel (%d) with unknown Schema (%d)", channel.ID, channel.SchemaID)
+			if channel.SchemaID != 0 {
+				if _, ok := doctor.schemas[channel.SchemaID]; !ok {
+					doctor.error("Encountered Channel (%d) with unknown Schema (%d)", channel.ID, channel.SchemaID)
+				}
 			}
 		case mcap.TokenMessage:
 			message, err := mcap.ParseMessage(data)
@@ -186,7 +189,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 			if message.LogTime > maxLogTime {
 				maxLogTime = message.LogTime
 			}
-
+			chunkMessageCount++
 			doctor.messageCount++
 
 		default:
@@ -194,21 +197,29 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 		}
 	}
 
-	if minLogTime != chunk.MessageStartTime {
-		doctor.error("Chunk.message_start_time %d does not match the earliest message log time %d",
-			chunk.MessageStartTime, minLogTime)
-	}
+	if chunkMessageCount != 0 {
+		if minLogTime != chunk.MessageStartTime {
+			doctor.error(
+				"Chunk.message_start_time %d does not match the earliest message log time %d",
+				chunk.MessageStartTime,
+				minLogTime,
+			)
+		}
 
-	if maxLogTime != chunk.MessageEndTime {
-		doctor.error("Chunk.message_end_time %d does not match the latest message log time %d",
-			chunk.MessageEndTime, maxLogTime)
-	}
+		if maxLogTime != chunk.MessageEndTime && chunkMessageCount != 0 {
+			doctor.error(
+				"Chunk.message_end_time %d does not match the latest message log time %d",
+				chunk.MessageEndTime,
+				maxLogTime,
+			)
+		}
 
-	if minLogTime < doctor.minLogTime {
-		doctor.minLogTime = minLogTime
-	}
-	if maxLogTime > doctor.maxLogTime {
-		doctor.maxLogTime = maxLogTime
+		if minLogTime < doctor.minLogTime {
+			doctor.minLogTime = minLogTime
+		}
+		if maxLogTime > doctor.maxLogTime {
+			doctor.maxLogTime = maxLogTime
+		}
 	}
 }
 
@@ -293,8 +304,14 @@ func (doctor *mcapDoctor) Examine() error {
 
 			doctor.channels[channel.ID] = channel
 
-			if _, ok := doctor.schemas[channel.SchemaID]; !ok {
-				doctor.error("Encountered Channel (%d) with unknown Schema (%d)", channel.ID, channel.SchemaID)
+			if channel.SchemaID != 0 {
+				if _, ok := doctor.schemas[channel.SchemaID]; !ok {
+					doctor.error(
+						"Encountered Channel (%d) with unknown Schema (%d)",
+						channel.ID,
+						channel.SchemaID,
+					)
+				}
 			}
 		case mcap.TokenMessage:
 			message, err := mcap.ParseMessage(data)

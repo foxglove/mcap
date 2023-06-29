@@ -1,12 +1,18 @@
 // -*- jsonc -*-
 {
   "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.trimTrailingWhitespace": true,
 
   "typescript.tsdk": "node_modules/typescript/lib",
   "prettier.prettierPath": "./node_modules/prettier",
   "eslint.packageManager": "yarn",
   "eslint.options": {
-    "reportUnusedDisableDirectives": true
+    "reportUnusedDisableDirectives": "error"
   },
   "jest.jestCommandLine": "yarn workspace @mcap/core test",
 

@@ -14,6 +14,7 @@ import (
 
 var (
 	addAttachmentLogTime      uint64
+	addAttachmentName         string
 	addAttachmentCreationTime uint64
 	addAttachmentFilename     string
 	addAttachmentMediaType    string
@@ -125,16 +126,17 @@ var addAttachmentCmd = &cobra.Command{
 	Use:   "attachment",
 	Short: "Add an attachment to an MCAP file",
 	Run: func(cmd *cobra.Command, args []string) {
-		ctx := context.Background()
 		if len(args) != 1 {
 			die("Unexpected number of args")
 		}
 		filename := args[0]
-		tempName := filename + ".new"
-		tmpfile, err := os.Create(tempName)
+
+		f, err := os.OpenFile(filename, os.O_RDWR, os.ModePerm)
 		if err != nil {
-			die("failed to create temp file: %s", err)
+			die("failed to open file: %s", err)
 		}
+		defer f.Close()
+
 		attachment, err := os.Open(addAttachmentFilename)
 		if err != nil {
 			die("failed to open attachment file: %s", err)
@@ -146,39 +148,30 @@ var addAttachmentCmd = &cobra.Command{
 			die("failed to stat file: %s", err)
 		}
 		contentLength := stat.Size()
-		err = utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
-			if remote {
-				die("not supported on remote MCAP files")
-			}
-			fi, err := os.Stat(addAttachmentFilename)
-			if err != nil {
-				die("failed to stat file %s", addAttachmentFilename)
-			}
-			createTime := uint64(fi.ModTime().UTC().UnixNano())
-			if addAttachmentCreationTime > 0 {
-				createTime = addAttachmentCreationTime
-			}
-			logTime := uint64(time.Now().UTC().UnixNano())
-			if addAttachmentLogTime > 0 {
-				logTime = addAttachmentLogTime
-			}
-			return utils.RewriteMCAP(tmpfile, rs, func(w *mcap.Writer) error {
-				return w.WriteAttachment(&mcap.Attachment{
-					LogTime:    logTime,
-					CreateTime: createTime,
-					Name:       addAttachmentFilename,
-					MediaType:  addAttachmentMediaType,
-					DataSize:   uint64(contentLength),
-					Data:       attachment,
-				})
-			})
-		})
+		fi, err := os.Stat(addAttachmentFilename)
 		if err != nil {
-			die("failed to add attachment: %s", err)
+			die("failed to stat file %s", addAttachmentFilename)
 		}
-		err = os.Rename(tempName, filename)
+		createTime := uint64(fi.ModTime().UTC().UnixNano())
+		if addAttachmentCreationTime > 0 {
+			createTime = addAttachmentCreationTime
+		}
+		logTime := uint64(time.Now().UTC().UnixNano())
+		if addAttachmentLogTime > 0 {
+			logTime = addAttachmentLogTime
+		}
+		err = utils.AmendMCAP(f, []*mcap.Attachment{
+			{
+				LogTime:    logTime,
+				CreateTime: createTime,
+				Name:       addAttachmentFilename,
+				MediaType:  addAttachmentMediaType,
+				DataSize:   uint64(contentLength),
+				Data:       attachment,
+			},
+		}, nil)
 		if err != nil {
-			die("failed to rename temporary output: %s", err)
+			die("failed to add attachment: %s. You may need to run `mcap recover` to repair the file.", err)
 		}
 	},
 }
@@ -186,6 +179,7 @@ var addAttachmentCmd = &cobra.Command{
 func init() {
 	addCmd.AddCommand(addAttachmentCmd)
 	addAttachmentCmd.PersistentFlags().StringVarP(&addAttachmentFilename, "file", "f", "", "filename of attachment to add")
+	addAttachmentCmd.PersistentFlags().StringVarP(&addAttachmentName, "name", "n", "", "name of attachment to add (defaults to filename)")
 	addAttachmentCmd.PersistentFlags().StringVarP(&addAttachmentMediaType, "content-type", "", "application/octet-stream", "content type of attachment")
 	addAttachmentCmd.PersistentFlags().Uint64VarP(&addAttachmentLogTime, "log-time", "", 0, "attachment log time in nanoseconds (defaults to current timestamp)")
 	addAttachmentCmd.PersistentFlags().Uint64VarP(&addAttachmentLogTime, "creation-time", "", 0, "attachment creation time in nanoseconds (defaults to ctime)")

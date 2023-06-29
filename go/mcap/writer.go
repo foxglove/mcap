@@ -43,8 +43,9 @@ type Writer struct {
 	compressed       *bytes.Buffer
 	compressedWriter *countingCRCWriter
 
-	currentChunkStartTime uint64
-	currentChunkEndTime   uint64
+	currentChunkStartTime    uint64
+	currentChunkEndTime      uint64
+	currentChunkMessageCount uint64
 
 	opts *WriterOptions
 
@@ -198,6 +199,7 @@ func (w *Writer) WriteMessage(m *Message) error {
 		if err != nil {
 			return err
 		}
+		w.currentChunkMessageCount++
 		if m.LogTime > w.currentChunkEndTime {
 			w.currentChunkEndTime = m.LogTime
 		}
@@ -427,8 +429,11 @@ func (w *Writer) flushActiveChunk() error {
 	uncompressedlen := w.compressedWriter.Size()
 	msglen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8 + compressedlen
 	chunkStartOffset := w.w.Size()
-	start := w.currentChunkStartTime
-	end := w.currentChunkEndTime
+	var start, end uint64
+	if w.currentChunkMessageCount != 0 {
+		start = w.currentChunkStartTime
+		end = w.currentChunkEndTime
+	}
 
 	// when writing a chunk, we don't go through writerecord to avoid needing to
 	// materialize the compressed data again. Instead, write the leading bytes
@@ -463,7 +468,8 @@ func (w *Writer) flushActiveChunk() error {
 	messageIndexOffsets := make(map[uint16]uint64)
 	if !w.opts.SkipMessageIndexing {
 		for _, chanID := range w.channelIDs {
-			if messageIndex, ok := w.messageIndexes[chanID]; ok {
+			messageIndex, ok := w.messageIndexes[chanID]
+			if ok && !messageIndex.IsEmpty() {
 				messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
 				err = w.WriteMessageIndex(messageIndex)
 				if err != nil {
@@ -475,13 +481,9 @@ func (w *Writer) flushActiveChunk() error {
 
 	messageIndexEnd := w.w.Size()
 	messageIndexLength := messageIndexEnd - chunkEndOffset
-	var chunkStart uint64
-	if w.currentChunkStartTime != math.MaxUint64 {
-		chunkStart = w.currentChunkStartTime
-	}
 	w.ChunkIndexes = append(w.ChunkIndexes, &ChunkIndex{
-		MessageStartTime:    chunkStart,
-		MessageEndTime:      w.currentChunkEndTime,
+		MessageStartTime:    start,
+		MessageEndTime:      end,
 		ChunkStartOffset:    chunkStartOffset,
 		ChunkLength:         chunkEndOffset - chunkStartOffset,
 		MessageIndexOffsets: messageIndexOffsets,
@@ -496,6 +498,7 @@ func (w *Writer) flushActiveChunk() error {
 	w.Statistics.ChunkCount++
 	w.currentChunkStartTime = math.MaxUint64
 	w.currentChunkEndTime = 0
+	w.currentChunkMessageCount = 0
 	return nil
 }
 
@@ -517,7 +520,8 @@ func makePrefixedMap(m map[string]string) []byte {
 	return buf
 }
 
-func (w *Writer) writeChunkIndex(idx *ChunkIndex) error {
+// WriteChunkIndex writes a chunk index record to the output.
+func (w *Writer) WriteChunkIndex(idx *ChunkIndex) error {
 	messageIndexLength := len(idx.MessageIndexOffsets) * (2 + 8)
 	msglen := 8 + 8 + 8 + 8 + 4 + messageIndexLength + 8 + 4 + len(idx.Compression) + 8 + 8
 	w.ensureSized(msglen)
@@ -600,7 +604,7 @@ func (w *Writer) writeSummarySection() ([]*SummaryOffset, error) {
 		if len(w.ChunkIndexes) > 0 {
 			chunkIndexOffset := w.w.Size()
 			for _, chunkIndex := range w.ChunkIndexes {
-				err := w.writeChunkIndex(chunkIndex)
+				err := w.WriteChunkIndex(chunkIndex)
 				if err != nil {
 					return offsets, fmt.Errorf("failed to write chunk index: %w", err)
 				}
@@ -780,6 +784,10 @@ type WriterOptions struct {
 	// OverrideLibrary causes the default header library to be overridden, not
 	// appended to.
 	OverrideLibrary bool
+
+	// SkipMagic causes the writer to skip writing magic bytes at the start of
+	// the file. This may be useful for writing a partial section of records.
+	SkipMagic bool
 }
 
 // Convert an MCAP compression level to the corresponding lz4.CompressionLevel.
@@ -817,8 +825,10 @@ func encoderLevelFromZstd(level CompressionLevel) zstd.EncoderLevel {
 // NewWriter returns a new MCAP writer.
 func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	writer := newWriteSizer(w, opts.IncludeCRC)
-	if _, err := writer.Write(Magic); err != nil {
-		return nil, err
+	if !opts.SkipMagic {
+		if _, err := writer.Write(Magic); err != nil {
+			return nil, err
+		}
 	}
 	compressed := bytes.Buffer{}
 	var compressedWriter *countingCRCWriter
@@ -846,16 +856,17 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 		}
 	}
 	return &Writer{
-		w:                     writer,
-		buf:                   make([]byte, 32),
-		channels:              make(map[uint16]*Channel),
-		schemas:               make(map[uint16]*Schema),
-		messageIndexes:        make(map[uint16]*MessageIndex),
-		uncompressed:          &bytes.Buffer{},
-		compressed:            &compressed,
-		compressedWriter:      compressedWriter,
-		currentChunkStartTime: math.MaxUint64,
-		currentChunkEndTime:   0,
+		w:                        writer,
+		buf:                      make([]byte, 32),
+		channels:                 make(map[uint16]*Channel),
+		schemas:                  make(map[uint16]*Schema),
+		messageIndexes:           make(map[uint16]*MessageIndex),
+		uncompressed:             &bytes.Buffer{},
+		compressed:               &compressed,
+		compressedWriter:         compressedWriter,
+		currentChunkStartTime:    math.MaxUint64,
+		currentChunkEndTime:      0,
+		currentChunkMessageCount: 0,
 		Statistics: &Statistics{
 			ChannelMessageCounts: make(map[uint16]uint64),
 			MessageStartTime:     0,

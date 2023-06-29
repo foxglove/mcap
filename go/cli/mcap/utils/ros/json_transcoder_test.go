@@ -150,6 +150,24 @@ func TestJSONTranscoding(t *testing.T) {
 			},
 			`{"foo":{"bar":{"baz":"hello"}}}`,
 		},
+		{
+			"array of record",
+			"",
+			`Foo[] foo
+			===
+			MSG: Foo
+			string bar
+			string baz
+			`,
+			[]byte{
+				0x02, 0x00, 0x00, 0x00, // two elements
+				0x03, 0x00, 0x00, 0x00, 'b', 'a', 'z',
+				0x03, 0x00, 0x00, 0x00, 'b', 'a', 'z',
+				0x03, 0x00, 0x00, 0x00, 'b', 'a', 'z',
+				0x03, 0x00, 0x00, 0x00, 'b', 'a', 'z',
+			},
+			`{"foo":[{"bar":"baz","baz":"baz"},{"bar":"baz","baz":"baz"}]}`,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
@@ -159,7 +177,7 @@ func TestJSONTranscoding(t *testing.T) {
 			assert.Nil(t, err)
 			err = transcoder.Transcode(buf, bytes.NewReader(c.input))
 			assert.Nil(t, err)
-			assert.JSONEq(t, c.expectedJSON, buf.String())
+			assert.Equal(t, c.expectedJSON, buf.String())
 		})
 	}
 }
@@ -307,6 +325,42 @@ func TestSingleRecordConversion(t *testing.T) {
 			`{"foo":3.14159}`,
 		},
 		{
+			"float32 NaN",
+			"",
+			[]recordField{
+				{
+					name:      "foo",
+					converter: transcoder.float32,
+				},
+			},
+			[]byte{0, 0, 192, 127},
+			`{"foo":"NaN"}`,
+		},
+		{
+			"float32 Infinity",
+			"",
+			[]recordField{
+				{
+					name:      "foo",
+					converter: transcoder.float32,
+				},
+			},
+			[]byte{0, 0, 128, 127},
+			`{"foo":"Infinity"}`,
+		},
+		{
+			"float32 -Infinity",
+			"",
+			[]recordField{
+				{
+					name:      "foo",
+					converter: transcoder.float32,
+				},
+			},
+			[]byte{0, 0, 128, 255},
+			`{"foo":"-Infinity"}`,
+		},
+		{
 			"float64",
 			"",
 			[]recordField{
@@ -317,6 +371,42 @@ func TestSingleRecordConversion(t *testing.T) {
 			},
 			[]byte{24, 106, 203, 110, 105, 118, 1, 64},
 			`{"foo":2.18281828459045}`,
+		},
+		{
+			"float64 NaN",
+			"",
+			[]recordField{
+				{
+					name:      "foo",
+					converter: transcoder.float64,
+				},
+			},
+			[]byte{1, 0, 0, 0, 0, 0, 248, 127},
+			`{"foo":"NaN"}`,
+		},
+		{
+			"float64 Infinity",
+			"",
+			[]recordField{
+				{
+					name:      "foo",
+					converter: transcoder.float64,
+				},
+			},
+			[]byte{0, 0, 0, 0, 0, 0, 240, 127},
+			`{"foo":"Infinity"}`,
+		},
+		{
+			"float64 -Infinity",
+			"",
+			[]recordField{
+				{
+					name:      "foo",
+					converter: transcoder.float64,
+				},
+			},
+			[]byte{0, 0, 0, 0, 0, 0, 240, 255},
+			`{"foo":"-Infinity"}`,
 		},
 		{
 			"time",
@@ -438,7 +528,7 @@ func TestSingleRecordConversion(t *testing.T) {
 			converter := transcoder.record(c.fields)
 			err := converter(buf, bytes.NewBuffer(c.input))
 			assert.Nil(t, err)
-			assert.JSONEq(t, c.output, buf.String())
+			assert.Equal(t, c.output, buf.String())
 		})
 	}
 }

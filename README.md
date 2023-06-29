@@ -4,10 +4,10 @@ MCAP is a modular container format and logging library for pub/sub messages with
 
 ## Documentation
 
-- [File format specification](./docs/specification)
-  - [Kaitai Struct definition](./docs/specification/mcap.ksy)
-- [Motivation](./docs/motivation/evaluation-of-robotics-data-recording-file-formats.md)
-- [Support Matrix](./docs/support-matrix.md)
+- [File format specification](https://mcap.dev/spec)
+  - [Kaitai Struct definition](./website/docs/spec/mcap.ksy)
+- [Motivation](https://mcap.dev/files/evaluation.pdf)
+- [Support Matrix](https://mcap.dev/reference)
 
 ## Developer quick start
 

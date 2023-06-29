@@ -2,18 +2,20 @@
   "private": true,
   "workspaces": {
     "packages": [
-      "typescript/core",
+      "tests/conformance",
       "typescript/benchmarks",
+      "typescript/core",
       "typescript/examples/*",
       "typescript/support",
-      "tests/conformance"
+      "website"
     ]
   },
   "scripts": {
-    "docs:lint": "prettier '**/*.md' --check",
-    "docs:build": "tailwindcss --config docs/website/tailwind.config.js -i docs/website/style.css -o docs/website/dist/bundle.css",
+    "prettier": "prettier --write .",
+    "prettier:check": "prettier --check .",
     "docs:swift:start": "swift package --disable-sandbox preview-documentation --target MCAP",
     "typedoc": "typedoc --out __docs__/typescript --options typescript/typedoc.json",
+    "start": "yarn workspace website start",
     "spellcheck": "cspell --relative '**'",
     "typescript:build": "yarn workspace @mcap/core build && yarn workspace @mcap/support build",
     "typescript:clean": "yarn workspace @mcap/core build --clean && yarn workspace @mcap/support build --clean",
@@ -24,7 +26,6 @@
   "devDependencies": {
     "cspell": "^6.26.3",
     "prettier": "^2.8.4",
-    "tailwindcss": "^3.2.7",
     "typedoc": "^0.23.25"
   }
 }

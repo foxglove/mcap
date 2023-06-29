@@ -150,10 +150,9 @@ async function compileMcapClass(): Promise<Mcap> {
     }
     return originalReadBytes.call(this, Number(len));
   };
-  const ksy = await fs.readFile(
-    path.join(__dirname, "../../../../../docs/specification/mcap.ksy"),
-    { encoding: "utf-8" },
-  );
+  const ksy = await fs.readFile(path.join(__dirname, "../../../../../website/docs/spec/mcap.ksy"), {
+    encoding: "utf-8",
+  });
   const compiler = new KaitaiStructCompiler();
   const files = await compiler.compile("javascript", YAML.load(ksy));
   const root = { KaitaiStream };

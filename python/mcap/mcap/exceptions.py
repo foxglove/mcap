@@ -7,5 +7,9 @@ class InvalidMagic(McapError):
         super().__init__(f"not a valid MCAP file, invalid magic: {bad_magic}")
 
 
+class DecoderNotFoundError(McapError):
+    pass
+
+
 class EndOfFile(McapError):
     pass
