@@ -122,8 +122,21 @@
   height: auto;
 }
 
+.logosHeader {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
 .logosSection {
   padding: 4rem 2rem;
+}
+
+.logosSection a {
+  display: flex;
+}
+
+.logosSection a svg {
+  align-self: center;
 }
 
 [data-theme="light"] .logosSection {
