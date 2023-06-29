@@ -60,9 +60,11 @@ The following records are allowed to appear in the data section:
 - [Schema](#schema-op0x03)
 - [Channel](#channel-op0x04)
 - [Message](#message-op0x05)
+- [Secondary Index Key](#secondary-index-key-op0x10)
 - [Attachment](#attachment-op0x09)
 - [Chunk](#chunk-op0x06)
 - [Message Index](#message-index-op0x07)
+- [Secondary Message Index](#secondary-message-index-op0x11)
 - [Metadata](#metadata-op0x0C)
 - [Data End](#data-end-op0x0F)
 
@@ -82,7 +84,9 @@ The following records are allowed to appear in the summary section:
 
 - [Schema](#schema-op0x03)
 - [Channel](#channel-op0x04)
+- [Secondary Index Key](#secondary-index-key-op0x10)
 - [Chunk Index](#chunk-index-op0x08)
+- [Secondary Chunk Index](#secondary-chunk-index-op0x12)
 - [Attachment Index](#attachment-index-op0x0A)
 - [Metadata Index](#metadata-index-op0x0D)
 - [Statistics](#statistics-op0x0B)
@@ -179,6 +183,30 @@ The message encoding and schema must match that of the Channel record correspond
 | 8     | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time.                         |
 | N     | data         | Bytes     | Message data, to be decoded according to the schema of the channel.                                             |
 
+### Secondary Index Key (op=0x10)
+
+A Secondary Index Key record defines a secondary timestamp index that will be used in this file.
+Secondary Indexes can be used to quickly look up messages by timestamps other than `log_time`.
+The `name` field identifies the timestamp key that messages will be indexed by. The [registry](./registry.md#secondary-index-keys) lists well-known secondary index key names.
+
+A Secondary Index Key record must appear before any [Secondary Message Index](#secondary-message-index-op0x11) records
+in the data section with this `secondary_index_id`.
+
+Secondary Index Key records in the Data section must also appear in the Summary section, before
+any [Secondary Chunk Index](#secondary-chunk-index-op0x12) records with this `secondary_index_id`.
+
+| Bytes | Name               | Type   | Description                                                       |
+| ----- | ------------------ | ------ | ----------------------------------------------------------------- |
+| 2     | secondary_index_id | uint16 | A unique identifier for this secondary index within the file.     |
+| 4 + N | name               | string | A name that describes the key, eg. `publish_time`, `header.stamp` |
+
+> Why do Secondary Index Key records appear in the Data section?
+> When reading using an index, the Secondary Index Key would be read out of the Summary section
+> before reading into the Data section. This means that the Secondary Index Key in the Data section
+> is not normally used. However, if a MCAP is truncated and the summary section is lost, having the
+> Secondary Index Key appear before any Secondary Message Index records allows the MCAP to be fully
+> recovered.
+
 ### Chunk (op=0x06)
 
 A Chunk contains a batch of Schema, Channel, and Message records. The batch of records contained in a chunk may be compressed or uncompressed.
@@ -207,6 +235,17 @@ A sequence of Message Index records occurs immediately after each chunk. Exactly
 
 Messages outside of chunks cannot be indexed.
 
+### Secondary Message Index (op=0x11)
+
+A Secondary Message Index record allows readers to locate individual message records within a chunk using a
+key defined in a [Secondary Index Key record](#secondary-index-key-op0x10).
+
+| Bytes | Name               | Type                              | Description                                                                                                    |
+| ----- | ------------------ | --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 2     | channel_id         | uint16                            | Channel ID.                                                                                                    |
+| 2     | secondary_index_id | uint16                            | Secondary Index ID.                                                                                            |
+| 4 + N | records            | `Array<Tuple<Timestamp, uint64>>` | Array of timestamp and offset for each record. Offset is relative to the start of the uncompressed chunk data. |
+
 ### Chunk Index (op=0x08)
 
 A Chunk Index record contains the location of a Chunk record and its associated Message Index records.
@@ -228,6 +267,18 @@ A Chunk Index record exists for every Chunk in the file.
 A Schema and Channel record MUST exist in the summary section for all channels referenced by chunk index records.
 
 > Why? The typical use case for file readers using an index is fast random access to a specific message timestamp. Channel is a prerequisite for decoding Message record data. Without an easy-to-access copy of the Channel records, readers would need to search for Channel records from the start of the file, degrading random access read performance.
+
+### Secondary Chunk Index (op=0x12)
+
+A secondary Chunk Index record contains additional secondary index information on top of the corresponding Chunk Index record.
+
+| Bytes | Name                  | Type                  | Description                                                                                                                                                                                                                       |
+| ----- | --------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2     | secondary_index_id    | uint16                | Secondary Index ID.                                                                                                                                                                                                               |
+| 8     | chunk_start_offset    | uint64                | Offset to the chunk record from the start of the file.                                                                                                                                                                            |
+| 8     | earliest_key          | Timestamp             | Earliest key in the chunk. Zero if the chunk contains no messages with this key.                                                                                                                                                  |
+| 8     | latest_key            | Timestamp             | Latest key in the chunk. Zero if the chunk contains no messages with this key.                                                                                                                                                    |
+| 4 + N | message_index_offsets | `Map<uint16, uint64>` | Mapping from channel ID to the offset of the secondary message index record with this `secondary_index_id` for that channel after the chunk, from the start of the file. An empty map indicates no message indexing is available. |
 
 ### Attachment (op=0x09)
 
@@ -513,6 +564,52 @@ A writer may choose to put messages in Chunks to compress record data. This MCAP
 [Channel 3]
 [Chunk Index A]
 [Chunk Index B]
+[Attachment Index 1]
+[Statistics]
+[Summary Offset 0x01]
+[Summary Offset 0x05]
+[Summary Offset 0x07]
+[Summary Offset 0x08]
+[Footer]
+```
+
+### Multiple Messages with a Secondary Index
+
+```
+[Header]
+[Secondary Index Key 1]
+[Chunk A]
+  [Schema A]
+  [Channel 1 (A)]
+  [Channel 2 (B)]
+  [Message on 1]
+  [Message on 1]
+  [Message on 2]
+[Message Index 1]
+[Message Index 2]
+[Secondary Message Index 1 (Channel 1)]
+[Secondary Message Index 1 (Channel 2)]
+[Attachment 1]
+[Chunk B]
+  [Schema B]
+  [Channel 3 (B)]
+  [Message on 3]
+  [Message on 1]
+[Message Index 3]
+[Message Index 1]
+[Secondary Message Index 1 (Channel 3)]
+[Secondary Message Index 1 (Channel 1)]
+[Data End]
+[Schema A]
+[Schema B]
+[Channel 1]
+[Channel 2]
+[Channel 3]
+[Secondary Index Key 1]
+[Chunk Index A]
+[Chunk Index B]
+[Secondary Chunk Index 1 (Chunk A)]
+[Secondary Chunk Index 1 (Chunk B)]
 [Attachment Index 1]
 [Statistics]
 [Summary Offset 0x01]

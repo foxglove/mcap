@@ -152,3 +152,17 @@ The `ros2` profile describes how to create MCAP files for [ROS 2](https://docs.r
 #### Schema
 
 - `encoding`: MUST be either `ros2msg` or `ros2idl`
+
+## Secondary index keys
+
+The Secondary Index Key `name` field may contain the following options:
+
+### `header.stamp`
+
+Indexes the `stamp` value of the `std_msgs/msg/Header`-valued `header` field of the deserialized message data.
+
+- `profile`: must be `ros1` or `ros2`
+
+### `publish_time`
+
+Indexes the `publish_time` value of Message records.
