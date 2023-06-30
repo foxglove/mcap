@@ -1,6 +1,6 @@
 import { McapWriter } from "@mcap/core";
+import { FileHandleWritable } from "@mcap/nodejs";
 import { open } from "fs/promises";
-import { FileHandleWritable } from "@mcap/support/nodejs";
 
 async function main() {
   const mcapFilePath = "output.mcap";

@@ -1,5 +1,5 @@
 import { McapIndexedReader } from "@mcap/core";
-import { FileHandleReadable } from "@mcap/support/nodejs";
+import { FileHandleReadable } from "@mcap/nodejs";
 import fs from "fs/promises";
 import { TestFeatures, TestVariant } from "variants/types";
 

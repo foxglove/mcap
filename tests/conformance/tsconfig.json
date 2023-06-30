@@ -7,7 +7,6 @@
     "lib": ["es2020", "dom"],
     "paths": {
       "@mcap/core": ["../../typescript/core/src"],
-      "@mcap/support/nodejs": ["../../typescript/src/nodejs"],
       "@mcap/support": ["../../typescript/support/src"]
     },
 

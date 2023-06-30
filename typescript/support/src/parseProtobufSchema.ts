@@ -25,9 +25,7 @@ export function parseProtobufSchema(
   // {sec: number, nsec: number}, compatible with the rest of Studio. The standard Protobuf types
   // use different names (`seconds` and `nanos`), and `seconds` is an `int64`, which would be
   // deserialized as a bigint by default.
-  const fixTimeType = (
-    type: protobufjs.ReflectionObject | null /* eslint-disable-line no-restricted-syntax */,
-  ) => {
+  const fixTimeType = (type: protobufjs.ReflectionObject | null) => {
     if (!type || !(type instanceof protobufjs.Type)) {
       return;
     }

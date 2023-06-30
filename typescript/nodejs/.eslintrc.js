@@ -1,8 +1,8 @@
 /* eslint-env node */
 module.exports = {
   env: { es2020: true },
-  ignorePatterns: ["dist", "nodejs.d.ts", "nodejs.js"],
-  extends: ["plugin:@foxglove/base", "plugin:@foxglove/jest"],
+  ignorePatterns: ["dist"],
+  extends: ["plugin:@foxglove/base", "plugin:@foxglove/jest", "plugin:import/recommended"],
   overrides: [
     {
       files: ["*.ts", "*.tsx"],
@@ -18,5 +18,11 @@ module.exports = {
   ],
   rules: {
     "no-warning-comments": ["error", { terms: ["fixme"], location: "anywhere" }],
+  },
+  settings: {
+    "import/resolver": {
+      typescript: true,
+      node: true,
+    },
   },
 };

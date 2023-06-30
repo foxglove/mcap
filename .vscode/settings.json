@@ -14,7 +14,7 @@
   "eslint.options": {
     "reportUnusedDisableDirectives": "error"
   },
-  "jest.jestCommandLine": "yarn workspace @mcap/core test",
+  "jest.jestCommandLine": "yarn typescript:test",
 
   "cSpell.enabled": true,
 

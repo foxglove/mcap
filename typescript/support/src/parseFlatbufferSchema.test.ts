@@ -316,6 +316,7 @@ describe("parseFlatbufferSchema", () => {
       "reflection.Schema",
       reflectionSchemaBuffer,
     );
+    /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
     const deserialized: any = deserialize(reflectionSchemaBuffer);
     const reflectionSchemaByteBuffer: ByteBuffer = new ByteBuffer(reflectionSchemaBuffer);
     const schema = Schema.getRootAsSchema(reflectionSchemaByteBuffer);
@@ -330,6 +331,7 @@ describe("parseFlatbufferSchema", () => {
     expect(datatypes.keys()).toContain("reflection.Enum");
     expect(datatypes.keys()).toContain("reflection.Object");
     expect(datatypes.get("reflection.Enum")).toEqual(enumSchema);
+    /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
   });
   it("parses non-root table schema", () => {
     const reflectionSchemaBuffer: Buffer = fs.readFileSync(`${__dirname}/fixtures/reflection.bfbs`);

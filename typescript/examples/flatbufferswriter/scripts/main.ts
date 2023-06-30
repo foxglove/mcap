@@ -1,9 +1,9 @@
 import { Grid, NumericType } from "@foxglove/schemas";
 import { McapWriter } from "@mcap/core";
+import { FileHandleWritable } from "@mcap/nodejs";
 import { Builder } from "flatbuffers";
 import fs from "fs";
 import { open } from "fs/promises";
-import { FileHandleWritable } from "@mcap/support/nodejs";
 
 import { buildGridMessage, buildTfMessage } from "./flatbufferUtils";
 

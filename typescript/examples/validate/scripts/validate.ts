@@ -8,8 +8,8 @@ import {
   McapStreamReader,
   McapTypes,
 } from "@mcap/core";
+import { FileHandleReadable } from "@mcap/nodejs";
 import { loadDecompressHandlers, protobufFromBinaryDescriptor } from "@mcap/support";
-import { FileHandleReadable } from "@mcap/support/nodejs";
 import { program } from "commander";
 import { createReadStream } from "fs";
 import fs from "fs/promises";
