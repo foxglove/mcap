@@ -1,11 +1,11 @@
-/* eslint @typescript-eslint/no-unsafe-member-access: 0 */
-/* eslint @typescript-eslint/no-unsafe-assignment: 0 */
-
 import { MessageDefinitionField } from "@foxglove/message-definition";
 import * as base64 from "@protobufjs/base64";
 
 import { MessageDefinitionMap } from "./types";
 
+/**
+ * Parse a JSON Schema and produce datatypes and a deserializer function.
+ */
 export function parseJsonSchema(
   rootJsonSchema: Record<string, unknown>,
   rootTypeName: string,
@@ -36,12 +36,15 @@ export function parseJsonSchema(
       schema.properties as Record<string, Record<string, unknown>>,
     )) {
       if (Array.isArray(fieldSchema.oneOf)) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         if (fieldSchema.oneOf.every((alternative) => typeof alternative.const === "number")) {
           for (const alternative of fieldSchema.oneOf) {
             fields.push({
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
               name: alternative.title,
               type: "uint32",
               isConstant: true,
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
               value: alternative.const,
             });
           }

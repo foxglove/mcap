@@ -145,14 +145,18 @@ function typeForField(schema: SchemaT, field: FieldT): MessageDefinitionField[] 
   return fields;
 }
 
-// Note: Currently this does not support "lazy" message reading in the style of the ros1 message
-// reader, and so will relatively inefficiently deserialize the entire flatbuffer message.
+/**
+ * Parse a flatbuffer binary schema and produce datatypes and a deserializer function.
+ *
+ * Note: Currently this does not support "lazy" message reading in the style of the ros1 message
+ * reader, and so will relatively inefficiently deserialize the entire flatbuffer message.
+ */
 export function parseFlatbufferSchema(
   schemaName: string,
   schemaArray: Uint8Array,
 ): {
   datatypes: MessageDefinitionMap;
-  deserializer: (buffer: ArrayBufferView) => unknown;
+  deserialize: (buffer: ArrayBufferView) => unknown;
 } {
   const datatypes: MessageDefinitionMap = new Map();
   const schemaBuffer = new ByteBuffer(schemaArray);
@@ -183,7 +187,12 @@ export function parseFlatbufferSchema(
     }
   }
   const parser = new Parser(rawSchema);
-  const deserializer = (buffer: ArrayBufferView) => {
+  // We set readDefaults=true to ensure that the reader receives default values for unset fields, or
+  // fields that were explicitly set but with ForceDefaults(false) on the writer side. This is
+  // necessary because `datatypes` does not include information about default values from the
+  // schema. See discussion: <https://github.com/foxglove/studio/pull/6256>
+  const toObject = parser.toObjectLambda(typeIndex, /*readDefaults=*/ true);
+  const deserialize = (buffer: ArrayBufferView) => {
     const byteBuffer = new ByteBuffer(
       new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength),
     );
@@ -191,9 +200,9 @@ export function parseFlatbufferSchema(
       byteBuffer,
       typeIndex,
       byteBuffer.readInt32(byteBuffer.position()) + byteBuffer.position(),
+      false,
     );
-    const obj = parser.toObject(table);
-    return obj;
+    return toObject(table);
   };
-  return { datatypes, deserializer };
+  return { datatypes, deserialize };
 }

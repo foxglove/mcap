@@ -1,7 +1,3 @@
-/* eslint @typescript-eslint/no-explicit-any: 0 */
-/* eslint @typescript-eslint/no-unsafe-member-access: 0 */
-/* eslint @typescript-eslint/no-unsafe-call: 0 */
-
 import { ByteBuffer, Builder } from "flatbuffers";
 import { Schema, BaseType, Type } from "flatbuffers_reflection";
 import fs from "fs";
@@ -316,11 +312,11 @@ describe("parseFlatbufferSchema", () => {
     // $ flatc -b --schema reflection/reflection.fbs
     // In https://github.com/google/flatbuffers
     const reflectionSchemaBuffer: Buffer = fs.readFileSync(`${__dirname}/fixtures/reflection.bfbs`);
-    const { datatypes, deserializer } = parseFlatbufferSchema(
+    const { datatypes, deserialize } = parseFlatbufferSchema(
       "reflection.Schema",
       reflectionSchemaBuffer,
     );
-    const deserialized: any = deserializer(reflectionSchemaBuffer);
+    const deserialized: any = deserialize(reflectionSchemaBuffer);
     const reflectionSchemaByteBuffer: ByteBuffer = new ByteBuffer(reflectionSchemaBuffer);
     const schema = Schema.getRootAsSchema(reflectionSchemaByteBuffer);
     // Spot check individual components to ensure that they got deserialized correctly.
@@ -337,7 +333,7 @@ describe("parseFlatbufferSchema", () => {
   });
   it("parses non-root table schema", () => {
     const reflectionSchemaBuffer: Buffer = fs.readFileSync(`${__dirname}/fixtures/reflection.bfbs`);
-    const { datatypes, deserializer } = parseFlatbufferSchema(
+    const { datatypes, deserialize } = parseFlatbufferSchema(
       "reflection.Type",
       reflectionSchemaBuffer,
     );
@@ -352,7 +348,14 @@ describe("parseFlatbufferSchema", () => {
     Type.addIndex(builder, 123);
     builder.finish(Type.endType(builder));
 
-    expect(deserializer(builder.asUint8Array())).toEqual({ base_type: 7, index: 123 });
+    expect(deserialize(builder.asUint8Array())).toEqual({
+      base_size: 4n,
+      base_type: 7,
+      element: 0n,
+      element_size: 0n,
+      fixed_length: 0n,
+      index: 123,
+    });
   });
   it("converts uint8 vectors to uint8arrays", () => {
     const builder = new Builder();
@@ -378,7 +381,7 @@ describe("parseFlatbufferSchema", () => {
     const byteVectorBin = Uint8Array.from(builder.asUint8Array());
 
     const byteVectorSchemaArray = fs.readFileSync(`${__dirname}/fixtures/ByteVector.bfbs`);
-    const { deserializer } = parseFlatbufferSchema("ByteVector", byteVectorSchemaArray);
-    expect(deserializer(byteVectorBin)).toEqual({ data: new Uint8Array([1, 2, 3]) });
+    const { deserialize } = parseFlatbufferSchema("ByteVector", byteVectorSchemaArray);
+    expect(deserialize(byteVectorBin)).toEqual({ data: new Uint8Array([1, 2, 3]) });
   });
 });

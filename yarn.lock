@@ -2999,7 +2999,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/rosmsg-serialization@npm:^2.0.0":
+"@foxglove/rosmsg-serialization@npm:^2.0.1":
   version: 2.0.1
   resolution: "@foxglove/rosmsg-serialization@npm:2.0.1"
   dependencies:
@@ -3019,7 +3019,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/rosmsg2-serialization@npm:^2.0.0":
+"@foxglove/rosmsg2-serialization@npm:^2.0.2":
   version: 2.0.2
   resolution: "@foxglove/rosmsg2-serialization@npm:2.0.2"
   dependencies:
@@ -3039,7 +3039,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/rosmsg@npm:^4.0.0":
+"@foxglove/rosmsg@npm:^4.0.0, @foxglove/rosmsg@npm:^4.2.2":
   version: 4.2.2
   resolution: "@foxglove/rosmsg@npm:4.2.2"
   dependencies:
@@ -3068,7 +3068,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/schemas@npm:^1.0.0, @foxglove/schemas@npm:^1.1.0":
+"@foxglove/schemas@npm:^1.0.0, @foxglove/schemas@npm:^1.3.1":
   version: 1.3.1
   resolution: "@foxglove/schemas@npm:1.3.1"
   dependencies:
@@ -3548,10 +3548,10 @@ __metadata:
   dependencies:
     "@foxglove/eslint-plugin": 0.21.0
     "@foxglove/message-definition": ^0.2.0
-    "@foxglove/rosmsg": ^4.0.0
-    "@foxglove/rosmsg-serialization": ^2.0.0
-    "@foxglove/rosmsg2-serialization": ^2.0.0
-    "@foxglove/schemas": ^1.1.0
+    "@foxglove/rosmsg": ^4.2.2
+    "@foxglove/rosmsg-serialization": ^2.0.1
+    "@foxglove/rosmsg2-serialization": ^2.0.2
+    "@foxglove/schemas": ^1.3.1
     "@foxglove/tsconfig": 1.1.0
     "@foxglove/wasm-bz2": ^0.1.1
     "@foxglove/wasm-lz4": ^1.0.2
@@ -3570,8 +3570,8 @@ __metadata:
     eslint-plugin-import: 2.27.5
     eslint-plugin-jest: 27.2.1
     eslint-plugin-prettier: 4.2.1
-    flatbuffers: ^23.1.21
-    flatbuffers_reflection: ^0.0.3
+    flatbuffers: ^23.5.26
+    flatbuffers_reflection: ^0.0.6
     jest: 29.4.3
     prettier: 2.8.4
     protobufjs: ^7.2.2
@@ -8135,17 +8135,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"flatbuffers@npm:^23.1.21":
-  version: 23.1.21
-  resolution: "flatbuffers@npm:23.1.21"
-  checksum: 6e890adb8300e5352d579abf7c674eec7d838c27e82981c3d9cd5a4043ff83fc7097a88eae68729eb7cff6ded2b1a896ee2009632027d613040bef669290fbc6
+"flatbuffers@npm:^23.1.21, flatbuffers@npm:^23.5.26":
+  version: 23.5.26
+  resolution: "flatbuffers@npm:23.5.26"
+  checksum: 2528e549118d02fca9775cc9c17cf445741bb58b0a9575eb07bba823394a79dccb3bf97c48561720aa61d3dc9f42759129df0e05eb94c12f809cfb6126eaedd1
   languageName: node
   linkType: hard
 
-"flatbuffers_reflection@npm:^0.0.3":
-  version: 0.0.3
-  resolution: "flatbuffers_reflection@npm:0.0.3"
-  checksum: bcef0af4ec41d6a21c9f6ae1df5be2e329c286d2ae566e09190ff585252b7ec6fbf79035c6ea255bc7c821851516b8bdcb5bf2f6c505e63a242e74c3fcd38cfe
+"flatbuffers_reflection@npm:^0.0.6":
+  version: 0.0.6
+  resolution: "flatbuffers_reflection@npm:0.0.6"
+  checksum: 65cc9aa9344705b50c106fed739b154b722f212e8af00663d035581914d5e7c229757410a54beb0d267bc6af0983032fe723d81af758d51c5c76cc8ed6c9f5de
   languageName: node
   linkType: hard
 
