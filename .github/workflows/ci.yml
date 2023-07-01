@@ -34,7 +34,7 @@ jobs:
           cache: yarn
       - run: corepack enable && yarn install --immutable
       - run: yarn workspace @foxglove/mcap-conformance lint:ci
-      - run: yarn workspace @foxglove/mcap-conformance typecheck
+      - run: yarn workspace @foxglove/mcap-conformance build
 
   conformance-cpp:
     runs-on: ubuntu-latest

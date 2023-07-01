@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -b tsconfig.json tsconfig.cjs.json",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
     "generate-inputs": "ts-node --files --project tsconfig.cjs.json scripts/generate-inputs",
