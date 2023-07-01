@@ -15,16 +15,6 @@
   "module": "dist/esm/src/index.js",
   "main": "dist/cjs/src/index.js",
   "typings": "dist/esm/src/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/esm/src/index.js",
-      "require": "./dist/cjs/src/index.js"
-    },
-    "./nodejs": {
-      "import": "./dist/esm/src/nodejs/index.js",
-      "require": "./dist/cjs/src/nodejs/index.js"
-    }
-  },
   "typedoc": {
     "entryPoint": "src/index.ts"
   },
@@ -37,7 +27,6 @@
   "scripts": {
     "build": "tsc -b tsconfig.json tsconfig.cjs.json",
     "prepack": "yarn build",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
     "test": "jest"

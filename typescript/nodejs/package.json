@@ -28,7 +28,6 @@
   "scripts": {
     "build": "tsc -b tsconfig.json tsconfig.cjs.json",
     "prepack": "yarn build",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
     "test": "jest"

@@ -212,9 +212,11 @@ jobs:
       - run: yarn dedupe --check
       - run: yarn prettier:check
       - run: yarn workspace @mcap/core lint:ci
-      - run: yarn workspace @mcap/core typecheck
+      - run: yarn workspace @mcap/core build
+      - run: yarn workspace @mcap/nodejs lint:ci
+      - run: yarn workspace @mcap/nodejs build
       - run: yarn workspace @mcap/support lint:ci
-      - run: yarn workspace @mcap/support typecheck
+      - run: yarn workspace @mcap/support build
       - run: yarn typescript:test
 
       - name: Publish @mcap/core to NPM
