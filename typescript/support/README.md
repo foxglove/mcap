@@ -1,6 +1,6 @@
 # @mcap/support
 
-[MCAP](https://github.com/foxglove/mcap) is a modular container format and logging library for pub/sub messages with arbitrary message serialization. It is primarily intended for use in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
+[MCAP](https://mcap.dev/) is a modular container format and logging library for pub/sub messages with arbitrary message serialization. It is primarily intended for use in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
 
 The `@mcap/support` package provides utilities for working with MCAP files that use [well-known compression formats and encodings](https://mcap.dev/specification/appendix.html), from Node.js and browsers.
 
@@ -50,4 +50,4 @@ const writer = new McapWriter({
 
 ## Stay in touch
 
-Join our [Slack channel](https://foxglove.dev/join-slack) to ask questions, share feedback, and stay up to date on what our team is working on.
+Join our [Slack channel](https://foxglove.dev/slack) to ask questions, share feedback, and stay up to date on what our team is working on.

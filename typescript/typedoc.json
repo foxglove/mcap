@@ -1,5 +1,5 @@
 {
   "name": "MCAP TypeScript SDK",
   "entryPointStrategy": "packages",
-  "entryPoints": ["./core", "./support"]
+  "entryPoints": ["./core", "./support", "./nodejs"]
 }
