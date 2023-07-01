@@ -1,6 +1,6 @@
 {
   "name": "@mcap/support",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Common schema and message parsing logic for use with MCAP and related protocols",
   "license": "MIT",
   "repository": {

@@ -24,7 +24,8 @@
     "python/**/build": true,
     "python/docs/*-apidoc": true,
     ".yarn/**": true,
-    "yarn.lock": true
+    "yarn.lock": true,
+    "**/dist": true
   },
 
   "python.formatting.provider": "black",

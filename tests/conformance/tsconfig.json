@@ -7,6 +7,7 @@
     "lib": ["es2020", "dom"],
     "paths": {
       "@mcap/core": ["../../typescript/core/src"],
+      "@mcap/nodejs": ["../../typescript/nodejs/src"],
       "@mcap/support": ["../../typescript/support/src"]
     },
 
@@ -15,11 +16,10 @@
   },
   "references": [
     { "path": "../../typescript/core" },
-    { "path": "../../typescript/support" },
-    { "path": "../../typescript/nodejs" }
+    { "path": "../../typescript/nodejs" },
+    { "path": "../../typescript/support" }
   ],
   "ts-node": {
     "require": ["tsconfig-paths/register"]
-    // "files": true
   }
 }

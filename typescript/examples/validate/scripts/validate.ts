@@ -1,6 +1,3 @@
-import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
-import { LazyMessageReader as ROS1LazyMessageReader } from "@foxglove/rosmsg-serialization";
-import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
 import {
   hasMcapPrefix,
   McapConstants,
@@ -9,14 +6,13 @@ import {
   McapTypes,
 } from "@mcap/core";
 import { FileHandleReadable } from "@mcap/nodejs";
-import { loadDecompressHandlers, protobufFromBinaryDescriptor } from "@mcap/support";
+import { loadDecompressHandlers, parseChannel, ParsedChannel } from "@mcap/support";
 import { program } from "commander";
 import { createReadStream } from "fs";
 import fs from "fs/promises";
 import { isEqual } from "lodash";
 import { performance } from "perf_hooks";
 
-type Channel = McapTypes.Channel;
 type TypedMcapRecord = McapTypes.TypedMcapRecord;
 
 function log(...data: unknown[]) {
@@ -90,10 +86,7 @@ async function validate(
   const schemasById = new Map<number, McapTypes.TypedMcapRecords["Schema"]>();
   const channelInfoById = new Map<
     number,
-    {
-      info: Channel;
-      messageDeserializer?: (data: ArrayBufferView) => unknown;
-    }
+    { info: McapTypes.Channel; parsedChannel: ParsedChannel }
   >();
 
   function processRecord(record: TypedMcapRecord) {
@@ -123,47 +116,17 @@ async function validate(
           }
           break;
         }
-        if (record.schemaId === 0) {
-          throw new Error(
-            `Channel ${record.id} has no schema; channels without schemas are not supported`,
-          );
+        let schema: McapTypes.Schema | undefined;
+        if (record.schemaId !== 0) {
+          schema = schemasById.get(record.schemaId);
+          if (!schema) {
+            throw new Error(`Missing schema ${record.schemaId} for channel ${record.id}`);
+          }
         }
-        const schema = schemasById.get(record.schemaId);
-        if (!schema) {
-          throw new Error(`Missing schema ${record.schemaId} for channel ${record.id}`);
-        }
-        let messageDeserializer: (data: ArrayBufferView) => unknown;
-        if (record.messageEncoding === "ros1") {
-          const reader = new ROS1LazyMessageReader(
-            parseMessageDefinition(new TextDecoder().decode(schema.data)),
-          );
-          messageDeserializer = (data) => {
-            const size = reader.size(data);
-            if (size !== data.byteLength) {
-              throw new Error(`Message size ${size} should match buffer length ${data.byteLength}`);
-            }
-            return reader.readMessage(data).toJSON();
-          };
-        } else if (record.messageEncoding === "ros2") {
-          const reader = new ROS2MessageReader(
-            parseMessageDefinition(new TextDecoder().decode(schema.data), {
-              ros2: true,
-            }),
-          );
-          messageDeserializer = (data) => reader.readMessage(data);
-        } else if (record.messageEncoding === "protobuf") {
-          const root = protobufFromBinaryDescriptor(schema.data);
-          const type = root.lookupType(schema.name);
-
-          messageDeserializer = (data) =>
-            type.decode(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
-        } else if (record.messageEncoding === "json") {
-          const textDecoder = new TextDecoder();
-          messageDeserializer = (data) => JSON.parse(textDecoder.decode(data));
-        } else {
-          throw new Error(`unsupported encoding ${record.messageEncoding}`);
-        }
-        channelInfoById.set(record.id, { info: record, messageDeserializer });
+        channelInfoById.set(record.id, {
+          info: record,
+          parsedChannel: parseChannel({ schema, messageEncoding: record.messageEncoding }),
+        });
         break;
       }
 
@@ -173,12 +136,7 @@ async function validate(
           throw new Error(`message for channel ${record.channelId} with no prior channel info`);
         }
         if (deserialize) {
-          if (channelInfo.messageDeserializer == undefined) {
-            throw new Error(
-              `No deserializer available for channel id: ${channelInfo.info.id} ${channelInfo.info.messageEncoding}`,
-            );
-          }
-          const message = channelInfo.messageDeserializer(record.data);
+          const message = channelInfo.parsedChannel.deserialize(record.data);
           if (dump) {
             log(message);
           }
