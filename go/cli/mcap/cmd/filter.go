@@ -307,15 +307,17 @@ func filter(
 				continue
 			}
 			if !channel.written {
-				schema, ok := schemas[channel.SchemaID]
-				if !ok {
-					return fmt.Errorf("encountered channel with topic %s with unknown schema ID %d", channel.Topic, channel.SchemaID)
-				}
-				if !schema.written {
-					if err = mcapWriter.WriteSchema(schema.Schema); err != nil {
-						return err
+				if channel.SchemaID != 0 {
+					schema, ok := schemas[channel.SchemaID]
+					if !ok {
+						return fmt.Errorf("encountered channel with topic %s with unknown schema ID %d", channel.Topic, channel.SchemaID)
 					}
-					schemas[channel.SchemaID] = markableSchema{schema.Schema, true}
+					if !schema.written {
+						if err = mcapWriter.WriteSchema(schema.Schema); err != nil {
+							return err
+						}
+						schemas[channel.SchemaID] = markableSchema{schema.Schema, true}
+					}
 				}
 				if err = mcapWriter.WriteChannel(channel.Channel); err != nil {
 					return err

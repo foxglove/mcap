@@ -34,7 +34,7 @@ func writeFilterTestInput(t *testing.T, w io.Writer) {
 	}))
 	assert.Nil(t, writer.WriteChannel(&mcap.Channel{
 		ID:       3,
-		SchemaID: 1,
+		SchemaID: 0,
 		Topic:    "radar_a",
 	}))
 	for i := 0; i < 100; i++ {
