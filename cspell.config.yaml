@@ -73,6 +73,7 @@ words:
   - nsec
   - nsecs
   - numpy
+  - omgidl
   - parseable
   - pipenv
   - pointcloud
