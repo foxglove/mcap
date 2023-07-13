@@ -79,7 +79,7 @@ struct MCAP_PUBLIC McapWriterOptions {
   bool forceCompression = false;
   /**
    * @brief The recording profile. See
-   * <https://github.com/foxglove/mcap/blob/main/website/docs/spec/registry.md#profiles>
+   * <https://mcap.dev/spec/registry#well-known-profiles>
    * for more information on well-known profiles.
    */
   std::string profile;
