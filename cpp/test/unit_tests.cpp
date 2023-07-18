@@ -478,6 +478,63 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
   }
 }
 
+/**
+ * @brief ensures that message index records are only written for the channels present in the
+ * previous chunk. This test writes two chunks with one message each in separate channels.
+ * If the writer is working correctly, there will be one message index record after each chunk,
+ * one for each message.
+ */
+TEST_CASE("Message index records", "[writer]") {
+  Buffer buffer;
+
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("test");
+  opts.chunkSize = 100;
+  opts.compression = mcap::Compression::None;
+
+  writer.open(buffer, opts);
+
+  mcap::Schema schema("schema", "schemaEncoding", "ab");
+  writer.addSchema(schema);
+  mcap::Channel channel1("topic", "messageEncoding", schema.id);
+  writer.addChannel(channel1);
+  mcap::Channel channel2("topic", "messageEncoding", schema.id);
+  writer.addChannel(channel2);
+
+  mcap::Message msg;
+  std::vector<std::byte> data(150);
+  WriteMsg(writer, channel1.id, 0, 100, 100, data);
+  WriteMsg(writer, channel2.id, 0, 200, 200, data);
+
+  writer.close();
+
+  // read the records after the starting magic, stopping before the end magic.
+  mcap::RecordReader reader(buffer, sizeof(mcap::Magic), buffer.size() - sizeof(mcap::Magic));
+
+  std::optional<mcap::Record> curRecord = std::nullopt;
+  std::vector<uint16_t> messageIndexChannelIds;
+  uint32_t chunkCount = 0;
+  mcap::MessageIndex index;
+
+  do {
+    curRecord = reader.next();
+    if (curRecord->opcode == mcap::OpCode::MessageIndex) {
+      requireOk(mcap::McapReader::ParseMessageIndex(*curRecord, &index));
+      REQUIRE(index.records.size() > 0);
+      messageIndexChannelIds.push_back(index.channelId);
+    }
+    if (curRecord->opcode == mcap::OpCode::Chunk) {
+      chunkCount++;
+    }
+  } while (curRecord != std::nullopt && reader.status().ok());
+  requireOk(reader.status());
+
+  REQUIRE(chunkCount == 2);
+  REQUIRE(messageIndexChannelIds.size() == 2);
+  REQUIRE(messageIndexChannelIds[0] == channel1.id);
+  REQUIRE(messageIndexChannelIds[1] == channel2.id);
+}
+
 TEST_CASE("LZ4 compression", "[reader][writer]") {
   SECTION("Roundtrip") {
     Buffer buffer;
