@@ -511,22 +511,21 @@ TEST_CASE("Message index records", "[writer]") {
   // read the records after the starting magic, stopping before the end magic.
   mcap::RecordReader reader(buffer, sizeof(mcap::Magic), buffer.size() - sizeof(mcap::Magic));
 
-  std::optional<mcap::Record> curRecord = std::nullopt;
   std::vector<uint16_t> messageIndexChannelIds;
   uint32_t chunkCount = 0;
-  mcap::MessageIndex index;
 
-  do {
-    curRecord = reader.next();
-    if (curRecord->opcode == mcap::OpCode::MessageIndex) {
-      requireOk(mcap::McapReader::ParseMessageIndex(*curRecord, &index));
-      REQUIRE(index.records.size() > 0);
+  for (std::optional<mcap::Record> rec = reader.next(); rec != std::nullopt; rec = reader.next()) {
+    requireOk(reader.status());
+    if (rec->opcode == mcap::OpCode::MessageIndex) {
+      mcap::MessageIndex index;
+      requireOk(mcap::McapReader::ParseMessageIndex(*rec, &index));
+      REQUIRE(index.records.size() == 1);
       messageIndexChannelIds.push_back(index.channelId);
     }
-    if (curRecord->opcode == mcap::OpCode::Chunk) {
+    if (rec->opcode == mcap::OpCode::Chunk) {
       chunkCount++;
     }
-  } while (curRecord != std::nullopt && reader.status().ok());
+  }
   requireOk(reader.status());
 
   REQUIRE(chunkCount == 2);
