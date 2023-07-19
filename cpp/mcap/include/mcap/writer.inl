@@ -723,11 +723,18 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
     const uint64_t messageIndexOffset = output.size();
     if (!options_.noMessageIndex) {
       // Write the message index records
-      for (const auto& [channelId, messageIndex] : currentMessageIndex_) {
-        chunkIndexRecord.messageIndexOffsets.emplace(channelId, output.size());
-        write(output, messageIndex);
+      for (auto& [channelId, messageIndex] : currentMessageIndex_) {
+        // currentMessageIndex_ contains entries for every channel ever seen, not just in this
+        // chunk. Only write message index records for channels with messages in this chunk.
+        if (messageIndex.records.size() > 0) {
+          chunkIndexRecord.messageIndexOffsets.emplace(channelId, output.size());
+          write(output, messageIndex);
+          // reset this message index for the next chunk. This allows us to re-use
+          // allocations vs. the alternative strategy of allocating a fresh set of MessageIndex
+          // objects per chunk.
+          messageIndex.records.clear();
+        }
       }
-      currentMessageIndex_.clear();
     }
     const uint64_t messageIndexLength = output.size() - messageIndexOffset;
 
@@ -743,10 +750,17 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
     chunkIndexRecord.uncompressedSize = uncompressedSize;
   } else if (!options_.noMessageIndex) {
     // Write the message index records
-    for (const auto& [channelId, messageIndex] : currentMessageIndex_) {
-      write(output, messageIndex);
+    for (auto& [channelId, messageIndex] : currentMessageIndex_) {
+      // currentMessageIndex_ contains entries for every channel ever seen, not just in this
+      // chunk. Only write message index records for channels with messages in this chunk.
+      if (messageIndex.records.size() > 0) {
+        write(output, messageIndex);
+        // reset this message index for the next chunk. This allows us to re-use
+        // allocations vs. the alternative strategy of allocating a fresh set of MessageIndex
+        // objects per chunk.
+        messageIndex.records.clear();
+      }
     }
-    currentMessageIndex_.clear();
   }
 
   // Reset uncompressedSize and start/end times for the next chunk
