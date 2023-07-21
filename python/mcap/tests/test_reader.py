@@ -217,13 +217,22 @@ def write_no_summary_mcap(filepath: Path):
         writer.finish()
 
 
-@pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
-def test_no_summary(reader_cls: AnyReaderSubclass, tmpdir: Path):
+def test_no_summary_seeking(tmpdir: Path):
     filepath = tmpdir / "no_summary.mcap"
     write_no_summary_mcap(filepath)
 
     with open(filepath, "rb") as f:
-        reader: McapReader = reader_cls(f)
+        reader = SeekingReader(f)
         assert len(list(reader.iter_messages())) == 200
         assert len(list(reader.iter_attachments())) == 1
         assert len(list(reader.iter_metadata())) == 1
+
+
+def test_no_summary_not_seeking(tmpdir: Path):
+    filepath = tmpdir / "no_summary.mcap"
+    write_no_summary_mcap(filepath)
+
+    with open(filepath, "rb") as f:
+        assert len(list(NonSeekingReader(f).iter_messages())) == 200
+        assert len(list(NonSeekingReader(f).iter_attachments())) == 1
+        assert len(list(NonSeekingReader(f).iter_metadata())) == 1
