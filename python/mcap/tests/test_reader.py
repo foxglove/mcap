@@ -223,7 +223,7 @@ def test_no_summary(reader_cls: AnyReaderSubclass, tmpdir: Path):
     write_no_summary_mcap(filepath)
 
     with open(filepath, "rb") as f:
-        reader: McapReader = SeekingReader(f)
+        reader: McapReader = reader_cls(f)
         assert len(list(reader.iter_messages())) == 200
         assert len(list(reader.iter_attachments())) == 1
         assert len(list(reader.iter_metadata())) == 1
