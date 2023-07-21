@@ -234,5 +234,7 @@ def test_no_summary_not_seeking(tmpdir: Path):
 
     with open(filepath, "rb") as f:
         assert len(list(NonSeekingReader(f).iter_messages())) == 200
+    with open(filepath, "rb") as f:
         assert len(list(NonSeekingReader(f).iter_attachments())) == 1
+    with open(filepath, "rb") as f:
         assert len(list(NonSeekingReader(f).iter_metadata())) == 1
