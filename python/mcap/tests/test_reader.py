@@ -10,7 +10,7 @@ from mcap.decoder import DecoderFactory
 from mcap.exceptions import DecoderNotFoundError
 from mcap.reader import McapReader, NonSeekingReader, SeekingReader, make_reader
 from mcap.records import Channel, Message, Schema
-from mcap.writer import Writer
+from mcap.writer import IndexType, Writer
 
 DEMO_MCAP = (
     Path(__file__).parent.parent.parent.parent / "testdata" / "mcap" / "demo.mcap"
@@ -195,3 +195,46 @@ def test_non_seeking_used_once():
         _ = list(reader.iter_metadata())
         with pytest.raises(RuntimeError):
             _ = list(reader.iter_metadata())
+
+
+def write_no_summary_mcap(filepath: Path):
+    with open(filepath, "wb") as f:
+        writer = Writer(
+            f,
+            index_types=IndexType.NONE,
+            repeat_channels=False,
+            repeat_schemas=False,
+            use_chunking=False,
+            use_statistics=False,
+            use_summary_offsets=False,
+        )
+        writer.start()
+        writer.add_attachment(10, 10, "my_attach", "text", b"some data")
+        writer.add_metadata("my_meta", {"foo": "bar"})
+        foo_channel = writer.register_channel("/foo", "json", 0)
+        for i in range(200):
+            writer.add_message(foo_channel, 10, json.dumps({"a": 0}).encode("utf8"), 10)
+        writer.finish()
+
+
+def test_no_summary_seeking(tmpdir: Path):
+    filepath = tmpdir / "no_summary.mcap"
+    write_no_summary_mcap(filepath)
+
+    with open(filepath, "rb") as f:
+        reader = SeekingReader(f)
+        assert len(list(reader.iter_messages())) == 200
+        assert len(list(reader.iter_attachments())) == 1
+        assert len(list(reader.iter_metadata())) == 1
+
+
+def test_no_summary_not_seeking(tmpdir: Path):
+    filepath = tmpdir / "no_summary.mcap"
+    write_no_summary_mcap(filepath)
+
+    with open(filepath, "rb") as f:
+        assert len(list(NonSeekingReader(f).iter_messages())) == 200
+    with open(filepath, "rb") as f:
+        assert len(list(NonSeekingReader(f).iter_attachments())) == 1
+    with open(filepath, "rb") as f:
+        assert len(list(NonSeekingReader(f).iter_metadata())) == 1
