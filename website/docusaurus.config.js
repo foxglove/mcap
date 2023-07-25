@@ -125,15 +125,15 @@ const config = {
             title: "Docs",
             items: [
               {
-                label: "MCAP guides",
+                label: "Guides",
                 to: "/guides",
               },
               {
-                label: "MCAP API reference",
+                label: "API reference",
                 to: "/reference",
               },
               {
-                label: "MCAP specification",
+                label: "Specification",
                 to: "/spec",
               },
             ],
