@@ -188,6 +188,7 @@ if (process.env.NODE_ENV === "production") {
     attributes: {
       src: "https://cdn.usefathom.com/script.js",
       "data-site": "RULHQVMR", // cspell:disable-line
+      "data-spa": "history",
       defer: "defer",
     },
   });
