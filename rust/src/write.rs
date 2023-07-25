@@ -685,7 +685,9 @@ impl<W: Write> Write for Compressor<W> {
 struct ChunkWriter<W: Write> {
     header_start: u64,
     stream_start: u64,
-    header: records::ChunkHeader,
+    /// Message start and end time, or None if there are no messages yet.
+    message_bounds: Option<(u64, u64)>,
+    compression_name: &'static str,
     compressor: CountingCrcWriter<Compressor<W>>,
     indexes: BTreeMap<u16, Vec<records::MessageIndexEntry>>,
 }
@@ -703,6 +705,8 @@ impl<W: Write + Seek> ChunkWriter<W> {
             None => "",
         };
 
+        // Write a dummy header that we'll overwrite with the actual values later.
+        // We just need its size (which only varies based on compression name).
         let header = records::ChunkHeader {
             message_start_time: 0,
             message_end_time: 0,
@@ -711,7 +715,6 @@ impl<W: Write + Seek> ChunkWriter<W> {
             compression: String::from(compression_name),
             compressed_size: !0,
         };
-
         writer.write_le(&header)?;
         let stream_start = writer.stream_position()?;
 
@@ -733,7 +736,8 @@ impl<W: Write + Seek> ChunkWriter<W> {
             compressor,
             header_start,
             stream_start,
-            header,
+            compression_name,
+            message_bounds: None,
             indexes: BTreeMap::new(),
         })
     }
@@ -770,15 +774,11 @@ impl<W: Write + Seek> ChunkWriter<W> {
     }
 
     fn write_message(&mut self, header: &MessageHeader, data: &[u8]) -> McapResult<()> {
-        // Update min/max time
-        self.header.message_start_time = match self.header.message_start_time {
-            0 => header.log_time,
-            nz => nz.min(header.log_time),
-        };
-        self.header.message_end_time = match self.header.message_end_time {
-            0 => header.log_time,
-            nz => nz.max(header.log_time),
-        };
+        // Update min/max time for the chunk
+        self.message_bounds = Some(match self.message_bounds {
+            None => (header.log_time, header.log_time),
+            Some((start, end)) => (start.min(header.log_time), end.max(header.log_time)),
+        });
 
         // Add an index for this message
         self.indexes
@@ -799,22 +799,32 @@ impl<W: Write + Seek> ChunkWriter<W> {
         Ok(())
     }
 
-    fn finish(mut self) -> McapResult<(W, records::ChunkIndex)> {
+    fn finish(self) -> McapResult<(W, records::ChunkIndex)> {
         // Get the number of uncompressed bytes written and the CRC.
-        self.header.uncompressed_size = self.compressor.position();
+
+        let uncompressed_size = self.compressor.position();
         let (stream, crc) = self.compressor.finalize();
-        self.header.uncompressed_crc = crc;
+        let uncompressed_crc = crc;
 
         // Finalize the compression stream - it maintains an internal buffer.
         let mut writer = stream.finish()?;
         let end_of_stream = writer.stream_position()?;
-        self.header.compressed_size = end_of_stream - self.stream_start;
+        let compressed_size = end_of_stream - self.stream_start;
         let record_size = (end_of_stream - self.header_start) as usize - 9; // 1 byte op, 8 byte len
 
         // Back up, write our finished header, then continue at the end of the stream.
         writer.seek(SeekFrom::Start(self.header_start))?;
         op_and_len(&mut writer, op::CHUNK, record_size)?;
-        writer.write_le(&self.header)?;
+        let message_bounds = self.message_bounds.unwrap_or((0, 0));
+        let header = records::ChunkHeader {
+            message_start_time: message_bounds.0,
+            message_end_time: message_bounds.1,
+            uncompressed_size,
+            uncompressed_crc,
+            compression: String::from(self.compression_name),
+            compressed_size,
+        };
+        writer.write_le(&header)?;
         assert_eq!(self.stream_start, writer.stream_position()?);
         assert_eq!(writer.seek(SeekFrom::End(0))?, end_of_stream);
 
@@ -839,15 +849,15 @@ impl<W: Write + Seek> ChunkWriter<W> {
         let end_of_indexes = writer.stream_position()?;
 
         let index = records::ChunkIndex {
-            message_start_time: self.header.message_start_time,
-            message_end_time: self.header.message_end_time,
+            message_start_time: header.message_start_time,
+            message_end_time: header.message_end_time,
             chunk_start_offset: self.header_start,
             chunk_length: end_of_stream - self.header_start,
             message_index_offsets,
             message_index_length: end_of_indexes - end_of_stream,
-            compression: self.header.compression,
-            compressed_size: self.header.compressed_size,
-            uncompressed_size: self.header.uncompressed_size,
+            compression: header.compression,
+            compressed_size: header.compressed_size,
+            uncompressed_size: header.uncompressed_size,
         };
 
         Ok((writer, index))
