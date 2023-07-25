@@ -172,10 +172,12 @@ pub struct Writer<'a, W: Write + Seek> {
     options: WriteOptions,
     schemas: HashMap<Schema<'a>, u16>,
     channels: HashMap<Channel<'a>, u16>,
-    stats: records::Statistics,
     chunk_indexes: Vec<records::ChunkIndex>,
     attachment_indexes: Vec<records::AttachmentIndex>,
     metadata_indexes: Vec<records::MetadataIndex>,
+    /// Message start and end time, or None if there are no messages yet.
+    message_bounds: Option<(u64, u64)>,
+    channel_message_counts: BTreeMap<u16, u64>,
 }
 
 impl<'a, W: Write + Seek> Writer<'a, W> {
@@ -199,10 +201,11 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             options: opts,
             schemas: HashMap::new(),
             channels: HashMap::new(),
-            stats: records::Statistics::default(),
             chunk_indexes: Vec::new(),
             attachment_indexes: Vec::new(),
             metadata_indexes: Vec::new(),
+            message_bounds: None,
+            channel_message_counts: BTreeMap::new(),
         })
     }
 
@@ -219,8 +222,6 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             return Ok(*id);
         }
 
-        self.stats.channel_count += 1;
-
         let next_channel_id = self.channels.len() as u16;
         assert!(self
             .channels
@@ -235,8 +236,6 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         if let Some(id) = self.schemas.get(schema) {
             return Ok(*id);
         }
-
-        self.stats.schema_count += 1;
 
         // Schema IDs cannot be zero, that's the sentinel value in a channel
         // for "no schema"
@@ -279,17 +278,11 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             ));
         }
 
-        self.stats.message_count += 1;
-        self.stats.message_start_time = match self.stats.message_start_time {
-            0 => header.log_time,
-            nz => nz.min(header.log_time),
-        };
-        self.stats.message_end_time = match self.stats.message_end_time {
-            0 => header.log_time,
-            nz => nz.max(header.log_time),
-        };
+        self.message_bounds = Some(match self.message_bounds {
+            None => (header.log_time, header.log_time),
+            Some((start, end)) => (start.min(header.log_time), end.max(header.log_time)),
+        });
         *self
-            .stats
             .channel_message_counts
             .entry(header.channel_id)
             .or_insert(0) += 1;
@@ -313,8 +306,6 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
     }
 
     pub fn attach(&mut self, attachment: &Attachment) -> McapResult<()> {
-        self.stats.attachment_count += 1;
-
         let header = records::AttachmentHeader {
             log_time: attachment.log_time,
             create_time: attachment.create_time,
@@ -350,8 +341,6 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
     }
 
     pub fn write_metadata(&mut self, metadata: &Metadata) -> McapResult<()> {
-        self.stats.metadata_count += 1;
-
         let w = self.finish_chunk()?;
         let offset = w.stream_position()?;
 
@@ -405,7 +394,6 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         self.writer = Some(match prev_writer {
             WriteMode::Raw(w) => {
                 // It's chunkin time.
-                self.stats.chunk_count += 1;
                 WriteMode::Chunk(ChunkWriter::new(w, self.options.compression)?)
             }
             chunk => chunk,
@@ -467,8 +455,25 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         // (&mut self).
         // (We could get around all this noise by having finish() take self,
         // but then it wouldn't be droppable _and_ finish...able.)
-        let mut stats = records::Statistics::default();
-        std::mem::swap(&mut stats, &mut self.stats);
+        let mut channel_message_counts = BTreeMap::new();
+        std::mem::swap(
+            &mut channel_message_counts,
+            &mut self.channel_message_counts,
+        );
+
+        // Grab stats before we munge all the self fields below.
+        let message_bounds = self.message_bounds.unwrap_or((0, 0));
+        let stats = records::Statistics {
+            message_count: channel_message_counts.values().sum(),
+            schema_count: self.schemas.len() as u16,
+            channel_count: self.channels.len() as u32,
+            attachment_count: self.attachment_indexes.len() as u32,
+            metadata_count: self.metadata_indexes.len() as u32,
+            chunk_count: self.chunk_indexes.len() as u32,
+            message_start_time: message_bounds.0,
+            message_end_time: message_bounds.1,
+            channel_message_counts,
+        };
 
         let mut chunk_indexes = Vec::new();
         std::mem::swap(&mut chunk_indexes, &mut self.chunk_indexes);
