@@ -368,7 +368,9 @@ export class McapIndexedReader {
 
       let chunkView = chunkViewCache.get(cursor.chunkIndex.chunkStartOffset);
       if (!chunkView) {
-        chunkView = await this.loadChunkData(cursor.chunkIndex);
+        chunkView = await this.loadChunkData(cursor.chunkIndex, {
+          validateCrcs: validateCrcs ?? true,
+        });
         chunkViewCache.set(cursor.chunkIndex.chunkStartOffset, chunkView);
       }
 
@@ -492,12 +494,15 @@ export class McapIndexedReader {
     }
   }
 
-  private async loadChunkData(chunkIndex: TypedMcapRecords["ChunkIndex"]): Promise<DataView> {
+  private async loadChunkData(
+    chunkIndex: TypedMcapRecords["ChunkIndex"],
+    options?: { validateCrcs: boolean },
+  ): Promise<DataView> {
     const chunkData = await this.readable.read(chunkIndex.chunkStartOffset, chunkIndex.chunkLength);
     const chunkResult = parseRecord({
       view: new DataView(chunkData.buffer, chunkData.byteOffset, chunkData.byteLength),
       startOffset: 0,
-      validateCrcs: true,
+      validateCrcs: options?.validateCrcs ?? true,
     });
     if (chunkResult.record?.type !== "Chunk") {
       throw this.errorWithLibrary(
@@ -516,7 +521,7 @@ export class McapIndexedReader {
       }
       buffer = decompress(buffer, chunk.uncompressedSize);
     }
-    if (chunk.uncompressedCrc !== 0) {
+    if (chunk.uncompressedCrc !== 0 && options?.validateCrcs !== false) {
       const chunkCrc = crc32(buffer);
       if (chunkCrc !== chunk.uncompressedCrc) {
         throw this.errorWithLibrary(
