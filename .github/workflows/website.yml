@@ -126,7 +126,7 @@ jobs:
         uses: cloudflare/pages-action@v1
         with:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          apiToken: ${{ secrets.CLOUDFLARE_TOKEN }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           gitHubToken: ${{ github.token }}
           branch: ${{ github.head_ref || github.ref_name }}
           projectName: mcap
