@@ -215,9 +215,9 @@ jobs:
 
       - name: Publish to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/core/v') }}
-        run: yarn workspace @mcap/core publish --access public
+        run: yarn workspace @mcap/core npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+          YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
   typescript-examples:
     runs-on: ubuntu-latest
