@@ -10,6 +10,8 @@ import ROSLight from "./companies/ros-color.svg";
 import ROSDark from "./companies/ros-white.svg";
 import TangramLight from "./companies/tangram-color.svg";
 import TangramDark from "./companies/tangram-white.svg";
+import WaabiLight from "./companies/waabi-color.svg";
+import WaabiDark from "./companies/waabi-white.svg";
 import DrawerEnvelope from "./drawer-envelope.svg";
 import Robot from "./robot.svg";
 import ShipmentPackage from "./shipment-package.svg";
@@ -43,6 +45,11 @@ const Logos = [
     href: "https://www.tangramvision.com/",
     LightModeLogo: TangramLight,
     DarkModeLogo: TangramDark,
+  },
+  {
+    href: "https://waabi.ai/",
+    LightModeLogo: WaabiLight,
+    DarkModeLogo: WaabiDark,
   },
 ];
 
