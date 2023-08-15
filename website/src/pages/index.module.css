@@ -150,26 +150,15 @@
 .logoGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 2rem 3rem;
+  gap: 3rem 3rem;
   text-align: center;
-}
-
-@media (min-width: 640px) {
-  .logoGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 996px) {
-  .logoGrid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
 }
 
 .logoIcon {
   display: inline-block;
   height: auto;
   width: 100%;
+  max-height: 50px;
   margin: auto;
 }
 
