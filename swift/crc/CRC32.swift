@@ -1,6 +1,8 @@
 import struct Foundation.Data
 
-#if arch(arm) || arch(arm64)
+// iOS seems to lack CRC intrinsics
+// See also: https://stackoverflow.com/questions/45625725/does-clang-lack-crc32-for-armv8-aarch64
+#if (arch(arm) || arch(arm64)) && !os(iOS)
   import _Builtin_intrinsics.arm.acle // cspell:disable-line
 #endif
 
@@ -34,7 +36,7 @@ public struct CRC32 {
 
   @inlinable
   public mutating func update(_ data: UnsafeRawBufferPointer) {
-    #if arch(arm) || arch(arm64)
+    #if (arch(arm) || arch(arm64)) && !os(iOS)
       self.updateARM(data)
     #else
       self.update16Byte(data)
@@ -93,7 +95,7 @@ public struct CRC32 {
     }
   }
 
-  #if arch(arm) || arch(arm64)
+  #if (arch(arm) || arch(arm64)) && !os(iOS)
     @inlinable
     internal mutating func updateARM(_ data: UnsafeRawBufferPointer) {
       var offset = 0
