@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
   name: "mcap",
-  platforms: [.macOS(.v10_15)], // for async/await
+  platforms: [.macOS(.v10_15), .iOS(.v13)], // for async/await
   products: [
     .library(name: "MCAP", targets: ["MCAP"]),
   ],

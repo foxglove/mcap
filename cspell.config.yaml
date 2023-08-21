@@ -60,6 +60,7 @@ words:
   - golangci
   - infima
   - inputfile
+  - intrinsics
   - jsonschema
   - kaitai
   - libmcap
