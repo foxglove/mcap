@@ -35,3 +35,27 @@ def test_write_messages():
         assert msg.message.log_time == index
         assert msg.message.publish_time == index
         assert msg.message.sequence == index
+
+
+def test_write_std_msgs_empty_messages():
+    output = BytesIO()
+    ros_writer = Ros2Writer(output=output)
+    schema = ros_writer.register_msgdef("std_msgs/msg/Empty", "")
+    for i in range(0, 10):
+        ros_writer.write_message(
+            topic="/test",
+            schema=schema,
+            message={},
+            log_time=i,
+            publish_time=i,
+            sequence=i,
+        )
+    ros_writer.finish()
+
+    output.seek(0)
+    for index, msg in enumerate(read_ros2_messages(output)):
+        assert msg.channel.topic == "/test"
+        assert msg.schema.name == "std_msgs/msg/Empty"
+        assert msg.message.log_time == index
+        assert msg.message.publish_time == index
+        assert msg.message.sequence == index
