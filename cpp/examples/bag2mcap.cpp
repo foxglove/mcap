@@ -30,8 +30,8 @@ int main() {
   mcap::Channel topic("/chatter", "ros1", stdMsgsString.id);
   writer.addChannel(topic);
 
-  std::array<std::byte, 4 + 13> payload;
-  const uint32_t length = 13;
+  std::array<std::byte, 4 + 13> payload{};
+  constexpr uint32_t length = 13;
   std::memcpy(payload.data(), &length, 4);
   std::memcpy(payload.data() + 4, "Hello, world!", 13);
 
@@ -48,7 +48,7 @@ int main() {
     std::cerr << "Failed to write message: " << res.message << "\n";
     writer.terminate();
     out.close();
-    std::remove("output.mcap");
+    std::ignore = std::remove("output.mcap");
     return 1;
   }
 
