@@ -46,9 +46,9 @@ def generate_sample_data():
     )
 
     for i in range(10):
-        e = String(data=f"string message {i}")
+        msg = String(data=f"string message {i}")
         buff = BytesIO()
-        e.serialize(buff)  # type: ignore
+        msg.serialize(buff)  # type: ignore
         writer.add_message(
             channel_id=string_channel_id,
             log_time=i * 1000,
@@ -64,9 +64,9 @@ def generate_sample_data():
     )
 
     for i in range(10):
-        e = Empty()
+        msg = Empty()
         buff = BytesIO()
-        e.serialize(buff)  # type: ignore
+        msg.serialize(buff)  # type: ignore
         writer.add_message(
             channel_id=empty_channel_id,
             log_time=i * 1000,
