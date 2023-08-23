@@ -34,6 +34,8 @@ type indexedMessageIterator struct {
 	zstdDecoder           *zstd.Decoder
 	lz4Reader             *lz4.Reader
 	hasReadSummarySection bool
+
+	compressedChunk []byte
 }
 
 // parseIndexSection parses the index section of the file and populates the
@@ -147,12 +149,16 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	if err != nil {
 		return err
 	}
-	chunk := make([]byte, chunkIndex.ChunkLength+chunkIndex.MessageIndexLength)
-	_, err = io.ReadFull(it.rs, chunk)
+
+	compressedChunkLength := chunkIndex.ChunkLength + chunkIndex.MessageIndexLength
+	if len(it.compressedChunk) < int(compressedChunkLength) {
+		it.compressedChunk = make([]byte, int(float64(compressedChunkLength)*1.2))
+	}
+	_, err = io.ReadFull(it.rs, it.compressedChunk[:compressedChunkLength])
 	if err != nil {
 		return fmt.Errorf("failed to read chunk data: %w", err)
 	}
-	parsedChunk, err := ParseChunk(chunk[9:chunkIndex.ChunkLength])
+	parsedChunk, err := ParseChunk(it.compressedChunk[9:chunkIndex.ChunkLength])
 	if err != nil {
 		return fmt.Errorf("failed to parse chunk: %w", err)
 	}
@@ -186,7 +192,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		return fmt.Errorf("unsupported compression %s", parsedChunk.Compression)
 	}
 	// use the message index to find the messages we want from the chunk
-	messageIndexSection := chunk[chunkIndex.ChunkLength:]
+	messageIndexSection := it.compressedChunk[chunkIndex.ChunkLength:compressedChunkLength]
 	var recordLen uint64
 	offset := 0
 	for offset < len(messageIndexSection) {
