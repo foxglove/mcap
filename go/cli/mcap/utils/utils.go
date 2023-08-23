@@ -9,9 +9,12 @@ import (
 	"os"
 	"regexp"
 
-	"cloud.google.com/go/storage"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/olekukonko/tablewriter"
+	"gocloud.dev/blob"
+	_ "gocloud.dev/blob/azureblob"
+	_ "gocloud.dev/blob/gcsblob"
+	_ "gocloud.dev/blob/s3blob"
 )
 
 var (
@@ -49,16 +52,36 @@ func GetReader(ctx context.Context, filename string) (func() error, io.ReadSeekC
 	if scheme != "" {
 		switch scheme {
 		case "gs":
-			client, err := storage.NewClient(ctx)
+			bucketClient, err := blob.OpenBucket(ctx, fmt.Sprintf("gs://%v", bucket))
 			if err != nil {
-				return close, nil, fmt.Errorf("failed to create GCS client: %v", err)
+				return close, nil, err
 			}
-			close = client.Close
-			object := client.Bucket(bucket).Object(path)
-			rs, err = NewGCSReadSeekCloser(ctx, object)
+			close = bucketClient.Close
+			rs, err = NewGoCloudReadSeekCloser(ctx, bucketClient, path)
 			if err != nil {
 				return close, nil, fmt.Errorf("failed to build read seek closer: %w", err)
 			}
+		case "s3":
+			bucketClient, err := blob.OpenBucket(ctx, fmt.Sprintf("s3://%v?awssdk=v2", bucket))
+			close = bucketClient.Close
+			if err != nil {
+				return close, nil, err
+			}
+			rs, err = NewGoCloudReadSeekCloser(ctx, bucketClient, path)
+			if err != nil {
+				return close, nil, fmt.Errorf("failed to build read seek closer: %w", err)
+			}
+		case "azblob":
+			bucketClient, err := blob.OpenBucket(ctx, fmt.Sprintf("azblob://%v", bucket))
+			if err != nil {
+				return close, nil, err
+			}
+			close = bucketClient.Close
+			rs, err = NewGoCloudReadSeekCloser(ctx, bucketClient, path)
+			if err != nil {
+				return close, nil, fmt.Errorf("failed to build read seek closer: %w", err)
+			}
+
 		default:
 			return close, nil, fmt.Errorf("Unsupported remote file scheme: %s", scheme)
 		}
@@ -81,12 +104,29 @@ func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.
 		remote = true
 		switch scheme {
 		case "gs":
-			client, err := storage.NewClient(ctx)
+			bucketClient, err := blob.OpenBucket(ctx, fmt.Sprintf("gs://%v", bucket))
 			if err != nil {
-				return fmt.Errorf("failed to create GCS client: %v", err)
+				return err
 			}
-			object := client.Bucket(bucket).Object(path)
-			rs, err = NewGCSReadSeekCloser(ctx, object)
+			rs, err = NewGoCloudReadSeekCloser(ctx, bucketClient, path)
+			if err != nil {
+				return fmt.Errorf("failed to build read seek closer: %w", err)
+			}
+		case "s3":
+			bucketClient, err := blob.OpenBucket(ctx, fmt.Sprintf("s3://%v?awssdk=v2", bucket))
+			if err != nil {
+				return err
+			}
+			rs, err = NewGoCloudReadSeekCloser(ctx, bucketClient, path)
+			if err != nil {
+				return fmt.Errorf("failed to build read seek closer: %w", err)
+			}
+		case "azblob":
+			bucketClient, err := blob.OpenBucket(ctx, fmt.Sprintf("azblob://%v", bucket))
+			if err != nil {
+				return err
+			}
+			rs, err = NewGoCloudReadSeekCloser(ctx, bucketClient, path)
 			if err != nil {
 				return fmt.Errorf("failed to build read seek closer: %w", err)
 			}

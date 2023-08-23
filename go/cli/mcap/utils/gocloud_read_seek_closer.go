@@ -5,24 +5,25 @@ import (
 	"fmt"
 	"io"
 
-	"cloud.google.com/go/storage"
+	"gocloud.dev/blob"
 )
 
-type GCSReadSeekCloser struct {
+type GoCloudReadSeekCloser struct {
 	size   int64
-	object *storage.ObjectHandle
+	key    string
 	ctx    context.Context
 	offset int64
 	r      io.ReadCloser
+	bucket *blob.Bucket
 }
 
-func (r *GCSReadSeekCloser) Read(p []byte) (int, error) {
+func (r *GoCloudReadSeekCloser) Read(p []byte) (int, error) {
 	n, err := r.r.Read(p)
 	r.offset += int64(n)
 	return n, err
 }
 
-func (r *GCSReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
+func (r *GoCloudReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
 	var seekTo int64
 	switch whence {
 	case io.SeekCurrent:
@@ -41,7 +42,7 @@ func (r *GCSReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		reader, err := r.object.NewRangeReader(r.ctx, seekTo, -1)
+		reader, err := r.bucket.NewRangeReader(r.ctx, r.key, seekTo, -1, nil)
 		if err != nil {
 			return 0, err
 		}
@@ -51,19 +52,21 @@ func (r *GCSReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
 	return seekTo, nil
 }
 
-func (r *GCSReadSeekCloser) Close() error {
+func (r *GoCloudReadSeekCloser) Close() error {
 	return r.r.Close()
 }
 
-func NewGCSReadSeekCloser(ctx context.Context, object *storage.ObjectHandle) (*GCSReadSeekCloser, error) {
-	r, err := object.NewReader(ctx)
+func NewGoCloudReadSeekCloser(ctx context.Context, bucket *blob.Bucket, key string) (*GoCloudReadSeekCloser, error) {
+	r, err := bucket.NewReader(ctx, key, nil)
 	if err != nil {
 		return nil, err
 	}
-	return &GCSReadSeekCloser{
-		size:   r.Attrs.Size,
-		object: object,
+
+	return &GoCloudReadSeekCloser{
+		size:   r.Size(),
+		key:    key,
 		r:      r,
 		ctx:    ctx,
+		bucket: bucket,
 	}, nil
 }
