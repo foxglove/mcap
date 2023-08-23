@@ -168,9 +168,11 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	case CompressionNone:
 		chunkData = parsedChunk.Records
 	case CompressionZSTD:
-		it.zstdDecoder, err = zstd.NewReader(nil)
-		if err != nil {
-			return fmt.Errorf("failed to read zstd chunk: %w", err)
+		if it.zstdDecoder == nil {
+			it.zstdDecoder, err = zstd.NewReader(nil)
+			if err != nil {
+				return fmt.Errorf("failed to instantiate zstd decoder: %w", err)
+			}
 		}
 		chunkData = make([]byte, 0, parsedChunk.UncompressedSize)
 		chunkData, err = it.zstdDecoder.DecodeAll(parsedChunk.Records, chunkData)
