@@ -14,6 +14,7 @@ rcl_interfaces__ParameterEvent = (
     "000000000100000000000000000000000000000000000000000000000000000000000000"
     "00000000"
 )
+std_msgs__Empty = "0001000000"
 
 
 def test_parse_tfmessage():
@@ -78,6 +79,13 @@ def test_parse_parameter_event():
     # Parameter[] deleted_parameters
     assert reader.sequence_length() == 0
 
+    assert reader.decoded_bytes() == len(data)
+
+
+def test_parse_empty_msg():
+    data = bytes.fromhex(std_msgs__Empty)
+    reader = CdrReader(data)
+    assert reader.uint8() == 0  # uint8 structure_needs_at_least_one_member
     assert reader.decoded_bytes() == len(data)
 
 
