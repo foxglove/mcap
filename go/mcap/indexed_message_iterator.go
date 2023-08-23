@@ -177,7 +177,8 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		} else {
 			it.lz4Reader.Reset(bytes.NewReader(parsedChunk.Records))
 		}
-		chunkData, err = io.ReadAll(it.lz4Reader)
+		chunkData = make([]byte, parsedChunk.UncompressedSize)
+		_, err = io.ReadFull(it.lz4Reader, chunkData)
 		if err != nil {
 			return fmt.Errorf("failed to decompress lz4 chunk: %w", err)
 		}
