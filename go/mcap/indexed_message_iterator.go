@@ -162,18 +162,14 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	case CompressionNone:
 		chunkData = parsedChunk.Records
 	case CompressionZSTD:
-		var err error
-		if it.zstdDecoder == nil {
-			it.zstdDecoder, err = zstd.NewReader(bytes.NewReader(parsedChunk.Records))
-		} else {
-			err = it.zstdDecoder.Reset(bytes.NewReader(parsedChunk.Records))
-		}
+		it.zstdDecoder, err = zstd.NewReader(nil)
 		if err != nil {
 			return fmt.Errorf("failed to read zstd chunk: %w", err)
 		}
-		chunkData, err = io.ReadAll(it.zstdDecoder)
+		chunkData = make([]byte, 0, parsedChunk.UncompressedSize)
+		chunkData, err = it.zstdDecoder.DecodeAll(parsedChunk.Records, chunkData)
 		if err != nil {
-			return fmt.Errorf("failed to decompress zstd chunk: %w", err)
+			return fmt.Errorf("failed to decode chunk data: %w", err)
 		}
 	case CompressionLZ4:
 		if it.lz4Reader == nil {
