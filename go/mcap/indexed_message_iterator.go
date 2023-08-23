@@ -11,6 +11,10 @@ import (
 	"github.com/pierrec/lz4/v4"
 )
 
+const (
+	chunkBufferGrowthMultiple = 1.2
+)
+
 // indexedMessageIterator is an iterator over an indexed mcap read seeker (as
 // seeking is required). It makes reads in alternation from the index data
 // section, the message index at the end of a chunk, and the chunk's contents.
@@ -35,7 +39,7 @@ type indexedMessageIterator struct {
 	lz4Reader             *lz4.Reader
 	hasReadSummarySection bool
 
-	compressedChunk []byte
+	compressedChunkAndMessageIndex []byte
 }
 
 // parseIndexSection parses the index section of the file and populates the
@@ -151,14 +155,15 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	}
 
 	compressedChunkLength := chunkIndex.ChunkLength + chunkIndex.MessageIndexLength
-	if len(it.compressedChunk) < int(compressedChunkLength) {
-		it.compressedChunk = make([]byte, int(float64(compressedChunkLength)*1.2))
+	if len(it.compressedChunkAndMessageIndex) < int(compressedChunkLength) {
+		newSize := int(float64(compressedChunkLength) * chunkBufferGrowthMultiple)
+		it.compressedChunkAndMessageIndex = make([]byte, newSize)
 	}
-	_, err = io.ReadFull(it.rs, it.compressedChunk[:compressedChunkLength])
+	_, err = io.ReadFull(it.rs, it.compressedChunkAndMessageIndex[:compressedChunkLength])
 	if err != nil {
 		return fmt.Errorf("failed to read chunk data: %w", err)
 	}
-	parsedChunk, err := ParseChunk(it.compressedChunk[9:chunkIndex.ChunkLength])
+	parsedChunk, err := ParseChunk(it.compressedChunkAndMessageIndex[9:chunkIndex.ChunkLength])
 	if err != nil {
 		return fmt.Errorf("failed to parse chunk: %w", err)
 	}
@@ -194,7 +199,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		return fmt.Errorf("unsupported compression %s", parsedChunk.Compression)
 	}
 	// use the message index to find the messages we want from the chunk
-	messageIndexSection := it.compressedChunk[chunkIndex.ChunkLength:compressedChunkLength]
+	messageIndexSection := it.compressedChunkAndMessageIndex[chunkIndex.ChunkLength:compressedChunkLength]
 	var recordLen uint64
 	offset := 0
 	for offset < len(messageIndexSection) {
