@@ -1,5 +1,6 @@
 """ROS2 message definition parsing and message deserialization."""
 
+import os
 import re
 from io import BytesIO
 from types import SimpleNamespace
@@ -264,6 +265,13 @@ def _read_complex_type(
     )
     msg = Msg()
 
+    if len(msgdef.fields) == 0:
+        # In case a message definition definition is empty, ROS 2 adds a
+        # `uint8 structure_needs_at_least_one_member` field when converting to IDL,
+        # to satisfy the requirement from IDL of not being empty.
+        # See also https://design.ros2.org/articles/legacy_interface_definition.html
+        reader.uint8()
+
     for field in msgdef.fields:
         ftype = field.type
         if not ftype.is_primitive_type():
@@ -333,6 +341,13 @@ def _write_complex_type(
     ros2_msg: Any,
     writer: CdrWriter,
 ) -> None:
+    if len(fields) == 0:
+        # In case a message definition definition is empty, ROS 2 adds a
+        # `uint8 structure_needs_at_least_one_member` field when converting to IDL,
+        # to satisfy the requirement from IDL of not being empty.
+        # See also https://design.ros2.org/articles/legacy_interface_definition.html
+        writer.write_uint8(0x00)
+
     for field in fields:
         ftype = field.type
         if not ftype.is_primitive_type():
@@ -501,12 +516,14 @@ def _for_each_msgdef(
 ) -> None:
     cur_schema_name = schema_name
 
+    # Remove empty lines
+    schema_text = os.linesep.join([s for s in schema_text.splitlines() if s.strip()])
+
     # Split schema_text by separator lines containing at least 3 = characters
     # (e.g. "===") using a regular expression
     for cur_schema_text in re.split(r"^={3,}$", schema_text, flags=re.MULTILINE):
         cur_schema_text = cur_schema_text.strip()
-        if not cur_schema_text:
-            continue
+
         # Check for a "MSG: pkg_name/msg_name" line
         match = re.match(r"^MSG:\s+(\S+)$", cur_schema_text, flags=re.MULTILINE)
         if match:
