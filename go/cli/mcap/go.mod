@@ -7,7 +7,7 @@ require (
 	github.com/fatih/color v1.13.0
 	github.com/foxglove/mcap/go/mcap v0.4.0
 	github.com/foxglove/mcap/go/ros v0.0.0-20230114025807-456e6a6ca1be
-	github.com/klauspost/compress v1.15.15
+	github.com/klauspost/compress v1.16.7
 	github.com/mattn/go-sqlite3 v1.14.14
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pierrec/lz4/v4 v4.1.17
