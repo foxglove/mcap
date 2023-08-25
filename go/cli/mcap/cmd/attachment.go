@@ -164,7 +164,7 @@ var addAttachmentCmd = &cobra.Command{
 			{
 				LogTime:    logTime,
 				CreateTime: createTime,
-				Name:       addAttachmentFilename,
+				Name:       utils.DefaultString(addAttachmentName, addAttachmentFilename),
 				MediaType:  addAttachmentMediaType,
 				DataSize:   uint64(contentLength),
 				Data:       attachment,
