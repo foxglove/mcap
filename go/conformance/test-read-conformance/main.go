@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/foxglove/mcap/go/mcap"
-	"github.com/foxglove/mcap/go/mcap/readopts"
 )
 
 var (
@@ -339,7 +338,7 @@ func readIndexed(w io.Writer, filepath string) error {
 	if err != nil {
 		return err
 	}
-	it, err := reader.Messages(readopts.InOrder(readopts.LogTimeOrder))
+	it, err := reader.Messages(mcap.InOrder(mcap.LogTimeOrder))
 	if err != nil {
 		return err
 	}

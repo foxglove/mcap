@@ -3,8 +3,6 @@ package mcap
 import (
 	"container/heap"
 	"fmt"
-
-	"github.com/foxglove/mcap/go/mcap/readopts"
 )
 
 // rangeIndex refers to either a chunk (via the ChunkIndex, with other fields nil)
@@ -18,7 +16,7 @@ type rangeIndex struct {
 // heap of rangeIndex entries, where the entries are sorted by their log time.
 type rangeIndexHeap struct {
 	indices []rangeIndex
-	order   readopts.ReadOrder
+	order   ReadOrder
 	lastErr error
 }
 
@@ -26,7 +24,7 @@ type rangeIndexHeap struct {
 func (h rangeIndexHeap) timestamp(i int) uint64 {
 	ri := h.indices[i]
 	if ri.messageIndexEntry == nil {
-		if h.order == readopts.ReverseLogTimeOrder {
+		if h.order == ReverseLogTimeOrder {
 			return ri.chunkIndex.MessageEndTime
 		}
 		return ri.chunkIndex.MessageStartTime
@@ -78,14 +76,14 @@ func (h *rangeIndexHeap) Pop() interface{} {
 // Less is required by `heap.Interface`.
 func (h *rangeIndexHeap) Less(i, j int) bool {
 	switch h.order {
-	case readopts.FileOrder:
+	case FileOrder:
 		return h.filePositionLess(i, j)
-	case readopts.LogTimeOrder:
+	case LogTimeOrder:
 		if h.timestamp(i) == h.timestamp(j) {
 			return h.filePositionLess(i, j)
 		}
 		return h.timestamp(i) < h.timestamp(j)
-	case readopts.ReverseLogTimeOrder:
+	case ReverseLogTimeOrder:
 		if h.timestamp(i) == h.timestamp(j) {
 			return h.filePositionLess(j, i)
 		}

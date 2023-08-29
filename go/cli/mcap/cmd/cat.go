@@ -16,7 +16,6 @@ import (
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/cli/mcap/utils/ros"
 	"github.com/foxglove/mcap/go/mcap"
-	"github.com/foxglove/mcap/go/mcap/readopts"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -165,14 +164,14 @@ func (w *jsonOutputWriter) writeMessage(
 	return nil
 }
 
-func getReadOpts(useIndex bool) []readopts.ReadOpt {
+func getReadOpts(useIndex bool) []mcap.ReadOpt {
 	topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-	opts := []readopts.ReadOpt{readopts.UsingIndex(useIndex), readopts.WithTopics(topics)}
+	opts := []mcap.ReadOpt{mcap.UsingIndex(useIndex), mcap.WithTopics(topics)}
 	if catStart != 0 {
-		opts = append(opts, readopts.After(catStart*1e9))
+		opts = append(opts, mcap.After(catStart*1e9))
 	}
 	if catEnd != math.MaxInt64 {
-		opts = append(opts, readopts.Before(catEnd*1e9))
+		opts = append(opts, mcap.Before(catEnd*1e9))
 	}
 	return opts
 }

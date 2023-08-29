@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
-	"github.com/foxglove/mcap/go/mcap/readopts"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -32,6 +31,14 @@ func prepInput(t *testing.T, w io.Writer, schema *mcap.Schema, channelID uint16,
 			LogTime:   uint64(i),
 		}))
 	}
+
+	assert.Nil(t, writer.WriteMetadata(&mcap.Metadata{
+		Name: "a",
+		Metadata: map[string]string{
+			"b": "c",
+		},
+	}))
+
 	assert.Nil(t, writer.Close())
 }
 
@@ -55,10 +62,10 @@ func TestMCAPMerging(t *testing.T) {
 		assert.Nil(t, merger.mergeInputs(output, inputs))
 
 		// output should now be a well-formed mcap
-		reader, err := mcap.NewReader(output)
+		reader, err := mcap.NewReader(bytes.NewReader(output.Bytes()))
 		assert.Nil(t, err)
 		assert.Equal(t, reader.Header().Profile, "testprofile")
-		it, err := reader.Messages(readopts.UsingIndex(false))
+		it, err := reader.Messages(mcap.UsingIndex(false))
 		assert.Nil(t, err)
 
 		messages := make(map[string]int)
@@ -70,6 +77,16 @@ func TestMCAPMerging(t *testing.T) {
 		assert.Equal(t, 100, messages["/foo"])
 		assert.Equal(t, 100, messages["/bar"])
 		assert.Equal(t, 100, messages["/baz"])
+
+		// check we got 3 parsable metadatas
+		info, err := reader.Info()
+		assert.Nil(t, err)
+		assert.Equal(t, 3, len(info.MetadataIndexes))
+		for _, idx := range info.MetadataIndexes {
+			_, err := reader.GetMetadata(idx.Offset)
+			assert.Nil(t, err)
+		}
+
 		reader.Close()
 	}
 }
@@ -155,7 +172,7 @@ func TestMultiChannelInput(t *testing.T) {
 	assert.Nil(t, err)
 	defer reader.Close()
 	assert.Equal(t, reader.Header().Profile, "testprofile")
-	it, err := reader.Messages(readopts.UsingIndex(false))
+	it, err := reader.Messages(mcap.UsingIndex(false))
 	assert.Nil(t, err)
 	messages := make(map[string]int)
 	err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
@@ -184,7 +201,7 @@ func TestSchemalessChannelInput(t *testing.T) {
 	reader, err := mcap.NewReader(output)
 	assert.Nil(t, err)
 	assert.Equal(t, reader.Header().Profile, "testprofile")
-	it, err := reader.Messages(readopts.UsingIndex(false))
+	it, err := reader.Messages(mcap.UsingIndex(false))
 	assert.Nil(t, err)
 	messages := make(map[string]int)
 	schemaIDs := make(map[uint16]int)
@@ -237,7 +254,7 @@ func TestMultipleSchemalessChannelSingleInput(t *testing.T) {
 	reader, err := mcap.NewReader(output)
 	assert.Nil(t, err)
 	assert.Equal(t, reader.Header().Profile, "testprofile")
-	it, err := reader.Messages(readopts.UsingIndex(false))
+	it, err := reader.Messages(mcap.UsingIndex(false))
 	assert.Nil(t, err)
 	messages := make(map[string]int)
 	schemaIDs := make(map[uint16]int)

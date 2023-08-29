@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/foxglove/mcap/go/mcap/readopts"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,22 +43,22 @@ var rangeIndexHeapTestItems = []rangeIndex{
 func TestMessageOrdering(t *testing.T) {
 	cases := []struct {
 		assertion          string
-		order              readopts.ReadOrder
+		order              ReadOrder
 		expectedIndexOrder []int
 	}{
 		{
 			assertion:          "read time order forwards",
-			order:              readopts.LogTimeOrder,
+			order:              LogTimeOrder,
 			expectedIndexOrder: []int{0, 1, 2, 3},
 		},
 		{
 			assertion:          "read time order backwards",
-			order:              readopts.ReverseLogTimeOrder,
+			order:              ReverseLogTimeOrder,
 			expectedIndexOrder: []int{3, 0, 2, 1},
 		},
 		{
 			assertion:          "read file order",
-			order:              readopts.FileOrder,
+			order:              FileOrder,
 			expectedIndexOrder: []int{0, 2, 1, 3},
 		},
 	}
