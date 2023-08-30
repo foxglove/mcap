@@ -65,11 +65,12 @@ int main(int argc, char** argv) {
                                 std::chrono::system_clock::now().time_since_epoch())
                                 .count();
 
-  for (uint64_t frame_index = 0; frame_index < NUM_FRAMES; ++frame_index) {
-    mcap::Timestamp frameTime = startTime + (frame_index * 100 * NS_PER_MS);
+  for (uint32_t frame_index = 0; frame_index < NUM_FRAMES; ++frame_index) {
+    mcap::Timestamp frameTime = startTime + (static_cast<uint64_t>(frame_index) * 100 * NS_PER_MS);
 
     auto contentJson = nlohmann::json::object();
-    float p = (2.0 * 2.0 * M_PI * float(frame_index)) / float(NUM_FRAMES);
+    float p = static_cast<float>((2.0 * 2.0 * M_PI * static_cast<double>(frame_index)) /
+                                 static_cast<double>(NUM_FRAMES));
     contentJson["x"] = sin(p);
     contentJson["y"] = cos(p);
     std::string serialized = contentJson.dump();
