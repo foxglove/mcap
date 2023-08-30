@@ -253,6 +253,7 @@ public final class MCAPWriter {
 
   public func end() async {
     await _closeChunk()
+    await _flush()
     DataEnd(dataSectionCRC: runningCRC.final).serialize(to: &buffer)
 
     await _flush()
