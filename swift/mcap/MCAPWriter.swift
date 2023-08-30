@@ -161,6 +161,9 @@ public final class MCAPWriter {
       }
     } else {
       message.serialize(to: &buffer)
+      if buffer.count >= options.chunkSize {
+        await _flush()
+      }
     }
   }
 
@@ -219,6 +222,7 @@ public final class MCAPWriter {
 
     let chunkStartOffset = _position()
     chunk.serialize(to: &buffer)
+    await _flush()
     let messageIndexStartOffset = _position()
 
     var messageIndexOffsets: [ChannelID: UInt64] = [:]
@@ -249,7 +253,6 @@ public final class MCAPWriter {
 
   public func end() async {
     await _closeChunk()
-    await _flush()
     DataEnd(dataSectionCRC: runningCRC.final).serialize(to: &buffer)
 
     await _flush()
