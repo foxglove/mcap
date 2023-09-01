@@ -1207,7 +1207,7 @@ mod test {
     fn test_read_record_from_slice_parses_for_big_enough_records() {
         let res = read_record_from_slice(&mut [0_u8; 9].as_slice());
         assert!(res.is_ok());
-        // Not a very strong test, but we're not testing that it parses for buffer size of 10 here
+        // Not a very strong test, but we are only testing that it checks the buffer size correctly
         assert!(matches!(res, Ok(Record::Unknown { opcode: _, data: _ })));
     }
 }
