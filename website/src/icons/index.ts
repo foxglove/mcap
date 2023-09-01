@@ -2,6 +2,8 @@ import ArmyWoman1 from "./army-woman-1.svg";
 import ChatTranslate from "./chat-translate.svg";
 import AndurilLight from "./companies/anduril-color.svg";
 import AndurilDark from "./companies/anduril-white.svg";
+import ApexLight from "./companies/apex-color.svg";
+import ApexDark from "./companies/apex-white.svg";
 import CocoLight from "./companies/coco-color.svg";
 import CocoDark from "./companies/coco-white.svg";
 import NorLabLight from "./companies/norlab-color.svg";
@@ -25,6 +27,11 @@ const Logos = [
     href: "https://www.anduril.com/",
     LightModeLogo: AndurilLight,
     DarkModeLogo: AndurilDark,
+  },
+  {
+    href: "https://www.apex.ai/",
+    LightModeLogo: ApexLight,
+    DarkModeLogo: ApexDark,
   },
   {
     href: "https://cocodelivery.com/",
