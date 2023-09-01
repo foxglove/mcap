@@ -118,7 +118,7 @@ impl<'a> Iterator for LinearReader<'a> {
 
 /// Read a record and advance the slice
 fn read_record_from_slice<'a>(buf: &mut &'a [u8]) -> McapResult<records::Record<'a>> {
-    if buf.len() < 5 {
+    if buf.len() < (size_of::<u64>() + size_of::<u8>()) {
         warn!("Malformed MCAP - not enough space for record + length!");
         return Err(McapError::UnexpectedEof);
     }
@@ -1192,5 +1192,22 @@ mod test {
         let mut reader =
             LinearReader::new_with_options(MAGIC, enum_set!(Options::IgnoreEndMagic)).unwrap();
         assert!(reader.next().is_none());
+    }
+
+    #[test]
+    fn test_read_record_from_slice_fails_on_too_short_chunks() {
+        let res = read_record_from_slice(&mut [0_u8; 4].as_slice());
+        assert!(matches!(res, Err(McapError::UnexpectedEof)));
+
+        let res = read_record_from_slice(&mut [0_u8; 8].as_slice());
+        assert!(matches!(res, Err(McapError::UnexpectedEof)));
+    }
+
+    #[test]
+    fn test_read_record_from_slice_parses_for_big_enough_records() {
+        let res = read_record_from_slice(&mut [0_u8; 9].as_slice());
+        assert!(res.is_ok());
+        // Not a very strong test, but we're not testing that it parses for buffer size of 10 here
+        assert!(matches!(res, Ok(Record::Unknown { opcode: _, data: _ })));
     }
 }
