@@ -142,7 +142,7 @@ overrides:
     ignoreRegExpList:
       - "0x[0-9a-f]+n?"
 
-  - filename: "(Pipfile|README.md|pyproject.toml)"
+  - filename: "(Pipfile|README.md|pyproject.toml|setup.cfg)"
     words:
       - pypi
       - pyright
@@ -151,6 +151,7 @@ overrides:
       - addopts
       - xfail
       - Pipfile
+      - pyyaml
 
   - filename: "python/**/*.rst"
     words:
