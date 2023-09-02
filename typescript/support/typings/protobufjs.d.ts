@@ -1,8 +1,8 @@
-import protobufjs from "protobufjs";
-import descriptor from "protobufjs/ext/descriptor";
+import protobufjs from "@foxglove/protobufjs";
+import descriptor from "@foxglove/protobufjs/ext/descriptor";
 
 // https://github.com/protobufjs/protobuf.js/issues/1499
-declare module "protobufjs" {
+declare module "@foxglove/protobufjs" {
   interface ReflectionObject {
     toDescriptor(
       protoVersion: string,

@@ -1,5 +1,5 @@
+import { FileDescriptorSet, IFileDescriptorSet } from "@foxglove/protobufjs/ext/descriptor";
 import fs from "fs";
-import { FileDescriptorSet, IFileDescriptorSet } from "protobufjs/ext/descriptor";
 
 import { parseChannel } from "./parseChannel";
 

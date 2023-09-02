@@ -1,5 +1,5 @@
-import protobufjs from "protobufjs";
-import { FileDescriptorSet } from "protobufjs/ext/descriptor";
+import protobufjs from "@foxglove/protobufjs";
+import { FileDescriptorSet } from "@foxglove/protobufjs/ext/descriptor";
 
 import { protobufDefinitionsToDatatypes, stripLeadingDot } from "./protobufDefinitionsToDatatypes";
 import { MessageDefinitionMap } from "./types";
@@ -61,7 +61,7 @@ export function parseProtobufSchema(
   const deserialize = (data: ArrayBufferView) => {
     return rootType.toObject(
       rootType.decode(new Uint8Array(data.buffer, data.byteOffset, data.byteLength)),
-      { defaults: true },
+      { defaults: true, longs: BigInt },
     );
   };
 

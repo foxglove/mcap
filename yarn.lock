@@ -2963,6 +2963,26 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@foxglove/protobufjs@npm:0.0.1-toobject-bigint.1":
+  version: 0.0.1-toobject-bigint.1
+  resolution: "@foxglove/protobufjs@npm:0.0.1-toobject-bigint.1"
+  dependencies:
+    "@protobufjs/aspromise": ^1.1.2
+    "@protobufjs/base64": ^1.1.2
+    "@protobufjs/codegen": ^2.0.4
+    "@protobufjs/eventemitter": ^1.1.0
+    "@protobufjs/fetch": ^1.1.0
+    "@protobufjs/float": ^1.0.2
+    "@protobufjs/inquire": ^1.1.0
+    "@protobufjs/path": ^1.1.2
+    "@protobufjs/pool": ^1.1.0
+    "@protobufjs/utf8": ^1.1.0
+    "@types/node": ">=13.7.0"
+    long: ^5.0.0
+  checksum: bce02c9a255116927fe327a7fce1dde8682ff0e742064a0120e7944d346385e28aecc315030c5560afc0208eaf1448d2a36b87f9f424531b7dd06e1b18100808
+  languageName: node
+  linkType: hard
+
 "@foxglove/rosbag@npm:0.2.3":
   version: 0.2.3
   resolution: "@foxglove/rosbag@npm:0.2.3"
@@ -3570,6 +3590,7 @@ __metadata:
   dependencies:
     "@foxglove/eslint-plugin": 0.21.0
     "@foxglove/message-definition": ^0.2.0
+    "@foxglove/protobufjs": 0.0.1-toobject-bigint.1
     "@foxglove/rosmsg": ^4.2.2
     "@foxglove/rosmsg-serialization": ^2.0.1
     "@foxglove/rosmsg2-serialization": ^2.0.2
@@ -3595,7 +3616,6 @@ __metadata:
     flatbuffers_reflection: ^0.0.6
     jest: 29.4.3
     prettier: 2.8.4
-    protobufjs: ^7.2.2
     ts-jest: 29.0.5
     typescript: 4.9.5
   languageName: unknown
@@ -12659,26 +12679,6 @@ __metadata:
     "@types/node": ">=13.7.0"
     long: ^5.0.0
   checksum: 9afa6de5fced0139a5180c063718508fac3ea734a9f1aceb99712367b15473a83327f91193f16b63540f9112b09a40912f5f0441a9b0d3f3c6a1c7f707d78249
-  languageName: node
-  linkType: hard
-
-"protobufjs@npm:^7.2.2":
-  version: 7.2.4
-  resolution: "protobufjs@npm:7.2.4"
-  dependencies:
-    "@protobufjs/aspromise": ^1.1.2
-    "@protobufjs/base64": ^1.1.2
-    "@protobufjs/codegen": ^2.0.4
-    "@protobufjs/eventemitter": ^1.1.0
-    "@protobufjs/fetch": ^1.1.0
-    "@protobufjs/float": ^1.0.2
-    "@protobufjs/inquire": ^1.1.0
-    "@protobufjs/path": ^1.1.2
-    "@protobufjs/pool": ^1.1.0
-    "@protobufjs/utf8": ^1.1.0
-    "@types/node": ">=13.7.0"
-    long: ^5.0.0
-  checksum: a952cdf2a5e5250c16ae651b570849b6f5b20a5475c3eef63ffb290ad239aa2916adfc1cc676f7fc93c69f48113df268761c0c246f7f023118c85bdd1a170044
   languageName: node
   linkType: hard
 
