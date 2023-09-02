@@ -48,14 +48,21 @@ func getDurationNs(start uint64, end uint64) float64 {
 	return float64(diff) * signMultiplier
 }
 
+func addRow(rows [][]string, field string, value string, args ...any) [][]string {
+	return append(rows, []string{field, fmt.Sprintf(value, args...)})
+}
+
 func printInfo(w io.Writer, info *mcap.Info) error {
 	buf := &bytes.Buffer{}
-	fmt.Fprintf(buf, "library: %s\n", info.Header.Library)
-	fmt.Fprintf(buf, "profile: %s\n", info.Header.Profile)
+
+	header := [][]string{
+		{"library:", info.Header.Library},
+		{"profile:", info.Header.Profile},
+	}
 	var start, end uint64
 	durationInSeconds := float64(0)
 	if info.Statistics != nil {
-		fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
+		header = addRow(header, "messages:", "%d", info.Statistics.MessageCount)
 		start = info.Statistics.MessageStartTime
 		end = info.Statistics.MessageEndTime
 		durationNs := getDurationNs(start, end)
@@ -65,18 +72,19 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		if math.Abs(durationNs) > math.MaxInt64 {
 			// time.Duration is an int64 nanosecond count under the hood, but end and start can
 			// be further apart than that.
-			fmt.Fprintf(buf, "duration: %.3fs\n", durationInSeconds)
+			header = addRow(header, "duration:", "%.3fs", durationInSeconds)
 		} else {
-			fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
+			header = addRow(header, "duration:", "%s", endtime.Sub(starttime))
 		}
 		if starttime.After(LongAgo) {
-			fmt.Fprintf(buf, "start: %s (%s)\n", starttime.Format(time.RFC3339Nano), decimalTime(starttime))
-			fmt.Fprintf(buf, "end: %s (%s)\n", endtime.Format(time.RFC3339Nano), decimalTime(endtime))
+			header = addRow(header, "start:", "%s (%s)", starttime.Format(time.RFC3339Nano), decimalTime(starttime))
+			header = addRow(header, "end:", "%s (%s)", endtime.Format(time.RFC3339Nano), decimalTime(endtime))
 		} else {
-			fmt.Fprintf(buf, "start: %s\n", decimalTime(starttime))
-			fmt.Fprintf(buf, "end: %s\n", decimalTime(endtime))
+			header = addRow(header, "start:", "%s", decimalTime(starttime))
+			header = addRow(header, "end:", "%s", decimalTime(endtime))
 		}
 	}
+	utils.FormatTable(buf, header)
 	if len(info.ChunkIndexes) > 0 {
 		compressionFormatStats := make(map[mcap.CompressionFormat]struct {
 			count            int

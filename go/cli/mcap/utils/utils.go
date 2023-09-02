@@ -111,6 +111,7 @@ func FormatTable(w io.Writer, rows [][]string) {
 	tw.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
 	tw.SetColumnSeparator("")
 	tw.AppendBulk(rows)
+	tw.SetNoWhiteSpace(true)
 	tw.Render()
 }
 
