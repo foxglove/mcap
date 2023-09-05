@@ -10,9 +10,12 @@ The MCAP command line tool is useful for working with MCAP files.
 
 ### Release binaries
 
-Download the latest binary for your platform from https://github.com/foxglove/mcap/releases, and mark it executable. For example:
+Use the asset links on https://github.com/foxglove/mcap/releases to download a release-specific binary for your platform (v0.0.34 for Linux AMD64 in the example below):
 
-    $ wget https://github.com/foxglove/mcap/releases/latest/download/mcap-linux-amd64 -O mcap
+    $ wget https://github.com/foxglove/mcap/releases/download/releases%2Fmcap-cli%2Fv0.0.34/mcap-linux-amd64 -O mcap
+
+Then, mark it executable:
+
     $ chmod +x mcap
 
 If required, move the binary onto your path.
