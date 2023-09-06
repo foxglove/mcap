@@ -135,9 +135,9 @@ export default function Home(): JSX.Element {
           <h2 className={styles.logosHeader}>
             Trusted by leading robotics teams
           </h2>
-          <div className={styles.logoGrid}>
+          <div className={styles.logoList}>
             {icons.Logos.map(({ href, LightModeLogo, DarkModeLogo }, idx) => (
-              <a key={idx} href={href}>
+              <a key={idx} href={href} className={styles.logoLink ?? ""}>
                 <LightModeLogo
                   role="img"
                   className={`${styles.logoIcon ?? ""} ${
