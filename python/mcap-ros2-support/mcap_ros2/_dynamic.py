@@ -259,6 +259,8 @@ def _read_complex_type(
             "__slots__": [field.name for field in msgdef.fields],
             "__repr__": __repr__,
             "__str__": __repr__,
+            "__eq__": __eq__,
+            "__ne__": __ne__,
             "_type": str(msgdef.base_type),
             "_full_text": str(msgdef),
         },
@@ -605,3 +607,25 @@ def _coerce_values(
 def __repr__(self: Any) -> str:
     fields = ", ".join(f"{field}={getattr(self, field)}" for field in self.__slots__)
     return f"{self.__name__}({fields})"
+
+
+def __eq__(self: Any, other: Any) -> bool:
+    if not isinstance(other, type(self)):
+        return False
+
+    if (
+        not hasattr(self, "__slots__")
+        or not hasattr(other, "__slots__")
+        or len(self.__slots__) != len(other.__slots__)
+    ):
+        return False
+
+    for attr in self.__slots__:
+        if getattr(self, attr) != getattr(other, attr):
+            return False
+
+    return True
+
+
+def __ne__(self: Any, other: Any) -> bool:
+    return not __eq__(self, other)
