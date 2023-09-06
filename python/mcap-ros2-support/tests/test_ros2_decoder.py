@@ -24,3 +24,16 @@ def test_ros2_decoder():
             assert ros_msg._full_text == "# std_msgs/Empty"
             count += 1
         assert count == 10
+
+
+def test_ros2_decoder_msg_eq():
+    with generate_sample_data() as m:
+        reader = make_reader(m, decoder_factories=[DecoderFactory()])
+
+        decoded_messages = reader.iter_decoded_messages("/chatter")
+        _, _, _, msg0 = next(decoded_messages)
+        _, _, _, msg1 = next(decoded_messages)
+        assert msg0.data == "string message 0"
+        assert msg1.data == "string message 1"
+        assert msg0 == msg0 and msg1 == msg1
+        assert msg0 != msg1 and msg1 != msg0
