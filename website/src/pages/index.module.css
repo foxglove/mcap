@@ -147,25 +147,20 @@
   background-color: #303846;
 }
 
-.logoGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 3rem 3rem;
-  text-align: center;
+.logoList {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.logoLink {
+  width: 33%;
 }
 
 .logoIcon {
-  display: inline-block;
-  height: auto;
   width: 100%;
   max-height: 50px;
-  margin: auto;
-}
-
-@media (min-width: 640px) {
-  .logoIcon {
-    width: 80%;
-  }
+  margin: 2rem;
 }
 
 [data-theme="light"] .darkMode {
