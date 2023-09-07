@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"sync"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
@@ -49,7 +50,8 @@ type Writer struct {
 
 	opts *WriterOptions
 
-	closed bool
+	closed  bool
+	onclose func()
 }
 
 // WriteHeader writes a header record to the output.
@@ -660,6 +662,9 @@ func (w *Writer) Close() error {
 			return fmt.Errorf("failed to flush active chunks: %w", err)
 		}
 	}
+	if w.onclose != nil {
+		w.onclose()
+	}
 	w.closed = true
 	err := w.WriteDataEnd(&DataEnd{
 		DataSectionCRC: w.w.Checksum(),
@@ -822,6 +827,22 @@ func encoderLevelFromZstd(level CompressionLevel) zstd.EncoderLevel {
 	}
 }
 
+var lz4WriterPool = sync.Pool{
+	New: func() interface{} {
+		writer := lz4.NewWriter(nil)
+		writer.Apply(lz4.BlockSizeOption(lz4.Block64Kb))
+		return writer
+	},
+}
+
+func getWriter() *lz4.Writer {
+	return lz4WriterPool.Get().(*lz4.Writer)
+}
+
+func putWriter(w *lz4.Writer) {
+	lz4WriterPool.Put(w)
+}
+
 // NewWriter returns a new MCAP writer.
 func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	writer := newWriteSizer(w, opts.IncludeCRC)
@@ -830,6 +851,8 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 			return nil, err
 		}
 	}
+
+	var onclose func()
 	compressed := bytes.Buffer{}
 	var compressedWriter *countingCRCWriter
 	if opts.Chunked {
@@ -842,10 +865,14 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 			}
 			compressedWriter = newCountingCRCWriter(zw, opts.IncludeCRC)
 		case CompressionLZ4:
+			lzw := getWriter()
+			lzw.Reset(&compressed)
 			level := encoderLevelFromLZ4(opts.CompressionLevel)
-			lzw := lz4.NewWriter(&compressed)
 			_ = lzw.Apply(lz4.CompressionLevelOption(level))
 			compressedWriter = newCountingCRCWriter(lzw, opts.IncludeCRC)
+			onclose = func() {
+				putWriter(lzw)
+			}
 		case CompressionNone:
 			compressedWriter = newCountingCRCWriter(bufCloser{&compressed}, opts.IncludeCRC)
 		default:
@@ -872,6 +899,7 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 			MessageStartTime:     0,
 			MessageEndTime:       0,
 		},
-		opts: opts,
+		opts:    opts,
+		onclose: onclose,
 	}, nil
 }
