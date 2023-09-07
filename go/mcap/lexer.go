@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"sync"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
@@ -302,6 +303,10 @@ func (l *Lexer) Close() {
 	if l.decoders.zstd != nil {
 		l.decoders.zstd.Close()
 	}
+
+	if l.decoders.lz4 != nil {
+		putReader(l.decoders.lz4)
+	}
 }
 
 type decoders struct {
@@ -347,9 +352,25 @@ func (l *Lexer) setZSTDDecoder(r io.Reader) error {
 	return nil
 }
 
+var lz4ReaderPool = sync.Pool{
+	New: func() interface{} {
+		return lz4.NewReader(nil)
+	},
+}
+
+func getReader() *lz4.Reader {
+	return lz4ReaderPool.Get().(*lz4.Reader)
+}
+
+func putReader(r *lz4.Reader) {
+	lz4ReaderPool.Put(r)
+}
+
 func (l *Lexer) setLZ4Decoder(r io.Reader) {
 	if l.decoders.lz4 == nil {
-		l.decoders.lz4 = lz4.NewReader(r)
+		decoder := getReader()
+		decoder.Reset(r)
+		l.decoders.lz4 = decoder
 	} else {
 		l.decoders.lz4.Reset(r)
 	}
