@@ -145,9 +145,9 @@ func TestCustomDecompressor(t *testing.T) {
 	)
 	lzr := lz4.NewReader(nil)
 	blockCount := 0
-	lzr.Apply(lz4.OnBlockDoneOption(func(size int) {
+	assert.Nil(t, lzr.Apply(lz4.OnBlockDoneOption(func(size int) {
 		blockCount++
-	}))
+	})))
 	lexer, err := NewLexer(bytes.NewReader(buf), &LexerOptions{
 		Decompressors: map[CompressionFormat]ResettableReader{
 			CompressionLZ4: lzr,

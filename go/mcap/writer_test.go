@@ -704,9 +704,9 @@ func TestBYOCompressor(t *testing.T) {
 	// example - custom lz4 settings
 	lzw := lz4.NewWriter(nil)
 	blockCount := 0
-	lzw.Apply(lz4.OnBlockDoneOption(func(size int) {
+	assert.Nil(t, lzw.Apply(lz4.OnBlockDoneOption(func(size int) {
 		blockCount++
-	}))
+	})))
 
 	writer, err := NewWriter(buf, &WriterOptions{
 		Chunked:     true,
