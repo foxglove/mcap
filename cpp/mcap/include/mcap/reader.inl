@@ -1588,8 +1588,7 @@ LinearMessageView::Iterator LinearMessageView::begin() {
   if (dataStart_ == dataEnd_ || !mcapReader_.dataSource()) {
     return end();
   }
-  return LinearMessageView::Iterator{mcapReader_, dataStart_, dataEnd_, readMessageOptions_,
-                                     onProblem_};
+  return LinearMessageView::Iterator{*this};
 }
 
 LinearMessageView::Iterator LinearMessageView::end() {
@@ -1598,37 +1597,27 @@ LinearMessageView::Iterator LinearMessageView::end() {
 
 // LinearMessageView::Iterator /////////////////////////////////////////////////
 
-LinearMessageView::Iterator::Iterator(McapReader& mcapReader, ByteOffset dataStart,
-                                      ByteOffset dataEnd,
-                                      const ReadMessageOptions& readMessageOptions,
-                                      const ProblemCallback& onProblem)
-    : impl_(std::make_unique<Impl>(mcapReader, dataStart, dataEnd, readMessageOptions, onProblem)) {
+LinearMessageView::Iterator::Iterator(LinearMessageView& view)
+    : impl_(std::make_unique<Impl>(view)) {
   if (!impl_->has_value()) {
     impl_ = nullptr;
   }
 }
 
-LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataStart,
-                                        ByteOffset dataEnd,
-                                        const ReadMessageOptions& readMessageOptions,
-                                        const ProblemCallback& onProblem)
-    : mcapReader_(mcapReader)
-    , readMessageOptions_(readMessageOptions)
-    , onProblem_(onProblem) {
-  auto optionsStatus = readMessageOptions_.validate();
-  if (!optionsStatus.ok()) {
-    onProblem(optionsStatus);
-  }
-  if (readMessageOptions_.readOrder == ReadMessageOptions::ReadOrder::FileOrder) {
-    recordReader_.emplace(*mcapReader.dataSource(), dataStart, dataEnd);
+LinearMessageView::Iterator::Impl::Impl(LinearMessageView& view) : view_(view) {
+  auto dataStart = view.dataStart_;
+  auto dataEnd = view.dataEnd_;
+  auto readMessageOptions = view.readMessageOptions_;
+  if (readMessageOptions.readOrder == ReadMessageOptions::ReadOrder::FileOrder) {
+    recordReader_.emplace(*(view_.mcapReader_.dataSource()), dataStart, dataEnd);
 
     recordReader_->onSchema = [this](const SchemaPtr schema, ByteOffset,
                                      std::optional<ByteOffset>) {
-      mcapReader_.schemas_.insert_or_assign(schema->id, schema);
+      view_.mcapReader_.schemas_.insert_or_assign(schema->id, schema);
     };
     recordReader_->onChannel = [this](const ChannelPtr channel, ByteOffset,
                                       std::optional<ByteOffset>) {
-      mcapReader_.channels_.insert_or_assign(channel->id, channel);
+      view_.mcapReader_.channels_.insert_or_assign(channel->id, channel);
     };
     recordReader_->onMessage = [this](const Message& message, ByteOffset messageStartOffset,
                                       std::optional<ByteOffset> chunkStartOffset) {
@@ -1638,7 +1627,7 @@ LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataS
       onMessage(message, offset);
     };
   } else {
-    indexedMessageReader_.emplace(mcapReader, readMessageOptions_,
+    indexedMessageReader_.emplace(view_.mcapReader_, readMessageOptions,
                                   std::bind(&LinearMessageView::Iterator::Impl::onMessage, this,
                                             std::placeholders::_1, std::placeholders::_2));
   }
@@ -1652,15 +1641,15 @@ LinearMessageView::Iterator::Impl::Impl(McapReader& mcapReader, ByteOffset dataS
  */
 void LinearMessageView::Iterator::Impl::onMessage(const Message& message, RecordOffset offset) {
   // make sure the message is within the expected time range
-  if (message.logTime < readMessageOptions_.startTime) {
+  if (message.logTime < view_.readMessageOptions_.startTime) {
     return;
   }
-  if (message.logTime >= readMessageOptions_.endTime) {
+  if (message.logTime >= view_.readMessageOptions_.endTime) {
     return;
   }
-  auto maybeChannel = mcapReader_.channel(message.channelId);
+  auto maybeChannel = view_.mcapReader_.channel(message.channelId);
   if (!maybeChannel) {
-    onProblem_(
+    view_.onProblem_(
       Status{StatusCode::InvalidChannelId,
              internal::StrCat("message at log_time ", message.logTime, " (seq ", message.sequence,
                               ") references missing channel id ", message.channelId)});
@@ -1669,14 +1658,14 @@ void LinearMessageView::Iterator::Impl::onMessage(const Message& message, Record
 
   auto& channel = *maybeChannel;
   // make sure the message is on the right topic
-  if (readMessageOptions_.topicFilter && !readMessageOptions_.topicFilter(channel.topic)) {
+  if (view_.readMessageOptions_.topicFilter && !view_.readMessageOptions_.topicFilter(channel.topic)) {
     return;
   }
   SchemaPtr maybeSchema;
   if (channel.schemaId != 0) {
-    maybeSchema = mcapReader_.schema(channel.schemaId);
+    maybeSchema = view_.mcapReader_.schema(channel.schemaId);
     if (!maybeSchema) {
-      onProblem_(Status{StatusCode::InvalidSchemaId,
+      view_.onProblem_(Status{StatusCode::InvalidSchemaId,
                         internal::StrCat("channel ", channel.id, " (", channel.topic,
                                          ") references missing schema id ", channel.schemaId)});
       return;
@@ -1698,7 +1687,7 @@ void LinearMessageView::Iterator::Impl::increment() {
       // Surface any problem that may have occurred while reading
       auto& status = recordReader_->status();
       if (!status.ok()) {
-        onProblem_(status);
+        view_.onProblem_(status);
       }
 
       if (!found) {
@@ -1714,7 +1703,7 @@ void LinearMessageView::Iterator::Impl::increment() {
         // alert with onProblem_.
         auto status = indexedMessageReader_->status();
         if (!status.ok()) {
-          onProblem_(status);
+          view_.onProblem_(status);
         }
         indexedMessageReader_ = std::nullopt;
         return;
@@ -1740,6 +1729,7 @@ LinearMessageView::Iterator::pointer LinearMessageView::Iterator::operator->() c
 }
 
 LinearMessageView::Iterator& LinearMessageView::Iterator::operator++() {
+  begun_ = true;
   impl_->increment();
   if (!impl_->has_value()) {
     impl_ = nullptr;
@@ -1752,7 +1742,17 @@ void LinearMessageView::Iterator::operator++(int) {
 }
 
 bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
-  return a.impl_ == b.impl_;
+  if (a.impl_ == nullptr || b.impl_ == nullptr) {
+    // special case for Iterator::end() == Iterator::end()
+    return a.impl_ == b.impl_;
+  }
+  if (!a.begun_ && !b.begun_) {
+    // special case for Iterator::begin() == Iterator::begin()
+    // comparing iterators to the beginning of the same view should return true.
+    return &(a.impl_->view_) == &(b.impl_->view_);
+  }
+  // all other cases return false.
+  return false;
 }
 
 bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {
