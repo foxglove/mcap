@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"crypto/md5"
 	"fmt"
+	"io"
 	"testing"
 	"time"
 
+	"github.com/pierrec/lz4/v4"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -677,4 +679,65 @@ func TestWriteAttachment(t *testing.T) {
 			assert.ErrorIs(t, err, c.err)
 		})
 	}
+}
+
+func assertReadable(t *testing.T, rs io.ReadSeeker) {
+	reader, err := NewReader(rs)
+	assert.Nil(t, err)
+
+	_, err = reader.Info()
+	assert.Nil(t, err)
+
+	it, err := reader.Messages()
+	assert.Nil(t, err)
+	for {
+		_, _, _, err := it.Next(nil)
+		if err != nil {
+			assert.ErrorIs(t, err, io.EOF)
+			break
+		}
+	}
+}
+
+func TestBYOCompressor(t *testing.T) {
+	buf := &bytes.Buffer{}
+	// example - custom lz4 settings
+	lzw := lz4.NewWriter(nil)
+	blockCount := 0
+	lzw.Apply(lz4.OnBlockDoneOption(func(size int) {
+		blockCount++
+	}))
+
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   1024,
+		Compressor:  lzw,
+		Compression: "lz4",
+	})
+	assert.Nil(t, err)
+
+	assert.Nil(t, writer.WriteHeader(&Header{}))
+	assert.Nil(t, writer.WriteSchema(&Schema{
+		ID:       1,
+		Name:     "schema",
+		Encoding: "ros1msg",
+		Data:     []byte{},
+	}))
+	assert.Nil(t, writer.WriteChannel(&Channel{
+		ID:              0,
+		SchemaID:        1,
+		Topic:           "/foo",
+		MessageEncoding: "ros1msg",
+	}))
+
+	for i := 0; i < 100; i++ {
+		assert.Nil(t, writer.WriteMessage(&Message{
+			ChannelID: 0,
+			Sequence:  0,
+			LogTime:   uint64(i),
+		}))
+	}
+	assert.Nil(t, writer.Close())
+	assertReadable(t, bytes.NewReader(buf.Bytes()))
+	assert.Positive(t, blockCount)
 }

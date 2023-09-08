@@ -788,6 +788,10 @@ type WriterOptions struct {
 	// SkipMagic causes the writer to skip writing magic bytes at the start of
 	// the file. This may be useful for writing a partial section of records.
 	SkipMagic bool
+
+	// Compressor is a custom compressor. If supplied it will take precedence
+	// over the built-in ones.
+	Compressor ResettableWriteCloser
 }
 
 // Convert an MCAP compression level to the corresponding lz4.CompressionLevel.
@@ -833,20 +837,26 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	compressed := bytes.Buffer{}
 	var compressedWriter *countingCRCWriter
 	if opts.Chunked {
-		switch opts.Compression {
-		case CompressionZSTD:
+		switch {
+		case opts.Compressor != nil: // must be top
+			if opts.Compression == "" {
+				return nil, fmt.Errorf("custom compressor requires compression format")
+			}
+			opts.Compressor.Reset(&compressed)
+			compressedWriter = newCountingCRCWriter(opts.Compressor, opts.IncludeCRC)
+		case opts.Compression == CompressionZSTD:
 			level := encoderLevelFromZstd(opts.CompressionLevel)
 			zw, err := zstd.NewWriter(&compressed, zstd.WithEncoderLevel(level))
 			if err != nil {
 				return nil, err
 			}
 			compressedWriter = newCountingCRCWriter(zw, opts.IncludeCRC)
-		case CompressionLZ4:
+		case opts.Compression == CompressionLZ4:
 			level := encoderLevelFromLZ4(opts.CompressionLevel)
 			lzw := lz4.NewWriter(&compressed)
 			_ = lzw.Apply(lz4.CompressionLevelOption(level))
 			compressedWriter = newCountingCRCWriter(lzw, opts.IncludeCRC)
-		case CompressionNone:
+		case opts.Compression == CompressionNone:
 			compressedWriter = newCountingCRCWriter(bufCloser{&compressed}, opts.IncludeCRC)
 		default:
 			return nil, fmt.Errorf("unsupported compression")

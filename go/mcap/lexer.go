@@ -158,6 +158,7 @@ type Lexer struct {
 	maxRecordSize            int
 	maxDecompressedChunkSize int
 	attachmentCallback       func(*AttachmentReader) error
+	decompressors            map[CompressionFormat]ResettableReader
 }
 
 // Next returns the next token from the lexer as a byte array. The result will
@@ -302,6 +303,11 @@ func (l *Lexer) Close() {
 	if l.decoders.zstd != nil {
 		l.decoders.zstd.Close()
 	}
+	for _, decompressor := range l.decompressors {
+		if closer, ok := decompressor.(io.Closer); ok {
+			closer.Close()
+		}
+	}
 }
 
 type decoders struct {
@@ -414,15 +420,19 @@ func loadChunk(l *Lexer, recordLen uint64) error {
 
 	// remaining bytes in the record are the chunk data
 	lr := io.LimitReader(l.reader, int64(recordsLength))
-	switch compression {
-	case CompressionNone:
+	switch {
+	case l.decompressors[compression] != nil: // must be top
+		decoder := l.decompressors[compression]
+		decoder.Reset(lr)
+		l.reader = decoder
+	case compression == CompressionNone:
 		l.reader = lr
-	case CompressionZSTD:
+	case compression == CompressionZSTD:
 		err = l.setZSTDDecoder(lr)
 		if err != nil {
 			return err
 		}
-	case CompressionLZ4:
+	case compression == CompressionLZ4:
 		l.setLZ4Decoder(lr)
 	default:
 		return fmt.Errorf("unsupported compression: %s", string(compression))
@@ -498,6 +508,12 @@ type LexerOptions struct {
 	MaxRecordSize int
 	// AttachmentCallback is a function to execute on attachments encountered in the file.
 	AttachmentCallback func(*AttachmentReader) error
+	// Decompressors are custom decompressors. Chunks matching the supplied
+	// compression format will be decompressed with the provided
+	// ResettableReader instead of the default implementation. If the
+	// ResettableReader also implements io.Closer, Close will be called on close
+	// of the reader.
+	Decompressors map[CompressionFormat]ResettableReader
 }
 
 // NewLexer returns a new lexer for the given reader.
@@ -505,6 +521,7 @@ func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 	var maxRecordSize, maxDecompressedChunkSize int
 	var computeAttachmentCRCs, validateChunkCRCs, emitChunks, emitInvalidChunks, skipMagic bool
 	var attachmentCallback func(*AttachmentReader) error
+	var decompressors map[CompressionFormat]ResettableReader
 	if len(opts) > 0 {
 		validateChunkCRCs = opts[0].ValidateChunkCRCs
 		computeAttachmentCRCs = opts[0].ComputeAttachmentCRCs
@@ -514,6 +531,7 @@ func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 		maxRecordSize = opts[0].MaxRecordSize
 		maxDecompressedChunkSize = opts[0].MaxDecompressedChunkSize
 		attachmentCallback = opts[0].AttachmentCallback
+		decompressors = opts[0].Decompressors
 	}
 	if !skipMagic {
 		err := validateMagic(r)
@@ -521,6 +539,7 @@ func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 			return nil, err
 		}
 	}
+
 	return &Lexer{
 		basereader:               r,
 		reader:                   r,
@@ -532,5 +551,6 @@ func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 		maxRecordSize:            maxRecordSize,
 		maxDecompressedChunkSize: maxDecompressedChunkSize,
 		attachmentCallback:       attachmentCallback,
+		decompressors:            decompressors,
 	}, nil
 }
