@@ -476,6 +476,37 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
 
     reader.close();
   }
+
+  SECTION("IteratorComparison") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    writer.open(buffer, mcap::McapWriterOptions("test"));
+    mcap::Schema schema("schema", "schemaEncoding", "ab");
+    writer.addSchema(schema);
+    mcap::Channel channel("topic", "messageEncoding", schema.id);
+    writer.addChannel(channel);
+    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    WriteMsg(writer, channel.id, 0, 2, 1, data);
+    WriteMsg(writer, channel.id, 1, 4, 3, data);
+    writer.close();
+
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+
+    auto view = reader.readMessages();
+    auto it = view.begin();
+    REQUIRE(it != view.end());
+    REQUIRE(it == view.begin());
+    ++it;
+    REQUIRE(it != view.end());
+    REQUIRE(it != view.begin());
+    ++it;
+    REQUIRE(it == view.end());
+    REQUIRE(it != view.begin());
+
+    reader.close();
+  }
 }
 
 /**
