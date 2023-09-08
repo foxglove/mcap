@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
@@ -129,13 +130,17 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			}
 		}
 	}
+
+	maxChanIDWidth := digits(uint64(chanIDs[len(chanIDs)-1])) + 3
 	for _, chanID := range chanIDs {
 		channel := info.Channels[chanID]
 		schema := info.Schemas[channel.SchemaID]
 		channelMessageCount := info.Statistics.ChannelMessageCounts[chanID]
 		frequency := 1e9 * float64(channelMessageCount) / float64(end-start)
+		width := digits(uint64(chanID)) + 2
+		padding := strings.Repeat(" ", maxChanIDWidth-width)
 		row := []string{
-			fmt.Sprintf("\t(%d) %s", channel.ID, channel.Topic),
+			fmt.Sprintf("\t(%d)%s%s", channel.ID, padding, channel.Topic),
 		}
 		if info.Statistics != nil {
 			row = append(row, fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency))
