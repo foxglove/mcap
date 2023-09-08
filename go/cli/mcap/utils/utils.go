@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
 
 	"cloud.google.com/go/storage"
 	"github.com/foxglove/mcap/go/mcap"
@@ -104,15 +106,21 @@ func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.
 }
 
 func FormatTable(w io.Writer, rows [][]string) {
-	tw := tablewriter.NewWriter(w)
+	buf := &bytes.Buffer{}
+	tw := tablewriter.NewWriter(buf)
 	tw.SetBorder(false)
 	tw.SetAutoWrapText(false)
 	tw.SetAlignment(tablewriter.ALIGN_LEFT)
 	tw.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
 	tw.SetColumnSeparator("")
 	tw.AppendBulk(rows)
-	tw.SetNoWhiteSpace(true)
 	tw.Render()
+	// This tablewriter puts a leading space on the lines for some reason, so
+	// remove it.
+	scanner := bufio.NewScanner(buf)
+	for scanner.Scan() {
+		fmt.Fprintln(w, strings.TrimLeft(scanner.Text(), " "))
+	}
 }
 
 func inferWriterOptions(info *mcap.Info) *mcap.WriterOptions {
