@@ -1751,8 +1751,8 @@ bool operator==(const LinearMessageView::Iterator& a, const LinearMessageView::I
     // comparing iterators to the beginning of the same view should return true.
     return &(a.impl_->view_) == &(b.impl_->view_);
   }
-  // all other cases return false.
-  return false;
+  // In all other cases, compare by object identity.
+  return &(a) == &(b);
 }
 
 bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::Iterator& b) {

@@ -498,13 +498,32 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
     auto it = view.begin();
     REQUIRE(it != view.end());
     REQUIRE(it == view.begin());
+    REQUIRE(it == it);
     ++it;
     REQUIRE(it != view.end());
     REQUIRE(it != view.begin());
+    REQUIRE(it == it);
     ++it;
     REQUIRE(it == view.end());
     REQUIRE(it != view.begin());
+    REQUIRE(it == it);
 
+    reader.close();
+  }
+  SECTION("IteratorComparisonEmpty") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    writer.open(buffer, mcap::McapWriterOptions("test"));
+    writer.close();
+
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+
+    auto view = reader.readMessages();
+    auto it = view.begin();
+    REQUIRE(it == view.begin());
+    REQUIRE(it == view.end());
     reader.close();
   }
 }
