@@ -232,6 +232,55 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         Ok(next_channel_id)
     }
 
+    /// Adds a channel (and its provided schema, if any), specifying its ID.
+    ///
+    /// Useful to preserve channel IDs when copying from an existing MCAP.
+    pub fn add_channel_with_id(&mut self, chan: &Channel<'a>, id: u16) -> McapResult<()> {
+        let schema_id = match &chan.schema {
+            Some(s) => self.add_schema(s)?,
+            None => 0,
+        };
+        for (known_channel, known_id) in &(self.channels) {
+            if id == *known_id {
+                if chan == known_channel {
+                    // tried adding the same channel twice with the same ID, not an error
+                    return Ok(());
+                }
+                return Err(McapError::ConflictingChannelIds(id));
+            }
+        }
+        assert!(self
+            .channels
+            .insert(chan.clone(), id)
+            .is_none());
+        self.chunkin_time()?
+            .write_channel(id, schema_id, chan)?;
+        Ok(())
+    }
+
+    /// Adds a schema separately from adding a channel.
+    ///
+    /// Useful to preserve schema IDs when copying from an existing MCAP.
+    pub fn add_schema_with_id(&mut self, schema: &Schema<'a>, id: u16) -> McapResult<()> {
+        if id == 0 {
+            return Err(McapError::UnexpectedSchemaIdZero);
+        }
+        for (known_schema, known_id) in &(self.schemas) {
+            if id == *known_id {
+                if schema == known_schema {
+                    return Ok(());
+                }
+                return Err(McapError::ConflictingSchemaIds(id));
+            }
+        }
+        assert!(self
+            .schemas
+            .insert(schema.clone(), id)
+            .is_none());
+
+        self.chunkin_time()?.write_schema(id, schema)
+    }
+
     fn add_schema(&mut self, schema: &Schema<'a>) -> McapResult<u16> {
         if let Some(id) = self.schemas.get(schema) {
             return Ok(*id);

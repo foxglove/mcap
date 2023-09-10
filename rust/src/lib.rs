@@ -109,6 +109,12 @@ pub enum McapError {
     ConflictingChannels(String),
     #[error("Schema `{0}` has mulitple records that don't match.")]
     ConflictingSchemas(String),
+    #[error("Cannot add multiple schemas with id `{0}`")]
+    ConflictingSchemaIds(u16),
+    #[error("Cannot add multiple channels with id `{0}`")]
+    ConflictingChannelIds(u16),
+    #[error("Schema cannot have ID 0")]
+    UnexpectedSchemaIdZero,
     #[error("Record parse failed")]
     Parse(#[from] binrw::Error),
     #[error("I/O error from writing, or reading a compression stream")]

@@ -14,7 +14,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
         .expect("Couldn't create writer");
 
     let mut channels = HashMap::<u16, mcap::Channel>::new();
-    let mut schemas = HashMap::<u64, mcap::Schema>::new();
+    let mut schemas = HashMap::<u16, mcap::Schema>::new();
 
     for record in &spec.records {
         match record.record_type.as_str() {
@@ -35,7 +35,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
             }
             "Channel" => {
                 let id = record.get_field_u16("id");
-                let schema_id = record.get_field_u64("schema_id");
+                let schema_id = record.get_field_u16("schema_id");
                 let topic = record.get_field_str("topic");
                 let message_encoding = record.get_field_str("message_encoding");
                 let schema = schemas.get(&schema_id).expect("Missing schema");
@@ -46,7 +46,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                     metadata: std::collections::BTreeMap::new(),
                 };
                 writer
-                    .add_channel(&channel)
+                    .add_channel_with_id(&channel, id)
                     .expect("Couldn't write channel");
                 channels.insert(id, channel);
             }
@@ -104,13 +104,16 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
             "Schema" => {
                 let name = record.get_field_str("name");
                 let encoding = record.get_field_str("encoding");
-                let id = record.get_field_u64("id");
+                let id = record.get_field_u16("id");
                 let data: Vec<u8> = record.get_field_data(&"data");
                 let schema = mcap::Schema {
                     name: name.to_owned(),
                     encoding: encoding.to_owned(),
                     data: Cow::from(data),
                 };
+                writer
+                    .add_schema_with_id(&schema, id)
+                    .expect("Couldn't write schema");
                 schemas.insert(id, schema);
             }
             "Statistics" => {
