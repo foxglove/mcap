@@ -178,6 +178,8 @@ pub struct Writer<'a, W: Write + Seek> {
     /// Message start and end time, or None if there are no messages yet.
     message_bounds: Option<(u64, u64)>,
     channel_message_counts: BTreeMap<u16, u64>,
+    highest_channel_id: u16,
+    highest_schema_id: u16,
 }
 
 impl<'a, W: Write + Seek> Writer<'a, W> {
@@ -206,6 +208,10 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             metadata_indexes: Vec::new(),
             message_bounds: None,
             channel_message_counts: BTreeMap::new(),
+            highest_channel_id: 0,
+            // Schema IDs cannot be zero, that's the sentinel value in a channel
+            // for "no schema"
+            highest_schema_id: 1,
         })
     }
 
@@ -222,7 +228,8 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             return Ok(*id);
         }
 
-        let next_channel_id = self.channels.len() as u16;
+        let next_channel_id = self.highest_channel_id + 1;
+        self.highest_channel_id = next_channel_id;
         assert!(self
             .channels
             .insert(chan.clone(), next_channel_id)
@@ -253,6 +260,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             .channels
             .insert(chan.clone(), id)
             .is_none());
+        self.highest_channel_id = std::cmp::max(self.highest_channel_id, id);
         self.chunkin_time()?
             .write_channel(id, schema_id, chan)?;
         Ok(())
@@ -277,6 +285,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             .schemas
             .insert(schema.clone(), id)
             .is_none());
+        self.highest_schema_id = std::cmp::max(self.highest_schema_id, id);
 
         self.chunkin_time()?.write_schema(id, schema)
     }
@@ -286,9 +295,8 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             return Ok(*id);
         }
 
-        // Schema IDs cannot be zero, that's the sentinel value in a channel
-        // for "no schema"
-        let next_schema_id = self.schemas.len() as u16 + 1;
+        let next_schema_id = self.highest_schema_id + 1;
+        self.highest_schema_id = next_schema_id;
         assert!(self
             .schemas
             .insert(schema.clone(), next_schema_id)
