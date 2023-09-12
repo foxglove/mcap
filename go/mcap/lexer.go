@@ -423,7 +423,10 @@ func loadChunk(l *Lexer, recordLen uint64) error {
 	switch {
 	case l.decompressors[compression] != nil: // must be top
 		decoder := l.decompressors[compression]
-		decoder.Reset(lr)
+		err = decoder.Reset(lr)
+		if err != nil {
+			return fmt.Errorf("failed to reset custom decompressor: %w", err)
+		}
 		l.reader = decoder
 	case compression == CompressionNone:
 		l.reader = lr

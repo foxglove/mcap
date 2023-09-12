@@ -5,12 +5,6 @@ import (
 	"io"
 )
 
-// resettableWriteCloser is a WriteCloser that supports a Reset method.
-type resettableWriteCloser interface {
-	io.WriteCloser
-	Reset(io.Writer)
-}
-
 type bufCloser struct {
 	b *bytes.Buffer
 }

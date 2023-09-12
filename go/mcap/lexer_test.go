@@ -135,6 +135,15 @@ func TestBadMagic(t *testing.T) {
 	}
 }
 
+type lzreader struct {
+	*lz4.Reader
+}
+
+func (l lzreader) Reset(r io.Reader) error {
+	l.Reader.Reset(r)
+	return nil
+}
+
 func TestCustomDecompressor(t *testing.T) {
 	buf := file(
 		header(),
@@ -150,7 +159,7 @@ func TestCustomDecompressor(t *testing.T) {
 	})))
 	lexer, err := NewLexer(bytes.NewReader(buf), &LexerOptions{
 		Decompressors: map[CompressionFormat]ResettableReader{
-			CompressionLZ4: lzr,
+			CompressionLZ4: lzreader{lzr},
 		},
 	})
 	assert.Nil(t, err)

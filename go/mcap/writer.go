@@ -446,6 +446,7 @@ func (w *Writer) flushActiveChunk() error {
 	if err != nil {
 		return err
 	}
+
 	offset += putUint64(w.chunk[offset:], uint64(msglen))
 	offset += putUint64(w.chunk[offset:], start)
 	offset += putUint64(w.chunk[offset:], end)
@@ -740,6 +741,33 @@ const (
 	CompressionLevelBest
 )
 
+type CustomCompressor interface {
+	Compressor() ResettableWriteCloser
+	Compression() CompressionFormat
+}
+
+// NewCustomCompressor returns a structure that may be supplied to writer
+// options as a custom chunk compressor.
+func NewCustomCompressor(compression CompressionFormat, compressor ResettableWriteCloser) CustomCompressor {
+	return &customCompressor{
+		compression: compression,
+		compressor:  compressor,
+	}
+}
+
+type customCompressor struct {
+	compression CompressionFormat
+	compressor  ResettableWriteCloser
+}
+
+func (c *customCompressor) Compressor() ResettableWriteCloser {
+	return c.compressor
+}
+
+func (c *customCompressor) Compression() CompressionFormat {
+	return c.compression
+}
+
 // WriterOptions are options for the MCAP Writer.
 type WriterOptions struct {
 	// IncludeCRC specifies whether to compute CRC checksums in the output.
@@ -791,7 +819,7 @@ type WriterOptions struct {
 
 	// Compressor is a custom compressor. If supplied it will take precedence
 	// over the built-in ones.
-	Compressor ResettableWriteCloser
+	Compressor CustomCompressor
 }
 
 // Convert an MCAP compression level to the corresponding lz4.CompressionLevel.
@@ -839,11 +867,14 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 	if opts.Chunked {
 		switch {
 		case opts.Compressor != nil: // must be top
-			if opts.Compression == "" {
+			// override the compression option. We can't check for a mismatch here
+			// because "none compression" is an empty string.
+			opts.Compression = opts.Compressor.Compression()
+			if opts.Compressor.Compression() == "" {
 				return nil, fmt.Errorf("custom compressor requires compression format")
 			}
-			opts.Compressor.Reset(&compressed)
-			compressedWriter = newCountingCRCWriter(opts.Compressor, opts.IncludeCRC)
+			opts.Compressor.Compressor().Reset(&compressed)
+			compressedWriter = newCountingCRCWriter(opts.Compressor.Compressor(), opts.IncludeCRC)
 		case opts.Compression == CompressionZSTD:
 			level := encoderLevelFromZstd(opts.CompressionLevel)
 			zw, err := zstd.NewWriter(&compressed, zstd.WithEncoderLevel(level))

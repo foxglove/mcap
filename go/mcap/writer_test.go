@@ -709,10 +709,9 @@ func TestBYOCompressor(t *testing.T) {
 	})))
 
 	writer, err := NewWriter(buf, &WriterOptions{
-		Chunked:     true,
-		ChunkSize:   1024,
-		Compressor:  lzw,
-		Compression: "lz4",
+		Chunked:    true,
+		ChunkSize:  1024,
+		Compressor: NewCustomCompressor("lz4", lzw),
 	})
 	assert.Nil(t, err)
 
