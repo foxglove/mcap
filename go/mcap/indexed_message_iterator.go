@@ -237,7 +237,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	return nil
 }
 
-func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, error) {
+func (it *indexedMessageIterator) Next(_ []byte) (*Schema, *Channel, *Message, error) {
 	if !it.hasReadSummarySection {
 		err := it.parseSummarySection()
 		if err != nil {
