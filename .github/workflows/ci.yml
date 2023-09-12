@@ -169,8 +169,6 @@ jobs:
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
-      - uses: satackey/action-docker-layer-caching@v0.0.11
-        continue-on-error: true
       - run: make ci-format-check
       - run: make ci
       - run: make test-host
