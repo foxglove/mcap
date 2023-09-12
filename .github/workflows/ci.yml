@@ -435,8 +435,6 @@ jobs:
       - uses: mislav/bump-homebrew-formula-action@d9e38dda029a3815f1b174c39b50f41e9587b4f6
         with:
           formula-name: mcap
-          # https://github.com/mislav/bump-homebrew-formula-action/issues/58
-          formula-path: Formula/m/mcap.rb
           push-to: foxglove/homebrew-core
           commit-message: |
             {{formulaName}} ${{ steps.extract-version.outputs.version-number }}
