@@ -1,4 +1,4 @@
-import { McapTypes } from "@mcap/core";
+import type { McapTypes } from "@mcap/core";
 
 let handlersPromise: Promise<McapTypes.DecompressHandlers> | undefined;
 export async function loadDecompressHandlers(): Promise<McapTypes.DecompressHandlers> {

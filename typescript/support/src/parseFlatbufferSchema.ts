@@ -140,7 +140,7 @@ function typeForField(schema: SchemaT, field: FieldT): MessageDefinitionField[] 
     case BaseType.Array:
     case BaseType.MaxBaseType:
     case undefined:
-      throw new Error("Unions and Arrays are not supported in @mcap/support currently.");
+      throw new Error("Unions and Arrays are not currently supported");
   }
   return fields;
 }

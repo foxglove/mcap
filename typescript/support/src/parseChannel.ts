@@ -1,5 +1,8 @@
-import { MessageDefinition } from "@foxglove/message-definition";
-import { parse as parseMessageDefinition, parseRos2idl } from "@foxglove/rosmsg";
+import { MessageDefinition, MessageDefinitionField } from "@foxglove/message-definition";
+import { IDLMessageDefinition, parseIDL } from "@foxglove/omgidl-parser";
+import { MessageReader as OmgidlMessageReader } from "@foxglove/omgidl-serialization";
+import { parseRos2idl } from "@foxglove/ros2idl-parser";
+import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import { MessageReader } from "@foxglove/rosmsg-serialization";
 import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
 
@@ -18,13 +21,41 @@ export type ParsedChannel = {
   datatypes: MessageDefinitionMap;
 };
 
+function parseIDLDefinitionsToDatatypes(
+  parsedDefinitions: IDLMessageDefinition[],
+  rootName?: string,
+) {
+  //  The only IDL definition non-conformant-to-MessageDefinition is unions
+  const convertUnionToMessageDefinition = (definition: IDLMessageDefinition): MessageDefinition => {
+    if (definition.aggregatedKind === "union") {
+      const innerDefs: MessageDefinitionField[] = definition.cases.map((caseDefinition) => ({
+        ...caseDefinition.type,
+        predicates: caseDefinition.predicates,
+      }));
+
+      if (definition.defaultCase != undefined) {
+        innerDefs.push(definition.defaultCase);
+      }
+      const { name } = definition;
+      return {
+        name,
+        definitions: innerDefs,
+      };
+    }
+    return definition;
+  };
+
+  const standardDefs: MessageDefinition[] = parsedDefinitions.map(convertUnionToMessageDefinition);
+  return parsedDefinitionsToDatatypes(standardDefs, rootName);
+}
+
 function parsedDefinitionsToDatatypes(
   parsedDefinitions: MessageDefinition[],
-  rootName: string,
+  rootName?: string,
 ): MessageDefinitionMap {
   const datatypes: MessageDefinitionMap = new Map();
   parsedDefinitions.forEach(({ name, definitions }, index) => {
-    if (index === 0) {
+    if (rootName != undefined && index === 0) {
       datatypes.set(rootName, { name: rootName, definitions });
     } else if (name != undefined) {
       datatypes.set(name, { name, definitions });
@@ -118,7 +149,11 @@ export function parseChannel(channel: Channel): ParsedChannel {
   }
 
   if (channel.messageEncoding === "cdr") {
-    if (channel.schema?.encoding !== "ros2msg" && channel.schema?.encoding !== "ros2idl") {
+    if (
+      channel.schema?.encoding !== "ros2msg" &&
+      channel.schema?.encoding !== "ros2idl" &&
+      channel.schema?.encoding !== "omgidl"
+    ) {
       throw new Error(
         `Message encoding ${channel.messageEncoding} with ${
           channel.schema == undefined
@@ -128,17 +163,28 @@ export function parseChannel(channel: Channel): ParsedChannel {
       );
     }
     const schema = new TextDecoder().decode(channel.schema.data);
-    const isIdl = channel.schema.encoding === "ros2idl";
+    if (channel.schema.encoding === "omgidl") {
+      const parsedDefinitions = parseIDL(schema);
+      const reader = new OmgidlMessageReader(channel.schema.name, parsedDefinitions);
+      const datatypes = parseIDLDefinitionsToDatatypes(parsedDefinitions);
+      return {
+        datatypes,
+        deserialize: (data) => reader.readMessage(data),
+      };
+    } else {
+      const isIdl = channel.schema.encoding === "ros2idl";
 
-    const parsedDefinitions = isIdl
-      ? parseRos2idl(schema)
-      : parseMessageDefinition(schema, { ros2: true });
+      const parsedDefinitions = isIdl
+        ? parseRos2idl(schema)
+        : parseMessageDefinition(schema, { ros2: true });
 
-    const reader = new ROS2MessageReader(parsedDefinitions);
-    return {
-      datatypes: parsedDefinitionsToDatatypes(parsedDefinitions, channel.schema.name),
-      deserialize: (data) => reader.readMessage(data),
-    };
+      const reader = new ROS2MessageReader(parsedDefinitions);
+
+      return {
+        datatypes: parsedDefinitionsToDatatypes(parsedDefinitions, channel.schema.name),
+        deserialize: (data) => reader.readMessage(data),
+      };
+    }
   }
 
   throw new Error(`Unsupported encoding ${channel.messageEncoding}`);
