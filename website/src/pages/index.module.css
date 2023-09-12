@@ -147,36 +147,20 @@
   background-color: #303846;
 }
 
-.logoGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 2rem 3rem;
-  text-align: center;
+.logoList {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
-@media (min-width: 640px) {
-  .logoGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 996px) {
-  .logoGrid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
+.logoLink {
+  width: 33%;
 }
 
 .logoIcon {
-  display: inline-block;
-  height: auto;
   width: 100%;
-  margin: auto;
-}
-
-@media (min-width: 640px) {
-  .logoIcon {
-    width: 80%;
-  }
+  max-height: 50px;
+  margin: 2rem;
 }
 
 [data-theme="light"] .darkMode {

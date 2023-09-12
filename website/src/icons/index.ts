@@ -2,6 +2,8 @@ import ArmyWoman1 from "./army-woman-1.svg";
 import ChatTranslate from "./chat-translate.svg";
 import AndurilLight from "./companies/anduril-color.svg";
 import AndurilDark from "./companies/anduril-white.svg";
+import ApexLight from "./companies/apex-color.svg";
+import ApexDark from "./companies/apex-white.svg";
 import CocoLight from "./companies/coco-color.svg";
 import CocoDark from "./companies/coco-white.svg";
 import NorLabLight from "./companies/norlab-color.svg";
@@ -10,6 +12,8 @@ import ROSLight from "./companies/ros-color.svg";
 import ROSDark from "./companies/ros-white.svg";
 import TangramLight from "./companies/tangram-color.svg";
 import TangramDark from "./companies/tangram-white.svg";
+import WaabiLight from "./companies/waabi-color.svg";
+import WaabiDark from "./companies/waabi-white.svg";
 import DrawerEnvelope from "./drawer-envelope.svg";
 import Robot from "./robot.svg";
 import ShipmentPackage from "./shipment-package.svg";
@@ -23,6 +27,11 @@ const Logos = [
     href: "https://www.anduril.com/",
     LightModeLogo: AndurilLight,
     DarkModeLogo: AndurilDark,
+  },
+  {
+    href: "https://www.apex.ai/",
+    LightModeLogo: ApexLight,
+    DarkModeLogo: ApexDark,
   },
   {
     href: "https://cocodelivery.com/",
@@ -43,6 +52,11 @@ const Logos = [
     href: "https://www.tangramvision.com/",
     LightModeLogo: TangramLight,
     DarkModeLogo: TangramDark,
+  },
+  {
+    href: "https://waabi.ai/",
+    LightModeLogo: WaabiLight,
+    DarkModeLogo: WaabiDark,
   },
 ];
 

@@ -7,7 +7,7 @@ import (
 )
 
 type countingCRCWriter struct {
-	w          resettableWriteCloser
+	w          ResettableWriteCloser
 	size       int64
 	crc        hash.Hash32
 	computeCRC bool
@@ -45,7 +45,7 @@ func (c *countingCRCWriter) Write(p []byte) (int, error) {
 	return c.w.Write(p)
 }
 
-func newCountingCRCWriter(w resettableWriteCloser, computeCRC bool) *countingCRCWriter {
+func newCountingCRCWriter(w ResettableWriteCloser, computeCRC bool) *countingCRCWriter {
 	return &countingCRCWriter{
 		w:          w,
 		crc:        crc32.NewIEEE(),

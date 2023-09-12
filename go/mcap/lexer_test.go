@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pierrec/lz4/v4"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -132,6 +133,52 @@ func TestBadMagic(t *testing.T) {
 			assert.IsType(t, &ErrBadMagic{}, err)
 		})
 	}
+}
+
+type lzreader struct {
+	*lz4.Reader
+}
+
+func (l lzreader) Reset(r io.Reader) error {
+	l.Reader.Reset(r)
+	return nil
+}
+
+func TestCustomDecompressor(t *testing.T) {
+	buf := file(
+		header(),
+		chunk(t, CompressionLZ4, true, channelInfo(), message(), message()),
+		chunk(t, CompressionLZ4, true, channelInfo(), message(), message()),
+		attachment(), attachment(),
+		footer(),
+	)
+	lzr := lz4.NewReader(nil)
+	blockCount := 0
+	assert.Nil(t, lzr.Apply(lz4.OnBlockDoneOption(func(size int) {
+		blockCount++
+	})))
+	lexer, err := NewLexer(bytes.NewReader(buf), &LexerOptions{
+		Decompressors: map[CompressionFormat]ResettableReader{
+			CompressionLZ4: lzreader{lzr},
+		},
+	})
+	assert.Nil(t, err)
+	expected := []TokenType{
+		TokenHeader,
+		TokenChannel,
+		TokenMessage,
+		TokenMessage,
+		TokenChannel,
+		TokenMessage,
+		TokenMessage,
+		TokenFooter,
+	}
+	for i, expectedTokenType := range expected {
+		tokenType, _, err := lexer.Next(nil)
+		assert.Nil(t, err)
+		assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+	}
+	assert.Positive(t, blockCount)
 }
 
 func TestReturnsEOFOnSuccessiveCalls(t *testing.T) {

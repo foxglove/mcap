@@ -10,10 +10,7 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
-#include <queue>
 #include <random>
-#include <sstream>
-#include <unordered_set>
 
 #define NS_PER_MS 1000000
 #define NS_PER_S 1000000000
@@ -33,8 +30,8 @@ public:
 
   // next produces a random point on the unit sphere, scaled by `scale`.
   std::tuple<float, float, float> next(float scale) {
-    float theta = 2 * M_PI * _distribution(_generator);
-    float phi = acos(1.0 - (2.0 * _distribution(_generator)));
+    float theta = 2 * static_cast<float>(M_PI) * _distribution(_generator);
+    float phi = acos(1.f - (2.f * _distribution(_generator)));
     float x = float((sin(phi) * cos(theta)) * scale);
     float y = float((sin(phi) * sin(theta)) * scale);
     float z = float(cos(phi) * scale);
@@ -124,15 +121,15 @@ int main(int argc, char** argv) {
                                 .count();
   PointGenerator pointGenerator;
   // write 100 pointcloud messages into the output MCAP file.
-  for (uint64_t frameIndex = 0; frameIndex < 100; ++frameIndex) {
+  for (uint32_t frameIndex = 0; frameIndex < 100; ++frameIndex) {
     // Space these frames 100ms apart in time.
-    mcap::Timestamp cloudTime = startTime + (frameIndex * 100 * NS_PER_MS);
+    mcap::Timestamp cloudTime = startTime + (static_cast<uint64_t>(frameIndex) * 100 * NS_PER_MS);
     // Slightly increase the size of the cloud on every frame.
-    float cloudScale = 1.0 + (float(frameIndex) / 50.0);
+    float cloudScale = 1.f + (static_cast<float>(frameIndex) / 50.f);
 
     auto timestamp = pcl.mutable_timestamp();
-    timestamp->set_seconds(cloudTime / NS_PER_S);
-    timestamp->set_nanos(cloudTime % NS_PER_S);
+    timestamp->set_seconds(static_cast<int64_t>(cloudTime) / NS_PER_S);
+    timestamp->set_nanos(static_cast<int>(cloudTime) % NS_PER_S);
 
     // write 1000 points into each pointcloud message.
     size_t offset = 0;
@@ -160,7 +157,7 @@ int main(int argc, char** argv) {
       std::cerr << "Failed to write message: " << res.message << "\n";
       writer.terminate();
       writer.close();
-      std::remove(outputFilename);
+      std::ignore = std::remove(outputFilename);
       return 1;
     }
   }

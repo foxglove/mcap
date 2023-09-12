@@ -6,8 +6,6 @@
 #include "foxglove/PointCloud.pb.h"
 #include "mcap/reader.hpp"
 
-namespace gp = google::protobuf;
-
 int main(int argc, char** argv) {
   if (argc != 2) {
     std::cerr << "Usage: " << argv[0] << " <input.mcap>" << std::endl;
@@ -39,8 +37,7 @@ int main(int argc, char** argv) {
       return 1;
     }
     foxglove::PointCloud pointCloud;
-    if (!pointCloud.ParseFromArray(static_cast<const void*>(it->message.data),
-                                   it->message.dataSize)) {
+    if (!pointCloud.ParseFromArray(it->message.data, static_cast<int>(it->message.dataSize))) {
       std::cerr << "could not parse pointcloud message" << std::endl;
       return 1;
     }

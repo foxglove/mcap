@@ -61,6 +61,7 @@ words:
   - golangci
   - infima
   - inputfile
+  - intrinsics
   - jsonschema
   - kaitai
   - libmcap
@@ -74,6 +75,7 @@ words:
   - nsec
   - nsecs
   - numpy
+  - omgidl
   - parseable
   - pipenv
   - pointcloud
@@ -99,6 +101,7 @@ words:
   - unchunked
   - unindexed
   - velodyne
+  - waabi
   - webp
   - zstandard
   - zstd
@@ -141,7 +144,7 @@ overrides:
     ignoreRegExpList:
       - "0x[0-9a-f]+n?"
 
-  - filename: "(Pipfile|README.md|pyproject.toml)"
+  - filename: "(Pipfile|README.md|pyproject.toml|setup.cfg)"
     words:
       - pypi
       - pyright
@@ -150,6 +153,7 @@ overrides:
       - addopts
       - xfail
       - Pipfile
+      - pyyaml
 
   - filename: "python/**/*.rst"
     words:

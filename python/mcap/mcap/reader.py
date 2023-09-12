@@ -279,9 +279,10 @@ class SeekingReader(McapReader):
             # No chunk indices available, so there is no index to search for messages.
             # use a non-seeking reader to read linearly through the stream.
             self._stream.seek(0, io.SEEK_SET)
-            return NonSeekingReader(self._stream).iter_messages(
+            yield from NonSeekingReader(self._stream).iter_messages(
                 topics, start_time, end_time, log_time_order
             )
+            return
 
         message_queue = MessageQueue(log_time_order=log_time_order, reverse=reverse)
         for chunk_index in _chunks_matching_topics(
@@ -351,7 +352,9 @@ class SeekingReader(McapReader):
         summary = self.get_summary()
         if summary is None:
             # no index available, use a non-seeking reader to read linearly through the stream.
-            return NonSeekingReader(self._stream).iter_attachments()
+            self._stream.seek(0, io.SEEK_SET)
+            yield from NonSeekingReader(self._stream).iter_attachments()
+            return
         for attachment_index in summary.attachment_indexes:
             self._stream.seek(attachment_index.offset)
             record = next(StreamReader(self._stream, skip_magic=True).records)
@@ -366,7 +369,8 @@ class SeekingReader(McapReader):
         if summary is None:
             # fall back to a non-seeking reader
             self._stream.seek(0, io.SEEK_SET)
-            return NonSeekingReader(self._stream).iter_metadata()
+            yield from NonSeekingReader(self._stream).iter_metadata()
+            return
         for metadata_index in summary.metadata_indexes:
             self._stream.seek(metadata_index.offset)
             record = next(StreamReader(self._stream, skip_magic=True).records)

@@ -169,8 +169,6 @@ jobs:
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
-      - uses: satackey/action-docker-layer-caching@v0.0.11
-        continue-on-error: true
       - run: make ci-format-check
       - run: make ci
       - run: make test-host
@@ -221,9 +219,9 @@ jobs:
 
       - name: Publish @mcap/core to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/core/v') }}
-        run: yarn workspace @mcap/core publish --access public
+        run: yarn workspace @mcap/core npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+          YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
       # To be enabled once API has settled
       # - name: Publish @mcap/nodejs to NPM
@@ -453,7 +451,7 @@ jobs:
         id: extract-version
         run: |
           printf "::set-output name=%s::%s\n" version-number "${GITHUB_REF#refs/tags/releases/mcap-cli/v}"
-      - uses: mislav/bump-homebrew-formula-action@a1aa5acee0698beefeac8f69f2eb8a5f292bf8bb
+      - uses: mislav/bump-homebrew-formula-action@d9e38dda029a3815f1b174c39b50f41e9587b4f6
         with:
           formula-name: mcap
           push-to: foxglove/homebrew-core

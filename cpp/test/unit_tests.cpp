@@ -476,6 +476,112 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
 
     reader.close();
   }
+
+  SECTION("IteratorComparison") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    writer.open(buffer, mcap::McapWriterOptions("test"));
+    mcap::Schema schema("schema", "schemaEncoding", "ab");
+    writer.addSchema(schema);
+    mcap::Channel channel("topic", "messageEncoding", schema.id);
+    writer.addChannel(channel);
+    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    WriteMsg(writer, channel.id, 0, 2, 1, data);
+    WriteMsg(writer, channel.id, 1, 4, 3, data);
+    writer.close();
+
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+
+    auto view = reader.readMessages();
+    auto it = view.begin();
+    REQUIRE(it != view.end());
+    REQUIRE(it == view.begin());
+    REQUIRE(it == it);
+    ++it;
+    REQUIRE(it != view.end());
+    REQUIRE(it != view.begin());
+    REQUIRE(it == it);
+    ++it;
+    REQUIRE(it == view.end());
+    REQUIRE(it != view.begin());
+    REQUIRE(it == it);
+
+    reader.close();
+  }
+  SECTION("IteratorComparisonEmpty") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    writer.open(buffer, mcap::McapWriterOptions("test"));
+    writer.close();
+
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+
+    auto view = reader.readMessages();
+    auto it = view.begin();
+    REQUIRE(it == view.begin());
+    REQUIRE(it == view.end());
+    reader.close();
+  }
+}
+
+/**
+ * @brief ensures that message index records are only written for the channels present in the
+ * previous chunk. This test writes two chunks with one message each in separate channels.
+ * If the writer is working correctly, there will be one message index record after each chunk,
+ * one for each message.
+ */
+TEST_CASE("Message index records", "[writer]") {
+  Buffer buffer;
+
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("test");
+  opts.chunkSize = 100;
+  opts.compression = mcap::Compression::None;
+
+  writer.open(buffer, opts);
+
+  mcap::Schema schema("schema", "schemaEncoding", "ab");
+  writer.addSchema(schema);
+  mcap::Channel channel1("topic", "messageEncoding", schema.id);
+  writer.addChannel(channel1);
+  mcap::Channel channel2("topic", "messageEncoding", schema.id);
+  writer.addChannel(channel2);
+
+  mcap::Message msg;
+  std::vector<std::byte> data(150);
+  WriteMsg(writer, channel1.id, 0, 100, 100, data);
+  WriteMsg(writer, channel2.id, 0, 200, 200, data);
+
+  writer.close();
+
+  // read the records after the starting magic, stopping before the end magic.
+  mcap::RecordReader reader(buffer, sizeof(mcap::Magic), buffer.size() - sizeof(mcap::Magic));
+
+  std::vector<uint16_t> messageIndexChannelIds;
+  uint32_t chunkCount = 0;
+
+  for (std::optional<mcap::Record> rec = reader.next(); rec != std::nullopt; rec = reader.next()) {
+    requireOk(reader.status());
+    if (rec->opcode == mcap::OpCode::MessageIndex) {
+      mcap::MessageIndex index;
+      requireOk(mcap::McapReader::ParseMessageIndex(*rec, &index));
+      REQUIRE(index.records.size() == 1);
+      messageIndexChannelIds.push_back(index.channelId);
+    }
+    if (rec->opcode == mcap::OpCode::Chunk) {
+      chunkCount++;
+    }
+  }
+  requireOk(reader.status());
+
+  REQUIRE(chunkCount == 2);
+  REQUIRE(messageIndexChannelIds.size() == 2);
+  REQUIRE(messageIndexChannelIds[0] == channel1.id);
+  REQUIRE(messageIndexChannelIds[1] == channel2.id);
 }
 
 TEST_CASE("LZ4 compression", "[reader][writer]") {
