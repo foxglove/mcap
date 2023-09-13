@@ -211,10 +211,12 @@ jobs:
       - run: yarn prettier:check
       - run: yarn workspace @mcap/core lint:ci
       - run: yarn workspace @mcap/core build
-      - run: yarn workspace @mcap/nodejs lint:ci
-      - run: yarn workspace @mcap/nodejs build
       - run: yarn workspace @mcap/support lint:ci
       - run: yarn workspace @mcap/support build
+      - run: yarn workspace @mcap/nodejs lint:ci
+      - run: yarn workspace @mcap/nodejs build
+      - run: yarn workspace @mcap/browser lint:ci
+      - run: yarn workspace @mcap/browser build
       - run: yarn typescript:test
 
       - name: Publish @mcap/core to NPM

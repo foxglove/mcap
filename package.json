@@ -20,8 +20,8 @@
     "start": "yarn workspace website start",
     "spellcheck": "cspell --relative '**'",
     "typescript:test": "yarn jest --config typescript/jest.config.json",
-    "typescript:build": "yarn workspace @mcap/core build && yarn workspace @mcap/support build && yarn workspace @mcap/nodejs build",
-    "typescript:clean": "yarn workspace @mcap/core build --clean && yarn workspace @mcap/support build --clean && yarn workspace @mcap/nodejs build --clean",
+    "typescript:build": "yarn workspace @mcap/core build && yarn workspace @mcap/support build && yarn workspace @mcap/nodejs build && yarn workspace @mcap/browser build",
+    "typescript:clean": "yarn workspace @mcap/core build --clean && yarn workspace @mcap/support build --clean && yarn workspace @mcap/nodejs build --clean && yarn workspace @mcap/browser build --clean",
     "test:conformance:generate-inputs": "yarn workspace @foxglove/mcap-conformance generate-inputs --data-dir \"$(pwd)/tests/conformance/data\"",
     "test:conformance": "yarn workspace @foxglove/mcap-conformance run-tests --data-dir \"$(pwd)/tests/conformance/data\""
   },
