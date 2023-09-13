@@ -34,7 +34,7 @@ from .records import (
     Schema,
     Statistics,
 )
-from .stream_reader import MAGIC_SIZE, StreamReader, breakup_chunk
+from .stream_reader import MAGIC_SIZE, StreamReader, breakup_chunk, read_magic
 from .summary import Summary
 
 
@@ -249,6 +249,7 @@ class SeekingReader(McapReader):
         decoder_factories: Iterable[DecoderFactory] = (),
     ):
         super().__init__(decoder_factories=decoder_factories)
+        read_magic(ReadDataStream(stream, calculate_crc=False))
         self._stream = stream
         self._validate_crcs = validate_crcs
         self._summary: Optional[Summary] = None

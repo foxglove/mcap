@@ -7,7 +7,7 @@ from typing import IO, Any, Optional, Tuple, Type, Union
 import pytest
 
 from mcap.decoder import DecoderFactory
-from mcap.exceptions import DecoderNotFoundError
+from mcap.exceptions import DecoderNotFoundError, InvalidMagic
 from mcap.reader import McapReader, NonSeekingReader, SeekingReader, make_reader
 from mcap.records import Channel, Message, Schema
 from mcap.writer import IndexType, Writer
@@ -238,3 +238,17 @@ def test_no_summary_not_seeking(tmpdir: Path):
         assert len(list(NonSeekingReader(f).iter_attachments())) == 1
     with open(filepath, "rb") as f:
         assert len(list(NonSeekingReader(f).iter_metadata())) == 1
+
+
+def test_detect_invalid_initial_magic(tmpdir: Path):
+    filepath = tmpdir / "invalid_magic.mcap"
+    with open(filepath, "w") as f:
+        f.write("some bytes longer than the initial magic bytes")
+
+    with open(filepath, "rb") as f:
+        with pytest.raises(InvalidMagic):
+            SeekingReader(f)
+
+    with open(filepath, "rb") as f:
+        with pytest.raises(InvalidMagic):
+            NonSeekingReader(f).get_header()
