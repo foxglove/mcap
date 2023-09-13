@@ -4,6 +4,9 @@ import { FileDescriptorSet } from "@foxglove/protobufjs/ext/descriptor";
 import { protobufDefinitionsToDatatypes, stripLeadingDot } from "./protobufDefinitionsToDatatypes";
 import { MessageDefinitionMap } from "./types";
 
+/**
+ * Options to configure the behavior of {@link parseProtobufSchema}.
+ */
 export type ParseProtobufSchemaOptions = {
   /**
    * A function that will be called with the root type after parsing the FileDescriptorSet. Used by

@@ -64,7 +64,13 @@ function parsedDefinitionsToDatatypes(
   return datatypes;
 }
 
+/**
+ * Options to configure the behavior of {@link parseChannel}.
+ */
 export type ParseChannelOptions = {
+  /**
+   * Options to configure the behavior of {@link parseProtobufSchema}.
+   */
   protobuf?: ParseProtobufSchemaOptions;
 };
 
