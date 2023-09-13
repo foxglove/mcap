@@ -45,8 +45,8 @@ export function protobufDefinitionsToDatatypes(
   for (const field of type.fieldsArray) {
     if (field.resolvedType instanceof protobufjs.Enum) {
       for (const [name, value] of Object.entries(field.resolvedType.values)) {
-        // Note: names from different enums might conflict. The player API will need to be updated
-        // to associate fields with enums (similar to the __foxglove_enum annotation hack).
+        // Note: names from different enums might conflict. The @foxglove/message-definition API
+        // will need to be updated to associate fields with enums.
         // https://github.com/foxglove/studio/issues/2214
         definitions.push({ name, type: "int32", isConstant: true, value });
       }
@@ -70,15 +70,6 @@ export function protobufDefinitionsToDatatypes(
         throw new Error("Repeated bytes are not currently supported");
       }
       definitions.push({ type: "uint8", name: field.name, isArray: true });
-    } else if (
-      type.fullName === ".google.protobuf.Timestamp" ||
-      type.fullName === ".google.protobuf.Duration"
-    ) {
-      definitions.push({
-        type: "int32",
-        name: field.name === "seconds" ? "sec" : "nsec",
-        isArray: field.repeated,
-      });
     } else {
       definitions.push({
         type: protobufScalarToRosPrimitive(field.type),

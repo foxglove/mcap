@@ -8,7 +8,7 @@ import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serializat
 
 import { parseFlatbufferSchema } from "./parseFlatbufferSchema";
 import { parseJsonSchema } from "./parseJsonSchema";
-import { parseProtobufSchema } from "./parseProtobufSchema";
+import { ParseProtobufSchemaOptions, parseProtobufSchema } from "./parseProtobufSchema";
 import { MessageDefinitionMap } from "./types";
 
 type Channel = {
@@ -64,6 +64,10 @@ function parsedDefinitionsToDatatypes(
   return datatypes;
 }
 
+export type ParseChannelOptions = {
+  protobuf?: ParseProtobufSchemaOptions;
+};
+
 /**
  * Process a channel/schema and extract information that can be used to deserialize messages on the
  * channel, and schemas in the format expected by Studio's RosDatatypes.
@@ -72,7 +76,7 @@ function parsedDefinitionsToDatatypes(
  * - https://github.com/foxglove/mcap/blob/main/docs/specification/well-known-message-encodings.md
  * - https://github.com/foxglove/mcap/blob/main/docs/specification/well-known-schema-encodings.md
  */
-export function parseChannel(channel: Channel): ParsedChannel {
+export function parseChannel(channel: Channel, options?: ParseChannelOptions): ParsedChannel {
   if (channel.messageEncoding === "json") {
     if (channel.schema != undefined && channel.schema.encoding !== "jsonschema") {
       throw new Error(
@@ -126,7 +130,7 @@ export function parseChannel(channel: Channel): ParsedChannel {
         } is not supported (expected protobuf)`,
       );
     }
-    return parseProtobufSchema(channel.schema.name, channel.schema.data);
+    return parseProtobufSchema(channel.schema.name, channel.schema.data, options?.protobuf);
   }
 
   if (channel.messageEncoding === "ros1") {

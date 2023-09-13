@@ -34,13 +34,25 @@ describe("parseChannel", () => {
   });
 
   it("works with protobuf", () => {
+    const processRootType = jest.fn().mockImplementation((x: unknown) => x);
+    const processMessageDefinitions = jest.fn().mockImplementation((x: unknown) => x);
     const fds = FileDescriptorSet.encode(FileDescriptorSet.root.toDescriptor("proto3")).finish();
-    const channel = parseChannel({
-      messageEncoding: "protobuf",
-      schema: { name: "google.protobuf.FileDescriptorSet", encoding: "protobuf", data: fds },
-    });
+    const channel = parseChannel(
+      {
+        messageEncoding: "protobuf",
+        schema: { name: "google.protobuf.FileDescriptorSet", encoding: "protobuf", data: fds },
+      },
+      {
+        protobuf: {
+          processRootType,
+          processMessageDefinitions,
+        },
+      },
+    );
     const deserialized = channel.deserialize(fds) as IFileDescriptorSet;
     expect(deserialized.file[0]!.name).toEqual("google_protobuf.proto");
+    expect(processRootType).toHaveBeenCalled();
+    expect(processMessageDefinitions).toHaveBeenCalled();
   });
 
   it("works with ros1", () => {

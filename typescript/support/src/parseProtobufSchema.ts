@@ -4,6 +4,22 @@ import { FileDescriptorSet } from "@foxglove/protobufjs/ext/descriptor";
 import { protobufDefinitionsToDatatypes, stripLeadingDot } from "./protobufDefinitionsToDatatypes";
 import { MessageDefinitionMap } from "./types";
 
+export type ParseProtobufSchemaOptions = {
+  /**
+   * A function that will be called with the root type after parsing the FileDescriptorSet. Used by
+   * Foxglove Studio to modify the deserialization behavior of google.protobuf.Timestamp &
+   * google.protobuf.Duration.
+   */
+  processRootType?: (rootType: protobufjs.Type) => protobufjs.Type;
+
+  /**
+   * A function that will be called after producing message definitions from the schema. Used by
+   * Foxglove Studio to modify the field name of google.protobuf.Timestamp &
+   * google.protobuf.Duration.
+   */
+  processMessageDefinitions?: (definitions: MessageDefinitionMap) => MessageDefinitionMap;
+};
+
 /**
  * Parse a Protobuf binary schema (FileDescriptorSet) and produce datatypes and a deserializer
  * function.
@@ -11,6 +27,7 @@ import { MessageDefinitionMap } from "./types";
 export function parseProtobufSchema(
   schemaName: string,
   schemaData: Uint8Array,
+  options?: ParseProtobufSchemaOptions,
 ): {
   datatypes: MessageDefinitionMap;
   deserialize: (buffer: ArrayBufferView) => unknown;
@@ -19,38 +36,10 @@ export function parseProtobufSchema(
 
   const root = protobufjs.Root.fromDescriptor(descriptorSet);
   root.resolveAll();
-  const rootType = root.lookupType(schemaName);
-
-  // Modify the definition of google.protobuf.Timestamp and Duration so they are interpreted as
-  // {sec: number, nsec: number}, compatible with the rest of Studio. The standard Protobuf types
-  // use different names (`seconds` and `nanos`), and `seconds` is an `int64`, which would be
-  // deserialized as a bigint by default.
-  //
-  // protobufDefinitionsToDatatypes also has matching logic to rename the fields.
-  const fixTimeType = (type: protobufjs.ReflectionObject | null) => {
-    if (!type || !(type instanceof protobufjs.Type)) {
-      return;
-    }
-    type.setup(); // ensure the original optimized toObject has been created
-    const prevToObject = type.toObject; // eslint-disable-line @typescript-eslint/unbound-method
-    const newToObject: typeof prevToObject = (message, options) => {
-      const result = prevToObject.call(type, message, options);
-      const { seconds, nanos } = result as { seconds: bigint; nanos: number };
-      if (typeof seconds !== "bigint" || typeof nanos !== "number") {
-        return result;
-      }
-      if (seconds > BigInt(Number.MAX_SAFE_INTEGER)) {
-        throw new Error(
-          `Timestamps with seconds greater than 2^53-1 are not supported (found seconds=${seconds}, nanos=${nanos})`,
-        );
-      }
-      return { sec: Number(seconds), nsec: nanos };
-    };
-    type.toObject = newToObject;
-  };
-
-  fixTimeType(root.lookup(".google.protobuf.Timestamp"));
-  fixTimeType(root.lookup(".google.protobuf.Duration"));
+  let rootType = root.lookupType(schemaName);
+  if (options?.processRootType) {
+    rootType = options.processRootType(rootType);
+  }
 
   const deserialize = (data: ArrayBufferView) => {
     return rootType.toObject(
@@ -59,8 +48,11 @@ export function parseProtobufSchema(
     );
   };
 
-  const datatypes: MessageDefinitionMap = new Map();
+  let datatypes: MessageDefinitionMap = new Map();
   protobufDefinitionsToDatatypes(datatypes, rootType);
+  if (options?.processMessageDefinitions) {
+    datatypes = options.processMessageDefinitions(datatypes);
+  }
 
   if (!datatypes.has(schemaName)) {
     throw new Error(
