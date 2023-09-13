@@ -8,17 +8,32 @@ The `@mcap/support` package provides utilities for working with MCAP files that 
 
 ### Reading MCAP files in a browser
 
-TODO
+```ts
+import { loadDecompressHandlers } from "@mcap/support";
+import { BlobReadable } from "@mcap/browser";
+import { McapIndexedReader } from "@mcap/core";
+import { open } from "fs/promises";
+
+async function onInputOrDrop(event: InputEvent | DragEvent) {
+  const file = event.dataTransfer.files[0];
+  const decompressHandlers = await loadDecompressHandlers();
+  const reader = await McapIndexedReader.Initialize({
+    readable: new BlobReadable(file),
+    decompressHandlers,
+  });
+}
+```
 
 ### Reading MCAP files in Node.js
 
 ```ts
 import { loadDecompressHandlers } from "@mcap/support";
-import { FileHandleReadable } from "@mcap/support/nodejs";
+import { FileHandleReadable } from "@mcap/nodejs";
+import { McapIndexedReader } from "@mcap/core";
+import { open } from "fs/promises";
+
 const decompressHandlers = await loadDecompressHandlers();
-
 const fileHandle = await open("file.mcap", "r");
-
 const reader = await McapIndexedReader.Initialize({
   readable: new FileHandleReadable(fileHandle),
   decompressHandlers,

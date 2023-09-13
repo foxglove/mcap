@@ -3,7 +3,7 @@
   "include": ["./src/**/*"],
   "compilerOptions": {
     "outDir": "./dist/esm",
-    "lib": ["es2020"],
+    "lib": ["es2020", "dom"],
     "composite": true,
     "incremental": true
   },

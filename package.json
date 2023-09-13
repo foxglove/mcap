@@ -8,6 +8,7 @@
       "typescript/examples/*",
       "typescript/support",
       "typescript/nodejs",
+      "typescript/browser",
       "website"
     ]
   },
