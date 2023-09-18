@@ -2,6 +2,8 @@
 
 import os
 import re
+import base64
+import binascii
 from io import BytesIO
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -422,6 +424,12 @@ def _write_complex_type(
                 array: Union[List[Any], Tuple[Any], Any] = _get_property(
                     ros2_msg, field.name
                 )
+                if ftype.type == "uint8" and isinstance(array, str):
+                    # Special handling for bytes in JSON
+                    try:
+                        array = base64.b64decode(array)
+                    except binascii.Error:
+                        pass
                 if array is None:
                     array = []
                 if (
