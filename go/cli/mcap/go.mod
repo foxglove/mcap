@@ -1,19 +1,21 @@
 module github.com/foxglove/mcap/go/cli/mcap
 
-go 1.18
+go 1.20
 
 require (
 	cloud.google.com/go/storage v1.23.0
 	github.com/fatih/color v1.13.0
+	github.com/foxglove/go-rosbag v0.0.5
 	github.com/foxglove/mcap/go/mcap v0.4.0
 	github.com/foxglove/mcap/go/ros v0.0.0-20230114025807-456e6a6ca1be
 	github.com/klauspost/compress v1.16.7
 	github.com/mattn/go-sqlite3 v1.14.14
 	github.com/olekukonko/tablewriter v0.0.5
-	github.com/pierrec/lz4/v4 v4.1.17
+	github.com/pierrec/lz4/v4 v4.1.18
+	github.com/schollz/progressbar/v3 v3.13.1
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/viper v1.12.0
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.4
 	google.golang.org/protobuf v1.28.0
 )
 
@@ -34,8 +36,9 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/magiconair/properties v1.8.6 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
-	github.com/mattn/go-isatty v0.0.14 // indirect
-	github.com/mattn/go-runewidth v0.0.13 // indirect
+	github.com/mattn/go-isatty v0.0.17 // indirect
+	github.com/mattn/go-runewidth v0.0.14 // indirect
+	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.2 // indirect
@@ -49,7 +52,8 @@ require (
 	go.opencensus.io v0.23.0 // indirect
 	golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e // indirect
 	golang.org/x/oauth2 v0.0.0-20220630143837-2104d58473e0 // indirect
-	golang.org/x/sys v0.0.0-20220627191245-f75cf1eec38b // indirect
+	golang.org/x/sys v0.6.0 // indirect
+	golang.org/x/term v0.6.0 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
 	google.golang.org/api v0.86.0 // indirect

@@ -10,10 +10,12 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/olekukonko/tablewriter"
+	"github.com/schollz/progressbar/v3"
 )
 
 var (
@@ -168,4 +170,21 @@ func DefaultString(strings ...string) string {
 		}
 	}
 	return ""
+}
+
+// NewProgressBar returns an instance of progressbar.ProgresBar.
+// `max` is the denominator of the progress.
+func NewProgressBar(max int64) *progressbar.ProgressBar {
+	return progressbar.NewOptions64(
+		max,
+		progressbar.OptionThrottle(65*time.Millisecond),
+		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetWidth(10),
+		progressbar.OptionOnCompletion(func() {
+			fmt.Fprint(os.Stderr, "\n")
+		}),
+		progressbar.OptionFullWidth(),
+		progressbar.OptionSetRenderBlankState(true),
+	)
+
 }
