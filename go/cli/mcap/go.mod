@@ -1,11 +1,11 @@
 module github.com/foxglove/mcap/go/cli/mcap
 
-go 1.18
+go 1.20
 
 require (
 	cloud.google.com/go/storage v1.23.0
 	github.com/fatih/color v1.13.0
-	github.com/foxglove/go-rosbag v0.0.4
+	github.com/foxglove/go-rosbag v0.0.5
 	github.com/foxglove/mcap/go/mcap v0.4.0
 	github.com/foxglove/mcap/go/ros v0.0.0-20230114025807-456e6a6ca1be
 	github.com/klauspost/compress v1.16.7

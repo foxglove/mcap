@@ -100,8 +100,8 @@ github.com/envoyproxy/go-control-plane v0.10.2-0.20220325020618-49ff273808a1/go.
 github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7+kN2VEUnK/pcBlmesArF7c=
 github.com/fatih/color v1.13.0 h1:8LOYc1KYPPmyKMuN8QV2DNRWNbLo6LZ0iLs8+mlH53w=
 github.com/fatih/color v1.13.0/go.mod h1:kLAiJbzzSOZDVNGyDpeOxJ47H46qBXwg5ILebYFFOfk=
-github.com/foxglove/go-rosbag v0.0.4 h1:0tWW++X26WhkRm3Thbfi1FBXweWIn+RkwUkhTYF/Kvo=
-github.com/foxglove/go-rosbag v0.0.4/go.mod h1:Lz84M+3C7QOh/Y99tv+83nmJ+PPswW6Z5t0SGa96jXY=
+github.com/foxglove/go-rosbag v0.0.5 h1:UCkYdiBGagpgAql8cNO0d8wX8QZMfGUte0+8aWB2MM4=
+github.com/foxglove/go-rosbag v0.0.5/go.mod h1:Kz3doYZfPO6OIawx4tFm9MU9COkuzcYaI963psJeLrA=
 github.com/foxglove/mcap/go/mcap v0.4.0 h1:jsDZZ6qmMKa174EE8Tw0hxeMUdgjz8emTlN8+6FEnXE=
 github.com/foxglove/mcap/go/mcap v0.4.0/go.mod h1:3UsmtxZGHWURgxEgQh3t0cGfyPyLoCGsa/gtS/Y6UPM=
 github.com/foxglove/mcap/go/ros v0.0.0-20230114025807-456e6a6ca1be h1:K7lVNHXix6A9Ysz8StgVHp59B0pBAb1HjxH6GITOJMQ=
