@@ -225,7 +225,7 @@ func channelIDForConnection(connID uint32) (uint16, error) {
 	return uint16(connID), nil
 }
 
-func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
+func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions, messageCallbacks ...func([]byte) error) error {
 	writer, err := mcap.NewWriter(w, opts)
 	if err != nil {
 		return err
@@ -315,6 +315,12 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions) error {
 				return err
 			}
 			seq++
+			for _, callback := range messageCallbacks {
+				err = callback(data)
+				if err != nil {
+					return err
+				}
+			}
 			return nil
 		},
 		true,

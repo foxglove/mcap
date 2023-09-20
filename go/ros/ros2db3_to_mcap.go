@@ -258,11 +258,17 @@ func transformMessages(db *sql.DB, f func(*sql.Rows) error) error {
 	return nil
 }
 
-func DB3ToMCAP(w io.Writer, db *sql.DB, opts *mcap.WriterOptions, searchdirs []string) error {
+func DB3ToMCAP(w io.Writer,
+	db *sql.DB,
+	opts *mcap.WriterOptions,
+	searchdirs []string,
+	callbacks ...func([]byte) error,
+) error {
 	topics, err := getTopics(db)
 	if err != nil {
 		return err
 	}
+
 	types := make([]string, len(topics))
 	for i := range topics {
 		types[i] = topics[i].typ
@@ -338,6 +344,13 @@ func DB3ToMCAP(w io.Writer, db *sql.DB, opts *mcap.WriterOptions, searchdirs []s
 			return err
 		}
 		seq[topicID]++
+
+		for _, callback := range callbacks {
+			err = callback(messageData)
+			if err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	if err != nil {
