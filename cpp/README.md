@@ -38,7 +38,7 @@ int main() {
   writer.addChannel(chatterPublisher);
 
   // Create a message payload. This would typically be done by your own
-  // serialiation library. In this example, we manually create ROS1 binary data
+  // serialization library. In this example, we manually create ROS1 binary data
   std::array<std::byte, 4 + 13> payload;
   const uint32_t length = 13;
   std::memcpy(payload.data(), &length, 4);
