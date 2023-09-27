@@ -41,12 +41,8 @@ type channelID struct {
 }
 
 type mcapMerger struct {
-	schemas    map[schemaID]*mcap.Schema
-	channels   map[channelID]*mcap.Channel
 	schemaIDs  map[schemaID]uint16
 	channelIDs map[channelID]uint16
-
-	outputChannelSchemas map[uint16]uint16
 
 	nextChannelID uint16
 	nextSchemaID  uint16
@@ -55,11 +51,8 @@ type mcapMerger struct {
 
 func newMCAPMerger(opts mergeOpts) *mcapMerger {
 	return &mcapMerger{
-		schemas:              make(map[schemaID]*mcap.Schema),
-		channels:             make(map[channelID]*mcap.Channel),
 		schemaIDs:            make(map[schemaID]uint16),
 		channelIDs:           make(map[channelID]uint16),
-		outputChannelSchemas: make(map[uint16]uint16),
 		nextChannelID:        1,
 		nextSchemaID:         1,
 		opts:                 opts,
@@ -98,7 +91,6 @@ func (m *mcapMerger) addChannel(w *mcap.Writer, inputID int, channel *mcap.Chann
 		MessageEncoding: channel.MessageEncoding,
 		Metadata:        channel.Metadata,
 	}
-	m.channels[key] = channel
 	m.channelIDs[key] = m.nextChannelID
 	err := w.WriteChannel(newChannel)
 	if err != nil {
@@ -116,7 +108,6 @@ func (m *mcapMerger) addSchema(w *mcap.Writer, inputID int, schema *mcap.Schema)
 		Encoding: schema.Encoding,
 		Data:     schema.Data,
 	}
-	m.schemas[key] = newSchema
 	m.schemaIDs[key] = m.nextSchemaID
 	err := w.WriteSchema(newSchema)
 	if err != nil {
