@@ -127,7 +127,10 @@ var convertCmd = &cobra.Command{
 			}
 
 			err = ros.Bag2MCAP(bw, f, opts, func(data []byte) error {
-				progressBar.Add64(1)
+				progressBarErr := progressBar.Add64(1)
+				if progressBarErr != nil {
+					die("failed to increment progressbar: %s", err)
+				}
 				return nil
 			})
 			if err != nil && !errors.Is(err, io.EOF) {
@@ -154,7 +157,10 @@ var convertCmd = &cobra.Command{
 			}
 			dirs := strings.FieldsFunc(amentPath, func(c rune) bool { return (c == os.PathListSeparator) })
 			err = ros.DB3ToMCAP(bw, db, opts, dirs, func(b []byte) error {
-				progressBar.Add(1)
+				progressBarErr := progressBar.Add64(1)
+				if progressBarErr != nil {
+					die("failed to increment progressbar: %s", err)
+				}
 				return nil
 			})
 			if err != nil {

@@ -32,7 +32,10 @@ func makeProfileCloser(pprofProfile bool) func() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	pprof.StartCPUProfile(cpuprof)
+	err = pprof.StartCPUProfile(cpuprof)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	runtime.SetBlockProfileRate(100e6)
 	blockProfile, err := os.Create(blockprofile)
@@ -44,10 +47,16 @@ func makeProfileCloser(pprofProfile bool) func() {
 		pprof.StopCPUProfile()
 		cpuprof.Close()
 
-		pprof.WriteHeapProfile(memprof)
+		err := pprof.WriteHeapProfile(memprof)
+		if err != nil {
+			log.Fatal(err)
+		}
 		memprof.Close()
 
-		pprof.Lookup("block").WriteTo(blockProfile, 0)
+		err = pprof.Lookup("block").WriteTo(blockProfile, 0)
+		if err != nil {
+			log.Fatal(err)
+		}
 		blockProfile.Close()
 
 		fmt.Fprintf(os.Stderr, "Wrote profiles to %s, %s, and %s\n", cpuprofile, memprofile, blockprofile)
@@ -79,7 +88,14 @@ func die(s string, args ...any) {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "Config file (default is $HOME/.mcap.yaml)")
-	rootCmd.PersistentFlags().BoolVar(&pprofProfile, "pprof-profile", false, "Record pprof profiles of command execution. Profiles will be written to files mcap-mem.prof, mcap-cpu.prof, and mcap-block.pprof. Defaults to false.")
+	rootCmd.PersistentFlags().BoolVar(
+		&pprofProfile,
+		"pprof-profile",
+		false,
+		"Record pprof profiles of command execution. "+
+			"Profiles will be written to files: mcap-mem.prof, mcap-cpu.prof, and mcap-block.pprof. "+
+			"Defaults to false.",
+	)
 	rootCmd.InitDefaultVersionFlag()
 }
 

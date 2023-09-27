@@ -31,7 +31,7 @@ func humanBytes(numBytes uint64) string {
 	displayedValue := float64(numBytes)
 	prefixIndex := 0
 	for ; displayedValue > 1024 && prefixIndex < len(prefixes); prefixIndex++ {
-		displayedValue = displayedValue / 1024
+		displayedValue /= 1024
 	}
 	return fmt.Sprintf("%.2f %s", displayedValue, prefixes[prefixIndex])
 }
@@ -145,11 +145,12 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		if info.Statistics != nil {
 			row = append(row, fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency))
 		}
-		if schema != nil {
+		switch {
+		case schema != nil:
 			row = append(row, fmt.Sprintf(" : %s [%s]", schema.Name, schema.Encoding))
-		} else if channel.SchemaID != 0 {
+		case channel.SchemaID != 0:
 			row = append(row, fmt.Sprintf(" : <missing schema %d>", channel.SchemaID))
-		} else {
+		default:
 			row = append(row, " : <no schema>")
 		}
 		rows = append(rows, row)

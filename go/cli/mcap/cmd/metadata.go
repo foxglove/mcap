@@ -194,7 +194,7 @@ var getMetadataCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to pretty JSON: %w", err)
 			}
-			_, err = os.Stdout.Write([]byte(prettyJSON + "\n"))
+			_, err = os.Stdout.WriteString(prettyJSON + "\n")
 			if err != nil {
 				return fmt.Errorf("failed to write metadata to output: %w", err)
 			}
@@ -212,9 +212,15 @@ func init() {
 	addCmd.AddCommand(addMetadataCmd)
 	addMetadataCmd.PersistentFlags().StringVarP(&addMetadataName, "name", "n", "", "name of metadata record to add")
 	addMetadataCmd.PersistentFlags().StringSliceVarP(&addMetadataKeyValues, "key", "k", []string{}, "key=value pair")
-	addMetadataCmd.MarkPersistentFlagRequired("name")
+	err := addMetadataCmd.MarkPersistentFlagRequired("name")
+	if err != nil {
+		die("failed to mark --name flag as required: %s", err)
+	}
 
 	getCmd.AddCommand(getMetadataCmd)
 	getMetadataCmd.PersistentFlags().StringVarP(&getMetadataName, "name", "n", "", "name of metadata record to create")
-	getMetadataCmd.MarkPersistentFlagRequired("name")
+	err = getMetadataCmd.MarkPersistentFlagRequired("name")
+	if err != nil {
+		die("failed to mark --name flag as required: %s", err)
+	}
 }

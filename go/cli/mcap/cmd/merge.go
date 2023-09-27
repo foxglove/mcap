@@ -28,13 +28,13 @@ type mergeOpts struct {
 	chunked     bool
 }
 
-// schemaID uniquely identifies a schema across the inputs
+// schemaID uniquely identifies a schema across the inputs.
 type schemaID struct {
 	inputID  int
 	schemaID uint16
 }
 
-// channelID uniquely identifies a channel across the inputs
+// channelID uniquely identifies a channel across the inputs.
 type channelID struct {
 	inputID   int
 	channelID uint16
@@ -162,17 +162,23 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 	// renumbered IDs, and load the message (with renumbered IDs) into the
 	// priority queue.
 	for inputID, input := range inputs {
-		reader, err := mcap.NewReader(input.reader)
+		err := func() error {
+			reader, err := mcap.NewReader(input.reader)
+			if err != nil {
+				return fmt.Errorf("failed to open reader on %s: %w", input.name, err)
+			}
+			defer reader.Close()
+			profiles[inputID] = reader.Header().Profile
+			iterator, err := reader.Messages(readopts.UsingIndex(false))
+			if err != nil {
+				return fmt.Errorf("failed to read messages on %s: %w", input.name, err)
+			}
+			iterators[inputID] = iterator
+			return nil
+		}()
 		if err != nil {
-			return fmt.Errorf("failed to open reader on %s: %w", input.name, err)
+			return err
 		}
-		defer reader.Close()
-		profiles[inputID] = reader.Header().Profile
-		iterator, err := reader.Messages(readopts.UsingIndex(false))
-		if err != nil {
-			return fmt.Errorf("failed to read messages on %s: %w", input.name, err)
-		}
-		iterators[inputID] = iterator
 	}
 	if err := writer.WriteHeader(&mcap.Header{Profile: outputProfile(profiles)}); err != nil {
 		return err
@@ -257,7 +263,7 @@ type namedReader struct {
 	reader io.Reader
 }
 
-// mergeCmd represents the merge command
+// mergeCmd represents the merge command.
 var mergeCmd = &cobra.Command{
 	Use:   "merge file1.mcap [file2.mcap] [file3.mcap]...",
 	Short: "Merge a selection of MCAP files by record timestamp",
