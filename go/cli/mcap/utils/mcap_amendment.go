@@ -282,7 +282,6 @@ func writeSummaryBytes(w io.Writer, section *summarySection, summaryStart int64)
 	})
 
 	fileOffset += wc.Count() - summaryInset
-	summaryInset = wc.Count()
 	summaryOffsetStart := fileOffset
 
 	for _, summaryOffset := range summaryOffsets {
@@ -404,7 +403,7 @@ func extendDataSection(
 	if err != nil {
 		return cw.Count(), nil, nil, fmt.Errorf("failed to construct writer: %w", err)
 	}
-	attachmentIndexes := make([]*mcap.AttachmentIndex, len(attachments))
+	attachmentIndexes := make([]*mcap.AttachmentIndex, 0, len(attachments))
 	for _, attachment := range attachments {
 		offset := cw.Count()
 		attachmentIndex := &mcap.AttachmentIndex{
@@ -423,7 +422,7 @@ func extendDataSection(
 		attachmentIndexes = append(attachmentIndexes, attachmentIndex)
 	}
 
-	metadataIndexes := make([]*mcap.MetadataIndex, len(metadata))
+	metadataIndexes := make([]*mcap.MetadataIndex, 0, len(metadata))
 	for _, metadata := range metadata {
 		offset := cw.Count()
 		metadataIndex := &mcap.MetadataIndex{

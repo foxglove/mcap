@@ -108,7 +108,7 @@ func (m *mcapMerger) addChannel(w *mcap.Writer, inputID int, channel *mcap.Chann
 	return newChannel.ID, nil
 }
 
-func (m *mcapMerger) addSchema(w *mcap.Writer, inputID int, schema *mcap.Schema) (uint16, error) {
+func (m *mcapMerger) addSchema(w *mcap.Writer, inputID int, schema *mcap.Schema) error {
 	key := schemaID{inputID, schema.ID}
 	newSchema := &mcap.Schema{
 		ID:       m.nextSchemaID, // substitute the next output schema ID
@@ -120,10 +120,10 @@ func (m *mcapMerger) addSchema(w *mcap.Writer, inputID int, schema *mcap.Schema)
 	m.schemaIDs[key] = m.nextSchemaID
 	err := w.WriteSchema(newSchema)
 	if err != nil {
-		return 0, fmt.Errorf("failed to write schema: %w", err)
+		return fmt.Errorf("failed to write schema: %w", err)
 	}
 	m.nextSchemaID++
-	return newSchema.ID, nil
+	return nil
 }
 
 func outputProfile(profiles []string) string {
@@ -194,7 +194,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 			return fmt.Errorf("failed to read first message on input %s: %w", inputName, err)
 		}
 		if schema != nil {
-			_, err = m.addSchema(writer, inputID, schema)
+			err = m.addSchema(writer, inputID, schema)
 			if err != nil {
 				return fmt.Errorf("failed to add initial schema for input %s: %w", inputName, err)
 			}
@@ -242,7 +242,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 				_, ok := m.outputSchemaID(msg.InputID, newSchema.ID)
 				if !ok {
 					// if the schema is unknown, add it to the output
-					_, err := m.addSchema(writer, msg.InputID, newSchema)
+					err := m.addSchema(writer, msg.InputID, newSchema)
 					if err != nil {
 						return fmt.Errorf("failed to add schema from %s: %w", inputs[msg.InputID].name, err)
 					}
