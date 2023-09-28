@@ -300,3 +300,38 @@ func TestBadInputGivesNamedErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestSameSchemasNotDuplicated(t *testing.T) {
+	buf1 := &bytes.Buffer{}
+	buf2 := &bytes.Buffer{}
+	buf3 := &bytes.Buffer{}
+	prepInput(t, buf1, &mcap.Schema{ID:1, Name: "SchemaA"}, 1, "/foo")
+	prepInput(t, buf2, &mcap.Schema{ID:1, Name: "SchemaA"}, 1, "/bar")
+	prepInput(t, buf3, &mcap.Schema{ID:1, Name: "SchemaB"}, 1, "/baz")
+	merger := newMCAPMerger(mergeOpts{})
+	output := &bytes.Buffer{}
+	inputs := []namedReader{
+		{"buf1", buf1},
+		{"buf2", buf2},
+		{"buf3", buf3},
+	}
+	assert.Nil(t, merger.mergeInputs(output, inputs))
+	// output should now be a well-formed mcap
+	reader, err := mcap.NewReader(output)
+	assert.Nil(t, err)
+	assert.Equal(t, reader.Header().Profile, "testprofile")
+	it, err := reader.Messages(readopts.UsingIndex(false))
+	assert.Nil(t, err)
+	schemas := make(map[uint16]bool)
+	var schemaNames []string
+	err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
+		_, ok := schemas[schema.ID];
+		if !ok {
+			schemas[schema.ID] = true
+			schemaNames = append(schemaNames, schema.Name)
+		}
+		return nil
+	})
+	assert.Equal(t, 2, len(schemas))
+	assert.Equal(t, schemaNames, []string{"SchemaA", "SchemaB"})
+}
