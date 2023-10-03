@@ -18,7 +18,7 @@ func (b *BufReadWriteSeeker) Write(p []byte) (n int, err error) {
 		newBuf := make([]byte, b.capacity*2)
 		copy(newBuf, b.buf)
 		b.buf = newBuf
-		b.capacity = b.capacity * 2
+		b.capacity *= 2
 		return b.Write(p)
 	}
 	if b.offset+int64(len(p)) > b.length {

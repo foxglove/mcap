@@ -346,7 +346,7 @@ func digits(n uint32) int {
 	}
 	count := 0
 	for n != 0 {
-		n = n / 10
+		n /= 10
 		count++
 	}
 	return count
