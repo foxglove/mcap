@@ -25,7 +25,7 @@ func printChannels(w io.Writer, channels []*mcap.Channel) error {
 	for _, channel := range channels {
 		metadata, err := json.Marshal(channel.Metadata)
 		if err != nil {
-			return fmt.Errorf("failed to marshal channel metadata: %v", err)
+			return fmt.Errorf("failed to marshal channel metadata: %w", err)
 		}
 		row := []string{
 			fmt.Sprintf("%d", channel.ID),
@@ -40,7 +40,7 @@ func printChannels(w io.Writer, channels []*mcap.Channel) error {
 	return nil
 }
 
-// channelsCmd represents the channels command
+// channelsCmd represents the channels command.
 var channelsCmd = &cobra.Command{
 	Use:   "channels",
 	Short: "List channels in an MCAP file",

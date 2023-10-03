@@ -2,9 +2,8 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"io"
-	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
@@ -12,7 +11,6 @@ import (
 )
 
 func TestCat(t *testing.T) {
-	ctx := context.Background()
 	cases := []struct {
 		assertion string
 		inputfile string
@@ -25,7 +23,7 @@ func TestCat(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		input, err := ioutil.ReadFile(c.inputfile)
+		input, err := os.ReadFile(c.inputfile)
 		assert.Nil(t, err)
 		w := new(bytes.Buffer)
 		r := bytes.NewReader(input)
@@ -35,7 +33,7 @@ func TestCat(t *testing.T) {
 			defer reader.Close()
 			it, err := reader.Messages()
 			assert.Nil(t, err)
-			err = printMessages(ctx, w, it, false)
+			err = printMessages(w, it, false)
 			assert.Nil(t, err)
 			r.Reset(input)
 			assert.Equal(t, c.expected, w.String())
@@ -44,7 +42,6 @@ func TestCat(t *testing.T) {
 }
 
 func BenchmarkCat(b *testing.B) {
-	ctx := context.Background()
 	cases := []struct {
 		assertion  string
 		inputfile  string
@@ -57,20 +54,22 @@ func BenchmarkCat(b *testing.B) {
 		},
 	}
 	for _, c := range cases {
-		input, err := ioutil.ReadFile(c.inputfile)
+		input, err := os.ReadFile(c.inputfile)
 		assert.Nil(b, err)
 		w := io.Discard
 		r := bytes.NewReader(input)
 		b.Run(c.assertion, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				reader, err := mcap.NewReader(r)
-				assert.Nil(b, err)
-				defer reader.Close()
-				it, err := reader.Messages()
-				assert.Nil(b, err)
-				err = printMessages(ctx, w, it, c.formatJSON)
-				assert.Nil(b, err)
-				r.Reset(input)
+				func() {
+					reader, err := mcap.NewReader(r)
+					assert.Nil(b, err)
+					defer reader.Close()
+					it, err := reader.Messages()
+					assert.Nil(b, err)
+					err = printMessages(w, it, c.formatJSON)
+					assert.Nil(b, err)
+					r.Reset(input)
+				}()
 			}
 		})
 	}

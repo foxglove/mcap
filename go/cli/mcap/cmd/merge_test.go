@@ -40,9 +40,9 @@ func TestMCAPMerging(t *testing.T) {
 		buf1 := &bytes.Buffer{}
 		buf2 := &bytes.Buffer{}
 		buf3 := &bytes.Buffer{}
-		prepInput(t, buf1, &mcap.Schema{ID:1}, 1, "/foo")
-		prepInput(t, buf2, &mcap.Schema{ID:1}, 1, "/bar")
-		prepInput(t, buf3, &mcap.Schema{ID:1}, 1, "/baz")
+		prepInput(t, buf1, &mcap.Schema{ID: 1}, 1, "/foo")
+		prepInput(t, buf2, &mcap.Schema{ID: 1}, 1, "/bar")
+		prepInput(t, buf3, &mcap.Schema{ID: 1}, 1, "/baz")
 		merger := newMCAPMerger(mergeOpts{
 			chunked: chunked,
 		})
@@ -134,8 +134,8 @@ func TestChannelsWithSameSchema(t *testing.T) {
 func TestMultiChannelInput(t *testing.T) {
 	buf1 := &bytes.Buffer{}
 	buf2 := &bytes.Buffer{}
-	prepInput(t, buf1, &mcap.Schema{ID:1}, 1, "/foo")
-	prepInput(t, buf2, &mcap.Schema{ID:1}, 1, "/bar")
+	prepInput(t, buf1, &mcap.Schema{ID: 1}, 1, "/foo")
+	prepInput(t, buf2, &mcap.Schema{ID: 1}, 1, "/bar")
 	merger := newMCAPMerger(mergeOpts{})
 	multiChannelInput := &bytes.Buffer{}
 	inputs := []namedReader{
@@ -144,7 +144,7 @@ func TestMultiChannelInput(t *testing.T) {
 	}
 	assert.Nil(t, merger.mergeInputs(multiChannelInput, inputs))
 	buf3 := &bytes.Buffer{}
-	prepInput(t, buf3, &mcap.Schema{ID:2}, 2, "/baz")
+	prepInput(t, buf3, &mcap.Schema{ID: 2}, 2, "/baz")
 	output := &bytes.Buffer{}
 	inputs2 := []namedReader{
 		{"multiChannelInput", multiChannelInput},
@@ -170,8 +170,8 @@ func TestMultiChannelInput(t *testing.T) {
 func TestSchemalessChannelInput(t *testing.T) {
 	buf1 := &bytes.Buffer{}
 	buf2 := &bytes.Buffer{}
-	prepInput(t, buf1, &mcap.Schema{ID:0}, 1, "/foo")
-	prepInput(t, buf2, &mcap.Schema{ID:1}, 1, "/bar")
+	prepInput(t, buf1, &mcap.Schema{ID: 0}, 1, "/foo")
+	prepInput(t, buf2, &mcap.Schema{ID: 1}, 1, "/bar")
 	merger := newMCAPMerger(mergeOpts{})
 	output := &bytes.Buffer{}
 	inputs := []namedReader{
@@ -262,7 +262,7 @@ func TestBadInputGivesNamedErrors(t *testing.T) {
 			"bad magic",
 			func() *bytes.Buffer {
 				buf := &bytes.Buffer{}
-				prepInput(t, buf, &mcap.Schema{ID:0}, 1, "/foo")
+				prepInput(t, buf, &mcap.Schema{ID: 0}, 1, "/foo")
 				buf.Bytes()[0] = 0x00
 				return buf
 			},
@@ -272,7 +272,7 @@ func TestBadInputGivesNamedErrors(t *testing.T) {
 			"bad content",
 			func() *bytes.Buffer {
 				buf := &bytes.Buffer{}
-				prepInput(t, buf, &mcap.Schema{ID:0}, 1, "/foo")
+				prepInput(t, buf, &mcap.Schema{ID: 0}, 1, "/foo")
 				for i := 3000; i < 4000; i++ {
 					buf.Bytes()[i] = 0x00
 				}
@@ -305,9 +305,9 @@ func TestSameSchemasNotDuplicated(t *testing.T) {
 	buf1 := &bytes.Buffer{}
 	buf2 := &bytes.Buffer{}
 	buf3 := &bytes.Buffer{}
-	prepInput(t, buf1, &mcap.Schema{ID:1, Name: "SchemaA"}, 1, "/foo")
-	prepInput(t, buf2, &mcap.Schema{ID:1, Name: "SchemaA"}, 1, "/bar")
-	prepInput(t, buf3, &mcap.Schema{ID:1, Name: "SchemaB"}, 1, "/baz")
+	prepInput(t, buf1, &mcap.Schema{ID: 1, Name: "SchemaA"}, 1, "/foo")
+	prepInput(t, buf2, &mcap.Schema{ID: 1, Name: "SchemaA"}, 1, "/bar")
+	prepInput(t, buf3, &mcap.Schema{ID: 1, Name: "SchemaB"}, 1, "/baz")
 	merger := newMCAPMerger(mergeOpts{})
 	output := &bytes.Buffer{}
 	inputs := []namedReader{
@@ -325,13 +325,16 @@ func TestSameSchemasNotDuplicated(t *testing.T) {
 	schemas := make(map[uint16]bool)
 	var schemaNames []string
 	err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
-		_, ok := schemas[schema.ID];
+		_, ok := schemas[schema.ID]
 		if !ok {
 			schemas[schema.ID] = true
 			schemaNames = append(schemaNames, schema.Name)
 		}
 		return nil
 	})
+	if err != nil {
+		die("failed to iterate through schemas: %s", err)
+	}
 	assert.Equal(t, 2, len(schemas))
 	assert.Equal(t, schemaNames, []string{"SchemaA", "SchemaB"})
 }

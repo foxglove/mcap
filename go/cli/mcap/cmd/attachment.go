@@ -95,11 +95,13 @@ var getAttachmentCmd = &cobra.Command{
 			case len(attachments[getAttachmentName]) == 0:
 				die("attachment %s not found", getAttachmentName)
 			case len(attachments[getAttachmentName]) == 1:
-				getAttachment(output, rs, attachments[getAttachmentName][0])
+				if err := getAttachment(output, rs, attachments[getAttachmentName][0]); err != nil {
+					die("failed to get attachment: %s", err)
+				}
 			case len(attachments[getAttachmentName]) > 1:
 				if getAttachmentOffset == 0 {
 					return fmt.Errorf(
-						"multiple attachments named %s exist. Specify an offset.",
+						"multiple attachments named %s exist (specify an offset)",
 						getAttachmentName,
 					)
 				}
@@ -179,15 +181,35 @@ var addAttachmentCmd = &cobra.Command{
 func init() {
 	addCmd.AddCommand(addAttachmentCmd)
 	addAttachmentCmd.PersistentFlags().StringVarP(&addAttachmentFilename, "file", "f", "", "filename of attachment to add")
-	addAttachmentCmd.PersistentFlags().StringVarP(&addAttachmentName, "name", "n", "", "name of attachment to add (defaults to filename)")
-	addAttachmentCmd.PersistentFlags().StringVarP(&addAttachmentMediaType, "content-type", "", "application/octet-stream", "content type of attachment")
-	addAttachmentCmd.PersistentFlags().Uint64VarP(&addAttachmentLogTime, "log-time", "", 0, "attachment log time in nanoseconds (defaults to current timestamp)")
-	addAttachmentCmd.PersistentFlags().Uint64VarP(&addAttachmentLogTime, "creation-time", "", 0, "attachment creation time in nanoseconds (defaults to ctime)")
-	addAttachmentCmd.MarkPersistentFlagRequired("file")
+	addAttachmentCmd.PersistentFlags().StringVarP(
+		&addAttachmentName, "name", "n", "", "name of attachment to add (defaults to filename)",
+	)
+	addAttachmentCmd.PersistentFlags().StringVarP(
+		&addAttachmentMediaType, "content-type", "", "application/octet-stream", "content type of attachment",
+	)
+	addAttachmentCmd.PersistentFlags().Uint64VarP(
+		&addAttachmentLogTime, "log-time", "", 0, "attachment log time in nanoseconds (defaults to current timestamp)",
+	)
+	addAttachmentCmd.PersistentFlags().Uint64VarP(
+		&addAttachmentLogTime, "creation-time", "", 0, "attachment creation time in nanoseconds (defaults to ctime)",
+	)
+	err := addAttachmentCmd.MarkPersistentFlagRequired("file")
+	if err != nil {
+		die("failed to mark --file flag as required: %s", err)
+	}
 
 	getCmd.AddCommand(getAttachmentCmd)
 	getAttachmentCmd.PersistentFlags().StringVarP(&getAttachmentName, "name", "n", "", "name of attachment to extract")
 	getAttachmentCmd.PersistentFlags().Uint64VarP(&getAttachmentOffset, "offset", "", 0, "offset of attachment to extract")
-	getAttachmentCmd.PersistentFlags().StringVarP(&getAttachmentOutput, "output", "o", "", "location to write attachment to")
-	getAttachmentCmd.MarkPersistentFlagRequired("name")
+	getAttachmentCmd.PersistentFlags().StringVarP(
+		&getAttachmentOutput,
+		"output",
+		"o",
+		"",
+		"location to write attachment to",
+	)
+	err = getAttachmentCmd.MarkPersistentFlagRequired("name")
+	if err != nil {
+		die("failed to mark --name flag as required: %s", err)
+	}
 }
