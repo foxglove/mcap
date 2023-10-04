@@ -103,7 +103,7 @@ const config = {
             type: "docSidebar",
             sidebarId: "referenceSidebar",
             position: "left",
-            label: "API reference",
+            label: "API Reference",
           },
           {
             type: "docSidebar",
@@ -125,15 +125,15 @@ const config = {
             title: "Docs",
             items: [
               {
-                label: "MCAP guides",
+                label: "Guides",
                 to: "/guides",
               },
               {
-                label: "MCAP API reference",
+                label: "API Reference",
                 to: "/reference",
               },
               {
-                label: "MCAP specification",
+                label: "Specification",
                 to: "/spec",
               },
             ],
