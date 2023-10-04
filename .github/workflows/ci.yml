@@ -474,7 +474,7 @@ jobs:
           default: true
           components: "rustfmt, clippy"
       - run: cargo fmt --all -- --check
-      - run: cargo clippy -- --no-deps
+      - run: cargo clippy -- --no-deps -Dwarnings
       - run: cargo build
       - run: cargo test
       - name: "publish to crates.io"

@@ -152,7 +152,7 @@ impl WriteOptions {
     /// begin a new chunk.
     pub fn chunk_size(self, chunk_size: Option<u64>) -> Self {
         Self {
-            chunk_size: chunk_size,
+            chunk_size,
             ..self
         }
     }
