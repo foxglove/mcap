@@ -2,8 +2,9 @@ import contextlib
 from io import BytesIO
 from tempfile import TemporaryFile
 
-from mcap.writer import Writer
 from std_msgs.msg import String  # type: ignore
+
+from mcap.writer import Writer
 
 
 @contextlib.contextmanager

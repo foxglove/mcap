@@ -1,19 +1,27 @@
-"""
-The :py:mod:`mcap_ros2.reader` module provides high-level ROS2 message reading capability.
+"""the :py:mod:`mcap_ros1.reader` module is deprecated. For similar functionality,
+instantiate the :py:class:`mcap.reader.McapReader` with a
+:py:class:`mcap_ros1.decoder.DecoderFactory` instance, eg:
 
-For more low-level control, consider using the underlying
-:py:class:`mcap_ros2.decoder.Decoder` and :py:class:`mcap.reader.McapReader`
-objects directly.
+>>> from mcap.reader import make_reader
+>>> from mcap_ros1.decoder import DecoderFactory
+>>> reader = make_reader(open("ros1.mcap", "rb"), decoder_factories=[DecoderFactory()])
+>>> for schema_, channel_, message_, ros1_msg in reader.iter_decoded_messages():
+>>>     print(ros1_msg)
+String(data="hello")
+String(data="goodbye")
 """
 
+import warnings
 from datetime import datetime
 from os import PathLike
-from typing import Any, IO, Iterable, Iterator, Optional, Union
+from typing import IO, Any, Iterable, Iterator, Optional, Union
 
 from mcap.reader import McapReader, make_reader
 from mcap.records import Channel, Message, Schema
 
-from .decoder import Decoder, McapROS2DecodeError
+from .decoder import DecoderFactory
+
+warnings.warn(__doc__, DeprecationWarning)
 
 
 def read_ros2_messages(
@@ -56,23 +64,19 @@ def read_ros2_messages(
         or isinstance(source, bytes)
     ):
         fd = open(source, "rb")
-        reader = make_reader(fd)
+        reader = make_reader(fd, decoder_factories=[DecoderFactory()])
     elif isinstance(source, McapReader):
         reader = source
     else:
-        reader = make_reader(source)
+        reader = make_reader(source, decoder_factories=[DecoderFactory()])
 
     try:
-        decoder = Decoder()
-        for schema, channel, message in reader.iter_messages(
+        for schema, channel, message, ros2_msg in reader.iter_decoded_messages(
             topics, start_time, end_time, log_time_order, reverse
         ):
-            if schema is None:
-                raise McapROS2DecodeError(
-                    f"cannot decode schemaless channel with encoding: {channel.message_encoding}"
-                )
+            assert schema is not None
             yield McapROS2Message(
-                ros_msg=decoder.decode(schema=schema, message=message),
+                ros_msg=ros2_msg,
                 message=message,
                 channel=channel,
                 schema=schema,

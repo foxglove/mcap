@@ -15,7 +15,7 @@ namespace gp = google::protobuf;
 // Loads the FileDescriptorSet from a protobuf schema definition into a SimpleDescriptorDatabase.
 bool LoadSchema(const mcap::SchemaPtr schema, gp::SimpleDescriptorDatabase* protoDb) {
   gp::FileDescriptorSet fdSet;
-  if (!fdSet.ParseFromArray(static_cast<const void*>(schema->data.data()), schema->data.size())) {
+  if (!fdSet.ParseFromArray(schema->data.data(), static_cast<int>(schema->data.size()))) {
     std::cerr << "failed to parse schema data" << std::endl;
     return false;
   }
@@ -83,8 +83,7 @@ int main(int argc, char** argv) {
       }
     }
     gp::Message* message = protoFactory.GetPrototype(descriptor)->New();
-    if (!message->ParseFromArray(static_cast<const void*>(it->message.data),
-                                 it->message.dataSize)) {
+    if (!message->ParseFromArray(it->message.data, static_cast<int>(it->message.dataSize))) {
       std::cerr << "failed to parse message using included foxglove.PointCloud schema" << std::endl;
       reader.close();
       return 1;

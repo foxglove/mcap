@@ -11,21 +11,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func prepInput(t *testing.T, w io.Writer, schemaID uint16, channelID uint16, topic string) {
+func prepInput(t *testing.T, w io.Writer, schema *mcap.Schema, channelID uint16, topic string) {
 	writer, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Chunked: true,
 	})
 	assert.Nil(t, err)
 
 	assert.Nil(t, writer.WriteHeader(&mcap.Header{Profile: "testprofile"}))
-	if schemaID != 0 {
-		assert.Nil(t, writer.WriteSchema(&mcap.Schema{
-			ID: schemaID,
-		}))
+	if schema.ID != 0 {
+		assert.Nil(t, writer.WriteSchema(schema))
 	}
 	assert.Nil(t, writer.WriteChannel(&mcap.Channel{
 		ID:       channelID,
-		SchemaID: schemaID,
+		SchemaID: schema.ID,
 		Topic:    topic,
 	}))
 	for i := 0; i < 100; i++ {
@@ -42,9 +40,9 @@ func TestMCAPMerging(t *testing.T) {
 		buf1 := &bytes.Buffer{}
 		buf2 := &bytes.Buffer{}
 		buf3 := &bytes.Buffer{}
-		prepInput(t, buf1, 1, 1, "/foo")
-		prepInput(t, buf2, 1, 1, "/bar")
-		prepInput(t, buf3, 1, 1, "/baz")
+		prepInput(t, buf1, &mcap.Schema{ID: 1}, 1, "/foo")
+		prepInput(t, buf2, &mcap.Schema{ID: 1}, 1, "/bar")
+		prepInput(t, buf3, &mcap.Schema{ID: 1}, 1, "/baz")
 		merger := newMCAPMerger(mergeOpts{
 			chunked: chunked,
 		})
@@ -136,8 +134,8 @@ func TestChannelsWithSameSchema(t *testing.T) {
 func TestMultiChannelInput(t *testing.T) {
 	buf1 := &bytes.Buffer{}
 	buf2 := &bytes.Buffer{}
-	prepInput(t, buf1, 1, 1, "/foo")
-	prepInput(t, buf2, 1, 1, "/bar")
+	prepInput(t, buf1, &mcap.Schema{ID: 1}, 1, "/foo")
+	prepInput(t, buf2, &mcap.Schema{ID: 1}, 1, "/bar")
 	merger := newMCAPMerger(mergeOpts{})
 	multiChannelInput := &bytes.Buffer{}
 	inputs := []namedReader{
@@ -146,7 +144,7 @@ func TestMultiChannelInput(t *testing.T) {
 	}
 	assert.Nil(t, merger.mergeInputs(multiChannelInput, inputs))
 	buf3 := &bytes.Buffer{}
-	prepInput(t, buf3, 2, 2, "/baz")
+	prepInput(t, buf3, &mcap.Schema{ID: 2}, 2, "/baz")
 	output := &bytes.Buffer{}
 	inputs2 := []namedReader{
 		{"multiChannelInput", multiChannelInput},
@@ -172,8 +170,8 @@ func TestMultiChannelInput(t *testing.T) {
 func TestSchemalessChannelInput(t *testing.T) {
 	buf1 := &bytes.Buffer{}
 	buf2 := &bytes.Buffer{}
-	prepInput(t, buf1, 0, 1, "/foo")
-	prepInput(t, buf2, 1, 1, "/bar")
+	prepInput(t, buf1, &mcap.Schema{ID: 0}, 1, "/foo")
+	prepInput(t, buf2, &mcap.Schema{ID: 1}, 1, "/bar")
 	merger := newMCAPMerger(mergeOpts{})
 	output := &bytes.Buffer{}
 	inputs := []namedReader{
@@ -264,7 +262,7 @@ func TestBadInputGivesNamedErrors(t *testing.T) {
 			"bad magic",
 			func() *bytes.Buffer {
 				buf := &bytes.Buffer{}
-				prepInput(t, buf, 0, 1, "/foo")
+				prepInput(t, buf, &mcap.Schema{ID: 0}, 1, "/foo")
 				buf.Bytes()[0] = 0x00
 				return buf
 			},
@@ -274,7 +272,7 @@ func TestBadInputGivesNamedErrors(t *testing.T) {
 			"bad content",
 			func() *bytes.Buffer {
 				buf := &bytes.Buffer{}
-				prepInput(t, buf, 0, 1, "/foo")
+				prepInput(t, buf, &mcap.Schema{ID: 0}, 1, "/foo")
 				for i := 3000; i < 4000; i++ {
 					buf.Bytes()[i] = 0x00
 				}
@@ -301,4 +299,42 @@ func TestBadInputGivesNamedErrors(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestSameSchemasNotDuplicated(t *testing.T) {
+	buf1 := &bytes.Buffer{}
+	buf2 := &bytes.Buffer{}
+	buf3 := &bytes.Buffer{}
+	prepInput(t, buf1, &mcap.Schema{ID: 1, Name: "SchemaA"}, 1, "/foo")
+	prepInput(t, buf2, &mcap.Schema{ID: 1, Name: "SchemaA"}, 1, "/bar")
+	prepInput(t, buf3, &mcap.Schema{ID: 1, Name: "SchemaB"}, 1, "/baz")
+	merger := newMCAPMerger(mergeOpts{})
+	output := &bytes.Buffer{}
+	inputs := []namedReader{
+		{"buf1", buf1},
+		{"buf2", buf2},
+		{"buf3", buf3},
+	}
+	assert.Nil(t, merger.mergeInputs(output, inputs))
+	// output should now be a well-formed mcap
+	reader, err := mcap.NewReader(output)
+	assert.Nil(t, err)
+	assert.Equal(t, reader.Header().Profile, "testprofile")
+	it, err := reader.Messages(readopts.UsingIndex(false))
+	assert.Nil(t, err)
+	schemas := make(map[uint16]bool)
+	var schemaNames []string
+	err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
+		_, ok := schemas[schema.ID]
+		if !ok {
+			schemas[schema.ID] = true
+			schemaNames = append(schemaNames, schema.Name)
+		}
+		return nil
+	})
+	if err != nil {
+		die("failed to iterate through schemas: %s", err)
+	}
+	assert.Equal(t, 2, len(schemas))
+	assert.Equal(t, schemaNames, []string{"SchemaA", "SchemaB"})
 }

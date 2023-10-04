@@ -11,6 +11,10 @@ import (
 	"github.com/pierrec/lz4/v4"
 )
 
+const (
+	chunkBufferGrowthMultiple = 1.2
+)
+
 // indexedMessageIterator is an iterator over an indexed mcap read seeker (as
 // seeking is required). It makes reads in alternation from the index data
 // section, the message index at the end of a chunk, and the chunk's contents.
@@ -27,12 +31,15 @@ type indexedMessageIterator struct {
 	chunkIndexes      []*ChunkIndex
 	attachmentIndexes []*AttachmentIndex
 	metadataIndexes   []*MetadataIndex
+	footer            *Footer
 
 	indexHeap rangeIndexHeap
 
 	zstdDecoder           *zstd.Decoder
 	lz4Reader             *lz4.Reader
 	hasReadSummarySection bool
+
+	compressedChunkAndMessageIndex []byte
 }
 
 // parseIndexSection parses the index section of the file and populates the
@@ -56,6 +63,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	if err != nil {
 		return fmt.Errorf("failed to parse footer: %w", err)
 	}
+	it.footer = footer
 
 	// scan the whole summary section
 	if footer.SummaryStart == 0 {
@@ -145,12 +153,17 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	if err != nil {
 		return err
 	}
-	chunk := make([]byte, chunkIndex.ChunkLength+chunkIndex.MessageIndexLength)
-	_, err = io.ReadFull(it.rs, chunk)
+
+	compressedChunkLength := chunkIndex.ChunkLength + chunkIndex.MessageIndexLength
+	if len(it.compressedChunkAndMessageIndex) < int(compressedChunkLength) {
+		newSize := int(float64(compressedChunkLength) * chunkBufferGrowthMultiple)
+		it.compressedChunkAndMessageIndex = make([]byte, newSize)
+	}
+	_, err = io.ReadFull(it.rs, it.compressedChunkAndMessageIndex[:compressedChunkLength])
 	if err != nil {
 		return fmt.Errorf("failed to read chunk data: %w", err)
 	}
-	parsedChunk, err := ParseChunk(chunk[9:chunkIndex.ChunkLength])
+	parsedChunk, err := ParseChunk(it.compressedChunkAndMessageIndex[9:chunkIndex.ChunkLength])
 	if err != nil {
 		return fmt.Errorf("failed to parse chunk: %w", err)
 	}
@@ -160,18 +173,16 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	case CompressionNone:
 		chunkData = parsedChunk.Records
 	case CompressionZSTD:
-		var err error
 		if it.zstdDecoder == nil {
-			it.zstdDecoder, err = zstd.NewReader(bytes.NewReader(parsedChunk.Records))
-		} else {
-			err = it.zstdDecoder.Reset(bytes.NewReader(parsedChunk.Records))
+			it.zstdDecoder, err = zstd.NewReader(nil)
+			if err != nil {
+				return fmt.Errorf("failed to instantiate zstd decoder: %w", err)
+			}
 		}
+		chunkData = make([]byte, 0, parsedChunk.UncompressedSize)
+		chunkData, err = it.zstdDecoder.DecodeAll(parsedChunk.Records, chunkData)
 		if err != nil {
-			return fmt.Errorf("failed to read zstd chunk: %w", err)
-		}
-		chunkData, err = io.ReadAll(it.zstdDecoder)
-		if err != nil {
-			return fmt.Errorf("failed to decompress zstd chunk: %w", err)
+			return fmt.Errorf("failed to decode chunk data: %w", err)
 		}
 	case CompressionLZ4:
 		if it.lz4Reader == nil {
@@ -179,7 +190,8 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		} else {
 			it.lz4Reader.Reset(bytes.NewReader(parsedChunk.Records))
 		}
-		chunkData, err = io.ReadAll(it.lz4Reader)
+		chunkData = make([]byte, parsedChunk.UncompressedSize)
+		_, err = io.ReadFull(it.lz4Reader, chunkData)
 		if err != nil {
 			return fmt.Errorf("failed to decompress lz4 chunk: %w", err)
 		}
@@ -187,7 +199,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		return fmt.Errorf("unsupported compression %s", parsedChunk.Compression)
 	}
 	// use the message index to find the messages we want from the chunk
-	messageIndexSection := chunk[chunkIndex.ChunkLength:]
+	messageIndexSection := it.compressedChunkAndMessageIndex[chunkIndex.ChunkLength:compressedChunkLength]
 	var recordLen uint64
 	offset := 0
 	for offset < len(messageIndexSection) {
@@ -225,7 +237,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	return nil
 }
 
-func (it *indexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, error) {
+func (it *indexedMessageIterator) Next(_ []byte) (*Schema, *Channel, *Message, error) {
 	if !it.hasReadSummarySection {
 		err := it.parseSummarySection()
 		if err != nil {

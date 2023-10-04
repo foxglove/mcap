@@ -1,16 +1,26 @@
-"""the :py:mod:`mcap_protobuf.reader` module provides high-level protobuf message reading
-capability. For more low-level control, consider using the underlying
-:py:class:`mcap_protobuf.decoder.Decoder` and :py:class:`mcap.reader.McapReader` objects
-directly.
+"""the :py:mod:`mcap_protobuf.reader` module is deprecated. For similar functionality,
+instantiate the :py:class:`mcap.reader.McapReader` with a
+:py:class:`mcap_protobuf.decoder.DecoderFactory` instance, eg:
+
+>>> from mcap.reader import make_reader
+>>> from mcap_protobuf.decoder import DecoderFactory
+>>> reader = make_reader(open("proto.mcap", "rb"), decoder_factories=[DecoderFactory()])
+>>> for schema_, channel_, message_, proto_msg in reader.iter_decoded_messages():
+>>>     print(proto_msg)
+MyProtoClass(data="hello")
+MyProtoClass(data="goodbye")
 """
-from typing import IO, Union, Any, Dict, Iterator, Optional, Iterable
+import warnings
 from datetime import datetime
 from os import PathLike
+from typing import IO, Any, Dict, Iterable, Iterator, Optional, Union
 
-from .decoder import Decoder, McapProtobufDecodeError
-
-from mcap.records import Message, Channel
 from mcap.reader import McapReader, make_reader
+from mcap.records import Channel, Message
+
+from .decoder import DecoderFactory
+
+warnings.warn(__doc__, DeprecationWarning)
 
 
 def read_protobuf_messages(
@@ -54,24 +64,19 @@ def read_protobuf_messages(
         or isinstance(source, bytes)
     ):
         fd = open(source, "rb")
-        reader = make_reader(fd)
+        reader = make_reader(fd, decoder_factories=[DecoderFactory()])
     elif isinstance(source, McapReader):
         reader = source
     else:
-        reader = make_reader(source)
+        reader = make_reader(source, decoder_factories=[DecoderFactory()])
 
     try:
-        decoder = Decoder()
-        for schema, channel, message in reader.iter_messages(
+        for schema, channel, message, proto_msg in reader.iter_decoded_messages(
             topics, start_time, end_time, log_time_order, reverse
         ):
-            if schema is None:
-                raise McapProtobufDecodeError(
-                    f"cannot decode schemaless channel with encoding: {channel.message_encoding}"
-                )
-
+            assert schema is not None
             yield McapProtobufMessage(
-                proto_msg=decoder.decode(schema=schema, message=message),
+                proto_msg=proto_msg,
                 message=message,
                 channel=channel,
             )

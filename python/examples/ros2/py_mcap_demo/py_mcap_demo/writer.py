@@ -1,10 +1,9 @@
 """script that writes ROS2 messages to MCAP using the rosbag2_py api."""
 import argparse
 
+import rosbag2_py
 from rclpy.serialization import serialize_message
 from std_msgs.msg import String
-
-import rosbag2_py
 
 TOPIC_NAME = "/chatter"
 

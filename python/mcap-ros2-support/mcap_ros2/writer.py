@@ -1,12 +1,13 @@
 import time
 from io import BufferedWriter
-from typing import Any, Dict, IO, Optional, Union
+from typing import IO, Any, Dict, Optional, Union
 
 import mcap
 from mcap.exceptions import McapError
 from mcap.records import Schema
 from mcap.well_known import SchemaEncoding
-from mcap.writer import CompressionType, Writer as McapWriter
+from mcap.writer import CompressionType
+from mcap.writer import Writer as McapWriter
 
 from . import __version__
 from ._dynamic import EncoderFunction, serialize_dynamic

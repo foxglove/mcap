@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/foxglove/go-rosbag"
+	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/foxglove/mcap/go/ros"
 	_ "github.com/mattn/go-sqlite3" // sqlite3 driver
@@ -107,7 +109,30 @@ var convertCmd = &cobra.Command{
 
 		switch filetype {
 		case FileTypeRos1:
-			err = ros.Bag2MCAP(bw, f, opts)
+			rosReader, err := rosbag.NewReader(f)
+			if err != nil {
+				die("failed to make new ROS reader: %s", err)
+			}
+
+			rosInfo, err := rosReader.Info()
+			if err != nil {
+				die("failed to get info from ROS file: %s", err)
+			}
+
+			messageCount := rosInfo.MessageCount
+			progressBar := utils.NewProgressBar(int64(messageCount))
+			_, err = f.Seek(0, io.SeekStart) // Info() moved the seeker to EOF. This brings it back to the start.
+			if err != nil {
+				die("failed to seek to start of file: %s", err)
+			}
+
+			err = ros.Bag2MCAP(bw, f, opts, func(data []byte) error {
+				progressBarErr := progressBar.Add64(1)
+				if progressBarErr != nil {
+					die("failed to increment progressbar: %s", err)
+				}
+				return nil
+			})
 			if err != nil && !errors.Is(err, io.EOF) {
 				die("failed to convert file: %s", err)
 			}
@@ -118,13 +143,26 @@ var convertCmd = &cobra.Command{
 				die("failed to open sqlite3: %s", err)
 			}
 
+			var messageCount int
+			err = db.QueryRow("select count(*) from messages").Scan(&messageCount)
+			if err != nil {
+				die("failed to query db for message counts")
+			}
+			progressBar := utils.NewProgressBar(int64(messageCount))
+
 			amentPath := convertAmentPrefixPath
 			prefixPath := os.Getenv("AMENT_PREFIX_PATH")
 			if prefixPath != "" {
 				amentPath += string(os.PathListSeparator) + prefixPath
 			}
 			dirs := strings.FieldsFunc(amentPath, func(c rune) bool { return (c == os.PathListSeparator) })
-			err = ros.DB3ToMCAP(bw, db, opts, dirs)
+			err = ros.DB3ToMCAP(bw, db, opts, dirs, func(b []byte) error {
+				progressBarErr := progressBar.Add64(1)
+				if progressBarErr != nil {
+					die("failed to increment progressbar: %s", err)
+				}
+				return nil
+			})
 			if err != nil {
 				die("failed to convert file: %s", err)
 			}

@@ -85,7 +85,7 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
-      // image: "img/docusaurus-social-card.jpg",
+      image: "img/og-image.jpeg",
       navbar: {
         title: "MCAP",
         logo: {
@@ -188,6 +188,7 @@ if (process.env.NODE_ENV === "production") {
     attributes: {
       src: "https://cdn.usefathom.com/script.js",
       "data-site": "RULHQVMR", // cspell:disable-line
+      "data-spa": "history",
       defer: "defer",
     },
   });

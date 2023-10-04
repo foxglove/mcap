@@ -15,7 +15,10 @@ func TestNoErrorOnMessagelessChunks(t *testing.T) {
 		ChunkSize: 10,
 	})
 	assert.Nil(t, err)
-	assert.Nil(t, writer.WriteHeader(&mcap.Header{"", ""}))
+	assert.Nil(t, writer.WriteHeader(&mcap.Header{
+		Profile: "",
+		Library: "",
+	}))
 	assert.Nil(t, writer.WriteChannel(&mcap.Channel{
 		ID:       1,
 		SchemaID: 0,

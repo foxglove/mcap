@@ -42,7 +42,7 @@ func printChunks(w io.Writer, chunkIndexes []*mcap.ChunkIndex) {
 	utils.FormatTable(w, rows)
 }
 
-// chunksCmd represents the chunks command
+// chunksCmd represents the chunks command.
 var chunksCmd = &cobra.Command{
 	Use:   "chunks",
 	Short: "List chunks in an MCAP file",

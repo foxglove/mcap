@@ -1,29 +1,41 @@
-""" High-level classes for reading content out of MCAP data sources. """
-from abc import ABC, abstractmethod
-from typing import Iterable, Tuple, Iterator, Dict, Optional, List, IO
+""" High-level classes for reading content out of MCAP data sources.
+"""
 import io
+from abc import ABC, abstractmethod
+from typing import (
+    IO,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    NamedTuple,
+    Optional,
+    Tuple,
+)
 
-from .data_stream import ReadDataStream
-from .exceptions import McapError
+from ._message_queue import MessageQueue
+from .data_stream import ReadDataStream, RecordBuilder
+from .decoder import DecoderFactory
+from .exceptions import DecoderNotFoundError, McapError
 from .records import (
     Attachment,
-    McapRecord,
-    Schema,
+    AttachmentIndex,
     Channel,
+    Chunk,
+    ChunkIndex,
+    Footer,
     Header,
+    McapRecord,
     Message,
     Metadata,
-    ChunkIndex,
-    Statistics,
-    Chunk,
-    Footer,
     MetadataIndex,
-    AttachmentIndex,
+    Schema,
+    Statistics,
 )
-from .stream_reader import StreamReader, breakup_chunk, MAGIC_SIZE
-from .data_stream import RecordBuilder
+from .stream_reader import MAGIC_SIZE, StreamReader, breakup_chunk, read_magic
 from .summary import Summary
-from ._message_queue import MessageQueue
 
 
 def _get_record_size(record: McapRecord):
@@ -87,18 +99,30 @@ def _chunks_matching_topics(
     return out
 
 
+class DecodedMessageTuple(NamedTuple):
+    """Yielded from every iteration of :py:meth:`~mcap.reader.McapReader.iter_decoded_messages`."""
+
+    schema: Optional[Schema]
+    channel: Channel
+    message: Message
+    decoded_message: Any
+
+
 class McapReader(ABC):
     """Reads data out of an MCAP file, using the summary section where available to efficiently
     read only the parts of the file that are needed.
 
-    :param stream: a file-like object for reading the source data from.
-    :param validate_crcs: if ``True``, will validate Chunk and DataEnd CRC values as messages are
-        read.
+    :param decoder_factories: An iterable of :py:class:`~mcap.decoder.DecoderFactory`
+        instances which can provide decoding functionality to
+        :py:meth:`~mcap.reader.McapReader.iter_decoded_messages`.
     """
 
-    @abstractmethod
-    def __init__(self, stream: IO[bytes], validate_crcs: bool = False):
-        raise NotImplementedError()
+    def __init__(
+        self,
+        decoder_factories: Iterable[DecoderFactory] = (),
+    ):
+        self._decoder_factories = decoder_factories
+        self._decoders: dict[int, Callable[[bytes], Any]] = {}
 
     @abstractmethod
     def iter_messages(
@@ -123,6 +147,52 @@ class McapReader(ABC):
         """
         raise NotImplementedError()
 
+    def iter_decoded_messages(
+        self,
+        topics: Optional[Iterable[str]] = None,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        log_time_order: bool = True,
+        reverse: bool = False,
+    ) -> Iterator[DecodedMessageTuple]:
+        """iterates through messages in an MCAP, decoding their contents.
+
+        :param topics: if not None, only messages from these topics will be returned.
+        :param start_time: an integer nanosecond timestamp. if provided, messages logged before this
+            timestamp are not included.
+        :param end_time: an integer nanosecond timestamp. if provided, messages logged after this
+            timestamp are not included.
+        :param log_time_order: if True, messages will be yielded in ascending log time order. If
+            False, messages will be yielded in the order they appear in the MCAP file.
+        :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
+            yielded in descending log time order.
+        """
+        message_iterator = self.iter_messages(
+            topics, start_time, end_time, log_time_order, reverse
+        )
+
+        def decoded_message(
+            schema: Optional[Schema], channel: Channel, message: Message
+        ) -> Any:
+            decoder = self._decoders.get(message.channel_id)
+            if decoder is not None:
+                return decoder(message.data)
+            for factory in self._decoder_factories:
+                decoder = factory.decoder_for(channel.message_encoding, schema)
+                if decoder is not None:
+                    self._decoders[message.channel_id] = decoder
+                    return decoder(message.data)
+
+            raise DecoderNotFoundError(
+                f"no decoder factory supplied for message encoding {channel.message_encoding}, "
+                f"schema {schema}"
+            )
+
+        for schema, channel, message in message_iterator:
+            yield DecodedMessageTuple(
+                schema, channel, message, decoded_message(schema, channel, message)
+            )
+
     @abstractmethod
     def get_header(self) -> Header:
         """Reads the Header records from the beginning of the MCAP file."""
@@ -144,11 +214,19 @@ class McapReader(ABC):
         raise NotImplementedError()
 
 
-def make_reader(stream: IO[bytes], validate_crcs: bool = False) -> McapReader:
+def make_reader(
+    stream: IO[bytes],
+    validate_crcs: bool = False,
+    decoder_factories: Iterable[DecoderFactory] = (),
+) -> McapReader:
     """constructs the appropriate McapReader implementation for this data source."""
     if stream.seekable():
-        return SeekingReader(stream, validate_crcs=validate_crcs)
-    return NonSeekingReader(stream, validate_crcs=validate_crcs)
+        return SeekingReader(
+            stream, validate_crcs=validate_crcs, decoder_factories=decoder_factories
+        )
+    return NonSeekingReader(
+        stream, validate_crcs=validate_crcs, decoder_factories=decoder_factories
+    )
 
 
 class SeekingReader(McapReader):
@@ -159,9 +237,19 @@ class SeekingReader(McapReader):
         does not validate the data section CRC in the DataEnd record because it is designed not to
         read the entire data section when reading messages. To read messages while validating the
         data section CRC, use :py:class:`NonSeekingReader`.
+    :param decoder_factories: An iterable of :py:class:`~mcap.decoder.DecoderFactory`
+        instances which can provide decoding functionality to
+        :py:meth:`~mcap.reader.McapReader.iter_decoded_messages`.
     """
 
-    def __init__(self, stream: IO[bytes], validate_crcs: bool = False):
+    def __init__(
+        self,
+        stream: IO[bytes],
+        validate_crcs: bool = False,
+        decoder_factories: Iterable[DecoderFactory] = (),
+    ):
+        super().__init__(decoder_factories=decoder_factories)
+        read_magic(ReadDataStream(stream, calculate_crc=False))
         self._stream = stream
         self._validate_crcs = validate_crcs
         self._summary: Optional[Summary] = None
@@ -185,15 +273,17 @@ class SeekingReader(McapReader):
             False, messages will be yielded in the order they appear in the MCAP file.
         :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
             yielded in descending log time order.
+
         """
         summary = self.get_summary()
         if summary is None or len(summary.chunk_indexes) == 0:
             # No chunk indices available, so there is no index to search for messages.
             # use a non-seeking reader to read linearly through the stream.
             self._stream.seek(0, io.SEEK_SET)
-            return NonSeekingReader(self._stream).iter_messages(
+            yield from NonSeekingReader(self._stream).iter_messages(
                 topics, start_time, end_time, log_time_order
             )
+            return
 
         message_queue = MessageQueue(log_time_order=log_time_order, reverse=reverse)
         for chunk_index in _chunks_matching_topics(
@@ -263,7 +353,9 @@ class SeekingReader(McapReader):
         summary = self.get_summary()
         if summary is None:
             # no index available, use a non-seeking reader to read linearly through the stream.
-            return NonSeekingReader(self._stream).iter_attachments()
+            self._stream.seek(0, io.SEEK_SET)
+            yield from NonSeekingReader(self._stream).iter_attachments()
+            return
         for attachment_index in summary.attachment_indexes:
             self._stream.seek(attachment_index.offset)
             record = next(StreamReader(self._stream, skip_magic=True).records)
@@ -278,7 +370,8 @@ class SeekingReader(McapReader):
         if summary is None:
             # fall back to a non-seeking reader
             self._stream.seek(0, io.SEEK_SET)
-            return NonSeekingReader(self._stream).iter_metadata()
+            yield from NonSeekingReader(self._stream).iter_metadata()
+            return
         for metadata_index in summary.metadata_indexes:
             self._stream.seek(metadata_index.offset)
             record = next(StreamReader(self._stream, skip_magic=True).records)
@@ -293,9 +386,18 @@ class NonSeekingReader(McapReader):
 
     :param stream: a file-like object for reading the source data from.
     :param validate_crcs: if ``True``, will validate chunk and data section CRC values.
+    :param decoder_factories: An iterable of :py:class:`~mcap.decoder.DecoderFactory`
+        instances which can provide decoding functionality to
+        :py:meth:`~mcap.reader.McapReader.iter_decoded_messages`.
     """
 
-    def __init__(self, stream: IO[bytes], validate_crcs: bool = False):
+    def __init__(
+        self,
+        stream: IO[bytes],
+        validate_crcs: bool = False,
+        decoder_factories: Iterable[DecoderFactory] = (),
+    ):
+        super().__init__(decoder_factories=decoder_factories)
         self._stream_reader = StreamReader(stream, validate_crcs=validate_crcs)
         self._schemas: Dict[int, Schema] = {}
         self._channels: Dict[int, Channel] = {}

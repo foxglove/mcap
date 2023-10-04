@@ -121,3 +121,52 @@
   width: 60px;
   height: auto;
 }
+
+.logosHeader {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.logosSection {
+  padding: 4rem 2rem;
+}
+
+.logosSection a {
+  display: flex;
+}
+
+.logosSection a svg {
+  align-self: center;
+}
+
+[data-theme="light"] .logosSection {
+  background-color: rgba(148, 101, 222, 0.06);
+}
+
+[data-theme="dark"] .logosSection {
+  background-color: #303846;
+}
+
+.logoList {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.logoLink {
+  width: 33%;
+}
+
+.logoIcon {
+  width: 100%;
+  max-height: 50px;
+  margin: 2rem;
+}
+
+[data-theme="light"] .darkMode {
+  display: none;
+}
+
+[data-theme="dark"] .lightMode {
+  display: none;
+}

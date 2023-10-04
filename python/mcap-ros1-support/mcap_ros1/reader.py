@@ -1,15 +1,26 @@
-"""the :py:mod:`mcap_ros1.reader` module provides high-level ROS1 message reading
-capability. For more low-level control, consider using the underlying
-:py:class:`mcap_ros1.decoder.Decoder` and :py:class:`mcap.reader.McapReader` objects directly.
+""".. deprecated:: 0.7.0
+    For similar functionality, instantiate :py:class:`mcap.reader.McapReader` with a
+    :py:class:`mcap_ros1.decoder.DecoderFactory` instance, eg:
+
+>>> from mcap.reader import make_reader
+>>> from mcap_ros1.decoder import DecoderFactory
+>>> reader = make_reader(open("ros1.mcap", "rb"), decoder_factories=[DecoderFactory()])
+>>> for schema_, channel_, message_, ros1_msg in reader.iter_decoded_messages():
+>>>     print(ros1_msg)
+String(data="hello")
+String(data="goodbye")
 """
-from typing import IO, Union, Any, Dict, Iterator, Optional, Iterable
+import warnings
 from datetime import datetime
 from os import PathLike
+from typing import IO, Any, Dict, Iterable, Iterator, Optional, Union
 
-from .decoder import Decoder, McapROS1DecodeError
-
-from mcap.records import Message, Channel, Schema
 from mcap.reader import McapReader, make_reader
+from mcap.records import Channel, Message, Schema
+
+from .decoder import DecoderFactory
+
+warnings.warn(__doc__, DeprecationWarning)
 
 
 def read_ros1_messages(
@@ -20,7 +31,12 @@ def read_ros1_messages(
     log_time_order: bool = True,
     reverse: bool = False,
 ) -> Iterator["McapROS1Message"]:
-    """High-level generator that reads ROS1 messages from an MCAP file.
+    """
+    High-level generator that reads ROS1 messages from an MCAP file.
+
+    .. deprecated:: 0.7.0
+      Use :py:class:`mcap_ros1.decoder.DecoderFactory` with :py:class:`mcap.reader.McapReader`
+      instead.
 
     :param source: some source of MCAP file data. Supply a stream of bytes, an McapReader instance,
         or the path to a valid MCAP file in the filesystem.
@@ -53,26 +69,19 @@ def read_ros1_messages(
         or isinstance(source, bytes)
     ):
         fd = open(source, "rb")
-        reader = make_reader(fd)
+        reader = make_reader(fd, decoder_factories=[DecoderFactory()])
     elif isinstance(source, McapReader):
         reader = source
     else:
-        reader = make_reader(source)
+        reader = make_reader(source, decoder_factories=[DecoderFactory()])
 
     try:
-        decoder = Decoder()
-        for schema, channel, message in reader.iter_messages(
+        for schema, channel, message, ros_msg in reader.iter_decoded_messages(
             topics, start_time, end_time, log_time_order, reverse
         ):
-            if schema is None:
-                raise McapROS1DecodeError(
-                    f"cannot decode schemaless channel with encoding {channel.message_encoding}"
-                )
+            assert schema is not None
             yield McapROS1Message(
-                ros_msg=decoder.decode(schema=schema, message=message),
-                message=message,
-                channel=channel,
-                schema=schema,
+                message=message, channel=channel, schema=schema, ros_msg=ros_msg
             )
     finally:
         if fd is not None:
@@ -80,7 +89,11 @@ def read_ros1_messages(
 
 
 class McapROS1Message:
-    """Contains a single ROS message and associated metadata.
+    """
+    Contains a single ROS message and associated metadata.
+
+    .. deprecated:: 0.7.0
+      use the tuple yielded from :py:class:`mcap.reader.McapReader.iter_decoded_messages` instead.
 
     :ivar ros_msg: the decoded ROS1 message.
     :ivar sequence_count: the message sequence count if included in the MCAP, or 0 otherwise.

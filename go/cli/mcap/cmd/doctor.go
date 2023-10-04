@@ -45,7 +45,7 @@ func (doctor *mcapDoctor) warn(format string, v ...any) {
 
 func (doctor *mcapDoctor) error(format string, v ...any) {
 	color.Red(format, v...)
-	doctor.errorCount += 1
+	doctor.errorCount++
 }
 
 func (doctor *mcapDoctor) fatal(v ...any) {
@@ -266,7 +266,7 @@ func (doctor *mcapDoctor) Examine() error {
 			}
 
 			if header.Library == "" {
-				doctor.warn("Header.library field should be non-empty. The library field should be set to a value that identifies the software which produced the file.")
+				doctor.warn("Set the Header.library field to a value that identifies the software that produced the file.")
 			}
 
 			if len(header.Profile) > 0 && header.Profile != "ros1" && header.Profile != "ros2" {
@@ -350,7 +350,7 @@ func (doctor *mcapDoctor) Examine() error {
 				doctor.error("Failed to parse message index:", err)
 			}
 			if messageOutsideChunk {
-				doctor.warn("encountered a message index in file with message records outside chunks. Messages outside of chunks cannot be indexed and will be missed by indexed readers.")
+				doctor.warn("Message index in file has message records outside chunks. Indexed readers will miss these messages.")
 			}
 		case mcap.TokenChunkIndex:
 			chunkIndex, err := mcap.ParseChunkIndex(data)
@@ -358,7 +358,7 @@ func (doctor *mcapDoctor) Examine() error {
 				doctor.error("Failed to parse chunk index:", err)
 			}
 			if messageOutsideChunk {
-				doctor.warn("encountered a chunk index in file with message records outside chunks. Messages outside of chunks cannot be indexed and will be missed by indexed readers.")
+				doctor.warn("Message index in file has message records outside chunks. Indexed readers will miss these messages.")
 			}
 			if _, ok := doctor.chunkIndexes[chunkIndex.ChunkStartOffset]; ok {
 				doctor.error("Multiple chunk indexes found for chunk at offset", chunkIndex.ChunkStartOffset)
@@ -406,58 +406,112 @@ func (doctor *mcapDoctor) Examine() error {
 	}
 
 	for chunkOffset, chunkIndex := range doctor.chunkIndexes {
-		doctor.reader.Seek(int64(chunkOffset), io.SeekStart)
+		_, err := doctor.reader.Seek(int64(chunkOffset), io.SeekStart)
+		if err != nil {
+			die("failed to seek to chunk offset: %s", err)
+		}
 		tokenType, data, err := lexer.Next(msg)
 		if err != nil {
 			doctor.error("Chunk index points to offset %d but encountered error reading at that offset: %v", chunkOffset, err)
 			continue
-		} else if tokenType != mcap.TokenChunk {
-			doctor.error("Chunk index points to offset %d but the record at this offset is a %s", chunkOffset, tokenType.String())
+		}
+		if tokenType != mcap.TokenChunk {
+			doctor.error(
+				"Chunk index points to offset %d but the record at this offset is a %s",
+				chunkOffset,
+				tokenType.String(),
+			)
 			continue
-		} else if chunkIndex.ChunkLength != 9+uint64(len(data)) {
-			doctor.error("Chunk index at offset %d has chunk length %d but the chunk at this offset has length %d (including opcode+length)", chunkOffset, chunkIndex.ChunkLength, 9+len(data))
+		}
+		if chunkIndex.ChunkLength != 9+uint64(len(data)) {
+			doctor.error(
+				"Chunk index %d length mismatch: %d vs %d.",
+				chunkOffset,
+				chunkIndex.ChunkLength,
+				9+len(data),
+			)
 			continue
 		}
 		chunk, err := mcap.ParseChunk(data)
 		if err != nil {
-			doctor.error("Chunk index points to offset %d but encountered error parsing the chunk at that offset: %v", chunkOffset, err)
+			doctor.error(
+				"Chunk index points to offset %d but encountered error parsing the chunk at that offset: %v",
+				chunkOffset,
+				err,
+			)
 			continue
 		}
 		if chunk.MessageStartTime != chunkIndex.MessageStartTime {
-			doctor.error("Chunk at offset %d has message start time %d, but its chunk index has message start time %d", chunkOffset, chunk.MessageStartTime, chunkIndex.MessageStartTime)
+			doctor.error(
+				"Chunk at offset %d has message start time %d, but its chunk index has message start time %d",
+				chunkOffset,
+				chunk.MessageStartTime,
+				chunkIndex.MessageStartTime,
+			)
 		}
 		if chunk.MessageEndTime != chunkIndex.MessageEndTime {
-			doctor.error("Chunk at offset %d has message end time %d, but its chunk index has message end time %d", chunkOffset, chunk.MessageEndTime, chunkIndex.MessageEndTime)
+			doctor.error(
+				"Chunk at offset %d has message end time %d, but its chunk index has message end time %d",
+				chunkOffset,
+				chunk.MessageEndTime,
+				chunkIndex.MessageEndTime,
+			)
 		}
 		if chunk.Compression != chunkIndex.Compression.String() {
-			doctor.error("Chunk at offset %d has compression %s, but its chunk index has compression %s", chunkOffset, chunk.Compression, chunkIndex.Compression)
+			doctor.error(
+				"Chunk at offset %d has compression %s, but its chunk index has compression %s",
+				chunkOffset,
+				chunk.Compression,
+				chunkIndex.Compression,
+			)
 		}
 		if uint64(len(chunk.Records)) != chunkIndex.CompressedSize {
-			doctor.error("Chunk at offset %d has data length %d, but its chunk index has compressed size %s", chunkOffset, len(chunk.Records), chunkIndex.CompressedSize)
+			doctor.error(
+				"Chunk at offset %d has data length %d, but its chunk index has compressed size %s",
+				chunkOffset,
+				len(chunk.Records),
+				chunkIndex.CompressedSize,
+			)
 		}
 		if chunk.UncompressedSize != chunkIndex.UncompressedSize {
-			doctor.error("Chunk at offset %d has uncompressed size %d, but its chunk index has uncompressed size %d", chunkOffset, chunk.UncompressedSize, chunkIndex.UncompressedSize)
+			doctor.error(
+				"Chunk at offset %d has uncompressed size %d, but its chunk index has uncompressed size %d",
+				chunkOffset,
+				chunk.UncompressedSize,
+				chunkIndex.UncompressedSize,
+			)
 		}
 	}
 
 	if doctor.statistics != nil {
 		if doctor.messageCount > 0 {
 			if doctor.statistics.MessageStartTime != doctor.minLogTime {
-				doctor.error("Statistics has message start time %d, but the minimum message start time is %d", doctor.statistics.MessageStartTime, doctor.minLogTime)
+				doctor.error(
+					"Statistics has message start time %d, but the minimum message start time is %d",
+					doctor.statistics.MessageStartTime,
+					doctor.minLogTime,
+				)
 			}
 			if doctor.statistics.MessageEndTime != doctor.maxLogTime {
-				doctor.error("Statistics has message end time %d, but the maximum message end time is %d", doctor.statistics.MessageEndTime, doctor.maxLogTime)
+				doctor.error(
+					"Statistics has message end time %d, but the maximum message end time is %d",
+					doctor.statistics.MessageEndTime,
+					doctor.maxLogTime,
+				)
 			}
 		}
 		if doctor.statistics.MessageCount != doctor.messageCount {
-			doctor.error("Statistics has message count %d, but actual number of messages is %d", doctor.statistics.MessageCount, doctor.messageCount)
+			doctor.error(
+				"Statistics has message count %d, but actual number of messages is %d",
+				doctor.statistics.MessageCount,
+				doctor.messageCount,
+			)
 		}
 	}
 	if doctor.errorCount == 0 {
 		return nil
-	} else {
-		return fmt.Errorf("encountered %d errors", doctor.errorCount)
 	}
+	return fmt.Errorf("encountered %d errors", doctor.errorCount)
 }
 
 func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
@@ -470,7 +524,7 @@ func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
 	}
 }
 
-func main(cmd *cobra.Command, args []string) {
+func main(_ *cobra.Command, args []string) {
 	ctx := context.Background()
 	if len(args) != 1 {
 		fmt.Println("An MCAP file argument is required.")

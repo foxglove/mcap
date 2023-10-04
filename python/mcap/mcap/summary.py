@@ -1,11 +1,11 @@
 from typing import Dict, List, Optional
 
 from .records import (
-    Schema,
+    AttachmentIndex,
     Channel,
     ChunkIndex,
-    AttachmentIndex,
     MetadataIndex,
+    Schema,
     Statistics,
 )
 

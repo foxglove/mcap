@@ -657,13 +657,11 @@ struct MCAP_PUBLIC LinearMessageView {
     friend LinearMessageView;
 
     Iterator() = default;
-    Iterator(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd,
-             const ReadMessageOptions& options, const ProblemCallback& onProblem);
+    Iterator(LinearMessageView& view);
 
     class Impl {
     public:
-      Impl(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd,
-           const ReadMessageOptions& options, const ProblemCallback& onProblem);
+      Impl(LinearMessageView& view);
 
       Impl(const Impl&) = delete;
       Impl& operator=(const Impl&) = delete;
@@ -674,11 +672,10 @@ struct MCAP_PUBLIC LinearMessageView {
       reference dereference() const;
       bool has_value() const;
 
-      McapReader& mcapReader_;
+      LinearMessageView& view_;
+
       std::optional<TypedRecordReader> recordReader_;
       std::optional<IndexedMessageReader> indexedMessageReader_;
-      ReadMessageOptions readMessageOptions_;
-      const ProblemCallback& onProblem_;
       Message curMessage_;
       std::optional<MessageView> curMessageView_;
 
@@ -686,6 +683,7 @@ struct MCAP_PUBLIC LinearMessageView {
       void onMessage(const Message& message, RecordOffset offset);
     };
 
+    bool begun_ = false;
     std::unique_ptr<Impl> impl_;
   };
 

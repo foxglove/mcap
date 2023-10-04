@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
@@ -30,7 +31,7 @@ func humanBytes(numBytes uint64) string {
 	displayedValue := float64(numBytes)
 	prefixIndex := 0
 	for ; displayedValue > 1024 && prefixIndex < len(prefixes); prefixIndex++ {
-		displayedValue = displayedValue / 1024
+		displayedValue /= 1024
 	}
 	return fmt.Sprintf("%.2f %s", displayedValue, prefixes[prefixIndex])
 }
@@ -48,14 +49,21 @@ func getDurationNs(start uint64, end uint64) float64 {
 	return float64(diff) * signMultiplier
 }
 
+func addRow(rows [][]string, field string, value string, args ...any) [][]string {
+	return append(rows, []string{field, fmt.Sprintf(value, args...)})
+}
+
 func printInfo(w io.Writer, info *mcap.Info) error {
 	buf := &bytes.Buffer{}
-	fmt.Fprintf(buf, "library: %s\n", info.Header.Library)
-	fmt.Fprintf(buf, "profile: %s\n", info.Header.Profile)
+
+	header := [][]string{
+		{"library:", info.Header.Library},
+		{"profile:", info.Header.Profile},
+	}
 	var start, end uint64
 	durationInSeconds := float64(0)
 	if info.Statistics != nil {
-		fmt.Fprintf(buf, "messages: %d\n", info.Statistics.MessageCount)
+		header = addRow(header, "messages:", "%d", info.Statistics.MessageCount)
 		start = info.Statistics.MessageStartTime
 		end = info.Statistics.MessageEndTime
 		durationNs := getDurationNs(start, end)
@@ -65,18 +73,19 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		if math.Abs(durationNs) > math.MaxInt64 {
 			// time.Duration is an int64 nanosecond count under the hood, but end and start can
 			// be further apart than that.
-			fmt.Fprintf(buf, "duration: %.3fs\n", durationInSeconds)
+			header = addRow(header, "duration:", "%.3fs", durationInSeconds)
 		} else {
-			fmt.Fprintf(buf, "duration: %s\n", endtime.Sub(starttime))
+			header = addRow(header, "duration:", "%s", endtime.Sub(starttime))
 		}
 		if starttime.After(LongAgo) {
-			fmt.Fprintf(buf, "start: %s (%s)\n", starttime.Format(time.RFC3339Nano), decimalTime(starttime))
-			fmt.Fprintf(buf, "end: %s (%s)\n", endtime.Format(time.RFC3339Nano), decimalTime(endtime))
+			header = addRow(header, "start:", "%s (%s)", starttime.Format(time.RFC3339Nano), decimalTime(starttime))
+			header = addRow(header, "end:", "%s (%s)", endtime.Format(time.RFC3339Nano), decimalTime(endtime))
 		} else {
-			fmt.Fprintf(buf, "start: %s\n", decimalTime(starttime))
-			fmt.Fprintf(buf, "end: %s\n", decimalTime(endtime))
+			header = addRow(header, "start:", "%s", decimalTime(starttime))
+			header = addRow(header, "end:", "%s", decimalTime(endtime))
 		}
 	}
+	utils.FormatTable(buf, header)
 	if len(info.ChunkIndexes) > 0 {
 		compressionFormatStats := make(map[mcap.CompressionFormat]struct {
 			count            int
@@ -121,22 +130,27 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			}
 		}
 	}
+
+	maxChanIDWidth := digits(uint64(chanIDs[len(chanIDs)-1])) + 3
 	for _, chanID := range chanIDs {
 		channel := info.Channels[chanID]
 		schema := info.Schemas[channel.SchemaID]
 		channelMessageCount := info.Statistics.ChannelMessageCounts[chanID]
 		frequency := 1e9 * float64(channelMessageCount) / float64(end-start)
+		width := digits(uint64(chanID)) + 2
+		padding := strings.Repeat(" ", maxChanIDWidth-width)
 		row := []string{
-			fmt.Sprintf("\t(%d) %s", channel.ID, channel.Topic),
+			fmt.Sprintf("\t(%d)%s%s", channel.ID, padding, channel.Topic),
 		}
 		if info.Statistics != nil {
 			row = append(row, fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency))
 		}
-		if schema != nil {
+		switch {
+		case schema != nil:
 			row = append(row, fmt.Sprintf(" : %s [%s]", schema.Name, schema.Encoding))
-		} else if channel.SchemaID != 0 {
+		case channel.SchemaID != 0:
 			row = append(row, fmt.Sprintf(" : <missing schema %d>", channel.SchemaID))
-		} else {
+		default:
 			row = append(row, " : <no schema>")
 		}
 		rows = append(rows, row)

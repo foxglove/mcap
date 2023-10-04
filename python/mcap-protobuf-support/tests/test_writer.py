@@ -1,11 +1,18 @@
 from io import BytesIO
 
-from mcap_protobuf.writer import Writer
-from mcap_protobuf.reader import read_protobuf_messages
-
 import pytest
-from google.protobuf.timestamp_pb2 import Timestamp
 from google.protobuf.duration_pb2 import Duration
+from google.protobuf.timestamp_pb2 import Timestamp
+from mcap_protobuf.decoder import DecoderFactory
+from mcap_protobuf.writer import Writer
+
+from mcap.reader import make_reader
+
+
+def read_protobuf_messages(stream: BytesIO):
+    return make_reader(
+        stream, decoder_factories=[DecoderFactory()]
+    ).iter_decoded_messages()
 
 
 def test_write_one():
@@ -14,13 +21,13 @@ def test_write_one():
         writer.write_message("timestamps", Timestamp(seconds=5, nanos=10), log_time=15)
     io.seek(0)
 
-    messages = list(read_protobuf_messages(io))
-    assert len(messages) == 1
-    message = messages[0]
-    assert message.proto_msg.seconds == 5
-    assert message.proto_msg.nanos == 10
-    assert message.log_time_ns == 15
-    assert message.topic == "timestamps"
+    items = list(read_protobuf_messages(io))
+    assert len(items) == 1
+    _, channel, message, decoded_message = items[0]
+    assert decoded_message.seconds == 5
+    assert decoded_message.nanos == 10
+    assert message.log_time == 15
+    assert channel.topic == "timestamps"
 
 
 def test_write_wrong_schema():

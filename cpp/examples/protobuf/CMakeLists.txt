@@ -23,7 +23,7 @@ target_include_directories(foxglove_proto_lib PUBLIC ${CMAKE_CURRENT_BINARY_DIR}
 # Unfortunately the protobuf library headers include some unused parameters, which have to be
 # downgraded back to warnings for all targets that depends on them.
 if (MSVC)
-    target_compile_options(foxglove_proto_lib PUBLIC /wd4100)
+    target_compile_options(foxglove_proto_lib PUBLIC /wd4100 /wd4267 /wd4244)
 else()
     target_compile_options(foxglove_proto_lib PUBLIC -Wno-error=unused-parameter)
 endif()

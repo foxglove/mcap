@@ -1,25 +1,27 @@
 package utils
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
+	"strings"
+	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/foxglove/mcap/go/mcap"
 	"github.com/olekukonko/tablewriter"
+	"github.com/schollz/progressbar/v3"
 )
 
 var (
 	remoteFileRegex = regexp.MustCompile(`(?P<Scheme>\w+)://(?P<Bucket>[a-z0-9_.-]+)/(?P<Filename>.*)`)
 )
 
-func GetScheme(filename string) (string, string, string) {
+func GetScheme(filename string) (match1 string, match2 string, match3 string) {
 	match := remoteFileRegex.FindStringSubmatch(filename)
 	if len(match) == 0 {
 		return "", "", filename
@@ -45,23 +47,23 @@ func StdoutRedirected() bool {
 func GetReader(ctx context.Context, filename string) (func() error, io.ReadSeekCloser, error) {
 	var rs io.ReadSeekCloser
 	var err error
-	close := func() error { return nil }
+	closeReader := func() error { return nil }
 	scheme, bucket, path := GetScheme(filename)
 	if scheme != "" {
 		switch scheme {
 		case "gs":
 			client, err := storage.NewClient(ctx)
 			if err != nil {
-				return close, nil, fmt.Errorf("failed to create GCS client: %v", err)
+				return closeReader, nil, fmt.Errorf("failed to create GCS client: %w", err)
 			}
-			close = client.Close
+			closeReader = client.Close
 			object := client.Bucket(bucket).Object(path)
 			rs, err = NewGCSReadSeekCloser(ctx, object)
 			if err != nil {
-				return close, nil, fmt.Errorf("failed to build read seek closer: %w", err)
+				return closeReader, nil, fmt.Errorf("failed to build read seek closer: %w", err)
 			}
 		default:
-			return close, nil, fmt.Errorf("Unsupported remote file scheme: %s", scheme)
+			return closeReader, nil, fmt.Errorf("unsupported remote file scheme: %s", scheme)
 		}
 	} else {
 		rs, err = os.Open(path)
@@ -70,7 +72,7 @@ func GetReader(ctx context.Context, filename string) (func() error, io.ReadSeekC
 		}
 	}
 
-	return close, rs, nil
+	return closeReader, rs, nil
 }
 
 func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.ReadSeeker) error) error {
@@ -84,7 +86,7 @@ func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.
 		case "gs":
 			client, err := storage.NewClient(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to create GCS client: %v", err)
+				return fmt.Errorf("failed to create GCS client: %w", err)
 			}
 			object := client.Bucket(bucket).Object(path)
 			rs, err = NewGCSReadSeekCloser(ctx, object)
@@ -92,7 +94,7 @@ func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.
 				return fmt.Errorf("failed to build read seek closer: %w", err)
 			}
 		default:
-			return fmt.Errorf("Unsupported remote file scheme: %s", scheme)
+			return fmt.Errorf("unsupported remote file scheme: %s", scheme)
 		}
 	} else {
 		rs, err = os.Open(path)
@@ -105,7 +107,8 @@ func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.
 }
 
 func FormatTable(w io.Writer, rows [][]string) {
-	tw := tablewriter.NewWriter(w)
+	buf := &bytes.Buffer{}
+	tw := tablewriter.NewWriter(buf)
 	tw.SetBorder(false)
 	tw.SetAutoWrapText(false)
 	tw.SetAlignment(tablewriter.ALIGN_LEFT)
@@ -113,143 +116,12 @@ func FormatTable(w io.Writer, rows [][]string) {
 	tw.SetColumnSeparator("")
 	tw.AppendBulk(rows)
 	tw.Render()
-}
-
-func inferWriterOptions(info *mcap.Info) *mcap.WriterOptions {
-	// assume if there are no chunk indexes, the file is not chunked. This
-	// assumption may be invalid if the file is chunked but not indexed.
-	if len(info.ChunkIndexes) == 0 {
-		return &mcap.WriterOptions{
-			Chunked: false,
-		}
+	// This tablewriter puts a leading space on the lines for some reason, so
+	// remove it.
+	scanner := bufio.NewScanner(buf)
+	for scanner.Scan() {
+		fmt.Fprintln(w, strings.TrimLeft(scanner.Text(), " "))
 	}
-	// if there are chunk indexes, create a chunked output with attributes
-	// approximating those of the first chunk.
-	idx := info.ChunkIndexes[0]
-	return &mcap.WriterOptions{
-		IncludeCRC:  true,
-		Chunked:     true,
-		ChunkSize:   int64(idx.ChunkLength),
-		Compression: idx.Compression,
-	}
-}
-
-// RewriteMCAP rewrites the mcap file wrapped by the provided ReadSeeker and
-// performs the operations described by the supplied fns at the end of writing.
-// It is used for adding metadata and attachments to an existing file. In the
-// future this can be optimized to rewrite only the summary section, which
-// should make it run much faster but will require some tricky modifications of
-// indexes pointing into the summary section.
-func RewriteMCAP(w io.Writer, r io.ReadSeeker, fns ...func(writer *mcap.Writer) error) error {
-	reader, err := mcap.NewReader(r)
-	if err != nil {
-		return fmt.Errorf("failed to open mcap reader: %w", err)
-	}
-	defer reader.Close()
-	info, err := reader.Info()
-	if err != nil {
-		return fmt.Errorf("failed to get mcap info")
-	}
-	opts := inferWriterOptions(info)
-	writer, err := mcap.NewWriter(w, opts)
-	if err != nil {
-		return fmt.Errorf("failed to construct mcap writer: %w", err)
-	}
-	defer writer.Close()
-	if err := writer.WriteHeader(info.Header); err != nil {
-		return fmt.Errorf("failed to rewrite header: %w", err)
-	}
-	_, err = r.Seek(0, io.SeekStart)
-	if err != nil {
-		return fmt.Errorf("failed to seek to reader start: %w", err)
-	}
-	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{
-		SkipMagic:         false,
-		ValidateChunkCRCs: false,
-		EmitChunks:        false,
-		AttachmentCallback: func(ar *mcap.AttachmentReader) error {
-			return writer.WriteAttachment(&mcap.Attachment{
-				LogTime:    ar.LogTime,
-				CreateTime: ar.CreateTime,
-				Name:       ar.Name,
-				MediaType:  ar.MediaType,
-				DataSize:   ar.DataSize,
-				Data:       ar.Data(),
-			})
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to construct lexer: %w", err)
-	}
-	defer lexer.Close()
-	buf := make([]byte, 1024)
-	schemas := make(map[uint16]bool)
-	channels := make(map[uint16]bool)
-	for {
-		tokenType, token, err := lexer.Next(buf)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return fmt.Errorf("failed to pull next record: %w", err)
-		}
-		if len(token) > len(buf) {
-			buf = token
-		}
-		switch tokenType {
-		case mcap.TokenChannel:
-			record, err := mcap.ParseChannel(token)
-			if err != nil {
-				return fmt.Errorf("failed to parse channel: %w", err)
-			}
-			if !channels[record.ID] {
-				err := writer.WriteChannel(record)
-				if err != nil {
-					return fmt.Errorf("failed to write channel: %w", err)
-				}
-				channels[record.ID] = true
-			}
-		case mcap.TokenSchema:
-			record, err := mcap.ParseSchema(token)
-			if err != nil {
-				return fmt.Errorf("failed to parse schema: %w", err)
-			}
-			if !schemas[record.ID] {
-				err := writer.WriteSchema(record)
-				if err != nil {
-					return fmt.Errorf("failed to write schema: %w", err)
-				}
-				schemas[record.ID] = true
-			}
-		case mcap.TokenMessage:
-			record, err := mcap.ParseMessage(token)
-			if err != nil {
-				return fmt.Errorf("failed to parse message: %w", err)
-			}
-			err = writer.WriteMessage(record)
-			if err != nil {
-				return fmt.Errorf("failed to write message: %w", err)
-			}
-		case mcap.TokenMetadata:
-			record, err := mcap.ParseMetadata(token)
-			if err != nil {
-				return fmt.Errorf("failed to parse metadata: %w", err)
-			}
-			err = writer.WriteMetadata(record)
-			if err != nil {
-				return fmt.Errorf("failed to write metadata: %w", err)
-			}
-		default:
-			continue
-		}
-	}
-	for _, f := range fns {
-		err = f(writer)
-		if err != nil {
-			return fmt.Errorf("failed to apply writer function: %w", err)
-		}
-	}
-	return nil
 }
 
 func Keys[T any](m map[string]T) []string {
@@ -278,4 +150,20 @@ func DefaultString(strings ...string) string {
 		}
 	}
 	return ""
+}
+
+// NewProgressBar returns an instance of progressbar.ProgresBar.
+// `max` is the denominator of the progress.
+func NewProgressBar(max int64) *progressbar.ProgressBar {
+	return progressbar.NewOptions64(
+		max,
+		progressbar.OptionThrottle(65*time.Millisecond),
+		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetWidth(10),
+		progressbar.OptionOnCompletion(func() {
+			fmt.Fprint(os.Stderr, "\n")
+		}),
+		progressbar.OptionFullWidth(),
+		progressbar.OptionSetRenderBlankState(true),
+	)
 }

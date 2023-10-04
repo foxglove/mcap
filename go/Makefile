@@ -7,7 +7,7 @@ test:
 lint:
 	make -C mcap lint
 	make -C ros lint
-	make -C mcap lint
+	make -C cli/mcap lint
 
 build-conformance-binaries:
 	make -C conformance build

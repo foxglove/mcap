@@ -39,7 +39,7 @@ type filterOpts struct {
 	chunkSize          int64
 }
 
-func buildFilterOptions(flags filterFlags) (*filterOpts, error) {
+func buildFilterOptions(flags *filterFlags) (*filterOpts, error) {
 	opts := &filterOpts{
 		output:             flags.output,
 		includeMetadata:    flags.includeMetadata,
@@ -67,7 +67,10 @@ func buildFilterOptions(flags filterFlags) (*filterOpts, error) {
 	case "":
 		opts.compressionFormat = mcap.CompressionNone
 	default:
-		return nil, fmt.Errorf("unrecognized compression format '%s': valid options are 'lz4', 'zstd', or 'none'", flags.outputCompression)
+		return nil, fmt.Errorf(
+			"unrecognized compression format '%s': valid options are 'lz4', 'zstd', or 'none'",
+			flags.outputCompression,
+		)
 	}
 
 	includeTopics, err := compileMatchers(flags.includeTopics)
@@ -98,12 +101,12 @@ func run(filterOptions *filterOpts, args []string) {
 			die("please supply a file. see --help for usage details.")
 		}
 	} else {
-		close, newReader, err := utils.GetReader(context.Background(), args[0])
+		closeFile, newReader, err := utils.GetReader(context.Background(), args[0])
 		if err != nil {
 			die("failed to open source for reading: %s", err)
 		}
 		defer func() {
-			if closeErr := close(); closeErr != nil {
+			if closeErr := closeFile(); closeErr != nil {
 				die("error closing read source: %s", closeErr)
 			}
 		}()
@@ -131,12 +134,12 @@ func run(filterOptions *filterOpts, args []string) {
 
 	err := filter(reader, writer, filterOptions)
 	if err != nil {
-		die(error.Error(err))
+		die("failed to filter: %s", err)
 	}
 }
 
 func compileMatchers(regexStrings []string) ([]regexp.Regexp, error) {
-	var matchers []regexp.Regexp
+	matchers := make([]regexp.Regexp, len(regexStrings))
 
 	for _, regexString := range regexStrings {
 		// auto-surround with ^$ if not specified.
@@ -144,7 +147,7 @@ func compileMatchers(regexStrings []string) ([]regexp.Regexp, error) {
 			regexString = "^" + regexString
 		}
 		if regexString[len(regexString)-1:] != "$" {
-			regexString = regexString + "$"
+			regexString += "$"
 		}
 		regex, err := regexp.Compile(regexString)
 		if err != nil {
@@ -219,7 +222,12 @@ func filter(
 			return
 		}
 		if opts.recover {
-			fmt.Printf("Recovered %d messages, %d attachments, and %d metadata records.\n", numMessages, numAttachments, numMetadata)
+			fmt.Printf(
+				"Recovered %d messages, %d attachments, and %d metadata records.\n",
+				numMessages,
+				numAttachments,
+				numMetadata,
+			)
 		}
 	}()
 
@@ -255,7 +263,7 @@ func filter(
 			if err != nil {
 				return err
 			}
-			if err = mcapWriter.WriteHeader(header); err != nil {
+			if err := mcapWriter.WriteHeader(header); err != nil {
 				return err
 			}
 		case mcap.TokenSchema:
@@ -270,7 +278,8 @@ func filter(
 				return err
 			}
 			// if any topics match an includeTopic, add it.
-			for _, matcher := range opts.includeTopics {
+			for i := range opts.includeTopics {
+				matcher := opts.includeTopics[i]
 				if matcher.MatchString(channel.Topic) {
 					channels[channel.ID] = markableChannel{channel, false}
 				}
@@ -278,7 +287,8 @@ func filter(
 			// if a topic does not match any excludeTopic, add it.
 			if len(opts.excludeTopics) != 0 {
 				shouldInclude := true
-				for _, matcher := range opts.excludeTopics {
+				for i := range opts.excludeTopics {
+					matcher := opts.excludeTopics[i]
 					if matcher.MatchString(channel.Topic) {
 						shouldInclude = false
 					}
@@ -307,22 +317,24 @@ func filter(
 				continue
 			}
 			if !channel.written {
-				schema, ok := schemas[channel.SchemaID]
-				if !ok {
-					return fmt.Errorf("encountered channel with topic %s with unknown schema ID %d", channel.Topic, channel.SchemaID)
-				}
-				if !schema.written {
-					if err = mcapWriter.WriteSchema(schema.Schema); err != nil {
-						return err
+				if channel.SchemaID != 0 {
+					schema, ok := schemas[channel.SchemaID]
+					if !ok {
+						return fmt.Errorf("encountered channel with topic %s with unknown schema ID %d", channel.Topic, channel.SchemaID)
 					}
-					schemas[channel.SchemaID] = markableSchema{schema.Schema, true}
+					if !schema.written {
+						if err := mcapWriter.WriteSchema(schema.Schema); err != nil {
+							return err
+						}
+						schemas[channel.SchemaID] = markableSchema{schema.Schema, true}
+					}
 				}
-				if err = mcapWriter.WriteChannel(channel.Channel); err != nil {
+				if err := mcapWriter.WriteChannel(channel.Channel); err != nil {
 					return err
 				}
 				channels[message.ChannelID] = markableChannel{channel.Channel, true}
 			}
-			if err = mcapWriter.WriteMessage(message); err != nil {
+			if err := mcapWriter.WriteMessage(message); err != nil {
 				return err
 			}
 			numMessages++
@@ -334,7 +346,7 @@ func filter(
 			if err != nil {
 				return err
 			}
-			if err = mcapWriter.WriteMetadata(metadata); err != nil {
+			if err := mcapWriter.WriteMetadata(metadata); err != nil {
 				return err
 			}
 			numMetadata++
@@ -361,16 +373,48 @@ usage:
   mcap filter in.mcap -o out.mcap -y /diagnostics -y /tf -y /camera_(front|back)`,
 		}
 		output := filterCmd.PersistentFlags().StringP("output", "o", "", "output filename")
-		includeTopics := filterCmd.PersistentFlags().StringArrayP("include-topic-regex", "y", []string{}, "messages with topic names matching this regex will be included, can be supplied multiple times")
-		excludeTopics := filterCmd.PersistentFlags().StringArrayP("exclude-topic-regex", "n", []string{}, "messages with topic names matching this regex will be excluded, can be supplied multiple times")
-		start := filterCmd.PersistentFlags().Uint64P("start-secs", "s", 0, "messages with log times after or equal to this timestamp will be included.")
-		end := filterCmd.PersistentFlags().Uint64P("end-secs", "e", 0, "messages with log times before timestamp will be included.")
+		includeTopics := filterCmd.PersistentFlags().StringArrayP(
+			"include-topic-regex",
+			"y",
+			[]string{},
+			"messages with topic names matching this regex will be included, can be supplied multiple times",
+		)
+		excludeTopics := filterCmd.PersistentFlags().StringArrayP(
+			"exclude-topic-regex",
+			"n",
+			[]string{},
+			"messages with topic names matching this regex will be excluded, can be supplied multiple times",
+		)
+		start := filterCmd.PersistentFlags().Uint64P(
+			"start-secs",
+			"s",
+			0,
+			"messages with log times after or equal to this timestamp will be included.",
+		)
+		end := filterCmd.PersistentFlags().Uint64P(
+			"end-secs",
+			"e",
+			0,
+			"messages with log times before timestamp will be included.",
+		)
 		chunkSize := filterCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
-		includeMetadata := filterCmd.PersistentFlags().Bool("include-metadata", false, "whether to include metadata in the output bag")
-		includeAttachments := filterCmd.PersistentFlags().Bool("include-attachments", false, "whether to include attachments in the output mcap")
-		outputCompression := filterCmd.PersistentFlags().String("output-compression", "zstd", "compression algorithm to use on output file")
+		includeMetadata := filterCmd.PersistentFlags().Bool(
+			"include-metadata",
+			false,
+			"whether to include metadata in the output bag",
+		)
+		includeAttachments := filterCmd.PersistentFlags().Bool(
+			"include-attachments",
+			false,
+			"whether to include attachments in the output mcap",
+		)
+		outputCompression := filterCmd.PersistentFlags().String(
+			"output-compression",
+			"zstd",
+			"compression algorithm to use on output file",
+		)
 		filterCmd.Run = func(cmd *cobra.Command, args []string) {
-			filterOptions, err := buildFilterOptions(filterFlags{
+			filterOptions, err := buildFilterOptions(&filterFlags{
 				output:             *output,
 				includeTopics:      *includeTopics,
 				excludeTopics:      *excludeTopics,
@@ -400,9 +444,13 @@ usage:
 		}
 		output := recoverCmd.PersistentFlags().StringP("output", "o", "", "output filename")
 		chunkSize := recoverCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
-		compression := recoverCmd.PersistentFlags().String("compression", "zstd", "compression algorithm to use on output file")
+		compression := recoverCmd.PersistentFlags().String(
+			"compression",
+			"zstd",
+			"compression algorithm to use on output file",
+		)
 		recoverCmd.Run = func(cmd *cobra.Command, args []string) {
-			filterOptions, err := buildFilterOptions(filterFlags{
+			filterOptions, err := buildFilterOptions(&filterFlags{
 				output:             *output,
 				chunkSize:          *chunkSize,
 				outputCompression:  *compression,
@@ -429,9 +477,13 @@ usage:
 		}
 		output := compressCmd.PersistentFlags().StringP("output", "o", "", "output filename")
 		chunkSize := compressCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
-		compression := compressCmd.PersistentFlags().String("compression", "zstd", "compression algorithm to use on output file")
+		compression := compressCmd.PersistentFlags().String(
+			"compression",
+			"zstd",
+			"compression algorithm to use on output file",
+		)
 		compressCmd.Run = func(cmd *cobra.Command, args []string) {
-			filterOptions, err := buildFilterOptions(filterFlags{
+			filterOptions, err := buildFilterOptions(&filterFlags{
 				output:             *output,
 				chunkSize:          *chunkSize,
 				outputCompression:  *compression,
@@ -458,7 +510,7 @@ usage:
 		output := decompressCmd.PersistentFlags().StringP("output", "o", "", "output filename")
 		chunkSize := decompressCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
 		decompressCmd.Run = func(cmd *cobra.Command, args []string) {
-			filterOptions, err := buildFilterOptions(filterFlags{
+			filterOptions, err := buildFilterOptions(&filterFlags{
 				output:             *output,
 				chunkSize:          *chunkSize,
 				outputCompression:  "none",
