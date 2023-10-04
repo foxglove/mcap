@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
 
     auto timestamp = pcl.mutable_timestamp();
     timestamp->set_seconds(static_cast<int64_t>(cloudTime) / NS_PER_S);
-    timestamp->set_nanos(static_cast<int>(cloudTime) % NS_PER_S);
+    timestamp->set_nanos(static_cast<int>(cloudTime % NS_PER_S));
 
     // write 1000 points into each pointcloud message.
     size_t offset = 0;
