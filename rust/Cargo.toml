@@ -7,14 +7,14 @@ categories = [ "science::robotics", "compression" ]
 repository = "https://github.com/foxglove/mcap"
 documentation = "https://docs.rs/mcap"
 readme = "README.md"
-version = "0.7.1"
+version = "0.8.0"
 edition = "2021"
 license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-binrw = "0.9"
+binrw = "0.12.0"
 byteorder = "1.4"
 crc32fast = "1.3"
 enumset = "1.0.11"
