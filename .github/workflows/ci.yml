@@ -248,7 +248,7 @@ jobs:
           lfs: true
       - uses: actions/setup-python@v4
         with:
-          python-version: 3.7
+          python-version: 3.8
       - run: pip install pipenv==2023.2.4
       - run: make lint
       - run: make test
