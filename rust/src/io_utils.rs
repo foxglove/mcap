@@ -12,7 +12,7 @@ pub struct CountingCrcReader<R> {
 impl<R: Read> CountingCrcReader<R> {
     /// Creates a new `CountingCrcReader` with the given reader.
     ///
-    /// This is not used when both `lz4` and `zstd` features are enabled.
+    /// This is not used when both `lz4` and `zstd` features are disabled.
     #[allow(dead_code)]
     pub fn new(inner: R) -> Self {
         Self {
