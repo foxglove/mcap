@@ -55,9 +55,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
             }
             "DataEnd" => {
                 let data_section_crc = record.get_field_u32("data_section_crc");
-                let _data_end = mcap::records::DataEnd {
-                    data_section_crc: data_section_crc,
-                };
+                let _data_end = mcap::records::DataEnd { data_section_crc };
                 // write data end
             }
             "Footer" => {
@@ -105,7 +103,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                 let name = record.get_field_str("name");
                 let encoding = record.get_field_str("encoding");
                 let id = record.get_field_u64("id");
-                let data: Vec<u8> = record.get_field_data(&"data");
+                let data: Vec<u8> = record.get_field_data("data");
                 let schema = mcap::Schema {
                     name: name.to_owned(),
                     encoding: encoding.to_owned(),
@@ -128,7 +126,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
 
     let contents = std::fs::read(tmp_path).expect("Couldn't read output");
     std::io::stdout()
-        .write(&contents)
+        .write_all(&contents)
         .expect("Couldn't write output");
 }
 
