@@ -586,7 +586,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Nil(t, writer.WriteHeader(&Header{}))
 	assert.Nil(t, writer.WriteSchema(&Schema{
-		ID:       1, // schema id begins from 1;
+		ID:       1, // schema id starts from 1;
 		Name:     "",
 		Encoding: "",
 		Data:     []byte{},
