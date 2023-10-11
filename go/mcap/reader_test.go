@@ -21,7 +21,7 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Nil(t, writer.WriteHeader(&Header{}))
 	assert.Nil(t, writer.WriteSchema(&Schema{
-		ID:       0,
+		ID:       1,
 		Name:     "",
 		Encoding: "",
 		Data:     []byte{},
@@ -586,7 +586,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Nil(t, writer.WriteHeader(&Header{}))
 	assert.Nil(t, writer.WriteSchema(&Schema{
-		ID:       0,
+		ID:       1,
 		Name:     "",
 		Encoding: "",
 		Data:     []byte{},
