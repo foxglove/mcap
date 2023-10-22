@@ -1,9 +1,9 @@
 use apache_avro::Schema;
+use serde::Serialize;
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::BufWriter;
 use std::sync::Arc;
-use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 struct Time {
@@ -101,10 +101,27 @@ fn main() {
         ]
     }"#;
 
-    let schemas = Schema::parse_list(&[raw_schema_time, raw_schema_vector, raw_schema_quaternion, raw_schema_pose, raw_schema_poses_in_frame]).unwrap();
+    let schemas = Schema::parse_list(&[
+        raw_schema_time,
+        raw_schema_vector,
+        raw_schema_quaternion,
+        raw_schema_pose,
+        raw_schema_poses_in_frame,
+    ])
+    .unwrap();
 
     // for multiple schemas we need to write them as an array
-    let arr = format!("[{}]", vec![raw_schema_time, raw_schema_vector, raw_schema_quaternion, raw_schema_pose, raw_schema_poses_in_frame].join(","));
+    let arr = format!(
+        "[{}]",
+        vec![
+            raw_schema_time,
+            raw_schema_vector,
+            raw_schema_quaternion,
+            raw_schema_pose,
+            raw_schema_poses_in_frame
+        ]
+        .join(",")
+    );
 
     let schema_b = mcap::Schema {
         name: "foxglove.PosesInFrame".to_string(),
@@ -135,37 +152,60 @@ fn main() {
         let poses_schema = schemas.get(4).unwrap();
 
         let pose_1 = Pose {
-            position: Vector3 { x: 0.0, y: 0.0, z: 0.0 },
-            orientation: Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+            position: Vector3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            orientation: Quaternion {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 0.0,
+            },
         };
 
         let pose_2 = Pose {
-            position: Vector3 { x: 1.0, y: 1.0, z: 1.0 },
-            orientation: Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+            position: Vector3 {
+                x: 1.0,
+                y: 1.0,
+                z: 1.0,
+            },
+            orientation: Quaternion {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 0.0,
+            },
         };
 
         let poses = PosesInFrame {
             timestamp: Time {
                 sec: 0i64,
-                nsec: 0i64
+                nsec: 0i64,
             },
             frame_id: "frame".to_string(),
             poses: vec![pose_1, pose_2],
         };
 
-        let encoded =
-            apache_avro::to_avro_datum_schemata(&poses_schema, [time_schema, vector3_schema, quat_schema, pose_schema].into(), apache_avro::to_value(&poses).unwrap())
-                .unwrap();
+        {
+            let encoded = apache_avro::to_avro_datum_schemata(
+                &poses_schema,
+                [time_schema, vector3_schema, quat_schema, pose_schema].into(),
+                apache_avro::to_value(&poses).unwrap(),
+            )
+            .unwrap();
 
-        let message = mcap::Message {
-            channel: Arc::new(channel_poses.to_owned()),
-            data: Cow::from(encoded),
-            log_time: 1000000,
-            publish_time: 0,
-            sequence: 0,
-        };
+            let message = mcap::Message {
+                channel: Arc::new(channel_poses.to_owned()),
+                data: Cow::from(encoded),
+                log_time: 1000000,
+                publish_time: 0,
+                sequence: 0,
+            };
 
-        avro_mcap.write(&message).unwrap();
+            avro_mcap.write(&message).unwrap();
+        }
     }
 
     avro_mcap.finish().unwrap();
