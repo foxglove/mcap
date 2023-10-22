@@ -42,6 +42,10 @@ The Channel `message_encoding` field describes the encoding for all messages wit
 
 - `message_encoding`: [`json`](https://www.json.org/json-en.html)
 
+### avro
+
+- `message_encoding`: [`avro`](https://avro.apache.org/) (binary encoding)
+
 ## Schema encodings
 
 The Schema `encoding` field describes the encoding of a Channel's schema. Typically, this is related to the Channel's `message_encoding`, but they are separate concepts (e.g. there are multiple schema languages for `json`).
@@ -185,6 +189,20 @@ For this example, `schema.name` should be set to `top_level_module::my_module::M
 - `name`: May contain any value
 - `encoding`: `jsonschema`
 - `data`: [JSON Schema](https://json-schema.org)
+
+### avro
+
+- `name`: Fully qualified name of the record type (including namespace), e.g. `example.MyRecord`
+- `encoding`: `avro`
+- `data`: utf8 encoded json object or array with a valid [AVRO schema declaration](https://avro.apache.org/docs/1.11.1/specification/#schema-declaration)
+
+In AVRO schemas a name must be defined before used as noted in the AVRO specification:
+
+> Further, a name must be defined before it is used (“before” in the depth-first, left-to-right traversal of the JSON parse tree, where the types attribute of a protocol is always deemed to come “before” the messages attribute.)
+
+You can define a name inline using a single schema object for `data` or an array of schema objects. If the `data` is an array of schemas, the `name` must reference a single
+"record" within the array of schemas. This referenced record type will be used as the schema for the
+channel and messages. The array of schemas DO NOT represent a union type for channel messages.
 
 ## Profiles
 
