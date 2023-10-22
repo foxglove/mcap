@@ -97,7 +97,7 @@ fn main() {
         "fields": [
             { "name": "timestamp", "type": "Time" },
             { "name": "frame_id", "type": "string" },
-            { "name": "poses", "type": "array", "items": "Pose" }
+            { "name": "poses", "type": { "type": "array", "items": "Pose" } }
         ]
     }"#;
 
