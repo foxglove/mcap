@@ -1,0 +1,12 @@
+[package]
+name = "mcap_avro_examples"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+mcap = { path = "../../" }
+apache-avro = { version = "0.16.0" }
+serde = { version = "1.0.178", features = ["derive"] }
+
+[[bin]]
+name = "writer"

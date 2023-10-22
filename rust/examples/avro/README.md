@@ -1,0 +1,3 @@
+```
+cargo run --bin writer
+```
