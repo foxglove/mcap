@@ -1,6 +1,5 @@
 """ROS2 message definition parsing and message deserialization."""
 
-import os
 import re
 from io import BytesIO
 from types import SimpleNamespace
@@ -519,7 +518,7 @@ def _for_each_msgdef(
     cur_schema_name = schema_name
 
     # Remove empty lines
-    schema_text = os.linesep.join([s for s in schema_text.splitlines() if s.strip()])
+    schema_text = "\n".join([s for s in schema_text.splitlines() if s.strip()])
 
     # Split schema_text by separator lines containing at least 3 = characters
     # (e.g. "===") using a regular expression
