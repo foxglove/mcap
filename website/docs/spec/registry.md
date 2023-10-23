@@ -196,7 +196,7 @@ For this example, `schema.name` should be set to `top_level_module::my_module::M
 - `encoding`: `avro`
 - `data`: utf8 encoded json object or array with a valid [AVRO schema declaration](https://avro.apache.org/docs/1.11.1/specification/#schema-declaration)
 
-In AVRO schemas a name must be defined before used as noted in the AVRO specification:
+In Avro schemas a name must be defined before used as noted in the Avro specification:
 
 > Further, a name must be defined before it is used (“before” in the depth-first, left-to-right traversal of the JSON parse tree, where the types attribute of a protocol is always deemed to come “before” the messages attribute.)
 
