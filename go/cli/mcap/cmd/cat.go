@@ -197,10 +197,10 @@ func printMessages(
 			die("Failed to read next message: %s", err)
 		}
 		if !formatJSON {
-                        schemaName := "no schema"
-                        if schema != nil {
-                            schemaName = schema.Name
-                        }
+			schemaName := "no schema"
+			if schema != nil {
+				schemaName = schema.Name
+			}
 			if len(message.Data) > 10 {
 				fmt.Fprintf(w, "%d %s [%s] %v...\n", message.LogTime, channel.Topic, schemaName, message.Data[:10])
 			} else {
