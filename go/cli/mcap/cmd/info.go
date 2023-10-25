@@ -131,7 +131,10 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		}
 	}
 
-	maxChanIDWidth := digits(uint64(chanIDs[len(chanIDs)-1])) + 3
+	maxChanIDWidth := 0
+	if len(chanIDs) > 0 {
+		maxChanIDWidth = digits(uint64(chanIDs[len(chanIDs)-1])) + 3
+	}
 	for _, chanID := range chanIDs {
 		channel := info.Channels[chanID]
 		schema := info.Schemas[channel.SchemaID]
