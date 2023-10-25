@@ -1,3 +1,5 @@
+<img src="/website/static/img/mcap.png" alt="MCAP logo" width="150px" height="150px"/>
+
 # MCAP
 
 MCAP is a modular container format and logging library for pub/sub messages with arbitrary message serialization. It is primarily intended for use in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
