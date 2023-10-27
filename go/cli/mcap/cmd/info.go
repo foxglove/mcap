@@ -147,12 +147,12 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			row = append(row, fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency))
 		}
                 if len(channel.Metadata) > 0 {
-                        mdJson, _ := json.Marshal(channel.Metadata)
-                        mdJsonStr := string(mdJson)
-                        if len(mdJsonStr) > 50 {
-                            mdJsonStr = mdJsonStr[0:47] + "..."
+                        mdJSON, _ := json.Marshal(channel.Metadata)
+                        mdJSONStr := string(mdJSON)
+                        if len(mdJSONStr) > 50 {
+                            mdJSONStr = mdJSONStr[0:47] + "..."
                         }
-                        row = append(row, fmt.Sprintf("%s", mdJsonStr))
+                        row = append(row, mdJSONStr)
                 }
 		switch {
 		case schema != nil:
