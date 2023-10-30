@@ -21,6 +21,11 @@ func TestCat(t *testing.T) {
 			"../../../../tests/conformance/data/OneMessage/OneMessage-ch-chx-mx-pad-rch-rsh-st-sum.mcap",
 			"2 example [Example] [1 2 3]\n",
 		},
+		{
+			"OneSchemalessMessage",
+			"../../../../tests/conformance/data/OneSchemalessMessage/OneSchemalessMessage-ch-chx-mx-pad-rch-st.mcap",
+			"2 example [no schema] [1 2 3]\n",
+		},
 	}
 	for _, c := range cases {
 		input, err := os.ReadFile(c.inputfile)
