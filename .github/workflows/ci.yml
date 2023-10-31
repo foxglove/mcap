@@ -475,6 +475,9 @@ jobs:
           components: "rustfmt, clippy"
       - run: cargo fmt --all -- --check
       - run: cargo clippy -- --no-deps
+      - run: cargo clippy --no-default-features -- --no-deps
+      - run: cargo clippy --no-default-features --features lz4 -- --no-deps
+      - run: cargo clippy --no-default-features --features zstd -- --no-deps
       - run: cargo build
       - run: cargo test
       - name: "publish to crates.io"

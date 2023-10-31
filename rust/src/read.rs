@@ -254,6 +254,8 @@ fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
 
 enum ChunkDecompressor<'a> {
     Null(LinearReader<'a>),
+    /// This is not used when both `zstd` and `lz4` features are disabled.
+    #[allow(dead_code)]
     Compressed(Option<CountingCrcReader<Box<dyn Read + Send + 'a>>>),
 }
 
@@ -274,9 +276,13 @@ impl<'a> ChunkReader<'a> {
             #[cfg(not(feature = "zstd"))]
             "zstd" => panic!("Unsupported compression format: zstd"),
 
+            #[cfg(feature = "lz4")]
             "lz4" => ChunkDecompressor::Compressed(Some(CountingCrcReader::new(Box::new(
-                lz4::Decoder::new(data)?,
+                lz4_flex::frame::FrameDecoder::new(data),
             )))),
+
+            #[cfg(not(feature = "lz4"))]
+            "lz4" => panic!("Unsupported compression format: lz4"),
 
             "" => {
                 if header.uncompressed_size != header.compressed_size {
