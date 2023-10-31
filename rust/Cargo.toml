@@ -2,8 +2,8 @@
 name = "mcap"
 description = "A library for reading and writing MCAP files"
 homepage = "https://mcap.dev"
-keywords = ["foxglove", "mcap"]
-categories = ["science::robotics", "compression"]
+keywords = [ "foxglove", "mcap" ]
+categories = [ "science::robotics", "compression" ]
 repository = "https://github.com/foxglove/mcap"
 documentation = "https://docs.rs/mcap"
 readme = "README.md"
@@ -39,7 +39,7 @@ lz4 = ["dep:lz4_flex"]
 anyhow = "1"
 atty = "0.2"
 camino = "1.0"
-clap = { version = "3.2", features = ["derive"] }
+clap = { version = "3.2", features = ["derive"]}
 itertools = "0.10"
 memmap = "0.7"
 rayon = "1.5"
