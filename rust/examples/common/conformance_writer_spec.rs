@@ -50,7 +50,7 @@ impl Record {
         for (key, value) in data.iter() {
             result.insert(key.to_string(), value.as_str().unwrap().to_string());
         }
-        result
+        return result;
     }
 
     pub fn get_field_str(self: &Self, name: &str) -> &str {
@@ -76,7 +76,7 @@ impl Record {
             .unwrap_or_else(|| panic!("Invalid: {}", name));
     }
 
-    pub fn get_field_u64(&self, name: &str) -> u64 {
+    pub fn get_field_u64(self: &Self, name: &str) -> u64 {
         return self
             .get_field(name)
             .as_str()
