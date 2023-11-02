@@ -31,6 +31,32 @@ func (e errUnindexedFile) Is(tgt error) bool {
 	return ok
 }
 
+func fileHasNoMessages(r io.ReadSeeker) (bool, error) {
+	_, err := r.Seek(0, io.SeekStart)
+	if err != nil {
+		return false, err
+	}
+	reader, err := mcap.NewReader(r)
+	if err != nil {
+		return false, err
+	}
+	defer reader.Close()
+	it, err := reader.Messages(mcap.UsingIndex(false), mcap.InOrder(mcap.FileOrder))
+	if err != nil {
+		return false, err
+	}
+	for {
+		_, _, _, err := it.Next(nil)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return true, nil
+			}
+			return false, err
+		}
+		return false, nil
+	}
+}
+
 func sortFile(w io.Writer, r io.ReadSeeker) error {
 	reader, err := mcap.NewReader(r)
 	if err != nil {
@@ -50,8 +76,13 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 		return errUnindexedFile{err}
 	}
 
-	if len(info.ChunkIndexes) == 0 {
-		return errUnindexedFile{errors.New("no chunk index records found")}
+	emptyFile, err := fileHasNoMessages(r)
+	if err != nil {
+		return fmt.Errorf("failed to check if file is empty: %w", err)
+	}
+
+	if len(info.ChunkIndexes) == 0 && !emptyFile {
+		return errUnindexedFile{errors.New("no chunk index records")}
 	}
 
 	err = writer.WriteHeader(info.Header)
