@@ -3,6 +3,7 @@ package cmd
 import (
 	"container/heap"
 	"crypto/md5"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -36,6 +37,7 @@ var (
 	mergeChunked                bool
 	mergeOutputFile             string
 	mergeAllowDuplicateMetadata bool
+	coalesceChannels            string
 )
 
 type mergeOpts struct {
@@ -44,6 +46,7 @@ type mergeOpts struct {
 	includeCRC             bool
 	chunked                bool
 	allowDuplicateMetadata bool
+	coalesceChannels       string
 }
 
 // schemaID uniquely identifies a schema across the inputs.
@@ -58,27 +61,37 @@ type channelID struct {
 	channelID uint16
 }
 
+type HashSum = [md5.Size]byte
+
 type mcapMerger struct {
-	schemaIDs      map[schemaID]uint16
-	channelIDs     map[channelID]uint16
-	schemaIDByHash map[string]uint16
-	metadataHashes map[string]bool
-	metadataNames  map[string]bool
-	nextChannelID  uint16
-	nextSchemaID   uint16
-	opts           mergeOpts
+	schemaIDs       map[schemaID]uint16
+	channelIDs      map[channelID]uint16
+	schemaIDByHash  map[HashSum]uint16
+	channelIDByHash map[HashSum]uint16
+	metadataHashes  map[string]bool
+	metadataNames   map[string]bool
+	nextChannelID   uint16
+	nextSchemaID    uint16
+	opts            mergeOpts
 }
+
+const (
+	AutoCoalescing  = "auto"
+	ForceCoalescing = "force"
+	NoCoalescing    = "none"
+)
 
 func newMCAPMerger(opts mergeOpts) *mcapMerger {
 	return &mcapMerger{
-		schemaIDs:      make(map[schemaID]uint16),
-		channelIDs:     make(map[channelID]uint16),
-		schemaIDByHash: make(map[string]uint16),
-		metadataHashes: make(map[string]bool),
-		metadataNames:  make(map[string]bool),
-		nextChannelID:  1,
-		nextSchemaID:   1,
-		opts:           opts,
+		schemaIDs:       make(map[schemaID]uint16),
+		channelIDs:      make(map[channelID]uint16),
+		schemaIDByHash:  make(map[HashSum]uint16),
+		channelIDByHash: make(map[HashSum]uint16),
+		metadataHashes:  make(map[string]bool),
+		metadataNames:   make(map[string]bool),
+		nextChannelID:   1,
+		nextSchemaID:    1,
+		opts:            opts,
 	}
 }
 
@@ -132,6 +145,29 @@ func (m *mcapMerger) addMetadata(w *mcap.Writer, metadata *mcap.Metadata) error 
 	return nil
 }
 
+func getChannelHash(channel *mcap.Channel, coalesceChannels string) HashSum {
+	hasher := md5.New()
+	schemaIDBytes := make([]byte, 2)
+	binary.LittleEndian.PutUint16(schemaIDBytes, channel.SchemaID)
+	hasher.Write(schemaIDBytes)
+	hasher.Write([]byte(channel.Topic))
+	hasher.Write([]byte(channel.MessageEncoding))
+
+	switch coalesceChannels {
+	case AutoCoalescing: // Include channel metadata in hash
+		for key, value := range channel.Metadata {
+			hasher.Write([]byte(key))
+			hasher.Write([]byte(value))
+		}
+	case ForceCoalescing: // Channel metadata is not included in hash
+		break
+	default:
+		die("Invalid value for --coalesce-channels: %s\n", coalesceChannels)
+	}
+
+	return HashSum(hasher.Sum(nil))
+}
+
 func (m *mcapMerger) addChannel(w *mcap.Writer, inputID int, channel *mcap.Channel) (uint16, error) {
 	outputSchemaID, ok := m.outputSchemaID(inputID, channel.SchemaID)
 	if !ok {
@@ -145,6 +181,17 @@ func (m *mcapMerger) addChannel(w *mcap.Writer, inputID int, channel *mcap.Chann
 		MessageEncoding: channel.MessageEncoding,
 		Metadata:        channel.Metadata,
 	}
+
+	if m.opts.coalesceChannels != NoCoalescing {
+		channelHash := getChannelHash(newChannel, m.opts.coalesceChannels)
+		channelID, channelKnown := m.channelIDByHash[channelHash]
+		if channelKnown {
+			m.channelIDs[key] = channelID
+			return channelID, nil
+		}
+		m.channelIDByHash[channelHash] = m.nextChannelID
+	}
+
 	m.channelIDs[key] = m.nextChannelID
 	err := w.WriteChannel(newChannel)
 	if err != nil {
@@ -154,13 +201,12 @@ func (m *mcapMerger) addChannel(w *mcap.Writer, inputID int, channel *mcap.Chann
 	return newChannel.ID, nil
 }
 
-func getSchemaHash(schema *mcap.Schema) string {
+func getSchemaHash(schema *mcap.Schema) HashSum {
 	hasher := md5.New()
 	hasher.Write([]byte(schema.Name))
 	hasher.Write([]byte(schema.Encoding))
 	hasher.Write(schema.Data)
-	hash := hasher.Sum(nil)
-	return hex.EncodeToString(hash)
+	return HashSum(hasher.Sum(nil))
 }
 
 func (m *mcapMerger) addSchema(w *mcap.Writer, inputID int, schema *mcap.Schema) error {
@@ -217,7 +263,8 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 	pq := utils.NewPriorityQueue(nil)
 
 	// Reset struct members
-	m.schemaIDByHash = make(map[string]uint16)
+	m.schemaIDByHash = make(map[HashSum]uint16)
+	m.channelIDByHash = make(map[HashSum]uint16)
 	m.schemaIDs = make(map[schemaID]uint16)
 	m.channelIDs = make(map[channelID]uint16)
 	m.nextChannelID = 1
@@ -351,6 +398,7 @@ var mergeCmd = &cobra.Command{
 			includeCRC:             mergeIncludeCRC,
 			chunked:                mergeChunked,
 			allowDuplicateMetadata: mergeAllowDuplicateMetadata,
+			coalesceChannels:       coalesceChannels,
 		}
 		merger := newMCAPMerger(opts)
 		var writer io.Writer
@@ -414,5 +462,16 @@ func init() {
 		"",
 		false,
 		"Allow duplicate-named metadata records to be merged in the output",
+	)
+	mergeCmd.PersistentFlags().StringVarP(
+		&coalesceChannels,
+		"coalesce-channels",
+		"",
+		"auto",
+		`channel coalescing behavior (supported: auto, force, none).
+ - auto: Coalesce channels with matching topic, schema and metadata
+ - force: Same as auto but ignores metadata
+ - none: Do not coalesce channels
+`,
 	)
 }

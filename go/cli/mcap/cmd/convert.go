@@ -38,6 +38,12 @@ const (
 	FileTypeDB3  FileType = "db3"
 )
 
+const (
+	CompressionFormatLz4  = "lz4"
+	CompressionFormatZstd = "zstd"
+	CompressionFormatNone = "none"
+)
+
 func checkMagic(path string) (FileType, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -89,11 +95,11 @@ var convertCmd = &cobra.Command{
 
 		var compressionFormat mcap.CompressionFormat
 		switch convertCompression {
-		case "lz4":
+		case CompressionFormatLz4:
 			compressionFormat = mcap.CompressionLZ4
-		case "zstd":
+		case CompressionFormatZstd:
 			compressionFormat = mcap.CompressionZSTD
-		case "none":
+		case CompressionFormatNone:
 			compressionFormat = mcap.CompressionNone
 		}
 
