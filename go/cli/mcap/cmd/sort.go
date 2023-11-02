@@ -45,16 +45,14 @@ func fileHasNoMessages(r io.ReadSeeker) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	for {
-		_, _, _, err := it.Next(nil)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return true, nil
-			}
-			return false, err
+	_, _, _, err = it.Next(nil)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return true, nil
 		}
-		return false, nil
+		return false, err
 	}
+	return false, nil
 }
 
 func sortFile(w io.Writer, r io.ReadSeeker) error {
