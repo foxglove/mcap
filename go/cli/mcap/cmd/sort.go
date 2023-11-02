@@ -101,7 +101,6 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 	return writer.Close()
 }
 
-// sortCmd represents the sort command
 var sortCmd = &cobra.Command{
 	Use:   "sort [file] -o output.mcap",
 	Short: "Read an MCAP file and write the messages out physically sorted on time",
