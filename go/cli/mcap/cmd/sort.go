@@ -14,6 +14,19 @@ var (
 	sortOutputFile string
 )
 
+type errUnindexedFile struct {
+	err error
+}
+
+func (e errUnindexedFile) Error() string {
+	return e.err.Error()
+}
+
+func (e errUnindexedFile) Is(tgt error) bool {
+	_, ok := tgt.(errUnindexedFile)
+	return ok
+}
+
 func sortFile(w io.Writer, r io.ReadSeeker) error {
 	reader, err := mcap.NewReader(r)
 	if err != nil {
@@ -29,7 +42,7 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 	}
 	info, err := reader.Info()
 	if err != nil {
-		return fmt.Errorf("failed to read info: %w", err)
+		return errUnindexedFile{err}
 	}
 
 	err = writer.WriteHeader(info.Header)
@@ -120,6 +133,9 @@ var sortCmd = &cobra.Command{
 		}
 		err = sortFile(output, f)
 		if err != nil {
+			if errors.Is(err, errUnindexedFile{}) {
+				die("Error reading file index: %s. You may need to run `mcap recover` if the file is corrupt.", err)
+			}
 			die("failed to sort file: %s", err)
 		}
 	},
