@@ -1,8 +1,7 @@
-package readopts
+package mcap
 
 import (
 	"fmt"
-	"math"
 )
 
 type ReadOrder int
@@ -19,16 +18,8 @@ type ReadOptions struct {
 	Topics   []string
 	UseIndex bool
 	Order    ReadOrder
-}
 
-func Default() ReadOptions {
-	return ReadOptions{
-		Start:    0,
-		End:      math.MaxInt64,
-		Topics:   nil,
-		UseIndex: true,
-		Order:    FileOrder,
-	}
+	MetadataCallback func(*Metadata) error
 }
 
 type ReadOpt func(*ReadOptions) error
@@ -76,6 +67,13 @@ func UsingIndex(useIndex bool) ReadOpt {
 			return fmt.Errorf("only file-order reads are supported when not using index")
 		}
 		ro.UseIndex = useIndex
+		return nil
+	}
+}
+
+func WithMetadataCallback(callback func(*Metadata) error) ReadOpt {
+	return func(ro *ReadOptions) error {
+		ro.MetadataCallback = callback
 		return nil
 	}
 }

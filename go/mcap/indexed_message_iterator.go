@@ -40,6 +40,7 @@ type indexedMessageIterator struct {
 	hasReadSummarySection bool
 
 	compressedChunkAndMessageIndex []byte
+	metadataCallback               func(*Metadata) error
 }
 
 // parseIndexSection parses the index section of the file and populates the
@@ -237,13 +238,54 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	return nil
 }
 
+func readRecord(r io.Reader) (TokenType, []byte, error) {
+	buf := make([]byte, 9)
+	_, err := io.ReadFull(r, buf)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to read record header: %w", err)
+	}
+	tokenType := TokenType(buf[0])
+	recordLen := binary.LittleEndian.Uint64(buf[1:])
+	record := make([]byte, recordLen)
+	_, err = io.ReadFull(r, record)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to read record: %w", err)
+	}
+	return tokenType, record, nil
+}
+
 func (it *indexedMessageIterator) Next(_ []byte) (*Schema, *Channel, *Message, error) {
 	if !it.hasReadSummarySection {
 		err := it.parseSummarySection()
 		if err != nil {
 			return nil, nil, nil, err
 		}
+		// take care of the metadata here
+		if it.metadataCallback != nil {
+			for _, idx := range it.metadataIndexes {
+				_, err = it.rs.Seek(int64(idx.Offset), io.SeekStart)
+				if err != nil {
+					return nil, nil, nil, fmt.Errorf("failed to seek to metadata: %w", err)
+				}
+				tokenType, data, err := readRecord(it.rs)
+				if err != nil {
+					return nil, nil, nil, fmt.Errorf("failed to read metadata record: %w", err)
+				}
+				if tokenType != TokenMetadata {
+					return nil, nil, nil, fmt.Errorf("expected metadata record, found %v", data)
+				}
+				metadata, err := ParseMetadata(data)
+				if err != nil {
+					return nil, nil, nil, fmt.Errorf("failed to parse metadata record: %w", err)
+				}
+				err = it.metadataCallback(metadata)
+				if err != nil {
+					return nil, nil, nil, fmt.Errorf("metadata callback failed: %w", err)
+				}
+			}
+		}
 	}
+
 	for it.indexHeap.Len() > 0 {
 		ri, err := it.indexHeap.HeapPop()
 		if err != nil {
