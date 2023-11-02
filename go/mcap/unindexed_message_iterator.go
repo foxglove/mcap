@@ -65,7 +65,7 @@ func (it *unindexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message,
 				}
 				err = it.metadataCallback(metadata)
 				if err != nil {
-					return nil, nil, nil, fmt.Errorf("failed to process metadata: %w", err)
+					return nil, nil, nil, err
 				}
 			}
 			// we don't emit metadata from the reader, so continue onward

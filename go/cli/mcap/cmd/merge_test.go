@@ -35,7 +35,8 @@ func prepInput(t *testing.T, w io.Writer, schema *mcap.Schema, channelID uint16,
 	assert.Nil(t, writer.WriteMetadata(&mcap.Metadata{
 		Name: "a",
 		Metadata: map[string]string{
-			"b": "c",
+			"b":     "c",
+			"topic": topic,
 		},
 	}))
 
@@ -43,51 +44,80 @@ func prepInput(t *testing.T, w io.Writer, schema *mcap.Schema, channelID uint16,
 }
 
 func TestMCAPMerging(t *testing.T) {
-	for _, chunked := range []bool{true, false} {
-		buf1 := &bytes.Buffer{}
-		buf2 := &bytes.Buffer{}
-		buf3 := &bytes.Buffer{}
-		prepInput(t, buf1, &mcap.Schema{ID: 1}, 1, "/foo")
-		prepInput(t, buf2, &mcap.Schema{ID: 1}, 1, "/bar")
-		prepInput(t, buf3, &mcap.Schema{ID: 1}, 1, "/baz")
-		merger := newMCAPMerger(mergeOpts{
-			chunked: chunked,
-		})
-		output := &bytes.Buffer{}
-		inputs := []namedReader{
-			{"buf1", buf1},
-			{"buf2", buf2},
-			{"buf3", buf3},
+	cases := []struct {
+		assertion        string
+		opts             mergeOpts
+		expectedError    error
+		expectedMetadata int
+	}{
+		{
+			"allow duplicates",
+			mergeOpts{
+				allowDuplicateMetadata: true,
+			},
+			nil,
+			3,
+		},
+		{
+			"disallow duplicates",
+			mergeOpts{
+				allowDuplicateMetadata: false,
+			},
+			&ErrDuplicateMetadataName{Name: "a"},
+			0,
+		},
+	}
+
+	for _, c := range cases {
+		for _, chunked := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s chunked %v", c.assertion, chunked), func(t *testing.T) {
+				buf1 := &bytes.Buffer{}
+				buf2 := &bytes.Buffer{}
+				buf3 := &bytes.Buffer{}
+				prepInput(t, buf1, &mcap.Schema{ID: 1}, 1, "/foo")
+				prepInput(t, buf2, &mcap.Schema{ID: 1}, 1, "/bar")
+				prepInput(t, buf3, &mcap.Schema{ID: 1}, 1, "/baz")
+
+				c.opts.chunked = chunked
+				merger := newMCAPMerger(c.opts)
+				output := &bytes.Buffer{}
+				inputs := []namedReader{
+					{"buf1", buf1},
+					{"buf2", buf2},
+					{"buf3", buf3},
+				}
+				assert.ErrorIs(t, merger.mergeInputs(output, inputs), c.expectedError)
+				if c.expectedError != nil {
+					return
+				}
+
+				// output should now be a well-formed mcap
+				reader, err := mcap.NewReader(bytes.NewReader(output.Bytes()))
+				assert.Nil(t, err)
+				assert.Equal(t, reader.Header().Profile, "testprofile")
+				it, err := reader.Messages(mcap.UsingIndex(false))
+				assert.Nil(t, err)
+
+				messages := make(map[string]int)
+				err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
+					messages[channel.Topic]++
+					return nil
+				})
+				assert.Nil(t, err)
+				assert.Equal(t, 100, messages["/foo"])
+				assert.Equal(t, 100, messages["/bar"])
+				assert.Equal(t, 100, messages["/baz"])
+
+				info, err := reader.Info()
+				assert.Nil(t, err)
+				assert.Equal(t, c.expectedMetadata, len(info.MetadataIndexes))
+				for _, idx := range info.MetadataIndexes {
+					_, err := reader.GetMetadata(idx.Offset)
+					assert.Nil(t, err)
+				}
+				reader.Close()
+			})
 		}
-		assert.Nil(t, merger.mergeInputs(output, inputs))
-
-		// output should now be a well-formed mcap
-		reader, err := mcap.NewReader(bytes.NewReader(output.Bytes()))
-		assert.Nil(t, err)
-		assert.Equal(t, reader.Header().Profile, "testprofile")
-		it, err := reader.Messages(mcap.UsingIndex(false))
-		assert.Nil(t, err)
-
-		messages := make(map[string]int)
-		err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
-			messages[channel.Topic]++
-			return nil
-		})
-		assert.Nil(t, err)
-		assert.Equal(t, 100, messages["/foo"])
-		assert.Equal(t, 100, messages["/bar"])
-		assert.Equal(t, 100, messages["/baz"])
-
-		// check we got 3 parsable metadatas
-		info, err := reader.Info()
-		assert.Nil(t, err)
-		assert.Equal(t, 3, len(info.MetadataIndexes))
-		for _, idx := range info.MetadataIndexes {
-			_, err := reader.GetMetadata(idx.Offset)
-			assert.Nil(t, err)
-		}
-
-		reader.Close()
 	}
 }
 
@@ -153,7 +183,9 @@ func TestMultiChannelInput(t *testing.T) {
 	buf2 := &bytes.Buffer{}
 	prepInput(t, buf1, &mcap.Schema{ID: 1}, 1, "/foo")
 	prepInput(t, buf2, &mcap.Schema{ID: 1}, 1, "/bar")
-	merger := newMCAPMerger(mergeOpts{})
+	merger := newMCAPMerger(mergeOpts{
+		allowDuplicateMetadata: true,
+	})
 	multiChannelInput := &bytes.Buffer{}
 	inputs := []namedReader{
 		{"buf1", buf1},
@@ -189,7 +221,9 @@ func TestSchemalessChannelInput(t *testing.T) {
 	buf2 := &bytes.Buffer{}
 	prepInput(t, buf1, &mcap.Schema{ID: 0}, 1, "/foo")
 	prepInput(t, buf2, &mcap.Schema{ID: 1}, 1, "/bar")
-	merger := newMCAPMerger(mergeOpts{})
+	merger := newMCAPMerger(mergeOpts{
+		allowDuplicateMetadata: true,
+	})
 	output := &bytes.Buffer{}
 	inputs := []namedReader{
 		{"buf1", buf1},
@@ -325,7 +359,9 @@ func TestSameSchemasNotDuplicated(t *testing.T) {
 	prepInput(t, buf1, &mcap.Schema{ID: 1, Name: "SchemaA"}, 1, "/foo")
 	prepInput(t, buf2, &mcap.Schema{ID: 1, Name: "SchemaA"}, 1, "/bar")
 	prepInput(t, buf3, &mcap.Schema{ID: 1, Name: "SchemaB"}, 1, "/baz")
-	merger := newMCAPMerger(mergeOpts{})
+	merger := newMCAPMerger(mergeOpts{
+		allowDuplicateMetadata: true,
+	})
 	output := &bytes.Buffer{}
 	inputs := []namedReader{
 		{"buf1", buf1},
@@ -337,7 +373,7 @@ func TestSameSchemasNotDuplicated(t *testing.T) {
 	reader, err := mcap.NewReader(output)
 	assert.Nil(t, err)
 	assert.Equal(t, reader.Header().Profile, "testprofile")
-	it, err := reader.Messages(readopts.UsingIndex(false))
+	it, err := reader.Messages(mcap.UsingIndex(false))
 	assert.Nil(t, err)
 	schemas := make(map[uint16]bool)
 	var schemaNames []string

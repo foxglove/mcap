@@ -185,32 +185,22 @@ func (r *Reader) Info() (*Info, error) {
 }
 
 func (r *Reader) GetMetadata(offset uint64) (*Metadata, error) {
-	info, err := r.Info()
+	_, err := r.rs.Seek(int64(offset), io.SeekStart)
 	if err != nil {
 		return nil, err
 	}
-	for _, idx := range info.MetadataIndexes {
-		if idx.Offset != offset {
-			continue
-		}
-		_, err := r.rs.Seek(int64(idx.Offset), io.SeekStart)
-		if err != nil {
-			return nil, err
-		}
-		token, data, err := r.l.Next(nil)
-		if err != nil {
-			return nil, err
-		}
-		if token != TokenMetadata {
-			return nil, fmt.Errorf("expected metadata record, found %v", data)
-		}
-		metadata, err := ParseMetadata(data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse metadata record: %w", err)
-		}
-		return metadata, nil
+	token, data, err := r.l.Next(nil)
+	if err != nil {
+		return nil, err
 	}
-	return nil, ErrMetadataNotFound
+	if token != TokenMetadata {
+		return nil, fmt.Errorf("expected metadata record, found %v", data)
+	}
+	metadata, err := ParseMetadata(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metadata record: %w", err)
+	}
+	return metadata, nil
 }
 
 // Close the reader.
