@@ -9,7 +9,9 @@
 #include <vector>
 
 // Forward declaration
+#ifndef MCAP_COMPRESSION_NO_ZSTD
 struct ZSTD_CCtx_s;
+#endif
 
 namespace mcap {
 
@@ -251,6 +253,7 @@ private:
   std::vector<std::byte> buffer_;
 };
 
+#ifndef MCAP_COMPRESSION_NO_LZ4
 /**
  * @brief An in-memory IChunkWriter implementation that holds data in a
  * temporary buffer before flushing to an LZ4-compressed buffer.
@@ -273,7 +276,9 @@ private:
   std::vector<std::byte> compressedBuffer_;
   CompressionLevel compressionLevel_;
 };
+#endif
 
+#ifndef MCAP_COMPRESSION_NO_ZSTD
 /**
  * @brief An in-memory IChunkWriter implementation that holds data in a
  * temporary buffer before flushing to an ZStandard-compressed buffer.
@@ -297,6 +302,7 @@ private:
   std::vector<std::byte> compressedBuffer_;
   ZSTD_CCtx_s* zstdContext_ = nullptr;
 };
+#endif
 
 /**
  * @brief Provides a write interface to an MCAP file.
@@ -445,8 +451,12 @@ private:
   std::unique_ptr<FileWriter> fileOutput_;
   std::unique_ptr<StreamWriter> streamOutput_;
   std::unique_ptr<BufferWriter> uncompressedChunk_;
+#ifndef MCAP_COMPRESSION_NO_LZ4
   std::unique_ptr<LZ4Writer> lz4Chunk_;
+#endif
+#ifndef MCAP_COMPRESSION_NO_ZSTD
   std::unique_ptr<ZStdWriter> zstdChunk_;
+#endif
   std::vector<Schema> schemas_;
   std::vector<Channel> channels_;
   std::vector<AttachmentIndex> attachmentIndex_;

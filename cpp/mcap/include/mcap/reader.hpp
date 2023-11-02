@@ -150,6 +150,7 @@ private:
   uint64_t size_;
 };
 
+#ifndef MCAP_COMPRESSION_NO_ZSTD
 /**
  * @brief ICompressedReader implementation that decompresses Zstandard
  * (https://facebook.github.io/zstd/) data.
@@ -183,7 +184,9 @@ private:
   Status status_;
   ByteArray uncompressedData_;
 };
+#endif
 
+#ifndef MCAP_COMPRESSION_NO_LZ4
 /**
  * @brief ICompressedReader implementation that decompresses LZ4
  * (https://lz4.github.io/lz4/) data.
@@ -222,6 +225,7 @@ private:
   uint64_t compressedSize_;
   uint64_t uncompressedSize_;
 };
+#endif
 
 struct LinearMessageView;
 
@@ -539,8 +543,12 @@ private:
   RecordReader reader_;
   Status status_;
   BufferReader uncompressedReader_;
+#ifndef MCAP_COMPRESSION_NO_LZ4
   LZ4Reader lz4Reader_;
+#endif
+#ifndef MCAP_COMPRESSION_NO_ZSTD
   ZStdReader zstdReader_;
+#endif
 };
 
 /**
@@ -627,7 +635,9 @@ private:
   Status status_;
   McapReader& mcapReader_;
   RecordReader recordReader_;
+#ifndef MCAP_COMPRESSION_NO_LZ4
   LZ4Reader lz4Reader_;
+#endif
   ReadMessageOptions options_;
   std::unordered_set<ChannelId> selectedChannels_;
   std::function<void(const Message&, RecordOffset)> onMessage_;

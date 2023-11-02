@@ -584,6 +584,7 @@ TEST_CASE("Message index records", "[writer]") {
   REQUIRE(messageIndexChannelIds[1] == channel2.id);
 }
 
+#ifndef MCAP_COMPRESSION_NO_LZ4
 TEST_CASE("LZ4 compression", "[reader][writer]") {
   SECTION("Roundtrip") {
     Buffer buffer;
@@ -781,6 +782,7 @@ TEST_CASE("Read Order", "[reader][writer]") {
     REQUIRE(count == reverse_order_expected.size());
   }
 }
+#endif
 
 TEST_CASE("ReadJobQueue order", "[reader]") {
   SECTION("successive chunks with out-of-order timestamps") {

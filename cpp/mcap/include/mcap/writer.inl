@@ -2,10 +2,14 @@
 #include <algorithm>
 #include <cassert>
 #include <iostream>
-#include <lz4frame.h>
-#include <lz4hc.h>
-#include <zstd.h>
-#include <zstd_errors.h>
+#ifndef MCAP_COMPRESSION_NO_LZ4
+#  include <lz4frame.h>
+#  include <lz4hc.h>
+#endif
+#ifndef MCAP_COMPRESSION_NO_ZSTD
+#  include <zstd.h>
+#  include <zstd_errors.h>
+#endif
 
 namespace mcap {
 
@@ -131,6 +135,7 @@ const std::byte* BufferWriter::compressedData() const {
 
 // LZ4Writer ///////////////////////////////////////////////////////////////////
 
+#ifndef MCAP_COMPRESSION_NO_LZ4
 namespace internal {
 
 int LZ4CompressionLevel(CompressionLevel level) {
@@ -199,9 +204,11 @@ const std::byte* LZ4Writer::data() const {
 const std::byte* LZ4Writer::compressedData() const {
   return compressedBuffer_.data();
 }
+#endif
 
 // ZStdWriter //////////////////////////////////////////////////////////////////
 
+#ifndef MCAP_COMPRESSION_NO_ZSTD
 namespace internal {
 
 int ZStdCompressionLevel(CompressionLevel level) {
@@ -278,6 +285,7 @@ const std::byte* ZStdWriter::data() const {
 const std::byte* ZStdWriter::compressedData() const {
   return compressedBuffer_.data();
 }
+#endif
 
 // McapWriter //////////////////////////////////////////////////////////////////
 
@@ -295,12 +303,16 @@ void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
     default:
       uncompressedChunk_ = std::make_unique<BufferWriter>();
       break;
+#ifndef MCAP_COMPRESSION_NO_LZ4
     case Compression::Lz4:
       lz4Chunk_ = std::make_unique<LZ4Writer>(options.compressionLevel, chunkSize_);
       break;
+#endif
+#ifndef MCAP_COMPRESSION_NO_ZSTD
     case Compression::Zstd:
       zstdChunk_ = std::make_unique<ZStdWriter>(options.compressionLevel, chunkSize_);
       break;
+#endif
   }
   auto* chunkWriter = getChunkWriter();
   if (chunkWriter) {
@@ -457,7 +469,9 @@ void McapWriter::terminate() {
   fileOutput_.reset();
   streamOutput_.reset();
   uncompressedChunk_.reset();
+#ifndef MCAP_COMPRESSION_NO_ZSTD
   zstdChunk_.reset();
+#endif
 
   channels_.clear();
   attachmentIndex_.clear();
@@ -658,10 +672,14 @@ IWritable& McapWriter::getOutput() {
     default:
     case Compression::None:
       return *uncompressedChunk_;
+#ifndef MCAP_COMPRESSION_NO_ZSTD
     case Compression::Zstd:
       return *zstdChunk_;
+#endif
+#ifndef MCAP_COMPRESSION_NO_LZ4
     case Compression::Lz4:
       return *lz4Chunk_;
+#endif
   }
 }
 
@@ -674,10 +692,14 @@ IChunkWriter* McapWriter::getChunkWriter() {
     case Compression::None:
     default:
       return uncompressedChunk_.get();
+#ifndef MCAP_COMPRESSION_NO_LZ4
     case Compression::Lz4:
       return lz4Chunk_.get();
+#endif
+#ifndef MCAP_COMPRESSION_NO_ZSTD
     case Compression::Zstd:
       return zstdChunk_.get();
+#endif
   }
 }
 
