@@ -76,12 +76,12 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 		return errUnindexedFile{err}
 	}
 
-	emptyFile, err := fileHasNoMessages(r)
+	isEmpty, err := fileHasNoMessages(r)
 	if err != nil {
 		return fmt.Errorf("failed to check if file is empty: %w", err)
 	}
 
-	if len(info.ChunkIndexes) == 0 && !emptyFile {
+	if len(info.ChunkIndexes) == 0 && !isEmpty {
 		return errUnindexedFile{errors.New("no chunk index records")}
 	}
 
@@ -93,7 +93,7 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 	// handle the attachments and metadata metadata first; physical location in
 	// the file is irrelevant but order is preserved.
 	for _, index := range info.AttachmentIndexes {
-		ar, err := reader.GetAttachmentReader(index.Offset)
+		attReader, err := reader.GetAttachmentReader(index.Offset)
 		if err != nil {
 			return fmt.Errorf("failed to read attachment: %w", err)
 		}
@@ -103,7 +103,7 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 			CreateTime: index.CreateTime,
 			LogTime:    index.LogTime,
 			DataSize:   index.DataSize,
-			Data:       ar.Data(),
+			Data:       attReader.Data(),
 		})
 		if err != nil {
 			return fmt.Errorf("failed to write attachment: %w", err)
