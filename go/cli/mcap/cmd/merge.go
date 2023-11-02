@@ -61,11 +61,13 @@ type channelID struct {
 	channelID uint16
 }
 
+type HashSum = [md5.Size]byte
+
 type mcapMerger struct {
 	schemaIDs       map[schemaID]uint16
 	channelIDs      map[channelID]uint16
 	schemaIDByHash  map[string]uint16
-	channelIDByHash map[string]uint16
+	channelIDByHash map[HashSum]uint16
 	metadataHashes  map[string]bool
 	metadataNames   map[string]bool
 	nextChannelID   uint16
@@ -84,7 +86,7 @@ func newMCAPMerger(opts mergeOpts) *mcapMerger {
 		schemaIDs:       make(map[schemaID]uint16),
 		channelIDs:      make(map[channelID]uint16),
 		schemaIDByHash:  make(map[string]uint16),
-		channelIDByHash: make(map[string]uint16),
+		channelIDByHash: make(map[HashSum]uint16),
 		metadataHashes:  make(map[string]bool),
 		metadataNames:   make(map[string]bool),
 		nextChannelID:   1,
@@ -143,7 +145,7 @@ func (m *mcapMerger) addMetadata(w *mcap.Writer, metadata *mcap.Metadata) error 
 	return nil
 }
 
-func getChannelHash(channel *mcap.Channel, coalesceChannels string) string {
+func getChannelHash(channel *mcap.Channel, coalesceChannels string) HashSum {
 	hasher := md5.New()
 	schemaIDBytes := make([]byte, 2)
 	binary.LittleEndian.PutUint16(schemaIDBytes, channel.SchemaID)
@@ -163,8 +165,7 @@ func getChannelHash(channel *mcap.Channel, coalesceChannels string) string {
 		die("Invalid value for --coalesce-channels: %s\n", coalesceChannels)
 	}
 
-	hash := hasher.Sum(nil)
-	return hex.EncodeToString(hash)
+	return HashSum(hasher.Sum(nil))
 }
 
 func (m *mcapMerger) addChannel(w *mcap.Writer, inputID int, channel *mcap.Channel) (uint16, error) {
@@ -264,7 +265,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 
 	// Reset struct members
 	m.schemaIDByHash = make(map[string]uint16)
-	m.channelIDByHash = make(map[string]uint16)
+	m.channelIDByHash = make(map[HashSum]uint16)
 	m.schemaIDs = make(map[schemaID]uint16)
 	m.channelIDs = make(map[channelID]uint16)
 	m.nextChannelID = 1
