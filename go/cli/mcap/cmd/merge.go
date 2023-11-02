@@ -66,7 +66,7 @@ type HashSum = [md5.Size]byte
 type mcapMerger struct {
 	schemaIDs       map[schemaID]uint16
 	channelIDs      map[channelID]uint16
-	schemaIDByHash  map[string]uint16
+	schemaIDByHash  map[HashSum]uint16
 	channelIDByHash map[HashSum]uint16
 	metadataHashes  map[string]bool
 	metadataNames   map[string]bool
@@ -85,7 +85,7 @@ func newMCAPMerger(opts mergeOpts) *mcapMerger {
 	return &mcapMerger{
 		schemaIDs:       make(map[schemaID]uint16),
 		channelIDs:      make(map[channelID]uint16),
-		schemaIDByHash:  make(map[string]uint16),
+		schemaIDByHash:  make(map[HashSum]uint16),
 		channelIDByHash: make(map[HashSum]uint16),
 		metadataHashes:  make(map[string]bool),
 		metadataNames:   make(map[string]bool),
@@ -201,13 +201,12 @@ func (m *mcapMerger) addChannel(w *mcap.Writer, inputID int, channel *mcap.Chann
 	return newChannel.ID, nil
 }
 
-func getSchemaHash(schema *mcap.Schema) string {
+func getSchemaHash(schema *mcap.Schema) HashSum {
 	hasher := md5.New()
 	hasher.Write([]byte(schema.Name))
 	hasher.Write([]byte(schema.Encoding))
 	hasher.Write(schema.Data)
-	hash := hasher.Sum(nil)
-	return hex.EncodeToString(hash)
+	return HashSum(hasher.Sum(nil))
 }
 
 func (m *mcapMerger) addSchema(w *mcap.Writer, inputID int, schema *mcap.Schema) error {
@@ -264,7 +263,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 	pq := utils.NewPriorityQueue(nil)
 
 	// Reset struct members
-	m.schemaIDByHash = make(map[string]uint16)
+	m.schemaIDByHash = make(map[HashSum]uint16)
 	m.channelIDByHash = make(map[HashSum]uint16)
 	m.schemaIDs = make(map[schemaID]uint16)
 	m.channelIDs = make(map[channelID]uint16)
