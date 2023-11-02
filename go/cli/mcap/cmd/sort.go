@@ -11,7 +11,11 @@ import (
 )
 
 var (
-	sortOutputFile string
+	sortOutputFile  string
+	sortChunkSize   int64
+	sortCompression string
+	sortIncludeCRC  bool
+	sortChunked     bool
 )
 
 type errUnindexedFile struct {
@@ -33,9 +37,10 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 		return fmt.Errorf("failed to create reader: %w", err)
 	}
 	writer, err := mcap.NewWriter(w, &mcap.WriterOptions{
-		Chunked:     true,
-		Compression: mcap.CompressionZSTD,
-		ChunkSize:   4 * 1024 * 1024,
+		Chunked:     sortChunked,
+		Compression: mcap.CompressionFormat(sortCompression),
+		ChunkSize:   sortChunkSize,
+		IncludeCRC:  sortIncludeCRC,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create writer: %w", err)
@@ -43,6 +48,10 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 	info, err := reader.Info()
 	if err != nil {
 		return errUnindexedFile{err}
+	}
+
+	if len(info.ChunkIndexes) == 0 {
+		return errUnindexedFile{errors.New("no chunk index records found")}
 	}
 
 	err = writer.WriteHeader(info.Header)
@@ -53,7 +62,7 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 	// handle the attachments and metadata metadata first; physical location in
 	// the file is irrelevant but order is preserved.
 	for _, index := range info.AttachmentIndexes {
-		ar, err := reader.GetAttachment(index.Offset)
+		ar, err := reader.GetAttachmentReader(index.Offset)
 		if err != nil {
 			return fmt.Errorf("failed to read attachment: %w", err)
 		}
@@ -66,17 +75,17 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 			Data:       ar.Data(),
 		})
 		if err != nil {
-			return fmt.Errorf("failed to read attachment: %w", err)
+			return fmt.Errorf("failed to write attachment: %w", err)
 		}
 	}
 	for _, index := range info.MetadataIndexes {
 		metadata, err := reader.GetMetadata(index.Offset)
 		if err != nil {
-			return fmt.Errorf("failed to read attachment: %w", err)
+			return fmt.Errorf("failed to read metadata: %w", err)
 		}
 		err = writer.WriteMetadata(metadata)
 		if err != nil {
-			return fmt.Errorf("failed to read attachment: %w", err)
+			return fmt.Errorf("failed to write metadata: %w", err)
 		}
 	}
 
@@ -93,10 +102,12 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 				break
 			}
 		}
-		if _, ok := schemas[schema.ID]; !ok {
-			err := writer.WriteSchema(schema)
-			if err != nil {
-				return fmt.Errorf("failed to write schema: %w", err)
+		if schema != nil {
+			if _, ok := schemas[schema.ID]; !ok {
+				err := writer.WriteSchema(schema)
+				if err != nil {
+					return fmt.Errorf("failed to write schema: %w", err)
+				}
 			}
 		}
 		if _, ok := channels[channel.ID]; !ok {
@@ -116,7 +127,7 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 
 var sortCmd = &cobra.Command{
 	Use:   "sort [file] -o output.mcap",
-	Short: "Read an MCAP file and write the messages out physically sorted on time",
+	Short: "Read an MCAP file and write the messages out physically sorted on log time",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) != 1 {
 			die("supply a file")
@@ -134,7 +145,8 @@ var sortCmd = &cobra.Command{
 		err = sortFile(output, f)
 		if err != nil {
 			if errors.Is(err, errUnindexedFile{}) {
-				die("Error reading file index: %s. You may need to run `mcap recover` if the file is corrupt.", err)
+				die("Error reading file index: %s. "+
+					"You may need to run `mcap recover` if the file is corrupt or unchunked.", err)
 			}
 			die("failed to sort file: %s", err)
 		}
@@ -143,13 +155,11 @@ var sortCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(sortCmd)
-	sortCmd.PersistentFlags().StringVarP(
-		&sortOutputFile,
-		"output-file",
-		"o",
-		"",
-		"output file",
-	)
+	sortCmd.PersistentFlags().StringVarP(&sortOutputFile, "output-file", "o", "", "output file")
+	sortCmd.PersistentFlags().Int64VarP(&sortChunkSize, "chunk-size", "", 4*1024*1024, "chunk size")
+	sortCmd.PersistentFlags().StringVarP(&sortCompression, "compression", "", "zstd", "chunk compression algorithm")
+	sortCmd.PersistentFlags().BoolVarP(&sortIncludeCRC, "include-crc", "", true, "include chunk CRCs in output")
+	sortCmd.PersistentFlags().BoolVarP(&sortChunked, "chunked", "", true, "create an indexed and chunk-compressed output")
 	err := sortCmd.MarkPersistentFlagRequired("output-file")
 	if err != nil {
 		die("failed to mark flag required: %s", err)

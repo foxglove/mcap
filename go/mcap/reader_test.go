@@ -604,7 +604,7 @@ func TestReadingMetadata(t *testing.T) {
 	assert.Equal(t, expectedMetadata, metadata)
 }
 
-func TestGetAttachment(t *testing.T) {
+func TestGetAttachmentReader(t *testing.T) {
 	buf := &bytes.Buffer{}
 	writer, err := NewWriter(buf, &WriterOptions{
 		Chunked:     true,
@@ -630,7 +630,7 @@ func TestGetAttachment(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(info.AttachmentIndexes))
 	idx := info.AttachmentIndexes[0]
-	ar, err := reader.GetAttachment(idx.Offset)
+	ar, err := reader.GetAttachmentReader(idx.Offset)
 	assert.Nil(t, err)
 
 	assert.Equal(t, "foo", ar.Name)
