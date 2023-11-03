@@ -604,6 +604,46 @@ func TestReadingMetadata(t *testing.T) {
 	assert.Equal(t, expectedMetadata, metadata)
 }
 
+func TestGetAttachmentReader(t *testing.T) {
+	buf := &bytes.Buffer{}
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   1024,
+		Compression: "",
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, writer.WriteHeader(&Header{}))
+	assert.Nil(t, writer.WriteAttachment(&Attachment{
+		LogTime:    10,
+		CreateTime: 1000,
+		Name:       "foo",
+		MediaType:  "text",
+		DataSize:   3,
+		Data:       bytes.NewReader([]byte{'a', 'b', 'c'}),
+	}))
+	assert.Nil(t, writer.Close())
+
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	assert.Nil(t, err)
+
+	info, err := reader.Info()
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(info.AttachmentIndexes))
+	idx := info.AttachmentIndexes[0]
+	ar, err := reader.GetAttachmentReader(idx.Offset)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "foo", ar.Name)
+	assert.Equal(t, "text", ar.MediaType)
+	assert.Equal(t, 3, int(ar.DataSize))
+	assert.Equal(t, 10, int(ar.LogTime))
+	assert.Equal(t, 1000, int(ar.CreateTime))
+
+	data, err := io.ReadAll(ar.Data())
+	assert.Nil(t, err)
+	assert.Equal(t, []byte{'a', 'b', 'c'}, data)
+}
+
 func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	buf := &bytes.Buffer{}
 	// write an MCAP with two chunks, where in each chunk all messages have ascending timestamps,

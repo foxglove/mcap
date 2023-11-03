@@ -184,6 +184,20 @@ func (r *Reader) Info() (*Info, error) {
 	return info, nil
 }
 
+// GetAttachmentReader returns an attachment reader located at the specific offset.
+// The reader must be consumed before the base reader is used again.
+func (r *Reader) GetAttachmentReader(offset uint64) (*AttachmentReader, error) {
+	_, err := r.rs.Seek(int64(offset+9), io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+	ar, err := parseAttachmentReader(r.rs, true)
+	if err != nil {
+		return nil, err
+	}
+	return ar, nil
+}
+
 func (r *Reader) GetMetadata(offset uint64) (*Metadata, error) {
 	_, err := r.rs.Seek(int64(offset), io.SeekStart)
 	if err != nil {
