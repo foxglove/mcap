@@ -27,6 +27,12 @@ func TestSortFile(t *testing.T) {
 		Topic:           "/foo",
 		MessageEncoding: "ros1msg",
 	}))
+	assert.Nil(t, writer.WriteChannel(&mcap.Channel{
+		ID:              2,
+		SchemaID:        0,
+		Topic:           "/bar",
+		MessageEncoding: "ros1msg",
+	}))
 	assert.Nil(t, writer.WriteMessage(&mcap.Message{
 		ChannelID:   0,
 		Sequence:    0,
@@ -38,6 +44,13 @@ func TestSortFile(t *testing.T) {
 		ChannelID:   0,
 		Sequence:    0,
 		LogTime:     50,
+		PublishTime: 0,
+		Data:        []byte{},
+	}))
+	assert.Nil(t, writer.WriteMessage(&mcap.Message{
+		ChannelID:   2,
+		Sequence:    0,
+		LogTime:     25,
 		PublishTime: 0,
 		Data:        []byte{},
 	}))
@@ -57,5 +70,5 @@ func TestSortFile(t *testing.T) {
 
 	_, _, msg, err := it.Next(nil)
 	assert.Nil(t, err)
-	assert.Equal(t, 50, int(msg.LogTime))
+	assert.Equal(t, 25, int(msg.LogTime))
 }

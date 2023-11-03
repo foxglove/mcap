@@ -175,7 +175,7 @@ var sortCmd = &cobra.Command{
 		if err != nil {
 			if errors.Is(err, errUnindexedFile{}) {
 				die("Error reading file index: %s. "+
-					"You may need to run `mcap recover` if the file is corrupt or unchunked.", err)
+					"You may need to run `mcap recover` if the file is corrupt or not chunk indexed.", err)
 			}
 			die("failed to sort file: %s", err)
 		}
