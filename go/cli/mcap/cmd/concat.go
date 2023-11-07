@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"container/heap"
 	"errors"
 	"fmt"
 	"io"
@@ -13,16 +12,16 @@ import (
 )
 
 var (
-	mergeCompression            string
-	mergeChunkSize              int64
-	mergeIncludeCRC             bool
-	mergeChunked                bool
-	mergeOutputFile             string
-	mergeAllowDuplicateMetadata bool
-	coalesceChannels            string
+	concatCompression            string
+	concatChunkSize              int64
+	concatIncludeCRC             bool
+	concatChunked                bool
+	concatOutputFile             string
+	concatAllowDuplicateMetadata bool
+	concatCoalesceChannels       string
 )
 
-type mergeOpts struct {
+type concatOpts struct {
 	compression            string
 	chunkSize              int64
 	includeCRC             bool
@@ -31,7 +30,7 @@ type mergeOpts struct {
 	coalesceChannels       string
 }
 
-type mcapMerger struct {
+type mcapConcatenator struct {
 	schemaIDs       map[schemaID]uint16
 	channelIDs      map[channelID]uint16
 	schemaIDByHash  map[HashSum]uint16
@@ -40,11 +39,11 @@ type mcapMerger struct {
 	metadataNames   map[string]bool
 	nextChannelID   uint16
 	nextSchemaID    uint16
-	opts            mergeOpts
+	opts            concatOpts
 }
 
-func newMCAPMerger(opts mergeOpts) *mcapMerger {
-	return &mcapMerger{
+func newMCAPConcatenator(opts concatOpts) *mcapConcatenator {
+	return &mcapConcatenator{
 		schemaIDs:       make(map[schemaID]uint16),
 		channelIDs:      make(map[channelID]uint16),
 		schemaIDByHash:  make(map[HashSum]uint16),
@@ -57,7 +56,7 @@ func newMCAPMerger(opts mergeOpts) *mcapMerger {
 	}
 }
 
-func (m *mcapMerger) outputChannelID(inputID int, inputChannelID uint16) (uint16, bool) {
+func (m *mcapConcatenator) outputChannelID(inputID int, inputChannelID uint16) (uint16, bool) {
 	v, ok := m.channelIDs[channelID{
 		inputID:   inputID,
 		channelID: inputChannelID,
@@ -65,7 +64,7 @@ func (m *mcapMerger) outputChannelID(inputID int, inputChannelID uint16) (uint16
 	return v, ok
 }
 
-func (m *mcapMerger) outputSchemaID(inputID int, inputSchemaID uint16) (uint16, bool) {
+func (m *mcapConcatenator) outputSchemaID(inputID int, inputSchemaID uint16) (uint16, bool) {
 	if inputSchemaID == 0 {
 		return 0, true
 	}
@@ -76,7 +75,7 @@ func (m *mcapMerger) outputSchemaID(inputID int, inputSchemaID uint16) (uint16, 
 	return v, ok
 }
 
-func (m *mcapMerger) addMetadata(w *mcap.Writer, metadata *mcap.Metadata) error {
+func (m *mcapConcatenator) addMetadata(w *mcap.Writer, metadata *mcap.Metadata) error {
 	if m.metadataNames[metadata.Name] && !m.opts.allowDuplicateMetadata {
 		return &ErrDuplicateMetadataName{Name: metadata.Name}
 	}
@@ -95,7 +94,7 @@ func (m *mcapMerger) addMetadata(w *mcap.Writer, metadata *mcap.Metadata) error 
 	return nil
 }
 
-func (m *mcapMerger) addChannel(w *mcap.Writer, inputID int, channel *mcap.Channel) (uint16, error) {
+func (m *mcapConcatenator) addChannel(w *mcap.Writer, inputID int, channel *mcap.Channel) (uint16, error) {
 	outputSchemaID, ok := m.outputSchemaID(inputID, channel.SchemaID)
 	if !ok {
 		return 0, fmt.Errorf("unknown schema on channel %d for input %d topic %s", channel.ID, inputID, channel.Topic)
@@ -128,7 +127,7 @@ func (m *mcapMerger) addChannel(w *mcap.Writer, inputID int, channel *mcap.Chann
 	return newChannel.ID, nil
 }
 
-func (m *mcapMerger) addSchema(w *mcap.Writer, inputID int, schema *mcap.Schema) error {
+func (m *mcapConcatenator) addSchema(w *mcap.Writer, inputID int, schema *mcap.Schema) error {
 	key := schemaID{inputID, schema.ID}
 	schemaHash := getSchemaHash(schema)
 	schemaID, schemaKnown := m.schemaIDByHash[schemaHash]
@@ -153,7 +152,7 @@ func (m *mcapMerger) addSchema(w *mcap.Writer, inputID int, schema *mcap.Schema)
 	return nil
 }
 
-func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
+func (m *mcapConcatenator) concatenateInputs(w io.Writer, inputs []namedReader) error {
 	writer, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Chunked:     m.opts.chunked,
 		ChunkSize:   m.opts.chunkSize,
@@ -166,7 +165,6 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 
 	iterators := make([]mcap.MessageIterator, len(inputs))
 	profiles := make([]string, len(inputs))
-	pq := utils.NewPriorityQueue(nil)
 
 	// Reset struct members
 	m.schemaIDByHash = make(map[HashSum]uint16)
@@ -201,6 +199,10 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 	if err := writer.WriteHeader(&mcap.Header{Profile: outputProfile(profiles)}); err != nil {
 		return err
 	}
+
+	var lastTimestamp uint64
+	const fileTimeGap uint64 = 100000000 // 100 milliseconds
+
 	for inputID, iterator := range iterators {
 		inputName := inputs[inputID].name
 		schema, channel, message, err := iterator.Next(nil)
@@ -221,67 +223,67 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 		if err != nil {
 			return fmt.Errorf("failed to add initial channel for input %s: %w", inputName, err)
 		}
-		// push the first message onto the priority queue
-		heap.Push(pq, utils.NewTaggedMessage(inputID, message))
-	}
-	// there's one message per input on the heap now. Pop messages off,
-	// replacing them with the next message from the corresponding input.
-	for pq.Len() > 0 {
-		// the message to be written. This is numbered with the correct channel
-		// ID for the output, and schemas + channels for it have already been
-		// written, so it can be written straight to the output.
-		msg := heap.Pop(pq).(utils.TaggedMessage)
-		err = writer.WriteMessage(msg.Message)
+
+		// Provides the offset to subtract from all of the timestamps in this file.
+		var timestampOffset = message.LogTime - lastTimestamp
+
+		message.LogTime = lastTimestamp
+
+		err = writer.WriteMessage(message)
 		if err != nil {
-			return fmt.Errorf("failed to write message: %w", err)
+			return fmt.Errorf("failed to write initial message for input %s: %w", inputName, err)
 		}
 
-		// Pull the next message off the iterator, to replace the one just
-		// popped from the queue. Before pushing this message, it must be
-		// renumbered and the related channels/schemas may need to be inserted.
-		newSchema, newChannel, newMessage, err := iterators[msg.InputID].Next(nil)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				// if the iterator is empty, skip this read. No further messages
-				// on the input will be drawn from the heap, so we will not hit
-				// this code on behalf of the same iterator again. Once this
-				// happens for each input the queue will be empty and the loop
-				// will break.
-				continue
+		for {
+			newSchema, newChannel, newMessage, err := iterator.Next(nil)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				return fmt.Errorf("error on input %s: %w", inputName, err)
 			}
-			return fmt.Errorf("error on input on %s: %w", inputs[msg.InputID].name, err)
-		}
 
-		// if the channel is unknown, need to add it to the output
-		var ok bool
-		newMessage.ChannelID, ok = m.outputChannelID(msg.InputID, newChannel.ID)
-		if !ok {
-			if newSchema != nil {
-				_, ok := m.outputSchemaID(msg.InputID, newSchema.ID)
-				if !ok {
-					// if the schema is unknown, add it to the output
-					err := m.addSchema(writer, msg.InputID, newSchema)
-					if err != nil {
-						return fmt.Errorf("failed to add schema from %s: %w", inputs[msg.InputID].name, err)
+			newMessage.LogTime -= timestampOffset
+			lastTimestamp = newMessage.LogTime
+
+			var ok bool
+			newMessage.ChannelID, ok = m.outputChannelID(inputID, newChannel.ID)
+
+			if !ok {
+				if newSchema != nil {
+					_, ok := m.outputSchemaID(inputID, newSchema.ID)
+					if !ok {
+						err := m.addSchema(writer, inputID, newSchema)
+						if err != nil {
+							return fmt.Errorf("failed to add schema from %s: %w", inputName, err)
+						}
 					}
 				}
+				newMessage.ChannelID, err = m.addChannel(writer, inputID, newChannel)
+				if err != nil {
+					return fmt.Errorf("failed to add channel from %s: %w", inputName, err)
+				}
 			}
-			newMessage.ChannelID, err = m.addChannel(writer, msg.InputID, newChannel)
+
+			err = writer.WriteMessage(newMessage)
 			if err != nil {
-				return fmt.Errorf("failed to add channel from %s: %w", inputs[msg.InputID].name, err)
+				return fmt.Errorf("failed to write message from %s: %w", inputName, err)
 			}
 		}
-		heap.Push(pq, utils.NewTaggedMessage(msg.InputID, newMessage))
+
+		// Add the gap so the records from one file aren't matched exactly with the previous.
+		lastTimestamp += fileTimeGap
 	}
+
 	return writer.Close()
 }
 
-// mergeCmd represents the merge command.
-var mergeCmd = &cobra.Command{
-	Use:   "merge file1.mcap [file2.mcap] [file3.mcap]...",
-	Short: "Merge a selection of MCAP files by record timestamp",
+// concatCmd represents the merge command.
+var concatCmd = &cobra.Command{
+	Use:   "concat file1.mcap [file2.mcap] [file3.mcap]...",
+	Short: "Concatenate a selection of MCAP files so the timestamps are sequential",
 	Run: func(cmd *cobra.Command, args []string) {
-		if mergeOutputFile == "" && !utils.StdoutRedirected() {
+		if concatOutputFile == "" && !utils.StdoutRedirected() {
 			die(PleaseRedirect)
 		}
 		var readers []namedReader
@@ -293,27 +295,27 @@ var mergeCmd = &cobra.Command{
 			defer f.Close()
 			readers = append(readers, namedReader{name: arg, reader: f})
 		}
-		opts := mergeOpts{
-			compression:            mergeCompression,
-			chunkSize:              mergeChunkSize,
-			includeCRC:             mergeIncludeCRC,
-			chunked:                mergeChunked,
-			allowDuplicateMetadata: mergeAllowDuplicateMetadata,
-			coalesceChannels:       coalesceChannels,
+		opts := concatOpts{
+			compression:            concatCompression,
+			chunkSize:              concatChunkSize,
+			includeCRC:             concatIncludeCRC,
+			chunked:                concatChunked,
+			allowDuplicateMetadata: concatAllowDuplicateMetadata,
+			coalesceChannels:       concatCoalesceChannels,
 		}
-		merger := newMCAPMerger(opts)
+		concatenator := newMCAPConcatenator(opts)
 		var writer io.Writer
-		if mergeOutputFile == "" {
+		if concatOutputFile == "" {
 			writer = os.Stdout
 		} else {
-			f, err := os.Create(mergeOutputFile)
+			f, err := os.Create(concatOutputFile)
 			if err != nil {
-				die("failed to open output file %s: %s\n", mergeOutputFile, err)
+				die("failed to open output file %s: %s\n", concatOutputFile, err)
 			}
 			defer f.Close()
 			writer = f
 		}
-		err := merger.mergeInputs(writer, readers)
+		err := concatenator.concatenateInputs(writer, readers)
 		if err != nil {
 			die("Merge failure: " + err.Error())
 		}
@@ -321,51 +323,51 @@ var mergeCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(mergeCmd)
-	mergeCmd.PersistentFlags().StringVarP(
-		&mergeCompression,
+	rootCmd.AddCommand(concatCmd)
+	concatCmd.PersistentFlags().StringVarP(
+		&concatCompression,
 		"compression",
 		"",
 		"zstd",
 		"chunk compression algorithm (supported: zstd, lz4, none)",
 	)
-	mergeCmd.PersistentFlags().StringVarP(
-		&mergeOutputFile,
+	concatCmd.PersistentFlags().StringVarP(
+		&concatOutputFile,
 		"output-file",
 		"o",
 		"",
 		"output file",
 	)
-	mergeCmd.PersistentFlags().Int64VarP(
-		&mergeChunkSize,
+	concatCmd.PersistentFlags().Int64VarP(
+		&concatChunkSize,
 		"chunk-size",
 		"",
 		8*1024*1024,
 		"chunk size to target",
 	)
-	mergeCmd.PersistentFlags().BoolVarP(
-		&mergeIncludeCRC,
+	concatCmd.PersistentFlags().BoolVarP(
+		&concatIncludeCRC,
 		"include-crc",
 		"",
 		true,
 		"include chunk CRC checksums in output",
 	)
-	mergeCmd.PersistentFlags().BoolVarP(
-		&mergeChunked,
+	concatCmd.PersistentFlags().BoolVarP(
+		&concatChunked,
 		"chunked",
 		"",
 		true,
 		"chunk the output file",
 	)
-	mergeCmd.PersistentFlags().BoolVarP(
-		&mergeAllowDuplicateMetadata,
+	concatCmd.PersistentFlags().BoolVarP(
+		&concatAllowDuplicateMetadata,
 		"allow-duplicate-metadata",
 		"",
 		false,
 		"Allow duplicate-named metadata records to be merged in the output",
 	)
-	mergeCmd.PersistentFlags().StringVarP(
-		&coalesceChannels,
+	concatCmd.PersistentFlags().StringVarP(
+		&concatCoalesceChannels,
 		"coalesce-channels",
 		"",
 		"auto",
