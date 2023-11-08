@@ -141,7 +141,7 @@ func run(filterOptions *filterOpts, args []string) {
 func compileMatchers(regexStrings []string) ([]regexp.Regexp, error) {
 	matchers := make([]regexp.Regexp, len(regexStrings))
 
-	for _, regexString := range regexStrings {
+	for i, regexString := range regexStrings {
 		// auto-surround with ^$ if not specified.
 		if regexString[:1] != "^" {
 			regexString = "^" + regexString
@@ -153,7 +153,7 @@ func compileMatchers(regexStrings []string) ([]regexp.Regexp, error) {
 		if err != nil {
 			return nil, err
 		}
-		matchers = append(matchers, *regex)
+		matchers[i] = *regex
 	}
 	return matchers, nil
 }

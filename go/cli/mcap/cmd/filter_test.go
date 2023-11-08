@@ -359,3 +359,11 @@ func TestRecover(t *testing.T) {
 		}, messageCounter, 0.0)
 	})
 }
+
+func TestCompileMatchers(t *testing.T) {
+	matchers, err := compileMatchers([]string{"camera.*", "lights.*"})
+	assert.Nil(t, err)
+	assert.Equal(t, len(matchers), 2)
+	assert.True(t, matchers[0].MatchString("camera"))
+	assert.True(t, matchers[1].MatchString("lights"))
+}
