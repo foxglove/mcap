@@ -4,7 +4,7 @@ set -e
 
 conan config init
 
-conan editable add ./mcap mcap/1.2.1
+conan editable add ./mcap mcap/1.3.0
 conan install test --install-folder test/build/Debug \
   -s compiler.cppstd=17 -s build_type=Debug --build missing
 
