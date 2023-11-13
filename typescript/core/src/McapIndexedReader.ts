@@ -18,6 +18,7 @@ type McapIndexedReaderArgs = {
   summaryOffsetsByOpcode: ReadonlyMap<number, TypedMcapRecords["SummaryOffset"]>;
   header: TypedMcapRecords["Header"];
   footer: TypedMcapRecords["Footer"];
+  dataEndOffset: bigint;
 };
 
 export class McapIndexedReader {
@@ -30,6 +31,9 @@ export class McapIndexedReader {
   readonly summaryOffsetsByOpcode: ReadonlyMap<number, TypedMcapRecords["SummaryOffset"]>;
   readonly header: TypedMcapRecords["Header"];
   readonly footer: TypedMcapRecords["Footer"];
+
+  // Used for appending attachments/metadata to existing MCAP files
+  readonly dataEndOffset: bigint;
 
   private readable: IReadable;
   private decompressHandlers?: DecompressHandlers;
@@ -51,6 +55,7 @@ export class McapIndexedReader {
     this.summaryOffsetsByOpcode = args.summaryOffsetsByOpcode;
     this.header = args.header;
     this.footer = args.footer;
+    this.dataEndOffset = args.dataEndOffset;
 
     for (const chunk of args.chunkIndexes) {
       if (this.messageStartTime == undefined || chunk.messageStartTime < this.messageStartTime) {
@@ -200,6 +205,13 @@ export class McapIndexedReader {
       throw errorWithLibrary("File is not indexed");
     }
 
+    const dataEndOffset = BigInt(
+      footer.summaryStart -
+        /* data end length */ BigInt(4) -
+        /* record content length */ BigInt(8) -
+        /* Opcode.FOOTER */ BigInt(1),
+    );
+
     // Copy the footer prefix before reading the summary because calling readable.read() may reuse the buffer.
     const footerPrefix = new Uint8Array(
       /* Opcode.FOOTER */ 1 +
@@ -307,6 +319,7 @@ export class McapIndexedReader {
       summaryOffsetsByOpcode,
       header,
       footer,
+      dataEndOffset,
     });
   }
 
