@@ -23,6 +23,7 @@ enum class StatusCode {
   DecompressionFailed,
   DecompressionSizeMismatch,
   UnrecognizedCompression,
+  UnsupportedCompression,
   OpenFailed,
   MissingStatistics,
   InvalidMessageReadOptions,
@@ -85,6 +86,9 @@ struct [[nodiscard]] Status {
         break;
       case StatusCode::UnrecognizedCompression:
         message = "unrecognized compression";
+        break;
+      case StatusCode::UnsupportedCompression:
+        message = "unsupported compression";
         break;
       case StatusCode::OpenFailed:
         message = "open failed";

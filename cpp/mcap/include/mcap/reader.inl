@@ -1205,14 +1205,10 @@ Status McapReader::ParseDataEnd(const Record& record, DataEnd* dataEnd) {
 std::optional<Compression> McapReader::ParseCompression(const std::string_view compression) {
   if (compression == "") {
     return Compression::None;
-#ifndef MCAP_COMPRESSION_NO_LZ4
   } else if (compression == "lz4") {
     return Compression::Lz4;
-#endif
-#ifndef MCAP_COMPRESSION_NO_ZSTD
   } else if (compression == "zstd") {
     return Compression::Zstd;
-#endif
   } else {
     return std::nullopt;
   }
@@ -1272,16 +1268,17 @@ void TypedChunkReader::reset(const Chunk& chunk, Compression compression) {
       break;
 #endif
 #ifndef MCAP_COMPRESSION_NO_ZSTD
-    default:
     case Compression::Zstd:
       decompressor = static_cast<ICompressedReader*>(&zstdReader_);
       break;
-#else
-    default:
 #endif
     case Compression::None:
       decompressor = static_cast<ICompressedReader*>(&uncompressedReader_);
       break;
+    default:
+      status_ = Status(StatusCode::UnsupportedCompression,
+                       internal::StrCat("unsupported compression: ", chunk.compression));
+      return;
   }
   decompressor->reset(chunk.records, chunk.compressedSize, chunk.uncompressedSize);
   reader_.reset(*decompressor, 0, decompressor->size());
@@ -1885,7 +1882,7 @@ void IndexedMessageReader::decompressChunk(const Chunk& chunk,
   }
 #endif
   else {
-    status_ = Status(StatusCode::UnrecognizedCompression,
+    status_ = Status(StatusCode::UnsupportedCompression,
                      internal::StrCat("unhandled compression: ", chunk.compression));
   }
 }
