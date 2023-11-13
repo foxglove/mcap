@@ -18,6 +18,8 @@ type McapIndexedReaderArgs = {
   summaryOffsetsByOpcode: ReadonlyMap<number, TypedMcapRecords["SummaryOffset"]>;
   header: TypedMcapRecords["Header"];
   footer: TypedMcapRecords["Footer"];
+  dataEndOffset?: bigint;
+  dataSectionCrc?: number;
 };
 
 export class McapIndexedReader {
@@ -30,6 +32,9 @@ export class McapIndexedReader {
   readonly summaryOffsetsByOpcode: ReadonlyMap<number, TypedMcapRecords["SummaryOffset"]>;
   readonly header: TypedMcapRecords["Header"];
   readonly footer: TypedMcapRecords["Footer"];
+  // Used for appending attachments/metadata to existing MCAP files
+  readonly dataEndOffset?: bigint;
+  readonly dataSectionCrc?: number;
 
   #readable: IReadable;
   #decompressHandlers?: DecompressHandlers;
@@ -51,6 +56,8 @@ export class McapIndexedReader {
     this.summaryOffsetsByOpcode = args.summaryOffsetsByOpcode;
     this.header = args.header;
     this.footer = args.footer;
+    this.dataEndOffset = args.dataEndOffset;
+    this.dataSectionCrc = args.dataSectionCrc;
 
     for (const chunk of args.chunkIndexes) {
       if (this.#messageStartTime == undefined || chunk.messageStartTime < this.#messageStartTime) {
@@ -203,6 +210,13 @@ export class McapIndexedReader {
       throw errorWithLibrary("File is not indexed");
     }
 
+    const dataEndOffset = BigInt(
+      footer.summaryStart -
+        /* data end length */ 4n -
+        /* record content length */ 8n -
+        /* Opcode.FOOTER */ 1n,
+    );
+
     // Copy the footer prefix before reading the summary because calling readable.read() may reuse the buffer.
     const footerPrefix = new Uint8Array(
       /* Opcode.FOOTER */ 1 +
@@ -248,6 +262,7 @@ export class McapIndexedReader {
     const metadataIndexes: TypedMcapRecords["MetadataIndex"][] = [];
     const summaryOffsetsByOpcode = new Map<number, TypedMcapRecords["SummaryOffset"]>();
     let statistics: TypedMcapRecords["Statistics"] | undefined;
+    let dataSectionCrc = 0;
 
     let offset = 0;
     for (
@@ -281,6 +296,9 @@ export class McapIndexedReader {
         case "SummaryOffset":
           summaryOffsetsByOpcode.set(result.record.groupOpcode, result.record);
           break;
+        case "DataEnd":
+          dataSectionCrc = result.record.dataSectionCrc;
+          break;
         case "Header":
         case "Footer":
         case "Message":
@@ -288,7 +306,6 @@ export class McapIndexedReader {
         case "MessageIndex":
         case "Attachment":
         case "Metadata":
-        case "DataEnd":
           throw errorWithLibrary(`${result.record.type} record not allowed in index section`);
         case "Unknown":
           break;
@@ -310,6 +327,8 @@ export class McapIndexedReader {
       summaryOffsetsByOpcode,
       header,
       footer,
+      dataEndOffset,
+      dataSectionCrc,
     });
   }
 
