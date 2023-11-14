@@ -42,7 +42,7 @@ bench-host:
 
 .PHONY: test
 test: dev-image
-	docker run -t --rm -v $(CURDIR):/src mcap_cpp_dev ./test/build/Debug/bin/unit-tests
+	docker run -t --rm -v $(CURDIR):/src mcap_cpp_dev make test-host
 
 .PHONY: test-host
 test-host:
