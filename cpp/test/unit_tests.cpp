@@ -627,13 +627,62 @@ TEST_CASE("LZ4 compression", "[reader][writer]") {
 
     reader.close();
   }
+}
+#endif
 
+#ifndef MCAP_COMPRESSION_NO_LZ4
+TEST_CASE("zstd compression", "[reader][writer]") {
+  SECTION("Roundtrip") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("test");
+    opts.compression = mcap::Compression::Zstd;
+    opts.forceCompression = true;
+    writer.open(buffer, opts);
+    mcap::Schema schema("schema", "schemaEncoding", "ab");
+    writer.addSchema(schema);
+    mcap::Channel channel("topic", "messageEncoding", schema.id);
+    writer.addChannel(channel);
+
+    mcap::Message msg;
+    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    WriteMsg(writer, channel.id, 0, 2, 1, data);
+
+    writer.close();
+
+    mcap::McapReader reader;
+    auto status = reader.open(buffer);
+    requireOk(status);
+
+    size_t messageCount = 0;
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+    for (const auto& msgView : reader.readMessages(onProblem)) {
+      ++messageCount;
+      REQUIRE(msgView.message.sequence == 0);
+      REQUIRE(msgView.message.channelId == channel.id);
+      REQUIRE(msgView.message.logTime == 2);
+      REQUIRE(msgView.message.publishTime == 1);
+      REQUIRE(msgView.message.dataSize == data.size());
+      REQUIRE(std::vector(msgView.message.data, msgView.message.data + msgView.message.dataSize) ==
+              data);
+    }
+    REQUIRE(messageCount == 1);
+
+    reader.close();
+  }
+}
+#endif
+
+TEST_CASE("Read Order", "[reader][writer]") {
   SECTION("Roundtrip two topics") {
     Buffer buffer;
 
     mcap::McapWriter writer;
     mcap::McapWriterOptions opts("test");
-    opts.compression = mcap::Compression::Lz4;
+    opts.compression = mcap::Compression::None;
     opts.forceCompression = true;
     writer.open(buffer, opts);
     mcap::Schema schema1("schema1", "schemaEncoding", "ab");
@@ -677,15 +726,12 @@ TEST_CASE("LZ4 compression", "[reader][writer]") {
 
     reader.close();
   }
-}
-
-TEST_CASE("Read Order", "[reader][writer]") {
   SECTION("Roundtrip unordered") {
     Buffer buffer;
 
     mcap::McapWriter writer;
     mcap::McapWriterOptions opts("test");
-    opts.compression = mcap::Compression::Lz4;
+    opts.compression = mcap::Compression::None;
     opts.forceCompression = true;
     writer.open(buffer, opts);
     mcap::Schema schema("schema", "schemaEncoding", "ab");
@@ -782,7 +828,6 @@ TEST_CASE("Read Order", "[reader][writer]") {
     REQUIRE(count == reverse_order_expected.size());
   }
 }
-#endif
 
 TEST_CASE("ReadJobQueue order", "[reader]") {
   SECTION("successive chunks with out-of-order timestamps") {
