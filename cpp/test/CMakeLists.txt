@@ -27,3 +27,7 @@ target_link_libraries(streamed-writer-conformance ${CONAN_LIBS})
 
 add_executable(unit-tests unit_tests.cpp)
 target_link_libraries(unit-tests ${CONAN_LIBS})
+
+add_executable(unit-tests-nocompress unit_tests.cpp)
+target_link_libraries(unit-tests-nocompress ${CONAN_LIBS})
+target_compile_definitions(unit-tests-nocompress PRIVATE MCAP_COMPRESSION_NO_LZ4 MCAP_COMPRESSION_NO_ZSTD)

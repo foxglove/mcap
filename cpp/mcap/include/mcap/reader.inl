@@ -1,9 +1,13 @@
 #include "internal.hpp"
 #include <algorithm>
 #include <cassert>
-#include <lz4frame.h>
-#include <zstd.h>
-#include <zstd_errors.h>
+#ifndef MCAP_COMPRESSION_NO_LZ4
+#  include <lz4frame.h>
+#endif
+#ifndef MCAP_COMPRESSION_NO_ZSTD
+#  include <zstd.h>
+#  include <zstd_errors.h>
+#endif
 
 namespace mcap {
 
@@ -119,6 +123,7 @@ uint64_t FileStreamReader::read(std::byte** output, uint64_t offset, uint64_t si
 
 // LZ4Reader ///////////////////////////////////////////////////////////////////
 
+#ifndef MCAP_COMPRESSION_NO_LZ4
 LZ4Reader::LZ4Reader() {
   const LZ4F_errorCode_t err =
     LZ4F_createDecompressionContext((LZ4F_dctx**)&decompressionContext_, LZ4F_VERSION);
@@ -206,9 +211,11 @@ Status LZ4Reader::decompressAll(const std::byte* data, uint64_t compressedSize,
   }
   return result;
 }
+#endif
 
 // ZStdReader //////////////////////////////////////////////////////////////////
 
+#ifndef MCAP_COMPRESSION_NO_ZSTD
 void ZStdReader::reset(const std::byte* data, uint64_t size, uint64_t uncompressedSize) {
   status_ = DecompressAll(data, size, uncompressedSize, &uncompressedData_);
 }
@@ -255,6 +262,7 @@ Status ZStdReader::DecompressAll(const std::byte* data, uint64_t compressedSize,
   }
   return result;
 }
+#endif
 
 // McapReader //////////////////////////////////////////////////////////////////
 
@@ -1251,10 +1259,27 @@ TypedChunkReader::TypedChunkReader()
     , status_{StatusCode::Success} {}
 
 void TypedChunkReader::reset(const Chunk& chunk, Compression compression) {
-  ICompressedReader* decompressor =
-    (compression == Compression::None)  ? static_cast<ICompressedReader*>(&uncompressedReader_)
-    : (compression == Compression::Lz4) ? static_cast<ICompressedReader*>(&lz4Reader_)
-                                        : static_cast<ICompressedReader*>(&zstdReader_);
+  ICompressedReader* decompressor;
+
+  switch (compression) {
+#ifndef MCAP_COMPRESSION_NO_LZ4
+    case Compression::Lz4:
+      decompressor = static_cast<ICompressedReader*>(&lz4Reader_);
+      break;
+#endif
+#ifndef MCAP_COMPRESSION_NO_ZSTD
+    case Compression::Zstd:
+      decompressor = static_cast<ICompressedReader*>(&zstdReader_);
+      break;
+#endif
+    case Compression::None:
+      decompressor = static_cast<ICompressedReader*>(&uncompressedReader_);
+      break;
+    default:
+      status_ = Status(StatusCode::UnsupportedCompression,
+                       internal::StrCat("unsupported compression: ", chunk.compression));
+      return;
+  }
   decompressor->reset(chunk.records, chunk.compressedSize, chunk.uncompressedSize);
   reader_.reset(*decompressor, 0, decompressor->size());
   status_ = decompressor->status();
@@ -1604,7 +1629,8 @@ LinearMessageView::Iterator::Iterator(LinearMessageView& view)
   }
 }
 
-LinearMessageView::Iterator::Impl::Impl(LinearMessageView& view) : view_(view) {
+LinearMessageView::Iterator::Impl::Impl(LinearMessageView& view)
+    : view_(view) {
   auto dataStart = view.dataStart_;
   auto dataEnd = view.dataEnd_;
   auto readMessageOptions = view.readMessageOptions_;
@@ -1658,16 +1684,18 @@ void LinearMessageView::Iterator::Impl::onMessage(const Message& message, Record
 
   auto& channel = *maybeChannel;
   // make sure the message is on the right topic
-  if (view_.readMessageOptions_.topicFilter && !view_.readMessageOptions_.topicFilter(channel.topic)) {
+  if (view_.readMessageOptions_.topicFilter &&
+      !view_.readMessageOptions_.topicFilter(channel.topic)) {
     return;
   }
   SchemaPtr maybeSchema;
   if (channel.schemaId != 0) {
     maybeSchema = view_.mcapReader_.schema(channel.schemaId);
     if (!maybeSchema) {
-      view_.onProblem_(Status{StatusCode::InvalidSchemaId,
-                        internal::StrCat("channel ", channel.id, " (", channel.topic,
-                                         ") references missing schema id ", channel.schemaId)});
+      view_.onProblem_(
+        Status{StatusCode::InvalidSchemaId,
+               internal::StrCat("channel ", channel.id, " (", channel.topic,
+                                ") references missing schema id ", channel.schemaId)});
       return;
     }
   }
@@ -1840,14 +1868,21 @@ void IndexedMessageReader::decompressChunk(const Chunk& chunk,
   if (*compression == Compression::None) {
     slot.decompressedChunk.insert(slot.decompressedChunk.end(), &chunk.records[0],
                                   &chunk.records[chunk.uncompressedSize]);
-  } else if (*compression == Compression::Lz4) {
+  }
+#ifndef MCAP_COMPRESSION_NO_LZ4
+  else if (*compression == Compression::Lz4) {
     status_ = lz4Reader_.decompressAll(chunk.records, chunk.compressedSize, chunk.uncompressedSize,
                                        &slot.decompressedChunk);
-  } else if (*compression == Compression::Zstd) {
+  }
+#endif
+#ifndef MCAP_COMPRESSION_NO_ZSTD
+  else if (*compression == Compression::Zstd) {
     status_ = ZStdReader::DecompressAll(chunk.records, chunk.compressedSize, chunk.uncompressedSize,
                                         &slot.decompressedChunk);
-  } else {
-    status_ = Status(StatusCode::UnrecognizedCompression,
+  }
+#endif
+  else {
+    status_ = Status(StatusCode::UnsupportedCompression,
                      internal::StrCat("unhandled compression: ", chunk.compression));
   }
 }
