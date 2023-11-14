@@ -97,7 +97,8 @@ func (m *mcapConcatenator) addMetadata(w *mcap.Writer, metadata *mcap.Metadata) 
 func (m *mcapConcatenator) addChannel(w *mcap.Writer, inputID int, channel *mcap.Channel) (uint16, error) {
 	outputSchemaID, ok := m.outputSchemaID(inputID, channel.SchemaID)
 	if !ok {
-		return 0, fmt.Errorf("unknown schema on channel %d for input %d topic %s", channel.ID, inputID, channel.Topic)
+		return 0, fmt.Errorf("unknown schema on channel %d for input %d topic %s",
+			channel.ID, inputID, channel.Topic)
 	}
 	key := channelID{inputID, channel.ID}
 	newChannel := &mcap.Channel{
@@ -241,6 +242,11 @@ func (m *mcapConcatenator) concatenateInputs(w io.Writer, inputs []namedReader) 
 					break
 				}
 				return fmt.Errorf("error on input %s: %w", inputName, err)
+			}
+
+			if newMessage.LogTime < timestampOffset {
+				return fmt.Errorf("timestamp %d is less than offset %d, sort input files before concatenating",
+					newMessage.LogTime, timestampOffset)
 			}
 
 			newMessage.LogTime -= timestampOffset
