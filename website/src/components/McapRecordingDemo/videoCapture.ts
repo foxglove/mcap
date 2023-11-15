@@ -86,6 +86,51 @@ export function startVideoCapture(params: VideoCaptureParams): () => void {
 }
 
 /**
+ * Sometimes `VideoEncoder.isConfigSupported` returns true but the encoder does not actually output
+ * frames (looking at you, Safari). This function tries actually encoding a frame and making sure
+ * that the encoder can output a chunk.
+ */
+async function isEncoderConfigActuallySupported(config: VideoEncoderConfig) {
+  try {
+    if ((await VideoEncoder.isConfigSupported(config)).supported !== true) {
+      return false;
+    }
+    let outputAnyFrames = false as boolean;
+    let hadErrors = false as boolean;
+    const encoder = new VideoEncoder({
+      output() {
+        outputAnyFrames = true;
+      },
+      error(err) {
+        hadErrors = true;
+        console.log(
+          "VideoEncoder error during compatibility detection:",
+          config,
+          err,
+        );
+      },
+    });
+    encoder.configure(config);
+    const bitmap = await createImageBitmap(new ImageData(1, 1));
+    const frame = new VideoFrame(bitmap, { timestamp: 0 });
+    bitmap.close();
+    encoder.encode(frame, { keyFrame: true });
+    frame.close();
+    await encoder.flush();
+    encoder.close();
+
+    return outputAnyFrames && !hadErrors;
+  } catch (err) {
+    console.log(
+      "VideoEncoder error during compatibility detection:",
+      config,
+      err,
+    );
+    return false;
+  }
+}
+
+/**
  * Start a periodic capture of camera frames and encode them as H264 video if supported by the
  * browser, otherwise fall back to JPEG encoding.
  */
@@ -102,18 +147,42 @@ async function startVideoCaptureAsync(
   let encoder: VideoEncoder | undefined;
   const framePool: ArrayBuffer[] = [];
   setupEncoder: try {
-    const config: VideoEncoderConfig = {
-      codec: "avc1.42001f", // Baseline profile (42 00) with maximum level (1f)
-      width: video.videoWidth,
-      height: video.videoHeight,
-      latencyMode: "realtime",
-      avc: { format: "annexb" },
-    };
     if (typeof VideoEncoder !== "function") {
+      console.log(
+        "VideoEncoder is not supported, falling back to JPEG encoding",
+      );
       break setupEncoder;
     }
-    if ((await VideoEncoder.isConfigSupported(config)).supported !== true) {
-      break setupEncoder;
+
+    const config: VideoEncoderConfig = {
+      codec: "avc1.42001f", // Baseline profile (42 00) with level 3.1 (1f)
+      width: video.videoWidth,
+      height: video.videoHeight,
+      displayWidth: video.videoWidth,
+      displayHeight: video.videoHeight,
+      latencyMode: "realtime",
+      avc: { format: "annexb" },
+      // Note that Safari 17 does not support latencyMode: "realtime", and in newer versions of the
+      // Safari Technical Preview, realtime mode only works if framerate and bitrate are set.
+      framerate: 1 / frameDurationSec,
+      bitrate: 1000000,
+    };
+    if (!(await isEncoderConfigActuallySupported(config))) {
+      // Safari 17 does not output any frames when latencyMode is "realtime"
+      // (https://bugs.webkit.org/show_bug.cgi?id=264894). Try again with "quality".
+      //
+      // See also: https://bugs.webkit.org/show_bug.cgi?id=264893
+      console.log(
+        "latencyMode realtime encoding not supported, falling back to quality",
+      );
+      config.latencyMode = "quality";
+      if (!(await isEncoderConfigActuallySupported(config))) {
+        console.log(
+          "Config is not supported, falling back to JPEG encoding",
+          config,
+        );
+        break setupEncoder;
+      }
     }
     encoder = new VideoEncoder({
       output: (chunk) => {
@@ -132,7 +201,12 @@ async function startVideoCaptureAsync(
           },
         });
       },
-      error: onError,
+      error: (err) => {
+        if (signal.aborted) {
+          return;
+        }
+        onError(err);
+      },
     });
 
     encoder.configure(config); // may throw
@@ -146,6 +220,7 @@ async function startVideoCaptureAsync(
   let lastKeyframeTime: number | undefined;
 
   let processingFrame = false;
+  const start = performance.now();
   const interval = setInterval(() => {
     if (processingFrame) {
       // last frame is not yet complete, skip frame
@@ -161,8 +236,11 @@ async function startVideoCaptureAsync(
         { once: true },
       );
       const now = performance.now();
-      const frame = new VideoFrame(video);
-      const encodeOptions: VideoEncoderEncodeOptions = {};
+      const frame = new VideoFrame(video, {
+        timestamp: (now - start) * 1e3,
+        duration: frameDurationSec * 1e6,
+      });
+      const encodeOptions: VideoEncoderEncodeOptions = { keyFrame: false };
       if (
         lastKeyframeTime == undefined ||
         now - lastKeyframeTime >= keyframeInterval
@@ -189,6 +267,7 @@ async function startVideoCaptureAsync(
 
   const cleanup = () => {
     clearInterval(interval);
+    encoder?.close();
   };
   if (signal.aborted) {
     cleanup();
