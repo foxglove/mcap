@@ -78,7 +78,7 @@ const RADIANS_PER_DEGREE = Math.PI / 180;
 
 // Adapted from https://github.com/mrdoob/three.js/blob/master/src/math/Quaternion.js
 function deviceOrientationToPose(
-  event: DeviceOrientationEvent
+  event: DeviceOrientationEvent,
 ): ProtobufObject<PoseInFrame> {
   const alpha = (event.alpha ?? 0) * RADIANS_PER_DEGREE; // z angle
   const beta = (event.beta ?? 0) * RADIANS_PER_DEGREE; // x angle
@@ -133,7 +133,9 @@ export function McapRecordingDemo(): JSX.Element {
     if (!recording) {
       return;
     }
-    const timeout = setTimeout(() => setRecording(false), 30000);
+    const timeout = setTimeout(() => {
+      setRecording(false);
+    }, 30000);
     return () => {
       clearTimeout(timeout);
     };
@@ -165,7 +167,7 @@ export function McapRecordingDemo(): JSX.Element {
     return () => {
       window.removeEventListener(
         "deviceorientation",
-        handleDeviceOrientationEvent
+        handleDeviceOrientationEvent,
       );
     };
   }, [addPoseMessage, recording, recordOrientation]);
@@ -178,7 +180,9 @@ export function McapRecordingDemo(): JSX.Element {
 
     const cleanup = startVideoStream({
       video,
-      onStart: () => setVideoStarted(true),
+      onStart: () => {
+        setVideoStarted(true);
+      },
       onError: (err) => {
         console.error(err);
         setVideoPermissionError(true);
@@ -201,7 +205,9 @@ export function McapRecordingDemo(): JSX.Element {
     const stopCapture = startVideoCapture({
       video,
       frameDurationSec: 1 / 30,
-      onFrame: (blob) => addCameraImage(blob),
+      onFrame: (blob) => {
+        addCameraImage(blob);
+      },
     });
     return () => {
       stopCapture();
@@ -234,7 +240,7 @@ export function McapRecordingDemo(): JSX.Element {
           .catch(console.error);
       }
     },
-    [recordOrientation, recording]
+    [recordOrientation, recording],
   );
 
   const onDownloadClick = useCallback(
@@ -249,7 +255,7 @@ export function McapRecordingDemo(): JSX.Element {
         // Create a date+time string in the local timezone to use as the filename
         const date = new Date();
         const localTime = new Date(
-          date.getTime() - date.getTimezoneOffset() * 60_000
+          date.getTime() - date.getTimezoneOffset() * 60_000,
         )
           .toISOString()
           .replace(/\..+$/, "")
@@ -264,7 +270,7 @@ export function McapRecordingDemo(): JSX.Element {
         setShowDownloadInfo(true);
       })();
     },
-    [state]
+    [state],
   );
 
   return (
@@ -282,7 +288,9 @@ export function McapRecordingDemo(): JSX.Element {
             <input
               type="checkbox"
               checked={recordVideo}
-              onChange={(event) => setRecordVideo(event.target.checked)}
+              onChange={(event) => {
+                setRecordVideo(event.target.checked);
+              }}
             />
             Camera
           </label>
@@ -290,7 +298,9 @@ export function McapRecordingDemo(): JSX.Element {
             <input
               type="checkbox"
               checked={recordMouse}
-              onChange={(event) => setRecordMouse(event.target.checked)}
+              onChange={(event) => {
+                setRecordMouse(event.target.checked);
+              }}
             />
             Mouse position
           </label>
@@ -299,7 +309,9 @@ export function McapRecordingDemo(): JSX.Element {
               <input
                 type="checkbox"
                 checked={recordOrientation}
-                onChange={(event) => setRecordOrientation(event.target.checked)}
+                onChange={(event) => {
+                  setRecordOrientation(event.target.checked);
+                }}
               />
               Orientation
             </label>
@@ -319,7 +331,9 @@ export function McapRecordingDemo(): JSX.Element {
               aria-label="Close"
               className={cx("clean-btn", styles.downloadInfoCloseButton)}
               type="button"
-              onClick={() => setShowDownloadInfo(false)}
+              onClick={() => {
+                setShowDownloadInfo(false);
+              }}
             >
               <span aria-hidden="true">&times;</span>
             </button>
@@ -352,7 +366,7 @@ export function McapRecordingDemo(): JSX.Element {
                 className={cx(
                   "button",
                   "button--success",
-                  styles.downloadButton
+                  styles.downloadButton,
                 )}
                 onClick={onDownloadClick}
               >
@@ -428,7 +442,9 @@ export function McapRecordingDemo(): JSX.Element {
               ) : (
                 <span
                   className={styles.videoPlaceholderText}
-                  onClick={() => setRecordVideo(true)}
+                  onClick={() => {
+                    setRecordVideo(true);
+                  }}
                 >
                   Enable “Camera” to record video
                 </span>

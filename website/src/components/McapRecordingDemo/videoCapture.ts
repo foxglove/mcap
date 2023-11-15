@@ -23,7 +23,7 @@ export function startVideoStream(params: VideoStreamParams): () => void {
       stream = videoStream;
       params.video.srcObject = videoStream;
       await params.video.play();
-      if (canceled) {
+      if (canceled as boolean) {
         return;
       }
       params.onStart();
@@ -68,7 +68,7 @@ export function startVideoCapture(params: VideoCaptureParams): () => void {
 
 async function startVideoCaptureAsync(
   params: VideoCaptureParams,
-  signal: AbortSignal
+  signal: AbortSignal,
 ) {
   const { video, onFrame, frameDurationSec } = params;
   const canvas = document.createElement("canvas");
@@ -93,7 +93,7 @@ async function startVideoCaptureAsync(
           framePromise = undefined;
         },
         "image/jpeg",
-        0.8
+        0.8,
       );
     });
   }, frameDurationSec * 1000);

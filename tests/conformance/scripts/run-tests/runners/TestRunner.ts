@@ -70,8 +70,8 @@ export abstract class IndexedReadTestRunner {
       messages: [],
       statistics: [],
     };
-    const knownSchemaIds: Set<number> = new Set();
-    const knownChannelIds: Set<number> = new Set();
+    const knownSchemaIds = new Set<number>();
+    const knownChannelIds = new Set<number>();
     for (const record of testCase.records) {
       switch (record.type) {
         case "Schema":
