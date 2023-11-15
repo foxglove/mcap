@@ -14,7 +14,7 @@ import {
   Recorder,
   toProtobufTime,
 } from "./Recorder";
-import { startVideoCapture, startVideoStream } from "./videoCapture";
+import { H264Frame, startVideoCapture, startVideoStream } from "./videoCapture";
 
 type State = {
   bytesWritten: bigint;
@@ -26,7 +26,8 @@ type State = {
 
   addMouseEventMessage: (msg: MouseEventMessage) => void;
   addPoseMessage: (msg: DeviceOrientationEvent) => void;
-  addCameraImage: (blob: Blob) => void;
+  addJpegFrame: (blob: Blob) => void;
+  addH264Frame: (frame: H264Frame) => void;
   closeAndRestart: () => Promise<Blob>;
 };
 
@@ -54,8 +55,11 @@ const useStore = create<State>((set) => {
       void recorder.addPose(deviceOrientationToPose(msg));
       set({ latestOrientation: msg });
     },
-    addCameraImage(blob: Blob) {
-      void recorder.addCameraImage(blob);
+    addJpegFrame(blob: Blob) {
+      void recorder.addJpegFrame(blob);
+    },
+    addH264Frame(frame: H264Frame) {
+      void recorder.addH264Frame(frame);
     },
     async closeAndRestart() {
       return await recorder.closeAndRestart();
@@ -121,7 +125,8 @@ export function McapRecordingDemo(): JSX.Element {
   const [videoPermissionError, setVideoPermissionError] = useState(false);
   const [showDownloadInfo, setShowDownloadInfo] = useState(false);
 
-  const { addCameraImage, addMouseEventMessage, addPoseMessage } = state;
+  const { addJpegFrame, addH264Frame, addMouseEventMessage, addPoseMessage } =
+    state;
 
   const canStartRecording =
     recordMouse ||
@@ -205,14 +210,20 @@ export function McapRecordingDemo(): JSX.Element {
     const stopCapture = startVideoCapture({
       video,
       frameDurationSec: 1 / 30,
-      onFrame: (blob) => {
-        addCameraImage(blob);
+      onJpegFrame: (blob) => {
+        addJpegFrame(blob);
+      },
+      onH264Frame: (frame) => {
+        addH264Frame(frame);
+      },
+      onError: (err) => {
+        console.error(err);
       },
     });
     return () => {
       stopCapture();
     };
-  }, [addCameraImage, recordVideo, recording, videoStarted]);
+  }, [addJpegFrame, addH264Frame, recordVideo, recording, videoStarted]);
 
   const onRecordClick = useCallback(
     (event: React.MouseEvent) => {
