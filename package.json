@@ -23,6 +23,7 @@
   "devDependencies": {
     "cspell": "8.0.0",
     "prettier": "3.1.0",
-    "typedoc": "0.23.25"
+    "typedoc": "0.25.3",
+    "typescript": "5.2.2"
   }
 }
