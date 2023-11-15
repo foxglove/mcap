@@ -16,26 +16,32 @@ type VideoStreamParams = {
 export function startVideoStream(params: VideoStreamParams): () => void {
   let canceled = false;
   let stream: MediaStream | undefined;
-  navigator.mediaDevices
-    .getUserMedia({ video: true })
-    .then(async (videoStream) => {
-      if (canceled) {
-        return;
-      }
-      stream = videoStream;
-      params.video.srcObject = videoStream;
-      await params.video.play();
-      if (canceled as boolean) {
-        return;
-      }
-      params.onStart();
-    })
-    .catch((err) => {
-      if (canceled) {
-        return;
-      }
-      params.onError(err as Error);
-    });
+  // Although TypeScript does not believe mediaDevices is ever undefined, it may be in practice
+  // (e.g. in Safari)
+  if (typeof navigator.mediaDevices !== "object") {
+    params.onError(new Error("navigator.mediaDevices is not defined"));
+  } else {
+    navigator.mediaDevices
+      .getUserMedia({ video: true })
+      .then(async (videoStream) => {
+        if (canceled) {
+          return;
+        }
+        stream = videoStream;
+        params.video.srcObject = videoStream;
+        await params.video.play();
+        if (canceled as boolean) {
+          return;
+        }
+        params.onStart();
+      })
+      .catch((err) => {
+        if (canceled) {
+          return;
+        }
+        params.onError(err as Error);
+      });
+  }
 
   return () => {
     canceled = true;
