@@ -1,3 +1,4 @@
+.yarn/**/*.cjs filter=lfs diff=lfs merge=lfs -text
 *.bag filter=lfs diff=lfs merge=lfs -text
 *.bfbs filter=lfs diff=lfs merge=lfs -text
 *.csv linguist-generated=true

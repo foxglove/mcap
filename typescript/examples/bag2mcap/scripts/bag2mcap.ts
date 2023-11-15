@@ -88,7 +88,6 @@ function rosMsgDefinitionToProto(
     let fieldNumber = 1;
     for (const field of def.definitions) {
       if (field.isConstant === true) {
-        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
         fields.push(`// ${field.type} ${field.name} = ${field.valueText ?? field.value ?? ""}`);
         continue;
       }
@@ -196,20 +195,20 @@ function convertTypedArrays(msg: Record<string, unknown>): Record<string, unknow
 
 // IWritable interface for FileHandle
 class FileHandleWritable implements IWritable {
-  private handle: FileHandle;
-  private totalBytesWritten = 0;
+  #handle: FileHandle;
+  #totalBytesWritten = 0;
 
   constructor(handle: FileHandle) {
-    this.handle = handle;
+    this.#handle = handle;
   }
 
   async write(buffer: Uint8Array): Promise<void> {
-    const written = await this.handle.write(buffer);
-    this.totalBytesWritten += written.bytesWritten;
+    const written = await this.#handle.write(buffer);
+    this.#totalBytesWritten += written.bytesWritten;
   }
 
   position(): bigint {
-    return BigInt(this.totalBytesWritten);
+    return BigInt(this.#totalBytesWritten);
   }
 }
 

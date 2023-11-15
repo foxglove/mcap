@@ -29,7 +29,7 @@ export default class Scene {
   public gravityCoefficient: number;
   public frameId: string;
 
-  private ball: Ball;
+  #ball: Ball;
 
   constructor({ width, height, ballRadius, gravityCoefficient = 0.005, frameId }: SceneParams) {
     this.image = new Image(width, height);
@@ -39,7 +39,7 @@ export default class Scene {
     this.ballRadius = ballRadius;
     this.gravityCoefficient = gravityCoefficient;
     this.frameId = frameId;
-    this.ball = {
+    this.#ball = {
       pos: { x: 0.25, y: 0.5 },
       vel: { x: 0.1, y: 0.1 },
     };
@@ -74,7 +74,7 @@ export default class Scene {
       encoding: "rgb8",
       // required for encoding Uint8Array in `json` encoding
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
+      // @ts-expect-error
       data: Buffer.from(this.image.getData()).toString("base64"),
     };
   }
@@ -85,20 +85,20 @@ export default class Scene {
       type: PointsAnnotationType.LINE_LOOP,
       points: [
         {
-          x: this.ball.pos.x * this.width - this.ballRadius * 2,
-          y: this.ball.pos.y * this.height - this.ballRadius * 2,
+          x: this.#ball.pos.x * this.width - this.ballRadius * 2,
+          y: this.#ball.pos.y * this.height - this.ballRadius * 2,
         },
         {
-          x: this.ball.pos.x * this.width + this.ballRadius * 2,
-          y: this.ball.pos.y * this.height - this.ballRadius * 2,
+          x: this.#ball.pos.x * this.width + this.ballRadius * 2,
+          y: this.#ball.pos.y * this.height - this.ballRadius * 2,
         },
         {
-          x: this.ball.pos.x * this.width + this.ballRadius * 2,
-          y: this.ball.pos.y * this.height + this.ballRadius * 2,
+          x: this.#ball.pos.x * this.width + this.ballRadius * 2,
+          y: this.#ball.pos.y * this.height + this.ballRadius * 2,
         },
         {
-          x: this.ball.pos.x * this.width - this.ballRadius * 2,
-          y: this.ball.pos.y * this.height + this.ballRadius * 2,
+          x: this.#ball.pos.x * this.width - this.ballRadius * 2,
+          y: this.#ball.pos.y * this.height + this.ballRadius * 2,
         },
       ].map((point) => ({ x: Math.floor(point.x), y: Math.floor(point.y) })),
       outline_colors: [],
@@ -115,11 +115,11 @@ export default class Scene {
           timestamp: time,
           // top left
           position: {
-            x: Math.floor(this.ball.pos.x * this.width - this.ballRadius * 2),
-            y: Math.floor(this.ball.pos.y * this.height - this.ballRadius * 2),
+            x: Math.floor(this.#ball.pos.x * this.width - this.ballRadius * 2),
+            y: Math.floor(this.#ball.pos.y * this.height - this.ballRadius * 2),
           },
-          text: `Position: x: ${Math.floor(this.ball.pos.x * this.width)}, y: ${Math.floor(
-            this.ball.pos.y * this.height,
+          text: `Position: x: ${Math.floor(this.#ball.pos.x * this.width)}, y: ${Math.floor(
+            this.#ball.pos.y * this.height,
           )}`,
           font_size: 12,
           text_color: { r: 1, g: 1, b: 1, a: 1 },
@@ -138,16 +138,16 @@ export default class Scene {
   }
 
   public animateBall(): void {
-    this.ball.pos.x += this.ball.vel.x;
-    this.ball.pos.y += this.ball.vel.y;
-    this.ball.vel.y += this.gravityCoefficient;
-    if (this.ball.pos.x < 0 || this.ball.pos.x > 1) {
-      this.ball.vel.x *= -0.8;
-      this.ball.pos.x = Math.max(0, Math.min(1, this.ball.pos.x));
+    this.#ball.pos.x += this.#ball.vel.x;
+    this.#ball.pos.y += this.#ball.vel.y;
+    this.#ball.vel.y += this.gravityCoefficient;
+    if (this.#ball.pos.x < 0 || this.#ball.pos.x > 1) {
+      this.#ball.vel.x *= -0.8;
+      this.#ball.pos.x = Math.max(0, Math.min(1, this.#ball.pos.x));
     }
-    if (this.ball.pos.y < 0 || this.ball.pos.y > 1) {
-      this.ball.vel.y *= -0.8;
-      this.ball.pos.y = Math.max(0, Math.min(1, this.ball.pos.y));
+    if (this.#ball.pos.y < 0 || this.#ball.pos.y > 1) {
+      this.#ball.vel.y *= -0.8;
+      this.#ball.pos.y = Math.max(0, Math.min(1, this.#ball.pos.y));
     }
   }
 
@@ -155,8 +155,8 @@ export default class Scene {
     this.animateBall();
     this.image.clear();
     this.image.paintCircle(
-      Math.floor(this.ball.pos.x * this.width),
-      Math.floor(this.ball.pos.y * this.height),
+      Math.floor(this.#ball.pos.x * this.width),
+      Math.floor(this.#ball.pos.y * this.height),
       5,
       [255, 0, 0],
     );

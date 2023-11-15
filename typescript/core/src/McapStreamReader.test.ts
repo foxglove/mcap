@@ -160,7 +160,9 @@ describe("McapStreamReader", () => {
       summaryCrc: 0x01234567,
     });
     expect(reader.done()).toBe(true);
-    expect(() => reader.append(new Uint8Array([42]))).toThrow("Already done reading");
+    expect(() => {
+      reader.append(new Uint8Array([42]));
+    }).toThrow("Already done reading");
   });
 
   it("rejects extraneous data at end of file", () => {
@@ -493,38 +495,36 @@ describe("McapStreamReader", () => {
             ...(testType === "unchunked file"
               ? [...channel, ...channel2]
               : testType === "same chunk"
-              ? record(Opcode.CHUNK, [
-                  ...uint64LE(0n), // start_time
-                  ...uint64LE(0n), // end_time
-                  ...uint64LE(0n), // decompressed size
-                  ...uint32LE(crc32(new Uint8Array([...channel, ...channel2]))), // decompressed crc32
-                  ...string(""), // compression
-                  ...uint64LE(BigInt(channel.byteLength + channel2.byteLength)),
-                  ...channel,
-                  ...channel2,
-                ])
-              : testType === "different chunks"
-              ? [
-                  ...record(Opcode.CHUNK, [
+                ? record(Opcode.CHUNK, [
                     ...uint64LE(0n), // start_time
                     ...uint64LE(0n), // end_time
                     ...uint64LE(0n), // decompressed size
-                    ...uint32LE(crc32(new Uint8Array(channel))), // decompressed crc32
+                    ...uint32LE(crc32(new Uint8Array([...channel, ...channel2]))), // decompressed crc32
                     ...string(""), // compression
-                    ...uint64LE(BigInt(channel.byteLength)),
+                    ...uint64LE(BigInt(channel.byteLength + channel2.byteLength)),
                     ...channel,
-                  ]),
-                  ...record(Opcode.CHUNK, [
-                    ...uint64LE(0n), // start_time
-                    ...uint64LE(0n), // end_time
-                    ...uint64LE(0n), // decompressed size
-                    ...uint32LE(crc32(new Uint8Array(channel2))), // decompressed crc32
-                    ...string(""), // compression
-                    ...uint64LE(BigInt(channel2.byteLength)),
                     ...channel2,
+                  ])
+                : [
+                    ...record(Opcode.CHUNK, [
+                      ...uint64LE(0n), // start_time
+                      ...uint64LE(0n), // end_time
+                      ...uint64LE(0n), // decompressed size
+                      ...uint32LE(crc32(new Uint8Array(channel))), // decompressed crc32
+                      ...string(""), // compression
+                      ...uint64LE(BigInt(channel.byteLength)),
+                      ...channel,
+                    ]),
+                    ...record(Opcode.CHUNK, [
+                      ...uint64LE(0n), // start_time
+                      ...uint64LE(0n), // end_time
+                      ...uint64LE(0n), // decompressed size
+                      ...uint32LE(crc32(new Uint8Array(channel2))), // decompressed crc32
+                      ...string(""), // compression
+                      ...uint64LE(BigInt(channel2.byteLength)),
+                      ...channel2,
+                    ]),
                   ]),
-                ]
-              : []),
 
             ...record(Opcode.FOOTER, [
               ...uint64LE(0n), // summary start
