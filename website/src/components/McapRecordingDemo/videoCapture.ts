@@ -67,7 +67,8 @@ export type H264Frame = {
 };
 
 type VideoCaptureParams = {
-  compression: "h264" | "jpeg";
+  enableH264: boolean;
+  enableJpeg: boolean;
   /** Video element to capture */
   video: HTMLVideoElement;
   /** Frame interval in seconds */
@@ -247,12 +248,16 @@ async function startVideoCaptureAsync(
 ) {
   const {
     video,
-    compression,
+    enableH264,
+    enableJpeg,
     onJpegFrame,
     onH264Frame,
     onError,
     frameDurationSec,
   } = params;
+  if (!enableH264 && !enableJpeg) {
+    throw new Error("At least one of H.264 or JPEG encoding must be enabled");
+  }
   const canvas = document.createElement("canvas");
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -260,7 +265,7 @@ async function startVideoCaptureAsync(
 
   let encoder: VideoEncoder | undefined;
   const framePool: ArrayBuffer[] = [];
-  if (compression === "h264") {
+  if (enableH264) {
     try {
       const result = await selectSupportedVideoEncoderConfig({
         width: video.videoWidth,
@@ -277,9 +282,6 @@ async function startVideoCaptureAsync(
       }
       encoder = new VideoEncoder({
         output: (chunk) => {
-          if (signal.aborted) {
-            return;
-          }
           let buffer = framePool.pop();
           if (!buffer || buffer.byteLength < chunk.byteLength) {
             buffer = new ArrayBuffer(chunk.byteLength);
@@ -311,19 +313,20 @@ async function startVideoCaptureAsync(
   const keyframeInterval = 2000;
   let lastKeyframeTime: number | undefined;
 
-  let processingFrame = false;
+  let processingH264 = false;
+  let processingJpeg = false;
   const start = performance.now();
   const interval = setInterval(() => {
-    if (processingFrame) {
+    if (processingH264 || processingJpeg) {
       // last frame is not yet complete, skip frame
       return;
     }
-    processingFrame = true;
     if (encoder) {
+      processingH264 = true;
       encoder.addEventListener(
         "dequeue",
         () => {
-          processingFrame = false;
+          processingH264 = false;
         },
         { once: true },
       );
@@ -342,12 +345,15 @@ async function startVideoCaptureAsync(
       }
       encoder.encode(frame, encodeOptions);
       frame.close();
-    } else {
+    }
+
+    if (enableJpeg) {
+      processingJpeg = true;
       ctx?.drawImage(video, 0, 0);
       canvas.toBlob(
         (blob) => {
-          processingFrame = false;
-          if (blob && !signal.aborted) {
+          processingJpeg = false;
+          if (blob) {
             onJpegFrame(blob);
           }
         },

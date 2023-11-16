@@ -188,12 +188,10 @@ export function McapRecordingDemo(): JSX.Element {
     };
   }, [addPoseMessage, recording, recordOrientation]);
 
+  const enableCamera = recordH264 || recordJpeg;
   useEffect(() => {
     const videoContainer = videoContainerRef.current;
-    if (!videoContainer) {
-      return;
-    }
-    if (!recordH264 && !recordJpeg) {
+    if (!videoContainer || !enableCamera) {
       return;
     }
 
@@ -223,7 +221,7 @@ export function McapRecordingDemo(): JSX.Element {
       setVideoStarted(false);
       setVideoError(undefined);
     };
-  }, [recordH264, recordJpeg]);
+  }, [enableCamera]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -236,7 +234,8 @@ export function McapRecordingDemo(): JSX.Element {
 
     const stopCapture = startVideoCapture({
       video,
-      compression: recordH264 ? "h264" : "jpeg",
+      enableH264: recordH264,
+      enableJpeg: recordJpeg,
       frameDurationSec: 1 / 30,
       onJpegFrame: (blob) => {
         addJpegFrame(blob);
@@ -338,9 +337,6 @@ export function McapRecordingDemo(): JSX.Element {
                 checked={recordH264}
                 onChange={(event) => {
                   setRecordH264(event.target.checked);
-                  if (event.target.checked) {
-                    setRecordJpeg(false);
-                  }
                 }}
               />
               Camera (H.264)
@@ -352,9 +348,6 @@ export function McapRecordingDemo(): JSX.Element {
               checked={recordJpeg}
               onChange={(event) => {
                 setRecordJpeg(event.target.checked);
-                if (event.target.checked) {
-                  setRecordH264(false);
-                }
               }}
             />
             Camera (JPEG)
