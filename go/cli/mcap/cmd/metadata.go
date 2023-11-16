@@ -32,9 +32,6 @@ func printMetadata(w io.Writer, r io.ReadSeeker, info *mcap.Info) error {
 		"metadata",
 	}
 	rows = append(rows, headers)
-	// jsonRowSeparator is used to replace the newline characters
-	// so that the metadata displayed is formatted and wrapped correctly
-	jsonRowSeparator := "\n" + strings.Repeat("\t", len(headers)-1) + strings.Repeat(" ", len(headers)-1)
 	for _, idx := range info.MetadataIndexes {
 		offset := idx.Offset + 1 + 8
 		if offset > math.MaxInt64 {
@@ -58,15 +55,11 @@ func printMetadata(w io.Writer, r io.ReadSeeker, info *mcap.Info) error {
 		if err != nil {
 			return fmt.Errorf("failed to marshal metadata to JSON: %w", err)
 		}
-		prettyJSON, err := utils.PrettyJSON(jsonSerialized)
-		if err != nil {
-			return fmt.Errorf("failed to pretty JSON: %w", err)
-		}
 		rows = append(rows, []string{
 			idx.Name,
 			fmt.Sprintf("%d", idx.Offset),
 			fmt.Sprintf("%d", idx.Length),
-			strings.ReplaceAll(prettyJSON, "\n", jsonRowSeparator),
+      string(jsonSerialized),
 		})
 	}
 	utils.FormatTable(w, rows)
