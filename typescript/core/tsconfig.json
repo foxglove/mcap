@@ -4,6 +4,8 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "./dist/esm",
-    "lib": ["es2020", "dom"]
+    "module": "es2022",
+    "target": "es2022",
+    "lib": ["es2022", "dom"]
   }
 }

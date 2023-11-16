@@ -31,21 +31,21 @@ export class McapIndexedReader {
   readonly header: TypedMcapRecords["Header"];
   readonly footer: TypedMcapRecords["Footer"];
 
-  private readable: IReadable;
-  private decompressHandlers?: DecompressHandlers;
+  #readable: IReadable;
+  #decompressHandlers?: DecompressHandlers;
 
-  private messageStartTime: bigint | undefined;
-  private messageEndTime: bigint | undefined;
-  private attachmentStartTime: bigint | undefined;
-  private attachmentEndTime: bigint | undefined;
+  #messageStartTime: bigint | undefined;
+  #messageEndTime: bigint | undefined;
+  #attachmentStartTime: bigint | undefined;
+  #attachmentEndTime: bigint | undefined;
 
   private constructor(args: McapIndexedReaderArgs) {
-    this.readable = args.readable;
+    this.#readable = args.readable;
     this.chunkIndexes = args.chunkIndexes;
     this.attachmentIndexes = args.attachmentIndexes;
     this.metadataIndexes = args.metadataIndexes;
     this.statistics = args.statistics;
-    this.decompressHandlers = args.decompressHandlers;
+    this.#decompressHandlers = args.decompressHandlers;
     this.channelsById = args.channelsById;
     this.schemasById = args.schemasById;
     this.summaryOffsetsByOpcode = args.summaryOffsetsByOpcode;
@@ -53,25 +53,28 @@ export class McapIndexedReader {
     this.footer = args.footer;
 
     for (const chunk of args.chunkIndexes) {
-      if (this.messageStartTime == undefined || chunk.messageStartTime < this.messageStartTime) {
-        this.messageStartTime = chunk.messageStartTime;
+      if (this.#messageStartTime == undefined || chunk.messageStartTime < this.#messageStartTime) {
+        this.#messageStartTime = chunk.messageStartTime;
       }
-      if (this.messageEndTime == undefined || chunk.messageEndTime > this.messageEndTime) {
-        this.messageEndTime = chunk.messageEndTime;
+      if (this.#messageEndTime == undefined || chunk.messageEndTime > this.#messageEndTime) {
+        this.#messageEndTime = chunk.messageEndTime;
       }
     }
 
     for (const attachment of args.attachmentIndexes) {
-      if (this.attachmentStartTime == undefined || attachment.logTime < this.attachmentStartTime) {
-        this.attachmentStartTime = attachment.logTime;
+      if (
+        this.#attachmentStartTime == undefined ||
+        attachment.logTime < this.#attachmentStartTime
+      ) {
+        this.#attachmentStartTime = attachment.logTime;
       }
-      if (this.attachmentEndTime == undefined || attachment.logTime > this.attachmentEndTime) {
-        this.attachmentEndTime = attachment.logTime;
+      if (this.#attachmentEndTime == undefined || attachment.logTime > this.#attachmentEndTime) {
+        this.#attachmentEndTime = attachment.logTime;
       }
     }
   }
 
-  private errorWithLibrary(message: string): Error {
+  #errorWithLibrary(message: string): Error {
     return new Error(`${message} [library=${this.header.library}]`);
   }
 
@@ -321,8 +324,8 @@ export class McapIndexedReader {
   ): AsyncGenerator<TypedMcapRecords["Message"], void, void> {
     const {
       topics,
-      startTime = this.messageStartTime,
-      endTime = this.messageEndTime,
+      startTime = this.#messageStartTime,
+      endTime = this.#messageEndTime,
       reverse = false,
       validateCrcs,
     } = args;
@@ -357,7 +360,7 @@ export class McapIndexedReader {
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
-        await cursor.loadMessageIndexes(this.readable);
+        await cursor.loadMessageIndexes(this.#readable);
         if (cursor.hasMoreMessages()) {
           chunkCursors.replace(cursor);
         } else {
@@ -368,7 +371,7 @@ export class McapIndexedReader {
 
       let chunkView = chunkViewCache.get(cursor.chunkIndex.chunkStartOffset);
       if (!chunkView) {
-        chunkView = await this.loadChunkData(cursor.chunkIndex, {
+        chunkView = await this.#loadChunkData(cursor.chunkIndex, {
           validateCrcs: validateCrcs ?? true,
         });
         chunkViewCache.set(cursor.chunkIndex.chunkStartOffset, chunkView);
@@ -376,7 +379,7 @@ export class McapIndexedReader {
 
       const [logTime, offset] = cursor.popMessage();
       if (offset >= BigInt(chunkView.byteLength)) {
-        throw this.errorWithLibrary(
+        throw this.#errorWithLibrary(
           `Message offset beyond chunk bounds (log time ${logTime}, offset ${offset}, chunk data length ${chunkView.byteLength}) in chunk at offset ${cursor.chunkIndex.chunkStartOffset}`,
         );
       }
@@ -386,17 +389,17 @@ export class McapIndexedReader {
         validateCrcs: validateCrcs ?? true,
       });
       if (!result.record) {
-        throw this.errorWithLibrary(
+        throw this.#errorWithLibrary(
           `Unable to parse record at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset}`,
         );
       }
       if (result.record.type !== "Message") {
-        throw this.errorWithLibrary(
+        throw this.#errorWithLibrary(
           `Unexpected record type ${result.record.type} in message index (time ${logTime}, offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
         );
       }
       if (result.record.logTime !== logTime) {
-        throw this.errorWithLibrary(
+        throw this.#errorWithLibrary(
           `Message log time ${result.record.logTime} did not match message index entry (${logTime} at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
         );
       }
@@ -422,14 +425,14 @@ export class McapIndexedReader {
       if (name != undefined && metadataIndex.name !== name) {
         continue;
       }
-      const metadataData = await this.readable.read(metadataIndex.offset, metadataIndex.length);
+      const metadataData = await this.#readable.read(metadataIndex.offset, metadataIndex.length);
       const metadataResult = parseRecord({
         view: new DataView(metadataData.buffer, metadataData.byteOffset, metadataData.byteLength),
         startOffset: 0,
         validateCrcs: false,
       });
       if (metadataResult.record?.type !== "Metadata") {
-        throw this.errorWithLibrary(
+        throw this.#errorWithLibrary(
           `Metadata data at offset ${
             metadataIndex.offset
           } does not point to metadata record (found ${String(metadataResult.record?.type)})`,
@@ -451,8 +454,8 @@ export class McapIndexedReader {
     const {
       name,
       mediaType,
-      startTime = this.attachmentStartTime,
-      endTime = this.attachmentEndTime,
+      startTime = this.#attachmentStartTime,
+      endTime = this.#attachmentEndTime,
       validateCrcs,
     } = args;
 
@@ -470,7 +473,7 @@ export class McapIndexedReader {
       if (attachmentIndex.logTime > endTime || attachmentIndex.logTime < startTime) {
         continue;
       }
-      const attachmentData = await this.readable.read(
+      const attachmentData = await this.#readable.read(
         attachmentIndex.offset,
         attachmentIndex.length,
       );
@@ -484,7 +487,7 @@ export class McapIndexedReader {
         validateCrcs: validateCrcs ?? true,
       });
       if (attachmentResult.record?.type !== "Attachment") {
-        throw this.errorWithLibrary(
+        throw this.#errorWithLibrary(
           `Attachment data at offset ${
             attachmentIndex.offset
           } does not point to attachment record (found ${String(attachmentResult.record?.type)})`,
@@ -494,18 +497,21 @@ export class McapIndexedReader {
     }
   }
 
-  private async loadChunkData(
+  async #loadChunkData(
     chunkIndex: TypedMcapRecords["ChunkIndex"],
     options?: { validateCrcs: boolean },
   ): Promise<DataView> {
-    const chunkData = await this.readable.read(chunkIndex.chunkStartOffset, chunkIndex.chunkLength);
+    const chunkData = await this.#readable.read(
+      chunkIndex.chunkStartOffset,
+      chunkIndex.chunkLength,
+    );
     const chunkResult = parseRecord({
       view: new DataView(chunkData.buffer, chunkData.byteOffset, chunkData.byteLength),
       startOffset: 0,
       validateCrcs: options?.validateCrcs ?? true,
     });
     if (chunkResult.record?.type !== "Chunk") {
-      throw this.errorWithLibrary(
+      throw this.#errorWithLibrary(
         `Chunk start offset ${
           chunkIndex.chunkStartOffset
         } does not point to chunk record (found ${String(chunkResult.record?.type)})`,
@@ -515,16 +521,16 @@ export class McapIndexedReader {
     const chunk = chunkResult.record;
     let buffer = chunk.records;
     if (chunk.compression !== "" && buffer.byteLength > 0) {
-      const decompress = this.decompressHandlers?.[chunk.compression];
+      const decompress = this.#decompressHandlers?.[chunk.compression];
       if (!decompress) {
-        throw this.errorWithLibrary(`Unsupported compression ${chunk.compression}`);
+        throw this.#errorWithLibrary(`Unsupported compression ${chunk.compression}`);
       }
       buffer = decompress(buffer, chunk.uncompressedSize);
     }
     if (chunk.uncompressedCrc !== 0 && options?.validateCrcs !== false) {
       const chunkCrc = crc32(buffer);
       if (chunkCrc !== chunk.uncompressedCrc) {
-        throw this.errorWithLibrary(
+        throw this.#errorWithLibrary(
           `Incorrect chunk CRC ${chunkCrc} (expected ${chunk.uncompressedCrc})`,
         );
       }

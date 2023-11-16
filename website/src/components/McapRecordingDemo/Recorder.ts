@@ -99,12 +99,12 @@ export class Recorder extends EventEmitter<RecorderEvents> {
       const poseChannel = await addProtobufChannel(
         this.#writer,
         "pose",
-        foxgloveMessageSchemas.PoseInFrame
+        foxgloveMessageSchemas.PoseInFrame,
       );
       const cameraChannel = await addProtobufChannel(
         this.#writer,
         "camera",
-        foxgloveMessageSchemas.CompressedImage
+        foxgloveMessageSchemas.CompressedImage,
       );
 
       this.#emit();

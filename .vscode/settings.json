@@ -9,8 +9,7 @@
   "files.trimTrailingWhitespace": true,
 
   "typescript.tsdk": "node_modules/typescript/lib",
-  "prettier.prettierPath": "./node_modules/prettier",
-  "eslint.packageManager": "yarn",
+  "prettier.prettierPath": "./node_modules/prettier/index.cjs",
   "eslint.options": {
     "reportUnusedDisableDirectives": "error"
   },

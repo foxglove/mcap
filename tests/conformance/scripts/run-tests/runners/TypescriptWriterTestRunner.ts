@@ -8,12 +8,12 @@ import { WriteTestRunner } from "./TestRunner";
 type JsonValue<T> = T extends number | bigint | string
   ? string
   : T extends Uint8Array
-  ? number[]
-  : T extends Map<infer K, infer V>
-  ? K extends number | bigint | string
-    ? Record<JsonValue<K>, JsonValue<V>>
-    : never
-  : never;
+    ? number[]
+    : T extends Map<infer K, infer V>
+      ? K extends number | bigint | string
+        ? Record<JsonValue<K>, JsonValue<V>>
+        : never
+      : never;
 
 type JsonRecord<R extends keyof McapTypes.McapRecords> = {
   type: R;

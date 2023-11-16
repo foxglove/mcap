@@ -11,7 +11,9 @@ describe("ByteStorage", () => {
 
     buffer.append(new Uint8Array([1, 2, 3]));
     expect(buffer.bytesRemaining()).toBe(3);
-    expect(() => buffer.consume(4)).toThrow();
+    expect(() => {
+      buffer.consume(4);
+    }).toThrow();
 
     expect(toArray(buffer.view)).toEqual(new Uint8Array([1, 2, 3]));
     buffer.consume(3);

@@ -1,46 +1,46 @@
 import { getBigUint64 } from "./getBigUint64";
 
 export default class Reader {
-  private view: DataView;
+  #view: DataView;
   offset: number;
-  private textDecoder = new TextDecoder();
+  #textDecoder = new TextDecoder();
 
   constructor(view: DataView, offset = 0) {
-    this.view = view;
+    this.#view = view;
     this.offset = offset;
   }
 
   uint8(): number {
-    const value = this.view.getUint8(this.offset);
+    const value = this.#view.getUint8(this.offset);
     this.offset += 1;
     return value;
   }
 
   uint16(): number {
-    const value = this.view.getUint16(this.offset, true);
+    const value = this.#view.getUint16(this.offset, true);
     this.offset += 2;
     return value;
   }
 
   uint32(): number {
-    const value = this.view.getUint32(this.offset, true);
+    const value = this.#view.getUint32(this.offset, true);
     this.offset += 4;
     return value;
   }
 
   uint64(): bigint {
-    const value = getBigUint64.call(this.view, this.offset, true);
+    const value = getBigUint64.call(this.#view, this.offset, true);
     this.offset += 8;
     return value;
   }
 
   string(): string {
     const length = this.uint32();
-    if (this.offset + length > this.view.byteLength) {
+    if (this.offset + length > this.#view.byteLength) {
       throw new Error(`String length ${length} exceeds bounds of buffer`);
     }
-    const value = this.textDecoder.decode(
-      new Uint8Array(this.view.buffer, this.view.byteOffset + this.offset, length),
+    const value = this.#textDecoder.decode(
+      new Uint8Array(this.#view.buffer, this.#view.byteOffset + this.offset, length),
     );
     this.offset += length;
     return value;
@@ -48,7 +48,7 @@ export default class Reader {
 
   keyValuePairs<K, V>(readKey: (reader: Reader) => K, readValue: (reader: Reader) => V): [K, V][] {
     const length = this.uint32();
-    if (this.offset + length > this.view.byteLength) {
+    if (this.offset + length > this.#view.byteLength) {
       throw new Error(`Key-value pairs length ${length} exceeds bounds of buffer`);
     }
     const result: [K, V][] = [];
@@ -72,7 +72,7 @@ export default class Reader {
 
   map<K, V>(readKey: (reader: Reader) => K, readValue: (reader: Reader) => V): Map<K, V> {
     const length = this.uint32();
-    if (this.offset + length > this.view.byteLength) {
+    if (this.offset + length > this.#view.byteLength) {
       throw new Error(`Map length ${length} exceeds bounds of buffer`);
     }
     const result = new Map<K, V>();
