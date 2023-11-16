@@ -1,5 +1,9 @@
 import { Time, fromNanoSec } from "@foxglove/rostime";
-import { PoseInFrame, CompressedImage } from "@foxglove/schemas";
+import {
+  PoseInFrame,
+  CompressedImage,
+  CompressedVideo,
+} from "@foxglove/schemas";
 import { foxgloveMessageSchemas } from "@foxglove/schemas/internal";
 import zstd from "@foxglove/wasm-zstd";
 import { McapWriter } from "@mcap/core";
@@ -7,6 +11,7 @@ import { EventEmitter } from "eventemitter3";
 import Queue from "promise-queue";
 
 import { ProtobufChannelInfo, addProtobufChannel } from "./addProtobufChannel";
+import { H264Frame } from "./videoCapture";
 
 export type ProtobufObject<Message> = {
   [K in keyof Message]: Message[K] extends { sec: number; nsec: number }
@@ -41,12 +46,14 @@ export class Recorder extends EventEmitter<RecorderEvents> {
   #writer?: McapWriter;
   /** Used to ensure all operations on the McapWriter are sequential */
   #queue = new Queue(/*maxPendingPromises=*/ 1);
-  #mouseChannelId?: Promise<number>;
+  #mouseChannelId?: number;
   #mouseChannelSeq = 0;
-  #poseChannel?: Promise<ProtobufChannelInfo>;
+  #poseChannel?: ProtobufChannelInfo;
   #poseChannelSeq = 0;
-  #cameraChannel?: Promise<ProtobufChannelInfo>;
-  #cameraChannelSeq = 0;
+  #jpegChannel?: ProtobufChannelInfo;
+  #jpegChannelSeq = 0;
+  #h264Channel?: ProtobufChannelInfo;
+  #h264ChannelSeq = 0;
 
   #blobParts: Uint8Array[] = [];
   bytesWritten = 0n;
@@ -59,7 +66,7 @@ export class Recorder extends EventEmitter<RecorderEvents> {
   }
 
   #reinitializeWriter() {
-    const promise = this.#queue.add(async () => {
+    void this.#queue.add(async () => {
       await zstd.isLoaded;
       this.#blobParts = [];
       this.bytesWritten = 0n;
@@ -84,35 +91,17 @@ export class Recorder extends EventEmitter<RecorderEvents> {
         profile: "",
       });
 
-      const mouseSchemaId = await this.#writer.registerSchema({
-        name: "MouseEvent",
-        encoding: "jsonschema",
-        data: this.#textEncoder.encode(JSON.stringify(MouseEventSchema)),
-      });
-      const mouseChannelId = await this.#writer.registerChannel({
-        topic: "mouse",
-        messageEncoding: "json",
-        schemaId: mouseSchemaId,
-        metadata: new Map(),
-      });
-
-      const poseChannel = await addProtobufChannel(
-        this.#writer,
-        "pose",
-        foxgloveMessageSchemas.PoseInFrame,
-      );
-      const cameraChannel = await addProtobufChannel(
-        this.#writer,
-        "camera",
-        foxgloveMessageSchemas.CompressedImage,
-      );
-
       this.#emit();
-      return { mouseChannelId, poseChannel, cameraChannel };
     });
-    this.#mouseChannelId = promise.then(({ mouseChannelId }) => mouseChannelId);
-    this.#poseChannel = promise.then(({ poseChannel }) => poseChannel);
-    this.#cameraChannel = promise.then(({ cameraChannel }) => cameraChannel);
+    // Channels are lazily added later
+    this.#mouseChannelId = undefined;
+    this.#mouseChannelSeq = 0;
+    this.#poseChannel = undefined;
+    this.#poseChannelSeq = 0;
+    this.#jpegChannel = undefined;
+    this.#jpegChannelSeq = 0;
+    this.#h264Channel = undefined;
+    this.#h264ChannelSeq = 0;
   }
 
   #time(): bigint {
@@ -128,13 +117,26 @@ export class Recorder extends EventEmitter<RecorderEvents> {
 
   async addMouseEvent(msg: MouseEventMessage): Promise<void> {
     void this.#queue.add(async () => {
-      if (!this.#writer || !this.#mouseChannelId) {
+      if (!this.#writer) {
         return;
+      }
+      if (this.#mouseChannelId == undefined) {
+        const mouseSchemaId = await this.#writer.registerSchema({
+          name: "MouseEvent",
+          encoding: "jsonschema",
+          data: this.#textEncoder.encode(JSON.stringify(MouseEventSchema)),
+        });
+        this.#mouseChannelId = await this.#writer.registerChannel({
+          topic: "mouse",
+          messageEncoding: "json",
+          schemaId: mouseSchemaId,
+          metadata: new Map(),
+        });
       }
       const now = this.#time();
       await this.#writer.addMessage({
         sequence: this.#mouseChannelSeq++,
-        channelId: await this.#mouseChannelId,
+        channelId: this.#mouseChannelId,
         logTime: now,
         publishTime: now,
         data: this.#textEncoder.encode(JSON.stringify(msg)),
@@ -146,11 +148,18 @@ export class Recorder extends EventEmitter<RecorderEvents> {
 
   async addPose(msg: ProtobufObject<PoseInFrame>): Promise<void> {
     void this.#queue.add(async () => {
-      if (!this.#writer || !this.#poseChannel) {
+      if (!this.#writer) {
         return;
       }
+      if (!this.#poseChannel) {
+        this.#poseChannel = await addProtobufChannel(
+          this.#writer,
+          "pose",
+          foxgloveMessageSchemas.PoseInFrame,
+        );
+      }
       const now = this.#time();
-      const { id, rootType } = await this.#poseChannel;
+      const { id, rootType } = this.#poseChannel;
       await this.#writer.addMessage({
         sequence: this.#poseChannelSeq++,
         channelId: id,
@@ -163,12 +172,19 @@ export class Recorder extends EventEmitter<RecorderEvents> {
     });
   }
 
-  async addCameraImage(blob: Blob): Promise<void> {
+  async addJpegFrame(blob: Blob): Promise<void> {
     void this.#queue.add(async () => {
-      if (!this.#writer || !this.#cameraChannel) {
+      if (!this.#writer) {
         return;
       }
-      const { id, rootType } = await this.#cameraChannel;
+      if (!this.#jpegChannel) {
+        this.#jpegChannel = await addProtobufChannel(
+          this.#writer,
+          "camera_jpeg",
+          foxgloveMessageSchemas.CompressedImage,
+        );
+      }
+      const { id, rootType } = this.#jpegChannel;
       const now = this.#time();
       const msg: ProtobufObject<CompressedImage> = {
         timestamp: toProtobufTime(fromNanoSec(now)),
@@ -177,11 +193,45 @@ export class Recorder extends EventEmitter<RecorderEvents> {
         format: blob.type,
       };
       await this.#writer.addMessage({
-        sequence: this.#cameraChannelSeq++,
+        sequence: this.#jpegChannelSeq++,
         channelId: id,
         logTime: now,
         publishTime: now,
         data: rootType.encode(msg).finish(),
+      });
+      this.messageCount++;
+      this.#emit();
+    });
+  }
+
+  async addH264Frame(frame: H264Frame): Promise<void> {
+    void this.#queue.add(async () => {
+      if (!this.#writer) {
+        return;
+      }
+      if (!this.#h264Channel) {
+        this.#h264Channel = await addProtobufChannel(
+          this.#writer,
+          "camera_h264",
+          foxgloveMessageSchemas.CompressedVideo,
+        );
+      }
+      const { id, rootType } = this.#h264Channel;
+      const now = this.#time();
+      const msg: ProtobufObject<CompressedVideo> = {
+        timestamp: toProtobufTime(fromNanoSec(now)),
+        frame_id: "camera",
+        data: frame.data,
+        format: "h264",
+      };
+      const data = rootType.encode(msg).finish();
+      frame.release();
+      await this.#writer.addMessage({
+        sequence: this.#h264ChannelSeq++,
+        channelId: id,
+        logTime: now,
+        publishTime: now,
+        data,
       });
       this.messageCount++;
       this.#emit();

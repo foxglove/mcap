@@ -130,6 +130,21 @@
   position: absolute;
   inset: 0;
   object-fit: cover;
+  z-index: 0;
+}
+
+.videoContainer .videoErrorContainer {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  background-color: #f5f1ffc4;
+  padding: 0.5rem;
+  inset: 0;
+  z-index: 1;
+}
+
+[data-theme="dark"] .videoContainer .videoErrorContainer {
+  background-color: #17151ec4;
 }
 
 .videoPlaceholderText {
@@ -168,6 +183,16 @@
 [data-theme="dark"] .downloadInfo {
   background-color: transparent;
   border-color: #585858;
+}
+
+.h264Warning {
+  font-weight: 600;
+  font-size: 0.8rem;
+  border: 1px solid var(--ifm-color-warning-dark);
+  background-color: var(--ifm-color-warning-contrast-background);
+  padding: 6px 6px 6px 12px;
+  margin-bottom: 16px;
+  color: var(--ifm-color-warning-contrast-foreground);
 }
 
 .downloadInfoCloseButton {

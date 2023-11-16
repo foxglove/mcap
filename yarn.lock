@@ -12947,6 +12947,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-async@npm:10.0.1":
+  version: 10.0.1
+  resolution: "react-async@npm:10.0.1"
+  peerDependencies:
+    react: ">=16.3.1"
+  checksum: 30d3959f22b66bfbcc11041cacd6635c5e5818e3996a81ea9544bf411fa0aeccefe0f41b24b337f5b6d16db8be90cbdeae367f2f359a9ab615dd73122c3d69d2
+  languageName: node
+  linkType: hard
+
 "react-base16-styling@npm:^0.6.0":
   version: 0.6.0
   resolution: "react-base16-styling@npm:0.6.0"
@@ -15679,6 +15688,7 @@ __metadata:
     promise-queue: 2.2.5
     protobufjs: 7.2.3
     react: 17.0.2
+    react-async: 10.0.1
     react-dom: 17.0.2
     typescript: 5.2.2
     zustand: 4.3.8

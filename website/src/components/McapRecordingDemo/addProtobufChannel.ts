@@ -32,7 +32,6 @@ export async function addProtobufChannel(
     );
     const protoSrc = generateProto(msgSchema, nestedEnums);
     const parseResult = protobufjs.parse(protoSrc, { keepCase: true });
-    // parseResult.root.nestedArray[0].name = "foxglove";
     const filename = `foxglove/${msgSchema.name}.proto`;
     parseResult.root.nestedArray[0]!.filename = filename;
     root.add(parseResult.root.nestedArray[0]!);
