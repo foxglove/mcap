@@ -54,15 +54,11 @@ func printMetadata(w io.Writer, r io.ReadSeeker, info *mcap.Info) error {
 		if err != nil {
 			return fmt.Errorf("failed to marshal metadata to JSON: %w", err)
 		}
-		prettyJSON, err := utils.PrettyJSON(jsonSerialized)
-		if err != nil {
-			return fmt.Errorf("failed to pretty JSON: %w", err)
-		}
 		rows = append(rows, []string{
 			idx.Name,
 			fmt.Sprintf("%d", idx.Offset),
 			fmt.Sprintf("%d", idx.Length),
-			prettyJSON,
+			string(jsonSerialized),
 		})
 	}
 	utils.FormatTable(w, rows)
