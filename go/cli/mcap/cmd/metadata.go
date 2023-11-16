@@ -25,12 +25,16 @@ var (
 
 func printMetadata(w io.Writer, r io.ReadSeeker, info *mcap.Info) error {
 	rows := make([][]string, 0, len(info.MetadataIndexes))
-	rows = append(rows, []string{
+	headers := []string{
 		"name",
 		"offset",
 		"length",
 		"metadata",
-	})
+	}
+	rows = append(rows, headers)
+	// jsonRowSeparator is used to replace the newline characters
+	// so that the metadata displayed is formatted and wrapped correctly
+	jsonRowSeparator := "\n" + strings.Repeat("\t", len(headers)-1) + strings.Repeat(" ", len(headers)-1)
 	for _, idx := range info.MetadataIndexes {
 		offset := idx.Offset + 1 + 8
 		if offset > math.MaxInt64 {
@@ -62,7 +66,7 @@ func printMetadata(w io.Writer, r io.ReadSeeker, info *mcap.Info) error {
 			idx.Name,
 			fmt.Sprintf("%d", idx.Offset),
 			fmt.Sprintf("%d", idx.Length),
-			prettyJSON,
+			strings.ReplaceAll(prettyJSON, "\n", jsonRowSeparator),
 		})
 	}
 	utils.FormatTable(w, rows)
