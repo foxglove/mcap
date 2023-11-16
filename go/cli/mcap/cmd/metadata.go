@@ -25,13 +25,12 @@ var (
 
 func printMetadata(w io.Writer, r io.ReadSeeker, info *mcap.Info) error {
 	rows := make([][]string, 0, len(info.MetadataIndexes))
-	headers := []string{
+	rows = append(rows, []string{
 		"name",
 		"offset",
 		"length",
 		"metadata",
-	}
-	rows = append(rows, headers)
+	})
 	for _, idx := range info.MetadataIndexes {
 		offset := idx.Offset + 1 + 8
 		if offset > math.MaxInt64 {
@@ -59,7 +58,7 @@ func printMetadata(w io.Writer, r io.ReadSeeker, info *mcap.Info) error {
 			idx.Name,
 			fmt.Sprintf("%d", idx.Offset),
 			fmt.Sprintf("%d", idx.Length),
-      string(jsonSerialized),
+			string(jsonSerialized),
 		})
 	}
 	utils.FormatTable(w, rows)
