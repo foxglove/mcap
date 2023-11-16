@@ -5,6 +5,7 @@ import { fromMillis } from "@foxglove/rostime";
 import { PoseInFrame } from "@foxglove/schemas";
 import cx from "classnames";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useAsync } from "react-async";
 import { create } from "zustand";
 
 import styles from "./McapRecordingDemo.module.css";
@@ -14,7 +15,12 @@ import {
   Recorder,
   toProtobufTime,
 } from "./Recorder";
-import { H264Frame, startVideoCapture, startVideoStream } from "./videoCapture";
+import {
+  H264Frame,
+  startVideoCapture,
+  startVideoStream,
+  supportsH264Encoding,
+} from "./videoCapture";
 
 type State = {
   bytesWritten: bigint;
@@ -117,21 +123,26 @@ export function McapRecordingDemo(): JSX.Element {
   const [orientationPermissionError, setOrientationPermissionError] =
     useState(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [recordVideo, setRecordVideo] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | undefined>();
+  const videoContainerRef = useRef<HTMLDivElement>(null);
+  const [recordJpeg, setRecordJpeg] = useState(false);
+  const [recordH264, setRecordH264] = useState(false);
   const [recordMouse, setRecordMouse] = useState(true);
   const [recordOrientation, setRecordOrientation] = useState(true);
   const [videoStarted, setVideoStarted] = useState(false);
-  const [videoPermissionError, setVideoPermissionError] = useState(false);
+  const [videoError, setVideoError] = useState<Error | undefined>();
   const [showDownloadInfo, setShowDownloadInfo] = useState(false);
 
   const { addJpegFrame, addH264Frame, addMouseEventMessage, addPoseMessage } =
     state;
 
+  const { data: h264Support } = useAsync(supportsH264Encoding);
+
   const canStartRecording =
     recordMouse ||
     (!hasMouse && recordOrientation) ||
-    (recordVideo && !videoPermissionError);
+    (recordH264 && !videoError) ||
+    (recordJpeg && !videoError);
 
   // Automatically pause recording after 30 seconds to avoid unbounded growth
   useEffect(() => {
@@ -178,37 +189,54 @@ export function McapRecordingDemo(): JSX.Element {
   }, [addPoseMessage, recording, recordOrientation]);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!recordVideo || !video) {
+    const videoContainer = videoContainerRef.current;
+    if (!videoContainer) {
+      return;
+    }
+    if (!recordH264 && !recordJpeg) {
       return;
     }
 
+    if (videoRef.current) {
+      videoRef.current.remove();
+    }
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    videoRef.current = video;
+    videoContainer.appendChild(video);
+
     const cleanup = startVideoStream({
-      video,
+      video: videoRef.current,
       onStart: () => {
         setVideoStarted(true);
       },
       onError: (err) => {
+        setVideoError(err);
         console.error(err);
-        setVideoPermissionError(true);
       },
     });
 
     return () => {
       cleanup();
+      video.remove();
       setVideoStarted(false);
-      setVideoPermissionError(false);
+      setVideoError(undefined);
     };
-  }, [recordVideo]);
+  }, [recordH264, recordJpeg]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!recording || !recordVideo || !video || !videoStarted) {
+    if (!recording || !video || !videoStarted) {
+      return;
+    }
+    if (!recordH264 && !recordJpeg) {
       return;
     }
 
     const stopCapture = startVideoCapture({
       video,
+      compression: recordH264 ? "h264" : "jpeg",
       frameDurationSec: 1 / 30,
       onJpegFrame: (blob) => {
         addJpegFrame(blob);
@@ -217,13 +245,21 @@ export function McapRecordingDemo(): JSX.Element {
         addH264Frame(frame);
       },
       onError: (err) => {
+        setVideoError(err);
         console.error(err);
       },
     });
     return () => {
       stopCapture();
     };
-  }, [addJpegFrame, addH264Frame, recordVideo, recording, videoStarted]);
+  }, [
+    addJpegFrame,
+    addH264Frame,
+    recordH264,
+    recording,
+    videoStarted,
+    recordJpeg,
+  ]);
 
   const onRecordClick = useCallback(
     (event: React.MouseEvent) => {
@@ -295,15 +331,33 @@ export function McapRecordingDemo(): JSX.Element {
           </p>
         </header>
         <div className={styles.sensors}>
+          {h264Support?.supported === true && (
+            <label>
+              <input
+                type="checkbox"
+                checked={recordH264}
+                onChange={(event) => {
+                  setRecordH264(event.target.checked);
+                  if (event.target.checked) {
+                    setRecordJpeg(false);
+                  }
+                }}
+              />
+              Camera (H.264)
+            </label>
+          )}
           <label>
             <input
               type="checkbox"
-              checked={recordVideo}
+              checked={recordJpeg}
               onChange={(event) => {
-                setRecordVideo(event.target.checked);
+                setRecordJpeg(event.target.checked);
+                if (event.target.checked) {
+                  setRecordH264(false);
+                }
               }}
             />
-            Camera
+            Camera (JPEG)
           </label>
           <label>
             <input
@@ -351,6 +405,13 @@ export function McapRecordingDemo(): JSX.Element {
             Try inspecting the file with the{" "}
             <Link to="/guides/cli">MCAP CLI</Link>, or open it in{" "}
             <Link to="https://studio.foxglove.dev/">Foxglove Studio</Link>.
+          </div>
+        )}
+
+        {recordH264 && h264Support?.mayUseLotsOfKeyframes === true && (
+          <div className={styles.h264Warning}>
+            Note: This browser may have a bug that causes H.264 encoding to be
+            less efficient.
           </div>
         )}
 
@@ -438,14 +499,13 @@ export function McapRecordingDemo(): JSX.Element {
           </div>
 
           <div className={styles.recordingControlsColumn}>
-            <div className={styles.videoContainer}>
-              {videoPermissionError ? (
-                <div className={styles.error}>
-                  Allow permission to record camera images
+            <div className={styles.videoContainer} ref={videoContainerRef}>
+              {videoError ? (
+                <div className={cx(styles.error, styles.videoErrorContainer)}>
+                  {videoError.toString()}
                 </div>
-              ) : recordVideo ? (
+              ) : recordH264 || recordJpeg ? (
                 <>
-                  <video ref={videoRef} muted playsInline />
                   {!videoStarted && (
                     <progress className={styles.videoLoadingIndicator} />
                   )}
@@ -454,7 +514,11 @@ export function McapRecordingDemo(): JSX.Element {
                 <span
                   className={styles.videoPlaceholderText}
                   onClick={() => {
-                    setRecordVideo(true);
+                    if (h264Support?.supported === true) {
+                      setRecordH264(true);
+                    } else {
+                      setRecordJpeg(true);
+                    }
                   }}
                 >
                   Enable “Camera” to record video

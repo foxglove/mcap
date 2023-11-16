@@ -39,7 +39,13 @@ export function startVideoStream(params: VideoStreamParams): () => void {
         if (canceled) {
           return;
         }
-        params.onError(err as Error);
+        params.onError(
+          new Error(
+            `${(
+              err as Error
+            ).toString()}. Ensure camera permissions are enabled.`,
+          ),
+        );
       });
   }
 
@@ -61,6 +67,7 @@ export type H264Frame = {
 };
 
 type VideoCaptureParams = {
+  compression: "h264" | "jpeg";
   /** Video element to capture */
   video: HTMLVideoElement;
   /** Frame interval in seconds */
@@ -86,6 +93,90 @@ export function startVideoCapture(params: VideoCaptureParams): () => void {
 }
 
 /**
+ * Determine whether VideoEncoder can (probably) be used to encode video with H.264.
+ */
+export async function supportsH264Encoding(): Promise<{
+  supported: boolean;
+  /** True if too many keyframes may be produced (e.g. https://bugs.webkit.org/show_bug.cgi?id=264893) */
+  mayUseLotsOfKeyframes: boolean;
+}> {
+  const result = await selectSupportedVideoEncoderConfig({
+    // Notes about fake width/height:
+    // - Some platforms require them to be even numbers
+    // - Too small or too large return false from isConfigSupported in Chrome
+    width: 640,
+    height: 480,
+    frameDurationSec: 1 / 30,
+  });
+  return {
+    supported: result != undefined,
+    mayUseLotsOfKeyframes: result?.mayUseLotsOfKeyframes ?? false,
+  };
+}
+
+/**
+ * Find a suitable configuration for VideoEncoder that can be used to encode H.264. Returns
+ * undefined if not supported.
+ */
+async function selectSupportedVideoEncoderConfig({
+  width,
+  height,
+  frameDurationSec,
+}: {
+  width: number;
+  height: number;
+  frameDurationSec: number;
+}) {
+  const config: VideoEncoderConfig = {
+    codec: "avc1.42001f", // Baseline profile (42 00) with level 3.1 (1f)
+    width,
+    height,
+    latencyMode: "realtime",
+    avc: { format: "annexb" },
+    // Note that Safari 17 does not support latencyMode: "realtime", and in newer versions of the
+    // Safari Technical Preview, realtime mode only works if framerate and bitrate are set.
+    framerate: 1 / frameDurationSec,
+    bitrate: 1000000, // chosen fairly arbitrarily but seems to work in Chrome and Safari
+  };
+  try {
+    if (typeof VideoEncoder !== "function") {
+      console.log(
+        "VideoEncoder is not supported, falling back to JPEG encoding",
+      );
+      return undefined;
+    }
+
+    let status = await isEncoderConfigActuallySupported(config);
+    if (status.supported) {
+      return {
+        config,
+        mayUseLotsOfKeyframes: status.mayUseLotsOfKeyframes,
+      };
+    }
+
+    // Safari 17 does not output any frames when latencyMode is "realtime"
+    // (https://bugs.webkit.org/show_bug.cgi?id=264894). Try again with "quality".
+    //
+    // See also: https://bugs.webkit.org/show_bug.cgi?id=264893
+    console.log(
+      "latencyMode realtime encoding not supported, attempting fallback to quality",
+    );
+    config.latencyMode = "quality";
+    status = await isEncoderConfigActuallySupported(config);
+    if (status.supported) {
+      return { config, mayUseLotsOfKeyframes: status.mayUseLotsOfKeyframes };
+    }
+  } catch (err) {
+    console.log(
+      "VideoEncoder error during compatibility detection:",
+      config,
+      err,
+    );
+  }
+  return undefined;
+}
+
+/**
  * Sometimes `VideoEncoder.isConfigSupported` returns true but the encoder does not actually output
  * frames (looking at you, Safari). This function tries actually encoding a frame and making sure
  * that the encoder can output a chunk.
@@ -93,13 +184,17 @@ export function startVideoCapture(params: VideoCaptureParams): () => void {
 async function isEncoderConfigActuallySupported(config: VideoEncoderConfig) {
   try {
     if ((await VideoEncoder.isConfigSupported(config)).supported !== true) {
-      return false;
+      return { supported: false };
     }
-    let outputAnyFrames = false as boolean;
+    let keyFrameCount = 0;
+    let totalFrameCount = 0;
     let hadErrors = false as boolean;
     const encoder = new VideoEncoder({
-      output() {
-        outputAnyFrames = true;
+      output(chunk) {
+        if (chunk.type === "key") {
+          keyFrameCount++;
+        }
+        totalFrameCount++;
       },
       error(err) {
         hadErrors = true;
@@ -111,22 +206,34 @@ async function isEncoderConfigActuallySupported(config: VideoEncoderConfig) {
       },
     });
     encoder.configure(config);
-    const bitmap = await createImageBitmap(new ImageData(1, 1));
-    const frame = new VideoFrame(bitmap, { timestamp: 0 });
+    const bitmap = await createImageBitmap(
+      new ImageData(config.width, config.height),
+    );
+    const duration = (1 / (config.framerate ?? 30)) * 1e6;
+    // Encode two frames to check if we get any delta frames or only keyframes
+    for (let i = 0; i < 2; i++) {
+      const frame = new VideoFrame(bitmap, {
+        timestamp: i * duration,
+        duration,
+      });
+      encoder.encode(frame, { keyFrame: i === 0 });
+      frame.close();
+    }
     bitmap.close();
-    encoder.encode(frame, { keyFrame: true });
-    frame.close();
     await encoder.flush();
     encoder.close();
 
-    return outputAnyFrames && !hadErrors;
+    return {
+      supported: totalFrameCount === 2 && !hadErrors,
+      mayUseLotsOfKeyframes: keyFrameCount > 1,
+    };
   } catch (err) {
     console.log(
       "VideoEncoder error during compatibility detection:",
       config,
       err,
     );
-    return false;
+    return { supported: false };
   }
 }
 
@@ -138,7 +245,14 @@ async function startVideoCaptureAsync(
   params: VideoCaptureParams,
   signal: AbortSignal,
 ) {
-  const { video, onJpegFrame, onH264Frame, onError, frameDurationSec } = params;
+  const {
+    video,
+    compression,
+    onJpegFrame,
+    onH264Frame,
+    onError,
+    frameDurationSec,
+  } = params;
   const canvas = document.createElement("canvas");
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
@@ -146,73 +260,51 @@ async function startVideoCaptureAsync(
 
   let encoder: VideoEncoder | undefined;
   const framePool: ArrayBuffer[] = [];
-  setupEncoder: try {
-    if (typeof VideoEncoder !== "function") {
-      console.log(
-        "VideoEncoder is not supported, falling back to JPEG encoding",
-      );
-      break setupEncoder;
-    }
-
-    const config: VideoEncoderConfig = {
-      codec: "avc1.42001f", // Baseline profile (42 00) with level 3.1 (1f)
-      width: video.videoWidth,
-      height: video.videoHeight,
-      displayWidth: video.videoWidth,
-      displayHeight: video.videoHeight,
-      latencyMode: "realtime",
-      avc: { format: "annexb" },
-      // Note that Safari 17 does not support latencyMode: "realtime", and in newer versions of the
-      // Safari Technical Preview, realtime mode only works if framerate and bitrate are set.
-      framerate: 1 / frameDurationSec,
-      bitrate: 1000000,
-    };
-    if (!(await isEncoderConfigActuallySupported(config))) {
-      // Safari 17 does not output any frames when latencyMode is "realtime"
-      // (https://bugs.webkit.org/show_bug.cgi?id=264894). Try again with "quality".
-      //
-      // See also: https://bugs.webkit.org/show_bug.cgi?id=264893
-      console.log(
-        "latencyMode realtime encoding not supported, falling back to quality",
-      );
-      config.latencyMode = "quality";
-      if (!(await isEncoderConfigActuallySupported(config))) {
-        console.log(
-          "Config is not supported, falling back to JPEG encoding",
-          config,
+  if (compression === "h264") {
+    try {
+      const result = await selectSupportedVideoEncoderConfig({
+        width: video.videoWidth,
+        height: video.videoHeight,
+        frameDurationSec,
+      });
+      if (!result) {
+        onError(
+          new Error(
+            "Unable to find a supported configuration for H.264 encoding",
+          ),
         );
-        break setupEncoder;
+        return;
       }
-    }
-    encoder = new VideoEncoder({
-      output: (chunk) => {
-        if (signal.aborted) {
-          return;
-        }
-        let buffer = framePool.pop();
-        if (!buffer || buffer.byteLength < chunk.byteLength) {
-          buffer = new ArrayBuffer(chunk.byteLength);
-        }
-        chunk.copyTo(buffer);
-        onH264Frame({
-          data: new Uint8Array(buffer, 0, chunk.byteLength),
-          release() {
-            framePool.push(this.data.buffer);
-          },
-        });
-      },
-      error: (err) => {
-        if (signal.aborted) {
-          return;
-        }
-        onError(err);
-      },
-    });
+      encoder = new VideoEncoder({
+        output: (chunk) => {
+          if (signal.aborted) {
+            return;
+          }
+          let buffer = framePool.pop();
+          if (!buffer || buffer.byteLength < chunk.byteLength) {
+            buffer = new ArrayBuffer(chunk.byteLength);
+          }
+          chunk.copyTo(buffer);
+          onH264Frame({
+            data: new Uint8Array(buffer, 0, chunk.byteLength),
+            release() {
+              framePool.push(this.data.buffer);
+            },
+          });
+        },
+        error: (err) => {
+          if (signal.aborted) {
+            return;
+          }
+          onError(err);
+        },
+      });
 
-    encoder.configure(config); // may throw
-  } catch (err) {
-    onError(err as Error);
-    encoder = undefined;
+      encoder.configure(result.config); // may throw
+    } catch (err) {
+      onError(err as Error);
+      return;
+    }
   }
 
   // add a keyframe every 2 seconds for h264 encoding
