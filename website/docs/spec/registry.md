@@ -219,7 +219,25 @@ The `ros2` profile describes how to create MCAP files for [ROS 2](https://docs.r
 
 - `message_encoding`: MUST be `cdr`
 - `metadata`:
-  - `offered_qos_profiles` (required, string)
+  - `offered_qos_profiles` (required, string) The policy value for the topic in yaml format. See [ROS QoS Policies for Recording docs](https://docs.ros.org/en/rolling/How-To-Guides/Overriding-QoS-Policies-For-Recording-And-Playback.html#using-qos-overrides) for more details. The policy value may change depending on the ROS distro. Below is an example policy schema.
+
+  ```
+  history: [keep_all, keep_last]
+  depth: int
+  reliability: [system_default, reliable, best_effort, unknown]
+  durability: [system_default, transient_local, volatile, unknown]
+  deadline:
+    sec: int
+    nsec: int
+  lifespan:
+    sec: int
+    nsec: int
+  liveliness: [system_default, automatic, manual_by_topic, unknown]
+  liveliness_lease_duration:
+    sec: int
+    nsec: int
+  avoid_ros_namespace_conventions: [true, false]
+  ```
 
 #### Schema
 
