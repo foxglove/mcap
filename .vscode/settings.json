@@ -27,17 +27,17 @@
     "**/dist": true
   },
 
-  "python.formatting.provider": "black",
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  },
   "python.analysis.typeCheckingMode": "strict",
-  "python.linting.flake8Enabled": true,
-  "python.linting.enabled": true,
-  "python.linting.flake8Args": ["--config", "python/.flake8"],
   "python.analysis.extraPaths": [
     "./python/mcap",
     "./python/mcap-protobuf-support",
     "./python/mcap-ros1-support",
     "./python/mcap-ros2-support"
   ],
+  "flake8.args": ["--config", "python/.flake8"],
 
   // https://github.com/microsoft/vscode-cpptools/issues/722
   "C_Cpp.autoAddFileAssociations": false,

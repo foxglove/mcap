@@ -55,7 +55,6 @@
     "@foxglove/message-definition": "^0.3.0",
     "@foxglove/omgidl-parser": "^1.0.0",
     "@foxglove/omgidl-serialization": "^1.0.0",
-    "@foxglove/protobufjs": "0.0.1-toobject-bigint.1",
     "@foxglove/ros2idl-parser": "^0.3.0",
     "@foxglove/rosmsg": "^4.2.2",
     "@foxglove/rosmsg-serialization": "^2.0.2",
@@ -66,6 +65,7 @@
     "@foxglove/wasm-zstd": "^1.0.1",
     "@protobufjs/base64": "^1.1.2",
     "flatbuffers": "^23.5.26",
-    "flatbuffers_reflection": "^0.0.7"
+    "flatbuffers_reflection": "^0.0.7",
+    "protobufjs": "7.2.5"
   }
 }
