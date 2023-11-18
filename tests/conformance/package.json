@@ -11,7 +11,7 @@
   },
   "devDependencies": {
     "@foxglove/crc": "^0.0.3",
-    "@foxglove/eslint-plugin": "1.0.0",
+    "@foxglove/eslint-plugin": "1.0.1",
     "@foxglove/tsconfig": "1.1.0",
     "@mcap/core": "workspace:*",
     "@mcap/support": "workspace:*",

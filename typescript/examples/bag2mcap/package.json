@@ -20,7 +20,7 @@
     "bag2mcap": "yarn typescript:build && ts-node --files --project tsconfig.cjs.json scripts/bag2mcap.ts"
   },
   "devDependencies": {
-    "@foxglove/eslint-plugin": "1.0.0",
+    "@foxglove/eslint-plugin": "1.0.1",
     "@foxglove/rosbag": "0.2.3",
     "@foxglove/rosmsg": "3.1.0",
     "@foxglove/rosmsg-serialization": "1.5.3",

@@ -20,7 +20,7 @@
     "main": "ts-node --files --project tsconfig.cjs.json scripts/main.ts"
   },
   "devDependencies": {
-    "@foxglove/eslint-plugin": "1.0.0",
+    "@foxglove/eslint-plugin": "1.0.1",
     "@mcap/core": "workspace:*",
     "@mcap/nodejs": "workspace:*",
     "@types/node": "18.13.0",

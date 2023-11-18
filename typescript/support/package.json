@@ -1,7 +1,7 @@
 {
   "name": "@mcap/support",
-  "version": "0.0.1",
-  "description": "Common schema and message parsing logic for use with MCAP and related protocols",
+  "version": "1.0.1",
+  "description": "Common decompression for use with MCAP files",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -32,7 +32,7 @@
     "test": "jest"
   },
   "devDependencies": {
-    "@foxglove/eslint-plugin": "1.0.0",
+    "@foxglove/eslint-plugin": "1.0.1",
     "@foxglove/tsconfig": "1.1.0",
     "@mcap/core": "workspace:*",
     "@types/jest": "29.5.8",
@@ -52,20 +52,9 @@
     "typescript": "5.2.2"
   },
   "dependencies": {
-    "@foxglove/message-definition": "^0.3.0",
-    "@foxglove/omgidl-parser": "^1.0.0",
-    "@foxglove/omgidl-serialization": "^1.0.0",
-    "@foxglove/ros2idl-parser": "^0.3.0",
-    "@foxglove/rosmsg": "^4.2.2",
-    "@foxglove/rosmsg-serialization": "^2.0.2",
-    "@foxglove/rosmsg2-serialization": "^2.0.2",
-    "@foxglove/schemas": "^1.5.1",
     "@foxglove/wasm-bz2": "^0.1.1",
     "@foxglove/wasm-lz4": "^1.0.2",
     "@foxglove/wasm-zstd": "^1.0.1",
-    "@protobufjs/base64": "^1.1.2",
-    "flatbuffers": "^23.5.26",
-    "flatbuffers_reflection": "^0.0.7",
-    "protobufjs": "7.2.5"
+    "protobufjs": "^7.2.5"
   }
 }

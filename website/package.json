@@ -20,7 +20,7 @@
     "@docusaurus/core": "2.4.1",
     "@docusaurus/module-type-aliases": "2.4.1",
     "@docusaurus/preset-classic": "2.4.1",
-    "@foxglove/eslint-plugin": "1.0.0",
+    "@foxglove/eslint-plugin": "1.0.1",
     "@foxglove/rostime": "1.1.2",
     "@foxglove/schemas": "1.6.2",
     "@foxglove/tsconfig": "2.0.0",

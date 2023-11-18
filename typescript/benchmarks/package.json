@@ -21,7 +21,7 @@
     "bench:debug": "NODE_OPTIONS='--inspect-brk' ts-node --files --project tsconfig.cjs.json index.ts"
   },
   "devDependencies": {
-    "@foxglove/eslint-plugin": "1.0.0",
+    "@foxglove/eslint-plugin": "1.0.1",
     "@foxglove/tsconfig": "1.1.0",
     "@mcap/core": "*",
     "@types/node": "18.13.0",
