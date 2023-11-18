@@ -5,6 +5,6 @@
 The following NPM packages are provided for use with JavaScript and TypeScript:
 
 - **@mcap/core** – low-level readers and writers
-- **@mcap/support** – support for well-known compression formats and encodings
+- **@mcap/support** – support for well-known compression formats
 - **@mcap/nodejs** – support for Node.js environment
 - **@mcap/browser** – support for browser environment

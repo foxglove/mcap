@@ -2,7 +2,7 @@
 
 [MCAP](https://mcap.dev/) is a modular container format and logging library for pub/sub messages with arbitrary message serialization. It is primarily intended for use in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
 
-The `@mcap/support` package provides utilities for working with MCAP files that use [well-known compression formats and encodings](https://mcap.dev/specification/appendix.html), from Node.js and browsers.
+The `@mcap/support` package provides utilities for working with MCAP files that use [well-known compression formats](https://mcap.dev/specification/appendix.html), from Node.js and browsers.
 
 ## Usage examples
 
