@@ -14,11 +14,12 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: echo '::add-matcher::.github/cspell-problem-matcher.json'
       - run: yarn spellcheck --no-progress
 
@@ -28,11 +29,12 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn workspace @foxglove/mcap-conformance lint:ci
       - run: yarn workspace @foxglove/mcap-conformance build
 
@@ -42,6 +44,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
@@ -51,7 +54,7 @@ jobs:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
       - run: cd cpp && make ci
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner cpp-
 
@@ -61,6 +64,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
@@ -69,7 +73,7 @@ jobs:
         with:
           go-version-file: go/go.work
       - run: cd go && make build-conformance-binaries
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner go-
 
@@ -79,6 +83,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
@@ -87,7 +92,7 @@ jobs:
         with:
           python-version: 3.7
       - run: cd python && pip install -e mcap
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner py-
 
@@ -97,11 +102,12 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner ts-
 
@@ -111,11 +117,12 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner ksy-
 
@@ -125,6 +132,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
@@ -133,7 +141,7 @@ jobs:
         with:
           swift-version: "5.7"
       - run: swift build
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner swift-
 
@@ -143,6 +151,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
@@ -152,7 +161,7 @@ jobs:
           toolchain: stable
           default: true
       - run: cd rust && cargo build --example=conformance_reader
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner rust-
 
@@ -201,12 +210,13 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
           registry-url: https://registry.npmjs.org
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn dedupe --check
       - run: yarn prettier:check
       - run: yarn workspace @mcap/core lint:ci
@@ -250,11 +260,12 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn workspace @foxglove/mcap-benchmarks lint:ci
       - run: yarn workspace @foxglove/mcap-benchmarks typecheck
       - run: yarn workspace @foxglove/mcap-example-validate lint:ci
