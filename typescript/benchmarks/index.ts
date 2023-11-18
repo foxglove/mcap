@@ -6,27 +6,27 @@ import { add, complete, cycle, suite } from "benny";
  * the copies without actually allocating the full initial capacity.
  */
 class FakeMemoryWritable {
-  private _lastWrittenData: Uint8Array;
-  private _size = 0;
+  #lastWrittenData: Uint8Array;
+  #size = 0;
 
   constructor(capacity: number) {
-    this._lastWrittenData = new Uint8Array(capacity);
+    this.#lastWrittenData = new Uint8Array(capacity);
   }
 
   reset() {
-    this._size = 0;
+    this.#size = 0;
   }
   position() {
-    return BigInt(this._size);
+    return BigInt(this.#size);
   }
   async write(data: Uint8Array) {
-    if (data.byteLength > this._lastWrittenData.byteLength) {
+    if (data.byteLength > this.#lastWrittenData.byteLength) {
       throw new Error(
-        `Write out of bounds, capacity would need to be at least ${this._size + data.byteLength}`,
+        `Write out of bounds, capacity would need to be at least ${this.#size + data.byteLength}`,
       );
     }
-    this._lastWrittenData.set(data, 0);
-    this._size += data.byteLength;
+    this.#lastWrittenData.set(data, 0);
+    this.#size += data.byteLength;
   }
 }
 

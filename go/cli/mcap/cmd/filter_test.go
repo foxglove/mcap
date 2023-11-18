@@ -123,7 +123,6 @@ func TestPassthrough(t *testing.T) {
 	// schemas and channels should be duplicated once into the summary section
 	assert.Equal(t, 2, schemaCounter)
 	assert.InDeltaMapValues(t, map[uint16]int{1: 2, 2: 2, 3: 2}, channelCounter, 0.0)
-
 }
 
 func TestFiltering(t *testing.T) {
@@ -359,4 +358,12 @@ func TestRecover(t *testing.T) {
 			3: 100,
 		}, messageCounter, 0.0)
 	})
+}
+
+func TestCompileMatchers(t *testing.T) {
+	matchers, err := compileMatchers([]string{"camera.*", "lights.*"})
+	assert.Nil(t, err)
+	assert.Equal(t, len(matchers), 2)
+	assert.True(t, matchers[0].MatchString("camera"))
+	assert.True(t, matchers[1].MatchString("lights"))
 }

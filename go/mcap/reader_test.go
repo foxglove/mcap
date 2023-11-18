@@ -8,7 +8,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/foxglove/mcap/go/mcap/readopts"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -63,7 +62,7 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
 	assert.Nil(t, err)
 
-	it, err := reader.Messages(readopts.UsingIndex(true))
+	it, err := reader.Messages(UsingIndex(true))
 	assert.Nil(t, err)
 	expectedTopics := []string{"/foo", "/bar"}
 	for i := 0; i < 2; i++ {
@@ -273,7 +272,7 @@ func TestMessageReading(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
-						it, err := r.Messages(readopts.UsingIndex(useIndex))
+						it, err := r.Messages(UsingIndex(useIndex))
 						assert.Nil(t, err)
 						c := 0
 						for {
@@ -296,8 +295,8 @@ func TestMessageReading(t *testing.T) {
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
 						it, err := r.Messages(
-							readopts.WithTopics([]string{"/test1"}),
-							readopts.UsingIndex(useIndex),
+							WithTopics([]string{"/test1"}),
+							UsingIndex(useIndex),
 						)
 						assert.Nil(t, err)
 						c := 0
@@ -321,8 +320,8 @@ func TestMessageReading(t *testing.T) {
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
 						it, err := r.Messages(
-							readopts.WithTopics([]string{"/test1", "/test2"}),
-							readopts.UsingIndex(useIndex),
+							WithTopics([]string{"/test1", "/test2"}),
+							UsingIndex(useIndex),
 						)
 						assert.Nil(t, err)
 						c := 0
@@ -346,9 +345,9 @@ func TestMessageReading(t *testing.T) {
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
 						it, err := r.Messages(
-							readopts.After(100),
-							readopts.Before(200),
-							readopts.UsingIndex(useIndex),
+							After(100),
+							Before(200),
+							UsingIndex(useIndex),
 						)
 						assert.Nil(t, err)
 						c := 0
@@ -379,7 +378,7 @@ func TestReaderCounting(t *testing.T) {
 			defer f.Close()
 			r, err := NewReader(f)
 			assert.Nil(t, err)
-			it, err := r.Messages(readopts.UsingIndex(indexed))
+			it, err := r.Messages(UsingIndex(indexed))
 			assert.Nil(t, err)
 			c := 0
 			for {
@@ -560,7 +559,7 @@ func TestReadingDiagnostics(t *testing.T) {
 	assert.Nil(t, err)
 	r, err := NewReader(f)
 	assert.Nil(t, err)
-	it, err := r.Messages(readopts.WithTopics([]string{"/diagnostics"}))
+	it, err := r.Messages(WithTopics([]string{"/diagnostics"}))
 	assert.Nil(t, err)
 	c := 0
 	for {
@@ -572,6 +571,77 @@ func TestReadingDiagnostics(t *testing.T) {
 		c++
 	}
 	assert.Equal(t, 52, c)
+}
+
+func TestReadingMetadata(t *testing.T) {
+	buf := &bytes.Buffer{}
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   1024,
+		Compression: "",
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, writer.WriteHeader(&Header{}))
+
+	expectedMetadata := &Metadata{
+		Name: "foo",
+		Metadata: map[string]string{
+			"foo": "bar",
+		},
+	}
+	assert.Nil(t, writer.WriteMetadata(expectedMetadata))
+	assert.Nil(t, writer.Close())
+
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	assert.Nil(t, err)
+
+	info, err := reader.Info()
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(info.MetadataIndexes))
+	idx := info.MetadataIndexes[0]
+	metadata, err := reader.GetMetadata(idx.Offset)
+	assert.Nil(t, err)
+	assert.Equal(t, expectedMetadata, metadata)
+}
+
+func TestGetAttachmentReader(t *testing.T) {
+	buf := &bytes.Buffer{}
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   1024,
+		Compression: "",
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, writer.WriteHeader(&Header{}))
+	assert.Nil(t, writer.WriteAttachment(&Attachment{
+		LogTime:    10,
+		CreateTime: 1000,
+		Name:       "foo",
+		MediaType:  "text",
+		DataSize:   3,
+		Data:       bytes.NewReader([]byte{'a', 'b', 'c'}),
+	}))
+	assert.Nil(t, writer.Close())
+
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	assert.Nil(t, err)
+
+	info, err := reader.Info()
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(info.AttachmentIndexes))
+	idx := info.AttachmentIndexes[0]
+	ar, err := reader.GetAttachmentReader(idx.Offset)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "foo", ar.Name)
+	assert.Equal(t, "text", ar.MediaType)
+	assert.Equal(t, 3, int(ar.DataSize))
+	assert.Equal(t, 10, int(ar.LogTime))
+	assert.Equal(t, 1000, int(ar.CreateTime))
+
+	data, err := io.ReadAll(ar.Data())
+	assert.Nil(t, err)
+	assert.Equal(t, []byte{'a', 'b', 'c'}, data)
 }
 
 func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
@@ -634,8 +704,8 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	assert.Nil(t, err)
 
 	it, err := reader.Messages(
-		readopts.UsingIndex(true),
-		readopts.InOrder(readopts.LogTimeOrder),
+		UsingIndex(true),
+		InOrder(LogTimeOrder),
 	)
 	assert.Nil(t, err)
 
@@ -655,8 +725,8 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 
 	// now try iterating in reverse
 	reverseIt, err := reader.Messages(
-		readopts.UsingIndex(true),
-		readopts.InOrder(readopts.ReverseLogTimeOrder),
+		UsingIndex(true),
+		InOrder(ReverseLogTimeOrder),
 	)
 	assert.Nil(t, err)
 

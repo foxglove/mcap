@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 	"math"
-
-	"github.com/foxglove/mcap/go/mcap/readopts"
 )
+
+var ErrMetadataNotFound = errors.New("metadata not found")
 
 func getPrefixedString(data []byte, offset int) (s string, newoffset int, err error) {
 	if len(data[offset:]) < 4 {
@@ -60,6 +60,8 @@ type Reader struct {
 	rs       io.ReadSeeker
 	header   *Header
 	channels map[uint16]*Channel
+
+	info *Info
 }
 
 type MessageIterator interface {
@@ -82,64 +84,69 @@ func Range(it MessageIterator, f func(*Schema, *Channel, *Message) error) error 
 	}
 }
 
-func (r *Reader) unindexedIterator(topics []string, start uint64, end uint64) *unindexedMessageIterator {
+func (r *Reader) unindexedIterator(opts ReadOptions) *unindexedMessageIterator {
 	topicMap := make(map[string]bool)
-	for _, topic := range topics {
+	for _, topic := range opts.Topics {
 		topicMap[topic] = true
 	}
 	r.l.emitChunks = false
 	return &unindexedMessageIterator{
-		lexer:    r.l,
-		channels: make(map[uint16]*Channel),
-		schemas:  make(map[uint16]*Schema),
-		topics:   topicMap,
-		start:    start,
-		end:      end,
+		lexer:            r.l,
+		channels:         make(map[uint16]*Channel),
+		schemas:          make(map[uint16]*Schema),
+		topics:           topicMap,
+		start:            uint64(opts.Start),
+		end:              uint64(opts.End),
+		metadataCallback: opts.MetadataCallback,
 	}
 }
 
 func (r *Reader) indexedMessageIterator(
-	topics []string,
-	start uint64,
-	end uint64,
-	order readopts.ReadOrder,
+	opts ReadOptions,
 ) *indexedMessageIterator {
 	topicMap := make(map[string]bool)
-	for _, topic := range topics {
+	for _, topic := range opts.Topics {
 		topicMap[topic] = true
 	}
 	r.l.emitChunks = true
 	return &indexedMessageIterator{
-		lexer:     r.l,
-		rs:        r.rs,
-		channels:  make(map[uint16]*Channel),
-		schemas:   make(map[uint16]*Schema),
-		topics:    topicMap,
-		start:     start,
-		end:       end,
-		indexHeap: rangeIndexHeap{order: order},
+		lexer:            r.l,
+		rs:               r.rs,
+		channels:         make(map[uint16]*Channel),
+		schemas:          make(map[uint16]*Schema),
+		topics:           topicMap,
+		start:            uint64(opts.Start),
+		end:              uint64(opts.End),
+		indexHeap:        rangeIndexHeap{order: opts.Order},
+		metadataCallback: opts.MetadataCallback,
 	}
 }
 
 func (r *Reader) Messages(
-	opts ...readopts.ReadOpt,
+	opts ...ReadOpt,
 ) (MessageIterator, error) {
-	ro := readopts.Default()
+	options := ReadOptions{
+		Start:    0,
+		End:      math.MaxInt64,
+		Topics:   nil,
+		UseIndex: true,
+		Order:    FileOrder,
+	}
 	for _, opt := range opts {
-		err := opt(&ro)
+		err := opt(&options)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if ro.UseIndex {
+	if options.UseIndex {
 		if rs, ok := r.r.(io.ReadSeeker); ok {
 			r.rs = rs
 		} else {
 			return nil, fmt.Errorf("indexed reader requires a seekable reader")
 		}
-		return r.indexedMessageIterator(ro.Topics, uint64(ro.Start), uint64(ro.End), ro.Order), nil
+		return r.indexedMessageIterator(options), nil
 	}
-	return r.unindexedIterator(ro.Topics, uint64(ro.Start), uint64(ro.End)), nil
+	return r.unindexedIterator(options), nil
 }
 
 // Get the Header record from this MCAP.
@@ -150,12 +157,20 @@ func (r *Reader) Header() *Header {
 // Info scans the summary section to form a structure describing characteristics
 // of the underlying mcap file.
 func (r *Reader) Info() (*Info, error) {
-	it := r.indexedMessageIterator(nil, 0, math.MaxUint64, readopts.FileOrder)
+	if r.info != nil {
+		return r.info, nil
+	}
+	if r.rs == nil {
+		return nil, fmt.Errorf("cannot get info from non-seekable reader")
+	}
+	it := r.indexedMessageIterator(ReadOptions{
+		UseIndex: true,
+	})
 	err := it.parseSummarySection()
 	if err != nil {
 		return nil, err
 	}
-	return &Info{
+	info := &Info{
 		Statistics:        it.statistics,
 		Channels:          it.channels,
 		ChunkIndexes:      it.chunkIndexes,
@@ -164,7 +179,42 @@ func (r *Reader) Info() (*Info, error) {
 		Schemas:           it.schemas,
 		Footer:            it.footer,
 		Header:            r.header,
-	}, nil
+	}
+	r.info = info
+	return info, nil
+}
+
+// GetAttachmentReader returns an attachment reader located at the specific offset.
+// The reader must be consumed before the base reader is used again.
+func (r *Reader) GetAttachmentReader(offset uint64) (*AttachmentReader, error) {
+	_, err := r.rs.Seek(int64(offset+9), io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+	ar, err := parseAttachmentReader(r.rs, true)
+	if err != nil {
+		return nil, err
+	}
+	return ar, nil
+}
+
+func (r *Reader) GetMetadata(offset uint64) (*Metadata, error) {
+	_, err := r.rs.Seek(int64(offset), io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+	token, data, err := r.l.Next(nil)
+	if err != nil {
+		return nil, err
+	}
+	if token != TokenMetadata {
+		return nil, fmt.Errorf("expected metadata record, found %v", data)
+	}
+	metadata, err := ParseMetadata(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse metadata record: %w", err)
+	}
+	return metadata, nil
 }
 
 // Close the reader.

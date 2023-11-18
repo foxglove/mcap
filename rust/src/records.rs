@@ -12,7 +12,6 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use binrw::io::{Read, Seek, Write};
 use binrw::*;
 
 /// Opcodes for MCAP file records.
@@ -115,54 +114,42 @@ struct McapString {
 }
 
 /// Avoids taking a copy to turn a String to an McapString for serialization
-fn write_string<W: binrw::io::Write + binrw::io::Seek>(
-    s: &String,
-    w: &mut W,
-    opts: &WriteOptions,
-    args: (),
-) -> BinResult<()> {
-    (s.len() as u32).write_options(w, opts, args)?;
-    (s.as_bytes()).write_options(w, opts, args)?;
+#[binrw::writer(writer, endian)]
+fn write_string(s: &String) -> BinResult<()> {
+    (s.len() as u32).write_options(writer, endian, ())?;
+    (s.as_bytes()).write_options(writer, endian, ())?;
     Ok(())
 }
 
-fn parse_vec<T: binrw::BinRead<Args = ()>, R: Read + Seek>(
-    reader: &mut R,
-    ro: &ReadOptions,
-    args: (),
-) -> BinResult<Vec<T>> {
+#[binrw::parser(reader, endian)]
+fn parse_vec<T: BinRead<Args<'static> = ()>>() -> BinResult<Vec<T>> {
     let mut parsed = Vec::new();
 
     // Length of the map in BYTES, not records.
-    let byte_len: u32 = BinRead::read_options(reader, ro, args)?;
+    let byte_len: u32 = BinRead::read_options(reader, endian, ())?;
     let pos = reader.stream_position()?;
 
     while (reader.stream_position()? - pos) < byte_len as u64 {
-        parsed.push(T::read_options(reader, ro, args)?);
+        parsed.push(T::read_options(reader, endian, ())?);
     }
 
     Ok(parsed)
 }
 
-#[allow(clippy::ptr_arg)] // needed to match binrw macros
-fn write_vec<W: binrw::io::Write + binrw::io::Seek, T: binrw::BinWrite<Args = ()>>(
-    v: &Vec<T>,
-    w: &mut W,
-    opts: &WriteOptions,
-    args: (),
-) -> BinResult<()> {
+#[allow(clippy::ptr_arg)]
+#[binrw::writer(writer, endian)]
+fn write_vec<T: BinWrite<Args<'static> = ()>>(v: &Vec<T>) -> BinResult<()> {
     use std::io::SeekFrom;
-
-    let start = w.stream_position()?;
-    (!0u32).write_options(w, opts, args)?; // Revisit...
+    let start = writer.stream_position()?;
+    (!0u32).write_options(writer, endian, ())?; // Revisit...
     for e in v.iter() {
-        e.write_options(w, opts, args)?;
+        e.write_options(writer, endian, ())?;
     }
-    let end = w.stream_position()?;
+    let end = writer.stream_position()?;
     let data_len = end - start - 4;
-    w.seek(SeekFrom::Start(start))?;
-    (data_len as u32).write_options(w, opts, args)?;
-    assert_eq!(w.seek(SeekFrom::End(0))?, end);
+    writer.seek(SeekFrom::Start(start))?;
+    (data_len as u32).write_options(writer, endian, ())?;
+    assert_eq!(writer.seek(SeekFrom::End(0))?, end);
     Ok(())
 }
 
@@ -197,20 +184,17 @@ pub struct SchemaHeader {
     pub encoding: String,
 }
 
-fn parse_string_map<R: Read + Seek>(
-    reader: &mut R,
-    ro: &ReadOptions,
-    args: (),
-) -> BinResult<BTreeMap<String, String>> {
+#[binrw::parser(reader, endian)]
+fn parse_string_map() -> BinResult<BTreeMap<String, String>> {
     let mut parsed = BTreeMap::new();
 
     // Length of the map in BYTES, not records.
-    let byte_len: u32 = BinRead::read_options(reader, ro, args)?;
+    let byte_len: u32 = BinRead::read_options(reader, endian, ())?;
     let pos = reader.stream_position()?;
 
     while (reader.stream_position()? - pos) < byte_len as u64 {
-        let k = McapString::read_options(reader, ro, args)?;
-        let v = McapString::read_options(reader, ro, args)?;
+        let k = McapString::read_options(reader, endian, ())?;
+        let v = McapString::read_options(reader, endian, ())?;
         if let Some(_prev) = parsed.insert(k.inner, v.inner) {
             return Err(binrw::Error::Custom {
                 pos,
@@ -222,12 +206,8 @@ fn parse_string_map<R: Read + Seek>(
     Ok(parsed)
 }
 
-fn write_string_map<W: Write + Seek>(
-    s: &BTreeMap<String, String>,
-    w: &mut W,
-    opts: &WriteOptions,
-    args: (),
-) -> BinResult<()> {
+#[binrw::writer(writer, endian)]
+fn write_string_map(s: &BTreeMap<String, String>) -> BinResult<()> {
     // Ugh: figure out total number of bytes to write:
     let mut byte_len = 0;
     for (k, v) in s {
@@ -236,22 +216,20 @@ fn write_string_map<W: Write + Seek>(
         byte_len += v.len();
     }
 
-    (byte_len as u32).write_options(w, opts, args)?;
-    let pos = w.stream_position()?;
+    (byte_len as u32).write_options(writer, endian, ())?;
+    let pos = writer.stream_position()?;
 
     for (k, v) in s {
-        write_string(k, w, opts, args)?;
-        write_string(v, w, opts, args)?;
+        write_string(k, writer, endian, ())?;
+        write_string(v, writer, endian, ())?;
     }
-    assert_eq!(w.stream_position()?, pos + byte_len as u64);
+    assert_eq!(writer.stream_position()?, pos + byte_len as u64);
     Ok(())
 }
 
-fn write_int_map<K: BinWrite<Args = ()>, V: BinWrite<Args = ()>, W: Write + Seek>(
+#[binrw::writer(writer, endian)]
+fn write_int_map<K: BinWrite<Args<'static> = ()>, V: BinWrite<Args<'static> = ()>>(
     s: &BTreeMap<K, V>,
-    w: &mut W,
-    opts: &WriteOptions,
-    args: (),
 ) -> BinResult<()> {
     // Ugh: figure out total number of bytes to write:
     let mut byte_len = 0;
@@ -262,32 +240,29 @@ fn write_int_map<K: BinWrite<Args = ()>, V: BinWrite<Args = ()>, W: Write + Seek
         byte_len += core::mem::size_of::<V>();
     }
 
-    (byte_len as u32).write_options(w, opts, args)?;
-    let pos = w.stream_position()?;
+    (byte_len as u32).write_options(writer, endian, ())?;
+    let pos = writer.stream_position()?;
 
     for (k, v) in s {
-        k.write_options(w, opts, args)?;
-        v.write_options(w, opts, args)?;
+        k.write_options(writer, endian, ())?;
+        v.write_options(writer, endian, ())?;
     }
-    assert_eq!(w.stream_position()?, pos + byte_len as u64);
+    assert_eq!(writer.stream_position()?, pos + byte_len as u64);
     Ok(())
 }
 
-fn parse_int_map<K, V, R>(reader: &mut R, ro: &ReadOptions, args: ()) -> BinResult<BTreeMap<K, V>>
-where
-    K: BinRead<Args = ()> + std::cmp::Ord,
-    V: BinRead<Args = ()>,
-    R: Read + Seek,
-{
+#[binrw::parser(reader, endian)]
+fn parse_int_map<K: BinRead<Args<'static> = ()> + std::cmp::Ord, V: BinRead<Args<'static> = ()>>(
+) -> BinResult<BTreeMap<K, V>> {
     let mut parsed = BTreeMap::new();
 
     // Length of the map in BYTES, not records.
-    let byte_len: u32 = BinRead::read_options(reader, ro, args)?;
+    let byte_len: u32 = BinRead::read_options(reader, endian, ())?;
     let pos = reader.stream_position()?;
 
     while (reader.stream_position()? - pos) < byte_len as u64 {
-        let k = K::read_options(reader, ro, args)?;
-        let v = V::read_options(reader, ro, args)?;
+        let k = K::read_options(reader, endian, ())?;
+        let v = V::read_options(reader, endian, ())?;
         if let Some(_prev) = parsed.insert(k, v) {
             return Err(binrw::Error::Custom {
                 pos,

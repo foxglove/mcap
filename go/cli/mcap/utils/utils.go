@@ -10,17 +10,18 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/foxglove/mcap/go/mcap"
 	"github.com/olekukonko/tablewriter"
+	"github.com/schollz/progressbar/v3"
 )
 
 var (
 	remoteFileRegex = regexp.MustCompile(`(?P<Scheme>\w+)://(?P<Bucket>[a-z0-9_.-]+)/(?P<Filename>.*)`)
 )
 
-func GetScheme(filename string) (string, string, string) {
+func GetScheme(filename string) (match1 string, match2 string, match3 string) {
 	match := remoteFileRegex.FindStringSubmatch(filename)
 	if len(match) == 0 {
 		return "", "", filename
@@ -46,23 +47,23 @@ func StdoutRedirected() bool {
 func GetReader(ctx context.Context, filename string) (func() error, io.ReadSeekCloser, error) {
 	var rs io.ReadSeekCloser
 	var err error
-	close := func() error { return nil }
+	closeReader := func() error { return nil }
 	scheme, bucket, path := GetScheme(filename)
 	if scheme != "" {
 		switch scheme {
 		case "gs":
 			client, err := storage.NewClient(ctx)
 			if err != nil {
-				return close, nil, fmt.Errorf("failed to create GCS client: %v", err)
+				return closeReader, nil, fmt.Errorf("failed to create GCS client: %w", err)
 			}
-			close = client.Close
+			closeReader = client.Close
 			object := client.Bucket(bucket).Object(path)
 			rs, err = NewGCSReadSeekCloser(ctx, object)
 			if err != nil {
-				return close, nil, fmt.Errorf("failed to build read seek closer: %w", err)
+				return closeReader, nil, fmt.Errorf("failed to build read seek closer: %w", err)
 			}
 		default:
-			return close, nil, fmt.Errorf("Unsupported remote file scheme: %s", scheme)
+			return closeReader, nil, fmt.Errorf("unsupported remote file scheme: %s", scheme)
 		}
 	} else {
 		rs, err = os.Open(path)
@@ -71,7 +72,7 @@ func GetReader(ctx context.Context, filename string) (func() error, io.ReadSeekC
 		}
 	}
 
-	return close, rs, nil
+	return closeReader, rs, nil
 }
 
 func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.ReadSeeker) error) error {
@@ -85,7 +86,7 @@ func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.
 		case "gs":
 			client, err := storage.NewClient(ctx)
 			if err != nil {
-				return fmt.Errorf("failed to create GCS client: %v", err)
+				return fmt.Errorf("failed to create GCS client: %w", err)
 			}
 			object := client.Bucket(bucket).Object(path)
 			rs, err = NewGCSReadSeekCloser(ctx, object)
@@ -93,7 +94,7 @@ func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.
 				return fmt.Errorf("failed to build read seek closer: %w", err)
 			}
 		default:
-			return fmt.Errorf("Unsupported remote file scheme: %s", scheme)
+			return fmt.Errorf("unsupported remote file scheme: %s", scheme)
 		}
 	} else {
 		rs, err = os.Open(path)
@@ -123,25 +124,6 @@ func FormatTable(w io.Writer, rows [][]string) {
 	}
 }
 
-func inferWriterOptions(info *mcap.Info) *mcap.WriterOptions {
-	// assume if there are no chunk indexes, the file is not chunked. This
-	// assumption may be invalid if the file is chunked but not indexed.
-	if len(info.ChunkIndexes) == 0 {
-		return &mcap.WriterOptions{
-			Chunked: false,
-		}
-	}
-	// if there are chunk indexes, create a chunked output with attributes
-	// approximating those of the first chunk.
-	idx := info.ChunkIndexes[0]
-	return &mcap.WriterOptions{
-		IncludeCRC:  true,
-		Chunked:     true,
-		ChunkSize:   int64(idx.ChunkLength),
-		Compression: idx.Compression,
-	}
-}
-
 func Keys[T any](m map[string]T) []string {
 	keys := []string{}
 	for k := range m {
@@ -168,4 +150,20 @@ func DefaultString(strings ...string) string {
 		}
 	}
 	return ""
+}
+
+// NewProgressBar returns an instance of progressbar.ProgresBar.
+// `max` is the denominator of the progress.
+func NewProgressBar(max int64) *progressbar.ProgressBar {
+	return progressbar.NewOptions64(
+		max,
+		progressbar.OptionThrottle(65*time.Millisecond),
+		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetWidth(10),
+		progressbar.OptionOnCompletion(func() {
+			fmt.Fprint(os.Stderr, "\n")
+		}),
+		progressbar.OptionFullWidth(),
+		progressbar.OptionSetRenderBlankState(true),
+	)
 }

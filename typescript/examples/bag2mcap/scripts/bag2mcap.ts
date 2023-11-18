@@ -86,7 +86,6 @@ function rosMsgDefinitionToProto(
     let fieldNumber = 1;
     for (const field of def.definitions) {
       if (field.isConstant === true) {
-        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
         fields.push(`// ${field.type} ${field.name} = ${field.valueText ?? field.value ?? ""}`);
         continue;
       }

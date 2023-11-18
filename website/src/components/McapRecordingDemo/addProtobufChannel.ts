@@ -14,25 +14,24 @@ export type ProtobufChannelInfo = {
 export async function addProtobufChannel(
   writer: McapWriter,
   topic: string,
-  rootSchema: FoxgloveMessageSchema
+  rootSchema: FoxgloveMessageSchema,
 ): Promise<ProtobufChannelInfo> {
   const schemaName = `foxglove.${rootSchema.name}`;
 
   const root = new protobufjs.Root();
   root.addJSON(
-    protobufjs.common.get("google/protobuf/timestamp.proto")!.nested!
+    protobufjs.common.get("google/protobuf/timestamp.proto")!.nested!,
   );
   root.addJSON(
-    protobufjs.common.get("google/protobuf/duration.proto")!.nested!
+    protobufjs.common.get("google/protobuf/duration.proto")!.nested!,
   );
 
   function addMessageSchema(msgSchema: FoxgloveMessageSchema) {
     const nestedEnums = Object.values(foxgloveEnumSchemas).filter(
-      (enumSchema) => enumSchema.parentSchemaName === msgSchema.name
+      (enumSchema) => enumSchema.parentSchemaName === msgSchema.name,
     );
     const protoSrc = generateProto(msgSchema, nestedEnums);
     const parseResult = protobufjs.parse(protoSrc, { keepCase: true });
-    // parseResult.root.nestedArray[0].name = "foxglove";
     const filename = `foxglove/${msgSchema.name}.proto`;
     parseResult.root.nestedArray[0]!.filename = filename;
     root.add(parseResult.root.nestedArray[0]!);
@@ -51,7 +50,7 @@ export async function addProtobufChannel(
     // protobufjs does not generate dependency fields, so fix them up manually
     if (file.name == undefined || file.name.length === 0) {
       throw new Error(
-        `Missing filename for ${file.package ?? "(unknown package)"}`
+        `Missing filename for ${file.package ?? "(unknown package)"}`,
       );
     }
     if (file.name !== "google_protobuf.proto") {

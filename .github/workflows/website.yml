@@ -14,9 +14,9 @@ jobs:
         with:
           lfs: true
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
-          node-version: 16.x
+          node-version: 20.x
           cache: yarn
 
       - run: corepack enable && yarn install --immutable
@@ -55,7 +55,7 @@ jobs:
 
       - uses: actions/setup-python@v4
         with:
-          python-version: 3.7
+          python-version: 3.8
 
       - run: pip install pipenv
 
@@ -100,6 +100,7 @@ jobs:
 
   docs-deploy:
     runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
     needs:
       - docs-home
       - docs-cpp

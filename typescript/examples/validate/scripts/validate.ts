@@ -57,8 +57,12 @@ async function readStream(
         stream.close();
       }
     });
-    stream.on("error", (error) => reject(error));
-    stream.on("close", () => resolve());
+    stream.on("error", (error) => {
+      reject(error);
+    });
+    stream.on("close", () => {
+      resolve();
+    });
   });
 
   if (!reader.done()) {
@@ -148,7 +152,6 @@ async function validate(
 
   log("Reading", filePath);
 
-  let isValidMcap = false;
   {
     const handle = await fs.open(filePath, "r");
     try {
@@ -158,7 +161,7 @@ async function validate(
         offset: 0,
         length: McapConstants.MCAP_MAGIC.length,
       });
-      isValidMcap = hasMcapPrefix(new DataView(buffer.buffer, 0, readResult.bytesRead));
+      const isValidMcap = hasMcapPrefix(new DataView(buffer.buffer, 0, readResult.bytesRead));
       if (!isValidMcap) {
         throw new Error(
           `Not a valid MCAP file: prefix not detected in <${Array.from(buffer)
@@ -170,10 +173,6 @@ async function validate(
     } finally {
       await handle.close();
     }
-  }
-
-  if (!isValidMcap) {
-    return;
   }
 
   let processed = false;

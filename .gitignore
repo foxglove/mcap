@@ -9,7 +9,10 @@ dist
 site/
 .cache
 .pnp.*
-.yarn
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/sdks
 
 *.db3-shm
 *.db3-wal

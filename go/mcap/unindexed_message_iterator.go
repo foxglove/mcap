@@ -11,6 +11,8 @@ type unindexedMessageIterator struct {
 	topics   map[string]bool
 	start    uint64
 	end      uint64
+
+	metadataCallback func(*Metadata) error
 }
 
 func (it *unindexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, error) {
@@ -55,6 +57,19 @@ func (it *unindexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message,
 				schema := it.schemas[channel.SchemaID]
 				return schema, channel, message, nil
 			}
+		case TokenMetadata:
+			if it.metadataCallback != nil {
+				metadata, err := ParseMetadata(record)
+				if err != nil {
+					return nil, nil, nil, fmt.Errorf("failed to parse metadata: %w", err)
+				}
+				err = it.metadataCallback(metadata)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+			}
+			// we don't emit metadata from the reader, so continue onward
+			continue
 		default:
 			// skip all other tokens
 		}

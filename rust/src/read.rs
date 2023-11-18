@@ -118,7 +118,7 @@ impl<'a> Iterator for LinearReader<'a> {
 
 /// Read a record and advance the slice
 fn read_record_from_slice<'a>(buf: &mut &'a [u8]) -> McapResult<records::Record<'a>> {
-    if buf.len() < 5 {
+    if buf.len() < (size_of::<u64>() + size_of::<u8>()) {
         warn!("Malformed MCAP - not enough space for record + length!");
         return Err(McapError::UnexpectedEof);
     }
@@ -254,6 +254,8 @@ fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
 
 enum ChunkDecompressor<'a> {
     Null(LinearReader<'a>),
+    /// This is not used when both `zstd` and `lz4` features are disabled.
+    #[allow(dead_code)]
     Compressed(Option<CountingCrcReader<Box<dyn Read + Send + 'a>>>),
 }
 
@@ -274,9 +276,13 @@ impl<'a> ChunkReader<'a> {
             #[cfg(not(feature = "zstd"))]
             "zstd" => panic!("Unsupported compression format: zstd"),
 
+            #[cfg(feature = "lz4")]
             "lz4" => ChunkDecompressor::Compressed(Some(CountingCrcReader::new(Box::new(
-                lz4::Decoder::new(data)?,
+                lz4_flex::frame::FrameDecoder::new(data),
             )))),
+
+            #[cfg(not(feature = "lz4"))]
+            "lz4" => panic!("Unsupported compression format: lz4"),
 
             "" => {
                 if header.uncompressed_size != header.compressed_size {
@@ -1192,5 +1198,22 @@ mod test {
         let mut reader =
             LinearReader::new_with_options(MAGIC, enum_set!(Options::IgnoreEndMagic)).unwrap();
         assert!(reader.next().is_none());
+    }
+
+    #[test]
+    fn test_read_record_from_slice_fails_on_too_short_chunks() {
+        let res = read_record_from_slice(&mut [0_u8; 4].as_slice());
+        assert!(matches!(res, Err(McapError::UnexpectedEof)));
+
+        let res = read_record_from_slice(&mut [0_u8; 8].as_slice());
+        assert!(matches!(res, Err(McapError::UnexpectedEof)));
+    }
+
+    #[test]
+    fn test_read_record_from_slice_parses_for_big_enough_records() {
+        let res = read_record_from_slice(&mut [0_u8; 9].as_slice());
+        assert!(res.is_ok());
+        // Not a very strong test, but we are only testing that it checks the buffer size correctly
+        assert!(matches!(res, Ok(Record::Unknown { opcode: _, data: _ })));
     }
 }

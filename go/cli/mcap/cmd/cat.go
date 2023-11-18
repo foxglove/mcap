@@ -16,7 +16,6 @@ import (
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/cli/mcap/utils/ros"
 	"github.com/foxglove/mcap/go/mcap"
-	"github.com/foxglove/mcap/go/mcap/readopts"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -39,7 +38,7 @@ func digits(n uint64) int {
 	}
 	count := 0
 	for n != 0 {
-		n = n / 10
+		n /= 10
 		count++
 	}
 	return count
@@ -65,7 +64,6 @@ type Message struct {
 	LogTime     uint64          `json:"log_time"`
 	PublishTime uint64          `json:"publish_time"`
 	Data        json.RawMessage `json:"data"`
-	buf         *bytes.Buffer
 }
 
 type jsonOutputWriter struct {
@@ -88,42 +86,42 @@ func (w *jsonOutputWriter) writeMessage(
 	data []byte,
 ) error {
 	w.buf.Reset()
-	_, err := w.buf.Write([]byte("{"))
+	_, err := w.buf.WriteString("{")
 	if err != nil {
 		return err
 	}
 
-	_, err = w.buf.Write([]byte(`"topic":`))
+	_, err = w.buf.WriteString(`"topic":`)
 	if err != nil {
 		return err
 	}
 
-	_, err = w.buf.Write([]byte(`"`))
+	_, err = w.buf.WriteString(`"`)
 	if err != nil {
 		return err
 	}
 
-	_, err = w.buf.Write([]byte(topic))
+	_, err = w.buf.WriteString(topic)
 	if err != nil {
 		return err
 	}
 
-	_, err = w.buf.Write([]byte(`",`))
+	_, err = w.buf.WriteString(`",`)
 	if err != nil {
 		return err
 	}
 
-	_, err = w.buf.Write([]byte(`"sequence":`))
+	_, err = w.buf.WriteString(`"sequence":`)
 	if err != nil {
 		return err
 	}
 
-	_, err = w.buf.Write([]byte(strconv.FormatUint(uint64(sequence), 10)))
+	_, err = w.buf.WriteString(strconv.FormatUint(uint64(sequence), 10))
 	if err != nil {
 		return err
 	}
 
-	_, err = w.buf.Write([]byte(`,"log_time":`))
+	_, err = w.buf.WriteString(`,"log_time":`)
 	if err != nil {
 		return err
 	}
@@ -133,7 +131,7 @@ func (w *jsonOutputWriter) writeMessage(
 		return err
 	}
 
-	_, err = w.buf.Write([]byte(`,"publish_time":`))
+	_, err = w.buf.WriteString(`,"publish_time":`)
 	if err != nil {
 		return err
 	}
@@ -143,7 +141,7 @@ func (w *jsonOutputWriter) writeMessage(
 		return err
 	}
 
-	_, err = w.buf.Write([]byte(`,"data":`))
+	_, err = w.buf.WriteString(`,"data":`)
 	if err != nil {
 		return err
 	}
@@ -153,7 +151,7 @@ func (w *jsonOutputWriter) writeMessage(
 		return err
 	}
 
-	_, err = w.buf.Write([]byte("}\n"))
+	_, err = w.buf.WriteString("}\n")
 	if err != nil {
 		return err
 	}
@@ -166,20 +164,19 @@ func (w *jsonOutputWriter) writeMessage(
 	return nil
 }
 
-func getReadOpts(useIndex bool) []readopts.ReadOpt {
+func getReadOpts(useIndex bool) []mcap.ReadOpt {
 	topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-	opts := []readopts.ReadOpt{readopts.UsingIndex(useIndex), readopts.WithTopics(topics)}
+	opts := []mcap.ReadOpt{mcap.UsingIndex(useIndex), mcap.WithTopics(topics)}
 	if catStart != 0 {
-		opts = append(opts, readopts.After(catStart*1e9))
+		opts = append(opts, mcap.After(catStart*1e9))
 	}
 	if catEnd != math.MaxInt64 {
-		opts = append(opts, readopts.Before(catEnd*1e9))
+		opts = append(opts, mcap.Before(catEnd*1e9))
 	}
 	return opts
 }
 
 func printMessages(
-	ctx context.Context,
 	w io.Writer,
 	it mcap.MessageIterator,
 	formatJSON bool,
@@ -199,10 +196,14 @@ func printMessages(
 			die("Failed to read next message: %s", err)
 		}
 		if !formatJSON {
+			schemaName := "no schema"
+			if schema != nil {
+				schemaName = schema.Name
+			}
 			if len(message.Data) > 10 {
-				fmt.Fprintf(w, "%d %s [%s] %v...\n", message.LogTime, channel.Topic, schema.Name, message.Data[:10])
+				fmt.Fprintf(w, "%d %s [%s] %v...\n", message.LogTime, channel.Topic, schemaName, message.Data[:10])
 			} else {
-				fmt.Fprintf(w, "%d %s [%s] %v\n", message.LogTime, channel.Topic, schema.Name, message.Data)
+				fmt.Fprintf(w, "%d %s [%s] %v\n", message.LogTime, channel.Topic, schemaName, message.Data)
 			}
 			continue
 		}
@@ -213,7 +214,10 @@ func printMessages(
 					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
 			default:
-				return fmt.Errorf("For schema-less channels, JSON output is only supported with 'json' message encoding. Found: %s", channel.MessageEncoding)
+				return fmt.Errorf(
+					"for schema-less channels, JSON output is only supported with 'json' message encoding. found: %s",
+					channel.MessageEncoding,
+				)
 			}
 		} else {
 			switch schema.Encoding {
@@ -250,7 +254,7 @@ func printMessages(
 					messageDescriptor = descriptor.(protoreflect.MessageDescriptor)
 					descriptors[channel.SchemaID] = messageDescriptor
 				}
-				protoMsg := dynamicpb.NewMessage(messageDescriptor.(protoreflect.MessageDescriptor))
+				protoMsg := dynamicpb.NewMessage(messageDescriptor)
 				if err := proto.Unmarshal(message.Data, protoMsg); err != nil {
 					return fmt.Errorf("failed to parse message: %w", err)
 				}
@@ -266,7 +270,10 @@ func printMessages(
 					return fmt.Errorf("failed to write message bytes: %w", err)
 				}
 			default:
-				return fmt.Errorf("JSON output only supported for ros1msg, protobuf, and jsonschema schemas. Found: %s", schema.Encoding)
+				return fmt.Errorf(
+					"JSON output only supported for ros1msg, protobuf, and jsonschema schemas. Found: %s",
+					schema.Encoding,
+				)
 			}
 		}
 		err = jsonWriter.writeMessage(
@@ -277,7 +284,7 @@ func printMessages(
 			msg.Bytes(),
 		)
 		if err != nil {
-			return fmt.Errorf("failed to write encoded message: %s", err)
+			return fmt.Errorf("failed to write encoded message: %w", err)
 		}
 		msg.Reset()
 	}
@@ -310,7 +317,7 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				die("Failed to read messages: %s", err)
 			}
-			err = printMessages(ctx, output, it, catFormatJSON)
+			err = printMessages(output, it, catFormatJSON)
 			if err != nil {
 				die("Failed to print messages: %s", err)
 			}
@@ -332,7 +339,7 @@ var catCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to read messages: %w", err)
 			}
-			err = printMessages(ctx, output, it, catFormatJSON)
+			err = printMessages(output, it, catFormatJSON)
 			if err != nil {
 				return fmt.Errorf("failed to print messages: %w", err)
 			}

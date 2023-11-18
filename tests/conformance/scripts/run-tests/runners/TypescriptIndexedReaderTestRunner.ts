@@ -13,7 +13,7 @@ export default class TypescriptIndexedReaderTestRunner extends IndexedReadTestRu
   async runReadTest(filePath: string): Promise<IndexedReadTestResult> {
     const handle = await fs.open(filePath, "r");
     try {
-      return await this._run(handle);
+      return await this.#run(handle);
     } finally {
       await handle.close();
     }
@@ -41,7 +41,7 @@ export default class TypescriptIndexedReaderTestRunner extends IndexedReadTestRu
     return true;
   }
 
-  private async _run(fileHandle: fs.FileHandle): Promise<IndexedReadTestResult> {
+  async #run(fileHandle: fs.FileHandle): Promise<IndexedReadTestResult> {
     const readable = new FileHandleReadable(fileHandle);
 
     const reader = await McapIndexedReader.Initialize({ readable });

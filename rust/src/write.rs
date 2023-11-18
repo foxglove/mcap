@@ -649,7 +649,8 @@ enum Compressor<W: Write> {
     Null(W),
     #[cfg(feature = "zstd")]
     Zstd(zstd::Encoder<'static, W>),
-    Lz4(lz4::Encoder<W>),
+    #[cfg(feature = "lz4")]
+    Lz4(lz4_flex::frame::FrameEncoder<W>),
 }
 
 impl<W: Write> Compressor<W> {
@@ -658,11 +659,8 @@ impl<W: Write> Compressor<W> {
             Compressor::Null(w) => w,
             #[cfg(feature = "zstd")]
             Compressor::Zstd(w) => w.finish()?,
-            Compressor::Lz4(w) => {
-                let (w, err) = w.finish();
-                err?;
-                w
-            }
+            #[cfg(feature = "lz4")]
+            Compressor::Lz4(w) => w.finish()?,
         })
     }
 }
@@ -673,6 +671,7 @@ impl<W: Write> Write for Compressor<W> {
             Compressor::Null(w) => w.write(buf),
             #[cfg(feature = "zstd")]
             Compressor::Zstd(w) => w.write(buf),
+            #[cfg(feature = "lz4")]
             Compressor::Lz4(w) => w.write(buf),
         }
     }
@@ -682,6 +681,7 @@ impl<W: Write> Write for Compressor<W> {
             Compressor::Null(w) => w.flush(),
             #[cfg(feature = "zstd")]
             Compressor::Zstd(w) => w.flush(),
+            #[cfg(feature = "lz4")]
             Compressor::Lz4(w) => w.flush(),
         }
     }
@@ -706,7 +706,10 @@ impl<W: Write + Seek> ChunkWriter<W> {
         let compression_name = match compression {
             #[cfg(feature = "zstd")]
             Some(Compression::Zstd) => "zstd",
+            #[cfg(feature = "lz4")]
             Some(Compression::Lz4) => "lz4",
+            #[cfg(not(any(feature = "zstd", feature = "lz4")))]
+            Some(_) => unreachable!("`Compression` is an empty enum that cannot be instantiated"),
             None => "",
         };
 
@@ -726,14 +729,16 @@ impl<W: Write + Seek> ChunkWriter<W> {
         let compressor = match compression {
             #[cfg(feature = "zstd")]
             Some(Compression::Zstd) => {
+                #[allow(unused_mut)]
                 let mut enc = zstd::Encoder::new(writer, 0)?;
+                #[cfg(not(target_arch = "wasm32"))]
                 enc.multithread(num_cpus::get_physical() as u32)?;
                 Compressor::Zstd(enc)
             }
-            Some(Compression::Lz4) => {
-                let b = lz4::EncoderBuilder::new();
-                Compressor::Lz4(b.build(writer)?)
-            }
+            #[cfg(feature = "lz4")]
+            Some(Compression::Lz4) => Compressor::Lz4(lz4_flex::frame::FrameEncoder::new(writer)),
+            #[cfg(not(any(feature = "zstd", feature = "lz4")))]
+            Some(_) => unreachable!("`Compression` is an empty enum that cannot be instantiated"),
             None => Compressor::Null(writer),
         };
         let compressor = CountingCrcWriter::new(compressor);

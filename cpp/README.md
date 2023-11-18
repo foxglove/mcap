@@ -38,7 +38,7 @@ int main() {
   writer.addChannel(chatterPublisher);
 
   // Create a message payload. This would typically be done by your own
-  // serialiation library. In this example, we manually create ROS1 binary data
+  // serialization library. In this example, we manually create ROS1 binary data
   std::array<std::byte, 4 + 13> payload;
   const uint32_t length = 13;
   std::memcpy(payload.data(), &length, 4);
@@ -82,6 +82,9 @@ following dependencies:
 
 - [lz4](https://lz4.github.io/lz4/) (tested with [lz4/1.9.3](https://conan.io/center/lz4))
 - [zstd](https://facebook.github.io/zstd/) (tested with [zstd/1.5.2](https://conan.io/center/zstd))
+
+If your project does not need `lz4` or `zstd` support, you can optionally disable these by defining
+`MCAP_COMPRESSION_NO_LZ4` or `MCAP_COMPRESSION_NO_ZSTD` respectively.
 
 To simplify installation of dependencies, the [Conan](https://conan.io/) package
 manager can be used with the included

@@ -49,6 +49,7 @@ fn zstd_round_trip() -> Result<()> {
     round_trip(Some(mcap::Compression::Zstd))
 }
 
+#[cfg(feature = "lz4")]
 #[test]
 fn lz4_round_trip() -> Result<()> {
     round_trip(Some(mcap::Compression::Lz4))

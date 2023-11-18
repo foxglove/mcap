@@ -2,7 +2,7 @@
 export const MCAP_MAGIC = Object.freeze([137, 77, 67, 65, 80, 48, 13, 10]);
 
 export enum Opcode {
-  MIN = 0x01,
+  MIN = 0x01, // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
   HEADER = 0x01,
   FOOTER = 0x02,
   SCHEMA = 0x03,
@@ -18,9 +18,10 @@ export enum Opcode {
   METADATA_INDEX = 0x0d,
   SUMMARY_OFFSET = 0x0e,
   DATA_END = 0x0f,
-  MAX = 0x0f,
+  MAX = 0x0f, // eslint-disable-line @typescript-eslint/no-duplicate-enum-values
 }
 
 export function isKnownOpcode(opcode: number): opcode is Opcode {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
   return opcode >= Opcode.MIN && opcode <= Opcode.MAX;
 }

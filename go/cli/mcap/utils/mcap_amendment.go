@@ -74,7 +74,7 @@ func AmendMCAP(
 	}
 
 	// the new summary offset is the old data end offset plus the length just written.
-	newSummaryOffset := oldDataEndOffset + int64(extraDataLength)
+	newSummaryOffset := oldDataEndOffset + extraDataLength
 
 	// Update summary with the new attachment and metadata indexes.
 	for _, attachmentIndex := range attachmentIndexes {
@@ -87,7 +87,7 @@ func AmendMCAP(
 	}
 
 	// Write summary out into a well-formed summary section, with all offsets and CRCs updated.
-	err = writeSummaryBytes(wsc, *summary, newSummaryOffset)
+	err = writeSummaryBytes(wsc, summary, newSummaryOffset)
 	if err != nil {
 		return fmt.Errorf("failed to build new summary section: %w", err)
 	}
@@ -183,7 +183,7 @@ func readSummarySection(r io.Reader) (*summarySection, error) {
 // sections/offset groups may be rewritten in a different order than the in the
 // data the summarySection was originally parsed from. All offsets and CRCs are
 // updated to account.
-func writeSummaryBytes(w io.Writer, section summarySection, summaryStart int64) error {
+func writeSummaryBytes(w io.Writer, section *summarySection, summaryStart int64) error {
 	wc := newChecksummingWriteCounter(w, 0)
 	writer, err := mcap.NewWriter(wc, &mcap.WriterOptions{
 		SkipMagic: true,
@@ -208,8 +208,8 @@ func writeSummaryBytes(w io.Writer, section summarySection, summaryStart int64) 
 		GroupLength: uint64(wc.Count()) - uint64(summaryInset),
 	})
 
-	fileOffset += int64(wc.Count()) - summaryInset
-	summaryInset = int64(wc.Count())
+	fileOffset += wc.Count() - summaryInset
+	summaryInset = wc.Count()
 
 	for _, channel := range section.Channels {
 		err := writer.WriteChannel(channel)
@@ -222,8 +222,8 @@ func writeSummaryBytes(w io.Writer, section summarySection, summaryStart int64) 
 		GroupStart:  uint64(fileOffset),
 		GroupLength: uint64(wc.Count()) - uint64(summaryInset),
 	})
-	fileOffset += int64(wc.Count()) - summaryInset
-	summaryInset = int64(wc.Count())
+	fileOffset += wc.Count() - summaryInset
+	summaryInset = wc.Count()
 
 	for _, attachmentIndex := range section.AttachmentIndexes {
 		err := writer.WriteAttachmentIndex(attachmentIndex)
@@ -237,8 +237,8 @@ func writeSummaryBytes(w io.Writer, section summarySection, summaryStart int64) 
 		GroupLength: uint64(wc.Count()) - uint64(summaryInset),
 	})
 
-	fileOffset += int64(wc.Count()) - summaryInset
-	summaryInset = int64(wc.Count())
+	fileOffset += wc.Count() - summaryInset
+	summaryInset = wc.Count()
 
 	for _, metadataIndex := range section.MetadataIndexes {
 		err := writer.WriteMetadataIndex(metadataIndex)
@@ -252,8 +252,8 @@ func writeSummaryBytes(w io.Writer, section summarySection, summaryStart int64) 
 		GroupLength: uint64(wc.Count()) - uint64(summaryInset),
 	})
 
-	fileOffset += int64(wc.Count()) - summaryInset
-	summaryInset = int64(wc.Count())
+	fileOffset += wc.Count() - summaryInset
+	summaryInset = wc.Count()
 
 	for _, chunkIndex := range section.ChunkIndexes {
 		err := writer.WriteChunkIndex(chunkIndex)
@@ -267,8 +267,8 @@ func writeSummaryBytes(w io.Writer, section summarySection, summaryStart int64) 
 		GroupLength: uint64(wc.Count()) - uint64(summaryInset),
 	})
 
-	fileOffset += int64(wc.Count()) - summaryInset
-	summaryInset = int64(wc.Count())
+	fileOffset += wc.Count() - summaryInset
+	summaryInset = wc.Count()
 
 	err = writer.WriteStatistics(section.Statistics)
 	if err != nil {
@@ -281,8 +281,7 @@ func writeSummaryBytes(w io.Writer, section summarySection, summaryStart int64) 
 		GroupLength: uint64(wc.Count()) - uint64(summaryInset),
 	})
 
-	fileOffset += int64(wc.Count()) - summaryInset
-	summaryInset = int64(wc.Count())
+	fileOffset += wc.Count() - summaryInset
 	summaryOffsetStart := fileOffset
 
 	for _, summaryOffset := range summaryOffsets {
@@ -333,8 +332,7 @@ func writeFooter(w io.Writer, footer *mcap.Footer) error {
 	}
 	binary.LittleEndian.PutUint32(buf[inset:], crc)
 	inset += 4
-	_, err := w.Write(buf[:inset])
-	if err != nil {
+	if _, err := w.Write(buf[:inset]); err != nil {
 		return err
 	}
 	return nil
@@ -405,7 +403,7 @@ func extendDataSection(
 	if err != nil {
 		return cw.Count(), nil, nil, fmt.Errorf("failed to construct writer: %w", err)
 	}
-	var attachmentIndexes []*mcap.AttachmentIndex
+	attachmentIndexes := make([]*mcap.AttachmentIndex, 0, len(attachments))
 	for _, attachment := range attachments {
 		offset := cw.Count()
 		attachmentIndex := &mcap.AttachmentIndex{
@@ -424,9 +422,9 @@ func extendDataSection(
 		attachmentIndexes = append(attachmentIndexes, attachmentIndex)
 	}
 
-	var metadataIndexes []*mcap.MetadataIndex
+	metadataIndexes := make([]*mcap.MetadataIndex, 0, len(metadata))
 	for _, metadata := range metadata {
-		offset := int64(cw.Count())
+		offset := cw.Count()
 		metadataIndex := &mcap.MetadataIndex{
 			Offset: uint64(offset) + uint64(startOffset),
 			Name:   metadata.Name,

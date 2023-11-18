@@ -31,7 +31,7 @@ func humanBytes(numBytes uint64) string {
 	displayedValue := float64(numBytes)
 	prefixIndex := 0
 	for ; displayedValue > 1024 && prefixIndex < len(prefixes); prefixIndex++ {
-		displayedValue = displayedValue / 1024
+		displayedValue /= 1024
 	}
 	return fmt.Sprintf("%.2f %s", displayedValue, prefixes[prefixIndex])
 }
@@ -131,25 +131,33 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		}
 	}
 
-	maxChanIDWidth := digits(uint64(chanIDs[len(chanIDs)-1])) + 3
+	maxChanIDWidth := 0
+	if len(chanIDs) > 0 {
+		maxChanIDWidth = digits(uint64(chanIDs[len(chanIDs)-1])) + 3
+	}
 	for _, chanID := range chanIDs {
 		channel := info.Channels[chanID]
 		schema := info.Schemas[channel.SchemaID]
-		channelMessageCount := info.Statistics.ChannelMessageCounts[chanID]
-		frequency := 1e9 * float64(channelMessageCount) / float64(end-start)
 		width := digits(uint64(chanID)) + 2
 		padding := strings.Repeat(" ", maxChanIDWidth-width)
 		row := []string{
 			fmt.Sprintf("\t(%d)%s%s", channel.ID, padding, channel.Topic),
 		}
 		if info.Statistics != nil {
-			row = append(row, fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency))
+			channelMessageCount := info.Statistics.ChannelMessageCounts[chanID]
+			if channelMessageCount > 1 {
+				frequency := 1e9 * float64(channelMessageCount) / float64(end-start)
+				row = append(row, fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency))
+			} else {
+				row = append(row, fmt.Sprintf("%*d msgs", maxCountWidth, channelMessageCount))
+			}
 		}
-		if schema != nil {
+		switch {
+		case schema != nil:
 			row = append(row, fmt.Sprintf(" : %s [%s]", schema.Name, schema.Encoding))
-		} else if channel.SchemaID != 0 {
+		case channel.SchemaID != 0:
 			row = append(row, fmt.Sprintf(" : <missing schema %d>", channel.SchemaID))
-		} else {
+		default:
 			row = append(row, " : <no schema>")
 		}
 		rows = append(rows, row)

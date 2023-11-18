@@ -139,6 +139,7 @@ pub const MAGIC: &[u8] = &[0x89, b'M', b'C', b'A', b'P', 0x30, b'\r', b'\n'];
 pub enum Compression {
     #[cfg(feature = "zstd")]
     Zstd,
+    #[cfg(feature = "lz4")]
     Lz4,
 }
 

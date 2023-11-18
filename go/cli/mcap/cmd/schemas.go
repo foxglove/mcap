@@ -32,7 +32,7 @@ func toType(s string) string {
 	return strings.ToLower(strings.TrimPrefix(s, "TYPE_"))
 }
 
-func printDescriptor(w io.Writer, desc *descriptorpb.FileDescriptorSet) error {
+func printDescriptor(w io.Writer, desc *descriptorpb.FileDescriptorSet) {
 	for i, file := range desc.File {
 		if i == 0 {
 			fmt.Fprintf(w, "syntax = \"%s\";\n\n", file.GetSyntax())
@@ -44,12 +44,18 @@ func printDescriptor(w io.Writer, desc *descriptorpb.FileDescriptorSet) error {
 				if fieldType == "" {
 					fieldType = toType(field.GetType().String())
 				}
-				fmt.Fprintf(w, "  %s %s %s = %d;\n", toLabel(field.GetLabel().String()), field.GetName(), fieldType, field.GetNumber())
+				fmt.Fprintf(
+					w,
+					"  %s %s %s = %d;\n",
+					toLabel(field.GetLabel().String()),
+					field.GetName(),
+					fieldType,
+					field.GetNumber(),
+				)
 			}
 			fmt.Fprintf(w, "}\n")
 		}
 	}
-	return nil
 }
 
 func printSchemas(w io.Writer, schemas []*mcap.Schema) {
@@ -61,7 +67,6 @@ func printSchemas(w io.Writer, schemas []*mcap.Schema) {
 		"data",
 	})
 	for _, schema := range schemas {
-
 		var displayString string
 		switch schema.Encoding {
 		case "ros1msg", "ros2msg", "ros2idl":
@@ -72,10 +77,7 @@ func printSchemas(w io.Writer, schemas []*mcap.Schema) {
 				die("failed to parse descriptor: %v", err)
 			}
 			buf := &bytes.Buffer{}
-			err = printDescriptor(buf, descriptor)
-			if err != nil {
-				die("Failed to print descriptor: %v", err)
-			}
+			printDescriptor(buf, descriptor)
 			displayString = buf.String()
 		default:
 			displayString = string(schema.Data)
@@ -92,7 +94,7 @@ func printSchemas(w io.Writer, schemas []*mcap.Schema) {
 	utils.FormatTable(w, rows)
 }
 
-// schemasCmd represents the schemas command
+// schemasCmd represents the schemas command.
 var schemasCmd = &cobra.Command{
 	Use:   "schemas",
 	Short: "List schemas in an MCAP file",
