@@ -26,17 +26,16 @@ To install using [Homebrew](https://brew.sh) on macOS or Linux, run:
 
     $ brew install mcap
 
-### Using Go
+### From Source
 
-:::caution
-Installing via 'go install' is not recommended, and is not guaranteed to work.
-:::
+-:::caution
+-Installing via 'go install' is not supported, to build from source you must clone the repository.
+-:::
 
-To install from the latest commit, use
-
-    $ go install github.com/foxglove/mcap/go/cli/mcap@latest
-
-Ensure that the go installation directory is in your path (e.g. `$HOME/go/bin` by default on Ubuntu).
+1. Clone the [mcap repository](https://github.com/foxglove/mcap).
+2. `$ cd go/cli/mcap`
+3. `$ make build`
+4. The binary will be built into the a newly created `bin` folder.
 
 ## Usage
 
