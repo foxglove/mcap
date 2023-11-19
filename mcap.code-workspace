@@ -1,0 +1,19 @@
+{
+  "folders": [
+	{
+		"path": "go"
+	},
+	{
+		"path": "rust"
+	},
+	{
+		"path": "typescript"
+	},
+	{
+		"path": "swift"
+	},
+	{
+		"path": "cpp"
+	}
+]
+}
