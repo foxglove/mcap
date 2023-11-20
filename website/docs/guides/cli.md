@@ -28,9 +28,9 @@ To install using [Homebrew](https://brew.sh) on macOS or Linux, run:
 
 ### From Source
 
-- :::caution
-- Installing via `go install` is not supported. To build from source you must clone the repository.
-- :::
+:::caution
+Installing via `go install` is not supported. To build from source you must clone the repository.
+:::
 
 1. Clone the [mcap repository](https://github.com/foxglove/mcap).
 2. `$ cd go/cli/mcap`
