@@ -160,7 +160,7 @@
 .logoIcon {
   width: 100%;
   max-height: 50px;
-  margin: 2rem;
+  margin: 2rem 1rem;
 }
 
 [data-theme="light"] .darkMode {
