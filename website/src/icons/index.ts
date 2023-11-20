@@ -6,6 +6,8 @@ import ApexLight from "./companies/apex-color.svg";
 import ApexDark from "./companies/apex-white.svg";
 import CocoLight from "./companies/coco-color.svg";
 import CocoDark from "./companies/coco-white.svg";
+import DexterityLight from "./companies/dexterity-color.svg";
+import DexterityDark from "./companies/dexterity-white.svg";
 import NorLabLight from "./companies/norlab-color.svg";
 import NorlabDark from "./companies/norlab-white.svg";
 import ROSLight from "./companies/ros-color.svg";
@@ -37,6 +39,11 @@ const Logos = [
     href: "https://cocodelivery.com/",
     LightModeLogo: CocoLight,
     DarkModeLogo: CocoDark,
+  },
+  {
+    href: "https://www.dexterity.ai/",
+    LightModeLogo: DexterityLight,
+    DarkModeLogo: DexterityDark,
   },
   {
     href: "https://norlab.ulaval.ca/",
