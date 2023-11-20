@@ -175,6 +175,8 @@ func (m *mcapConcatenator) concatenateInputs(w io.Writer, inputs []namedReader) 
 	m.nextChannelID = 1
 	m.nextSchemaID = 1
 
+	var attachments map[string]bool = make(map[string]bool)
+
 	// for each input reader, initialize an mcap reader and read the first
 	// message off. Insert the schema and channel into the output with
 	// renumbered IDs, and load the message (with renumbered IDs) into the
@@ -184,13 +186,51 @@ func (m *mcapConcatenator) concatenateInputs(w io.Writer, inputs []namedReader) 
 		if err != nil {
 			return fmt.Errorf("failed to open reader on %s: %w", input.name, err)
 		}
+
 		defer reader.Close() //nolint:gocritic // we actually want these defered in the loop.
+
+		// Start attachments here
+
+		info, err := reader.Info()
+		if err != nil {
+			return fmt.Errorf("failed to read info from %s: %w", input.name, err)
+		}
+		for _, index := range info.AttachmentIndexes {
+			fmt.Printf("Attachment: %s %d\n", index.Name, index.Offset)
+			attachmentReader, err := reader.GetAttachmentReader(index.Offset)
+
+			if err != nil {
+				return fmt.Errorf("failed to read attachment from %s: %w", input.name, err)
+			}
+
+			if !attachments[index.Name] {
+				fmt.Printf("Attachment Reader ish: %s\n", attachmentReader.Name)
+				// Check if an attachment with this name has been written. If not write it.
+				writer.WriteAttachment(&mcap.Attachment{
+					Name:       index.Name,
+					MediaType:  index.MediaType,
+					CreateTime: index.CreateTime,
+					LogTime:    index.LogTime,
+					DataSize:   index.DataSize,
+					Data:       attachmentReader.Data(),
+				})
+
+				attachments[index.Name] = true
+			}
+		}
+
+		// os.File(input.reader).Seek(0, io.SeekStart)
+
+		fmt.Printf("Wrote attachments for: %s\n", input.name)
+
 		profiles[inputID] = reader.Header().Profile
 		opts := []mcap.ReadOpt{
-			mcap.UsingIndex(false),
+			mcap.UsingIndex(true),
 			mcap.WithMetadataCallback(func(metadata *mcap.Metadata) error {
 				return m.addMetadata(writer, metadata)
 			})}
+		// End attachments here
+
 		iterator, err := reader.Messages(opts...)
 		if err != nil {
 			return err
