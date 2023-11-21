@@ -1,6 +1,9 @@
 import { IWritable } from "./IWritable";
 import { IReadable } from "./types";
 
+/**
+ * In-memory buffer used for reading and writing MCAP files in tests. Can be used as both an IReadable and an IWritable.
+ */
 export class TempBuffer implements IReadable, IWritable {
   #buffer = new ArrayBuffer(1024);
   #size = 0;

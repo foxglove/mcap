@@ -1,31 +1,14 @@
 import { Grid, NumericType } from "@foxglove/schemas";
-import { McapWriter, IWritable } from "@mcap/core";
+import { McapWriter } from "@mcap/core";
+import { FileHandleWritable } from "@mcap/nodejs";
 import { Builder } from "flatbuffers";
 import fs from "fs";
-import { open, FileHandle } from "fs/promises";
+import { open } from "fs/promises";
 
 import { buildGridMessage, buildTfMessage } from "./flatbufferUtils";
 
 const QUAT_IDENTITY = { x: 0, y: 0, z: 0, w: 1 };
 
-// Mcap IWritable interface for nodejs FileHandle
-class FileHandleWritable implements IWritable {
-  #handle: FileHandle;
-  #totalBytesWritten = 0;
-
-  constructor(handle: FileHandle) {
-    this.#handle = handle;
-  }
-
-  async write(buffer: Uint8Array): Promise<void> {
-    const written = await this.#handle.write(buffer);
-    this.#totalBytesWritten += written.bytesWritten;
-  }
-
-  position(): bigint {
-    return BigInt(this.#totalBytesWritten);
-  }
-}
 function nextPowerOfTwo(numToRound: number) {
   let nextPower = 1;
   while (nextPower < numToRound) {

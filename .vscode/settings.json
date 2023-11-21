@@ -1,5 +1,6 @@
 // -*- jsonc -*-
 {
+  "editor.codeActionsOnSave": { "source.fixAll.eslint": true },
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
 
@@ -13,7 +14,7 @@
   "eslint.options": {
     "reportUnusedDisableDirectives": "error"
   },
-  "jest.jestCommandLine": "yarn workspace @mcap/core test",
+  "jest.jestCommandLine": "yarn typescript:test",
 
   "cSpell.enabled": true,
 
@@ -21,20 +22,23 @@
     "**/node_modules": true,
     "tests/conformance/data": true,
     "python/**/build": true,
-    "python/docs/*-apidoc": true
+    "python/docs/*-apidoc": true,
+    ".yarn/**": true,
+    "yarn.lock": true,
+    "**/dist": true
   },
 
-  "python.formatting.provider": "black",
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  },
   "python.analysis.typeCheckingMode": "strict",
-  "python.linting.flake8Enabled": true,
-  "python.linting.enabled": true,
-  "python.linting.flake8Args": ["--config", "python/.flake8"],
   "python.analysis.extraPaths": [
     "./python/mcap",
     "./python/mcap-protobuf-support",
     "./python/mcap-ros1-support",
     "./python/mcap-ros2-support"
   ],
+  "flake8.args": ["--config", "python/.flake8"],
 
   // https://github.com/microsoft/vscode-cpptools/issues/722
   "C_Cpp.autoAddFileAssociations": false,

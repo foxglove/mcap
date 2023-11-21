@@ -21,14 +21,14 @@
     "bench:debug": "NODE_OPTIONS='--inspect-brk' ts-node --files --project tsconfig.cjs.json index.ts"
   },
   "devDependencies": {
-    "@foxglove/eslint-plugin": "1.0.0",
+    "@foxglove/eslint-plugin": "1.0.1",
     "@foxglove/tsconfig": "1.1.0",
     "@mcap/core": "*",
     "@types/node": "18.13.0",
     "@typescript-eslint/eslint-plugin": "6.11.0",
     "@typescript-eslint/parser": "6.11.0",
     "benny": "^3.7.1",
-    "eslint": "8.53.0",
+    "eslint": "8.54.0",
     "eslint-config-prettier": "9.0.0",
     "eslint-plugin-es": "4.1.0",
     "eslint-plugin-filenames": "1.3.2",

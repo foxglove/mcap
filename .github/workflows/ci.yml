@@ -36,7 +36,7 @@ jobs:
           cache: yarn
       - run: yarn install --immutable
       - run: yarn workspace @foxglove/mcap-conformance lint:ci
-      - run: yarn workspace @foxglove/mcap-conformance typecheck
+      - run: yarn workspace @foxglove/mcap-conformance build
 
   conformance-cpp:
     runs-on: ubuntu-latest
@@ -220,14 +220,38 @@ jobs:
       - run: yarn dedupe --check
       - run: yarn prettier:check
       - run: yarn workspace @mcap/core lint:ci
-      - run: yarn workspace @mcap/core typecheck
-      - run: yarn workspace @mcap/core test
+      - run: yarn workspace @mcap/core build
+      - run: yarn workspace @mcap/support lint:ci
+      - run: yarn workspace @mcap/support build
+      - run: yarn workspace @mcap/nodejs lint:ci
+      - run: yarn workspace @mcap/nodejs build
+      - run: yarn workspace @mcap/browser lint:ci
+      - run: yarn workspace @mcap/browser build
+      - run: yarn typescript:test
 
-      - name: Publish to NPM
+      - name: Publish @mcap/core to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/core/v') }}
         run: yarn workspace @mcap/core npm publish --access public
         env:
           YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+
+      - name: Publish @mcap/support to NPM
+        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/support/v') }}
+        run: yarn workspace @mcap/support publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+
+      - name: Publish @mcap/nodejs to NPM
+        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/nodejs/v') }}
+        run: yarn workspace @mcap/nodejs publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+
+      - name: Publish @mcap/browser to NPM
+        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/browser/v') }}
+        run: yarn workspace @mcap/browser publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
   typescript-examples:
     runs-on: ubuntu-latest

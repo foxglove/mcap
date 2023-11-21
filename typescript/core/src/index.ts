@@ -10,3 +10,4 @@ export type { IWritable } from "./IWritable";
 
 export * from "./hasMcapPrefix";
 export * from "./parse";
+export * from "./TempBuffer";
