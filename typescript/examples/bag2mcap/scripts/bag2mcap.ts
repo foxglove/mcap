@@ -1,7 +1,3 @@
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at http://mozilla.org/MPL/2.0/
-
 // convert a ROS1 .bag file to an mcap file with protobuf schema and message encoding
 
 import { Bag } from "@foxglove/rosbag";
@@ -12,9 +8,11 @@ import { toNanoSec } from "@foxglove/rostime";
 import Bzip2 from "@foxglove/wasm-bz2";
 import decompressLZ4 from "@foxglove/wasm-lz4";
 import zstd from "@foxglove/wasm-zstd";
-import { McapWriter, IWritable, McapTypes } from "@mcap/core";
+import { McapWriter, McapTypes } from "@mcap/core";
+import { FileHandleWritable } from "@mcap/nodejs";
+import { ProtobufDescriptor, protobufToDescriptor } from "@mcap/support";
 import { program } from "commander";
-import { open, FileHandle } from "fs/promises";
+import { open } from "fs/promises";
 import protobufjs from "protobufjs";
 import descriptor from "protobufjs/ext/descriptor";
 
@@ -55,7 +53,7 @@ function rosMsgDefinitionToProto(
   msgDef: string,
 ): {
   rootType: protobufjs.Type;
-  descriptorSet: ReturnType<protobufjs.Root["toDescriptor"]>;
+  descriptorSet: ProtobufDescriptor;
   schemaName: string;
 } {
   const definitionArr = parseMessageDefinition(msgDef);
@@ -153,7 +151,7 @@ function rosMsgDefinitionToProto(
   const rootType = root.lookupType(schemaName);
 
   // create a descriptor message for the root
-  const descriptorSet = root.toDescriptor("proto3");
+  const descriptorSet = protobufToDescriptor(root);
   for (const file of descriptorSet.file) {
     // Strip leading `.` from the package names to make them relative to the descriptor
     file.package = file.package?.substring(1);
@@ -191,25 +189,6 @@ function convertTypedArrays(msg: Record<string, unknown>): Record<string, unknow
   }
 
   return msg;
-}
-
-// IWritable interface for FileHandle
-class FileHandleWritable implements IWritable {
-  #handle: FileHandle;
-  #totalBytesWritten = 0;
-
-  constructor(handle: FileHandle) {
-    this.#handle = handle;
-  }
-
-  async write(buffer: Uint8Array): Promise<void> {
-    const written = await this.#handle.write(buffer);
-    this.#totalBytesWritten += written.bytesWritten;
-  }
-
-  position(): bigint {
-    return BigInt(this.#totalBytesWritten);
-  }
 }
 
 async function convert(filePath: string, options: { indexed: boolean }) {

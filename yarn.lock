@@ -2782,10 +2782,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@eslint/js@npm:8.53.0":
-  version: 8.53.0
-  resolution: "@eslint/js@npm:8.53.0"
-  checksum: e0d5cfb0000aaee237c8e6d6d6e366faa60b1ef7f928ce17778373aa44d3b886368f6d5e1f97f913f0f16801aad016db8b8df78418c9d18825c15590328028af
+"@eslint/js@npm:8.54.0":
+  version: 8.54.0
+  resolution: "@eslint/js@npm:8.54.0"
+  checksum: 6d88a6f711ef0133566b5340e3178a178fbb297585766460f195d0a9db85688f1e5cf8559fd5748aeb3131e2096c66595b323d8edab22df015acda68f1ebde92
   languageName: node
   linkType: hard
 
@@ -2803,22 +2803,22 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/eslint-plugin@npm:1.0.0":
-  version: 1.0.0
-  resolution: "@foxglove/eslint-plugin@npm:1.0.0"
+"@foxglove/eslint-plugin@npm:1.0.1":
+  version: 1.0.1
+  resolution: "@foxglove/eslint-plugin@npm:1.0.1"
   dependencies:
     "@typescript-eslint/utils": ^6
     tsutils: ^3
     typescript: ^4 || ^5
   peerDependencies:
     eslint: ^7 || ^8
-    eslint-config-prettier: ^8
+    eslint-config-prettier: ^8 || ^9
     eslint-plugin-es: ^4
     eslint-plugin-filenames: ^1
     eslint-plugin-import: ^2
     eslint-plugin-prettier: ^5
     prettier: ^3
-  checksum: 455819c6d2a0de3901fee957688433d631dd7ecd5ad691c838b853cd63a1e2e94362b0b065e83410d979deccabea5959b46d5de994006d80d287c3afc3e4aed0
+  checksum: 53a802c11a373545932671151c1ab432fd3c9af9eef124a462ceff1bbc0c04605dfba72e7e078c38f56ff873baa8e135a24440ad1b69ef7d2fd78239795d9589
   languageName: node
   linkType: hard
 
@@ -2826,14 +2826,14 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@foxglove/mcap-benchmarks@workspace:typescript/benchmarks"
   dependencies:
-    "@foxglove/eslint-plugin": 1.0.0
+    "@foxglove/eslint-plugin": 1.0.1
     "@foxglove/tsconfig": 1.1.0
     "@mcap/core": "*"
     "@types/node": 18.13.0
     "@typescript-eslint/eslint-plugin": 6.11.0
     "@typescript-eslint/parser": 6.11.0
     benny: ^3.7.1
-    eslint: 8.53.0
+    eslint: 8.54.0
     eslint-config-prettier: 9.0.0
     eslint-plugin-es: 4.1.0
     eslint-plugin-filenames: 1.3.2
@@ -2851,9 +2851,10 @@ __metadata:
   resolution: "@foxglove/mcap-conformance@workspace:tests/conformance"
   dependencies:
     "@foxglove/crc": ^0.0.3
-    "@foxglove/eslint-plugin": 1.0.0
+    "@foxglove/eslint-plugin": 1.0.1
     "@foxglove/tsconfig": 1.1.0
-    "@mcap/core": "*"
+    "@mcap/core": "workspace:*"
+    "@mcap/support": "workspace:*"
     "@types/diff": ^5.0.2
     "@types/js-yaml": ^4.0.5
     "@types/node": 18.13.0
@@ -2862,7 +2863,7 @@ __metadata:
     colors: 1.4.0
     commander: 11.1.0
     diff: ^5.1.0
-    eslint: 8.53.0
+    eslint: 8.54.0
     eslint-config-prettier: 9.0.0
     eslint-plugin-es: 4.1.0
     eslint-plugin-filenames: 1.3.2
@@ -2885,7 +2886,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@foxglove/mcap-example-bag2mcap@workspace:typescript/examples/bag2mcap"
   dependencies:
-    "@foxglove/eslint-plugin": 1.0.0
+    "@foxglove/eslint-plugin": 1.0.1
     "@foxglove/rosbag": 0.2.3
     "@foxglove/rosmsg": 3.1.0
     "@foxglove/rosmsg-serialization": 1.5.3
@@ -2894,25 +2895,23 @@ __metadata:
     "@foxglove/wasm-bz2": 0.1.1
     "@foxglove/wasm-lz4": 1.0.2
     "@foxglove/wasm-zstd": 1.0.1
-    "@mcap/core": "*"
-    "@types/jest": 29.5.8
+    "@mcap/core": "workspace:*"
+    "@mcap/nodejs": "workspace:*"
+    "@mcap/support": "workspace:*"
     "@types/lodash": 4.14.191
     "@types/node": 18.13.0
     "@typescript-eslint/eslint-plugin": 6.11.0
     "@typescript-eslint/parser": 6.11.0
     commander: 11.1.0
-    eslint: 8.53.0
+    eslint: 8.54.0
     eslint-config-prettier: 9.0.0
     eslint-plugin-es: 4.1.0
     eslint-plugin-filenames: 1.3.2
     eslint-plugin-import: 2.29.0
-    eslint-plugin-jest: 27.6.0
     eslint-plugin-prettier: 5.0.1
-    jest: 29.7.0
     lodash: 4.17.21
     prettier: 3.1.0
-    protobufjs: 7.2.2
-    ts-jest: 29.1.1
+    protobufjs: 7.2.5
     ts-node: 10.9.1
     tsconfig-paths: 4.1.2
     typescript: 5.2.2
@@ -2923,10 +2922,12 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@foxglove/mcap-example-basicwriter@workspace:typescript/examples/basicwriter"
   dependencies:
-    "@foxglove/eslint-plugin": 1.0.0
-    "@mcap/core": "*"
+    "@foxglove/eslint-plugin": 1.0.1
+    "@mcap/core": "workspace:*"
+    "@mcap/nodejs": "workspace:*"
+    "@mcap/support": "workspace:*"
     "@types/node": 18.13.0
-    eslint: 8.53.0
+    eslint: 8.54.0
     eslint-config-prettier: 9.0.0
     eslint-plugin-es: 4.1.0
     eslint-plugin-filenames: 1.3.2
@@ -2942,11 +2943,12 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@foxglove/mcap-example-flatbufferswriter@workspace:typescript/examples/flatbufferswriter"
   dependencies:
-    "@foxglove/eslint-plugin": 1.0.0
+    "@foxglove/eslint-plugin": 1.0.1
     "@foxglove/schemas": ^1.0.0
-    "@mcap/core": "*"
+    "@mcap/core": "workspace:*"
+    "@mcap/nodejs": "workspace:*"
     "@types/node": 18.13.0
-    eslint: 8.53.0
+    eslint: 8.54.0
     eslint-config-prettier: 9.0.0
     eslint-plugin-es: 4.1.0
     eslint-plugin-filenames: 1.3.2
@@ -2963,11 +2965,12 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@foxglove/mcap-example-text-annotation-demo@workspace:typescript/examples/text-annotation-demo"
   dependencies:
-    "@foxglove/eslint-plugin": 1.0.0
+    "@foxglove/eslint-plugin": 1.0.1
     "@foxglove/schemas": 1.3.0
-    "@mcap/core": "*"
+    "@mcap/core": "workspace:*"
+    "@mcap/nodejs": "workspace:*"
     "@types/node": 18.13.0
-    eslint: 8.53.0
+    eslint: 8.54.0
     eslint-config-prettier: 9.0.0
     eslint-plugin-es: 4.1.0
     eslint-plugin-filenames: 1.3.2
@@ -2983,7 +2986,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@foxglove/mcap-example-validate@workspace:typescript/examples/validate"
   dependencies:
-    "@foxglove/eslint-plugin": 1.0.0
+    "@foxglove/eslint-plugin": 1.0.1
     "@foxglove/rosbag": 0.2.3
     "@foxglove/rosmsg": 3.1.0
     "@foxglove/rosmsg-serialization": 1.5.3
@@ -2992,14 +2995,16 @@ __metadata:
     "@foxglove/wasm-bz2": 0.1.1
     "@foxglove/wasm-lz4": 1.0.2
     "@foxglove/wasm-zstd": 1.0.1
-    "@mcap/core": "*"
+    "@mcap/core": "workspace:*"
+    "@mcap/nodejs": "workspace:*"
+    "@mcap/support": "workspace:*"
     "@types/jest": 29.5.8
     "@types/lodash": 4.14.191
     "@types/node": 18.13.0
     "@typescript-eslint/eslint-plugin": 6.11.0
     "@typescript-eslint/parser": 6.11.0
     commander: 11.1.0
-    eslint: 8.53.0
+    eslint: 8.54.0
     eslint-config-prettier: 9.0.0
     eslint-plugin-es: 4.1.0
     eslint-plugin-filenames: 1.3.2
@@ -3009,7 +3014,7 @@ __metadata:
     jest: 29.7.0
     lodash: 4.17.21
     prettier: 3.1.0
-    protobufjs: 7.2.2
+    protobufjs: 7.2.5
     ts-jest: 29.1.1
     ts-node: 10.9.1
     tsconfig-paths: 4.1.2
@@ -3128,7 +3133,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/wasm-bz2@npm:0.1.1":
+"@foxglove/wasm-bz2@npm:0.1.1, @foxglove/wasm-bz2@npm:^0.1.1":
   version: 0.1.1
   resolution: "@foxglove/wasm-bz2@npm:0.1.1"
   dependencies:
@@ -3137,14 +3142,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/wasm-lz4@npm:1.0.2":
+"@foxglove/wasm-lz4@npm:1.0.2, @foxglove/wasm-lz4@npm:^1.0.2":
   version: 1.0.2
   resolution: "@foxglove/wasm-lz4@npm:1.0.2"
   checksum: 1148ae84be22830382995ef19912dd033f009c0f16690dd942acce2efee02035b035f5910690c7e37c9435e7636b94006ef33220f86e98bc281129e50445bb19
   languageName: node
   linkType: hard
 
-"@foxglove/wasm-zstd@npm:1.0.1":
+"@foxglove/wasm-zstd@npm:1.0.1, @foxglove/wasm-zstd@npm:^1.0.1":
   version: 1.0.1
   resolution: "@foxglove/wasm-zstd@npm:1.0.1"
   checksum: 91fffc0970e4dad0550e054ae1647730e09876ef0d6fb15c70d800e9027e38d8372e990dde98542a95eb00d88d483c9e1227be0ea958f9d3f41693dc78311027
@@ -3528,19 +3533,44 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@mcap/browser@workspace:typescript/browser":
+  version: 0.0.0-use.local
+  resolution: "@mcap/browser@workspace:typescript/browser"
+  dependencies:
+    "@foxglove/eslint-plugin": 1.0.1
+    "@foxglove/tsconfig": 1.1.0
+    "@mcap/core": "workspace:*"
+    "@types/jest": 29.5.8
+    "@typescript-eslint/eslint-plugin": 6.11.0
+    "@typescript-eslint/parser": 6.11.0
+    eslint: 8.54.0
+    eslint-config-prettier: 9.0.0
+    eslint-import-resolver-typescript: 3.6.1
+    eslint-plugin-es: 4.1.0
+    eslint-plugin-filenames: 1.3.2
+    eslint-plugin-import: 2.29.0
+    eslint-plugin-jest: 27.6.0
+    eslint-plugin-prettier: 5.0.1
+    jest: 29.7.0
+    prettier: 3.1.0
+    ts-jest: 29.1.1
+    typescript: 5.2.2
+  languageName: unknown
+  linkType: soft
+
 "@mcap/core@*, @mcap/core@workspace:*, @mcap/core@workspace:typescript/core":
   version: 0.0.0-use.local
   resolution: "@mcap/core@workspace:typescript/core"
   dependencies:
     "@foxglove/crc": ^0.0.3
-    "@foxglove/eslint-plugin": 1.0.0
+    "@foxglove/eslint-plugin": 1.0.1
     "@foxglove/tsconfig": 1.1.0
     "@types/jest": 29.5.8
     "@types/lodash": 4.14.191
     "@types/node": 18.13.0
     "@typescript-eslint/eslint-plugin": 6.11.0
     "@typescript-eslint/parser": 6.11.0
-    eslint: 8.53.0
+    eslint: 8.54.0
     eslint-config-prettier: 9.0.0
     eslint-plugin-es: 4.1.0
     eslint-plugin-filenames: 1.3.2
@@ -3554,6 +3584,61 @@ __metadata:
     ts-jest: 29.1.1
     ts-node: 10.9.1
     tslib: ^2.5.0
+    typescript: 5.2.2
+  languageName: unknown
+  linkType: soft
+
+"@mcap/nodejs@workspace:*, @mcap/nodejs@workspace:typescript/nodejs":
+  version: 0.0.0-use.local
+  resolution: "@mcap/nodejs@workspace:typescript/nodejs"
+  dependencies:
+    "@foxglove/eslint-plugin": 1.0.1
+    "@foxglove/tsconfig": 1.1.0
+    "@mcap/core": "workspace:*"
+    "@types/jest": 29.5.8
+    "@types/node": 18.13.0
+    "@typescript-eslint/eslint-plugin": 6.11.0
+    "@typescript-eslint/parser": 6.11.0
+    eslint: 8.54.0
+    eslint-config-prettier: 9.0.0
+    eslint-import-resolver-typescript: 3.6.1
+    eslint-plugin-es: 4.1.0
+    eslint-plugin-filenames: 1.3.2
+    eslint-plugin-import: 2.29.0
+    eslint-plugin-jest: 27.6.0
+    eslint-plugin-prettier: 5.0.1
+    jest: 29.7.0
+    prettier: 3.1.0
+    ts-jest: 29.1.1
+    typescript: 5.2.2
+  languageName: unknown
+  linkType: soft
+
+"@mcap/support@workspace:*, @mcap/support@workspace:typescript/support":
+  version: 0.0.0-use.local
+  resolution: "@mcap/support@workspace:typescript/support"
+  dependencies:
+    "@foxglove/eslint-plugin": 1.0.1
+    "@foxglove/tsconfig": 1.1.0
+    "@foxglove/wasm-bz2": ^0.1.1
+    "@foxglove/wasm-lz4": ^1.0.2
+    "@foxglove/wasm-zstd": ^1.0.1
+    "@mcap/core": "workspace:*"
+    "@types/jest": 29.5.8
+    "@types/node": 18.13.0
+    "@typescript-eslint/eslint-plugin": 6.11.0
+    "@typescript-eslint/parser": 6.11.0
+    eslint: 8.54.0
+    eslint-config-prettier: 9.0.0
+    eslint-plugin-es: 4.1.0
+    eslint-plugin-filenames: 1.3.2
+    eslint-plugin-import: 2.29.0
+    eslint-plugin-jest: 27.6.0
+    eslint-plugin-prettier: 5.0.1
+    jest: 29.7.0
+    prettier: 3.1.0
+    protobufjs: ^7.2.5
+    ts-jest: 29.1.1
     typescript: 5.2.2
   languageName: unknown
   linkType: soft
@@ -4535,13 +4620,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@typescript-eslint/scope-manager@npm:5.59.7":
-  version: 5.59.7
-  resolution: "@typescript-eslint/scope-manager@npm:5.59.7"
+"@typescript-eslint/scope-manager@npm:5.62.0":
+  version: 5.62.0
+  resolution: "@typescript-eslint/scope-manager@npm:5.62.0"
   dependencies:
-    "@typescript-eslint/types": 5.59.7
-    "@typescript-eslint/visitor-keys": 5.59.7
-  checksum: 43f7ea93fddbe2902122a41050677fe3eff2ea468f435b981592510cfc6136e8c28ac7d3a3e05fb332c0b3078a29bd0c91c35b2b1f4e788b4eb9aaeb70e21583
+    "@typescript-eslint/types": 5.62.0
+    "@typescript-eslint/visitor-keys": 5.62.0
+  checksum: 6062d6b797fe1ce4d275bb0d17204c827494af59b5eaf09d8a78cdd39dadddb31074dded4297aaf5d0f839016d601032857698b0e4516c86a41207de606e9573
   languageName: node
   linkType: hard
 
@@ -4572,10 +4657,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@typescript-eslint/types@npm:5.59.7":
-  version: 5.59.7
-  resolution: "@typescript-eslint/types@npm:5.59.7"
-  checksum: 52eccec9e2d631eb2808e48b5dc33a837b5e242fa9eddace89fc707c9f2283b5364f1d38b33d418a08d64f45f6c22f051800898e1881a912f8aac0c3ae300d0a
+"@typescript-eslint/types@npm:5.62.0":
+  version: 5.62.0
+  resolution: "@typescript-eslint/types@npm:5.62.0"
+  checksum: 48c87117383d1864766486f24de34086155532b070f6264e09d0e6139449270f8a9559cfef3c56d16e3bcfb52d83d42105d61b36743626399c7c2b5e0ac3b670
   languageName: node
   linkType: hard
 
@@ -4586,12 +4671,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@typescript-eslint/typescript-estree@npm:5.59.7":
-  version: 5.59.7
-  resolution: "@typescript-eslint/typescript-estree@npm:5.59.7"
+"@typescript-eslint/typescript-estree@npm:5.62.0":
+  version: 5.62.0
+  resolution: "@typescript-eslint/typescript-estree@npm:5.62.0"
   dependencies:
-    "@typescript-eslint/types": 5.59.7
-    "@typescript-eslint/visitor-keys": 5.59.7
+    "@typescript-eslint/types": 5.62.0
+    "@typescript-eslint/visitor-keys": 5.62.0
     debug: ^4.3.4
     globby: ^11.1.0
     is-glob: ^4.0.3
@@ -4600,7 +4685,7 @@ __metadata:
   peerDependenciesMeta:
     typescript:
       optional: true
-  checksum: eefe82eedf9ee2e14463c3f2b5b18df084c1328a859b245ee897a9a7075acce7cca0216a21fd7968b75aa64189daa008bfde1e2f9afbcc336f3dfe856e7f342e
+  checksum: 3624520abb5807ed8f57b1197e61c7b1ed770c56dfcaca66372d584ff50175225798bccb701f7ef129d62c5989070e1ee3a0aa2d84e56d9524dcf011a2bb1a52
   languageName: node
   linkType: hard
 
@@ -4640,30 +4725,30 @@ __metadata:
   linkType: hard
 
 "@typescript-eslint/utils@npm:^5.10.0":
-  version: 5.59.7
-  resolution: "@typescript-eslint/utils@npm:5.59.7"
+  version: 5.62.0
+  resolution: "@typescript-eslint/utils@npm:5.62.0"
   dependencies:
     "@eslint-community/eslint-utils": ^4.2.0
     "@types/json-schema": ^7.0.9
     "@types/semver": ^7.3.12
-    "@typescript-eslint/scope-manager": 5.59.7
-    "@typescript-eslint/types": 5.59.7
-    "@typescript-eslint/typescript-estree": 5.59.7
+    "@typescript-eslint/scope-manager": 5.62.0
+    "@typescript-eslint/types": 5.62.0
+    "@typescript-eslint/typescript-estree": 5.62.0
     eslint-scope: ^5.1.1
     semver: ^7.3.7
   peerDependencies:
     eslint: ^6.0.0 || ^7.0.0 || ^8.0.0
-  checksum: d8682700187ca94cc6441480cb6b87d0514a9748103c15dd93206c5b1c6fefa59063662f27a4103e16abbcfb654a61d479bc55af8f23d96f342431b87f31bb4e
+  checksum: ee9398c8c5db6d1da09463ca7bf36ed134361e20131ea354b2da16a5fdb6df9ba70c62a388d19f6eebb421af1786dbbd79ba95ddd6ab287324fc171c3e28d931
   languageName: node
   linkType: hard
 
-"@typescript-eslint/visitor-keys@npm:5.59.7":
-  version: 5.59.7
-  resolution: "@typescript-eslint/visitor-keys@npm:5.59.7"
+"@typescript-eslint/visitor-keys@npm:5.62.0":
+  version: 5.62.0
+  resolution: "@typescript-eslint/visitor-keys@npm:5.62.0"
   dependencies:
-    "@typescript-eslint/types": 5.59.7
+    "@typescript-eslint/types": 5.62.0
     eslint-visitor-keys: ^3.3.0
-  checksum: 4367f2ea68dd96a0520485434ad11e1bd26239eeeb3a2150bee7478a0f1df3c2099a39f96486722932be0456bcb7a47a483b452876d1d30bdeb9b81d354eef3d
+  checksum: 976b05d103fe8335bef5c93ad3f76d781e3ce50329c0243ee0f00c0fcfb186c81df50e64bfdd34970148113f8ade90887f53e3c4938183afba830b4ba8e30a35
   languageName: node
   linkType: hard
 
@@ -7413,13 +7498,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"enhanced-resolve@npm:^5.14.0":
-  version: 5.14.0
-  resolution: "enhanced-resolve@npm:5.14.0"
+"enhanced-resolve@npm:^5.12.0, enhanced-resolve@npm:^5.14.0":
+  version: 5.15.0
+  resolution: "enhanced-resolve@npm:5.15.0"
   dependencies:
     graceful-fs: ^4.2.4
     tapable: ^2.2.0
-  checksum: fff1aaebbf376371e5df4502e111967f6247c37611ad3550e4e7fca657f6dcb29ef7ffe88bf14e5010b78997f1ddd984a8db97af87ee0a5477771398fd326f5b
+  checksum: fbd8cdc9263be71cc737aa8a7d6c57b43d6aa38f6cc75dde6fcd3598a130cc465f979d2f4d01bb3bf475acb43817749c79f8eef9be048683602ca91ab52e4f11
   languageName: node
   linkType: hard
 
@@ -7631,7 +7716,25 @@ __metadata:
   languageName: node
   linkType: hard
 
-"eslint-module-utils@npm:^2.8.0":
+"eslint-import-resolver-typescript@npm:3.6.1":
+  version: 3.6.1
+  resolution: "eslint-import-resolver-typescript@npm:3.6.1"
+  dependencies:
+    debug: ^4.3.4
+    enhanced-resolve: ^5.12.0
+    eslint-module-utils: ^2.7.4
+    fast-glob: ^3.3.1
+    get-tsconfig: ^4.5.0
+    is-core-module: ^2.11.0
+    is-glob: ^4.0.3
+  peerDependencies:
+    eslint: "*"
+    eslint-plugin-import: "*"
+  checksum: 454fa0646533050fb57f13d27daf8c71f51b0bb9156d6a461290ccb8576d892209fcc6702a89553f3f5ea8e5b407395ca2e5de169a952c953685f1f7c46b4496
+  languageName: node
+  linkType: hard
+
+"eslint-module-utils@npm:^2.7.4, eslint-module-utils@npm:^2.8.0":
   version: 2.8.0
   resolution: "eslint-module-utils@npm:2.8.0"
   dependencies:
@@ -7811,14 +7914,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"eslint@npm:8.53.0":
-  version: 8.53.0
-  resolution: "eslint@npm:8.53.0"
+"eslint@npm:8.54.0":
+  version: 8.54.0
+  resolution: "eslint@npm:8.54.0"
   dependencies:
     "@eslint-community/eslint-utils": ^4.2.0
     "@eslint-community/regexpp": ^4.6.1
     "@eslint/eslintrc": ^2.1.3
-    "@eslint/js": 8.53.0
+    "@eslint/js": 8.54.0
     "@humanwhocodes/config-array": ^0.11.13
     "@humanwhocodes/module-importer": ^1.0.1
     "@nodelib/fs.walk": ^1.2.8
@@ -7855,7 +7958,7 @@ __metadata:
     text-table: ^0.2.0
   bin:
     eslint: bin/eslint.js
-  checksum: 2da808655c7aa4b33f8970ba30d96b453c3071cc4d6cd60d367163430677e32ff186b65270816b662d29139283138bff81f28dddeb2e73265495245a316ed02c
+  checksum: 7e876e9da2a18a017271cf3733d05a3dfbbe469272d75753408c6ea5b1646c71c6bb18cb91e10ca930144c32c1ce3701e222f1ae6784a3975a69f8f8aa68e49f
   languageName: node
   linkType: hard
 
@@ -8101,7 +8204,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fast-glob@npm:^3.2.11, fast-glob@npm:^3.2.9, fast-glob@npm:^3.3.0, fast-glob@npm:^3.3.2":
+"fast-glob@npm:^3.2.11, fast-glob@npm:^3.2.9, fast-glob@npm:^3.3.0, fast-glob@npm:^3.3.1, fast-glob@npm:^3.3.2":
   version: 3.3.2
   resolution: "fast-glob@npm:3.3.2"
   dependencies:
@@ -8327,9 +8430,9 @@ __metadata:
   linkType: hard
 
 "flatbuffers@npm:^23.1.21":
-  version: 23.1.21
-  resolution: "flatbuffers@npm:23.1.21"
-  checksum: 6e890adb8300e5352d579abf7c674eec7d838c27e82981c3d9cd5a4043ff83fc7097a88eae68729eb7cff6ded2b1a896ee2009632027d613040bef669290fbc6
+  version: 23.5.26
+  resolution: "flatbuffers@npm:23.5.26"
+  checksum: 2528e549118d02fca9775cc9c17cf445741bb58b0a9575eb07bba823394a79dccb3bf97c48561720aa61d3dc9f42759129df0e05eb94c12f809cfb6126eaedd1
   languageName: node
   linkType: hard
 
@@ -8619,6 +8722,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"get-tsconfig@npm:^4.5.0":
+  version: 4.7.2
+  resolution: "get-tsconfig@npm:4.7.2"
+  dependencies:
+    resolve-pkg-maps: ^1.0.0
+  checksum: 172358903250eff0103943f816e8a4e51d29b8e5449058bdf7266714a908a48239f6884308bd3a6ff28b09f692b9533dbebfd183ab63e4e14f073cda91f1bca9
+  languageName: node
+  linkType: hard
+
 "github-slugger@npm:^1.4.0":
   version: 1.5.0
   resolution: "github-slugger@npm:1.5.0"
@@ -8747,15 +8859,15 @@ __metadata:
   linkType: hard
 
 "globby@npm:^13.1.1":
-  version: 13.1.3
-  resolution: "globby@npm:13.1.3"
+  version: 13.2.2
+  resolution: "globby@npm:13.2.2"
   dependencies:
     dir-glob: ^3.0.1
-    fast-glob: ^3.2.11
-    ignore: ^5.2.0
+    fast-glob: ^3.3.0
+    ignore: ^5.2.4
     merge2: ^1.4.1
     slash: ^4.0.0
-  checksum: 93f06e02002cdf368f7e3d55bd59e7b00784c7cc8fe92c7ee5082cc7171ff6109fda45e1c97a80bb48bc811dedaf7843c7c9186f5f84bde4883ab630e13c43df
+  checksum: f3d84ced58a901b4fcc29c846983108c426631fe47e94872868b65565495f7bee7b3defd68923bd480582771fd4bbe819217803a164a618ad76f1d22f666f41e
   languageName: node
   linkType: hard
 
@@ -9575,7 +9687,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"is-core-module@npm:^2.13.0, is-core-module@npm:^2.13.1, is-core-module@npm:^2.9.0":
+"is-core-module@npm:^2.11.0, is-core-module@npm:^2.13.0, is-core-module@npm:^2.13.1, is-core-module@npm:^2.9.0":
   version: 2.13.1
   resolution: "is-core-module@npm:2.13.1"
   dependencies:
@@ -12776,9 +12888,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"protobufjs@npm:7.2.2":
-  version: 7.2.2
-  resolution: "protobufjs@npm:7.2.2"
+"protobufjs@npm:7.2.5, protobufjs@npm:^7.2.5":
+  version: 7.2.5
+  resolution: "protobufjs@npm:7.2.5"
   dependencies:
     "@protobufjs/aspromise": ^1.1.2
     "@protobufjs/base64": ^1.1.2
@@ -12792,27 +12904,7 @@ __metadata:
     "@protobufjs/utf8": ^1.1.0
     "@types/node": ">=13.7.0"
     long: ^5.0.0
-  checksum: 86166e8f3e46789fa4d117ae72c17356db36bf87c0e0710d224be32e543b1c378a94e66dc2b1de5af45edfc25f56acfc7e688c50c956426a3ae97bc474f4445c
-  languageName: node
-  linkType: hard
-
-"protobufjs@npm:7.2.3":
-  version: 7.2.3
-  resolution: "protobufjs@npm:7.2.3"
-  dependencies:
-    "@protobufjs/aspromise": ^1.1.2
-    "@protobufjs/base64": ^1.1.2
-    "@protobufjs/codegen": ^2.0.4
-    "@protobufjs/eventemitter": ^1.1.0
-    "@protobufjs/fetch": ^1.1.0
-    "@protobufjs/float": ^1.0.2
-    "@protobufjs/inquire": ^1.1.0
-    "@protobufjs/path": ^1.1.2
-    "@protobufjs/pool": ^1.1.0
-    "@protobufjs/utf8": ^1.1.0
-    "@types/node": ">=13.7.0"
-    long: ^5.0.0
-  checksum: 9afa6de5fced0139a5180c063718508fac3ea734a9f1aceb99712367b15473a83327f91193f16b63540f9112b09a40912f5f0441a9b0d3f3c6a1c7f707d78249
+  checksum: 3770a072114061faebbb17cfd135bc4e187b66bc6f40cd8bac624368b0270871ec0cfb43a02b9fb4f029c8335808a840f1afba3c2e7ede7063b98ae6b98a703f
   languageName: node
   linkType: hard
 
@@ -13481,6 +13573,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"resolve-pkg-maps@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "resolve-pkg-maps@npm:1.0.0"
+  checksum: 1012afc566b3fdb190a6309cc37ef3b2dcc35dff5fa6683a9d00cd25c3247edfbc4691b91078c97adc82a29b77a2660c30d791d65dab4fc78bfc473f60289977
+  languageName: node
+  linkType: hard
+
 "resolve.exports@npm:^2.0.0":
   version: 2.0.0
   resolution: "resolve.exports@npm:2.0.0"
@@ -13595,8 +13694,12 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "root-workspace-0b6124@workspace:."
   dependencies:
+    "@types/node": 18.13.0
     cspell: 8.0.0
+    jest: 29.7.0
     prettier: 3.1.0
+    ts-jest: 29.1.1
+    ts-node: 10.9.1
     typedoc: 0.25.3
     typescript: 5.2.2
   languageName: unknown
@@ -15662,7 +15765,7 @@ __metadata:
     "@docusaurus/core": 2.4.1
     "@docusaurus/module-type-aliases": 2.4.1
     "@docusaurus/preset-classic": 2.4.1
-    "@foxglove/eslint-plugin": 1.0.0
+    "@foxglove/eslint-plugin": 1.0.1
     "@foxglove/rostime": 1.1.2
     "@foxglove/schemas": 1.6.2
     "@foxglove/tsconfig": 2.0.0
@@ -15672,7 +15775,7 @@ __metadata:
     "@types/promise-queue": 2.2.0
     buffer: 6.0.3
     classnames: 2.3.2
-    eslint: 8.53.0
+    eslint: 8.54.0
     eslint-config-prettier: 9.0.0
     eslint-plugin-es: 4.1.0
     eslint-plugin-filenames: 1.3.2
@@ -15686,7 +15789,7 @@ __metadata:
     prism-react-renderer: 1.3.5
     process: 0.11.10
     promise-queue: 2.2.5
-    protobufjs: 7.2.3
+    protobufjs: 7.2.5
     react: 17.0.2
     react-async: 10.0.1
     react-dom: 17.0.2
