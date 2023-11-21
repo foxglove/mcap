@@ -1,15 +1,19 @@
+import { ISeekableWriter } from "./ISeekableWriter";
 import { IWritable } from "./IWritable";
 import { IReadable } from "./types";
 
 /**
  * In-memory buffer used for reading and writing MCAP files in tests. Can be used as both an IReadable and an IWritable.
  */
-export class TempBuffer implements IReadable, IWritable {
+export class TempBuffer implements IReadable, IWritable, ISeekableWriter {
   #buffer = new ArrayBuffer(1024);
   #size = 0;
 
   position(): bigint {
     return BigInt(this.#size);
+  }
+  async seek(position: bigint): Promise<void> {
+    this.#size = Number(position);
   }
   async write(data: Uint8Array): Promise<void> {
     if (this.#size + data.byteLength > this.#buffer.byteLength) {
