@@ -1,4 +1,5 @@
 import { McapIndexedReader } from "@mcap/core";
+import { FileHandleReadable } from "@mcap/nodejs";
 import fs from "fs/promises";
 import { TestFeatures, TestVariant } from "variants/types";
 
@@ -41,28 +42,7 @@ export default class TypescriptIndexedReaderTestRunner extends IndexedReadTestRu
   }
 
   async #run(fileHandle: fs.FileHandle): Promise<IndexedReadTestResult> {
-    let buffer = new ArrayBuffer(4096);
-    const readable = {
-      size: async () => BigInt((await fileHandle.stat()).size),
-      read: async (offset: bigint, length: bigint) => {
-        if (offset > Number.MAX_SAFE_INTEGER || length > Number.MAX_SAFE_INTEGER) {
-          throw new Error(`Read too large: offset ${offset}, length ${length}`);
-        }
-        if (length > buffer.byteLength) {
-          buffer = new ArrayBuffer(Number(length * 2n));
-        }
-        const result = await fileHandle.read({
-          buffer: new DataView(buffer, 0, Number(length)),
-          position: Number(offset),
-        });
-        if (result.bytesRead !== Number(length)) {
-          throw new Error(
-            `Read only ${result.bytesRead} bytes from offset ${offset}, expected ${length}`,
-          );
-        }
-        return new Uint8Array(result.buffer.buffer, result.buffer.byteOffset, result.bytesRead);
-      },
-    };
+    const readable = new FileHandleReadable(fileHandle);
 
     const reader = await McapIndexedReader.Initialize({ readable });
     if (reader.chunkIndexes.length === 0) {

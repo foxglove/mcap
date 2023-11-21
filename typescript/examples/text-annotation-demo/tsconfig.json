@@ -8,7 +8,9 @@
     "target": "es2022",
     "lib": ["es2022", "dom"],
     "paths": {
-      "@mcap/core": ["../../core/src"]
+      "@mcap/core": ["../../core/src"],
+      "@mcap/support": ["../../support/src"],
+      "@mcap/nodejs": ["../../nodejs/src"]
     },
 
     // required for tsconfig-paths https://github.com/dividab/tsconfig-paths/issues/143
