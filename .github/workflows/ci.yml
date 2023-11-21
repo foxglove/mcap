@@ -237,19 +237,19 @@ jobs:
 
       - name: Publish @mcap/support to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/support/v') }}
-        run: yarn workspace @mcap/support publish --access public
+        run: yarn workspace @mcap/support npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
       - name: Publish @mcap/nodejs to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/nodejs/v') }}
-        run: yarn workspace @mcap/nodejs publish --access public
+        run: yarn workspace @mcap/nodejs npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
       - name: Publish @mcap/browser to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/browser/v') }}
-        run: yarn workspace @mcap/browser publish --access public
+        run: yarn workspace @mcap/browser npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
