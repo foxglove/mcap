@@ -129,11 +129,11 @@ async function selectSupportedVideoEncoderConfig({
   frameDurationSec: number;
 }) {
   const config: VideoEncoderConfig = {
-    codec: "avc1.42001f", // Baseline profile (42 00) with level 3.1 (1f)
+    codec: "hev1.1.6.L93.B0", // Baseline profile (42 00) with level 3.1 (1f)
     width,
     height,
     latencyMode: "realtime",
-    avc: { format: "annexb" },
+    hevc: { format: "annexb" },
     // Note that Safari 17 does not support latencyMode: "realtime", and in newer versions of the
     // Safari Technical Preview, realtime mode only works if framerate and bitrate are set.
     framerate: 1 / frameDurationSec,

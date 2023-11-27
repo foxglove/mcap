@@ -212,7 +212,7 @@ export class Recorder extends EventEmitter<RecorderEvents> {
       if (!this.#h264Channel) {
         this.#h264Channel = await addProtobufChannel(
           this.#writer,
-          "camera_h264",
+          "camera_h265",
           foxgloveMessageSchemas.CompressedVideo,
         );
       }
@@ -222,7 +222,7 @@ export class Recorder extends EventEmitter<RecorderEvents> {
         timestamp: toProtobufTime(fromNanoSec(now)),
         frame_id: "camera",
         data: frame.data,
-        format: "h264",
+        format: "h265",
       };
       const data = rootType.encode(msg).finish();
       frame.release();
