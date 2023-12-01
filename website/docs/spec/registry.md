@@ -219,6 +219,7 @@ The `ros2` profile describes how to create MCAP files for [ROS 2](https://docs.r
 
 - `message_encoding`: MUST be `cdr`
 - `metadata`:
+
   - `offered_qos_profiles` (required, string) YAML formatted sequence of QoS policy values. See [ROS QoS Policies for Recording docs](https://docs.ros.org/en/rolling/How-To-Guides/Overriding-QoS-Policies-For-Recording-And-Playback.html#using-qos-overrides) for more details. The policy value may change depending on the ROS distro. Below is an example for a single policy schema value.
 
   ```
