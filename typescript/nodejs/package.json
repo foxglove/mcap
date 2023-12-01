@@ -15,8 +15,10 @@
   "module": "dist/esm/src/index.js",
   "main": "dist/cjs/src/index.js",
   "typings": "dist/esm/src/index.d.ts",
-  "typedoc": {
-    "entryPoint": "src/index.ts"
+  "typedocOptions": {
+    "entryPoints": [
+      "src/index.ts"
+    ]
   },
   "files": [
     "dist",
