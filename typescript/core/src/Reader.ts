@@ -1,5 +1,8 @@
 import { getBigUint64 } from "./getBigUint64";
 
+// For performance reasons we use a single TextDecoder instance whose internal state is merely
+// the encoding (defaults to UTF-8). This means that a TextDecoder.decode() call is not affected
+// be previous calls.
 const textDecoder = new TextDecoder();
 
 export default class Reader {
