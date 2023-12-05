@@ -1,9 +1,13 @@
 import { getBigUint64 } from "./getBigUint64";
 
+// For performance reasons we use a single TextDecoder instance whose internal state is merely
+// the encoding (defaults to UTF-8). This means that a TextDecoder.decode() call is not affected
+// be previous calls.
+const textDecoder = new TextDecoder();
+
 export default class Reader {
   #view: DataView;
   offset: number;
-  #textDecoder = new TextDecoder();
 
   constructor(view: DataView, offset = 0) {
     this.#view = view;
@@ -39,7 +43,7 @@ export default class Reader {
     if (this.offset + length > this.#view.byteLength) {
       throw new Error(`String length ${length} exceeds bounds of buffer`);
     }
-    const value = this.#textDecoder.decode(
+    const value = textDecoder.decode(
       new Uint8Array(this.#view.buffer, this.#view.byteOffset + this.offset, length),
     );
     this.offset += length;
