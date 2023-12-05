@@ -1,9 +1,10 @@
 import { getBigUint64 } from "./getBigUint64";
 
+const textDecoder = new TextDecoder();
+
 export default class Reader {
   #view: DataView;
   offset: number;
-  #textDecoder = new TextDecoder();
 
   constructor(view: DataView, offset = 0) {
     this.#view = view;
@@ -39,7 +40,7 @@ export default class Reader {
     if (this.offset + length > this.#view.byteLength) {
       throw new Error(`String length ${length} exceeds bounds of buffer`);
     }
-    const value = this.#textDecoder.decode(
+    const value = textDecoder.decode(
       new Uint8Array(this.#view.buffer, this.#view.byteOffset + this.offset, length),
     );
     this.offset += length;
