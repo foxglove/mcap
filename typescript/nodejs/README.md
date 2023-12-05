@@ -6,7 +6,7 @@ The `@mcap/nodejs` package provides utilities for working with MCAP files from N
 
 ## Usage examples
 
-### Reading MCAP files
+### Reading MCAP files in Node.js
 
 ```ts
 import { loadDecompressHandlers } from "@mcap/support";
@@ -22,11 +22,11 @@ const reader = await McapIndexedReader.Initialize({
 });
 ```
 
-### Writing MCAP files
+### Writing MCAP files in Node.js
 
 ```ts
 import zstd from "@foxglove/wasm-zstd";
-import { FileHandleWritable } from "@mcap/support/nodejs";
+import { FileHandleWritable } from "@mcap/nodejs";
 import { McapWriter } from "@mcap/core";
 import { open } from "fs/promises";
 

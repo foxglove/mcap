@@ -40,25 +40,6 @@ const reader = await McapIndexedReader.Initialize({
 });
 ```
 
-### Writing MCAP files with Node.js
-
-```ts
-import zstd from "@foxglove/wasm-zstd";
-import { FileHandleWritable } from "@mcap/support/nodejs";
-import { open } from "fs/promises";
-
-const fileHandle = await open("file.mcap", "w");
-
-await zstd.isLoaded;
-const writer = new McapWriter({
-  writable: new FileHandleWritable(fileHandle),
-  compressChunk: (data) => ({
-    compression: "zstd",
-    compressedData: zstd.compress(data),
-  }),
-});
-```
-
 ## License
 
 `@mcap/support` is licensed under the [MIT License](https://opensource.org/licenses/MIT).
