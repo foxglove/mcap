@@ -55,7 +55,8 @@ export function parseRecord({
   if (recordLength > Number.MAX_SAFE_INTEGER) {
     throw new Error(`Record content length ${recordLength} is too large`);
   }
-  const recordEndOffset = headerReader.offset + Number(recordLength);
+  const recordLengthNum = Number(recordLength);
+  const recordEndOffset = headerReader.offset + recordLengthNum;
   if (recordEndOffset > view.byteLength) {
     return { usedBytes: 0 };
   }
@@ -64,11 +65,7 @@ export function parseRecord({
     const record: TypedMcapRecord = {
       type: "Unknown",
       opcode,
-      data: new Uint8Array(
-        view.buffer,
-        view.byteOffset + headerReader.offset,
-        Number(recordLength),
-      ),
+      data: new Uint8Array(view.buffer, view.byteOffset + headerReader.offset, recordLengthNum),
     };
     return { record, usedBytes: recordEndOffset - startOffset };
   }
@@ -76,7 +73,7 @@ export function parseRecord({
   const recordView = new DataView(
     view.buffer,
     view.byteOffset + headerReader.offset,
-    Number(recordLength),
+    recordLengthNum,
   );
   const reader = new Reader(recordView);
 
