@@ -25,8 +25,12 @@ export class ChunkCursor {
   #endTime: bigint | undefined;
   #reverse: boolean;
 
+  // List of message offsets (across all channels) sorted by logTime.
   #orderedMessageOffset?: [logTime: bigint, offset: bigint][];
-  #messageOffsetIndex = 0;
+  // Index for the next message offset. Gets incremented for every popMessage() call.
+  #nextMessageOffsetIndex = 0;
+  // If endTime is specified, this corresponds to the index of the first message that is not within the [startTime, endTime] range.
+  #messageOffsetEndIndex?: number;
 
   constructor(params: ChunkCursorParams) {
     this.chunkIndex = params.chunkIndex;
@@ -71,7 +75,10 @@ export class ChunkCursor {
     if (this.#orderedMessageOffset == undefined) {
       throw new Error("loadMessageIndexes() must be called before hasMore()");
     }
-    return this.#messageOffsetIndex < this.#orderedMessageOffset.length;
+    return (
+      this.#nextMessageOffsetIndex <
+      (this.#messageOffsetEndIndex ?? this.#orderedMessageOffset.length)
+    );
   }
 
   /**
@@ -82,13 +89,16 @@ export class ChunkCursor {
     if (this.#orderedMessageOffset == undefined) {
       throw new Error("loadMessageIndexes() must be called before popMessage()");
     }
-    if (this.#messageOffsetIndex >= this.#orderedMessageOffset.length) {
+    if (
+      this.#nextMessageOffsetIndex >=
+      (this.#messageOffsetEndIndex ?? this.#orderedMessageOffset.length)
+    ) {
       throw new Error(
         `Unexpected popMessage() call when no more messages are available, in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
       );
     }
 
-    return this.#orderedMessageOffset[this.#messageOffsetIndex++]!;
+    return this.#orderedMessageOffset[this.#nextMessageOffsetIndex++]!;
   }
 
   /**
@@ -185,43 +195,40 @@ export class ChunkCursor {
       );
     }
 
-    // Remove message offsets whose log time is not within [startTime, endTime];
-    let startIndex: number | undefined;
-    let endIndex: number | undefined;
+    // Determine the indexes corresponding to the start and end time.
     const startTime = reverse ? this.#endTime : this.#startTime;
     const endTime = reverse ? this.#startTime : this.#endTime;
-
     const iteratee = (logTime: bigint) => (reverse ? -logTime : logTime);
     if (startTime != undefined) {
-      startIndex = sortedIndexBy(this.#orderedMessageOffset, startTime, iteratee);
+      this.#nextMessageOffsetIndex = sortedIndexBy(this.#orderedMessageOffset, startTime, iteratee);
     }
     if (endTime != undefined) {
-      endIndex = sortedIndexBy(this.#orderedMessageOffset, endTime, iteratee);
+      this.#messageOffsetEndIndex = sortedIndexBy(this.#orderedMessageOffset, endTime, iteratee);
       // sortedIndexBy returns the minimum index but for the end index we actually want the highest index since
-      // endTime is inclusive. So we count up the endIndex manually until we reach a logTime that is not included anymore.
-      while (endIndex < this.#orderedMessageOffset.length) {
-        const logTime = this.#orderedMessageOffset[endIndex]![0];
+      // endTime is inclusive. So we count up the end index manually until we reach a logTime that is not included anymore.
+      while (this.#messageOffsetEndIndex < this.#orderedMessageOffset.length) {
+        const logTime = this.#orderedMessageOffset[this.#messageOffsetEndIndex]![0];
         if (reverse ? logTime < endTime : logTime > endTime) {
           break;
         }
-        endIndex++;
+        this.#messageOffsetEndIndex++;
       }
-    }
-
-    if (startIndex != undefined || endIndex != undefined) {
-      this.#orderedMessageOffset = this.#orderedMessageOffset.slice(startIndex ?? 0, endIndex);
     }
   }
 
+  // Get the next available message logTime which is being used when comparing chunkCursors (for ordering purposes).
   #getSortTime(): bigint {
+    // If message indexes have been loaded and are non-empty, we return the logTime of the next available message.
     if (
       this.#orderedMessageOffset != undefined &&
       this.#orderedMessageOffset.length > 0 &&
-      this.#messageOffsetIndex < this.#orderedMessageOffset.length
+      this.#nextMessageOffsetIndex <
+        (this.#messageOffsetEndIndex ?? this.#orderedMessageOffset.length)
     ) {
-      return this.#orderedMessageOffset[this.#messageOffsetIndex]![0];
-    } else {
-      return this.#reverse ? this.chunkIndex.messageEndTime : this.chunkIndex.messageStartTime;
+      return this.#orderedMessageOffset[this.#nextMessageOffsetIndex]![0];
     }
+
+    // Fall back to the chunk index' start time or end time.
+    return this.#reverse ? this.chunkIndex.messageEndTime : this.chunkIndex.messageStartTime;
   }
 }
