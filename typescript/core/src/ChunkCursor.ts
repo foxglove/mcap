@@ -1,5 +1,3 @@
-import Heap from "heap-js";
-
 import { parseRecord } from "./parse";
 import { sortedIndexBy } from "./sortedIndexBy";
 import { IReadable, TypedMcapRecords } from "./types";
@@ -10,15 +8,6 @@ type ChunkCursorParams = {
   startTime: bigint | undefined;
   endTime: bigint | undefined;
   reverse: boolean;
-};
-
-type MessageIndexCursor = {
-  channelId: number;
-
-  /** index of next message within `records` array */
-  index: number;
-
-  records: TypedMcapRecords["MessageIndex"]["records"];
 };
 
 /**
@@ -36,7 +25,8 @@ export class ChunkCursor {
   #endTime: bigint | undefined;
   #reverse: boolean;
 
-  #messageIndexCursors?: Heap<MessageIndexCursor>;
+  #orderedMessageOffset?: [logTime: bigint, offset: bigint][];
+  #messageOffsetIndex = 0;
 
   constructor(params: ChunkCursorParams) {
     this.chunkIndex = params.chunkIndex;
@@ -78,10 +68,10 @@ export class ChunkCursor {
    * loaded before using this method.
    */
   hasMoreMessages(): boolean {
-    if (!this.#messageIndexCursors) {
+    if (this.#orderedMessageOffset == undefined) {
       throw new Error("loadMessageIndexes() must be called before hasMore()");
     }
-    return this.#messageIndexCursors.size() > 0;
+    return this.#messageOffsetIndex < this.#orderedMessageOffset.length;
   }
 
   /**
@@ -89,45 +79,16 @@ export class ChunkCursor {
    * using this method.
    */
   popMessage(): [logTime: bigint, offset: bigint] {
-    if (!this.#messageIndexCursors) {
+    if (this.#orderedMessageOffset == undefined) {
       throw new Error("loadMessageIndexes() must be called before popMessage()");
     }
-    const cursor = this.#messageIndexCursors.peek();
-    if (!cursor) {
+    if (this.#messageOffsetIndex >= this.#orderedMessageOffset.length) {
       throw new Error(
         `Unexpected popMessage() call when no more messages are available, in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
       );
     }
-    const record = cursor.records[cursor.index]!;
-    const [logTime] = record;
-    if (this.#startTime != undefined && logTime < this.#startTime) {
-      throw new Error(
-        `Encountered message with logTime (${logTime}) prior to startTime (${this.#startTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
-      );
-    }
-    if (this.#endTime != undefined && logTime > this.#endTime) {
-      throw new Error(
-        `Encountered message with logTime (${logTime}) after endTime (${this.#endTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
-      );
-    }
 
-    const nextRecord = cursor.records[cursor.index + 1];
-    if (nextRecord && this.#reverse) {
-      if (this.#startTime == undefined || nextRecord[0] >= this.#startTime) {
-        cursor.index++;
-        this.#messageIndexCursors.replace(cursor);
-        return record;
-      }
-    } else if (nextRecord) {
-      if (this.#endTime == undefined || nextRecord[0] <= this.#endTime) {
-        cursor.index++;
-        this.#messageIndexCursors.replace(cursor);
-        return record;
-      }
-    }
-
-    this.#messageIndexCursors.pop();
-    return record;
+    return this.#orderedMessageOffset[this.#messageOffsetIndex++]!;
   }
 
   /**
@@ -135,34 +96,11 @@ export class ChunkCursor {
    * called.
    */
   hasMessageIndexes(): boolean {
-    return this.#messageIndexCursors != undefined;
+    return this.#orderedMessageOffset != undefined;
   }
 
   async loadMessageIndexes(readable: IReadable): Promise<void> {
     const reverse = this.#reverse;
-    this.#messageIndexCursors = new Heap((a, b) => {
-      const logTimeA = a.records[a.index]?.[0];
-      const logTimeB = b.records[b.index]?.[0];
-
-      if (reverse) {
-        if (logTimeA == undefined) {
-          return -1;
-        } else if (logTimeB == undefined) {
-          return 1;
-        }
-
-        return Number(logTimeB - logTimeA);
-      } else {
-        if (logTimeA == undefined) {
-          return 1;
-        } else if (logTimeB == undefined) {
-          return -1;
-        }
-
-        return Number(logTimeA - logTimeB);
-      }
-    });
-
     let messageIndexStartOffset: bigint | undefined;
     let relevantMessageIndexStartOffset: bigint | undefined;
     for (const [channelId, offset] of this.chunkIndex.messageIndexOffsets) {
@@ -194,6 +132,7 @@ export class ChunkCursor {
       messageIndexes.byteLength,
     );
 
+    this.#orderedMessageOffset = [];
     let offset = 0;
     for (
       let result;
@@ -211,59 +150,7 @@ export class ChunkCursor {
         continue;
       }
 
-      result.record.records.sort(([logTimeA], [logTimeB]) => Number(logTimeA - logTimeB));
-      if (reverse) {
-        // If we used `logTimeB - logTimeA` as the comparator for reverse iteration, messages with
-        // the same timestamp would not be in reverse order. To avoid this problem we use reverse()
-        // instead.
-        result.record.records.reverse();
-      }
-
-      for (const [logTime] of result.record.records) {
-        if (logTime < this.chunkIndex.messageStartTime) {
-          throw new Error(
-            `Encountered message index entry in channel ${result.record.channelId} with logTime (${logTime}) earlier than chunk messageStartTime (${this.chunkIndex.messageStartTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
-          );
-        }
-        if (logTime > this.chunkIndex.messageEndTime) {
-          throw new Error(
-            `Encountered message index entry in channel ${result.record.channelId} with logTime (${logTime}) later than chunk messageEndTime (${this.chunkIndex.messageEndTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
-          );
-        }
-      }
-
-      let startIndex = 0;
-      if (reverse) {
-        if (this.#endTime != undefined) {
-          startIndex = sortedIndexBy(result.record.records, this.#endTime, (logTime) => -logTime);
-        }
-      } else {
-        if (this.#startTime != undefined) {
-          startIndex = sortedIndexBy(result.record.records, this.#startTime, (logTime) => logTime);
-        }
-      }
-
-      if (startIndex >= result.record.records.length) {
-        continue;
-      }
-      if (reverse) {
-        if (
-          this.#startTime != undefined &&
-          result.record.records[startIndex]![0] < this.#startTime
-        ) {
-          continue;
-        }
-      } else {
-        if (this.#endTime != undefined && result.record.records[startIndex]![0] > this.#endTime) {
-          continue;
-        }
-      }
-
-      this.#messageIndexCursors.push({
-        index: startIndex,
-        channelId: result.record.channelId,
-        records: result.record.records,
-      });
+      this.#orderedMessageOffset = this.#orderedMessageOffset.concat(result.record.records);
     }
 
     if (offset !== messageIndexesView.byteLength) {
@@ -271,20 +158,70 @@ export class ChunkCursor {
         `${messageIndexesView.byteLength - offset} bytes remaining in message index section`,
       );
     }
-  }
 
-  #getSortTime(): bigint {
-    if (!this.#messageIndexCursors) {
-      return this.#reverse ? this.chunkIndex.messageEndTime : this.chunkIndex.messageStartTime;
+    if (this.#orderedMessageOffset.length === 0) {
+      return;
     }
 
-    const cursor = this.#messageIndexCursors.peek();
-    if (!cursor) {
+    this.#orderedMessageOffset.sort(([logTimeA], [logTimeB]) => Number(logTimeA - logTimeB));
+    if (reverse) {
+      // If we used `logTimeB - logTimeA` as the comparator for reverse iteration, messages with
+      // the same timestamp would not be in reverse order. To avoid this problem we use reverse()
+      // instead.
+      this.#orderedMessageOffset.reverse();
+    }
+
+    const [logTimeFirstMessage] = this.#orderedMessageOffset[0]!;
+    if (logTimeFirstMessage < this.chunkIndex.messageStartTime) {
       throw new Error(
-        `Unexpected empty cursor for chunk at offset ${this.chunkIndex.chunkStartOffset}`,
+        `Chunk contains a message with logTime (${logTimeFirstMessage}) earlier than chunk messageStartTime (${this.chunkIndex.messageStartTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
       );
     }
 
-    return cursor.records[cursor.index]![0];
+    const [logTimeLastMessage] = this.#orderedMessageOffset[this.#orderedMessageOffset.length - 1]!;
+    if (logTimeLastMessage > this.chunkIndex.messageEndTime) {
+      throw new Error(
+        `Chunk contains a message with logTime with logTime (${logTimeLastMessage}) later than chunk messageEndTime (${this.chunkIndex.messageEndTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
+      );
+    }
+
+    // Remove message offsets whose log time is not within [startTime, endTime];
+    let startIndex: number | undefined;
+    let endIndex: number | undefined;
+    const startTime = reverse ? this.#endTime : this.#startTime;
+    const endTime = reverse ? this.#startTime : this.#endTime;
+
+    const iteratee = (logTime: bigint) => (reverse ? -logTime : logTime);
+    if (startTime != undefined) {
+      startIndex = sortedIndexBy(this.#orderedMessageOffset, startTime, iteratee);
+    }
+    if (endTime != undefined) {
+      endIndex = sortedIndexBy(this.#orderedMessageOffset, endTime, iteratee);
+      // sortedIndexBy returns the minimum index but for the end index we actually want the highest index since
+      // endTime is inclusive. So we count up the endIndex manually until we reach a logTime that is not included anymore.
+      while (endIndex < this.#orderedMessageOffset.length) {
+        const logTime = this.#orderedMessageOffset[endIndex]![0];
+        if (reverse ? logTime < endTime : logTime > endTime) {
+          break;
+        }
+        endIndex++;
+      }
+    }
+
+    if (startIndex != undefined || endIndex != undefined) {
+      this.#orderedMessageOffset = this.#orderedMessageOffset.slice(startIndex ?? 0, endIndex);
+    }
+  }
+
+  #getSortTime(): bigint {
+    if (
+      this.#orderedMessageOffset != undefined &&
+      this.#orderedMessageOffset.length > 0 &&
+      this.#messageOffsetIndex < this.#orderedMessageOffset.length
+    ) {
+      return this.#orderedMessageOffset[this.#messageOffsetIndex]![0];
+    } else {
+      return this.#reverse ? this.chunkIndex.messageEndTime : this.chunkIndex.messageStartTime;
+    }
   }
 }
