@@ -345,11 +345,17 @@ export class McapIndexedReader {
     }
 
     const chunkCursors = new Heap<ChunkCursor>((a, b) => a.compare(b));
+    let chunksOrdered = true;
+    let prevChunkEndTime: bigint | undefined;
     for (const chunkIndex of this.chunkIndexes) {
       if (chunkIndex.messageStartTime <= endTime && chunkIndex.messageEndTime >= startTime) {
         chunkCursors.push(
           new ChunkCursor({ chunkIndex, relevantChannels, startTime, endTime, reverse }),
         );
+        if (chunksOrdered && prevChunkEndTime != undefined) {
+          chunksOrdered = chunkIndex.messageStartTime >= prevChunkEndTime;
+        }
+        prevChunkEndTime = chunkIndex.messageEndTime;
       }
     }
 
@@ -406,7 +412,11 @@ export class McapIndexedReader {
       yield result.record;
 
       if (cursor.hasMoreMessages()) {
-        chunkCursors.replace(cursor);
+        // There is no need to reorganize the heap when chunks are ordered and not overlapping.
+        // We can simply keep on reading messages from the current chunk.
+        if (!chunksOrdered) {
+          chunkCursors.replace(cursor);
+        }
       } else {
         chunkCursors.pop();
         chunkViewCache.delete(cursor.chunkIndex.chunkStartOffset);
