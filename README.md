@@ -29,9 +29,7 @@ which is used to store the test logs under `tests/conformance/data`.
 
 ## CLI tool
 
-A CLI tool for interacting with the format is available [here](./go/cli/mcap).
-
-Download the [latest release](https://github.com/foxglove/mcap/releases/latest).
+A [CLI tool](./go/cli/mcap) for interacting with the format is available [here](https://github.com/foxglove/mcap/releases/latest).
 
 ## License
 
