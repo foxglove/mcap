@@ -1,5 +1,6 @@
 import { parseRecord } from "./parse";
 import { sortedIndexBy } from "./sortedIndexBy";
+import { sortedLastIndexBy } from "./sortedLastIndex";
 import { IReadable, TypedMcapRecords } from "./types";
 
 type ChunkCursorParams = {
@@ -26,11 +27,9 @@ export class ChunkCursor {
   #reverse: boolean;
 
   // List of message offsets (across all channels) sorted by logTime.
-  #orderedMessageOffset?: [logTime: bigint, offset: bigint][];
+  orderedMessageOffsets?: [logTime: bigint, offset: bigint][];
   // Index for the next message offset. Gets incremented for every popMessage() call.
   #nextMessageOffsetIndex = 0;
-  // If endTime is specified, this corresponds to the index of the first message that is not within the [startTime, endTime] range.
-  #messageOffsetEndIndex?: number;
 
   constructor(params: ChunkCursorParams) {
     this.chunkIndex = params.chunkIndex;
@@ -72,13 +71,10 @@ export class ChunkCursor {
    * loaded before using this method.
    */
   hasMoreMessages(): boolean {
-    if (this.#orderedMessageOffset == undefined) {
+    if (this.orderedMessageOffsets == undefined) {
       throw new Error("loadMessageIndexes() must be called before hasMore()");
     }
-    return (
-      this.#nextMessageOffsetIndex <
-      (this.#messageOffsetEndIndex ?? this.#orderedMessageOffset.length)
-    );
+    return this.#nextMessageOffsetIndex < this.orderedMessageOffsets.length;
   }
 
   /**
@@ -86,19 +82,16 @@ export class ChunkCursor {
    * using this method.
    */
   popMessage(): [logTime: bigint, offset: bigint] {
-    if (this.#orderedMessageOffset == undefined) {
+    if (this.orderedMessageOffsets == undefined) {
       throw new Error("loadMessageIndexes() must be called before popMessage()");
     }
-    if (
-      this.#nextMessageOffsetIndex >=
-      (this.#messageOffsetEndIndex ?? this.#orderedMessageOffset.length)
-    ) {
+    if (this.#nextMessageOffsetIndex >= this.orderedMessageOffsets.length) {
       throw new Error(
         `Unexpected popMessage() call when no more messages are available, in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
       );
     }
 
-    return this.#orderedMessageOffset[this.#nextMessageOffsetIndex++]!;
+    return this.orderedMessageOffsets[this.#nextMessageOffsetIndex++]!;
   }
 
   /**
@@ -106,7 +99,7 @@ export class ChunkCursor {
    * called.
    */
   hasMessageIndexes(): boolean {
-    return this.#orderedMessageOffset != undefined;
+    return this.orderedMessageOffsets != undefined;
   }
 
   async loadMessageIndexes(readable: IReadable): Promise<void> {
@@ -142,8 +135,8 @@ export class ChunkCursor {
       messageIndexes.byteLength,
     );
 
-    this.#orderedMessageOffset = [];
     let offset = 0;
+    const arrayOfMessageOffsets: [logTime: bigint, offset: bigint][][] = [];
     for (
       let result;
       (result = parseRecord({ view: messageIndexesView, startOffset: offset, validateCrcs: true })),
@@ -160,7 +153,7 @@ export class ChunkCursor {
         continue;
       }
 
-      this.#orderedMessageOffset = this.#orderedMessageOffset.concat(result.record.records);
+      arrayOfMessageOffsets.push(result.record.records);
     }
 
     if (offset !== messageIndexesView.byteLength) {
@@ -169,50 +162,60 @@ export class ChunkCursor {
       );
     }
 
-    if (this.#orderedMessageOffset.length === 0) {
+    this.orderedMessageOffsets = arrayOfMessageOffsets.flat();
+    if (this.orderedMessageOffsets.length === 0) {
       return;
     }
 
-    this.#orderedMessageOffset.sort(([logTimeA], [logTimeB]) => Number(logTimeA - logTimeB));
+    this.orderedMessageOffsets.sort(([logTimeA, offsetA], [logTimeB, offsetB]) => {
+      let diff = Number(logTimeA - logTimeB);
+
+      // Break ties by message offset in the file
+      if (diff === 0) {
+        diff = Number(offsetA - offsetB);
+      }
+
+      return diff;
+    });
     if (reverse) {
       // If we used `logTimeB - logTimeA` as the comparator for reverse iteration, messages with
       // the same timestamp would not be in reverse order. To avoid this problem we use reverse()
       // instead.
-      this.#orderedMessageOffset.reverse();
+      this.orderedMessageOffsets.reverse();
     }
 
-    const [logTimeFirstMessage] = this.#orderedMessageOffset[0]!;
+    const [logTimeFirstMessage] = this.orderedMessageOffsets[0]!;
     if (logTimeFirstMessage < this.chunkIndex.messageStartTime) {
       throw new Error(
-        `Chunk contains a message with logTime (${logTimeFirstMessage}) earlier than chunk messageStartTime (${this.chunkIndex.messageStartTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
+        `Chunk at offset ${this.chunkIndex.chunkStartOffset} contains a message with logTime (${logTimeFirstMessage}) earlier than chunk messageStartTime (${this.chunkIndex.messageStartTime})`,
       );
     }
 
-    const [logTimeLastMessage] = this.#orderedMessageOffset[this.#orderedMessageOffset.length - 1]!;
+    const [logTimeLastMessage] = this.orderedMessageOffsets[this.orderedMessageOffsets.length - 1]!;
     if (logTimeLastMessage > this.chunkIndex.messageEndTime) {
       throw new Error(
-        `Chunk contains a message with logTime with logTime (${logTimeLastMessage}) later than chunk messageEndTime (${this.chunkIndex.messageEndTime}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
+        `Chunk at offset ${this.chunkIndex.chunkStartOffset} contains a message with logTime with logTime (${logTimeLastMessage}) later than chunk messageEndTime (${this.chunkIndex.messageEndTime})`,
       );
     }
 
     // Determine the indexes corresponding to the start and end time.
     const startTime = reverse ? this.#endTime : this.#startTime;
     const endTime = reverse ? this.#startTime : this.#endTime;
-    const iteratee = (logTime: bigint) => (reverse ? -logTime : logTime);
+    const iteratee = reverse ? (logTime: bigint) => -logTime : (logTime: bigint) => logTime;
+    let startIndex: number | undefined;
+    let endIndex: number | undefined;
+
     if (startTime != undefined) {
-      this.#nextMessageOffsetIndex = sortedIndexBy(this.#orderedMessageOffset, startTime, iteratee);
+      startIndex = sortedIndexBy(this.orderedMessageOffsets, startTime, iteratee);
     }
     if (endTime != undefined) {
-      this.#messageOffsetEndIndex = sortedIndexBy(this.#orderedMessageOffset, endTime, iteratee);
-      // sortedIndexBy returns the minimum index but for the end index we actually want the highest index since
-      // endTime is inclusive. So we count up the end index manually until we reach a logTime that is not included anymore.
-      while (this.#messageOffsetEndIndex < this.#orderedMessageOffset.length) {
-        const logTime = this.#orderedMessageOffset[this.#messageOffsetEndIndex]![0];
-        if (reverse ? logTime < endTime : logTime > endTime) {
-          break;
-        }
-        this.#messageOffsetEndIndex++;
-      }
+      endIndex = sortedLastIndexBy(this.orderedMessageOffsets, endTime, iteratee);
+    }
+
+    // Remove offsets whose log time is outside of the range [startTime, endTime] which
+    // avoids having to do additional book-keep of additional array start & stop indexes.
+    if (startIndex != undefined || endIndex != undefined) {
+      this.orderedMessageOffsets = this.orderedMessageOffsets.slice(startIndex, endIndex);
     }
   }
 
@@ -220,12 +223,11 @@ export class ChunkCursor {
   #getSortTime(): bigint {
     // If message indexes have been loaded and are non-empty, we return the logTime of the next available message.
     if (
-      this.#orderedMessageOffset != undefined &&
-      this.#orderedMessageOffset.length > 0 &&
-      this.#nextMessageOffsetIndex <
-        (this.#messageOffsetEndIndex ?? this.#orderedMessageOffset.length)
+      this.orderedMessageOffsets != undefined &&
+      this.orderedMessageOffsets.length > 0 &&
+      this.#nextMessageOffsetIndex < this.orderedMessageOffsets.length
     ) {
-      return this.#orderedMessageOffset[this.#nextMessageOffsetIndex]![0];
+      return this.orderedMessageOffsets[this.#nextMessageOffsetIndex]![0];
     }
 
     // Fall back to the chunk index' start time or end time.
