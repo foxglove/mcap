@@ -27,7 +27,7 @@ export class ChunkCursor {
   #reverse: boolean;
 
   // List of message offsets (across all channels) sorted by logTime.
-  orderedMessageOffsets?: [logTime: bigint, offset: bigint][];
+  #orderedMessageOffsets?: [logTime: bigint, offset: bigint][];
   // Index for the next message offset. Gets incremented for every popMessage() call.
   #nextMessageOffsetIndex = 0;
 
@@ -71,10 +71,10 @@ export class ChunkCursor {
    * loaded before using this method.
    */
   hasMoreMessages(): boolean {
-    if (this.orderedMessageOffsets == undefined) {
+    if (this.#orderedMessageOffsets == undefined) {
       throw new Error("loadMessageIndexes() must be called before hasMore()");
     }
-    return this.#nextMessageOffsetIndex < this.orderedMessageOffsets.length;
+    return this.#nextMessageOffsetIndex < this.#orderedMessageOffsets.length;
   }
 
   /**
@@ -82,16 +82,16 @@ export class ChunkCursor {
    * using this method.
    */
   popMessage(): [logTime: bigint, offset: bigint] {
-    if (this.orderedMessageOffsets == undefined) {
+    if (this.#orderedMessageOffsets == undefined) {
       throw new Error("loadMessageIndexes() must be called before popMessage()");
     }
-    if (this.#nextMessageOffsetIndex >= this.orderedMessageOffsets.length) {
+    if (this.#nextMessageOffsetIndex >= this.#orderedMessageOffsets.length) {
       throw new Error(
         `Unexpected popMessage() call when no more messages are available, in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
       );
     }
 
-    return this.orderedMessageOffsets[this.#nextMessageOffsetIndex++]!;
+    return this.#orderedMessageOffsets[this.#nextMessageOffsetIndex++]!;
   }
 
   /**
@@ -99,7 +99,7 @@ export class ChunkCursor {
    * called.
    */
   hasMessageIndexes(): boolean {
-    return this.orderedMessageOffsets != undefined;
+    return this.#orderedMessageOffsets != undefined;
   }
 
   async loadMessageIndexes(readable: IReadable): Promise<void> {
@@ -162,36 +162,39 @@ export class ChunkCursor {
       );
     }
 
-    this.orderedMessageOffsets = arrayOfMessageOffsets.flat();
-    if (this.orderedMessageOffsets.length === 0) {
-      return;
-    }
+    this.#orderedMessageOffsets = arrayOfMessageOffsets
+      .flat()
+      .sort(([logTimeA, offsetA], [logTimeB, offsetB]) => {
+        let diff = Number(logTimeA - logTimeB);
 
-    this.orderedMessageOffsets.sort(([logTimeA, offsetA], [logTimeB, offsetB]) => {
-      let diff = Number(logTimeA - logTimeB);
+        // Break ties by message offset in the file
+        if (diff === 0) {
+          diff = Number(offsetA - offsetB);
+        }
 
-      // Break ties by message offset in the file
-      if (diff === 0) {
-        diff = Number(offsetA - offsetB);
-      }
+        return diff;
+      });
 
-      return diff;
-    });
     if (reverse) {
       // If we used `logTimeB - logTimeA` as the comparator for reverse iteration, messages with
       // the same timestamp would not be in reverse order. To avoid this problem we use reverse()
       // instead.
-      this.orderedMessageOffsets.reverse();
+      this.#orderedMessageOffsets.reverse();
     }
 
-    const [logTimeFirstMessage] = this.orderedMessageOffsets[0]!;
+    if (this.#orderedMessageOffsets.length === 0) {
+      return;
+    }
+
+    const [logTimeFirstMessage] = this.#orderedMessageOffsets[0]!;
     if (logTimeFirstMessage < this.chunkIndex.messageStartTime) {
       throw new Error(
         `Chunk at offset ${this.chunkIndex.chunkStartOffset} contains a message with logTime (${logTimeFirstMessage}) earlier than chunk messageStartTime (${this.chunkIndex.messageStartTime})`,
       );
     }
 
-    const [logTimeLastMessage] = this.orderedMessageOffsets[this.orderedMessageOffsets.length - 1]!;
+    const [logTimeLastMessage] =
+      this.#orderedMessageOffsets[this.#orderedMessageOffsets.length - 1]!;
     if (logTimeLastMessage > this.chunkIndex.messageEndTime) {
       throw new Error(
         `Chunk at offset ${this.chunkIndex.chunkStartOffset} contains a message with logTime with logTime (${logTimeLastMessage}) later than chunk messageEndTime (${this.chunkIndex.messageEndTime})`,
@@ -206,16 +209,16 @@ export class ChunkCursor {
     let endIndex: number | undefined;
 
     if (startTime != undefined) {
-      startIndex = sortedIndexBy(this.orderedMessageOffsets, startTime, iteratee);
+      startIndex = sortedIndexBy(this.#orderedMessageOffsets, startTime, iteratee);
     }
     if (endTime != undefined) {
-      endIndex = sortedLastIndexBy(this.orderedMessageOffsets, endTime, iteratee);
+      endIndex = sortedLastIndexBy(this.#orderedMessageOffsets, endTime, iteratee);
     }
 
     // Remove offsets whose log time is outside of the range [startTime, endTime] which
     // avoids having to do additional book-keep of additional array start & stop indexes.
     if (startIndex != undefined || endIndex != undefined) {
-      this.orderedMessageOffsets = this.orderedMessageOffsets.slice(startIndex, endIndex);
+      this.#orderedMessageOffsets = this.#orderedMessageOffsets.slice(startIndex, endIndex);
     }
   }
 
@@ -223,11 +226,11 @@ export class ChunkCursor {
   #getSortTime(): bigint {
     // If message indexes have been loaded and are non-empty, we return the logTime of the next available message.
     if (
-      this.orderedMessageOffsets != undefined &&
-      this.orderedMessageOffsets.length > 0 &&
-      this.#nextMessageOffsetIndex < this.orderedMessageOffsets.length
+      this.#orderedMessageOffsets != undefined &&
+      this.#orderedMessageOffsets.length > 0 &&
+      this.#nextMessageOffsetIndex < this.#orderedMessageOffsets.length
     ) {
-      return this.orderedMessageOffsets[this.#nextMessageOffsetIndex]![0];
+      return this.#orderedMessageOffsets[this.#nextMessageOffsetIndex]![0];
     }
 
     // Fall back to the chunk index' start time or end time.
