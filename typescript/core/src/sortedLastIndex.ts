@@ -2,7 +2,6 @@
  * Return the lowest index of `array` where an element can be inserted and maintain its sorted
  * order. This is a specialization of lodash's sortedIndexBy().
  */
-
 export function sortedLastIndexBy(
   array: [bigint, bigint][],
   value: bigint,
