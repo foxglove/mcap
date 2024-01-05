@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/foxglove/go-rosbag"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/stretchr/testify/assert"
 )
@@ -48,6 +49,58 @@ func TestBag2MCAPPreservesChannelMetadata(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 3, channelCount)
+}
+
+func TestDeduplicatesSchemas(t *testing.T) {
+	buf := &bytes.Buffer{}
+	bw, err := rosbag.NewWriter(buf)
+	assert.Nil(t, err)
+	assert.Nil(t, bw.WriteBagHeader(rosbag.BagHeader{}))
+	assert.Nil(t, bw.WriteConnection(&rosbag.Connection{
+		Conn:  0,
+		Topic: "yo",
+		Data: rosbag.ConnectionHeader{
+			Topic:  "yo",
+			Type:   "a",
+			MD5Sum: "123",
+		},
+	}))
+	assert.Nil(t, bw.WriteConnection(&rosbag.Connection{
+		Conn:  1,
+		Topic: "yoo",
+		Data: rosbag.ConnectionHeader{
+			Topic:  "yoo",
+			Type:   "a",
+			MD5Sum: "123",
+		},
+	}))
+	assert.Nil(t, bw.WriteMessage(&rosbag.Message{
+		Conn: 0,
+		Time: 0,
+		Data: []byte{},
+	}))
+	assert.Nil(t, bw.WriteMessage(&rosbag.Message{
+		Conn: 1,
+		Time: 0,
+		Data: []byte{},
+	}))
+	assert.Nil(t, bw.Close())
+
+	output := &bytes.Buffer{}
+	assert.Nil(t, Bag2MCAP(output, buf, &mcap.WriterOptions{
+		IncludeCRC: true,
+		Chunked:    true,
+		ChunkSize:  1024,
+	}))
+
+	rs := bytes.NewReader(output.Bytes())
+	reader, err := mcap.NewReader(rs)
+	assert.Nil(t, err)
+
+	info, err := reader.Info()
+	assert.Nil(t, err)
+	assert.Equal(t, 2, int(info.Statistics.ChannelCount))
+	assert.Equal(t, 1, int(info.Statistics.SchemaCount))
 }
 
 func BenchmarkBag2MCAP(b *testing.B) {

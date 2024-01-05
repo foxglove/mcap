@@ -260,7 +260,7 @@ func Bag2MCAP(w io.Writer, r io.Reader, opts *mcap.WriterOptions, messageCallbac
 			msgdef := connectionDataHeader["message_definition"]
 			delete(connectionDataHeader, "message_definition")
 
-			key := fmt.Sprintf("%s/%s", topic, connectionDataHeader["md5sum"])
+			key := fmt.Sprintf("%s/%s", typ, connectionDataHeader["md5sum"])
 			if _, ok := schemas[key]; !ok {
 				schemaID := uint16(len(schemas) + 1)
 				msgdefCopy := make([]byte, len(msgdef))
