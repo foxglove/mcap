@@ -42,6 +42,16 @@ func prepInput(t *testing.T, w io.Writer, schema *mcap.Schema, channel *mcap.Cha
 		},
 	}))
 
+	att := &mcap.Attachment{
+		LogTime:    1,
+		CreateTime: 2,
+		Name:       "mock.bytes",
+		MediaType:  "application/octet-stream",
+		DataSize:   3,
+		Data:       bytes.NewBuffer([]byte{1, 2, 3}),
+	}
+	writer.WriteAttachment(att)
+
 	assert.Nil(t, writer.Close())
 }
 
@@ -122,6 +132,49 @@ func TestMCAPMerging(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestAttachmentMerging(t *testing.T) {
+	t.Run("include attachments in merged file", func(t *testing.T) {
+		buf1 := &bytes.Buffer{}
+		buf2 := &bytes.Buffer{}
+		prepInput(t, buf1, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 1, Topic: "/foo"})
+		prepInput(t, buf2, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 1, Topic: "/bar"})
+
+		opts := mergeOpts{coalesceChannels: "none", allowDuplicateMetadata: true}
+		merger := newMCAPMerger(opts)
+		output := &bytes.Buffer{}
+		inputs := []namedReader{
+			{"buf1", buf1},
+			{"buf2", buf2},
+		}
+
+		err := merger.mergeInputs(output, inputs)
+		assert.Nil(t, err)
+
+		reader, err := mcap.NewReader(bytes.NewReader(output.Bytes()))
+		assert.Nil(t, err)
+		info, err := reader.Info()
+		assert.Nil(t, err)
+
+		assert.Equal(t, 2, len(info.AttachmentIndexes))
+		for _, attIndex := range info.AttachmentIndexes {
+			assert.Equal(t, &mcap.Attachment{
+				LogTime:    1,
+				CreateTime: 2,
+				Name:       "mock.bytes",
+				MediaType:  "application/octet-stream",
+				DataSize:   3,
+			}, &mcap.Attachment{
+				LogTime:    attIndex.LogTime,
+				CreateTime: attIndex.CreateTime,
+				Name:       attIndex.Name,
+				MediaType:  attIndex.MediaType,
+				DataSize:   attIndex.DataSize,
+			})
+		}
+		reader.Close()
+	})
 }
 
 func TestChannelsWithSameSchema(t *testing.T) {

@@ -145,6 +145,14 @@ func (m *mcapMerger) addMetadata(w *mcap.Writer, metadata *mcap.Metadata) error 
 	return nil
 }
 
+func (m *mcapMerger) addAttachment(w *mcap.Writer, attachment *mcap.Attachment) error {
+	err := w.WriteAttachment(attachment)
+	if err != nil {
+		return fmt.Errorf("failed to write attachment: %w", err)
+	}
+	return nil
+}
+
 func getChannelHash(channel *mcap.Channel, coalesceChannels string) HashSum {
 	hasher := md5.New()
 	schemaIDBytes := make([]byte, 2)
@@ -275,7 +283,26 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 	// renumbered IDs, and load the message (with renumbered IDs) into the
 	// priority queue.
 	for inputID, input := range inputs {
-		reader, err := mcap.NewReader(input.reader)
+		// include a lexer option to process attachments.
+		// attachments are appended as they are encountered; log time order is
+		// not preserved.
+		opt := []mcap.ReaderOpt{
+			mcap.WithLexerOptions(&mcap.LexerOptions{
+				EmitChunks: false,
+				AttachmentCallback: func(attReader *mcap.AttachmentReader) error {
+					m.addAttachment(writer, &mcap.Attachment{
+						LogTime:    attReader.LogTime,
+						CreateTime: attReader.CreateTime,
+						Name:       attReader.Name,
+						MediaType:  attReader.MediaType,
+						DataSize:   attReader.DataSize,
+						Data:       attReader.Data(),
+					})
+					return nil
+				},
+			}),
+		}
+		reader, err := mcap.NewReader(input.reader, opt...)
 		if err != nil {
 			return fmt.Errorf("failed to open reader on %s: %w", input.name, err)
 		}
@@ -285,7 +312,8 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 			mcap.UsingIndex(false),
 			mcap.WithMetadataCallback(func(metadata *mcap.Metadata) error {
 				return m.addMetadata(writer, metadata)
-			})}
+			}),
+		}
 		iterator, err := reader.Messages(opts...)
 		if err != nil {
 			return err

@@ -222,14 +222,25 @@ func (r *Reader) Close() {
 	r.l.Close()
 }
 
-func NewReader(r io.Reader) (*Reader, error) {
+func NewReader(r io.Reader, opts ...ReaderOpt) (*Reader, error) {
 	var rs io.ReadSeeker
 	if readseeker, ok := r.(io.ReadSeeker); ok {
 		rs = readseeker
 	}
-	lexer, err := NewLexer(r, &LexerOptions{
-		EmitChunks: true,
-	})
+	options := ReaderOptions{}
+	for _, opt := range opts {
+		err := opt(&options)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var lexerOpts *LexerOptions
+	if options.LexerOpts != nil {
+		lexerOpts = options.LexerOpts
+	} else {
+		lexerOpts = &LexerOptions{EmitChunks: true}
+	}
+	lexer, err := NewLexer(r, lexerOpts)
 	if err != nil {
 		return nil, err
 	}
