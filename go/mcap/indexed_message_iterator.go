@@ -238,20 +238,20 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	return nil
 }
 
-func readRecord(r io.Reader) (TokenType, []byte, error) {
+func readRecord(r io.Reader) (OpCode, []byte, error) {
 	buf := make([]byte, 9)
 	_, err := io.ReadFull(r, buf)
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to read record header: %w", err)
 	}
-	tokenType := TokenType(buf[0])
+	opcode := OpCode(buf[0])
 	recordLen := binary.LittleEndian.Uint64(buf[1:])
 	record := make([]byte, recordLen)
 	_, err = io.ReadFull(r, record)
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to read record: %w", err)
 	}
-	return tokenType, record, nil
+	return opcode, record, nil
 }
 
 func (it *indexedMessageIterator) Next(_ []byte) (*Schema, *Channel, *Message, error) {
@@ -267,11 +267,11 @@ func (it *indexedMessageIterator) Next(_ []byte) (*Schema, *Channel, *Message, e
 				if err != nil {
 					return nil, nil, nil, fmt.Errorf("failed to seek to metadata: %w", err)
 				}
-				tokenType, data, err := readRecord(it.rs)
+				opcode, data, err := readRecord(it.rs)
 				if err != nil {
 					return nil, nil, nil, fmt.Errorf("failed to read metadata record: %w", err)
 				}
-				if tokenType != TokenMetadata {
+				if opcode != OpMetadata {
 					return nil, nil, nil, fmt.Errorf("expected metadata record, found %v", data)
 				}
 				metadata, err := ParseMetadata(data)

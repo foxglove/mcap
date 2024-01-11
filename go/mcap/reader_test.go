@@ -552,6 +552,53 @@ func find[T any](items []T, f func(T) bool) (val T, err error) {
 	return val, fmt.Errorf("not found")
 }
 
+func TestReaderMetadataCallback(t *testing.T) {
+	cases := []struct {
+		assertion string
+		useIndex  bool
+	}{
+		{
+			"using index",
+			true,
+		},
+		{
+			"without index",
+			false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.assertion, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			writer, err := NewWriter(buf, &WriterOptions{
+				IncludeCRC: false,
+				Chunked:    true,
+				ChunkSize:  1024,
+			})
+			assert.Nil(t, err)
+			assert.Nil(t, writer.WriteHeader(&Header{}))
+			assert.Nil(t, writer.WriteMetadata(&Metadata{
+				Name:     "foo",
+				Metadata: map[string]string{"foo": "bar"},
+			}))
+			assert.Nil(t, writer.Close())
+			data := bytes.NewReader(buf.Bytes())
+			reader, err := NewReader(data)
+			assert.Nil(t, err)
+
+			var recordName string
+			it, err := reader.Messages(UsingIndex(c.useIndex), WithMetadataCallback(func(m *Metadata) error {
+				recordName = m.Name
+				return nil
+			}))
+			assert.Nil(t, err)
+			_, _, _, err = it.Next(nil)
+			assert.ErrorIs(t, err, io.EOF)
+
+			assert.Equal(t, "foo", recordName)
+		})
+	}
+}
+
 func TestReadingDiagnostics(t *testing.T) {
 	f, err := os.Open("../../testdata/mcap/demo.mcap")
 	assert.Nil(t, err)
