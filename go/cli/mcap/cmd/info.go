@@ -112,7 +112,6 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			fmt.Fprintf(buf, "\n")
 		}
 	}
-	fmt.Fprintf(buf, "channels:\n")
 	chanIDs := []uint16{}
 	for chanID := range info.Channels {
 		chanIDs = append(chanIDs, chanID)
@@ -120,6 +119,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	sort.Slice(chanIDs, func(i, j int) bool {
 		return chanIDs[i] < chanIDs[j]
 	})
+	fmt.Fprintf(buf, "channels(%d):\n", len(chanIDs))
 	rows := [][]string{}
 	maxCountWidth := 0
 	if info.Statistics != nil {
