@@ -50,7 +50,8 @@ func prepInput(t *testing.T, w io.Writer, schema *mcap.Schema, channel *mcap.Cha
 		DataSize:   3,
 		Data:       bytes.NewBuffer([]byte{1, 2, 3}),
 	}
-	writer.WriteAttachment(att)
+	err = writer.WriteAttachment(att)
+	assert.Nil(t, err)
 
 	assert.Nil(t, writer.Close())
 }

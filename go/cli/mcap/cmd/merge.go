@@ -290,7 +290,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 			mcap.WithLexerOptions(&mcap.LexerOptions{
 				EmitChunks: false,
 				AttachmentCallback: func(attReader *mcap.AttachmentReader) error {
-					m.addAttachment(writer, &mcap.Attachment{
+					err := m.addAttachment(writer, &mcap.Attachment{
 						LogTime:    attReader.LogTime,
 						CreateTime: attReader.CreateTime,
 						Name:       attReader.Name,
@@ -298,7 +298,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 						DataSize:   attReader.DataSize,
 						Data:       attReader.Data(),
 					})
-					return nil
+					return err
 				},
 			}),
 		}
