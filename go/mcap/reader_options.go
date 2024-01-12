@@ -4,19 +4,6 @@ import (
 	"fmt"
 )
 
-type ReaderOptions struct {
-	LexerOpts *LexerOptions
-}
-
-type ReaderOpt func(*ReaderOptions) error
-
-func WithLexerOptions(lexerOpts *LexerOptions) ReaderOpt {
-	return func(ro *ReaderOptions) error {
-		ro.LexerOpts = lexerOpts
-		return nil
-	}
-}
-
 type ReadOrder int
 
 const (

@@ -145,14 +145,6 @@ func (m *mcapMerger) addMetadata(w *mcap.Writer, metadata *mcap.Metadata) error 
 	return nil
 }
 
-func (m *mcapMerger) addAttachment(w *mcap.Writer, attachment *mcap.Attachment) error {
-	err := w.WriteAttachment(attachment)
-	if err != nil {
-		return fmt.Errorf("failed to write attachment: %w", err)
-	}
-	return nil
-}
-
 func getChannelHash(channel *mcap.Channel, coalesceChannels string) HashSum {
 	hasher := md5.New()
 	schemaIDBytes := make([]byte, 2)
@@ -283,26 +275,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 	// renumbered IDs, and load the message (with renumbered IDs) into the
 	// priority queue.
 	for inputID, input := range inputs {
-		// include a lexer option to process attachments.
-		// attachments are appended as they are encountered; log time order is
-		// not preserved.
-		opt := []mcap.ReaderOpt{
-			mcap.WithLexerOptions(&mcap.LexerOptions{
-				EmitChunks: false,
-				AttachmentCallback: func(attReader *mcap.AttachmentReader) error {
-					err := m.addAttachment(writer, &mcap.Attachment{
-						LogTime:    attReader.LogTime,
-						CreateTime: attReader.CreateTime,
-						Name:       attReader.Name,
-						MediaType:  attReader.MediaType,
-						DataSize:   attReader.DataSize,
-						Data:       attReader.Data(),
-					})
-					return err
-				},
-			}),
-		}
-		reader, err := mcap.NewReader(input.reader, opt...)
+		reader, err := mcap.NewReader(input.reader)
 		if err != nil {
 			return fmt.Errorf("failed to open reader on %s: %w", input.name, err)
 		}
@@ -395,12 +368,51 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 		}
 		heap.Push(pq, utils.NewTaggedMessage(msg.InputID, newMessage))
 	}
+
+	// merge any indexed attachments
+	for _, input := range inputs {
+		_, err := input.reader.Seek(0, io.SeekStart)
+		if err != nil {
+			return fmt.Errorf("Failed to seek: %w", err)
+		}
+		reader, err := mcap.NewReader(input.reader)
+		if err != nil {
+			return fmt.Errorf("Failed to create reader for attachments: %w", err)
+		}
+		defer reader.Close() //nolint:gocritic // we actually want these defered in the loop.
+		info, err := reader.Info()
+		if err != nil {
+			return fmt.Errorf("Failed to get Info: %w", err)
+		}
+		if info == nil {
+			continue
+		}
+
+		for _, index := range info.AttachmentIndexes {
+			attReader, err := reader.GetAttachmentReader(index.Offset)
+			if err != nil {
+				return fmt.Errorf("failed to read attachment: %w", err)
+			}
+			err = writer.WriteAttachment(&mcap.Attachment{
+				Name:       index.Name,
+				MediaType:  index.MediaType,
+				CreateTime: index.CreateTime,
+				LogTime:    index.LogTime,
+				DataSize:   index.DataSize,
+				Data:       attReader.Data(),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to write attachment: %w", err)
+			}
+		}
+	}
+
 	return writer.Close()
 }
 
 type namedReader struct {
 	name   string
-	reader io.Reader
+	reader io.ReadSeeker
 }
 
 // mergeCmd represents the merge command.

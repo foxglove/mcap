@@ -96,9 +96,9 @@ func TestMCAPMerging(t *testing.T) {
 				merger := newMCAPMerger(c.opts)
 				output := &bytes.Buffer{}
 				inputs := []namedReader{
-					{"buf1", buf1},
-					{"buf2", buf2},
-					{"buf3", buf3},
+					{"buf1", bytes.NewReader(buf1.Bytes())},
+					{"buf2", bytes.NewReader(buf2.Bytes())},
+					{"buf3", bytes.NewReader(buf3.Bytes())},
 				}
 				assert.ErrorIs(t, merger.mergeInputs(output, inputs), c.expectedError)
 				if c.expectedError != nil {
@@ -146,8 +146,8 @@ func TestAttachmentMerging(t *testing.T) {
 		merger := newMCAPMerger(opts)
 		output := &bytes.Buffer{}
 		inputs := []namedReader{
-			{"buf1", buf1},
-			{"buf2", buf2},
+			{"buf1", bytes.NewReader(buf1.Bytes())},
+			{"buf2", bytes.NewReader(buf2.Bytes())},
 		}
 
 		err := merger.mergeInputs(output, inputs)
@@ -155,6 +155,8 @@ func TestAttachmentMerging(t *testing.T) {
 
 		reader, err := mcap.NewReader(bytes.NewReader(output.Bytes()))
 		assert.Nil(t, err)
+		defer reader.Close()
+
 		info, err := reader.Info()
 		assert.Nil(t, err)
 
@@ -173,8 +175,13 @@ func TestAttachmentMerging(t *testing.T) {
 				MediaType:  attIndex.MediaType,
 				DataSize:   attIndex.DataSize,
 			})
+
+			attReader, err := reader.GetAttachmentReader(attIndex.Offset)
+			assert.Nil(t, err)
+			data, err := io.ReadAll(attReader.Data())
+			assert.Nil(t, err)
+			assert.Equal(t, []byte{1, 2, 3}, data)
 		}
-		reader.Close()
 	})
 }
 
@@ -224,7 +231,7 @@ func TestChannelsWithSameSchema(t *testing.T) {
 		coalesceChannels: "none",
 	})
 	output := &bytes.Buffer{}
-	assert.Nil(t, merger.mergeInputs(output, []namedReader{{"buf", buf}}))
+	assert.Nil(t, merger.mergeInputs(output, []namedReader{{"buf", bytes.NewReader(buf.Bytes())}}))
 	reader, err := mcap.NewReader(bytes.NewReader(output.Bytes()))
 	assert.Nil(t, err)
 	info, err := reader.Info()
@@ -247,16 +254,16 @@ func TestMultiChannelInput(t *testing.T) {
 	})
 	multiChannelInput := &bytes.Buffer{}
 	inputs := []namedReader{
-		{"buf1", buf1},
-		{"buf2", buf2},
+		{"buf1", bytes.NewReader(buf1.Bytes())},
+		{"buf2", bytes.NewReader(buf2.Bytes())},
 	}
 	assert.Nil(t, merger.mergeInputs(multiChannelInput, inputs))
 	buf3 := &bytes.Buffer{}
 	prepInput(t, buf3, &mcap.Schema{ID: 2}, &mcap.Channel{ID: 2, Topic: "/baz"})
 	output := &bytes.Buffer{}
 	inputs2 := []namedReader{
-		{"multiChannelInput", multiChannelInput},
-		{"buf3", buf3},
+		{"multiChannelInput", bytes.NewReader(multiChannelInput.Bytes())},
+		{"buf3", bytes.NewReader(buf3.Bytes())},
 	}
 	assert.Nil(t, merger.mergeInputs(output, inputs2))
 	reader, err := mcap.NewReader(output)
@@ -286,8 +293,8 @@ func TestSchemalessChannelInput(t *testing.T) {
 	})
 	output := &bytes.Buffer{}
 	inputs := []namedReader{
-		{"buf1", buf1},
-		{"buf2", buf2},
+		{"buf1", bytes.NewReader(buf1.Bytes())},
+		{"buf2", bytes.NewReader(buf2.Bytes())},
 	}
 	assert.Nil(t, merger.mergeInputs(output, inputs))
 
@@ -340,7 +347,7 @@ func TestMultipleSchemalessChannelSingleInput(t *testing.T) {
 	merger := newMCAPMerger(mergeOpts{coalesceChannels: "none"})
 	output := &bytes.Buffer{}
 	inputs := []namedReader{
-		{"buf", buf},
+		{"buf", bytes.NewReader(buf.Bytes())},
 	}
 	assert.Nil(t, merger.mergeInputs(output, inputs))
 
@@ -401,7 +408,7 @@ func TestBadInputGivesNamedErrors(t *testing.T) {
 					coalesceChannels: "none",
 				})
 				inputs := []namedReader{
-					{"filename", buf},
+					{"filename", bytes.NewReader(buf.Bytes())},
 				}
 				output := &bytes.Buffer{}
 				err := merger.mergeInputs(output, inputs)
@@ -426,9 +433,9 @@ func TestSameSchemasNotDuplicated(t *testing.T) {
 	})
 	output := &bytes.Buffer{}
 	inputs := []namedReader{
-		{"buf1", buf1},
-		{"buf2", buf2},
-		{"buf3", buf3},
+		{"buf1", bytes.NewReader(buf1.Bytes())},
+		{"buf2", bytes.NewReader(buf2.Bytes())},
+		{"buf3", bytes.NewReader(buf3.Bytes())},
 	}
 	assert.Nil(t, merger.mergeInputs(output, inputs))
 	// output should now be a well-formed mcap
@@ -472,10 +479,10 @@ func TestChannelCoalesceBehavior(t *testing.T) {
 		prepInput(t, buf4, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 4, Topic: "/bar"})
 		output := &bytes.Buffer{}
 		inputs := []namedReader{
-			{"buf1", buf1},
-			{"buf2", buf2},
-			{"buf3", buf3},
-			{"buf4", buf4},
+			{"buf1", bytes.NewReader(buf1.Bytes())},
+			{"buf2", bytes.NewReader(buf2.Bytes())},
+			{"buf3", bytes.NewReader(buf3.Bytes())},
+			{"buf4", bytes.NewReader(buf4.Bytes())},
 		}
 		merger := newMCAPMerger(mergeOpts{coalesceChannels: coalesceChannels, allowDuplicateMetadata: true})
 		assert.Nil(t, merger.mergeInputs(output, inputs))
