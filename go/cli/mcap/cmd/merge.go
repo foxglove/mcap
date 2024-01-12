@@ -373,16 +373,16 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 	for _, input := range inputs {
 		_, err := input.reader.Seek(0, io.SeekStart)
 		if err != nil {
-			return fmt.Errorf("Failed to seek: %w", err)
+			return fmt.Errorf("failed to seek: %w", err)
 		}
 		reader, err := mcap.NewReader(input.reader)
 		if err != nil {
-			return fmt.Errorf("Failed to create reader for attachments: %w", err)
+			return fmt.Errorf("failed to create reader for attachments: %w", err)
 		}
 		defer reader.Close() //nolint:gocritic // we actually want these defered in the loop.
 		info, err := reader.Info()
 		if err != nil {
-			return fmt.Errorf("Failed to get Info: %w", err)
+			return fmt.Errorf("failed to get Info: %w", err)
 		}
 		if info == nil {
 			continue
