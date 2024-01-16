@@ -303,11 +303,6 @@ func (l *Lexer) Close() {
 	if l.decoders.zstd != nil {
 		l.decoders.zstd.Close()
 	}
-	for _, decompressor := range l.decompressors {
-		if closer, ok := decompressor.(io.Closer); ok {
-			closer.Close()
-		}
-	}
 }
 
 type decoders struct {
@@ -513,9 +508,7 @@ type LexerOptions struct {
 	AttachmentCallback func(*AttachmentReader) error
 	// Decompressors are custom decompressors. Chunks matching the supplied
 	// compression format will be decompressed with the provided
-	// ResettableReader instead of the default implementation. If the
-	// ResettableReader also implements io.Closer, Close will be called on close
-	// of the reader.
+	// ResettableReader instead of the default implementation.
 	Decompressors map[CompressionFormat]ResettableReader
 }
 
