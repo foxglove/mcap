@@ -369,40 +369,53 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 		heap.Push(pq, utils.NewTaggedMessage(msg.InputID, newMessage))
 	}
 
-	// merge any indexed attachments
+	// scan the input again for any attachments
 	for _, input := range inputs {
 		_, err := input.reader.Seek(0, io.SeekStart)
 		if err != nil {
 			return fmt.Errorf("failed to seek: %w", err)
 		}
-		reader, err := mcap.NewReader(input.reader)
+		lexer, err := mcap.NewLexer(input.reader, &mcap.LexerOptions{
+			ComputeAttachmentCRCs: true,
+			AttachmentCallback: func(attReader *mcap.AttachmentReader) error {
+				err := writer.WriteAttachment(&mcap.Attachment{
+					LogTime:    attReader.LogTime,
+					CreateTime: attReader.CreateTime,
+					Name:       attReader.Name,
+					MediaType:  attReader.MediaType,
+					DataSize:   attReader.DataSize,
+					Data:       attReader.Data(),
+				})
+				if err != nil {
+					return fmt.Errorf("failed to write attachment: %w", err)
+				}
+				computed, err := attReader.ComputedCRC()
+				if err != nil {
+					return fmt.Errorf("failed to compute CRC: %w", err)
+				}
+				parsed, err := attReader.ParsedCRC()
+				if err != nil {
+					return fmt.Errorf("failed to parse CRC: %w", err)
+				}
+				if computed != parsed {
+					return fmt.Errorf("CRC check failed: %w", err)
+				}
+
+				return err
+			},
+		})
 		if err != nil {
-			return fmt.Errorf("failed to create reader for attachments: %w", err)
-		}
-		defer reader.Close() //nolint:gocritic // we actually want these defered in the loop.
-		info, err := reader.Info()
-		if err != nil {
-			return fmt.Errorf("failed to get Info: %w", err)
-		}
-		if info == nil {
-			continue
+			return fmt.Errorf("failed to create lexer: %w", err)
 		}
 
-		for _, index := range info.AttachmentIndexes {
-			attReader, err := reader.GetAttachmentReader(index.Offset)
+		buf := make([]byte, 1024)
+		for {
+			_, _, err := lexer.Next(buf)
 			if err != nil {
-				return fmt.Errorf("failed to read attachment: %w", err)
-			}
-			err = writer.WriteAttachment(&mcap.Attachment{
-				Name:       index.Name,
-				MediaType:  index.MediaType,
-				CreateTime: index.CreateTime,
-				LogTime:    index.LogTime,
-				DataSize:   index.DataSize,
-				Data:       attReader.Data(),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to write attachment: %w", err)
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				return err
 			}
 		}
 	}
