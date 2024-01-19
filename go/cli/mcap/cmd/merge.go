@@ -279,7 +279,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 		if err != nil {
 			return fmt.Errorf("failed to open reader on %s: %w", input.name, err)
 		}
-		defer reader.Close() //nolint:gocritic // we actually want these defered in the loop.
+		defer reader.Close() //nolint:gocritic // we actually want these deferred in the loop.
 		profiles[inputID] = reader.Header().Profile
 		opts := []mcap.ReadOpt{
 			mcap.UsingIndex(false),
@@ -369,58 +369,118 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 		heap.Push(pq, utils.NewTaggedMessage(msg.InputID, newMessage))
 	}
 
-	// scan the input again for any attachments
+	// append any attachments as they are encountered. if an input is unindexed,
+	// we do a second full scan of it.
 	for _, input := range inputs {
 		_, err := input.reader.Seek(0, io.SeekStart)
 		if err != nil {
 			return fmt.Errorf("failed to seek: %w", err)
 		}
-		lexer, err := mcap.NewLexer(input.reader, &mcap.LexerOptions{
-			ComputeAttachmentCRCs: true,
-			AttachmentCallback: func(attReader *mcap.AttachmentReader) error {
-				err := writer.WriteAttachment(&mcap.Attachment{
-					LogTime:    attReader.LogTime,
-					CreateTime: attReader.CreateTime,
-					Name:       attReader.Name,
-					MediaType:  attReader.MediaType,
-					DataSize:   attReader.DataSize,
-					Data:       attReader.Data(),
-				})
-				if err != nil {
-					return fmt.Errorf("failed to write attachment: %w", err)
-				}
-				computed, err := attReader.ComputedCRC()
-				if err != nil {
-					return fmt.Errorf("failed to compute CRC: %w", err)
-				}
-				parsed, err := attReader.ParsedCRC()
-				if err != nil {
-					return fmt.Errorf("failed to parse CRC: %w", err)
-				}
-				if computed != parsed {
-					return fmt.Errorf("CRC check failed: %w", err)
-				}
 
-				return err
-			},
-		})
+		reader, err := mcap.NewReader(input.reader)
 		if err != nil {
-			return fmt.Errorf("failed to create lexer: %w", err)
+			return fmt.Errorf("failed to create attachment reader: %w", err)
 		}
-
-		buf := make([]byte, 1024)
-		for {
-			_, _, err := lexer.Next(buf)
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					break
+		defer reader.Close() //nolint:gocritic // we actually want these deferred in the loop.
+		info, err := reader.Info()
+		if err == nil && info != nil && info.Statistics != nil {
+			if info.Statistics.AttachmentCount > 0 {
+				err = addIndexedAttachments(reader, writer)
+				if err != nil {
+					return fmt.Errorf("failed to add attachment from indexed file %s: %w", input.name, err)
 				}
-				return err
+			}
+		} else {
+			err = scanForAttachments(&input, writer)
+			if err != nil {
+				return fmt.Errorf("failed to scan attachments from file %s: %w", input.name, err)
 			}
 		}
 	}
 
 	return writer.Close()
+}
+
+// scan only the attachment indexes to add attachments.
+func addIndexedAttachments(reader *mcap.Reader, writer *mcap.Writer) error {
+	info, err := reader.Info()
+	if err != nil {
+		return fmt.Errorf("failed to get Info: %w", err)
+	}
+	if info == nil {
+		return nil
+	}
+
+	for _, index := range info.AttachmentIndexes {
+		attReader, err := reader.GetAttachmentReader(index.Offset)
+		if err != nil {
+			return fmt.Errorf("failed to read attachment: %w", err)
+		}
+		err = writer.WriteAttachment(&mcap.Attachment{
+			Name:       index.Name,
+			MediaType:  index.MediaType,
+			CreateTime: index.CreateTime,
+			LogTime:    index.LogTime,
+			DataSize:   index.DataSize,
+			Data:       attReader.Data(),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to write attachment: %w", err)
+		}
+	}
+	return nil
+}
+
+// for an unindexed mcap, we need to scan the full file.
+func scanForAttachments(input *namedReader, writer *mcap.Writer) error {
+	_, err := input.reader.Seek(0, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("failed to seek: %w", err)
+	}
+	lexer, err := mcap.NewLexer(input.reader, &mcap.LexerOptions{
+		ComputeAttachmentCRCs: true,
+		AttachmentCallback: func(attReader *mcap.AttachmentReader) error {
+			err := writer.WriteAttachment(&mcap.Attachment{
+				LogTime:    attReader.LogTime,
+				CreateTime: attReader.CreateTime,
+				Name:       attReader.Name,
+				MediaType:  attReader.MediaType,
+				DataSize:   attReader.DataSize,
+				Data:       attReader.Data(),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to write attachment: %w", err)
+			}
+			computed, err := attReader.ComputedCRC()
+			if err != nil {
+				return fmt.Errorf("failed to compute CRC: %w", err)
+			}
+			parsed, err := attReader.ParsedCRC()
+			if err != nil {
+				return fmt.Errorf("failed to parse CRC: %w", err)
+			}
+			if computed != parsed {
+				return fmt.Errorf("CRC check failed: %w", err)
+			}
+
+			return err
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create lexer: %w", err)
+	}
+
+	buf := make([]byte, 1024)
+	for {
+		_, _, err := lexer.Next(buf)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 type namedReader struct {
