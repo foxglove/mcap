@@ -12,12 +12,21 @@ import (
 
 type prepInputOptions struct {
 	writerOptions *mcap.WriterOptions
+	attachment    *mcap.Attachment
 }
 
 func withWriterOptions(writerOpts *mcap.WriterOptions) func(*prepInputOptions) {
 	return func(inputOpts *prepInputOptions) {
 		if writerOpts != nil {
 			inputOpts.writerOptions = writerOpts
+		}
+	}
+}
+
+func withAttachment(attachment *mcap.Attachment) func(*prepInputOptions) {
+	return func(inputOpts *prepInputOptions) {
+		if attachment != nil {
+			inputOpts.attachment = attachment
 		}
 	}
 }
@@ -61,16 +70,10 @@ func prepInput(t *testing.T, w io.Writer, schema *mcap.Schema, channel *mcap.Cha
 		},
 	}))
 
-	att := &mcap.Attachment{
-		LogTime:    1,
-		CreateTime: 2,
-		Name:       "mock.bytes",
-		MediaType:  "application/octet-stream",
-		DataSize:   3,
-		Data:       bytes.NewBuffer([]byte{1, 2, 3}),
+	if options.attachment != nil {
+		err = writer.WriteAttachment(options.attachment)
+		assert.Nil(t, err)
 	}
-	err = writer.WriteAttachment(att)
-	assert.Nil(t, err)
 
 	assert.Nil(t, writer.Close())
 }
@@ -108,7 +111,15 @@ func TestMCAPMerging(t *testing.T) {
 				buf3 := &bytes.Buffer{}
 				prepInput(t, buf1, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 1, Topic: "/foo"})
 				prepInput(t, buf2, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 1, Topic: "/bar"})
-				prepInput(t, buf3, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 1, Topic: "/baz"})
+				prepInput(t, buf3, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 1, Topic: "/baz"},
+					withAttachment(&mcap.Attachment{
+						LogTime:    1,
+						CreateTime: 2,
+						Name:       "mock.bytes",
+						MediaType:  "application/octet-stream",
+						DataSize:   3,
+						Data:       bytes.NewBuffer([]byte{1, 2, 3}),
+					}))
 
 				c.opts.chunked = chunked
 				c.opts.coalesceChannels = "none"
@@ -182,8 +193,26 @@ func TestAttachmentMerging(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			buf1 := &bytes.Buffer{}
 			buf2 := &bytes.Buffer{}
-			prepInput(t, buf1, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 1, Topic: "/foo"}, withWriterOptions(c.writerOpts))
-			prepInput(t, buf2, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 1, Topic: "/bar"}, withWriterOptions(c.writerOpts))
+			prepInput(t, buf1, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 1, Topic: "/foo"},
+				withWriterOptions(c.writerOpts),
+				withAttachment(&mcap.Attachment{
+					LogTime:    1,
+					CreateTime: 2,
+					Name:       "mock.bytes",
+					MediaType:  "application/octet-stream",
+					DataSize:   3,
+					Data:       bytes.NewBuffer([]byte{1, 2, 3}),
+				}))
+			prepInput(t, buf2, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 1, Topic: "/bar"},
+				withWriterOptions(c.writerOpts),
+				withAttachment(&mcap.Attachment{
+					LogTime:    1,
+					CreateTime: 2,
+					Name:       "mock.bytes",
+					MediaType:  "application/octet-stream",
+					DataSize:   3,
+					Data:       bytes.NewBuffer([]byte{1, 2, 3}),
+				}))
 
 			opts := mergeOpts{coalesceChannels: "none", allowDuplicateMetadata: true}
 			merger := newMCAPMerger(opts)

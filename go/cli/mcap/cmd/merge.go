@@ -370,7 +370,8 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 	}
 
 	// append any attachments as they are encountered. if an input is unindexed,
-	// we do a second full scan of it.
+	// or doesn't provide an AttachmentCount, we do a second full scan of it.
+	// empty AttachmentIndexes alone doesn't indicate there are no attachments.
 	for _, input := range inputs {
 		_, err := input.reader.Seek(0, io.SeekStart)
 		if err != nil {
@@ -383,12 +384,13 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 		}
 		defer reader.Close() //nolint:gocritic // we actually want these deferred in the loop.
 		info, err := reader.Info()
-		if err == nil && info != nil && info.Statistics != nil {
-			if info.Statistics.AttachmentCount > 0 {
-				err = addIndexedAttachments(reader, writer)
-				if err != nil {
-					return fmt.Errorf("failed to add attachment from indexed file %s: %w", input.name, err)
-				}
+		if err == nil &&
+			info != nil &&
+			info.Statistics != nil &&
+			info.Statistics.AttachmentCount == uint32(len(info.AttachmentIndexes)) {
+			err = addIndexedAttachments(reader, writer, info.AttachmentIndexes)
+			if err != nil {
+				return fmt.Errorf("failed to add attachment from indexed file %s: %w", input.name, err)
 			}
 		} else {
 			err = scanForAttachments(&input, writer)
@@ -402,16 +404,11 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 }
 
 // scan only the attachment indexes to add attachments.
-func addIndexedAttachments(reader *mcap.Reader, writer *mcap.Writer) error {
-	info, err := reader.Info()
-	if err != nil {
-		return fmt.Errorf("failed to get Info: %w", err)
-	}
-	if info == nil {
-		return nil
-	}
-
-	for _, index := range info.AttachmentIndexes {
+func addIndexedAttachments(reader *mcap.Reader, writer *mcap.Writer, indexes []*mcap.AttachmentIndex) error {
+	for _, index := range indexes {
+		if index == nil {
+			continue
+		}
 		attReader, err := reader.GetAttachmentReader(index.Offset)
 		if err != nil {
 			return fmt.Errorf("failed to read attachment: %w", err)
