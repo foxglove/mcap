@@ -279,13 +279,14 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 		if err != nil {
 			return fmt.Errorf("failed to open reader on %s: %w", input.name, err)
 		}
-		defer reader.Close() //nolint:gocritic // we actually want these defered in the loop.
+		defer reader.Close() //nolint:gocritic // we actually want these deferred in the loop.
 		profiles[inputID] = reader.Header().Profile
 		opts := []mcap.ReadOpt{
 			mcap.UsingIndex(false),
 			mcap.WithMetadataCallback(func(metadata *mcap.Metadata) error {
 				return m.addMetadata(writer, metadata)
-			})}
+			}),
+		}
 		iterator, err := reader.Messages(opts...)
 		if err != nil {
 			return err
@@ -367,12 +368,121 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 		}
 		heap.Push(pq, utils.NewTaggedMessage(msg.InputID, newMessage))
 	}
+
+	// append any attachments as they are encountered. if an input is unindexed,
+	// or doesn't provide an AttachmentCount, we do a second full scan of it.
+	// empty AttachmentIndexes alone doesn't indicate there are no attachments.
+	for _, input := range inputs {
+		_, err := input.reader.Seek(0, io.SeekStart)
+		if err != nil {
+			return fmt.Errorf("failed to seek: %w", err)
+		}
+
+		reader, err := mcap.NewReader(input.reader)
+		if err != nil {
+			return fmt.Errorf("failed to create attachment reader: %w", err)
+		}
+		defer reader.Close() //nolint:gocritic // we actually want these deferred in the loop.
+		info, err := reader.Info()
+		if err == nil &&
+			info != nil &&
+			info.Statistics != nil &&
+			info.Statistics.AttachmentCount == uint32(len(info.AttachmentIndexes)) {
+			err = addIndexedAttachments(reader, writer, info.AttachmentIndexes)
+			if err != nil {
+				return fmt.Errorf("failed to add attachment from indexed file %s: %w", input.name, err)
+			}
+		} else {
+			err = scanForAttachments(&input, writer)
+			if err != nil {
+				return fmt.Errorf("failed to scan attachments from file %s: %w", input.name, err)
+			}
+		}
+	}
+
 	return writer.Close()
+}
+
+// scan only the attachment indexes to add attachments.
+func addIndexedAttachments(reader *mcap.Reader, writer *mcap.Writer, indexes []*mcap.AttachmentIndex) error {
+	for _, index := range indexes {
+		if index == nil {
+			continue
+		}
+		attReader, err := reader.GetAttachmentReader(index.Offset)
+		if err != nil {
+			return fmt.Errorf("failed to read attachment: %w", err)
+		}
+		err = writer.WriteAttachment(&mcap.Attachment{
+			Name:       index.Name,
+			MediaType:  index.MediaType,
+			CreateTime: index.CreateTime,
+			LogTime:    index.LogTime,
+			DataSize:   index.DataSize,
+			Data:       attReader.Data(),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to write attachment: %w", err)
+		}
+	}
+	return nil
+}
+
+// for an unindexed mcap, we need to scan the full file.
+func scanForAttachments(input *namedReader, writer *mcap.Writer) error {
+	_, err := input.reader.Seek(0, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("failed to seek: %w", err)
+	}
+	lexer, err := mcap.NewLexer(input.reader, &mcap.LexerOptions{
+		ComputeAttachmentCRCs: true,
+		AttachmentCallback: func(attReader *mcap.AttachmentReader) error {
+			err := writer.WriteAttachment(&mcap.Attachment{
+				LogTime:    attReader.LogTime,
+				CreateTime: attReader.CreateTime,
+				Name:       attReader.Name,
+				MediaType:  attReader.MediaType,
+				DataSize:   attReader.DataSize,
+				Data:       attReader.Data(),
+			})
+			if err != nil {
+				return fmt.Errorf("failed to write attachment: %w", err)
+			}
+			computed, err := attReader.ComputedCRC()
+			if err != nil {
+				return fmt.Errorf("failed to compute CRC: %w", err)
+			}
+			parsed, err := attReader.ParsedCRC()
+			if err != nil {
+				return fmt.Errorf("failed to parse CRC: %w", err)
+			}
+			if computed != parsed {
+				return fmt.Errorf("CRC check failed: %w", err)
+			}
+
+			return err
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create lexer: %w", err)
+	}
+
+	buf := make([]byte, 1024)
+	for {
+		_, _, err := lexer.Next(buf)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 type namedReader struct {
 	name   string
-	reader io.Reader
+	reader io.ReadSeeker
 }
 
 // mergeCmd represents the merge command.
