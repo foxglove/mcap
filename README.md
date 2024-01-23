@@ -57,16 +57,14 @@ The version number is set at build time based on the tag.
 ### C++
 
 1. Update the version in all relevant files
-
-- cpp/bench/conanfile.py
-- cpp/build-docs.sh
-- cpp/build.sh
-- cpp/docs/conanfile.py
-- cpp/examples/conanfile.py
-- cpp/mcap/include/mcap/types.hpp (`MCAP_LIBRARY_VERSION`)
-- cpp/mcap/include/conanfile.py
-- cpp/test/conanfile.py
-
+   - cpp/bench/conanfile.py
+   - cpp/build-docs.sh
+   - cpp/build.sh
+   - cpp/docs/conanfile.py
+   - cpp/examples/conanfile.py
+   - cpp/mcap/include/mcap/types.hpp (`MCAP_LIBRARY_VERSION`)
+   - cpp/mcap/include/conanfile.py
+   - cpp/test/conanfile.py
 2. Tag a release matching the version number `releases/cpp/vX.Y.Z`
 
 ### Python
@@ -75,10 +73,9 @@ There are several python packages; updating any follows a similar process.
 
 1. Update the version in the appropriate `__init.py__` file
 2. Tag a release
-
-- For the core mcap library, match the pattern `releases/python/vX.Y.Z`
-- For other packages, use `releases/python/PACKAGE/vX.Y.Z`
-  - For example, `releases/python/mcap/v1.2.3`
+   - For the core mcap library, match the pattern `releases/python/vX.Y.Z`
+   - For other packages, use `releases/python/PACKAGE/vX.Y.Z`
+     - For example, `releases/python/mcap/v1.2.3`
 
 ### TypeScript
 
@@ -86,8 +83,7 @@ There are several TS packages; updating any follows a similar process.
 
 1. Update the version in the appropriate `package.json`
 2. Tag a release matching `releases/typescript/PACKAGE/vX.Y.Z`
-
-- For example, `releases/typescript/core/v1.2.3`
+   - For example, `releases/typescript/core/v1.2.3`
 
 ### Swift
 
