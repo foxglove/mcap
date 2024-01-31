@@ -71,7 +71,7 @@ func getSchemas(directories []string, types []string) (map[string][]byte, error)
 		}{
 			{parentPackage: rosPackage, rosType: rosType, schema: schema},
 		}
-		seenSubtypes := make(map[string]struct{})
+		seenSubtypes := map[string]struct{}{rosType: struct{}{}}
 		first := true
 		for len(subdefinitions) > 0 {
 			subdefinition := subdefinitions[0]

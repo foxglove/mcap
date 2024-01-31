@@ -220,7 +220,6 @@ MSG: example_msgs/Descriptor
 # is a descriptor
 ================================================================================
 MSG: example_msgs/OtherDescriptor
-
 example_msgs/Descriptor descriptor
 `
 		assert.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
