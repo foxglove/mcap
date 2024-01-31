@@ -205,3 +205,24 @@ func TestSchemaFinding(t *testing.T) {
 		assert.Equal(t, c.expectedContent, string(content))
 	}
 }
+
+func TestSchemaDeduplication(t *testing.T) {
+	t.Run("schema dependencies are resolved and subtypes deduplicated", func(t *testing.T) {
+		schemas, err := getSchemas([]string{"./testdata/duplicate_typedefinition"}, []string{"example_msgs/msg/Parent"})
+		assert.Nil(t, err)
+
+		schema := schemas["example_msgs/msg/Parent"]
+		expectedSchema := `
+example_msgs/Descriptor descriptor
+example_msgs/OtherDescriptor other_msg_with_descriptor
+================================================================================
+MSG: example_msgs/Descriptor
+# is a descriptor
+================================================================================
+MSG: example_msgs/OtherDescriptor
+
+example_msgs/Descriptor descriptor
+`
+		assert.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
+	})
+}
