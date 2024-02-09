@@ -71,6 +71,7 @@ func getSchemas(directories []string, types []string) (map[string][]byte, error)
 		}{
 			{parentPackage: rosPackage, rosType: rosType, schema: schema},
 		}
+		seenSubtypes := map[string]struct{}{rosType: {}}
 		first := true
 		for len(subdefinitions) > 0 {
 			subdefinition := subdefinitions[0]
@@ -143,15 +144,21 @@ func getSchemas(directories []string, types []string) (map[string][]byte, error)
 				if err != nil {
 					return nil, fmt.Errorf("failed to find schema for %s: %w", fieldType, err)
 				}
-				subdefinitions = append(subdefinitions, struct {
-					parentPackage string
-					rosType       string
-					schema        []byte
-				}{
-					parentPackage: parentPackage,
-					rosType:       qualifiedType,
-					schema:        fieldSchema,
-				})
+
+				// Only process new subtypes to avoid duplicate type definitions in the schema
+				_, knownSubtype := seenSubtypes[qualifiedType]
+				if !knownSubtype {
+					seenSubtypes[qualifiedType] = struct{}{}
+					subdefinitions = append(subdefinitions, struct {
+						parentPackage string
+						rosType       string
+						schema        []byte
+					}{
+						parentPackage: parentPackage,
+						rosType:       qualifiedType,
+						schema:        fieldSchema,
+					})
+				}
 			}
 		}
 		messageDefinitions[rosType] = messageDefinition.Bytes()
