@@ -60,15 +60,15 @@ export class McapWriter {
     | ((chunkData: Uint8Array) => { compression: string; compressedData: Uint8Array })
     | undefined;
   #chunkSize: number;
-  #dataSectionCrc = crc32Init();
+  /** undefined means CRC is not calculated */
+  #dataSectionCrc: number | undefined = crc32Init();
 
   public statistics: Statistics | undefined;
   #useSummaryOffsets: boolean;
   #repeatSchemas: boolean;
   #repeatChannels: boolean;
 
-  // If using append mode, InitializeInAppendMode() should be used to create the McapWriter
-  #appendMode?: boolean;
+  #appendMode = false;
 
   // indices
   #chunkIndices: ChunkIndex[] | undefined;
@@ -129,55 +129,56 @@ export class McapWriter {
   /**
    * Initializes a new McapWriter in append mode.
    */
-  static async InitializeInAppendMode(readWrite: IReadable & ISeekableWriter): Promise<McapWriter> {
+  static async InitializeForAppending(
+    readWrite: IReadable & ISeekableWriter,
+    options: Omit<McapWriterOptions, "writable" | "startChannelId">,
+  ): Promise<McapWriter> {
     const reader = await McapIndexedReader.Initialize({ readable: readWrite });
-
-    if (reader.dataEndOffset == null) {
-      throw new Error(`McapWriter InitializeInAppendMode failed: missing dataEndOffset in reader`);
-    }
     await readWrite.seek(reader.dataEndOffset);
+    await readWrite.truncate();
 
-    const writer = new McapWriter({ writable: readWrite });
+    const writer = new McapWriter({ ...options, writable: readWrite });
     writer.#appendMode = true;
-
-    if (reader.dataSectionCrc == null) {
-      throw new Error(`McapWriter InitializeInAppendMode failed: missing dataSectionCrc in reader`);
-    }
     writer.#dataSectionCrc = reader.dataSectionCrc;
+    writer.#chunkIndices = [...reader.chunkIndexes];
+    writer.#attachmentIndices = [...reader.attachmentIndexes];
+    writer.#metadataIndices = [...reader.metadataIndexes];
 
-    for (const attachmentIndex of reader.attachmentIndexes) {
-      writer.#addAttachmentIndex(attachmentIndex);
+    if (writer.statistics) {
+      if (reader.statistics) {
+        writer.statistics = reader.statistics;
+      } else {
+        // If statistics calculation was requested, but the input file does not have statistics,
+        // then we can't write them because we don't know the correct initial values
+        writer.statistics = undefined;
+      }
     }
 
-    for (const metadataIndex of reader.metadataIndexes) {
-      writer.#addMetadataIndex(metadataIndex);
+    writer.#schemas = new Map(reader.schemasById);
+    writer.#writtenSchemaIds = new Set(reader.schemasById.keys());
+    for (const schema of reader.schemasById.values()) {
+      writer.#nextSchemaId = Math.max(writer.#nextSchemaId, schema.id + 1);
     }
 
-    for (const schema of reader.schemasById) {
-      writer.#registerExistingSchema(schema[1]);
+    writer.#channels = new Map(reader.channelsById);
+    writer.#writtenChannelIds = new Set(reader.channelsById.keys());
+    for (const channel of reader.channelsById.values()) {
+      writer.#nextChannelId = Math.max(writer.#nextChannelId, channel.id + 1);
     }
-
-    for (const channel of reader.channelsById) {
-      writer.#registerExistingChannel(channel[1]);
-    }
-
-    for (const chunkIndex of reader.chunkIndexes) {
-      writer.#addChunkIndex(chunkIndex);
-    }
-
-    writer.#setStatistics(reader.statistics);
 
     return writer;
   }
 
   async start(header: Header): Promise<void> {
-    if (this.#appendMode === true) {
-      throw new Error(`McapWriter start failed: cannot call start when writer is in append mode`);
+    if (this.#appendMode) {
+      throw new Error(`Cannot call start() when writer is in append mode`);
     }
     this.#recordWriter.writeMagic();
     this.#recordWriter.writeHeader(header);
 
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    if (this.#dataSectionCrc != undefined) {
+      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    }
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
   }
@@ -185,11 +186,15 @@ export class McapWriter {
   async end(): Promise<void> {
     await this.#finalizeChunk();
 
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    if (this.#dataSectionCrc != undefined) {
+      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    }
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
 
-    this.#recordWriter.writeDataEnd({ dataSectionCrc: crc32Final(this.#dataSectionCrc) });
+    this.#recordWriter.writeDataEnd({
+      dataSectionCrc: this.#dataSectionCrc == undefined ? 0 : crc32Final(this.#dataSectionCrc),
+    });
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
 
@@ -436,7 +441,9 @@ export class McapWriter {
       });
     }
 
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    if (this.#dataSectionCrc != undefined) {
+      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    }
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
   }
@@ -456,7 +463,9 @@ export class McapWriter {
       });
     }
 
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    if (this.#dataSectionCrc != undefined) {
+      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    }
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
   }
@@ -493,7 +502,9 @@ export class McapWriter {
 
     const messageIndexOffsets = this.#chunkIndices ? new Map<number, bigint>() : undefined;
 
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    if (this.#dataSectionCrc != undefined) {
+      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    }
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
 
@@ -519,93 +530,10 @@ export class McapWriter {
     }
     this.#chunkBuilder.reset();
 
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    if (this.#dataSectionCrc != undefined) {
+      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    }
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
-  }
-
-  /**
-   * Add attachment index from existing MCAP file.
-   * The purpose of this is to update the information for the new summary with the existing data from the existing MCAP file.
-   */
-  #addAttachmentIndex(attachmentIndex: AttachmentIndex): void {
-    if (this.statistics) {
-      ++this.statistics.attachmentCount;
-    }
-
-    if (this.#attachmentIndices) {
-      this.#attachmentIndices.push(attachmentIndex);
-    }
-
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
-    this.#recordWriter.reset();
-  }
-
-  /**
-   * Add metadata index from existing MCAP file.
-   * The purpose of this is to update the information for the new summary with the existing data from the existing MCAP file.
-   */
-  #addMetadataIndex(metadataIndex: MetadataIndex): void {
-    if (this.statistics) {
-      ++this.statistics.metadataCount;
-    }
-
-    if (this.#metadataIndices) {
-      this.#metadataIndices.push(metadataIndex);
-    }
-
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
-    this.#recordWriter.reset();
-  }
-
-  /**
-   * Add chunk index from existing MCAP file.
-   * The purpose of this is to update the information for the new summary with the existing data from the existing MCAP file.
-   */
-  #addChunkIndex(chunkIndex: ChunkIndex): void {
-    if (this.statistics) {
-      ++this.statistics.chunkCount;
-    }
-
-    if (this.#chunkIndices) {
-      this.#chunkIndices.push(chunkIndex);
-    }
-
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
-    this.#recordWriter.reset();
-  }
-
-  /**
-   * Set statistics from existing MCAP file.
-   * The purpose of this is to update the information for the new summary with the existing data from the existing MCAP file.
-   */
-  #setStatistics(statistics: Statistics | undefined): void {
-    if (this.statistics && statistics) {
-      this.statistics = statistics;
-    }
-  }
-
-  /**
-   * Register schema from existing MCAP file.
-   * The purpose of this is to update the information for the new summary with the existing data from the existing MCAP file.
-   */
-  #registerExistingSchema(info: Schema): void {
-    this.#nextSchemaId = info.id + 1;
-    this.#schemas.set(info.id, info);
-    if (this.statistics) {
-      ++this.statistics.schemaCount;
-    }
-  }
-
-  /**
-   * Register channel from existing MCAP file.
-   * The purpose of this is to update the information for the new summary with the existing data from the existing MCAP file.
-   */
-  #registerExistingChannel(info: Channel): void {
-    this.#nextChannelId = info.id + 1;
-    this.#channels.set(info.id, info);
-    if (this.statistics) {
-      ++this.statistics.channelCount;
-    }
   }
 }

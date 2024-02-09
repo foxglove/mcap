@@ -348,22 +348,22 @@ describe("McapWriter", () => {
   it("supports append mode", async () => {
     const tempBuffer = new TempBuffer();
 
-    const writer = new McapWriter({ writable: tempBuffer, chunkSize: 0 });
+    const writer = new McapWriter({ writable: tempBuffer });
 
     await writer.start({ library: "", profile: "" });
     const schemaId = await writer.registerSchema({
-      name: "test1",
+      name: "schema1",
       encoding: "json",
       data: new Uint8Array(),
     });
-    const channelId = await writer.registerChannel({
-      topic: "test",
+    const channelId1 = await writer.registerChannel({
+      topic: "channel1",
       schemaId,
       messageEncoding: "json",
       metadata: new Map(),
     });
     await writer.addMessage({
-      channelId,
+      channelId: channelId1,
       data: new Uint8Array(),
       sequence: 0,
       logTime: 0n,
@@ -371,34 +371,34 @@ describe("McapWriter", () => {
     });
     await writer.end();
 
-    const writerAppendMode = await McapWriter.InitializeInAppendMode(tempBuffer);
+    const writerAppendMode = await McapWriter.InitializeForAppending(tempBuffer, {});
 
     await writerAppendMode.addAttachment({
-      name: "attachment test",
+      name: "attachment1",
       logTime: 0n,
       createTime: 0n,
-      mediaType: "application/json",
-      data: new TextEncoder().encode(`{"test": "testValue"}`),
+      mediaType: "text/plain",
+      data: new TextEncoder().encode("foo"),
     });
     await writerAppendMode.addMetadata({
-      name: "metadata test",
+      name: "metadata1",
       metadata: new Map<string, string>([["test", "testValue"]]),
     });
     await writerAppendMode.addMessage({
-      channelId,
+      channelId: channelId1,
       data: new Uint8Array(),
       sequence: 1,
       logTime: 1n,
       publishTime: 1n,
     });
-    const newChannelId = await writerAppendMode.registerChannel({
-      topic: "test/append",
+    const channelId2 = await writerAppendMode.registerChannel({
+      topic: "channel2",
       schemaId,
       messageEncoding: "json",
       metadata: new Map(),
     });
     await writerAppendMode.addMessage({
-      channelId: newChannelId,
+      channelId: channelId2,
       data: new Uint8Array(),
       sequence: 2,
       logTime: 2n,
@@ -426,7 +426,7 @@ describe("McapWriter", () => {
         id: 1,
         encoding: "json",
         data: new Uint8Array(),
-        name: "test1",
+        name: "schema1",
       },
       {
         type: "Channel",
@@ -434,7 +434,7 @@ describe("McapWriter", () => {
         messageEncoding: "json",
         metadata: new Map(),
         schemaId: 1,
-        topic: "test",
+        topic: "channel1",
       },
       {
         type: "Message",
@@ -447,35 +447,20 @@ describe("McapWriter", () => {
       {
         type: "MessageIndex",
         channelId: 0,
-        records: [[0n, 65n]],
+        records: [[0n, 71n]],
       },
       {
         type: "Attachment",
-        name: "attachment test",
+        name: "attachment1",
         logTime: 0n,
         createTime: 0n,
-        mediaType: "application/json",
-        data: new TextEncoder().encode(`{"test": "testValue"}`),
+        mediaType: "text/plain",
+        data: new TextEncoder().encode("foo"),
       },
       {
         type: "Metadata",
-        name: "metadata test",
+        name: "metadata1",
         metadata: new Map([["test", "testValue"]]),
-      },
-      {
-        type: "Schema",
-        id: 1,
-        encoding: "json",
-        data: new Uint8Array(),
-        name: "test1",
-      },
-      {
-        type: "Channel",
-        id: 0,
-        messageEncoding: "json",
-        metadata: new Map(),
-        schemaId: 1,
-        topic: "test",
       },
       {
         type: "Message",
@@ -491,7 +476,7 @@ describe("McapWriter", () => {
         messageEncoding: "json",
         metadata: new Map(),
         schemaId: 1,
-        topic: "test/append",
+        topic: "channel2",
       },
       {
         type: "Message",
@@ -504,23 +489,23 @@ describe("McapWriter", () => {
       {
         type: "MessageIndex",
         channelId: 0,
-        records: [[1n, 65n]],
+        records: [[1n, 0n]],
       },
       {
         type: "MessageIndex",
         channelId: 1,
-        records: [[2n, 136n]],
+        records: [[2n, 68n]],
       },
       {
         type: "DataEnd",
-        dataSectionCrc: 1361490560,
+        dataSectionCrc: 3114485016,
       },
       {
         type: "Schema",
         id: 1,
         encoding: "json",
         data: new Uint8Array(),
-        name: "test1",
+        name: "schema1",
       },
       {
         type: "Channel",
@@ -528,7 +513,7 @@ describe("McapWriter", () => {
         messageEncoding: "json",
         metadata: new Map(),
         schemaId: 1,
-        topic: "test",
+        topic: "channel1",
       },
       {
         type: "Channel",
@@ -536,7 +521,7 @@ describe("McapWriter", () => {
         messageEncoding: "json",
         metadata: new Map(),
         schemaId: 1,
-        topic: "test/append",
+        topic: "channel2",
       },
       {
         type: "Statistics",
@@ -555,88 +540,88 @@ describe("McapWriter", () => {
       },
       {
         type: "MetadataIndex",
-        offset: 298n,
-        length: 51n,
-        name: "metadata test",
+        offset: 276n,
+        length: 47n,
+        name: "metadata1",
       },
       {
         type: "AttachmentIndex",
-        offset: 201n,
-        length: 97n,
+        offset: 207n,
+        length: 69n,
         logTime: 0n,
         createTime: 0n,
-        dataSize: 21n,
-        name: "attachment test",
-        mediaType: "application/json",
+        dataSize: 3n,
+        name: "attachment1",
+        mediaType: "text/plain",
       },
       {
         type: "ChunkIndex",
-        chunkLength: 145n,
+        chunkLength: 151n,
         chunkStartOffset: 25n,
-        compressedSize: 96n,
+        compressedSize: 102n,
         compression: "",
         messageEndTime: 0n,
         messageIndexLength: 31n,
-        messageIndexOffsets: new Map([[0, 170n]]),
+        messageIndexOffsets: new Map([[0, 176n]]),
         messageStartTime: 0n,
-        uncompressedSize: 96n,
+        uncompressedSize: 102n,
       },
       {
         type: "ChunkIndex",
-        chunkLength: 216n,
-        chunkStartOffset: 349n,
-        compressedSize: 167n,
+        chunkLength: 148n,
+        chunkStartOffset: 323n,
+        compressedSize: 99n,
         compression: "",
         messageEndTime: 2n,
         messageIndexLength: 62n,
         messageIndexOffsets: new Map([
-          [0, 565n],
-          [1, 596n],
+          [0, 471n],
+          [1, 502n],
         ]),
         messageStartTime: 1n,
-        uncompressedSize: 167n,
+        uncompressedSize: 99n,
       },
       {
         type: "SummaryOffset",
-        groupLength: 32n,
+        groupLength: 34n,
         groupOpcode: Opcode.SCHEMA,
-        groupStart: 640n,
+        groupStart: 546n,
       },
       {
         type: "SummaryOffset",
-        groupLength: 73n,
+        groupLength: 74n,
         groupOpcode: Opcode.CHANNEL,
-        groupStart: 672n,
+        groupStart: 580n,
       },
       {
         type: "SummaryOffset",
         groupLength: 75n,
         groupOpcode: Opcode.STATISTICS,
-        groupStart: 745n,
+        groupStart: 654n,
       },
       {
         type: "SummaryOffset",
-        groupLength: 42n,
+        groupLength: 38n,
         groupOpcode: Opcode.METADATA_INDEX,
-        groupStart: 820n,
+        groupStart: 729n,
       },
       {
         type: "SummaryOffset",
-        groupLength: 88n,
+        groupLength: 78n,
         groupOpcode: Opcode.ATTACHMENT_INDEX,
-        groupStart: 862n,
+        groupStart: 767n,
       },
       {
         type: "SummaryOffset",
         groupLength: 176n,
         groupOpcode: Opcode.CHUNK_INDEX,
-        groupStart: 950n,
+        groupStart: 845n,
       },
       {
         type: "Footer",
-        summaryCrc: 1244986820,
-        summaryOffsetStart: 1126n,
-        summaryStart: 640n,
+        summaryCrc: 758669511,
+        summaryOffsetStart: 1021n,
+        summaryStart: 546n,
       },
     ]);
 
