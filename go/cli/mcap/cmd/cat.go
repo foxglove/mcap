@@ -335,7 +335,25 @@ var catCmd = &cobra.Command{
 				return fmt.Errorf("failed to create reader: %w", err)
 			}
 			defer reader.Close()
-			it, err := reader.Messages(getReadOpts(true)...)
+			info, err := reader.Info()
+			if err != nil {
+				return fmt.Errorf("could not get info about MCAP: %w", err)
+			}
+			// if there are chunk index records present, use the index to read messages efficiently.
+			// Otherwise fall back to a linear scan in case the MCAP is unindexed.
+			useIndex := true
+			if len(info.ChunkIndexes) == 0 {
+				useIndex = false
+				_, err = rs.Seek(0, io.SeekStart)
+				if err != nil {
+					return fmt.Errorf("failed to seek to start: %w", err)
+				}
+				reader, err = mcap.NewReader(rs)
+				if err != nil {
+					return fmt.Errorf("failed to reset reader: %w", err)
+				}
+			}
+			it, err := reader.Messages(getReadOpts(useIndex)...)
 			if err != nil {
 				return fmt.Errorf("failed to read messages: %w", err)
 			}
