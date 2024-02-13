@@ -9,6 +9,17 @@ import { parseMagic, parseRecord } from "./parse";
 import { collect, keyValues, record, string, uint16LE, uint32LE, uint64LE } from "./testUtils";
 import { TypedMcapRecord } from "./types";
 
+function readAsMcapStream(data: Uint8Array) {
+  const reader = new McapStreamReader();
+  reader.append(data);
+  const records: TypedMcapRecord[] = [];
+  for (let rec; (rec = reader.nextRecord()); ) {
+    records.push(rec);
+  }
+  expect(reader.done()).toBe(true);
+  return records;
+}
+
 describe("McapWriter", () => {
   it("supports messages with logTime 0", async () => {
     const tempBuffer = new TempBuffer();
@@ -371,51 +382,8 @@ describe("McapWriter", () => {
     });
     await writer.end();
 
-    const writerAppendMode = await McapWriter.InitializeForAppending(tempBuffer, {});
-
-    await writerAppendMode.addAttachment({
-      name: "attachment1",
-      logTime: 0n,
-      createTime: 0n,
-      mediaType: "text/plain",
-      data: new TextEncoder().encode("foo"),
-    });
-    await writerAppendMode.addMetadata({
-      name: "metadata1",
-      metadata: new Map<string, string>([["test", "testValue"]]),
-    });
-    await writerAppendMode.addMessage({
-      channelId: channelId1,
-      data: new Uint8Array(),
-      sequence: 1,
-      logTime: 1n,
-      publishTime: 1n,
-    });
-    const channelId2 = await writerAppendMode.registerChannel({
-      topic: "channel2",
-      schemaId,
-      messageEncoding: "json",
-      metadata: new Map(),
-    });
-    await writerAppendMode.addMessage({
-      channelId: channelId2,
-      data: new Uint8Array(),
-      sequence: 2,
-      logTime: 2n,
-      publishTime: 2n,
-    });
-    await writerAppendMode.end();
-
-    const reader = new McapStreamReader();
-    reader.append(tempBuffer.get());
-    const records: TypedMcapRecord[] = [];
-    for (let rec; (rec = reader.nextRecord()); ) {
-      records.push(rec);
-    }
-
-    expect(reader.done()).toEqual(true);
-
-    expect(records).toEqual<TypedMcapRecord[]>([
+    // Records common to both the original and appended file
+    const commonRecords: TypedMcapRecord[] = [
       {
         type: "Header",
         library: "",
@@ -449,6 +417,125 @@ describe("McapWriter", () => {
         channelId: 0,
         records: [[0n, 71n]],
       },
+    ];
+
+    const originalRecords = readAsMcapStream(tempBuffer.get());
+    expect(originalRecords).toEqual<TypedMcapRecord[]>([
+      ...commonRecords,
+      {
+        type: "DataEnd",
+        dataSectionCrc: 2968501716,
+      },
+      {
+        type: "Schema",
+        id: 1,
+        encoding: "json",
+        data: new Uint8Array(),
+        name: "schema1",
+      },
+      {
+        type: "Channel",
+        id: 0,
+        messageEncoding: "json",
+        metadata: new Map(),
+        schemaId: 1,
+        topic: "channel1",
+      },
+      {
+        type: "Statistics",
+        attachmentCount: 0,
+        channelCount: 1,
+        channelMessageCounts: new Map([[0, 1n]]),
+        chunkCount: 1,
+        messageCount: 1n,
+        messageEndTime: 0n,
+        messageStartTime: 0n,
+        metadataCount: 0,
+        schemaCount: 1,
+      },
+      {
+        type: "ChunkIndex",
+        chunkLength: 151n,
+        chunkStartOffset: 25n,
+        compressedSize: 102n,
+        compression: "",
+        messageEndTime: 0n,
+        messageIndexLength: 31n,
+        messageIndexOffsets: new Map([[0, 176n]]),
+        messageStartTime: 0n,
+        uncompressedSize: 102n,
+      },
+      {
+        type: "SummaryOffset",
+        groupLength: 34n,
+        groupOpcode: Opcode.SCHEMA,
+        groupStart: 220n,
+      },
+      {
+        type: "SummaryOffset",
+        groupLength: 37n,
+        groupOpcode: Opcode.CHANNEL,
+        groupStart: 254n,
+      },
+      {
+        type: "SummaryOffset",
+        groupLength: 65n,
+        groupOpcode: Opcode.STATISTICS,
+        groupStart: 291n,
+      },
+      {
+        type: "SummaryOffset",
+        groupLength: 83n,
+        groupOpcode: Opcode.CHUNK_INDEX,
+        groupStart: 356n,
+      },
+      {
+        type: "Footer",
+        summaryCrc: 2739614603,
+        summaryOffsetStart: 439n,
+        summaryStart: 220n,
+      },
+    ]);
+
+    const appendWriter = await McapWriter.InitializeForAppending(tempBuffer, {});
+
+    await appendWriter.addAttachment({
+      name: "attachment1",
+      logTime: 0n,
+      createTime: 0n,
+      mediaType: "text/plain",
+      data: new TextEncoder().encode("foo"),
+    });
+    await appendWriter.addMetadata({
+      name: "metadata1",
+      metadata: new Map<string, string>([["test", "testValue"]]),
+    });
+    await appendWriter.addMessage({
+      channelId: channelId1,
+      data: new Uint8Array(),
+      sequence: 1,
+      logTime: 1n,
+      publishTime: 1n,
+    });
+    const channelId2 = await appendWriter.registerChannel({
+      topic: "channel2",
+      schemaId,
+      messageEncoding: "json",
+      metadata: new Map(),
+    });
+    await appendWriter.addMessage({
+      channelId: channelId2,
+      data: new Uint8Array(),
+      sequence: 2,
+      logTime: 2n,
+      publishTime: 2n,
+    });
+    await appendWriter.end();
+
+    const appendedRecords = readAsMcapStream(tempBuffer.get());
+
+    expect(appendedRecords).toEqual<TypedMcapRecord[]>([
+      ...commonRecords,
       {
         type: "Attachment",
         name: "attachment1",
@@ -624,15 +711,5 @@ describe("McapWriter", () => {
         summaryStart: 546n,
       },
     ]);
-
-    // Confirm that the appended file is still readable
-    const readAppendedFile = new McapStreamReader();
-    readAppendedFile.append(tempBuffer.get());
-    const appendedRecords: TypedMcapRecord[] = [];
-    for (let rec; (rec = readAppendedFile.nextRecord()); ) {
-      appendedRecords.push(rec);
-    }
-
-    expect(readAppendedFile.done()).toEqual(true);
   });
 });
