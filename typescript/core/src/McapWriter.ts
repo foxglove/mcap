@@ -139,7 +139,10 @@ export class McapWriter {
 
     const writer = new McapWriter({ ...options, writable: readWrite });
     writer.#appendMode = true;
-    writer.#dataSectionCrc = reader.dataSectionCrc;
+    writer.#dataSectionCrc =
+      // Invert the CRC value so we can continue updating it with new data; it will be inverted
+      // again in end()
+      reader.dataSectionCrc != undefined ? crc32Final(reader.dataSectionCrc) : undefined;
     writer.#chunkIndices = [...reader.chunkIndexes];
     writer.#attachmentIndices = [...reader.attachmentIndexes];
     writer.#metadataIndices = [...reader.metadataIndexes];

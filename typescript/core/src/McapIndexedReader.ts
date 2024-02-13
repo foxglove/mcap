@@ -232,7 +232,7 @@ export class McapIndexedReader {
     const dataEndOffset = footer.summaryStart - dataEndLength;
     if (dataEndOffset < headerEndOffset) {
       throw errorWithLibrary(
-        `Expected DataEnd position (${footer.summaryStart} - ${dataEndLength} = ${dataEndOffset}) to be after Header end offset (${headerEndOffset})`,
+        `Expected DataEnd position (summary start ${footer.summaryStart} - ${dataEndLength} = ${dataEndOffset}) to be after Header end offset (${headerEndOffset})`,
       );
     }
 
@@ -309,7 +309,8 @@ export class McapIndexedReader {
           summaryOffsetsByOpcode.set(result.record.groupOpcode, result.record);
           break;
         case "DataEnd":
-          dataSectionCrc = result.record.dataSectionCrc;
+          dataSectionCrc =
+            result.record.dataSectionCrc === 0 ? undefined : result.record.dataSectionCrc;
           break;
         case "Header":
         case "Footer":

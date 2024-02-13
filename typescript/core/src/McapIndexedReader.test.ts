@@ -57,8 +57,8 @@ describe("McapIndexedReader", () => {
           new Uint8Array([
             ...MCAP_MAGIC,
             ...record(Opcode.FOOTER, [
-              ...uint64LE(0n), // summary offset
-              ...uint64LE(0n), // summary start offset
+              ...uint64LE(0n), // summary start
+              ...uint64LE(0n), // summary offset start
               ...uint32LE(0), // summary crc
             ]),
             ...MCAP_MAGIC,
@@ -92,8 +92,8 @@ describe("McapIndexedReader", () => {
           ...string(""), // library
         ]),
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary offset
-          ...uint64LE(0n), // summary start offset
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -111,8 +111,8 @@ describe("McapIndexedReader", () => {
           ...string("lib"), // library
         ]),
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary offset
-          ...uint64LE(0n), // summary start offset
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -130,6 +130,7 @@ describe("McapIndexedReader", () => {
         ...string(""), // profile
         ...string(""), // library
       ]),
+      ...record(Opcode.DATA_END, [...uint32LE(0)]),
     ];
     const summaryStart = data.length;
 
@@ -142,15 +143,15 @@ describe("McapIndexedReader", () => {
 
     data.push(
       ...record(Opcode.FOOTER, [
-        ...uint64LE(BigInt(summaryStart)), // summary offset
-        ...uint64LE(0n), // summary start offset
+        ...uint64LE(BigInt(summaryStart)), // summary start
+        ...uint64LE(0n), // summary offset start
         ...uint32LE(crc32(new Uint8Array([42]))), // summary crc
       ]),
       ...MCAP_MAGIC,
     );
     const readable = makeReadable(new Uint8Array(data));
     await expect(McapIndexedReader.Initialize({ readable })).rejects.toThrow(
-      "Incorrect summary CRC 491514153 (expected 163128923)",
+      "Incorrect summary CRC 1656343536 (expected 163128923)",
     );
   });
 
@@ -161,6 +162,7 @@ describe("McapIndexedReader", () => {
         ...string(""), // profile
         ...string(""), // library
       ]),
+      ...record(Opcode.DATA_END, [...uint32LE(0)]),
     ];
     const summaryStart = data.length;
     data.push(
@@ -178,8 +180,8 @@ describe("McapIndexedReader", () => {
         ...keyValues(string, string, [["foo", "bar"]]), // user data
       ]),
       ...record(Opcode.FOOTER, [
-        ...uint64LE(BigInt(summaryStart)), // summary offset
-        ...uint64LE(0n), // summary start offset
+        ...uint64LE(BigInt(summaryStart)), // summary start
+        ...uint64LE(0n), // summary offset start
         ...uint32LE(crc32(new Uint8Array(0))), // summary crc
       ]),
       ...MCAP_MAGIC,
@@ -324,6 +326,7 @@ describe("McapIndexedReader", () => {
           ]),
         );
         const messageIndexLength = BigInt(data.length) - messageIndexOffset;
+        data.push(...record(Opcode.DATA_END, [...uint32LE(0)]));
         const summaryStart = data.length;
         data.push(
           ...channel,
@@ -339,8 +342,8 @@ describe("McapIndexedReader", () => {
             ...uint64LE(BigInt(chunkContents.length)), // uncompressed size
           ]),
           ...record(Opcode.FOOTER, [
-            ...uint64LE(BigInt(summaryStart)), // summary offset
-            ...uint64LE(0n), // summary start offset
+            ...uint64LE(BigInt(summaryStart)), // summary start
+            ...uint64LE(0n), // summary offset start
             ...uint32LE(crc32(new Uint8Array(0))), // summary crc
           ]),
           ...MCAP_MAGIC,
@@ -922,8 +925,8 @@ describe("McapIndexedReader", () => {
         ...string("foo"), // name
       ]),
       ...record(Opcode.FOOTER, [
-        ...uint64LE(BigInt(summaryStart)), // summary offset
-        ...uint64LE(0n), // summary start offset
+        ...uint64LE(BigInt(summaryStart)), // summary start
+        ...uint64LE(0n), // summary offset start
         ...uint32LE(0), // summary crc
       ]),
       ...MCAP_MAGIC,
@@ -1051,8 +1054,8 @@ describe("McapIndexedReader", () => {
         ...string("application/json"), // media type
       ]),
       ...record(Opcode.FOOTER, [
-        ...uint64LE(BigInt(summaryStart)), // summary offset
-        ...uint64LE(0n), // summary start offset
+        ...uint64LE(BigInt(summaryStart)), // summary start
+        ...uint64LE(0n), // summary offset start
         ...uint32LE(0), // summary crc
       ]),
       ...MCAP_MAGIC,

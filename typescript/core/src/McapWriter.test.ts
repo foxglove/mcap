@@ -4,7 +4,7 @@ import { McapIndexedReader } from "./McapIndexedReader";
 import McapStreamReader from "./McapStreamReader";
 import { McapWriter } from "./McapWriter";
 import { TempBuffer } from "./TempBuffer";
-import { Opcode } from "./constants";
+import { MCAP_MAGIC, Opcode } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
 import { collect, keyValues, record, string, uint16LE, uint32LE, uint64LE } from "./testUtils";
 import { TypedMcapRecord } from "./types";
@@ -534,6 +534,12 @@ describe("McapWriter", () => {
 
     const appendedRecords = readAsMcapStream(tempBuffer.get());
 
+    const newSummaryStart = 546n;
+    const dataEndLength = 1n + 8n + 4n;
+    const expectedDataCrc = crc32(
+      tempBuffer.get().slice(0, Number(newSummaryStart - dataEndLength)),
+    );
+
     expect(appendedRecords).toEqual<TypedMcapRecord[]>([
       ...commonRecords,
       {
@@ -585,7 +591,7 @@ describe("McapWriter", () => {
       },
       {
         type: "DataEnd",
-        dataSectionCrc: 3114485016,
+        dataSectionCrc: expectedDataCrc,
       },
       {
         type: "Schema",
@@ -708,8 +714,124 @@ describe("McapWriter", () => {
         type: "Footer",
         summaryCrc: 758669511,
         summaryOffsetStart: 1021n,
-        summaryStart: 546n,
+        summaryStart: newSummaryStart,
       },
     ]);
   });
+
+  it.each([true, false])(
+    "respects data_section_crc present=%s when appending",
+    async (useDataSectionCrc) => {
+      const originalDataSection = new Uint8Array([
+        ...MCAP_MAGIC,
+        ...record(Opcode.HEADER, [
+          ...string(""), // profile
+          ...string("lib"), // library
+        ]),
+      ]);
+      const dataEndLength = 1 + 8 + 4;
+      const tempBuffer = new TempBuffer(
+        new Uint8Array([
+          ...originalDataSection,
+          ...record(Opcode.DATA_END, [
+            ...uint32LE(useDataSectionCrc ? crc32(originalDataSection) : 0), // data crc
+          ]),
+          ...record(Opcode.STATISTICS, [
+            ...uint64LE(0n), // message count
+            ...uint16LE(0), // schema count
+            ...uint32LE(0), // channel count
+            ...uint32LE(0), // attachment count
+            ...uint32LE(0), // metadata count
+            ...uint32LE(0), // chunk count
+            ...uint64LE(0n), // message start time
+            ...uint64LE(0n), // message end time
+            ...uint32LE(0), // channel message counts length
+          ]),
+          ...record(Opcode.FOOTER, [
+            ...uint64LE(BigInt(originalDataSection.length + dataEndLength)), // summary start
+            ...uint64LE(0n), // summary offset start
+            ...uint32LE(0), // summary crc
+          ]),
+          ...MCAP_MAGIC,
+        ]),
+      );
+      const appendWriter = await McapWriter.InitializeForAppending(tempBuffer, {
+        repeatChannels: false,
+        useSummaryOffsets: false,
+        useChunks: false,
+      });
+      const chanId = await appendWriter.registerChannel({
+        messageEncoding: "foo",
+        metadata: new Map(),
+        schemaId: 0,
+        topic: "foo",
+      });
+      await appendWriter.addMessage({
+        channelId: chanId,
+        logTime: 0n,
+        publishTime: 0n,
+        sequence: 0,
+        data: new Uint8Array([]),
+      });
+      await appendWriter.end();
+
+      const summarySection = new Uint8Array([
+        ...record(Opcode.STATISTICS, [
+          ...uint64LE(1n), // message count
+          ...uint16LE(0), // schema count
+          ...uint32LE(1), // channel count
+          ...uint32LE(0), // attachment count
+          ...uint32LE(0), // metadata count
+          ...uint32LE(0), // chunk count
+          ...uint64LE(0n), // message start time
+          ...uint64LE(0n), // message end time
+          ...keyValues(uint16LE, uint64LE, [[0, 1n]]), // channel message counts length
+        ]),
+      ]);
+
+      const newDataSection = new Uint8Array([
+        ...originalDataSection,
+        ...record(Opcode.CHANNEL, [
+          ...uint16LE(0), // channel id
+          ...uint16LE(0), // schema id
+          ...string("foo"), // topic
+          ...string("foo"), // message encoding
+          ...keyValues(string, string, []), // user data
+        ]),
+        ...record(Opcode.MESSAGE, [
+          ...uint16LE(chanId),
+          ...uint32LE(0), // sequence
+          ...uint64LE(0n), // log time
+          ...uint64LE(0n), // publish time
+        ]),
+      ]);
+
+      expect(tempBuffer.get()).toEqual(
+        new Uint8Array([
+          ...newDataSection,
+          ...record(Opcode.DATA_END, [
+            ...uint32LE(useDataSectionCrc ? crc32(newDataSection) : 0), // data crc
+          ]),
+          ...summarySection,
+          ...record(Opcode.FOOTER, [
+            ...uint64LE(BigInt(newDataSection.length + dataEndLength)), // summary start
+            ...uint64LE(0n), // summary offset start
+            ...uint32LE(
+              // summary crc
+              crc32(
+                new Uint8Array([
+                  ...summarySection,
+                  Opcode.FOOTER,
+                  ...uint64LE(8n + 8n + 4n), // footer record length
+                  ...uint64LE(BigInt(newDataSection.length + dataEndLength)), // summary start
+                  ...uint64LE(0n), // summary offset start
+                ]),
+              ),
+            ),
+          ]),
+          ...MCAP_MAGIC,
+        ]),
+      );
+    },
+  );
 });
