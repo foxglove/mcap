@@ -20,6 +20,11 @@ export default class TypescriptIndexedReaderTestRunner extends IndexedReadTestRu
   }
 
   supportsVariant({ records, features }: TestVariant): boolean {
+    if (features.has(TestFeatures.AddExtraDataToRecords)) {
+      // Due to a spec bug we currently support padding at the end of DataEnd records. This
+      // interferes with the indexed writer's ability to find the location of the DataEnd record.
+      return false;
+    }
     if (!records.some((record) => record.type === "Message")) {
       return false;
     }
