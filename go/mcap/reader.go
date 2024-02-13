@@ -144,6 +144,23 @@ func (r *Reader) Messages(
 		} else {
 			return nil, fmt.Errorf("indexed reader requires a seekable reader")
 		}
+		startPos, err := r.rs.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current stream position: %w", err)
+		}
+		info, err := r.Info()
+		if err != nil {
+			return nil, fmt.Errorf("could not get info: %w", err)
+		}
+		// if there are no chunk index records present, but there are messages, we need to
+		// scan the file linearly to find them.
+		if len(info.ChunkIndexes) == 0 && info.Statistics != nil && info.Statistics.MessageCount > 0 {
+			_, err = r.rs.Seek(startPos, io.SeekStart)
+			if err != nil {
+				return nil, fmt.Errorf("failed to seek to start: %w", err)
+			}
+			return r.unindexedIterator(options), nil
+		}
 		return r.indexedMessageIterator(options), nil
 	}
 	return r.unindexedIterator(options), nil
