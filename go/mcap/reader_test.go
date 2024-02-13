@@ -73,6 +73,56 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 		assert.Equal(t, expectedTopics[i], channel.Topic)
 	}
 }
+func TestReaderFallsBackToLinearScan(t *testing.T) {
+	buf := &bytes.Buffer{}
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked: false,
+	})
+	assert.Nil(t, err)
+	assert.Nil(t, writer.WriteHeader(&Header{}))
+	assert.Nil(t, writer.WriteSchema(&Schema{
+		ID:       1,
+		Name:     "",
+		Encoding: "",
+		Data:     []byte{},
+	}))
+	assert.Nil(t, writer.WriteChannel(&Channel{
+		ID:              0,
+		SchemaID:        1,
+		Topic:           "/foo",
+		MessageEncoding: "",
+		Metadata: map[string]string{
+			"": "",
+		},
+	}))
+	assert.Nil(t, writer.WriteMessage(&Message{
+		ChannelID:   0,
+		Sequence:    0,
+		LogTime:     0,
+		PublishTime: 0,
+		Data:        []byte("hello"),
+	}))
+	assert.Nil(t, writer.WriteMessage(&Message{
+		ChannelID:   0,
+		Sequence:    1,
+		LogTime:     1,
+		PublishTime: 1,
+		Data:        []byte("goodbye"),
+	}))
+	writer.Close()
+
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	assert.Nil(t, err)
+
+	it, err := reader.Messages(UsingIndex(true))
+	messageContents := []string{"hello", "goodbye"}
+	assert.Nil(t, err)
+	for _, content := range messageContents {
+		_, _, msg, err := it.Next(nil)
+		assert.Nil(t, err)
+		assert.Equal(t, content, string(msg.Data))
+	}
+}
 
 func TestReadPrefixedBytes(t *testing.T) {
 	cases := []struct {
