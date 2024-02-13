@@ -127,7 +127,14 @@ export class McapWriter {
   }
 
   /**
-   * Initializes a new McapWriter in append mode.
+   * Initializes a new McapWriter for appending to an existing MCAP file. The same `readWrite` will
+   * be used to load indexes out of the existing file, remove the DataEnd and subsequent records,
+   * and then rewrite them when the writer is closed. The existing file must be indexed, since
+   * existing indexes, channel and schema IDs, etc. are reused when appending to the file.
+   *
+   * A writer initialized with this method is already "opened" and does not require a `start()`
+   * call, however it does require an eventual call to `end()` to produce a properly indexed MCAP
+   * file.
    */
   static async InitializeForAppending(
     readWrite: IReadable & ISeekableWriter,
