@@ -459,16 +459,10 @@ jobs:
         id: extract-version
         run: |
           printf "::set-output name=%s::%s\n" version-number "${GITHUB_REF#refs/tags/releases/mcap-cli/v}"
-      - uses: mislav/bump-homebrew-formula-action@b3327118b2153c82da63fd9cbf58942146ee99f0
+      - uses: mislav/bump-homebrew-formula-action@5a3f2e95b18e8647880bffc858ab1a71da42af4c
         with:
+          # Note: Don't override push-to (see: https://github.com/foxglove/mcap/issues/1063)
           formula-name: mcap
-          push-to: foxglove/homebrew-core
-          commit-message: |
-            {{formulaName}} ${{ steps.extract-version.outputs.version-number }}
-
-            Created by https://github.com/mislav/bump-homebrew-formula-action
-
-            cc @foxglove/mcap-cli-maintainers
         env:
           COMMITTER_TOKEN: ${{ secrets.HOMEBREW_GITHUB_TOKEN }}
 
