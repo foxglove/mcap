@@ -28,12 +28,16 @@ func decimalTime(t time.Time) string {
 
 func humanBytes(numBytes uint64) string {
 	prefixes := []string{"B", "KiB", "MiB", "GiB"}
-	displayedValue := float64(numBytes)
-	prefixIndex := 0
-	for ; displayedValue > 1024 && prefixIndex < len(prefixes); prefixIndex++ {
-		displayedValue /= 1024
+
+	for index, p := range prefixes {
+		displayedValue := float64(numBytes) / (math.Pow(1024, float64(index)))
+		if displayedValue <= 1024 {
+			return fmt.Sprintf("%.2f %s", displayedValue, p)
+		}
 	}
-	return fmt.Sprintf("%.2f %s", displayedValue, prefixes[prefixIndex])
+	lastIndex := len(prefixes) - 1
+	displayedValue := float64(numBytes) / (math.Pow(1024, float64(lastIndex)))
+	return fmt.Sprintf("%.2f %s", displayedValue, prefixes[lastIndex])
 }
 
 func getDurationNs(start uint64, end uint64) float64 {

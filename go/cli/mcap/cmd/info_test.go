@@ -39,3 +39,21 @@ func TestInfo(t *testing.T) {
 	})
 	assert.Nil(t, err)
 }
+
+func TestHumanBytes(t *testing.T) {
+	cases := []struct {
+		n      uint64
+		result string
+	}{
+		{2, "2.00 B"},
+		{1024 * 2, "2.00 KiB"},
+		{1024 * 1024 * 2, "2.00 MiB"},
+		{1024 * 1024 * 1024 * 2, "2.00 GiB"},
+		{1024 * 1024 * 1024 * 1024 * 2, "2048.00 GiB"},
+	}
+	for _, c := range cases {
+		t.Run(c.result, func(t *testing.T) {
+			assert.Equal(t, c.result, humanBytes(c.n))
+		})
+	}
+}
