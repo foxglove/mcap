@@ -32,7 +32,7 @@ FetchContent_Declare(
 )
 set(ZSTD_BUILD_STATIC ON)
 set(ZSTD_BUILD_SHARED OFF)
-set(ZSTD_LZ4_SUPPORT ON)
+set(ZSTD_LZ4_SUPPORT OFF)
 set(ZSTD_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(zstd)
 target_include_directories(libzstd_static PUBLIC $<BUILD_INTERFACE:${zstd_SOURCE_DIR}/lib>)
