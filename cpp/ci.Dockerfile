@@ -12,6 +12,7 @@ RUN apt-get update && \
   curl \
   cmake \
   gnupg \
+  git \
   make \
   perl \
   python3 \
