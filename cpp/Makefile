@@ -46,7 +46,7 @@ test: dev-image
 
 .PHONY: test-host
 test-host:
-	cd build && ctest
+	ctest --test-dir build
 
 .PHONY: hdoc-build
 hdoc-build:
