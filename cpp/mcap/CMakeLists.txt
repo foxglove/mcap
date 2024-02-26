@@ -15,6 +15,7 @@ set(SOURCES
 )
 
 add_library(mcap INTERFACE ${SOURCES})
+add_library(mcap::mcap ALIAS mcap)
 target_include_directories(
     mcap
     INTERFACE
