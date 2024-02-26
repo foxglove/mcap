@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.27.3)
+cmake_minimum_required(VERSION 3.22.1)
 
 set(MCAP_LIBRARY_VERSION 1.3.0)
 project(mcap LANGUAGES CXX VERSION ${MCAP_LIBRARY_VERSION})

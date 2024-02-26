@@ -10,6 +10,7 @@ RUN apt-get update && \
   apt-get install -y --no-install-recommends --no-install-suggests \
   ca-certificates \
   curl \
+  cmake \
   gnupg \
   make \
   perl \
@@ -17,15 +18,7 @@ RUN apt-get update && \
   python3-pip \
   clang \
   clang-format \
-  lsb-release \
   && rm -rf /var/lib/apt/lists/*
-
-RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null && \
-    echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/kitware.list >/dev/null && \
-    apt update && \
-    rm /usr/share/keyrings/kitware-archive-keyring.gpg && \
-    apt install -y kitware-archive-keyring cmake && \
-    rm -rf /var/lib/apt/lists/*
 
 RUN if [ "$IMAGE" = "ubuntu:focal" ]; then \
   echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main" >> /etc/apt/sources.list && \
