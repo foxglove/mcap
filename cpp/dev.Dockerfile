@@ -7,13 +7,19 @@ RUN apt-get update && \
   apt-get install -y --no-install-recommends --no-install-suggests \
   ca-certificates \
   curl \
-  cmake \
   gnupg \
   make \
   perl \
   python3 \
-  python3-pip
+  python3-pip \
+  lsb-release
 
+RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null && \
+    echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/kitware.list >/dev/null && \
+    apt update && \
+    rm /usr/share/keyrings/kitware-archive-keyring.gpg && \
+    apt install -y kitware-archive-keyring cmake && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main" >> /etc/apt/sources.list && \
   curl https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -  &&\
