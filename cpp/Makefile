@@ -22,7 +22,7 @@ clean:
 	docker rmi -f mcap_cpp_ci_jammy
 	rm -rf bench/build
 	rm -rf examples/build
-	rm -rf test/build
+	rm -rf build
 
 .PHONY: format-check
 format-check: dev-image
@@ -46,8 +46,7 @@ test: dev-image
 
 .PHONY: test-host
 test-host:
-	./test/build/Debug/bin/unit-tests
-	./test/build/Debug/bin/unit-tests-nocompress
+	cd build && ctest
 
 .PHONY: hdoc-build
 hdoc-build:
