@@ -15,5 +15,6 @@ if [ "$1" != "--build-tests-only" ]; then
   conan build bench --build-folder bench/build/Release
 fi
 
-cmake . -B ./build -DCMAKE_BUILD_TYPE=Debug
+# cSpell:ignore DCMAKE
+cmake . -B ./build "-DCMAKE_BUILD_TYPE=Debug"
 cmake --build ./build
