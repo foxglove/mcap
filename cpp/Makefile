@@ -46,7 +46,8 @@ test: dev-image
 
 .PHONY: test-host
 test-host:
-	ctest --test-dir build
+	./build/test/unit-tests
+	./build/test/unit-tests-nocompress
 
 .PHONY: hdoc-build
 hdoc-build:
