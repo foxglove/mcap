@@ -27,8 +27,8 @@ import (
 
 var (
 	catTopics     string
-	catStart      int64
-	catEnd        int64
+	catStart      uint64
+	catEnd        uint64
 	catFormatJSON bool
 )
 
@@ -354,8 +354,8 @@ var catCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(catCmd)
 
-	catCmd.PersistentFlags().Int64VarP(&catStart, "start-secs", "", 0, "start time")
-	catCmd.PersistentFlags().Int64VarP(&catEnd, "end-secs", "", math.MaxInt64, "end time")
+	catCmd.PersistentFlags().Uint64VarP(&catStart, "start-secs", "", 0, "start time")
+	catCmd.PersistentFlags().Uint64VarP(&catEnd, "end-secs", "", math.MaxInt64, "end time")
 	catCmd.PersistentFlags().StringVarP(&catTopics, "topics", "", "", "comma-separated list of topics")
 	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false,
 		`print messages as JSON. Supported message encodings: ros1, protobuf, and json.`)

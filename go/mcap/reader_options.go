@@ -13,8 +13,8 @@ const (
 )
 
 type ReadOptions struct {
-	Start    int64
-	End      int64
+	Start    uint64
+	End      uint64
 	Topics   []string
 	UseIndex bool
 	Order    ReadOrder
@@ -24,7 +24,7 @@ type ReadOptions struct {
 
 type ReadOpt func(*ReadOptions) error
 
-func After(start int64) ReadOpt {
+func After(start uint64) ReadOpt {
 	return func(ro *ReadOptions) error {
 		if ro.End < start {
 			return fmt.Errorf("end cannot come before start")
@@ -34,7 +34,7 @@ func After(start int64) ReadOpt {
 	}
 }
 
-func Before(end int64) ReadOpt {
+func Before(end uint64) ReadOpt {
 	return func(ro *ReadOptions) error {
 		if end < ro.Start {
 			return fmt.Errorf("end cannot come before start")

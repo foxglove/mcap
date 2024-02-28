@@ -95,8 +95,8 @@ func (r *Reader) unindexedIterator(opts ReadOptions) *unindexedMessageIterator {
 		channels:         make(map[uint16]*Channel),
 		schemas:          make(map[uint16]*Schema),
 		topics:           topicMap,
-		start:            uint64(opts.Start),
-		end:              uint64(opts.End),
+		start:            opts.Start,
+		end:              opts.End,
 		metadataCallback: opts.MetadataCallback,
 	}
 }
@@ -115,8 +115,8 @@ func (r *Reader) indexedMessageIterator(
 		channels:         make(map[uint16]*Channel),
 		schemas:          make(map[uint16]*Schema),
 		topics:           topicMap,
-		start:            uint64(opts.Start),
-		end:              uint64(opts.End),
+		start:            opts.Start,
+		end:              opts.End,
 		indexHeap:        rangeIndexHeap{order: opts.Order},
 		metadataCallback: opts.MetadataCallback,
 	}
@@ -127,7 +127,7 @@ func (r *Reader) Messages(
 ) (MessageIterator, error) {
 	options := ReadOptions{
 		Start:    0,
-		End:      math.MaxInt64,
+		End:      math.MaxUint64,
 		Topics:   nil,
 		UseIndex: true,
 		Order:    FileOrder,
