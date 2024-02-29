@@ -3,6 +3,7 @@ name: Website
 on:
   push:
     branches: [main]
+    # deploy the website for every new MCAP CLI release, so the version gets populated in CLI installation docs
     tags: ["releases/mcap-cli/*"]
   pull_request:
     branches: ["*"]
