@@ -68,9 +68,11 @@ const config = {
       return {
         name: "latestCLIReleaseTag",
         async loadContent() {
+          /* cspell:disable */
           const { stdout: tagList } = await execAsync(
             `git tag --sort=-creatordate --list "releases/mcap-cli/*"`,
           );
+          /* cspell:enable */
           const allTags = tagList.split("\n");
           const latest = allTags[0];
           if (latest == undefined) {

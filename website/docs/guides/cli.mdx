@@ -84,7 +84,9 @@ Convert a ROS 1 bag file to mcap:
 
 {/* cspell: disable */}
 
-    $ mcap convert demo.bag demo.mcap
+```bash
+$ mcap convert demo.bag demo.mcap
+```
 
 {/* cspell: enable */}
 
@@ -92,13 +94,17 @@ Convert a ROS 2 db3 file to mcap:
 
 {/* cspell: disable */}
 
-    $ mcap convert demo.db3 demo.mcap
+```bash
+$ mcap convert demo.db3 demo.mcap
+```
 
 {/* cspell: enable */}
 
 In ROS 2 releases prior to Iron, db3 files did not contain message definitions (schemas). When converting to MCAP, you should first source the same ROS 2 workspace that the original file was recorded with. If this is not available, you will need to specify a search directory for message definitions (e.g `/opt/ros/humble` from the original system):
 
-    $ mcap convert demo.db3 demo.mcap --ament-prefix-path /path/to/humble
+```bash
+$ mcap convert demo.db3 demo.mcap --ament-prefix-path /path/to/humble
+```
 
 Alternatively, the [`ros2 bag convert`](https://github.com/ros2/rosbag2#converting-bags) utility may be used to convert between db3 and mcap.
 
@@ -153,6 +159,8 @@ $ mcap cat demo.mcap --topics /tf --json | head -n 10
 
 All commands except `convert` support reading from remote files stored in GCS:
 
+{/* cspell: disable */}
+
 ```
 $ mcap info gs://your-remote-bucket/demo.mcap
 library: mcap go #(devel)
@@ -174,6 +182,8 @@ channels:
 attachments: 0
 ```
 
+{/* cspell: enable */}
+
 Remote reads will use the index at the end of the file to minimize latency and data transfer.
 
 ### File Diagnostics
@@ -181,6 +191,8 @@ Remote reads will use the index at the end of the file to minimize latency and d
 #### List chunks in a file
 
 The `mcap list` command can be used with chunks or attachments:
+
+{/* cspell: disable */}
 
 ```
 $ mcap list chunks ~/data/mcap/demo.mcap
@@ -200,3 +212,5 @@ offset    length   start                end                  compression  compre
 56510103  4750731  1490149587227624742  1490149587814043200  zstd         4750678          9622778            0.493691
 61262859  217330   1490149587824113700  1490149587884601617  zstd         217277           217255             1.000101
 ```
+
+{/* cspell: enable */}
