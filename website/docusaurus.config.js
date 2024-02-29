@@ -70,7 +70,7 @@ const config = {
         async loadContent() {
           /* cspell:disable */
           const result = await execAsync(
-            `git tag --sort=-creatordate --list "releases/mcap-cli/*"`,
+            `/usr/bin/git tag --sort=-creatordate --list "releases/mcap-cli/*"`,
           );
           /* cspell:enable */
           if (result.stdout.length === 0) {
