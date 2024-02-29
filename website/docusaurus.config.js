@@ -69,17 +69,18 @@ const config = {
         name: "latestCLIReleaseTag",
         async loadContent() {
           /* cspell:disable */
-          const { stdout: tagList } = await execAsync(
+          const result = await execAsync(
             `git tag --sort=-creatordate --list "releases/mcap-cli/*"`,
           );
           /* cspell:enable */
-          const allTags = tagList.split("\n");
-          const latest = allTags[0];
-          if (latest == undefined) {
+          if (result.stdout.length === 0) {
             throw new Error(
-              `could not determine latest MCAP CLI tag: all tags was ${tagList}`,
+              `could not determine latest MCAP CLI tag ${JSON.stringify(
+                result,
+              )}`,
             );
           }
+          const latest = result.stdout.split("\n")[0];
           return latest;
         },
         async contentLoaded({ content, actions }) {
