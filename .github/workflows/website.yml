@@ -3,6 +3,7 @@ name: Website
 on:
   push:
     branches: [main]
+    tags: ["releases/mcap-cli/*"]
   pull_request:
     branches: ["*"]
 
