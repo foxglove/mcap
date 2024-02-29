@@ -5,7 +5,9 @@
 const path = require("path");
 const darkCodeTheme = require("prism-react-renderer/themes/dracula");
 const lightCodeTheme = require("prism-react-renderer/themes/github");
+const util = require("util");
 const webpack = require("webpack");
+const execAsync = util.promisify(require("child_process").exec);
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -62,6 +64,27 @@ const config = {
         };
       },
     }),
+    () => {
+      return {
+        name: "latestCLIReleaseTag",
+        async loadContent() {
+          const { stdout: tagList } = await execAsync(
+            `git tag --sort=-creatordate --list "releases/mcap-cli/*"`,
+          );
+          const allTags = tagList.split("\n");
+          const latest = allTags[0];
+          if (latest == undefined) {
+            throw new Error(
+              `could not determine latest MCAP CLI tag: all tags was ${tagList}`,
+            );
+          }
+          return latest;
+        },
+        async contentLoaded({ content, actions }) {
+          actions.setGlobalData({ tag: content });
+        },
+      };
+    },
   ],
 
   presets: [
