@@ -83,7 +83,7 @@
       "fields": [
         ["group_length", "37"],
         ["group_opcode", "3"],
-        ["group_start", "242"]
+        ["group_start", "239"]
       ]
     },
     {
@@ -91,7 +91,7 @@
       "fields": [
         ["group_length", "50"],
         ["group_opcode", "4"],
-        ["group_start", "279"]
+        ["group_start", "276"]
       ]
     },
     {
@@ -99,7 +99,7 @@
       "fields": [
         ["group_length", "68"],
         ["group_opcode", "11"],
-        ["group_start", "329"]
+        ["group_start", "326"]
       ]
     },
     {
@@ -107,15 +107,15 @@
       "fields": [
         ["group_length", "86"],
         ["group_opcode", "8"],
-        ["group_start", "397"]
+        ["group_start", "394"]
       ]
     },
     {
       "type": "Footer",
       "fields": [
-        ["summary_crc", "3636097681"],
-        ["summary_offset_start", "483"],
-        ["summary_start", "242"]
+        ["summary_crc", "497536301"],
+        ["summary_offset_start", "480"],
+        ["summary_start", "239"]
       ]
     }
   ],

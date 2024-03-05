@@ -13,9 +13,9 @@
     {
       "type": "Footer",
       "fields": [
-        ["summary_crc", "3895734819"],
+        ["summary_crc", "3783159930"],
         ["summary_offset_start", "0"],
-        ["summary_start", "88"]
+        ["summary_start", "85"]
       ]
     }
   ],

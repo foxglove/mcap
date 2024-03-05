@@ -404,22 +404,11 @@ export class McapRecordBuilder {
   }
 
   writeDataEnd(dataEnd: DataEnd): bigint {
-    this.#bufferBuilder.uint8(Opcode.DATA_END);
-
-    const startPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
-      .uint64(0n) // placeholder size
+      .uint8(Opcode.DATA_END)
+      .uint64(4n) // data end is fixed length
       .uint32(dataEnd.dataSectionCrc);
-    if (this.options?.padRecords === true) {
-      this.#bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
-    }
-
-    const endPosition = this.#bufferBuilder.length;
-    this.#bufferBuilder
-      .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
-      .seek(endPosition);
-
-    return BigInt(endPosition - startPosition + 1);
+    // data end record cannot be padded
+    return 4n;
   }
 }

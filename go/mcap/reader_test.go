@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"testing"
 
@@ -839,4 +840,43 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	_, _, msg, err = reverseIt.Next(nil)
 	assert.Nil(t, msg)
 	assert.Error(t, io.EOF, err)
+}
+
+func TestReadingBigTimestamps(t *testing.T) {
+	buf := &bytes.Buffer{}
+	w, err := NewWriter(buf, &WriterOptions{
+		Chunked:   true,
+		ChunkSize: 100,
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, w.WriteHeader(&Header{}))
+	assert.NoError(t, w.WriteSchema(&Schema{ID: 1}))
+	assert.NoError(t, w.WriteChannel(&Channel{SchemaID: 1, Topic: "/topic"}))
+	assert.NoError(t, w.WriteMessage(&Message{
+		LogTime: math.MaxUint64 - 1,
+		Data:    []byte("hello"),
+	}))
+	assert.NoError(t, w.Close())
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	assert.NoError(t, err)
+	t.Run("info works as expected", func(t *testing.T) {
+		info, err := reader.Info()
+		assert.Nil(t, err)
+		assert.Equal(t, uint64(math.MaxUint64-1), info.Statistics.MessageEndTime)
+	})
+	t.Run("message iteration works as expected", func(t *testing.T) {
+		it, err := reader.Messages(After(math.MaxUint64-2), Before(math.MaxUint64))
+		assert.Nil(t, err)
+		count := 0
+		for {
+			_, _, msg, err := it.Next(nil)
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			assert.Nil(t, err)
+			assert.Equal(t, []byte("hello"), msg.Data)
+			count++
+		}
+		assert.Equal(t, count, 1)
+	})
 }

@@ -1,176 +1,59 @@
 {
-  "meta": {
-    "variant": {
-      "features": [
-        "ch",
-        "rch",
-        "chx",
-        "pad"
+  "records": [
+    {"type": "Header", "fields": [["library", ""], ["profile", ""]]},
+    {
+      "type": "Channel",
+      "fields": [
+        ["id", "1"],
+        ["message_encoding", "text"],
+        ["metadata", {}],
+        ["schema_id", "0"],
+        ["topic", "example"]
+      ]
+    },
+    {
+      "type": "Message",
+      "fields": [
+        ["channel_id", "1"],
+        ["data", ["1", "2", "3"]],
+        ["log_time", "2"],
+        ["publish_time", "1"],
+        ["sequence", "10"]
+      ]
+    },
+    {"type": "DataEnd", "fields": [["data_section_crc", "4107059283"]]},
+    {
+      "type": "Channel",
+      "fields": [
+        ["id", "1"],
+        ["message_encoding", "text"],
+        ["metadata", {}],
+        ["schema_id", "0"],
+        ["topic", "example"]
+      ]
+    },
+    {
+      "type": "ChunkIndex",
+      "fields": [
+        ["chunk_length", "119"],
+        ["chunk_start_offset", "28"],
+        ["compressed_size", "70"],
+        ["compression", ""],
+        ["message_end_time", "2"],
+        ["message_index_length", "0"],
+        ["message_index_offsets", {}],
+        ["message_start_time", "2"],
+        ["uncompressed_size", "70"]
+      ]
+    },
+    {
+      "type": "Footer",
+      "fields": [
+        ["summary_crc", "3823191098"],
+        ["summary_offset_start", "0"],
+        ["summary_start", "160"]
       ]
     }
-  },
-  "records": [
-    {
-      "fields": [
-        [
-          "library",
-          ""
-        ],
-        [
-          "profile",
-          ""
-        ]
-      ],
-      "type": "Header"
-    },
-    {
-      "fields": [
-        [
-          "id",
-          "1"
-        ],
-        [
-          "message_encoding",
-          "text"
-        ],
-        [
-          "metadata",
-          {
-          }
-        ],
-        [
-          "schema_id",
-          "0"
-        ],
-        [
-          "topic",
-          "example"
-        ]
-      ],
-      "type": "Channel"
-    },
-    {
-      "fields": [
-        [
-          "channel_id",
-          "1"
-        ],
-        [
-          "data",
-          [
-            "1",
-            "2",
-            "3"
-          ]
-        ],
-        [
-          "log_time",
-          "2"
-        ],
-        [
-          "publish_time",
-          "1"
-        ],
-        [
-          "sequence",
-          "10"
-        ]
-      ],
-      "type": "Message"
-    },
-    {
-      "fields": [
-        [
-          "data_section_crc",
-          "4107059283"
-        ]
-      ],
-      "type": "DataEnd"
-    },
-    {
-      "fields": [
-        [
-          "id",
-          "1"
-        ],
-        [
-          "message_encoding",
-          "text"
-        ],
-        [
-          "metadata",
-          {
-          }
-        ],
-        [
-          "schema_id",
-          "0"
-        ],
-        [
-          "topic",
-          "example"
-        ]
-      ],
-      "type": "Channel"
-    },
-    {
-      "fields": [
-        [
-          "chunk_length",
-          "119"
-        ],
-        [
-          "chunk_start_offset",
-          "28"
-        ],
-        [
-          "compressed_size",
-          "70"
-        ],
-        [
-          "compression",
-          ""
-        ],
-        [
-          "message_end_time",
-          "2"
-        ],
-        [
-          "message_index_length",
-          "0"
-        ],
-        [
-          "message_index_offsets",
-          {
-          }
-        ],
-        [
-          "message_start_time",
-          "2"
-        ],
-        [
-          "uncompressed_size",
-          "70"
-        ]
-      ],
-      "type": "ChunkIndex"
-    },
-    {
-      "fields": [
-        [
-          "summary_crc",
-          "3391746248"
-        ],
-        [
-          "summary_offset_start",
-          "0"
-        ],
-        [
-          "summary_start",
-          "163"
-        ]
-      ],
-      "type": "Footer"
-    }
-  ]
+  ],
+  "meta": {"variant": {"features": ["ch", "rch", "chx", "pad"]}}
 }

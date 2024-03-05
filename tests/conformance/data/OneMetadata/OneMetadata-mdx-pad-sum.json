@@ -15,15 +15,15 @@
       "fields": [
         ["group_length", "42"],
         ["group_opcode", "13"],
-        ["group_start", "88"]
+        ["group_start", "85"]
       ]
     },
     {
       "type": "Footer",
       "fields": [
-        ["summary_crc", "2257852717"],
-        ["summary_offset_start", "130"],
-        ["summary_start", "88"]
+        ["summary_crc", "3808970324"],
+        ["summary_offset_start", "127"],
+        ["summary_start", "85"]
       ]
     }
   ],
