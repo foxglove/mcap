@@ -13,7 +13,9 @@ const (
 )
 
 type ReadOptions struct {
-	Start    int64
+	// Deprecated: use StartNanos instead
+	Start int64
+	// Deprecated: use EndNanos instead
 	End      int64
 	Topics   []string
 	UseIndex bool
