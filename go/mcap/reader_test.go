@@ -396,8 +396,8 @@ func TestMessageReading(t *testing.T) {
 						r, err := NewReader(reader)
 						assert.Nil(t, err)
 						it, err := r.Messages(
-							After(100),
-							Before(200),
+							AfterNanos(100),
+							BeforeNanos(200),
 							UsingIndex(useIndex),
 						)
 						assert.Nil(t, err)
@@ -865,7 +865,7 @@ func TestReadingBigTimestamps(t *testing.T) {
 		assert.Equal(t, uint64(math.MaxUint64-1), info.Statistics.MessageEndTime)
 	})
 	t.Run("message iteration works as expected", func(t *testing.T) {
-		it, err := reader.Messages(After(math.MaxUint64-2), Before(math.MaxUint64))
+		it, err := reader.Messages(AfterNanos(math.MaxUint64-2), BeforeNanos(math.MaxUint64))
 		assert.Nil(t, err)
 		count := 0
 		for {

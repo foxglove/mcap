@@ -85,6 +85,7 @@ func Range(it MessageIterator, f func(*Schema, *Channel, *Message) error) error 
 }
 
 func (r *Reader) unindexedIterator(opts ReadOptions) *unindexedMessageIterator {
+	opts.Finalize()
 	topicMap := make(map[string]bool)
 	for _, topic := range opts.Topics {
 		topicMap[topic] = true
@@ -95,8 +96,8 @@ func (r *Reader) unindexedIterator(opts ReadOptions) *unindexedMessageIterator {
 		channels:         make(map[uint16]*Channel),
 		schemas:          make(map[uint16]*Schema),
 		topics:           topicMap,
-		start:            opts.Start,
-		end:              opts.End,
+		start:            opts.StartNanos,
+		end:              opts.EndNanos,
 		metadataCallback: opts.MetadataCallback,
 	}
 }
@@ -104,6 +105,7 @@ func (r *Reader) unindexedIterator(opts ReadOptions) *unindexedMessageIterator {
 func (r *Reader) indexedMessageIterator(
 	opts ReadOptions,
 ) *indexedMessageIterator {
+	opts.Finalize()
 	topicMap := make(map[string]bool)
 	for _, topic := range opts.Topics {
 		topicMap[topic] = true
@@ -115,8 +117,8 @@ func (r *Reader) indexedMessageIterator(
 		channels:         make(map[uint16]*Channel),
 		schemas:          make(map[uint16]*Schema),
 		topics:           topicMap,
-		start:            opts.Start,
-		end:              opts.End,
+		start:            opts.StartNanos,
+		end:              opts.EndNanos,
 		indexHeap:        rangeIndexHeap{order: opts.Order},
 		metadataCallback: opts.MetadataCallback,
 	}
@@ -126,11 +128,11 @@ func (r *Reader) Messages(
 	opts ...ReadOpt,
 ) (MessageIterator, error) {
 	options := ReadOptions{
-		Start:    0,
-		End:      math.MaxUint64,
-		Topics:   nil,
-		UseIndex: true,
-		Order:    FileOrder,
+		StartNanos: 0,
+		EndNanos:   math.MaxUint64,
+		Topics:     nil,
+		UseIndex:   true,
+		Order:      FileOrder,
 	}
 	for _, opt := range opts {
 		err := opt(&options)
@@ -138,6 +140,7 @@ func (r *Reader) Messages(
 			return nil, err
 		}
 	}
+	options.Finalize()
 	if options.UseIndex {
 		if rs, ok := r.r.(io.ReadSeeker); ok {
 			r.rs = rs
