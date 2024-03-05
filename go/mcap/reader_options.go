@@ -13,15 +13,16 @@ const (
 )
 
 type ReadOptions struct {
-	Start      int64
-	End        int64
-	StartNanos uint64
-	EndNanos   uint64
-	Topics     []string
-	UseIndex   bool
-	Order      ReadOrder
+	Start    int64
+	End      int64
+	Topics   []string
+	UseIndex bool
+	Order    ReadOrder
 
 	MetadataCallback func(*Metadata) error
+
+	StartNanos uint64
+	EndNanos   uint64
 }
 
 func (ro *ReadOptions) Finalize() {
