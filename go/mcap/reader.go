@@ -84,7 +84,7 @@ func Range(it MessageIterator, f func(*Schema, *Channel, *Message) error) error 
 	}
 }
 
-func (r *Reader) unindexedIterator(opts ReadOptions) *unindexedMessageIterator {
+func (r *Reader) unindexedIterator(opts *ReadOptions) *unindexedMessageIterator {
 	opts.Finalize()
 	topicMap := make(map[string]bool)
 	for _, topic := range opts.Topics {
@@ -103,7 +103,7 @@ func (r *Reader) unindexedIterator(opts ReadOptions) *unindexedMessageIterator {
 }
 
 func (r *Reader) indexedMessageIterator(
-	opts ReadOptions,
+	opts *ReadOptions,
 ) *indexedMessageIterator {
 	opts.Finalize()
 	topicMap := make(map[string]bool)
@@ -162,11 +162,11 @@ func (r *Reader) Messages(
 			if err != nil {
 				return nil, fmt.Errorf("failed to seek to start: %w", err)
 			}
-			return r.unindexedIterator(options), nil
+			return r.unindexedIterator(&options), nil
 		}
-		return r.indexedMessageIterator(options), nil
+		return r.indexedMessageIterator(&options), nil
 	}
-	return r.unindexedIterator(options), nil
+	return r.unindexedIterator(&options), nil
 }
 
 // Get the Header record from this MCAP.
@@ -183,7 +183,7 @@ func (r *Reader) Info() (*Info, error) {
 	if r.rs == nil {
 		return nil, fmt.Errorf("cannot get info from non-seekable reader")
 	}
-	it := r.indexedMessageIterator(ReadOptions{
+	it := r.indexedMessageIterator(&ReadOptions{
 		UseIndex: true,
 	})
 	err := it.parseSummarySection()
