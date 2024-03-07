@@ -208,7 +208,7 @@ func (r *Reader) GetAttachmentReader(offset uint64) (*AttachmentReader, error) {
 	if err != nil {
 		return nil, err
 	}
-	ar, err := parseAttachmentReader(r.rs, true)
+	ar, err := ParseAttachmentReader(r.rs, true)
 	if err != nil {
 		return nil, err
 	}

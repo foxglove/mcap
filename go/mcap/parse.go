@@ -264,7 +264,10 @@ func ParseChunkIndex(buf []byte) (*ChunkIndex, error) {
 	}, nil
 }
 
-func parseAttachmentReader(
+// ParseAttachmentReader parses the header of an attachment record and produces an AttachmentReader,
+// which can be used to read out the contents of the attachment without needing to hold it all in
+// memory at once.
+func ParseAttachmentReader(
 	r io.Reader,
 	computeCRC bool,
 ) (*AttachmentReader, error) {

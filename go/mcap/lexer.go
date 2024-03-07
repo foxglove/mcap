@@ -220,7 +220,7 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			}
 
 			if l.attachmentCallback != nil {
-				attachmentReader, err := parseAttachmentReader(
+				attachmentReader, err := ParseAttachmentReader(
 					limitReader,
 					l.computeAttachmentCRCs,
 				)
