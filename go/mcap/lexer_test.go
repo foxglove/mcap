@@ -13,6 +13,7 @@ import (
 
 	"github.com/pierrec/lz4/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLexUnchunkedFile(t *testing.T) {
@@ -113,7 +114,7 @@ func TestRejectsNestedChunks(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNestedChunk)
 }
 
-func TestBadMagic(t *testing.T) {
+func TestNewReaderBadMagic(t *testing.T) {
 	cases := []struct {
 		assertion string
 		magic     []byte
@@ -130,7 +131,7 @@ func TestBadMagic(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			_, err := NewLexer(bytes.NewReader(c.magic))
-			assert.IsType(t, &ErrBadMagic{}, err)
+			require.ErrorIs(t, &ErrBadMagic{}, err)
 		})
 	}
 }
@@ -516,4 +517,21 @@ func BenchmarkLexer(b *testing.B) {
 			})
 		}
 	}
+}
+
+func TestBadMagic(t *testing.T) {
+	t.Run("demonstrate usage of is", func(t *testing.T) {
+		err := &ErrBadMagic{
+			location: magicLocationStart,
+			actual:   []byte{0x00, 0x01, 0x02, 0x03},
+		}
+		require.ErrorIs(t, err, &ErrBadMagic{})
+	})
+	t.Run("example of formatting", func(t *testing.T) {
+		err := &ErrBadMagic{
+			location: magicLocationStart,
+			actual:   []byte{0x00, 0x01, 0x02, 0x03},
+		}
+		require.Equal(t, "Invalid magic at start of file, found: [0 1 2 3]", err.Error())
+	})
 }
