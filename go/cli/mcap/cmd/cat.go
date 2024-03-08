@@ -168,10 +168,10 @@ func getReadOpts(useIndex bool) []mcap.ReadOpt {
 	topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
 	opts := []mcap.ReadOpt{mcap.UsingIndex(useIndex), mcap.WithTopics(topics)}
 	if catStart != 0 {
-		opts = append(opts, mcap.After(catStart*1e9))
+		opts = append(opts, mcap.AfterNanos(catStart*1e9))
 	}
 	if catEnd != math.MaxInt64 {
-		opts = append(opts, mcap.Before(catEnd*1e9))
+		opts = append(opts, mcap.BeforeNanos(catEnd*1e9))
 	}
 	return opts
 }
