@@ -178,6 +178,8 @@ pub struct Writer<'a, W: Write + Seek> {
     /// Message start and end time, or None if there are no messages yet.
     message_bounds: Option<(u64, u64)>,
     channel_message_counts: BTreeMap<u16, u64>,
+    highest_channel_id: u16,
+    highest_schema_id: u16,
 }
 
 impl<'a, W: Write + Seek> Writer<'a, W> {
@@ -206,6 +208,10 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             metadata_indexes: Vec::new(),
             message_bounds: None,
             channel_message_counts: BTreeMap::new(),
+            highest_channel_id: 0,
+            // Schema IDs cannot be zero, that's the sentinel value in a channel
+            // for "no schema"
+            highest_schema_id: 1,
         })
     }
 
@@ -222,7 +228,8 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             return Ok(*id);
         }
 
-        let next_channel_id = self.channels.len() as u16;
+        let next_channel_id = self.highest_channel_id + 1;
+        self.highest_channel_id = next_channel_id;
         assert!(self
             .channels
             .insert(chan.clone(), next_channel_id)
@@ -232,14 +239,64 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         Ok(next_channel_id)
     }
 
+    /// Adds a channel (and its provided schema, if any), specifying its ID.
+    ///
+    /// Useful to preserve channel IDs when copying from an existing MCAP.
+    pub fn add_channel_with_id(&mut self, chan: &Channel<'a>, id: u16) -> McapResult<()> {
+        let schema_id = match &chan.schema {
+            Some(s) => self.add_schema(s)?,
+            None => 0,
+        };
+        for (known_channel, known_id) in &(self.channels) {
+            if id == *known_id {
+                if chan == known_channel {
+                    // tried adding the same channel twice with the same ID, not an error
+                    return Ok(());
+                }
+                return Err(McapError::ConflictingChannelIds(id));
+            }
+        }
+        assert!(self
+            .channels
+            .insert(chan.clone(), id)
+            .is_none());
+        self.highest_channel_id = std::cmp::max(self.highest_channel_id, id);
+        self.chunkin_time()?
+            .write_channel(id, schema_id, chan)?;
+        Ok(())
+    }
+
+    /// Adds a schema separately from adding a channel.
+    ///
+    /// Useful to preserve schema IDs when copying from an existing MCAP.
+    pub fn add_schema_with_id(&mut self, schema: &Schema<'a>, id: u16) -> McapResult<()> {
+        if id == 0 {
+            return Err(McapError::UnexpectedSchemaIdZero);
+        }
+        for (known_schema, known_id) in &(self.schemas) {
+            if id == *known_id {
+                if schema == known_schema {
+                    return Ok(());
+                }
+                return Err(McapError::ConflictingSchemaIds(id));
+            }
+        }
+        assert!(self
+            .schemas
+            .insert(schema.clone(), id)
+            .is_none());
+        self.highest_schema_id = std::cmp::max(self.highest_schema_id, id);
+
+        self.chunkin_time()?.write_schema(id, schema)
+    }
+
     fn add_schema(&mut self, schema: &Schema<'a>) -> McapResult<u16> {
         if let Some(id) = self.schemas.get(schema) {
             return Ok(*id);
         }
 
-        // Schema IDs cannot be zero, that's the sentinel value in a channel
-        // for "no schema"
-        let next_schema_id = self.schemas.len() as u16 + 1;
+        let next_schema_id = self.highest_schema_id + 1;
+        self.highest_schema_id = next_schema_id;
         assert!(self
             .schemas
             .insert(schema.clone(), next_schema_id)

@@ -24,6 +24,6 @@ export default class RustWriterTestRunner extends WriteTestRunner {
   }
 
   supportsVariant(_variant: TestVariant): boolean {
-    return false;
+    return true;
   }
 }
