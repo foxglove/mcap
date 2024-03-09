@@ -50,6 +50,8 @@ type Writer struct {
 	opts *WriterOptions
 
 	closed bool
+
+	channelsOutsideChunks bool
 }
 
 // WriteHeader writes a header record to the output.
@@ -117,7 +119,7 @@ func (w *Writer) WriteSchema(s *Schema) (err error) {
 	offset += putPrefixedString(w.msg[offset:], s.Name)
 	offset += putPrefixedString(w.msg[offset:], s.Encoding)
 	offset += putPrefixedBytes(w.msg[offset:], s.Data)
-	if w.opts.Chunked && !w.closed {
+	if w.opts.Chunked && !w.closed && !w.channelsOutsideChunks {
 		_, err = w.writeRecord(w.compressedWriter, OpSchema, w.msg[:offset])
 	} else {
 		_, err = w.writeRecord(w.w, OpSchema, w.msg[:offset])
@@ -156,7 +158,7 @@ func (w *Writer) WriteChannel(c *Channel) error {
 	offset += putPrefixedString(w.msg[offset:], c.MessageEncoding)
 	offset += copy(w.msg[offset:], userdata)
 	var err error
-	if w.opts.Chunked && !w.closed {
+	if w.opts.Chunked && !w.closed && !w.channelsOutsideChunks {
 		_, err = w.writeRecord(w.compressedWriter, OpChannel, w.msg[:offset])
 		if err != nil {
 			return err
@@ -827,6 +829,12 @@ type WriterOptions struct {
 	// Compressor is a custom compressor. If supplied it will take precedence
 	// over the built-in ones.
 	Compressor CustomCompressor
+
+	// ChannelsOutsideChunks causes channels and schemas to be written outside
+	// of chunks, rather than inside them. This will cause them to be stored
+	// uncompressed, but also separates them from message data in a way that may
+	// make message data easier to manipulate without decompressing.
+	ChannelsOutsideChunks bool
 }
 
 // Convert an MCAP compression level to the corresponding lz4.CompressionLevel.

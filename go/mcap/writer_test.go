@@ -10,6 +10,7 @@ import (
 
 	"github.com/pierrec/lz4/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const libraryString = "libfoo v0"
@@ -140,6 +141,80 @@ func TestOutputDeterminism(t *testing.T) {
 			assert.Equal(t, hash, newHash)
 		})
 	}
+}
+
+func TestChannelsOutsideChunks(t *testing.T) {
+	buf := &bytes.Buffer{}
+	w, err := NewWriter(buf, &WriterOptions{
+		Chunked:               true,
+		ChunkSize:             1024,
+		Compression:           CompressionNone,
+		IncludeCRC:            true,
+		ChannelsOutsideChunks: true,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, w.WriteHeader(&Header{}))
+	require.NoError(t, w.WriteSchema(&Schema{
+		ID:       1,
+		Name:     "schema",
+		Encoding: "msg",
+		Data:     []byte{},
+	}))
+	require.NoError(t, w.WriteChannel(&Channel{
+		ID:              1,
+		Topic:           "/test",
+		MessageEncoding: "ros1",
+		SchemaID:        1,
+	}))
+	require.NoError(t, w.WriteMessage(&Message{
+		ChannelID:   1,
+		Sequence:    0,
+		LogTime:     100,
+		PublishTime: 100,
+		Data: []byte{
+			1,
+			2,
+			3,
+			4,
+		},
+	}))
+	require.NoError(t, w.Close())
+
+	t.Run("file is readable with a linear scan", func(t *testing.T) {
+		reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+		require.NoError(t, err)
+
+		msgs, err := reader.Messages(InOrder(FileOrder), UsingIndex(false))
+		require.NoError(t, err)
+		for {
+			schema, channel, msg, err := msgs.Next(nil)
+			if err != nil {
+				require.ErrorIs(t, err, io.EOF)
+				break
+			}
+			require.Equal(t, schema.Name, "schema")
+			require.Equal(t, channel.Topic, "/test")
+			require.Equal(t, msg.Data, []byte{1, 2, 3, 4})
+		}
+	})
+	t.Run("file is readable with an indexed scan", func(t *testing.T) {
+		reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+		require.NoError(t, err)
+
+		msgs, err := reader.Messages(InOrder(LogTimeOrder), UsingIndex(true))
+		require.NoError(t, err)
+		for {
+			schema, channel, msg, err := msgs.Next(nil)
+			if err != nil {
+				require.ErrorIs(t, err, io.EOF)
+				break
+			}
+			require.Equal(t, schema.Name, "schema")
+			require.Equal(t, channel.Topic, "/test")
+			require.Equal(t, msg.Data, []byte{1, 2, 3, 4})
+		}
+	})
 }
 
 func TestChunkedReadWrite(t *testing.T) {
