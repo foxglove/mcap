@@ -36,4 +36,4 @@ For an exhaustive list of ways to interact with your MCAP data, check out the [m
 
 ## Visualize MCAP
 
-[Foxglove](https://foxglove.dev/product) supports playing back local and remote ROS 1 bag files, as well as local and remote MCAP files containing ROS 1 data.
+[Foxglove](https://foxglove.dev/) supports playing back local and remote ROS 1 bag files, as well as local and remote MCAP files containing ROS 1 data.
