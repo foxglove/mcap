@@ -60,8 +60,11 @@ export class McapWriter {
     | ((chunkData: Uint8Array) => { compression: string; compressedData: Uint8Array })
     | undefined;
   #chunkSize: number;
-  /** undefined means CRC is not calculated */
-  #dataSectionCrc: number | undefined = crc32Init();
+  /**
+   * undefined means the CRC is not calculated, e.g. when using InitializeForAppending if the
+   * original file did not have a dataSectionCrc.
+   */
+  #dataSectionCrc: number | undefined;
 
   public statistics: Statistics | undefined;
   #useSummaryOffsets: boolean;
@@ -183,12 +186,11 @@ export class McapWriter {
     if (this.#appendMode) {
       throw new Error(`Cannot call start() when writer is in append mode`);
     }
+    this.#dataSectionCrc = crc32Init();
     this.#recordWriter.writeMagic();
     this.#recordWriter.writeHeader(header);
 
-    if (this.#dataSectionCrc != undefined) {
-      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
-    }
+    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
   }
