@@ -103,7 +103,14 @@ func (w *Writer) WriteFooter(f *Footer) error {
 // WriteSchema writes a schema record to the output. Schema records are uniquely
 // identified within a file by their schema ID. A Schema record must occur at
 // least once in the file prior to any Channel Info referring to its ID.
+// A unique identifier for this schema within the file. Must not be zero.
 func (w *Writer) WriteSchema(s *Schema) (err error) {
+	if s == nil {
+		return errors.New("schema struct can not be nil")
+	}
+	if s.ID == 0 {
+		return errors.New("schemaID must not be zero")
+	}
 	msglen := 2 + 4 + len(s.Name) + 4 + len(s.Encoding) + 4 + len(s.Data)
 	w.ensureSized(msglen)
 	offset := putUint16(w.msg, s.ID)

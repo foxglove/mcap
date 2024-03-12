@@ -27,8 +27,8 @@ import (
 
 var (
 	catTopics     string
-	catStart      int64
-	catEnd        int64
+	catStart      uint64
+	catEnd        uint64
 	catFormatJSON bool
 )
 
@@ -168,10 +168,10 @@ func getReadOpts(useIndex bool) []mcap.ReadOpt {
 	topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
 	opts := []mcap.ReadOpt{mcap.UsingIndex(useIndex), mcap.WithTopics(topics)}
 	if catStart != 0 {
-		opts = append(opts, mcap.After(catStart*1e9))
+		opts = append(opts, mcap.AfterNanos(catStart*1e9))
 	}
 	if catEnd != math.MaxInt64 {
-		opts = append(opts, mcap.Before(catEnd*1e9))
+		opts = append(opts, mcap.BeforeNanos(catEnd*1e9))
 	}
 	return opts
 }
@@ -354,8 +354,8 @@ var catCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(catCmd)
 
-	catCmd.PersistentFlags().Int64VarP(&catStart, "start-secs", "", 0, "start time")
-	catCmd.PersistentFlags().Int64VarP(&catEnd, "end-secs", "", math.MaxInt64, "end time")
+	catCmd.PersistentFlags().Uint64VarP(&catStart, "start-secs", "", 0, "start time")
+	catCmd.PersistentFlags().Uint64VarP(&catEnd, "end-secs", "", math.MaxInt64, "end time")
 	catCmd.PersistentFlags().StringVarP(&catTopics, "topics", "", "", "comma-separated list of topics")
 	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false,
 		`print messages as JSON. Supported message encodings: ros1, protobuf, and json.`)
