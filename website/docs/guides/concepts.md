@@ -19,5 +19,5 @@ A stream of messages which have the same type, or schema. Often corresponds to a
 A description of the structure and contents of messages on a channel, e.g. a [Protobuf Schema](https://protobuf.dev/programming-guides/proto3/) or [JSON Schema](https://json-schema.org/).
 
 :::info
-The [foxglove/schemas](https://github.com/foxglove/schemas) repo provides pre-defined schemas for [Foxglove Studio](https://foxglove.dev/studio) visualizations.
+The [foxglove/schemas](https://github.com/foxglove/schemas) repo provides [pre-defined schemas](https://docs.foxglove.dev/docs/visualization/message-schemas/introduction) for Foxglove visualizations.
 :::

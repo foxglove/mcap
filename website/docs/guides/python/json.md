@@ -34,7 +34,7 @@ This prints out the timestamp, intensity, and coordinates for each point in the 
 
 ### Encode data as a `foxglove.PointCloud`
 
-Let's encode this CSV data as a [`foxglove.PointCloud` schema](https://foxglove.dev/docs/studio/messages/point-cloud), so we can later visualize this data in [Foxglove Studio](https://foxglove.dev/studio):
+Let's encode this CSV data as a [`foxglove.PointCloud` schema](https://docs.foxglove.dev/docs/visualization/message-schemas/point-cloud), so we can later visualize this data in [Foxglove](https://foxglove.dev/):
 
 | field          | type                 | description                                                      |
 | -------------- | -------------------- | ---------------------------------------------------------------- |
@@ -108,7 +108,7 @@ with open(args.output, "wb") as f:
 
 ### Register channel
 
-Let's create a channel of messages to contain our point cloud. The schema's name and content tell Foxglove Studio that it can parse and display this message as a point cloud.
+Let's create a channel of messages to contain our point cloud. The schema's name and content tell Foxglove that it can parse and display this message as a point cloud.
 
 ```python
 with open(Path(__file__).parent / "PointCloud.json", "rb") as f:
@@ -176,7 +176,7 @@ $ mcap doctor output.mcap
 
 ### Visualize data
 
-For a more visual representation of this data, let's use Foxglove Studio. Open either the [desktop](https://foxglove.dev/download) or [web app](https://studio.foxglove.dev), and add a [Raw Messages Panel](https://foxglove.dev/docs/studio/panels/raw-messages) and [3D Panel](https://foxglove.dev/docs/studio/panels/3d) to your layout.
+For a more visual representation of this data, let's use Foxglove. Open either the [desktop](https://foxglove.dev/download) or [web app](https://app.foxglove.dev/view), and add a [Raw Messages Panel](https://docs.foxglove.dev/docs/visualization/panels/raw-messages) and [3D Panel](https://docs.foxglove.dev/docs/visualization/panels/3d) to your layout.
 
 Then, simply drag and drop your output MCAP file into the app window to start playing the data. Make sure to enable the `pointcloud` topic in the 3D (Beta) panel to display the point cloud in 3D space. You can also inspect the raw data for the `pointcloud` topic in your Raw Messages panel: ![pointcloud](./json-hero.png)
 

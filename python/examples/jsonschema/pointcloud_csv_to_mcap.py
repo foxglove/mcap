@@ -1,4 +1,4 @@
-""" Example script for converting pointcloud CSV data to an MCAP viewable in Foxglove Studio.
+""" Example script for converting pointcloud CSV data to an MCAP viewable in Foxglove.
 
 This script uses the public CSV dataset "Sydney Urban Objects Dataset",
 released by the Australian Centre for Field Robotics at the University of Sydney, NSW, Australia.
@@ -10,6 +10,7 @@ usage:
   pip install mcap
   python3 pointcloud_csv_to_mcap.py sydney-urban-objects-dataset/objects/4wd.0.2299.csv -o out.mcap
 """
+
 import argparse
 import base64
 import csv
