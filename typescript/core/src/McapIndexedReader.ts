@@ -18,6 +18,8 @@ type McapIndexedReaderArgs = {
   summaryOffsetsByOpcode: ReadonlyMap<number, TypedMcapRecords["SummaryOffset"]>;
   header: TypedMcapRecords["Header"];
   footer: TypedMcapRecords["Footer"];
+  dataEndOffset: bigint;
+  dataSectionCrc?: number;
 };
 
 export class McapIndexedReader {
@@ -30,6 +32,9 @@ export class McapIndexedReader {
   readonly summaryOffsetsByOpcode: ReadonlyMap<number, TypedMcapRecords["SummaryOffset"]>;
   readonly header: TypedMcapRecords["Header"];
   readonly footer: TypedMcapRecords["Footer"];
+  // Used for appending attachments/metadata to existing MCAP files
+  readonly dataEndOffset: bigint;
+  readonly dataSectionCrc?: number;
 
   #readable: IReadable;
   #decompressHandlers?: DecompressHandlers;
@@ -51,6 +56,8 @@ export class McapIndexedReader {
     this.summaryOffsetsByOpcode = args.summaryOffsetsByOpcode;
     this.header = args.header;
     this.footer = args.footer;
+    this.dataEndOffset = args.dataEndOffset;
+    this.dataSectionCrc = args.dataSectionCrc;
 
     for (const chunk of args.chunkIndexes) {
       if (this.#messageStartTime == undefined || chunk.messageStartTime < this.#messageStartTime) {
@@ -93,6 +100,7 @@ export class McapIndexedReader {
     const size = await readable.size();
 
     let header: TypedMcapRecords["Header"];
+    let headerEndOffset: bigint;
     {
       const headerPrefix = await readable.read(
         0n,
@@ -104,15 +112,15 @@ export class McapIndexedReader {
         headerPrefix.byteLength,
       );
       void parseMagic(headerPrefixView, 0);
-      const headerLength = headerPrefixView.getBigUint64(
+      const headerContentLength = headerPrefixView.getBigUint64(
         MCAP_MAGIC.length + /* Opcode.HEADER */ 1,
         true,
       );
+      const headerReadLength =
+        /* Opcode.HEADER */ 1n + /* record content length */ 8n + headerContentLength;
 
-      const headerRecord = await readable.read(
-        BigInt(MCAP_MAGIC.length),
-        /* Opcode.HEADER */ 1n + /* record content length */ 8n + headerLength,
-      );
+      const headerRecord = await readable.read(BigInt(MCAP_MAGIC.length), headerReadLength);
+      headerEndOffset = BigInt(MCAP_MAGIC.length) + headerReadLength;
       const headerResult = parseRecord({
         view: new DataView(headerRecord.buffer, headerRecord.byteOffset, headerRecord.byteLength),
         startOffset: 0,
@@ -218,14 +226,27 @@ export class McapIndexedReader {
       ),
     );
 
+    const dataEndLength =
+      /* Opcode.DATA_END */ 1n + /* record content length */ 8n + /* data_section_crc */ 4n;
+
+    const dataEndOffset = footer.summaryStart - dataEndLength;
+    if (dataEndOffset < headerEndOffset) {
+      throw errorWithLibrary(
+        `Expected DataEnd position (summary start ${footer.summaryStart} - ${dataEndLength} = ${dataEndOffset}) to be after Header end offset (${headerEndOffset})`,
+      );
+    }
+
     // Future optimization: avoid holding whole summary blob in memory at once
-    const allSummaryData = await readable.read(
-      footer.summaryStart,
-      footerOffset - footer.summaryStart,
+    const dataEndAndSummarySection = await readable.read(
+      dataEndOffset,
+      footerOffset - dataEndOffset,
     );
     if (footer.summaryCrc !== 0) {
       let summaryCrc = crc32Init();
-      summaryCrc = crc32Update(summaryCrc, allSummaryData);
+      summaryCrc = crc32Update(
+        summaryCrc,
+        dataEndAndSummarySection.subarray(Number(dataEndLength)),
+      );
       summaryCrc = crc32Update(summaryCrc, footerPrefix);
       summaryCrc = crc32Final(summaryCrc);
       if (summaryCrc !== footer.summaryCrc) {
@@ -236,9 +257,9 @@ export class McapIndexedReader {
     }
 
     const indexView = new DataView(
-      allSummaryData.buffer,
-      allSummaryData.byteOffset,
-      allSummaryData.byteLength,
+      dataEndAndSummarySection.buffer,
+      dataEndAndSummarySection.byteOffset,
+      dataEndAndSummarySection.byteLength,
     );
 
     const channelsById = new Map<number, TypedMcapRecords["Channel"]>();
@@ -248,6 +269,7 @@ export class McapIndexedReader {
     const metadataIndexes: TypedMcapRecords["MetadataIndex"][] = [];
     const summaryOffsetsByOpcode = new Map<number, TypedMcapRecords["SummaryOffset"]>();
     let statistics: TypedMcapRecords["Statistics"] | undefined;
+    let dataSectionCrc: number | undefined;
 
     let offset = 0;
     for (
@@ -256,6 +278,11 @@ export class McapIndexedReader {
         result.record;
       offset += result.usedBytes
     ) {
+      if (offset === 0 && result.record.type !== "DataEnd") {
+        throw errorWithLibrary(
+          `Expected DataEnd record to precede summary section, but found ${result.record.type}`,
+        );
+      }
       switch (result.record.type) {
         case "Schema":
           schemasById.set(result.record.id, result.record);
@@ -281,6 +308,10 @@ export class McapIndexedReader {
         case "SummaryOffset":
           summaryOffsetsByOpcode.set(result.record.groupOpcode, result.record);
           break;
+        case "DataEnd":
+          dataSectionCrc =
+            result.record.dataSectionCrc === 0 ? undefined : result.record.dataSectionCrc;
+          break;
         case "Header":
         case "Footer":
         case "Message":
@@ -288,7 +319,6 @@ export class McapIndexedReader {
         case "MessageIndex":
         case "Attachment":
         case "Metadata":
-        case "DataEnd":
           throw errorWithLibrary(`${result.record.type} record not allowed in index section`);
         case "Unknown":
           break;
@@ -310,6 +340,8 @@ export class McapIndexedReader {
       summaryOffsetsByOpcode,
       header,
       footer,
+      dataEndOffset,
+      dataSectionCrc,
     });
   }
 
