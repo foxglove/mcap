@@ -459,7 +459,7 @@ jobs:
         id: extract-version
         run: |
           printf "::set-output name=%s::%s\n" version-number "${GITHUB_REF#refs/tags/releases/mcap-cli/v}"
-      - uses: mislav/bump-homebrew-formula-action@5a3f2e95b18e8647880bffc858ab1a71da42af4c
+      - uses: mislav/bump-homebrew-formula-action@868bf7871f81dda58cc50fe1d17ea83ae1f3f929
         with:
           # Note: Don't override push-to (see: https://github.com/foxglove/mcap/issues/1063)
           formula-name: mcap
