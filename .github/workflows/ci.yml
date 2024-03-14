@@ -443,7 +443,7 @@ jobs:
         run: |
           git log --oneline --no-merges --first-parent --grep CLI --decorate-refs=refs $(git describe --tags $(git rev-list --tags=releases/mcap-cli --max-count=1))..HEAD > ${{ github.workspace }}-CHANGELOG.txt
       - name: Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: ./go/cli/mcap/bin/*
           body_path: ${{ github.workspace }}-CHANGELOG.txt
