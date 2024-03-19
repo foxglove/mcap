@@ -79,6 +79,8 @@ const (
 	AutoCoalescing  = "auto"
 	ForceCoalescing = "force"
 	NoCoalescing    = "none"
+
+	compressionNoneAlias = "none"
 )
 
 func newMCAPMerger(opts mergeOpts) *mcapMerger {
@@ -502,6 +504,11 @@ var mergeCmd = &cobra.Command{
 			defer f.Close()
 			readers = append(readers, namedReader{name: arg, reader: f})
 		}
+
+		if mergeCompression == compressionNoneAlias {
+			mergeCompression = ""
+		}
+
 		opts := mergeOpts{
 			compression:            mergeCompression,
 			chunkSize:              mergeChunkSize,
