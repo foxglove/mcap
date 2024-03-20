@@ -32,6 +32,7 @@ linters:
     - unparam
     - errorlint
     - lll
+    - testifylint
 
 linters-settings:
   gocritic:

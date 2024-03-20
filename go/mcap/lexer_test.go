@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/pierrec/lz4/v4"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLexUnchunkedFile(t *testing.T) {
@@ -28,7 +28,7 @@ func TestLexUnchunkedFile(t *testing.T) {
 		footer(),
 	)
 	lexer, err := NewLexer(bytes.NewReader(file))
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	expected := []TokenType{
 		TokenHeader,
 		TokenChannel,
@@ -40,8 +40,8 @@ func TestLexUnchunkedFile(t *testing.T) {
 	}
 	for _, expectedTokenType := range expected {
 		tokenType, _, err := lexer.Next(nil)
-		assert.Nil(t, err)
-		assert.Equal(t, expectedTokenType, tokenType)
+		require.NoError(t, err)
+		require.Equal(t, expectedTokenType, tokenType)
 	}
 }
 
@@ -51,9 +51,9 @@ func TestRejectsUnsupportedCompression(t *testing.T) {
 			chunk(t, CompressionZSTD, true, channelInfo(), message(), message())),
 	)
 	lexer, err := NewLexer(bytes.NewReader(file))
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	_, _, err = lexer.Next(nil)
-	assert.Equal(t, "unsupported compression: unknown", err.Error())
+	require.Equal(t, "unsupported compression: unknown", err.Error())
 }
 
 func TestRejectsTooLargeRecords(t *testing.T) {
@@ -63,9 +63,9 @@ func TestRejectsTooLargeRecords(t *testing.T) {
 	lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
 		MaxRecordSize: 999,
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	_, _, err = lexer.Next(nil)
-	assert.ErrorIs(t, err, ErrRecordTooLarge)
+	require.ErrorIs(t, err, ErrRecordTooLarge)
 }
 
 func TestRejectsTooLargeChunks(t *testing.T) {
@@ -76,11 +76,11 @@ func TestRejectsTooLargeChunks(t *testing.T) {
 		MaxDecompressedChunkSize: 999,
 		ValidateChunkCRCs:        true,
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	_, _, err = lexer.Next(nil)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	_, _, err = lexer.Next(nil)
-	assert.ErrorIs(t, err, ErrChunkTooLarge)
+	require.ErrorIs(t, err, ErrChunkTooLarge)
 }
 
 func TestLargeChunksOKIfNotCheckingCRC(t *testing.T) {
@@ -90,11 +90,11 @@ func TestLargeChunksOKIfNotCheckingCRC(t *testing.T) {
 	lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
 		MaxDecompressedChunkSize: 999,
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	_, _, err = lexer.Next(nil)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	_, _, err = lexer.Next(nil)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 }
 
 func TestRejectsNestedChunks(t *testing.T) {
@@ -104,13 +104,13 @@ func TestRejectsNestedChunks(t *testing.T) {
 		footer(),
 	)
 	lexer, err := NewLexer(bytes.NewReader(file))
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	// header, then error
 	tokenType, _, err := lexer.Next(nil)
-	assert.Nil(t, err)
-	assert.Equal(t, tokenType, TokenHeader)
+	require.NoError(t, err)
+	require.Equal(t, TokenHeader, tokenType)
 	_, _, err = lexer.Next(nil)
-	assert.ErrorIs(t, err, ErrNestedChunk)
+	require.ErrorIs(t, err, ErrNestedChunk)
 }
 
 func TestBadMagic(t *testing.T) {
@@ -130,7 +130,7 @@ func TestBadMagic(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			_, err := NewLexer(bytes.NewReader(c.magic))
-			assert.IsType(t, &ErrBadMagic{}, err)
+			require.IsType(t, &ErrBadMagic{}, err)
 		})
 	}
 }
@@ -154,7 +154,7 @@ func TestCustomDecompressor(t *testing.T) {
 	)
 	lzr := lz4.NewReader(nil)
 	blockCount := 0
-	assert.Nil(t, lzr.Apply(lz4.OnBlockDoneOption(func(int) {
+	require.NoError(t, lzr.Apply(lz4.OnBlockDoneOption(func(int) {
 		blockCount++
 	})))
 	lexer, err := NewLexer(bytes.NewReader(buf), &LexerOptions{
@@ -162,7 +162,7 @@ func TestCustomDecompressor(t *testing.T) {
 			CompressionLZ4: lzreader{lzr},
 		},
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	expected := []TokenType{
 		TokenHeader,
 		TokenChannel,
@@ -175,19 +175,19 @@ func TestCustomDecompressor(t *testing.T) {
 	}
 	for i, expectedTokenType := range expected {
 		tokenType, _, err := lexer.Next(nil)
-		assert.Nil(t, err)
-		assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+		require.NoError(t, err)
+		require.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
 	}
-	assert.Positive(t, blockCount)
+	require.Positive(t, blockCount)
 }
 
 func TestReturnsEOFOnSuccessiveCalls(t *testing.T) {
 	lexer, err := NewLexer(bytes.NewReader(file()))
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	_, _, err = lexer.Next(nil)
-	assert.ErrorIs(t, err, io.EOF)
+	require.ErrorIs(t, err, io.EOF)
 	_, _, err = lexer.Next(nil)
-	assert.ErrorIs(t, err, io.EOF)
+	require.ErrorIs(t, err, io.EOF)
 }
 
 func TestLexChunkedFile(t *testing.T) {
@@ -212,7 +212,7 @@ func TestLexChunkedFile(t *testing.T) {
 					lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
 						ValidateChunkCRCs: validateCRC,
 					})
-					assert.Nil(t, err)
+					require.NoError(t, err)
 					expected := []TokenType{
 						TokenHeader,
 						TokenChannel,
@@ -225,14 +225,14 @@ func TestLexChunkedFile(t *testing.T) {
 					}
 					for i, expectedTokenType := range expected {
 						tokenType, _, err := lexer.Next(nil)
-						assert.Nil(t, err)
-						assert.Equal(t, expectedTokenType, tokenType,
+						require.NoError(t, err)
+						require.Equal(t, expectedTokenType, tokenType,
 							fmt.Sprintf("expected %s but got %s at index %d", expectedTokenType, tokenType, i))
 					}
 
 					// now we are eof
 					_, _, err = lexer.Next(nil)
-					assert.ErrorIs(t, err, io.EOF)
+					require.ErrorIs(t, err, io.EOF)
 				})
 			}
 		})
@@ -248,12 +248,12 @@ func TestSkipsUnknownOpcodes(t *testing.T) {
 		message(),
 	)
 	lexer, err := NewLexer(bytes.NewReader(file))
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	expected := []TokenType{TokenHeader, TokenMessage}
 	for i, expectedTokenType := range expected {
 		tokenType, _, err := lexer.Next(nil)
-		assert.Nil(t, err)
-		assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+		require.NoError(t, err)
+		require.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
 	}
 }
 
@@ -269,7 +269,7 @@ func TestChunkCRCValidation(t *testing.T) {
 		lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
 			ValidateChunkCRCs: true,
 		})
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		expected := []TokenType{
 			TokenHeader,
 			TokenChannel,
@@ -282,8 +282,8 @@ func TestChunkCRCValidation(t *testing.T) {
 		}
 		for i, expectedTokenType := range expected {
 			tokenType, _, err := lexer.Next(nil)
-			assert.Nil(t, err)
-			assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+			require.NoError(t, err)
+			require.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
 		}
 	})
 	t.Run("validates file with zero'd CRCs", func(t *testing.T) {
@@ -297,7 +297,7 @@ func TestChunkCRCValidation(t *testing.T) {
 		lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
 			ValidateChunkCRCs: true,
 		})
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		expected := []TokenType{
 			TokenHeader,
 			TokenChannel,
@@ -310,15 +310,15 @@ func TestChunkCRCValidation(t *testing.T) {
 		}
 		for i, expectedTokenType := range expected {
 			tokenType, _, err := lexer.Next(nil)
-			assert.Nil(t, err)
-			assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+			require.NoError(t, err)
+			require.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
 		}
 	})
 	t.Run("validation fails on corrupted file", func(t *testing.T) {
 		badchunk := chunk(t, CompressionZSTD, true, channelInfo(), message(), message())
 
 		// chunk must be corrupted at a deep enough offset to hit the compressed data section
-		assert.NotEqual(t, badchunk[35], 0x00)
+		require.NotEqual(t, 0x00, badchunk[35])
 		badchunk[35] = 0x00
 		file := file(
 			header(),
@@ -330,7 +330,7 @@ func TestChunkCRCValidation(t *testing.T) {
 		lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
 			ValidateChunkCRCs: true,
 		})
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		expected := []TokenType{
 			TokenHeader,
 			TokenChannel,
@@ -339,12 +339,12 @@ func TestChunkCRCValidation(t *testing.T) {
 		}
 		for i, expectedTokenType := range expected {
 			tokenType, _, err := lexer.Next(nil)
-			assert.Nil(t, err)
-			assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+			require.NoError(t, err)
+			require.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
 		}
 		_, _, err = lexer.Next(nil)
-		assert.NotNil(t, err)
-		assert.True(t, strings.Contains(err.Error(), "invalid chunk CRC"))
+		require.Error(t, err)
+		require.True(t, strings.Contains(err.Error(), "invalid chunk CRC"))
 	})
 }
 
@@ -382,30 +382,30 @@ func TestAttachmentHandling(t *testing.T) {
 			c.attachment.Data = bytes.NewReader(c.attachmentData)
 			file := &bytes.Buffer{}
 			writer, err := NewWriter(file, &WriterOptions{})
-			assert.Nil(t, err)
-			assert.Nil(t, writer.WriteHeader(&Header{
+			require.NoError(t, err)
+			require.NoError(t, writer.WriteHeader(&Header{
 				Profile: "",
 				Library: "",
 			}))
-			assert.Nil(t, writer.WriteAttachment(c.attachment))
-			assert.Nil(t, writer.Close())
+			require.NoError(t, writer.WriteAttachment(c.attachment))
+			require.NoError(t, writer.Close())
 
 			var called bool
 			lexer, err := NewLexer(file, &LexerOptions{
 				ComputeAttachmentCRCs: true,
 				AttachmentCallback: func(ar *AttachmentReader) error {
-					assert.Equal(t, c.attachment.LogTime, ar.LogTime)
-					assert.Equal(t, c.attachment.CreateTime, ar.CreateTime)
-					assert.Equal(t, c.attachment.Name, ar.Name)
-					assert.Equal(t, c.attachment.MediaType, ar.MediaType)
+					require.Equal(t, c.attachment.LogTime, ar.LogTime)
+					require.Equal(t, c.attachment.CreateTime, ar.CreateTime)
+					require.Equal(t, c.attachment.Name, ar.Name)
+					require.Equal(t, c.attachment.MediaType, ar.MediaType)
 					data, err := io.ReadAll(ar.Data())
-					assert.Nil(t, err)
-					assert.Equal(t, c.attachmentData, data)
+					require.NoError(t, err)
+					require.Equal(t, c.attachmentData, data)
 					computedCRC, err := ar.ComputedCRC()
-					assert.Nil(t, err)
+					require.NoError(t, err)
 					parsedCRC, err := ar.ParsedCRC()
-					assert.Nil(t, err)
-					assert.Equal(t, computedCRC, parsedCRC)
+					require.NoError(t, err)
+					require.Equal(t, computedCRC, parsedCRC)
 					called = true
 					return nil
 				},
@@ -414,10 +414,10 @@ func TestAttachmentHandling(t *testing.T) {
 			for !errors.Is(err, io.EOF) {
 				_, _, err = lexer.Next(nil)
 				if !errors.Is(err, io.EOF) {
-					assert.Nil(t, err)
+					require.NoError(t, err)
 				}
 			}
-			assert.True(t, called)
+			require.True(t, called)
 		})
 	}
 }
@@ -445,7 +445,7 @@ func TestChunkEmission(t *testing.T) {
 						ValidateChunkCRCs: validateCRC,
 						EmitChunks:        true,
 					})
-					assert.Nil(t, err)
+					require.NoError(t, err)
 					expected := []TokenType{
 						TokenHeader,
 						TokenChunk,
@@ -454,11 +454,11 @@ func TestChunkEmission(t *testing.T) {
 					}
 					for i, expectedTokenType := range expected {
 						tokenType, _, err := lexer.Next(nil)
-						assert.Nil(t, err)
-						assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+						require.NoError(t, err)
+						require.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
 					}
 					_, _, err = lexer.Next(nil)
-					assert.ErrorIs(t, err, io.EOF)
+					require.ErrorIs(t, err, io.EOF)
 				})
 			}
 		})
@@ -485,7 +485,7 @@ func BenchmarkLexer(b *testing.B) {
 	}
 	for _, c := range cases {
 		input, err := os.ReadFile(c.inputfile)
-		assert.Nil(b, err)
+		require.NoError(b, err)
 		reader := &bytes.Reader{}
 		msg := make([]byte, 3*1024*1024)
 		for _, validateCRC := range []bool{true, false} {
@@ -498,7 +498,7 @@ func BenchmarkLexer(b *testing.B) {
 					lexer, err := NewLexer(reader, &LexerOptions{
 						ValidateChunkCRCs: validateCRC,
 					})
-					assert.Nil(b, err)
+					require.NoError(b, err)
 					for {
 						_, record, err := lexer.Next(msg)
 						if errors.Is(err, io.EOF) {

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/pierrec/lz4/v4"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const libraryString = "libfoo v0"
@@ -18,31 +18,31 @@ func TestMCAPReadWrite(t *testing.T) {
 	t.Run("test header", func(t *testing.T) {
 		buf := &bytes.Buffer{}
 		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionZSTD, OverrideLibrary: true})
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		err = w.WriteHeader(&Header{
 			Profile: "ros1",
 			Library: libraryString,
 		})
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		lexer, err := NewLexer(buf)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer lexer.Close()
 		tokenType, record, err := lexer.Next(nil)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		// body of the header is the profile, followed by the metadata map
 		offset := 0
 		profile, offset, err := getPrefixedString(record, offset)
-		assert.Nil(t, err)
-		assert.Equal(t, "ros1", profile)
+		require.NoError(t, err)
+		require.Equal(t, "ros1", profile)
 		library, _, err := getPrefixedString(record, offset)
-		assert.Nil(t, err)
-		assert.Equal(t, "libfoo v0", library)
-		assert.Equal(t, TokenHeader, tokenType)
+		require.NoError(t, err)
+		require.Equal(t, "libfoo v0", library)
+		require.Equal(t, TokenHeader, tokenType)
 	})
 	t.Run("zero-valued schema IDs permitted", func(t *testing.T) {
 		buf := &bytes.Buffer{}
 		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionLZ4})
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		err = w.WriteChannel(&Channel{
 			ID:              0,
 			SchemaID:        0,
@@ -52,12 +52,12 @@ func TestMCAPReadWrite(t *testing.T) {
 				"key": "val",
 			},
 		})
-		assert.Nil(t, err)
+		require.NoError(t, err)
 	})
 	t.Run("positive schema IDs rejected if schema unknown", func(t *testing.T) {
 		buf := &bytes.Buffer{}
 		w, err := NewWriter(buf, &WriterOptions{Compression: CompressionLZ4})
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		err = w.WriteChannel(&Channel{
 			ID:              0,
 			SchemaID:        1,
@@ -67,7 +67,7 @@ func TestMCAPReadWrite(t *testing.T) {
 				"key": "val",
 			},
 		})
-		assert.ErrorIs(t, err, ErrUnknownSchema)
+		require.ErrorIs(t, err, ErrUnknownSchema)
 	})
 }
 
@@ -82,19 +82,19 @@ func TestOutputDeterminism(t *testing.T) {
 			ChunkSize:       1024,
 			OverrideLibrary: true,
 		})
-		assert.Nil(t, err)
-		assert.Nil(t, w.WriteHeader(&Header{
+		require.NoError(t, err)
+		require.NoError(t, w.WriteHeader(&Header{
 			Profile: "ros1",
 			Library: libraryString,
 		}))
-		assert.Nil(t, w.WriteSchema(&Schema{
+		require.NoError(t, w.WriteSchema(&Schema{
 			ID:       1,
 			Name:     "foo",
 			Encoding: "ros1msg",
 			Data:     []byte{},
 		}))
 		for i := 0; i < 3; i++ {
-			assert.Nil(t, w.WriteChannel(&Channel{
+			require.NoError(t, w.WriteChannel(&Channel{
 				ID:              uint16(i),
 				Topic:           fmt.Sprintf("/test-%d", i),
 				MessageEncoding: "ros1",
@@ -104,7 +104,7 @@ func TestOutputDeterminism(t *testing.T) {
 		}
 		for i := 0; i < 1000; i++ {
 			channelID := uint16(i % 3)
-			assert.Nil(t, w.WriteMessage(&Message{
+			require.NoError(t, w.WriteMessage(&Message{
 				ChannelID:   channelID,
 				Sequence:    0,
 				LogTime:     100,
@@ -117,27 +117,27 @@ func TestOutputDeterminism(t *testing.T) {
 				},
 			}))
 		}
-		assert.Nil(t, w.WriteAttachment(&Attachment{
+		require.NoError(t, w.WriteAttachment(&Attachment{
 			Name:      "file.jpg",
 			LogTime:   0,
 			MediaType: "image/jpeg",
 			DataSize:  4,
 			Data:      bytes.NewReader([]byte{0x01, 0x02, 0x03, 0x04}),
 		}))
-		assert.Nil(t, w.WriteAttachment(&Attachment{
+		require.NoError(t, w.WriteAttachment(&Attachment{
 			Name:      "file2.jpg",
 			LogTime:   0,
 			MediaType: "image/jpeg",
 			DataSize:  4,
 			Data:      bytes.NewReader([]byte{0x01, 0x02, 0x03, 0x04}),
 		}))
-		assert.Nil(t, w.Close())
+		require.NoError(t, w.Close())
 		if i == 0 {
 			hash = fmt.Sprintf("%x", md5.Sum(buf.Bytes()))
 		}
 		t.Run("output hashes consistently", func(t *testing.T) {
 			newHash := fmt.Sprintf("%x", md5.Sum(buf.Bytes()))
-			assert.Equal(t, hash, newHash)
+			require.Equal(t, hash, newHash)
 		})
 	}
 }
@@ -157,18 +157,18 @@ func TestChunkedReadWrite(t *testing.T) {
 				IncludeCRC:      true,
 				OverrideLibrary: true,
 			})
-			assert.Nil(t, err)
-			assert.Nil(t, w.WriteHeader(&Header{
+			require.NoError(t, err)
+			require.NoError(t, w.WriteHeader(&Header{
 				Profile: "ros1",
 				Library: libraryString,
 			}))
-			assert.Nil(t, w.WriteSchema(&Schema{
+			require.NoError(t, w.WriteSchema(&Schema{
 				ID:       1,
 				Name:     "schema",
 				Encoding: "msg",
 				Data:     []byte{},
 			}))
-			assert.Nil(t, w.WriteChannel(&Channel{
+			require.NoError(t, w.WriteChannel(&Channel{
 				ID:              1,
 				Topic:           "/test",
 				MessageEncoding: "ros1",
@@ -177,13 +177,13 @@ func TestChunkedReadWrite(t *testing.T) {
 					"callerid": "100", // cspell:disable-line
 				},
 			}))
-			assert.Nil(t, w.WriteChannel(&Channel{
+			require.NoError(t, w.WriteChannel(&Channel{
 				ID:              2,
 				Topic:           "/test2",
 				MessageEncoding: "ros1",
 				SchemaID:        1,
 			}))
-			assert.Nil(t, w.WriteMessage(&Message{
+			require.NoError(t, w.WriteMessage(&Message{
 				ChannelID:   1,
 				Sequence:    0,
 				LogTime:     100,
@@ -195,7 +195,7 @@ func TestChunkedReadWrite(t *testing.T) {
 					4,
 				},
 			}))
-			assert.Nil(t, w.WriteMessage(&Message{
+			require.NoError(t, w.WriteMessage(&Message{
 				ChannelID:   2,
 				Sequence:    0,
 				LogTime:     100,
@@ -207,16 +207,16 @@ func TestChunkedReadWrite(t *testing.T) {
 					4,
 				},
 			}))
-			assert.Nil(t, w.Close())
-			assert.Equal(t, 2, len(w.ChunkIndexes))
-			assert.Equal(t, 0, len(w.AttachmentIndexes))
-			assert.Equal(t, uint64(2), w.Statistics.MessageCount)
-			assert.Equal(t, uint32(0), w.Statistics.AttachmentCount)
-			assert.Equal(t, uint32(2), w.Statistics.ChannelCount)
-			assert.Equal(t, uint32(2), w.Statistics.ChunkCount)
-			assert.Equal(t, int(w.Offset()), buf.Len())
+			require.NoError(t, w.Close())
+			require.Len(t, w.ChunkIndexes, 2)
+			require.Empty(t, w.AttachmentIndexes)
+			require.Equal(t, uint64(2), w.Statistics.MessageCount)
+			require.Equal(t, uint32(0), w.Statistics.AttachmentCount)
+			require.Equal(t, uint32(2), w.Statistics.ChannelCount)
+			require.Equal(t, uint32(2), w.Statistics.ChunkCount)
+			require.Equal(t, int(w.Offset()), buf.Len())
 			lexer, err := NewLexer(buf)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			defer lexer.Close()
 			for i, expected := range []TokenType{
 				TokenHeader,
@@ -243,8 +243,8 @@ func TestChunkedReadWrite(t *testing.T) {
 				TokenFooter,
 			} {
 				tokenType, _, err := lexer.Next(nil)
-				assert.Nil(t, err)
-				assert.Equal(t, expected, tokenType,
+				require.NoError(t, err)
+				require.Equal(t, expected, tokenType,
 					fmt.Sprintf("want %s got %s at %d", expected, tokenType, i))
 			}
 		})
@@ -262,13 +262,13 @@ func TestChunkBoundaryIndexing(t *testing.T) {
 		Compression:     CompressionZSTD,
 		OverrideLibrary: true,
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	err = w.WriteHeader(&Header{
 		Profile: "ros1",
 		Library: libraryString,
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, w.WriteSchema(&Schema{
+	require.NoError(t, err)
+	require.NoError(t, w.WriteSchema(&Schema{
 		ID:       1,
 		Name:     "schema",
 		Data:     []byte{},
@@ -281,26 +281,26 @@ func TestChunkBoundaryIndexing(t *testing.T) {
 		MessageEncoding: "ros1",
 		Metadata:        make(map[string]string),
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, w.WriteMessage(&Message{
+	require.NoError(t, err)
+	require.NoError(t, w.WriteMessage(&Message{
 		ChannelID:   1,
 		Sequence:    uint32(1),
 		LogTime:     uint64(100),
 		PublishTime: uint64(2),
 		Data:        []byte("Hello, world!"),
 	}))
-	assert.Nil(t, w.WriteMessage(&Message{
+	require.NoError(t, w.WriteMessage(&Message{
 		ChannelID:   1,
 		Sequence:    uint32(1),
 		LogTime:     uint64(1),
 		PublishTime: uint64(2),
 		Data:        []byte("Hello, world!"),
 	}))
-	assert.Nil(t, w.Close())
+	require.NoError(t, w.Close())
 	t.Run("chunk indexes correct", func(t *testing.T) {
-		assert.Equal(t, 2, len(w.ChunkIndexes))
-		assert.Equal(t, 100, int(w.ChunkIndexes[0].MessageStartTime)) // first message
-		assert.Equal(t, 1, int(w.ChunkIndexes[1].MessageStartTime))   // second message
+		require.Len(t, w.ChunkIndexes, 2)
+		require.Equal(t, 100, int(w.ChunkIndexes[0].MessageStartTime)) // first message
+		require.Equal(t, 1, int(w.ChunkIndexes[1].MessageStartTime))   // second message
 	})
 }
 
@@ -312,13 +312,13 @@ func TestIndexStructures(t *testing.T) {
 		Compression:     CompressionZSTD,
 		OverrideLibrary: true,
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	err = w.WriteHeader(&Header{
 		Profile: "ros1",
 		Library: libraryString,
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, w.WriteSchema(&Schema{
+	require.NoError(t, err)
+	require.NoError(t, w.WriteSchema(&Schema{
 		ID:       1,
 		Name:     "schema",
 		Data:     []byte{},
@@ -331,15 +331,15 @@ func TestIndexStructures(t *testing.T) {
 		MessageEncoding: "ros1",
 		Metadata:        make(map[string]string),
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, w.WriteMessage(&Message{
+	require.NoError(t, err)
+	require.NoError(t, w.WriteMessage(&Message{
 		ChannelID:   1,
 		Sequence:    uint32(1),
 		LogTime:     uint64(1),
 		PublishTime: uint64(2),
 		Data:        []byte("Hello, world!"),
 	}))
-	assert.Nil(t, w.WriteAttachment(&Attachment{
+	require.NoError(t, w.WriteAttachment(&Attachment{
 		Name:       "file.jpg",
 		LogTime:    100,
 		CreateTime: 99,
@@ -347,11 +347,11 @@ func TestIndexStructures(t *testing.T) {
 		DataSize:   4,
 		Data:       bytes.NewReader([]byte{0x01, 0x02, 0x03, 0x04}),
 	}))
-	assert.Nil(t, w.Close())
+	require.NoError(t, w.Close())
 	t.Run("chunk indexes correct", func(t *testing.T) {
-		assert.Equal(t, 1, len(w.ChunkIndexes))
+		require.Len(t, w.ChunkIndexes, 1)
 		chunkIndex := w.ChunkIndexes[0]
-		assert.Equal(t, &ChunkIndex{
+		require.Equal(t, &ChunkIndex{
 			MessageStartTime: 1,
 			MessageEndTime:   1,
 			ChunkStartOffset: 105,
@@ -366,9 +366,9 @@ func TestIndexStructures(t *testing.T) {
 		}, chunkIndex)
 	})
 	t.Run("attachment indexes correct", func(t *testing.T) {
-		assert.Equal(t, 1, len(w.AttachmentIndexes))
+		require.Len(t, w.AttachmentIndexes, 1)
 		attachmentIndex := w.AttachmentIndexes[0]
-		assert.Equal(t, &AttachmentIndex{
+		require.Equal(t, &AttachmentIndex{
 			Offset:     38,
 			Length:     67,
 			LogTime:    100,
@@ -388,18 +388,18 @@ func TestStatistics(t *testing.T) {
 		Compression:     CompressionZSTD,
 		OverrideLibrary: true,
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, w.WriteHeader(&Header{
+	require.NoError(t, err)
+	require.NoError(t, w.WriteHeader(&Header{
 		Profile: "ros1",
 		Library: libraryString,
 	}))
-	assert.Nil(t, w.WriteSchema(&Schema{
+	require.NoError(t, w.WriteSchema(&Schema{
 		ID:       1,
 		Name:     "schema",
 		Encoding: "msg",
 		Data:     []byte{},
 	}))
-	assert.Nil(t, w.WriteChannel(&Channel{
+	require.NoError(t, w.WriteChannel(&Channel{
 		ID:              1,
 		SchemaID:        1,
 		Topic:           "/test",
@@ -407,7 +407,7 @@ func TestStatistics(t *testing.T) {
 		Metadata:        make(map[string]string),
 	}))
 	for i := 0; i < 1000; i++ {
-		assert.Nil(t, w.WriteMessage(&Message{
+		require.NoError(t, w.WriteMessage(&Message{
 			ChannelID:   1,
 			Sequence:    uint32(i),
 			LogTime:     uint64(i),
@@ -415,38 +415,38 @@ func TestStatistics(t *testing.T) {
 			Data:        []byte("Hello, world!"),
 		}))
 	}
-	assert.Nil(t, w.WriteAttachment(&Attachment{
+	require.NoError(t, w.WriteAttachment(&Attachment{
 		Name:      "file.jpg",
 		LogTime:   0,
 		MediaType: "image/jpeg",
 		DataSize:  4,
 		Data:      bytes.NewReader([]byte{0x01, 0x02, 0x03, 0x04}),
 	}))
-	assert.Nil(t, w.Close())
-	assert.Equal(t, uint64(1000), w.Statistics.MessageCount)
-	assert.Equal(t, uint32(1), w.Statistics.ChannelCount)
-	assert.Equal(t, uint32(1), w.Statistics.AttachmentCount)
-	assert.Equal(t, 42, int(w.Statistics.ChunkCount))
-	assert.Equal(t, 42, len(w.ChunkIndexes))
-	assert.Equal(t, 1, len(w.AttachmentIndexes))
+	require.NoError(t, w.Close())
+	require.Equal(t, uint64(1000), w.Statistics.MessageCount)
+	require.Equal(t, uint32(1), w.Statistics.ChannelCount)
+	require.Equal(t, uint32(1), w.Statistics.AttachmentCount)
+	require.Equal(t, 42, int(w.Statistics.ChunkCount))
+	require.Len(t, w.ChunkIndexes, 42)
+	require.Len(t, w.AttachmentIndexes, 1)
 }
 
 func TestUnchunkedReadWrite(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w, err := NewWriter(buf, &WriterOptions{OverrideLibrary: true})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	err = w.WriteHeader(&Header{
 		Profile: "ros1",
 		Library: libraryString,
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	err = w.WriteSchema(&Schema{
 		ID:       1,
 		Name:     "schema",
 		Encoding: "msg",
 		Data:     []byte{},
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	err = w.WriteChannel(&Channel{
 		ID:              1,
 		SchemaID:        1,
@@ -456,7 +456,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 			"callerid": "100", // cspell:disable-line
 		},
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	err = w.WriteMessage(&Message{
 		ChannelID:   1,
 		Sequence:    0,
@@ -469,7 +469,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 			4,
 		},
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	err = w.WriteAttachment(&Attachment{
 		Name:      "file.jpg",
@@ -478,19 +478,19 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		DataSize:  4,
 		Data:      bytes.NewReader([]byte{0x01, 0x02, 0x03, 0x04}),
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, w.Close())
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
 
-	assert.Equal(t, 0, len(w.ChunkIndexes))
-	assert.Equal(t, 1, len(w.AttachmentIndexes))
-	assert.Equal(t, "image/jpeg", w.AttachmentIndexes[0].MediaType)
-	assert.Equal(t, uint64(1), w.Statistics.MessageCount)
-	assert.Equal(t, uint32(1), w.Statistics.AttachmentCount)
-	assert.Equal(t, uint32(1), w.Statistics.ChannelCount)
-	assert.Equal(t, uint32(0), w.Statistics.ChunkCount)
+	require.Empty(t, w.ChunkIndexes)
+	require.Len(t, w.AttachmentIndexes, 1)
+	require.Equal(t, "image/jpeg", w.AttachmentIndexes[0].MediaType)
+	require.Equal(t, uint64(1), w.Statistics.MessageCount)
+	require.Equal(t, uint32(1), w.Statistics.AttachmentCount)
+	require.Equal(t, uint32(1), w.Statistics.ChannelCount)
+	require.Equal(t, uint32(0), w.Statistics.ChunkCount)
 
 	lexer, err := NewLexer(buf)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	defer lexer.Close()
 	for _, expected := range []TokenType{
 		TokenHeader,
@@ -509,8 +509,8 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		TokenFooter,
 	} {
 		tokenType, _, err := lexer.Next(nil)
-		assert.Nil(t, err)
-		assert.Equal(t, expected, tokenType, fmt.Sprintf("want %s got %s", expected, tokenType))
+		require.NoError(t, err)
+		require.Equal(t, expected, tokenType, fmt.Sprintf("want %s got %s", expected, tokenType))
 	}
 }
 
@@ -528,26 +528,26 @@ func TestLibraryString(t *testing.T) {
 		t.Run("library string is automatically filled", func(t *testing.T) {
 			buf := &bytes.Buffer{}
 			w, err := NewWriter(buf, &WriterOptions{})
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			err = w.WriteHeader(&Header{
 				Profile: "ros1",
 				Library: c.input,
 			})
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			w.Close()
 			lexer, err := NewLexer(buf)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			defer lexer.Close()
 			tokenType, record, err := lexer.Next(nil)
-			assert.Nil(t, err)
-			assert.Equal(t, tokenType, TokenHeader)
+			require.NoError(t, err)
+			require.Equal(t, TokenHeader, tokenType)
 			offset := 0
 			profile, offset, err := getPrefixedString(record, offset)
-			assert.Nil(t, err)
-			assert.Equal(t, "ros1", profile)
+			require.NoError(t, err)
+			require.Equal(t, "ros1", profile)
 			library, _, err := getPrefixedString(record, offset)
-			assert.Nil(t, err)
-			assert.Equal(t, library, c.output)
+			require.NoError(t, err)
+			require.Equal(t, library, c.output)
 		})
 	}
 }
@@ -558,7 +558,7 @@ func TestMakePrefixedMap(t *testing.T) {
 			"foo": "bar",
 			"bar": "foo",
 		})
-		assert.Equal(t, flatten(
+		require.Equal(t, flatten(
 			encodedUint32(2*4+2*4+4*3), // map length
 			encodedUint32(3),
 			[]byte("bar"),
@@ -611,19 +611,19 @@ func BenchmarkWriterAllocs(b *testing.B) {
 					ChunkSize: int64(c.chunkSize),
 					Chunked:   true,
 				})
-				assert.Nil(b, err)
-				assert.Nil(b, writer.WriteHeader(&Header{
+				require.NoError(b, err)
+				require.NoError(b, writer.WriteHeader(&Header{
 					Profile: "ros1",
 					Library: "foo",
 				}))
 				for i := 0; i < c.channelCount; i++ {
-					assert.Nil(b, writer.WriteSchema(&Schema{
+					require.NoError(b, writer.WriteSchema(&Schema{
 						ID:       uint16(i),
 						Name:     stringData,
 						Encoding: "ros1msg",
 						Data:     messageData,
 					}))
-					assert.Nil(b, writer.WriteChannel(&Channel{
+					require.NoError(b, writer.WriteChannel(&Channel{
 						ID:              uint16(i),
 						SchemaID:        uint16(i),
 						Topic:           stringData,
@@ -636,7 +636,7 @@ func BenchmarkWriterAllocs(b *testing.B) {
 				channelID := 0
 				messageCount := 0
 				for messageCount < c.messageCount {
-					assert.Nil(b, writer.WriteMessage(&Message{
+					require.NoError(b, writer.WriteMessage(&Message{
 						ChannelID:   uint16(channelID),
 						Sequence:    0,
 						LogTime:     uint64(messageCount),
@@ -674,26 +674,26 @@ func TestWriteAttachment(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			buf := &bytes.Buffer{}
 			writer, err := NewWriter(buf, &WriterOptions{})
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			err = writer.WriteAttachment(c.attachment)
-			assert.ErrorIs(t, err, c.err)
+			require.ErrorIs(t, err, c.err)
 		})
 	}
 }
 
 func assertReadable(t *testing.T, rs io.ReadSeeker) {
 	reader, err := NewReader(rs)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	_, err = reader.Info()
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	it, err := reader.Messages()
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	for {
 		_, _, _, err := it.Next(nil)
 		if err != nil {
-			assert.ErrorIs(t, err, io.EOF)
+			require.ErrorIs(t, err, io.EOF)
 			break
 		}
 	}
@@ -704,7 +704,7 @@ func TestBYOCompressor(t *testing.T) {
 	// example - custom lz4 settings
 	lzw := lz4.NewWriter(nil)
 	blockCount := 0
-	assert.Nil(t, lzw.Apply(lz4.OnBlockDoneOption(func(int) {
+	require.NoError(t, lzw.Apply(lz4.OnBlockDoneOption(func(int) {
 		blockCount++
 	})))
 
@@ -713,16 +713,16 @@ func TestBYOCompressor(t *testing.T) {
 		ChunkSize:  1024,
 		Compressor: NewCustomCompressor("lz4", lzw),
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
-	assert.Nil(t, writer.WriteHeader(&Header{}))
-	assert.Nil(t, writer.WriteSchema(&Schema{
+	require.NoError(t, writer.WriteHeader(&Header{}))
+	require.NoError(t, writer.WriteSchema(&Schema{
 		ID:       1,
 		Name:     "schema",
 		Encoding: "ros1msg",
 		Data:     []byte{},
 	}))
-	assert.Nil(t, writer.WriteChannel(&Channel{
+	require.NoError(t, writer.WriteChannel(&Channel{
 		ID:              0,
 		SchemaID:        1,
 		Topic:           "/foo",
@@ -730,13 +730,13 @@ func TestBYOCompressor(t *testing.T) {
 	}))
 
 	for i := 0; i < 100; i++ {
-		assert.Nil(t, writer.WriteMessage(&Message{
+		require.NoError(t, writer.WriteMessage(&Message{
 			ChannelID: 0,
 			Sequence:  0,
 			LogTime:   uint64(i),
 		}))
 	}
-	assert.Nil(t, writer.Close())
+	require.NoError(t, writer.Close())
 	assertReadable(t, bytes.NewReader(buf.Bytes()))
-	assert.Positive(t, blockCount)
+	require.Positive(t, blockCount)
 }

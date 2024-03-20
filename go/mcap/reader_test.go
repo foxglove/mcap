@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
@@ -18,15 +18,15 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 		Chunked:   true,
 		ChunkSize: 10000,
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, writer.WriteHeader(&Header{}))
-	assert.Nil(t, writer.WriteSchema(&Schema{
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&Header{}))
+	require.NoError(t, writer.WriteSchema(&Schema{
 		ID:       1,
 		Name:     "",
 		Encoding: "",
 		Data:     []byte{},
 	}))
-	assert.Nil(t, writer.WriteChannel(&Channel{
+	require.NoError(t, writer.WriteChannel(&Channel{
 		ID:              0,
 		SchemaID:        0,
 		Topic:           "/foo",
@@ -35,7 +35,7 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 			"": "",
 		},
 	}))
-	assert.Nil(t, writer.WriteChannel(&Channel{
+	require.NoError(t, writer.WriteChannel(&Channel{
 		ID:              1,
 		SchemaID:        0,
 		Topic:           "/bar",
@@ -44,14 +44,14 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 			"": "",
 		},
 	}))
-	assert.Nil(t, writer.WriteMessage(&Message{
+	require.NoError(t, writer.WriteMessage(&Message{
 		ChannelID:   0,
 		Sequence:    0,
 		LogTime:     0,
 		PublishTime: 0,
 		Data:        []byte{'h', 'e', 'l', 'l', 'o'},
 	}))
-	assert.Nil(t, writer.WriteMessage(&Message{
+	require.NoError(t, writer.WriteMessage(&Message{
 		ChannelID:   1,
 		Sequence:    0,
 		LogTime:     0,
@@ -61,17 +61,17 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 	writer.Close()
 
 	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	it, err := reader.Messages(UsingIndex(true))
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	expectedTopics := []string{"/foo", "/bar"}
 	for i := 0; i < 2; i++ {
 		_, channel, _, err := it.Next(nil)
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		assert.Equal(t, expectedTopics[i], channel.Topic)
+		require.Equal(t, expectedTopics[i], channel.Topic)
 	}
 }
 func TestReaderFallsBackToLinearScan(t *testing.T) {
@@ -79,15 +79,15 @@ func TestReaderFallsBackToLinearScan(t *testing.T) {
 	writer, err := NewWriter(buf, &WriterOptions{
 		Chunked: false,
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, writer.WriteHeader(&Header{}))
-	assert.Nil(t, writer.WriteSchema(&Schema{
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&Header{}))
+	require.NoError(t, writer.WriteSchema(&Schema{
 		ID:       1,
 		Name:     "",
 		Encoding: "",
 		Data:     []byte{},
 	}))
-	assert.Nil(t, writer.WriteChannel(&Channel{
+	require.NoError(t, writer.WriteChannel(&Channel{
 		ID:              0,
 		SchemaID:        1,
 		Topic:           "/foo",
@@ -96,14 +96,14 @@ func TestReaderFallsBackToLinearScan(t *testing.T) {
 			"": "",
 		},
 	}))
-	assert.Nil(t, writer.WriteMessage(&Message{
+	require.NoError(t, writer.WriteMessage(&Message{
 		ChannelID:   0,
 		Sequence:    0,
 		LogTime:     0,
 		PublishTime: 0,
 		Data:        []byte("hello"),
 	}))
-	assert.Nil(t, writer.WriteMessage(&Message{
+	require.NoError(t, writer.WriteMessage(&Message{
 		ChannelID:   0,
 		Sequence:    1,
 		LogTime:     1,
@@ -113,15 +113,15 @@ func TestReaderFallsBackToLinearScan(t *testing.T) {
 	writer.Close()
 
 	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	it, err := reader.Messages(UsingIndex(true))
 	messageContents := []string{"hello", "goodbye"}
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	for _, content := range messageContents {
 		_, _, msg, err := it.Next(nil)
-		assert.Nil(t, err)
-		assert.Equal(t, content, string(msg.Data))
+		require.NoError(t, err)
+		require.Equal(t, content, string(msg.Data))
 	}
 }
 
@@ -158,9 +158,9 @@ func TestReadPrefixedBytes(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			s, off, err := getPrefixedBytes(c.data, 0)
-			assert.ErrorIs(t, c.expectedError, err)
-			assert.Equal(t, c.expectedBytes, s)
-			assert.Equal(t, c.expectedOffset, off)
+			require.ErrorIs(t, c.expectedError, err)
+			require.Equal(t, c.expectedBytes, s)
+			require.Equal(t, c.expectedOffset, off)
 		})
 	}
 }
@@ -220,9 +220,9 @@ func TestReadPrefixedMap(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			output, offset, err := getPrefixedMap(c.input, 0)
-			assert.ErrorIs(t, err, c.err)
-			assert.Equal(t, offset, c.newOffset)
-			assert.Equal(t, output, c.output)
+			require.ErrorIs(t, err, c.err)
+			require.Equal(t, offset, c.newOffset)
+			require.Equal(t, output, c.output)
 		})
 	}
 }
@@ -260,9 +260,9 @@ func TestReadPrefixedString(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			s, off, err := getPrefixedString(c.data, 0)
-			assert.ErrorIs(t, c.expectedError, err)
-			assert.Equal(t, c.expectedString, s)
-			assert.Equal(t, c.expectedOffset, off)
+			require.ErrorIs(t, c.expectedError, err)
+			require.Equal(t, c.expectedString, s)
+			require.Equal(t, c.expectedOffset, off)
 		})
 	}
 }
@@ -285,24 +285,24 @@ func TestMessageReading(t *testing.T) {
 						Compression: compression,
 						IncludeCRC:  true,
 					})
-					assert.Nil(t, err)
+					require.NoError(t, err)
 					err = w.WriteHeader(&Header{
 						Profile: "ros1",
 					})
-					assert.Nil(t, err)
-					assert.Nil(t, w.WriteSchema(&Schema{
+					require.NoError(t, err)
+					require.NoError(t, w.WriteSchema(&Schema{
 						ID:       1,
 						Name:     "foo",
 						Encoding: "msg",
 						Data:     []byte{},
 					}))
-					assert.Nil(t, w.WriteChannel(&Channel{
+					require.NoError(t, w.WriteChannel(&Channel{
 						ID:              0,
 						Topic:           "/test1",
 						SchemaID:        1,
 						MessageEncoding: "ros1",
 					}))
-					assert.Nil(t, w.WriteChannel(&Channel{
+					require.NoError(t, w.WriteChannel(&Channel{
 						ID:              1,
 						Topic:           "/test2",
 						MessageEncoding: "ros1",
@@ -316,101 +316,101 @@ func TestMessageReading(t *testing.T) {
 							PublishTime: uint64(i),
 							Data:        []byte{1, 2, 3, 4},
 						})
-						assert.Nil(t, err)
+						require.NoError(t, err)
 					}
 					w.Close()
 					t.Run("read all messages", func(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
-						assert.Nil(t, err)
+						require.NoError(t, err)
 						it, err := r.Messages(UsingIndex(useIndex))
-						assert.Nil(t, err)
+						require.NoError(t, err)
 						c := 0
 						for {
 							schema, channel, message, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
-							assert.Nil(t, err)
-							assert.NotNil(t, channel)
-							assert.NotNil(t, message)
-							assert.Equal(t, message.ChannelID, channel.ID)
-							assert.NotNil(t, schema)
-							assert.Equal(t, schema.ID, channel.SchemaID)
+							require.NoError(t, err)
+							require.NotNil(t, channel)
+							require.NotNil(t, message)
+							require.Equal(t, message.ChannelID, channel.ID)
+							require.NotNil(t, schema)
+							require.Equal(t, schema.ID, channel.SchemaID)
 							c++
 						}
-						assert.Equal(t, 1000, c)
+						require.Equal(t, 1000, c)
 					})
 					t.Run("read messages on one topic", func(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
-						assert.Nil(t, err)
+						require.NoError(t, err)
 						it, err := r.Messages(
 							WithTopics([]string{"/test1"}),
 							UsingIndex(useIndex),
 						)
-						assert.Nil(t, err)
+						require.NoError(t, err)
 						c := 0
 						for {
 							schema, channel, message, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
-							assert.Nil(t, err)
-							assert.NotNil(t, channel)
-							assert.NotNil(t, message)
-							assert.NotNil(t, schema)
-							assert.Equal(t, message.ChannelID, channel.ID)
-							assert.Equal(t, schema.ID, channel.SchemaID)
+							require.NoError(t, err)
+							require.NotNil(t, channel)
+							require.NotNil(t, message)
+							require.NotNil(t, schema)
+							require.Equal(t, message.ChannelID, channel.ID)
+							require.Equal(t, schema.ID, channel.SchemaID)
 							c++
 						}
-						assert.Equal(t, 500, c)
+						require.Equal(t, 500, c)
 					})
 					t.Run("read messages on multiple topics", func(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
-						assert.Nil(t, err)
+						require.NoError(t, err)
 						it, err := r.Messages(
 							WithTopics([]string{"/test1", "/test2"}),
 							UsingIndex(useIndex),
 						)
-						assert.Nil(t, err)
+						require.NoError(t, err)
 						c := 0
 						for {
 							schema, channel, message, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
-							assert.Nil(t, err)
-							assert.NotNil(t, channel)
-							assert.NotNil(t, message)
-							assert.NotNil(t, schema)
-							assert.Equal(t, message.ChannelID, channel.ID)
-							assert.Equal(t, channel.SchemaID, schema.ID)
+							require.NoError(t, err)
+							require.NotNil(t, channel)
+							require.NotNil(t, message)
+							require.NotNil(t, schema)
+							require.Equal(t, message.ChannelID, channel.ID)
+							require.Equal(t, channel.SchemaID, schema.ID)
 							c++
 						}
-						assert.Equal(t, 1000, c)
+						require.Equal(t, 1000, c)
 					})
 					t.Run("read messages in time range", func(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
 						r, err := NewReader(reader)
-						assert.Nil(t, err)
+						require.NoError(t, err)
 						it, err := r.Messages(
 							AfterNanos(100),
 							BeforeNanos(200),
 							UsingIndex(useIndex),
 						)
-						assert.Nil(t, err)
+						require.NoError(t, err)
 						c := 0
 						for {
 							_, _, _, err := it.Next(nil)
 							if errors.Is(err, io.EOF) {
 								break
 							}
-							assert.Nil(t, err)
+							require.NoError(t, err)
 							c++
 						}
-						assert.Equal(t, 100, c)
+						require.Equal(t, 100, c)
 					})
 				})
 			}
@@ -425,22 +425,22 @@ func TestReaderCounting(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("indexed %v", indexed), func(t *testing.T) {
 			f, err := os.Open("../../testdata/mcap/demo.mcap")
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			defer f.Close()
 			r, err := NewReader(f)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			it, err := r.Messages(UsingIndex(indexed))
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			c := 0
 			for {
 				_, _, _, err := it.Next(nil)
 				if errors.Is(err, io.EOF) {
 					break
 				}
-				assert.Nil(t, err)
+				require.NoError(t, err)
 				c++
 			}
-			assert.Equal(t, 1606, c)
+			require.Equal(t, 1606, c)
 		})
 	}
 }
@@ -547,34 +547,34 @@ func TestMCAPInfo(t *testing.T) {
 				ChunkSize:   1024,
 				Compression: CompressionLZ4,
 			})
-			assert.Nil(t, err)
-			assert.Nil(t, w.WriteHeader(&Header{}))
+			require.NoError(t, err)
+			require.NoError(t, w.WriteHeader(&Header{}))
 			for _, schema := range c.schemas {
-				assert.Nil(t, w.WriteSchema(schema))
+				require.NoError(t, w.WriteSchema(schema))
 			}
 			for _, channel := range c.channels {
-				assert.Nil(t, w.WriteChannel(channel))
+				require.NoError(t, w.WriteChannel(channel))
 			}
 			for _, message := range c.messages {
-				assert.Nil(t, w.WriteMessage(message))
+				require.NoError(t, w.WriteMessage(message))
 			}
 			for _, metadata := range c.metadata {
-				assert.Nil(t, w.WriteMetadata(metadata))
+				require.NoError(t, w.WriteMetadata(metadata))
 			}
 			for _, attachment := range c.attachments {
-				assert.Nil(t, w.WriteAttachment(attachment))
+				require.NoError(t, w.WriteAttachment(attachment))
 			}
-			assert.Nil(t, w.Close())
+			require.NoError(t, w.Close())
 
 			reader := bytes.NewReader(buf.Bytes())
 			r, err := NewReader(reader)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			info, err := r.Info()
-			assert.Nil(t, err)
-			assert.Equal(t, uint64(len(c.messages)), info.Statistics.MessageCount, "unexpected message count")
-			assert.Equal(t, uint32(len(c.channels)), info.Statistics.ChannelCount, "unexpected channel count")
-			assert.Equal(t, uint32(len(c.metadata)), info.Statistics.MetadataCount, "unexpected metadata count")
-			assert.Equal(
+			require.NoError(t, err)
+			require.Equal(t, uint64(len(c.messages)), info.Statistics.MessageCount, "unexpected message count")
+			require.Equal(t, uint32(len(c.channels)), info.Statistics.ChannelCount, "unexpected channel count")
+			require.Equal(t, uint32(len(c.metadata)), info.Statistics.MetadataCount, "unexpected metadata count")
+			require.Equal(
 				t,
 				uint32(len(c.attachments)),
 				info.Statistics.AttachmentCount,
@@ -585,10 +585,10 @@ func TestMCAPInfo(t *testing.T) {
 				channel, err := find(c.channels, func(channel *Channel) bool {
 					return channel.ID == message.ChannelID
 				})
-				assert.Nil(t, err)
+				require.NoError(t, err)
 				expectedTopicCounts[channel.Topic]++
 			}
-			assert.Equal(t, expectedTopicCounts, info.ChannelCounts())
+			require.Equal(t, expectedTopicCounts, info.ChannelCounts())
 		})
 	}
 }
@@ -625,50 +625,50 @@ func TestReaderMetadataCallback(t *testing.T) {
 				Chunked:    true,
 				ChunkSize:  1024,
 			})
-			assert.Nil(t, err)
-			assert.Nil(t, writer.WriteHeader(&Header{}))
-			assert.Nil(t, writer.WriteMetadata(&Metadata{
+			require.NoError(t, err)
+			require.NoError(t, writer.WriteHeader(&Header{}))
+			require.NoError(t, writer.WriteMetadata(&Metadata{
 				Name:     "foo",
 				Metadata: map[string]string{"foo": "bar"},
 			}))
-			assert.Nil(t, writer.Close())
+			require.NoError(t, writer.Close())
 			data := bytes.NewReader(buf.Bytes())
 			reader, err := NewReader(data)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 
 			var recordName string
 			it, err := reader.Messages(UsingIndex(c.useIndex), WithMetadataCallback(func(m *Metadata) error {
 				recordName = m.Name
 				return nil
 			}))
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			_, _, _, err = it.Next(nil)
-			assert.ErrorIs(t, err, io.EOF)
+			require.ErrorIs(t, err, io.EOF)
 
-			assert.Equal(t, "foo", recordName)
+			require.Equal(t, "foo", recordName)
 		})
 	}
 }
 
 func TestReadingDiagnostics(t *testing.T) {
 	f, err := os.Open("../../testdata/mcap/demo.mcap")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	defer f.Close()
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	r, err := NewReader(f)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	it, err := r.Messages(WithTopics([]string{"/diagnostics"}))
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	c := 0
 	for {
 		_, _, _, err := it.Next(nil)
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		c++
 	}
-	assert.Equal(t, 52, c)
+	require.Equal(t, 52, c)
 }
 
 func TestReadingMetadata(t *testing.T) {
@@ -678,8 +678,8 @@ func TestReadingMetadata(t *testing.T) {
 		ChunkSize:   1024,
 		Compression: "",
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, writer.WriteHeader(&Header{}))
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&Header{}))
 
 	expectedMetadata := &Metadata{
 		Name: "foo",
@@ -687,19 +687,19 @@ func TestReadingMetadata(t *testing.T) {
 			"foo": "bar",
 		},
 	}
-	assert.Nil(t, writer.WriteMetadata(expectedMetadata))
-	assert.Nil(t, writer.Close())
+	require.NoError(t, writer.WriteMetadata(expectedMetadata))
+	require.NoError(t, writer.Close())
 
 	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	info, err := reader.Info()
-	assert.Nil(t, err)
-	assert.Equal(t, 1, len(info.MetadataIndexes))
+	require.NoError(t, err)
+	require.Len(t, info.MetadataIndexes, 1)
 	idx := info.MetadataIndexes[0]
 	metadata, err := reader.GetMetadata(idx.Offset)
-	assert.Nil(t, err)
-	assert.Equal(t, expectedMetadata, metadata)
+	require.NoError(t, err)
+	require.Equal(t, expectedMetadata, metadata)
 }
 
 func TestGetAttachmentReader(t *testing.T) {
@@ -709,9 +709,9 @@ func TestGetAttachmentReader(t *testing.T) {
 		ChunkSize:   1024,
 		Compression: "",
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, writer.WriteHeader(&Header{}))
-	assert.Nil(t, writer.WriteAttachment(&Attachment{
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&Header{}))
+	require.NoError(t, writer.WriteAttachment(&Attachment{
 		LogTime:    10,
 		CreateTime: 1000,
 		Name:       "foo",
@@ -719,27 +719,27 @@ func TestGetAttachmentReader(t *testing.T) {
 		DataSize:   3,
 		Data:       bytes.NewReader([]byte{'a', 'b', 'c'}),
 	}))
-	assert.Nil(t, writer.Close())
+	require.NoError(t, writer.Close())
 
 	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	info, err := reader.Info()
-	assert.Nil(t, err)
-	assert.Equal(t, 1, len(info.AttachmentIndexes))
+	require.NoError(t, err)
+	require.Len(t, info.AttachmentIndexes, 1)
 	idx := info.AttachmentIndexes[0]
 	ar, err := reader.GetAttachmentReader(idx.Offset)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
-	assert.Equal(t, "foo", ar.Name)
-	assert.Equal(t, "text", ar.MediaType)
-	assert.Equal(t, 3, int(ar.DataSize))
-	assert.Equal(t, 10, int(ar.LogTime))
-	assert.Equal(t, 1000, int(ar.CreateTime))
+	require.Equal(t, "foo", ar.Name)
+	require.Equal(t, "text", ar.MediaType)
+	require.Equal(t, 3, int(ar.DataSize))
+	require.Equal(t, 10, int(ar.LogTime))
+	require.Equal(t, 1000, int(ar.CreateTime))
 
 	data, err := io.ReadAll(ar.Data())
-	assert.Nil(t, err)
-	assert.Equal(t, []byte{'a', 'b', 'c'}, data)
+	require.NoError(t, err)
+	require.Equal(t, []byte{'a', 'b', 'c'}, data)
 }
 
 func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
@@ -751,15 +751,15 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 		ChunkSize:   200,
 		Compression: CompressionLZ4,
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, writer.WriteHeader(&Header{}))
-	assert.Nil(t, writer.WriteSchema(&Schema{
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&Header{}))
+	require.NoError(t, writer.WriteSchema(&Schema{
 		ID:       1,
 		Name:     "",
 		Encoding: "",
 		Data:     []byte{},
 	}))
-	assert.Nil(t, writer.WriteChannel(&Channel{
+	require.NoError(t, writer.WriteChannel(&Channel{
 		ID:              0,
 		Topic:           "",
 		SchemaID:        0,
@@ -770,7 +770,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	}))
 	msgCount := 0
 	addMsg := func(timestamp uint64) {
-		assert.Nil(t, writer.WriteMessage(&Message{
+		require.NoError(t, writer.WriteMessage(&Message{
 			ChannelID:   0,
 			Sequence:    0,
 			LogTime:     timestamp,
@@ -786,7 +786,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 		addMsg(now)
 	}
 	// ensure that the chunk contains more than one message
-	assert.Greater(t, now, uint64(110))
+	require.Greater(t, now, uint64(110))
 	// add time discontinuity between chunks
 	now -= 55
 
@@ -795,51 +795,51 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 		now += 10
 		addMsg(now)
 	}
-	assert.Nil(t, writer.Close())
+	require.NoError(t, writer.Close())
 
 	// start reading the MCAP back
 	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	it, err := reader.Messages(
 		UsingIndex(true),
 		InOrder(LogTimeOrder),
 	)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	// check that timestamps monotonically increase from the returned iterator
 	var lastSeenTimestamp uint64
 	for i := 0; i < msgCount; i++ {
 		_, _, msg, err := it.Next(nil)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		if i != 0 {
-			assert.Greater(t, msg.LogTime, lastSeenTimestamp)
+			require.Greater(t, msg.LogTime, lastSeenTimestamp)
 		}
 		lastSeenTimestamp = msg.LogTime
 	}
 	_, _, msg, err := it.Next(nil)
-	assert.Nil(t, msg)
-	assert.Error(t, io.EOF, err)
+	require.Nil(t, msg)
+	require.ErrorIs(t, io.EOF, err)
 
 	// now try iterating in reverse
 	reverseIt, err := reader.Messages(
 		UsingIndex(true),
 		InOrder(ReverseLogTimeOrder),
 	)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	// check that timestamps monotonically decrease from the returned iterator
 	for i := 0; i < msgCount; i++ {
 		_, _, msg, err := reverseIt.Next(nil)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		if i != 0 {
-			assert.Less(t, msg.LogTime, lastSeenTimestamp)
+			require.Less(t, msg.LogTime, lastSeenTimestamp)
 		}
 		lastSeenTimestamp = msg.LogTime
 	}
 	_, _, msg, err = reverseIt.Next(nil)
-	assert.Nil(t, msg)
-	assert.Error(t, io.EOF, err)
+	require.Nil(t, msg)
+	require.ErrorIs(t, io.EOF, err)
 }
 
 func TestReadingBigTimestamps(t *testing.T) {
@@ -848,35 +848,35 @@ func TestReadingBigTimestamps(t *testing.T) {
 		Chunked:   true,
 		ChunkSize: 100,
 	})
-	assert.NoError(t, err)
-	assert.NoError(t, w.WriteHeader(&Header{}))
-	assert.NoError(t, w.WriteSchema(&Schema{ID: 1}))
-	assert.NoError(t, w.WriteChannel(&Channel{SchemaID: 1, Topic: "/topic"}))
-	assert.NoError(t, w.WriteMessage(&Message{
+	require.NoError(t, err)
+	require.NoError(t, w.WriteHeader(&Header{}))
+	require.NoError(t, w.WriteSchema(&Schema{ID: 1}))
+	require.NoError(t, w.WriteChannel(&Channel{SchemaID: 1, Topic: "/topic"}))
+	require.NoError(t, w.WriteMessage(&Message{
 		LogTime: math.MaxUint64 - 1,
 		Data:    []byte("hello"),
 	}))
-	assert.NoError(t, w.Close())
+	require.NoError(t, w.Close())
 	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	t.Run("info works as expected", func(t *testing.T) {
 		info, err := reader.Info()
-		assert.Nil(t, err)
-		assert.Equal(t, uint64(math.MaxUint64-1), info.Statistics.MessageEndTime)
+		require.NoError(t, err)
+		require.Equal(t, uint64(math.MaxUint64-1), info.Statistics.MessageEndTime)
 	})
 	t.Run("message iteration works as expected", func(t *testing.T) {
 		it, err := reader.Messages(AfterNanos(math.MaxUint64-2), BeforeNanos(math.MaxUint64))
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		count := 0
 		for {
 			_, _, msg, err := it.Next(nil)
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			assert.Nil(t, err)
-			assert.Equal(t, []byte("hello"), msg.Data)
+			require.NoError(t, err)
+			require.Equal(t, []byte("hello"), msg.Data)
 			count++
 		}
-		assert.Equal(t, count, 1)
+		require.Equal(t, 1, count)
 	})
 }
