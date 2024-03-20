@@ -94,8 +94,8 @@ We'll leave the timestamp field for later, when we write the messages into the M
 We'll start with some imports from the Python MCAP library:
 
 ```python
-from mcap.mcap0.writer import Writer
-from mcap.mcap0.well_known import SchemaEncoding, MessageEncoding
+from mcap.writer import Writer
+from mcap.well_known import SchemaEncoding, MessageEncoding
 ```
 
 Open a file where we'll output our MCAP data and write our header:
