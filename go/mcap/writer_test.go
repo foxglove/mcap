@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pierrec/lz4/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -208,7 +209,7 @@ func TestChunkedReadWrite(t *testing.T) {
 				},
 			}))
 			require.NoError(t, w.Close())
-			require.Len(t, w.ChunkIndexes, 2)
+			assert.Len(t, w.ChunkIndexes, 2)
 			require.Empty(t, w.AttachmentIndexes)
 			require.Equal(t, uint64(2), w.Statistics.MessageCount)
 			require.Equal(t, uint32(0), w.Statistics.AttachmentCount)
@@ -298,7 +299,7 @@ func TestChunkBoundaryIndexing(t *testing.T) {
 	}))
 	require.NoError(t, w.Close())
 	t.Run("chunk indexes correct", func(t *testing.T) {
-		require.Len(t, w.ChunkIndexes, 2)
+		assert.Len(t, w.ChunkIndexes, 2)
 		require.Equal(t, 100, int(w.ChunkIndexes[0].MessageStartTime)) // first message
 		require.Equal(t, 1, int(w.ChunkIndexes[1].MessageStartTime))   // second message
 	})
@@ -349,7 +350,7 @@ func TestIndexStructures(t *testing.T) {
 	}))
 	require.NoError(t, w.Close())
 	t.Run("chunk indexes correct", func(t *testing.T) {
-		require.Len(t, w.ChunkIndexes, 1)
+		assert.Len(t, w.ChunkIndexes, 1)
 		chunkIndex := w.ChunkIndexes[0]
 		require.Equal(t, &ChunkIndex{
 			MessageStartTime: 1,
@@ -366,7 +367,7 @@ func TestIndexStructures(t *testing.T) {
 		}, chunkIndex)
 	})
 	t.Run("attachment indexes correct", func(t *testing.T) {
-		require.Len(t, w.AttachmentIndexes, 1)
+		assert.Len(t, w.AttachmentIndexes, 1)
 		attachmentIndex := w.AttachmentIndexes[0]
 		require.Equal(t, &AttachmentIndex{
 			Offset:     38,
@@ -427,8 +428,8 @@ func TestStatistics(t *testing.T) {
 	require.Equal(t, uint32(1), w.Statistics.ChannelCount)
 	require.Equal(t, uint32(1), w.Statistics.AttachmentCount)
 	require.Equal(t, 42, int(w.Statistics.ChunkCount))
-	require.Len(t, w.ChunkIndexes, 42)
-	require.Len(t, w.AttachmentIndexes, 1)
+	assert.Len(t, w.ChunkIndexes, 42)
+	assert.Len(t, w.AttachmentIndexes, 1)
 }
 
 func TestUnchunkedReadWrite(t *testing.T) {
@@ -482,7 +483,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 	require.NoError(t, w.Close())
 
 	require.Empty(t, w.ChunkIndexes)
-	require.Len(t, w.AttachmentIndexes, 1)
+	assert.Len(t, w.AttachmentIndexes, 1)
 	require.Equal(t, "image/jpeg", w.AttachmentIndexes[0].MediaType)
 	require.Equal(t, uint64(1), w.Statistics.MessageCount)
 	require.Equal(t, uint32(1), w.Statistics.AttachmentCount)

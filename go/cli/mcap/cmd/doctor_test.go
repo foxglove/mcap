@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNoErrorOnMessagelessChunks(t *testing.T) {
@@ -14,21 +14,21 @@ func TestNoErrorOnMessagelessChunks(t *testing.T) {
 		Chunked:   true,
 		ChunkSize: 10,
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, writer.WriteHeader(&mcap.Header{
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&mcap.Header{
 		Profile: "",
 		Library: "",
 	}))
-	assert.Nil(t, writer.WriteChannel(&mcap.Channel{
+	require.NoError(t, writer.WriteChannel(&mcap.Channel{
 		ID:       1,
 		SchemaID: 0,
 		Topic:    "schemaless_topic",
 	}))
-	assert.Nil(t, writer.Close())
+	require.NoError(t, writer.Close())
 
 	rs := bytes.NewReader(buf.Bytes())
 
 	doctor := newMcapDoctor(rs)
 	err = doctor.Examine()
-	assert.Nil(t, err)
+	require.NoError(t, err)
 }

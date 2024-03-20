@@ -5,7 +5,7 @@ import (
 	"hash/crc32"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestChecksummingWriteCounter(t *testing.T) {
@@ -15,9 +15,9 @@ func TestChecksummingWriteCounter(t *testing.T) {
 	buf := &bytes.Buffer{}
 	cw := newChecksummingWriteCounter(buf, initialCRC)
 	n, err := cw.Write(data[5:])
-	assert.Nil(t, err)
-	assert.Equal(t, len(data[5:]), n, "number of bytes written does not match expected")
-	assert.Equal(t, fullCRC, cw.CRC(), "computed CRC does not match expected")
-	assert.Equal(t, int64(len(data[5:])), cw.Count(), "count does not match expected")
-	assert.Equal(t, data[5:], buf.Bytes(), "data does not match expected")
+	require.NoError(t, err)
+	require.Equal(t, len(data[5:]), n, "number of bytes written does not match expected")
+	require.Equal(t, fullCRC, cw.CRC(), "computed CRC does not match expected")
+	require.Equal(t, int64(len(data[5:])), cw.Count(), "count does not match expected")
+	require.Equal(t, data[5:], buf.Bytes(), "data does not match expected")
 }

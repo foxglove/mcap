@@ -9,6 +9,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -695,7 +696,7 @@ func TestReadingMetadata(t *testing.T) {
 
 	info, err := reader.Info()
 	require.NoError(t, err)
-	require.Len(t, info.MetadataIndexes, 1)
+	assert.Len(t, info.MetadataIndexes, 1)
 	idx := info.MetadataIndexes[0]
 	metadata, err := reader.GetMetadata(idx.Offset)
 	require.NoError(t, err)
@@ -726,7 +727,7 @@ func TestGetAttachmentReader(t *testing.T) {
 
 	info, err := reader.Info()
 	require.NoError(t, err)
-	require.Len(t, info.AttachmentIndexes, 1)
+	assert.Len(t, info.AttachmentIndexes, 1)
 	idx := info.AttachmentIndexes[0]
 	ar, err := reader.GetAttachmentReader(idx.Offset)
 	require.NoError(t, err)

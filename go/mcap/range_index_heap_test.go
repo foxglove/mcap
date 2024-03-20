@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -68,7 +69,7 @@ func TestMessageOrdering(t *testing.T) {
 			for _, item := range rangeIndexHeapTestItems {
 				require.NoError(t, h.HeapPush(item))
 			}
-			require.Len(t, rangeIndexHeapTestItems, h.Len())
+			assert.Len(t, rangeIndexHeapTestItems, h.Len())
 			i := 0
 			for h.Len() > 0 {
 				poppedItem, err := h.HeapPop()

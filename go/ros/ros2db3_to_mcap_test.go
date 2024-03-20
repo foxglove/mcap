@@ -11,6 +11,7 @@ import (
 	"github.com/foxglove/mcap/go/mcap"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDB3MCAPConversion(t *testing.T) {
@@ -43,7 +44,7 @@ func TestDB3MCAPConversion(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			buf := &bytes.Buffer{}
 			db, err := sql.Open("sqlite3", c.inputFile)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			opts := &mcap.WriterOptions{
 				IncludeCRC:  true,
 				Chunked:     true,
@@ -52,19 +53,19 @@ func TestDB3MCAPConversion(t *testing.T) {
 			}
 
 			err = DB3ToMCAP(buf, db, opts, []string{c.searchDir})
-			assert.Nil(t, err)
+			require.NoError(t, err)
 
 			reader, err := mcap.NewReader(bytes.NewReader(buf.Bytes()))
-			assert.Nil(t, err)
+			require.NoError(t, err)
 
 			info, err := reader.Info()
-			assert.Nil(t, err)
-			assert.Equal(t, uint64(c.expectedMessageCount), info.Statistics.MessageCount)
-			assert.Equal(t, 1, len(info.Channels))
-			assert.Equal(t, c.expectedTopic, info.Channels[1].Topic)
+			require.NoError(t, err)
+			require.Equal(t, uint64(c.expectedMessageCount), info.Statistics.MessageCount)
+			assert.Len(t, info.Channels, 1)
+			require.Equal(t, c.expectedTopic, info.Channels[1].Topic)
 			messageCount := 0
 			it, err := reader.Messages(mcap.WithTopics([]string{c.expectedTopic}))
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			for {
 				schema, channel, message, err := it.Next(nil)
 				if err != nil {
@@ -73,12 +74,12 @@ func TestDB3MCAPConversion(t *testing.T) {
 					}
 					t.Errorf("failed to pull message from serialized file: %s", err)
 				}
-				assert.NotEmpty(t, message.Data)
-				assert.Equal(t, channel.Topic, c.expectedTopic)
-				assert.Equal(t, schema.Name, c.expectedSchemaName)
+				require.NotEmpty(t, message.Data)
+				require.Equal(t, c.expectedTopic, channel.Topic)
+				require.Equal(t, c.expectedSchemaName, schema.Name)
 				messageCount++
 			}
-			assert.Equal(t, c.expectedMessageCount, messageCount)
+			require.Equal(t, c.expectedMessageCount, messageCount)
 		})
 	}
 }
@@ -87,7 +88,7 @@ func TestMergesNonNewlineDelimitedSchemas(t *testing.T) {
 	schemas, err := getSchemas(
 		[]string{"./testdata/galactic"},
 		[]string{"package_a/msg/NoNewline"})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	schema := schemas["package_a/msg/NoNewline"]
 	expected := `
 string data
@@ -100,13 +101,13 @@ string data
 MSG: package_b/TypeB
 int32 foo
 `
-	assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(string(schema)))
+	require.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(string(schema)))
 }
 
 func TestBoundedFields(t *testing.T) {
 	schemas, err := getSchemas([]string{"./testdata/galactic"}, []string{"package_a/msg/BoundedField"})
-	assert.Nil(t, err)
-	assert.Equal(t, 1, len(schemas))
+	require.NoError(t, err)
+	assert.Len(t, schemas, 1)
 	schema := schemas["package_a/msg/BoundedField"]
 	expectedSchema := `
 # Bounded field examples from
@@ -128,13 +129,13 @@ package_b/TypeB[<=10]
 MSG: package_b/TypeB
 int32 foo
 `
-	assert.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
+	require.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
 }
 
 func TestSchemaComposition(t *testing.T) {
 	t.Run("schema dependencies are resolved", func(t *testing.T) {
 		schemas, err := getSchemas([]string{"./testdata/galactic"}, []string{"package_a/msg/TypeA"})
-		assert.Nil(t, err)
+		require.NoError(t, err)
 
 		schema := schemas["package_a/msg/TypeA"]
 		expectedSchema := `
@@ -144,7 +145,7 @@ package_b/TypeB FancyType
 MSG: package_b/TypeB
 int32 foo
 `
-		assert.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
+		require.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
 	})
 }
 
@@ -172,7 +173,7 @@ func TestMessageTopicRegex(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
-			assert.Equal(t, c.match, messageTopicRegex.MatchString(c.input))
+			require.Equal(t, c.match, messageTopicRegex.MatchString(c.input))
 		})
 	}
 }
@@ -201,15 +202,15 @@ func TestSchemaFinding(t *testing.T) {
 	}
 	for _, c := range cases {
 		content, err := getSchema(c.rosType, []string{"./testdata/get_schema_workspace"})
-		assert.Equal(t, c.err, err)
-		assert.Equal(t, c.expectedContent, string(content))
+		require.Equal(t, c.err, err)
+		require.Equal(t, c.expectedContent, string(content))
 	}
 }
 
 func TestSchemaDeduplication(t *testing.T) {
 	t.Run("schema dependencies are resolved and subtypes deduplicated", func(t *testing.T) {
 		schemas, err := getSchemas([]string{"./testdata/duplicate_typedefinition"}, []string{"example_msgs/msg/Parent"})
-		assert.Nil(t, err)
+		require.NoError(t, err)
 
 		schema := schemas["example_msgs/msg/Parent"]
 		expectedSchema := `
@@ -222,6 +223,6 @@ MSG: example_msgs/Descriptor
 MSG: example_msgs/OtherDescriptor
 example_msgs/Descriptor descriptor
 `
-		assert.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
+		require.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
 	})
 }
