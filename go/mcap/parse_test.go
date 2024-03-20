@@ -4,6 +4,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,7 +41,7 @@ func TestParseHeader(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			output, err := ParseHeader(c.input)
 			require.ErrorIs(t, err, c.err)
-			require.Equal(t, output, c.output)
+			assert.Equal(t, output, c.output)
 		})
 	}
 }
@@ -106,7 +107,7 @@ func TestParseMetadata(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			output, err := ParseMetadata(c.input)
 			require.ErrorIs(t, err, c.err)
-			require.Equal(t, output, c.output)
+			assert.Equal(t, output, c.output)
 		})
 	}
 }
@@ -151,7 +152,7 @@ func TestParseMetadataIndex(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			output, err := ParseMetadataIndex(c.input)
 			require.ErrorIs(t, err, c.err)
-			require.Equal(t, output, c.output)
+			assert.Equal(t, output, c.output)
 		})
 	}
 }
@@ -196,7 +197,7 @@ func TestParseFooter(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			output, err := ParseFooter(c.input)
 			require.ErrorIs(t, err, c.err)
-			require.Equal(t, output, c.output)
+			assert.Equal(t, output, c.output)
 		})
 	}
 }
@@ -253,7 +254,7 @@ func TestParseSchema(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			output, err := ParseSchema(c.input)
 			require.ErrorIs(t, err, c.err)
-			require.Equal(t, output, c.output)
+			assert.Equal(t, output, c.output)
 		})
 	}
 }

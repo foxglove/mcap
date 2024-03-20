@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,7 +42,7 @@ func TestCat(t *testing.T) {
 			err = printMessages(w, it, false)
 			require.NoError(t, err)
 			r.Reset(input)
-			require.Equal(t, c.expected, w.String())
+			assert.Equal(t, c.expected, w.String())
 		})
 	}
 }

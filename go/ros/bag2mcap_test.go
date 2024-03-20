@@ -11,6 +11,7 @@ import (
 
 	"github.com/foxglove/go-rosbag"
 	"github.com/foxglove/mcap/go/mcap"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,15 +41,15 @@ func TestBag2MCAPPreservesChannelMetadata(t *testing.T) {
 		case mcap.TokenChannel:
 			ch, err := mcap.ParseChannel(token)
 			require.NoError(t, err)
-			require.Equal(t, len(expectedKeys), len(ch.Metadata))
+			assert.Equal(t, len(expectedKeys), len(ch.Metadata))
 			for _, k := range expectedKeys {
-				require.Contains(t, ch.Metadata, k)
+				assert.Contains(t, ch.Metadata, k)
 			}
 			channelCount++
 		default:
 		}
 	}
-	require.Equal(t, 3, channelCount)
+	assert.Equal(t, 3, channelCount)
 }
 
 func TestDeduplicatesSchemas(t *testing.T) {
@@ -99,8 +100,8 @@ func TestDeduplicatesSchemas(t *testing.T) {
 
 	info, err := reader.Info()
 	require.NoError(t, err)
-	require.Equal(t, 2, int(info.Statistics.ChannelCount))
-	require.Equal(t, 1, int(info.Statistics.SchemaCount))
+	assert.Equal(t, 2, int(info.Statistics.ChannelCount))
+	assert.Equal(t, 1, int(info.Statistics.SchemaCount))
 }
 
 func BenchmarkBag2MCAP(b *testing.B) {
@@ -159,7 +160,7 @@ func TestConvertsBz2(t *testing.T) {
 	require.NoError(t, err)
 	info, err := reader.Info()
 	require.NoError(t, err)
-	require.Equal(t, 10, int(info.Statistics.MessageCount))
+	assert.Equal(t, 10, int(info.Statistics.MessageCount))
 }
 
 func TestChannelIdForConnection(t *testing.T) {
@@ -192,7 +193,7 @@ func TestChannelIdForConnection(t *testing.T) {
 		t.Run(c.label, func(t *testing.T) {
 			channelID, err := channelIDForConnection(c.connID)
 			require.ErrorIs(t, err, c.expectedErr)
-			require.Equal(t, c.expectedChannelID, channelID)
+			assert.Equal(t, c.expectedChannelID, channelID)
 		})
 	}
 }

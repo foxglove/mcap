@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/pierrec/lz4/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,7 +42,7 @@ func TestLexUnchunkedFile(t *testing.T) {
 	for _, expectedTokenType := range expected {
 		tokenType, _, err := lexer.Next(nil)
 		require.NoError(t, err)
-		require.Equal(t, expectedTokenType, tokenType)
+		assert.Equal(t, expectedTokenType, tokenType)
 	}
 }
 
@@ -53,7 +54,7 @@ func TestRejectsUnsupportedCompression(t *testing.T) {
 	lexer, err := NewLexer(bytes.NewReader(file))
 	require.NoError(t, err)
 	_, _, err = lexer.Next(nil)
-	require.Equal(t, "unsupported compression: unknown", err.Error())
+	assert.Equal(t, "unsupported compression: unknown", err.Error())
 }
 
 func TestRejectsTooLargeRecords(t *testing.T) {
@@ -108,7 +109,7 @@ func TestRejectsNestedChunks(t *testing.T) {
 	// header, then error
 	tokenType, _, err := lexer.Next(nil)
 	require.NoError(t, err)
-	require.Equal(t, TokenHeader, tokenType)
+	assert.Equal(t, TokenHeader, tokenType)
 	_, _, err = lexer.Next(nil)
 	require.ErrorIs(t, err, ErrNestedChunk)
 }
@@ -130,7 +131,7 @@ func TestBadMagic(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			_, err := NewLexer(bytes.NewReader(c.magic))
-			require.IsType(t, &ErrBadMagic{}, err)
+			assert.IsType(t, &ErrBadMagic{}, err)
 		})
 	}
 }
@@ -176,9 +177,9 @@ func TestCustomDecompressor(t *testing.T) {
 	for i, expectedTokenType := range expected {
 		tokenType, _, err := lexer.Next(nil)
 		require.NoError(t, err)
-		require.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+		assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
 	}
-	require.Positive(t, blockCount)
+	assert.Positive(t, blockCount)
 }
 
 func TestReturnsEOFOnSuccessiveCalls(t *testing.T) {
@@ -226,7 +227,7 @@ func TestLexChunkedFile(t *testing.T) {
 					for i, expectedTokenType := range expected {
 						tokenType, _, err := lexer.Next(nil)
 						require.NoError(t, err)
-						require.Equal(t, expectedTokenType, tokenType,
+						assert.Equal(t, expectedTokenType, tokenType,
 							fmt.Sprintf("expected %s but got %s at index %d", expectedTokenType, tokenType, i))
 					}
 
@@ -253,7 +254,7 @@ func TestSkipsUnknownOpcodes(t *testing.T) {
 	for i, expectedTokenType := range expected {
 		tokenType, _, err := lexer.Next(nil)
 		require.NoError(t, err)
-		require.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+		assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
 	}
 }
 
@@ -283,7 +284,7 @@ func TestChunkCRCValidation(t *testing.T) {
 		for i, expectedTokenType := range expected {
 			tokenType, _, err := lexer.Next(nil)
 			require.NoError(t, err)
-			require.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+			assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
 		}
 	})
 	t.Run("validates file with zero'd CRCs", func(t *testing.T) {
@@ -311,7 +312,7 @@ func TestChunkCRCValidation(t *testing.T) {
 		for i, expectedTokenType := range expected {
 			tokenType, _, err := lexer.Next(nil)
 			require.NoError(t, err)
-			require.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+			assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
 		}
 	})
 	t.Run("validation fails on corrupted file", func(t *testing.T) {
@@ -340,11 +341,11 @@ func TestChunkCRCValidation(t *testing.T) {
 		for i, expectedTokenType := range expected {
 			tokenType, _, err := lexer.Next(nil)
 			require.NoError(t, err)
-			require.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+			assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
 		}
 		_, _, err = lexer.Next(nil)
 		require.Error(t, err)
-		require.True(t, strings.Contains(err.Error(), "invalid chunk CRC"))
+		assert.True(t, strings.Contains(err.Error(), "invalid chunk CRC"))
 	})
 }
 
@@ -394,18 +395,18 @@ func TestAttachmentHandling(t *testing.T) {
 			lexer, err := NewLexer(file, &LexerOptions{
 				ComputeAttachmentCRCs: true,
 				AttachmentCallback: func(ar *AttachmentReader) error {
-					require.Equal(t, c.attachment.LogTime, ar.LogTime)
-					require.Equal(t, c.attachment.CreateTime, ar.CreateTime)
-					require.Equal(t, c.attachment.Name, ar.Name)
-					require.Equal(t, c.attachment.MediaType, ar.MediaType)
+					assert.Equal(t, c.attachment.LogTime, ar.LogTime)
+					assert.Equal(t, c.attachment.CreateTime, ar.CreateTime)
+					assert.Equal(t, c.attachment.Name, ar.Name)
+					assert.Equal(t, c.attachment.MediaType, ar.MediaType)
 					data, err := io.ReadAll(ar.Data())
 					require.NoError(t, err)
-					require.Equal(t, c.attachmentData, data)
+					assert.Equal(t, c.attachmentData, data)
 					computedCRC, err := ar.ComputedCRC()
 					require.NoError(t, err)
 					parsedCRC, err := ar.ParsedCRC()
 					require.NoError(t, err)
-					require.Equal(t, computedCRC, parsedCRC)
+					assert.Equal(t, computedCRC, parsedCRC)
 					called = true
 					return nil
 				},
@@ -417,7 +418,7 @@ func TestAttachmentHandling(t *testing.T) {
 					require.NoError(t, err)
 				}
 			}
-			require.True(t, called)
+			assert.True(t, called)
 		})
 	}
 }
@@ -455,7 +456,7 @@ func TestChunkEmission(t *testing.T) {
 					for i, expectedTokenType := range expected {
 						tokenType, _, err := lexer.Next(nil)
 						require.NoError(t, err)
-						require.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
+						assert.Equal(t, expectedTokenType, tokenType, fmt.Sprintf("mismatch element %d", i))
 					}
 					_, _, err = lexer.Next(nil)
 					require.ErrorIs(t, err, io.EOF)

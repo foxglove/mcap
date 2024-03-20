@@ -60,9 +60,9 @@ func TestDB3MCAPConversion(t *testing.T) {
 
 			info, err := reader.Info()
 			require.NoError(t, err)
-			require.Equal(t, uint64(c.expectedMessageCount), info.Statistics.MessageCount)
+			assert.Equal(t, uint64(c.expectedMessageCount), info.Statistics.MessageCount)
 			assert.Len(t, info.Channels, 1)
-			require.Equal(t, c.expectedTopic, info.Channels[1].Topic)
+			assert.Equal(t, c.expectedTopic, info.Channels[1].Topic)
 			messageCount := 0
 			it, err := reader.Messages(mcap.WithTopics([]string{c.expectedTopic}))
 			require.NoError(t, err)
@@ -75,11 +75,11 @@ func TestDB3MCAPConversion(t *testing.T) {
 					t.Errorf("failed to pull message from serialized file: %s", err)
 				}
 				require.NotEmpty(t, message.Data)
-				require.Equal(t, c.expectedTopic, channel.Topic)
-				require.Equal(t, c.expectedSchemaName, schema.Name)
+				assert.Equal(t, c.expectedTopic, channel.Topic)
+				assert.Equal(t, c.expectedSchemaName, schema.Name)
 				messageCount++
 			}
-			require.Equal(t, c.expectedMessageCount, messageCount)
+			assert.Equal(t, c.expectedMessageCount, messageCount)
 		})
 	}
 }
@@ -101,7 +101,7 @@ string data
 MSG: package_b/TypeB
 int32 foo
 `
-	require.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(string(schema)))
+	assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(string(schema)))
 }
 
 func TestBoundedFields(t *testing.T) {
@@ -129,7 +129,7 @@ package_b/TypeB[<=10]
 MSG: package_b/TypeB
 int32 foo
 `
-	require.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
+	assert.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
 }
 
 func TestSchemaComposition(t *testing.T) {
@@ -145,7 +145,7 @@ package_b/TypeB FancyType
 MSG: package_b/TypeB
 int32 foo
 `
-		require.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
+		assert.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
 	})
 }
 
@@ -173,7 +173,7 @@ func TestMessageTopicRegex(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
-			require.Equal(t, c.match, messageTopicRegex.MatchString(c.input))
+			assert.Equal(t, c.match, messageTopicRegex.MatchString(c.input))
 		})
 	}
 }
@@ -202,8 +202,8 @@ func TestSchemaFinding(t *testing.T) {
 	}
 	for _, c := range cases {
 		content, err := getSchema(c.rosType, []string{"./testdata/get_schema_workspace"})
-		require.Equal(t, c.err, err)
-		require.Equal(t, c.expectedContent, string(content))
+		assert.Equal(t, c.err, err)
+		assert.Equal(t, c.expectedContent, string(content))
 	}
 }
 
@@ -223,6 +223,6 @@ MSG: example_msgs/Descriptor
 MSG: example_msgs/OtherDescriptor
 example_msgs/Descriptor descriptor
 `
-		require.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
+		assert.Equal(t, strings.TrimSpace(expectedSchema), strings.TrimSpace(string(schema)))
 	})
 }

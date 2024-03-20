@@ -3,6 +3,7 @@ package ros1msg
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -372,7 +373,7 @@ func TestROS1MSGParser(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			fields, err := ParseMessageDefinition(c.parentPackage, []byte(c.messageDefinition))
 			require.NoError(t, err)
-			require.Equal(t, c.fields, fields)
+			assert.Equal(t, c.fields, fields)
 		})
 	}
 }

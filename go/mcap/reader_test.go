@@ -72,7 +72,7 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		require.Equal(t, expectedTopics[i], channel.Topic)
+		assert.Equal(t, expectedTopics[i], channel.Topic)
 	}
 }
 func TestReaderFallsBackToLinearScan(t *testing.T) {
@@ -122,7 +122,7 @@ func TestReaderFallsBackToLinearScan(t *testing.T) {
 	for _, content := range messageContents {
 		_, _, msg, err := it.Next(nil)
 		require.NoError(t, err)
-		require.Equal(t, content, string(msg.Data))
+		assert.Equal(t, content, string(msg.Data))
 	}
 }
 
@@ -160,8 +160,8 @@ func TestReadPrefixedBytes(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			s, off, err := getPrefixedBytes(c.data, 0)
 			require.ErrorIs(t, c.expectedError, err)
-			require.Equal(t, c.expectedBytes, s)
-			require.Equal(t, c.expectedOffset, off)
+			assert.Equal(t, c.expectedBytes, s)
+			assert.Equal(t, c.expectedOffset, off)
 		})
 	}
 }
@@ -222,8 +222,8 @@ func TestReadPrefixedMap(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			output, offset, err := getPrefixedMap(c.input, 0)
 			require.ErrorIs(t, err, c.err)
-			require.Equal(t, offset, c.newOffset)
-			require.Equal(t, output, c.output)
+			assert.Equal(t, offset, c.newOffset)
+			assert.Equal(t, output, c.output)
 		})
 	}
 }
@@ -262,8 +262,8 @@ func TestReadPrefixedString(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			s, off, err := getPrefixedString(c.data, 0)
 			require.ErrorIs(t, c.expectedError, err)
-			require.Equal(t, c.expectedString, s)
-			require.Equal(t, c.expectedOffset, off)
+			assert.Equal(t, c.expectedString, s)
+			assert.Equal(t, c.expectedOffset, off)
 		})
 	}
 }
@@ -335,12 +335,12 @@ func TestMessageReading(t *testing.T) {
 							require.NoError(t, err)
 							require.NotNil(t, channel)
 							require.NotNil(t, message)
-							require.Equal(t, message.ChannelID, channel.ID)
+							assert.Equal(t, message.ChannelID, channel.ID)
 							require.NotNil(t, schema)
-							require.Equal(t, schema.ID, channel.SchemaID)
+							assert.Equal(t, schema.ID, channel.SchemaID)
 							c++
 						}
-						require.Equal(t, 1000, c)
+						assert.Equal(t, 1000, c)
 					})
 					t.Run("read messages on one topic", func(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
@@ -361,11 +361,11 @@ func TestMessageReading(t *testing.T) {
 							require.NotNil(t, channel)
 							require.NotNil(t, message)
 							require.NotNil(t, schema)
-							require.Equal(t, message.ChannelID, channel.ID)
-							require.Equal(t, schema.ID, channel.SchemaID)
+							assert.Equal(t, message.ChannelID, channel.ID)
+							assert.Equal(t, schema.ID, channel.SchemaID)
 							c++
 						}
-						require.Equal(t, 500, c)
+						assert.Equal(t, 500, c)
 					})
 					t.Run("read messages on multiple topics", func(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
@@ -386,11 +386,11 @@ func TestMessageReading(t *testing.T) {
 							require.NotNil(t, channel)
 							require.NotNil(t, message)
 							require.NotNil(t, schema)
-							require.Equal(t, message.ChannelID, channel.ID)
-							require.Equal(t, channel.SchemaID, schema.ID)
+							assert.Equal(t, message.ChannelID, channel.ID)
+							assert.Equal(t, channel.SchemaID, schema.ID)
 							c++
 						}
-						require.Equal(t, 1000, c)
+						assert.Equal(t, 1000, c)
 					})
 					t.Run("read messages in time range", func(t *testing.T) {
 						reader := bytes.NewReader(buf.Bytes())
@@ -411,7 +411,7 @@ func TestMessageReading(t *testing.T) {
 							require.NoError(t, err)
 							c++
 						}
-						require.Equal(t, 100, c)
+						assert.Equal(t, 100, c)
 					})
 				})
 			}
@@ -441,7 +441,7 @@ func TestReaderCounting(t *testing.T) {
 				require.NoError(t, err)
 				c++
 			}
-			require.Equal(t, 1606, c)
+			assert.Equal(t, 1606, c)
 		})
 	}
 }
@@ -572,10 +572,10 @@ func TestMCAPInfo(t *testing.T) {
 			require.NoError(t, err)
 			info, err := r.Info()
 			require.NoError(t, err)
-			require.Equal(t, uint64(len(c.messages)), info.Statistics.MessageCount, "unexpected message count")
-			require.Equal(t, uint32(len(c.channels)), info.Statistics.ChannelCount, "unexpected channel count")
-			require.Equal(t, uint32(len(c.metadata)), info.Statistics.MetadataCount, "unexpected metadata count")
-			require.Equal(
+			assert.Equal(t, uint64(len(c.messages)), info.Statistics.MessageCount, "unexpected message count")
+			assert.Equal(t, uint32(len(c.channels)), info.Statistics.ChannelCount, "unexpected channel count")
+			assert.Equal(t, uint32(len(c.metadata)), info.Statistics.MetadataCount, "unexpected metadata count")
+			assert.Equal(
 				t,
 				uint32(len(c.attachments)),
 				info.Statistics.AttachmentCount,
@@ -589,7 +589,7 @@ func TestMCAPInfo(t *testing.T) {
 				require.NoError(t, err)
 				expectedTopicCounts[channel.Topic]++
 			}
-			require.Equal(t, expectedTopicCounts, info.ChannelCounts())
+			assert.Equal(t, expectedTopicCounts, info.ChannelCounts())
 		})
 	}
 }
@@ -646,7 +646,7 @@ func TestReaderMetadataCallback(t *testing.T) {
 			_, _, _, err = it.Next(nil)
 			require.ErrorIs(t, err, io.EOF)
 
-			require.Equal(t, "foo", recordName)
+			assert.Equal(t, "foo", recordName)
 		})
 	}
 }
@@ -669,7 +669,7 @@ func TestReadingDiagnostics(t *testing.T) {
 		require.NoError(t, err)
 		c++
 	}
-	require.Equal(t, 52, c)
+	assert.Equal(t, 52, c)
 }
 
 func TestReadingMetadata(t *testing.T) {
@@ -700,7 +700,7 @@ func TestReadingMetadata(t *testing.T) {
 	idx := info.MetadataIndexes[0]
 	metadata, err := reader.GetMetadata(idx.Offset)
 	require.NoError(t, err)
-	require.Equal(t, expectedMetadata, metadata)
+	assert.Equal(t, expectedMetadata, metadata)
 }
 
 func TestGetAttachmentReader(t *testing.T) {
@@ -732,15 +732,15 @@ func TestGetAttachmentReader(t *testing.T) {
 	ar, err := reader.GetAttachmentReader(idx.Offset)
 	require.NoError(t, err)
 
-	require.Equal(t, "foo", ar.Name)
-	require.Equal(t, "text", ar.MediaType)
-	require.Equal(t, 3, int(ar.DataSize))
-	require.Equal(t, 10, int(ar.LogTime))
-	require.Equal(t, 1000, int(ar.CreateTime))
+	assert.Equal(t, "foo", ar.Name)
+	assert.Equal(t, "text", ar.MediaType)
+	assert.Equal(t, 3, int(ar.DataSize))
+	assert.Equal(t, 10, int(ar.LogTime))
+	assert.Equal(t, 1000, int(ar.CreateTime))
 
 	data, err := io.ReadAll(ar.Data())
 	require.NoError(t, err)
-	require.Equal(t, []byte{'a', 'b', 'c'}, data)
+	assert.Equal(t, []byte{'a', 'b', 'c'}, data)
 }
 
 func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
@@ -787,7 +787,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 		addMsg(now)
 	}
 	// ensure that the chunk contains more than one message
-	require.Greater(t, now, uint64(110))
+	assert.Greater(t, now, uint64(110))
 	// add time discontinuity between chunks
 	now -= 55
 
@@ -814,7 +814,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 		_, _, msg, err := it.Next(nil)
 		require.NoError(t, err)
 		if i != 0 {
-			require.Greater(t, msg.LogTime, lastSeenTimestamp)
+			assert.Greater(t, msg.LogTime, lastSeenTimestamp)
 		}
 		lastSeenTimestamp = msg.LogTime
 	}
@@ -834,7 +834,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 		_, _, msg, err := reverseIt.Next(nil)
 		require.NoError(t, err)
 		if i != 0 {
-			require.Less(t, msg.LogTime, lastSeenTimestamp)
+			assert.Less(t, msg.LogTime, lastSeenTimestamp)
 		}
 		lastSeenTimestamp = msg.LogTime
 	}
@@ -863,7 +863,7 @@ func TestReadingBigTimestamps(t *testing.T) {
 	t.Run("info works as expected", func(t *testing.T) {
 		info, err := reader.Info()
 		require.NoError(t, err)
-		require.Equal(t, uint64(math.MaxUint64-1), info.Statistics.MessageEndTime)
+		assert.Equal(t, uint64(math.MaxUint64-1), info.Statistics.MessageEndTime)
 	})
 	t.Run("message iteration works as expected", func(t *testing.T) {
 		it, err := reader.Messages(AfterNanos(math.MaxUint64-2), BeforeNanos(math.MaxUint64))
@@ -875,9 +875,9 @@ func TestReadingBigTimestamps(t *testing.T) {
 				break
 			}
 			require.NoError(t, err)
-			require.Equal(t, []byte("hello"), msg.Data)
+			assert.Equal(t, []byte("hello"), msg.Data)
 			count++
 		}
-		require.Equal(t, 1, count)
+		assert.Equal(t, 1, count)
 	})
 }

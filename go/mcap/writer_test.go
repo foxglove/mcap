@@ -34,11 +34,11 @@ func TestMCAPReadWrite(t *testing.T) {
 		offset := 0
 		profile, offset, err := getPrefixedString(record, offset)
 		require.NoError(t, err)
-		require.Equal(t, "ros1", profile)
+		assert.Equal(t, "ros1", profile)
 		library, _, err := getPrefixedString(record, offset)
 		require.NoError(t, err)
-		require.Equal(t, "libfoo v0", library)
-		require.Equal(t, TokenHeader, tokenType)
+		assert.Equal(t, "libfoo v0", library)
+		assert.Equal(t, TokenHeader, tokenType)
 	})
 	t.Run("zero-valued schema IDs permitted", func(t *testing.T) {
 		buf := &bytes.Buffer{}
@@ -138,7 +138,7 @@ func TestOutputDeterminism(t *testing.T) {
 		}
 		t.Run("output hashes consistently", func(t *testing.T) {
 			newHash := fmt.Sprintf("%x", md5.Sum(buf.Bytes()))
-			require.Equal(t, hash, newHash)
+			assert.Equal(t, hash, newHash)
 		})
 	}
 }
@@ -211,11 +211,11 @@ func TestChunkedReadWrite(t *testing.T) {
 			require.NoError(t, w.Close())
 			assert.Len(t, w.ChunkIndexes, 2)
 			require.Empty(t, w.AttachmentIndexes)
-			require.Equal(t, uint64(2), w.Statistics.MessageCount)
-			require.Equal(t, uint32(0), w.Statistics.AttachmentCount)
-			require.Equal(t, uint32(2), w.Statistics.ChannelCount)
-			require.Equal(t, uint32(2), w.Statistics.ChunkCount)
-			require.Equal(t, int(w.Offset()), buf.Len())
+			assert.Equal(t, uint64(2), w.Statistics.MessageCount)
+			assert.Equal(t, uint32(0), w.Statistics.AttachmentCount)
+			assert.Equal(t, uint32(2), w.Statistics.ChannelCount)
+			assert.Equal(t, uint32(2), w.Statistics.ChunkCount)
+			assert.Equal(t, int(w.Offset()), buf.Len())
 			lexer, err := NewLexer(buf)
 			require.NoError(t, err)
 			defer lexer.Close()
@@ -245,7 +245,7 @@ func TestChunkedReadWrite(t *testing.T) {
 			} {
 				tokenType, _, err := lexer.Next(nil)
 				require.NoError(t, err)
-				require.Equal(t, expected, tokenType,
+				assert.Equal(t, expected, tokenType,
 					fmt.Sprintf("want %s got %s at %d", expected, tokenType, i))
 			}
 		})
@@ -300,8 +300,8 @@ func TestChunkBoundaryIndexing(t *testing.T) {
 	require.NoError(t, w.Close())
 	t.Run("chunk indexes correct", func(t *testing.T) {
 		assert.Len(t, w.ChunkIndexes, 2)
-		require.Equal(t, 100, int(w.ChunkIndexes[0].MessageStartTime)) // first message
-		require.Equal(t, 1, int(w.ChunkIndexes[1].MessageStartTime))   // second message
+		assert.Equal(t, 100, int(w.ChunkIndexes[0].MessageStartTime)) // first message
+		assert.Equal(t, 1, int(w.ChunkIndexes[1].MessageStartTime))   // second message
 	})
 }
 
@@ -352,7 +352,7 @@ func TestIndexStructures(t *testing.T) {
 	t.Run("chunk indexes correct", func(t *testing.T) {
 		assert.Len(t, w.ChunkIndexes, 1)
 		chunkIndex := w.ChunkIndexes[0]
-		require.Equal(t, &ChunkIndex{
+		assert.Equal(t, &ChunkIndex{
 			MessageStartTime: 1,
 			MessageEndTime:   1,
 			ChunkStartOffset: 105,
@@ -369,7 +369,7 @@ func TestIndexStructures(t *testing.T) {
 	t.Run("attachment indexes correct", func(t *testing.T) {
 		assert.Len(t, w.AttachmentIndexes, 1)
 		attachmentIndex := w.AttachmentIndexes[0]
-		require.Equal(t, &AttachmentIndex{
+		assert.Equal(t, &AttachmentIndex{
 			Offset:     38,
 			Length:     67,
 			LogTime:    100,
@@ -424,10 +424,10 @@ func TestStatistics(t *testing.T) {
 		Data:      bytes.NewReader([]byte{0x01, 0x02, 0x03, 0x04}),
 	}))
 	require.NoError(t, w.Close())
-	require.Equal(t, uint64(1000), w.Statistics.MessageCount)
-	require.Equal(t, uint32(1), w.Statistics.ChannelCount)
-	require.Equal(t, uint32(1), w.Statistics.AttachmentCount)
-	require.Equal(t, 42, int(w.Statistics.ChunkCount))
+	assert.Equal(t, uint64(1000), w.Statistics.MessageCount)
+	assert.Equal(t, uint32(1), w.Statistics.ChannelCount)
+	assert.Equal(t, uint32(1), w.Statistics.AttachmentCount)
+	assert.Equal(t, 42, int(w.Statistics.ChunkCount))
 	assert.Len(t, w.ChunkIndexes, 42)
 	assert.Len(t, w.AttachmentIndexes, 1)
 }
@@ -484,11 +484,11 @@ func TestUnchunkedReadWrite(t *testing.T) {
 
 	require.Empty(t, w.ChunkIndexes)
 	assert.Len(t, w.AttachmentIndexes, 1)
-	require.Equal(t, "image/jpeg", w.AttachmentIndexes[0].MediaType)
-	require.Equal(t, uint64(1), w.Statistics.MessageCount)
-	require.Equal(t, uint32(1), w.Statistics.AttachmentCount)
-	require.Equal(t, uint32(1), w.Statistics.ChannelCount)
-	require.Equal(t, uint32(0), w.Statistics.ChunkCount)
+	assert.Equal(t, "image/jpeg", w.AttachmentIndexes[0].MediaType)
+	assert.Equal(t, uint64(1), w.Statistics.MessageCount)
+	assert.Equal(t, uint32(1), w.Statistics.AttachmentCount)
+	assert.Equal(t, uint32(1), w.Statistics.ChannelCount)
+	assert.Equal(t, uint32(0), w.Statistics.ChunkCount)
 
 	lexer, err := NewLexer(buf)
 	require.NoError(t, err)
@@ -511,7 +511,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 	} {
 		tokenType, _, err := lexer.Next(nil)
 		require.NoError(t, err)
-		require.Equal(t, expected, tokenType, fmt.Sprintf("want %s got %s", expected, tokenType))
+		assert.Equal(t, expected, tokenType, fmt.Sprintf("want %s got %s", expected, tokenType))
 	}
 }
 
@@ -541,14 +541,14 @@ func TestLibraryString(t *testing.T) {
 			defer lexer.Close()
 			tokenType, record, err := lexer.Next(nil)
 			require.NoError(t, err)
-			require.Equal(t, TokenHeader, tokenType)
+			assert.Equal(t, TokenHeader, tokenType)
 			offset := 0
 			profile, offset, err := getPrefixedString(record, offset)
 			require.NoError(t, err)
-			require.Equal(t, "ros1", profile)
+			assert.Equal(t, "ros1", profile)
 			library, _, err := getPrefixedString(record, offset)
 			require.NoError(t, err)
-			require.Equal(t, library, c.output)
+			assert.Equal(t, library, c.output)
 		})
 	}
 }
@@ -559,7 +559,7 @@ func TestMakePrefixedMap(t *testing.T) {
 			"foo": "bar",
 			"bar": "foo",
 		})
-		require.Equal(t, flatten(
+		assert.Equal(t, flatten(
 			encodedUint32(2*4+2*4+4*3), // map length
 			encodedUint32(3),
 			[]byte("bar"),
@@ -739,5 +739,5 @@ func TestBYOCompressor(t *testing.T) {
 	}
 	require.NoError(t, writer.Close())
 	assertReadable(t, bytes.NewReader(buf.Bytes()))
-	require.Positive(t, blockCount)
+	assert.Positive(t, blockCount)
 }

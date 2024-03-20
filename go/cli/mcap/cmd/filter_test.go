@@ -118,12 +118,12 @@ func TestPassthrough(t *testing.T) {
 			metadataCounter++
 		}
 	}
-	require.Equal(t, 1, attachmentCounter)
-	require.Equal(t, 1, metadataCounter)
-	require.InDeltaMapValues(t, map[uint16]int{1: 100, 2: 100, 3: 100}, messageCounter, 0.0)
+	assert.Equal(t, 1, attachmentCounter)
+	assert.Equal(t, 1, metadataCounter)
+	assert.InDeltaMapValues(t, map[uint16]int{1: 100, 2: 100, 3: 100}, messageCounter, 0.0)
 	// schemas and channels should be duplicated once into the summary section
-	require.Equal(t, 2, schemaCounter)
-	require.InDeltaMapValues(t, map[uint16]int{1: 2, 2: 2, 3: 2}, channelCounter, 0.0)
+	assert.Equal(t, 2, schemaCounter)
+	assert.InDeltaMapValues(t, map[uint16]int{1: 2, 2: 2, 3: 2}, channelCounter, 0.0)
 }
 
 func TestFiltering(t *testing.T) {
@@ -250,9 +250,9 @@ func TestFiltering(t *testing.T) {
 					metadataCounter++
 				}
 			}
-			require.Equal(t, c.expectedAttachmentCount, attachmentCounter)
-			require.Equal(t, c.expectedMetadataCount, metadataCounter)
-			require.InDeltaMapValues(t, c.expectedMessageCount, messageCounter, 0.0)
+			assert.Equal(t, c.expectedAttachmentCount, attachmentCounter)
+			assert.Equal(t, c.expectedMetadataCount, metadataCounter)
+			assert.InDeltaMapValues(t, c.expectedMessageCount, messageCounter, 0.0)
 		})
 	}
 }
@@ -301,9 +301,9 @@ func TestRecover(t *testing.T) {
 				metadataCounter++
 			}
 		}
-		require.Equal(t, 0, attachmentCounter)
-		require.Equal(t, 0, metadataCounter)
-		require.InDeltaMapValues(t, map[uint16]int{
+		assert.Equal(t, 0, attachmentCounter)
+		assert.Equal(t, 0, metadataCounter)
+		assert.InDeltaMapValues(t, map[uint16]int{
 			1: 88,
 			2: 88,
 			3: 88,
@@ -351,9 +351,9 @@ func TestRecover(t *testing.T) {
 				metadataCounter++
 			}
 		}
-		require.Equal(t, 1, attachmentCounter)
-		require.Equal(t, 1, metadataCounter)
-		require.InDeltaMapValues(t, map[uint16]int{
+		assert.Equal(t, 1, attachmentCounter)
+		assert.Equal(t, 1, metadataCounter)
+		assert.InDeltaMapValues(t, map[uint16]int{
 			1: 100,
 			2: 99,
 			3: 100,
@@ -365,6 +365,6 @@ func TestCompileMatchers(t *testing.T) {
 	matchers, err := compileMatchers([]string{"camera.*", "lights.*"})
 	require.NoError(t, err)
 	assert.Len(t, matchers, 2)
-	require.True(t, matchers[0].MatchString("camera"))
-	require.True(t, matchers[1].MatchString("lights"))
+	assert.True(t, matchers[0].MatchString("camera"))
+	assert.True(t, matchers[1].MatchString("lights"))
 }

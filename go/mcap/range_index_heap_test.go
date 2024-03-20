@@ -77,11 +77,11 @@ func TestMessageOrdering(t *testing.T) {
 				found := false
 				for index, item := range rangeIndexHeapTestItems {
 					if reflect.DeepEqual(item, *poppedItem) {
-						require.Equal(t, c.expectedIndexOrder[i], index)
+						assert.Equal(t, c.expectedIndexOrder[i], index)
 						found = true
 					}
 				}
-				require.True(t, found)
+				assert.True(t, found)
 				i++
 			}
 		})
