@@ -52,7 +52,7 @@ func getAttachment(w io.Writer, rs io.ReadSeeker, idx *mcap.AttachmentIndex) err
 var getAttachmentCmd = &cobra.Command{
 	Use:   "attachment",
 	Short: "Get an attachment by name or offset",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
 			die("Unexpected number of args")
@@ -127,7 +127,7 @@ var getAttachmentCmd = &cobra.Command{
 var addAttachmentCmd = &cobra.Command{
 	Use:   "attachment",
 	Short: "Add an attachment to an MCAP file",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		if len(args) != 1 {
 			die("Unexpected number of args")
 		}

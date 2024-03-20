@@ -143,7 +143,7 @@ func TestMCAPMerging(t *testing.T) {
 				assert.Nil(t, err)
 
 				messages := make(map[string]int)
-				err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
+				err = mcap.Range(it, func(_ *mcap.Schema, channel *mcap.Channel, _ *mcap.Message) error {
 					messages[channel.Topic]++
 					return nil
 				})
@@ -346,7 +346,7 @@ func TestMultiChannelInput(t *testing.T) {
 	it, err := reader.Messages(mcap.UsingIndex(false))
 	assert.Nil(t, err)
 	messages := make(map[string]int)
-	err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
+	err = mcap.Range(it, func(_ *mcap.Schema, channel *mcap.Channel, _ *mcap.Message) error {
 		messages[channel.Topic]++
 		return nil
 	})
@@ -379,7 +379,7 @@ func TestSchemalessChannelInput(t *testing.T) {
 	assert.Nil(t, err)
 	messages := make(map[string]int)
 	schemaIDs := make(map[uint16]int)
-	err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
+	err = mcap.Range(it, func(_ *mcap.Schema, channel *mcap.Channel, _ *mcap.Message) error {
 		messages[channel.Topic]++
 		schemaIDs[channel.SchemaID]++
 		return nil
@@ -432,7 +432,7 @@ func TestMultipleSchemalessChannelSingleInput(t *testing.T) {
 	assert.Nil(t, err)
 	messages := make(map[string]int)
 	schemaIDs := make(map[uint16]int)
-	err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
+	err = mcap.Range(it, func(_ *mcap.Schema, channel *mcap.Channel, _ *mcap.Message) error {
 		messages[channel.Topic]++
 		schemaIDs[channel.SchemaID]++
 		return nil
@@ -519,7 +519,7 @@ func TestSameSchemasNotDuplicated(t *testing.T) {
 	assert.Nil(t, err)
 	schemas := make(map[uint16]bool)
 	var schemaNames []string
-	err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
+	err = mcap.Range(it, func(schema *mcap.Schema, _ *mcap.Channel, _ *mcap.Message) error {
 		_, ok := schemas[schema.ID]
 		if !ok {
 			schemas[schema.ID] = true
@@ -566,7 +566,7 @@ func TestChannelCoalesceBehavior(t *testing.T) {
 		it, err := reader.Messages(mcap.UsingIndex(false))
 		assert.Nil(t, err)
 		messages := make(map[uint16]int)
-		err = mcap.Range(it, func(schema *mcap.Schema, channel *mcap.Channel, message *mcap.Message) error {
+		err = mcap.Range(it, func(_ *mcap.Schema, channel *mcap.Channel, _ *mcap.Message) error {
 			messages[channel.ID]++
 			return nil
 		})

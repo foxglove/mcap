@@ -489,7 +489,7 @@ type namedReader struct {
 var mergeCmd = &cobra.Command{
 	Use:   "merge file1.mcap [file2.mcap] [file3.mcap]...",
 	Short: "Merge a selection of MCAP files by record timestamp",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		if mergeOutputFile == "" && !utils.StdoutRedirected() {
 			die(PleaseRedirect)
 		}

@@ -157,7 +157,7 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 var sortCmd = &cobra.Command{
 	Use:   "sort [file] -o output.mcap",
 	Short: "Read an MCAP file and write the messages out physically sorted on log time",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		if len(args) != 1 {
 			die("supply a file")
 		}

@@ -89,7 +89,7 @@ func TestPassthrough(t *testing.T) {
 		3: 0,
 	}
 	lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
-		AttachmentCallback: func(ar *mcap.AttachmentReader) error {
+		AttachmentCallback: func(*mcap.AttachmentReader) error {
 			attachmentCounter++
 			return nil
 		},
@@ -222,7 +222,7 @@ func TestFiltering(t *testing.T) {
 			attachmentCounter := 0
 			metadataCounter := 0
 			lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
-				AttachmentCallback: func(ar *mcap.AttachmentReader) error {
+				AttachmentCallback: func(*mcap.AttachmentReader) error {
 					attachmentCounter++
 					return nil
 				},
@@ -278,7 +278,7 @@ func TestRecover(t *testing.T) {
 		attachmentCounter := 0
 		metadataCounter := 0
 		lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
-			AttachmentCallback: func(ar *mcap.AttachmentReader) error {
+			AttachmentCallback: func(*mcap.AttachmentReader) error {
 				attachmentCounter++
 				return nil
 			},
@@ -329,7 +329,7 @@ func TestRecover(t *testing.T) {
 		attachmentCounter := 0
 		metadataCounter := 0
 		lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
-			AttachmentCallback: func(ar *mcap.AttachmentReader) error {
+			AttachmentCallback: func(_ *mcap.AttachmentReader) error {
 				attachmentCounter++
 				return nil
 			},
