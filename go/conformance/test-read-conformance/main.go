@@ -45,13 +45,13 @@ func (x Field) MarshalJSON() ([]byte, error) {
 	var v any
 	switch t.Name() {
 	case "string":
-		v = fmt.Sprintf("\"%s\"", x.Value)
+		v = fmt.Sprintf("%q", x.Value)
 	case "uint8", "uint16", "uint32", "uint64":
 		v = fmt.Sprintf("\"%d\"", x.Value)
 	case "OpCode":
 		v = fmt.Sprintf("\"%d\"", x.Value)
 	case "CompressionFormat":
-		v = fmt.Sprintf("\"%s\"", x.Value)
+		v = fmt.Sprintf("%q", x.Value)
 	default:
 		switch t.Kind() {
 		case reflect.Map:
