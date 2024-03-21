@@ -384,9 +384,8 @@ func readIndexed(w io.Writer, filepath string) error {
 
 func main() {
 	filepath := os.Args[1]
-	mode := os.Args[2]
 	var err error
-	if mode == "streamed" {
+	if mode := os.Args[2]; mode == "streamed" {
 		err = readStreamed(os.Stdout, filepath)
 	} else {
 		err = readIndexed(os.Stdout, filepath)
