@@ -9,6 +9,7 @@ import { StreamedReadTestResult } from "../types";
 export default class TypescriptStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "ts-streamed-reader";
   readonly readsDataEnd = true;
+  readonly sortsMessages = false;
 
   supportsVariant(_variant: TestVariant): boolean {
     return true;
