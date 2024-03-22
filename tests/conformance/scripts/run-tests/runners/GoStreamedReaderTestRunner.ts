@@ -1,13 +1,14 @@
 import { exec } from "child_process";
 import { join } from "path";
 import { promisify } from "util";
-import { TestVariant } from "variants/types";
+import { TestFeatures, TestVariant } from "variants/types";
 
 import { StreamedReadTestRunner } from "./TestRunner";
 import { StreamedReadTestResult } from "../types";
 
 export default class GoStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "go-streamed-reader";
+  readonly sortsMessages = true;
 
   async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const { stdout } = await promisify(exec)(`./bin/test-read-conformance ${filePath} streamed`, {
@@ -16,7 +17,10 @@ export default class GoStreamedReaderTestRunner extends StreamedReadTestRunner {
     return JSON.parse(stdout) as StreamedReadTestResult;
   }
 
-  supportsVariant(_variant: TestVariant): boolean {
-    return true;
+  supportsVariant(variant: TestVariant): boolean {
+    return (
+      variant.features.has(TestFeatures.UseChunkIndex) &&
+      variant.features.has(TestFeatures.UseStatistics)
+    );
   }
 }

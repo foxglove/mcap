@@ -169,6 +169,22 @@ type Attachment struct {
 	CRC        uint32
 }
 
+func getInfo(rs io.ReadSeeker) (*mcap.Info, error) {
+	reader, err := mcap.NewReader(rs)
+	if err != nil {
+		return nil, err
+	}
+	info, err := reader.Info()
+	if err != nil {
+		return nil, err
+	}
+	_, err = rs.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
 func readStreamed(w io.Writer, filepath string) error {
 	f, err := os.Open(filepath)
 	if err != nil {
@@ -176,28 +192,29 @@ func readStreamed(w io.Writer, filepath string) error {
 	}
 	defer f.Close()
 	records := []Record{}
-
-	lexer, err := mcap.NewLexer(f, &mcap.LexerOptions{
-		AttachmentCallback: func(ar *mcap.AttachmentReader) error {
-			data, err := io.ReadAll(ar.Data())
-			if err != nil {
-				return err
-			}
-			crc, err := ar.ParsedCRC()
-			if err != nil {
-				return err
-			}
-			parsed := Attachment{
-				LogTime:    ar.LogTime,
-				CreateTime: ar.CreateTime,
-				Name:       ar.Name,
-				MediaType:  ar.MediaType,
-				Data:       data,
-				CRC:        crc,
-			}
-			records = append(records, Record{parsed})
-			return nil
-		},
+	info, err := getInfo(f)
+	if err != nil {
+		return err
+	}
+	lexer, err := mcap.NewOrderedLexer(f, info, 64*1024*1024, func(ar *mcap.AttachmentReader) error {
+		data, err := io.ReadAll(ar.Data())
+		if err != nil {
+			return err
+		}
+		crc, err := ar.ParsedCRC()
+		if err != nil {
+			return err
+		}
+		parsed := Attachment{
+			LogTime:    ar.LogTime,
+			CreateTime: ar.CreateTime,
+			Name:       ar.Name,
+			MediaType:  ar.MediaType,
+			Data:       data,
+			CRC:        crc,
+		}
+		records = append(records, Record{parsed})
+		return nil
 	})
 	if err != nil {
 		return err

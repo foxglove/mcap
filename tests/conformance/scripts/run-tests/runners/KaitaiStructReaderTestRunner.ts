@@ -163,6 +163,7 @@ async function compileMcapClass(): Promise<Mcap> {
 
 export default class KaitaiStructReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "ksy-reader";
+  readonly sortsMessages = false;
 
   supportsVariant(_variant: TestVariant): boolean {
     return true;

@@ -8,6 +8,7 @@ import { StreamedReadTestResult } from "../types";
 
 export default class RustReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "rust-streamed-reader";
+  readonly sortsMessages = false;
 
   async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const { stdout } = await promisify(exec)(`./conformance_reader ${filePath}`, {

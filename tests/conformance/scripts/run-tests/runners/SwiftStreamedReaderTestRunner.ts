@@ -8,6 +8,7 @@ import { StreamedReadTestResult } from "../types";
 
 export default class SwiftStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "swift-streamed-reader";
+  readonly sortsMessages = false;
 
   async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const { stdout } = await promisify(exec)(

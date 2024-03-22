@@ -8,6 +8,7 @@ import {
 
 export abstract class StreamedReadTestRunner {
   abstract readonly name: string;
+  abstract readonly sortsMessages: boolean;
 
   /**
    * @returns true if the test variant is supported; false if it is not. If this method returns
@@ -24,8 +25,55 @@ export abstract class StreamedReadTestRunner {
   abstract runReadTest(filePath: string): Promise<StreamedReadTestResult>;
 
   expectedResult(testCase: TestCase): StreamedReadTestResult {
+    if (this.sortsMessages) {
+      return { records: sortMessageRecords(testCase.records) };
+    }
     return { records: testCase.records };
   }
+}
+
+export function sortMessageRecords(records: SerializableMcapRecord[]): SerializableMcapRecord[] {
+  let firstMessage: number | undefined;
+  let lastMessage: number | undefined;
+  for (let i = 0; i < records.length; i++) {
+    const recordType = records[i]?.type;
+    if (recordType === "Message" && firstMessage == undefined) {
+      firstMessage = i;
+    }
+    if (firstMessage != undefined && recordType !== "Message") {
+      lastMessage = i;
+      break;
+    }
+  }
+  if (firstMessage == undefined) {
+    return records;
+  }
+  if (lastMessage == undefined) {
+    return records;
+  }
+  const leader = records.slice(0, firstMessage);
+  const messages = records.slice(firstMessage, lastMessage);
+  const trailer = records.slice(lastMessage);
+  messages.sort((a, b) => {
+    const timeA = findLogTime(a);
+    const timeB = findLogTime(b);
+    if (timeA > timeB) {
+      return 1;
+    } else if (timeA < timeB) {
+      return -1;
+    }
+    return 0;
+  });
+  return leader.concat(messages).concat(trailer);
+}
+
+function findLogTime(record: SerializableMcapRecord): bigint {
+  for (const [fieldName, fieldValue] of record.fields) {
+    if (fieldName === "log_time") {
+      return BigInt(fieldValue as string);
+    }
+  }
+  throw new Error(`could not find 'log_time' field on record: ${JSON.stringify(record)}`);
 }
 
 export abstract class IndexedReadTestRunner {
@@ -53,15 +101,6 @@ export abstract class IndexedReadTestRunner {
         }
       }
       throw new Error(`could not find 'id' field on record: ${JSON.stringify(record)}`);
-    }
-
-    function findLogTime(record: SerializableMcapRecord): bigint {
-      for (const [fieldName, fieldValue] of record.fields) {
-        if (fieldName === "log_time") {
-          return BigInt(fieldValue as string);
-        }
-      }
-      throw new Error(`could not find 'log_time' field on record: ${JSON.stringify(record)}`);
     }
 
     const result: IndexedReadTestResult = {
