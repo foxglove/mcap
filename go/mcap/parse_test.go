@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseHeader(t *testing.T) {
@@ -39,7 +40,7 @@ func TestParseHeader(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			output, err := ParseHeader(c.input)
-			assert.ErrorIs(t, err, c.err)
+			require.ErrorIs(t, err, c.err)
 			assert.Equal(t, output, c.output)
 		})
 	}
@@ -105,7 +106,7 @@ func TestParseMetadata(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			output, err := ParseMetadata(c.input)
-			assert.ErrorIs(t, err, c.err)
+			require.ErrorIs(t, err, c.err)
 			assert.Equal(t, output, c.output)
 		})
 	}
@@ -150,7 +151,7 @@ func TestParseMetadataIndex(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			output, err := ParseMetadataIndex(c.input)
-			assert.ErrorIs(t, err, c.err)
+			require.ErrorIs(t, err, c.err)
 			assert.Equal(t, output, c.output)
 		})
 	}
@@ -195,7 +196,7 @@ func TestParseFooter(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			output, err := ParseFooter(c.input)
-			assert.ErrorIs(t, err, c.err)
+			require.ErrorIs(t, err, c.err)
 			assert.Equal(t, output, c.output)
 		})
 	}
@@ -252,7 +253,7 @@ func TestParseSchema(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			output, err := ParseSchema(c.input)
-			assert.ErrorIs(t, err, c.err)
+			require.ErrorIs(t, err, c.err)
 			assert.Equal(t, output, c.output)
 		})
 	}

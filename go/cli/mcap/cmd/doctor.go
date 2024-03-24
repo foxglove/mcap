@@ -269,7 +269,7 @@ func (doctor *mcapDoctor) Examine() error {
 				doctor.warn("Set the Header.library field to a value that identifies the software that produced the file.")
 			}
 
-			if len(header.Profile) > 0 && header.Profile != "ros1" && header.Profile != "ros2" {
+			if header.Profile != "" && header.Profile != "ros1" && header.Profile != "ros2" {
 				doctor.warn(`Header.profile field "%s" is not a well-known profile.`, header.Profile)
 			}
 		case mcap.TokenFooter:

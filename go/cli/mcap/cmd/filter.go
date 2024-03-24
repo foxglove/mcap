@@ -413,7 +413,7 @@ usage:
 			"zstd",
 			"compression algorithm to use on output file",
 		)
-		filterCmd.Run = func(cmd *cobra.Command, args []string) {
+		filterCmd.Run = func(_ *cobra.Command, args []string) {
 			filterOptions, err := buildFilterOptions(&filterFlags{
 				output:             *output,
 				includeTopics:      *includeTopics,
@@ -449,7 +449,7 @@ usage:
 			"zstd",
 			"compression algorithm to use on output file",
 		)
-		recoverCmd.Run = func(cmd *cobra.Command, args []string) {
+		recoverCmd.Run = func(_ *cobra.Command, args []string) {
 			filterOptions, err := buildFilterOptions(&filterFlags{
 				output:             *output,
 				chunkSize:          *chunkSize,
@@ -482,7 +482,7 @@ usage:
 			"zstd",
 			"compression algorithm to use on output file",
 		)
-		compressCmd.Run = func(cmd *cobra.Command, args []string) {
+		compressCmd.Run = func(_ *cobra.Command, args []string) {
 			filterOptions, err := buildFilterOptions(&filterFlags{
 				output:             *output,
 				chunkSize:          *chunkSize,
@@ -509,7 +509,7 @@ usage:
 		}
 		output := decompressCmd.PersistentFlags().StringP("output", "o", "", "output filename")
 		chunkSize := decompressCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
-		decompressCmd.Run = func(cmd *cobra.Command, args []string) {
+		decompressCmd.Run = func(_ *cobra.Command, args []string) {
 			filterOptions, err := buildFilterOptions(&filterFlags{
 				output:             *output,
 				chunkSize:          *chunkSize,

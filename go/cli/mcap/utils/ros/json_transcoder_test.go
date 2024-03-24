@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestJSONTranscoding(t *testing.T) {
@@ -174,9 +175,9 @@ func TestJSONTranscoding(t *testing.T) {
 			definition := []byte(c.messageDefinition)
 			buf := &bytes.Buffer{}
 			transcoder, err := NewJSONTranscoder(c.parentPackage, definition)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			err = transcoder.Transcode(buf, bytes.NewReader(c.input))
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, c.expectedJSON, buf.String())
 		})
 	}
@@ -184,7 +185,7 @@ func TestJSONTranscoding(t *testing.T) {
 
 func TestSingleRecordConversion(t *testing.T) {
 	transcoder, err := NewJSONTranscoder("", nil)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	cases := []struct {
 		assertion     string
 		parentPackage string
@@ -527,7 +528,7 @@ func TestSingleRecordConversion(t *testing.T) {
 			buf := &bytes.Buffer{}
 			converter := transcoder.record(c.fields)
 			err := converter(buf, bytes.NewBuffer(c.input))
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, c.output, buf.String())
 		})
 	}

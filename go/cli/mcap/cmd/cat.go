@@ -294,7 +294,7 @@ func printMessages(
 var catCmd = &cobra.Command{
 	Use:   "cat [file]",
 	Short: "Cat the messages in an MCAP file to stdout",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		stat, err := os.Stdin.Stat()
 		if err != nil {
@@ -329,7 +329,7 @@ var catCmd = &cobra.Command{
 			die("supply a file")
 		}
 		filename := args[0]
-		err = utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
+		err = utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
 			reader, err := mcap.NewReader(rs)
 			if err != nil {
 				return fmt.Errorf("failed to create reader: %w", err)

@@ -12,13 +12,14 @@ import (
 	"github.com/foxglove/go-rosbag"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBag2MCAPPreservesChannelMetadata(t *testing.T) {
 	inputFile := "./testdata/markers.bag"
 	expectedKeys := []string{"md5sum", "topic"}
 	f, err := os.Open(inputFile)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	writer := &bytes.Buffer{}
 	err = Bag2MCAP(writer, f, &mcap.WriterOptions{
 		IncludeCRC:  true,
@@ -26,20 +27,20 @@ func TestBag2MCAPPreservesChannelMetadata(t *testing.T) {
 		ChunkSize:   4 * 1024 * 1024,
 		Compression: mcap.CompressionNone,
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	lexer, err := mcap.NewLexer(writer)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	channelCount := 0
 	for {
 		tokenType, token, err := lexer.Next(nil)
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		switch tokenType {
 		case mcap.TokenChannel:
 			ch, err := mcap.ParseChannel(token)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, len(expectedKeys), len(ch.Metadata))
 			for _, k := range expectedKeys {
 				assert.Contains(t, ch.Metadata, k)
@@ -54,9 +55,9 @@ func TestBag2MCAPPreservesChannelMetadata(t *testing.T) {
 func TestDeduplicatesSchemas(t *testing.T) {
 	buf := &bytes.Buffer{}
 	bw, err := rosbag.NewWriter(buf)
-	assert.Nil(t, err)
-	assert.Nil(t, bw.WriteBagHeader(rosbag.BagHeader{}))
-	assert.Nil(t, bw.WriteConnection(&rosbag.Connection{
+	require.NoError(t, err)
+	require.NoError(t, bw.WriteBagHeader(rosbag.BagHeader{}))
+	require.NoError(t, bw.WriteConnection(&rosbag.Connection{
 		Conn:  0,
 		Topic: "yo",
 		Data: rosbag.ConnectionHeader{
@@ -65,7 +66,7 @@ func TestDeduplicatesSchemas(t *testing.T) {
 			MD5Sum: "123",
 		},
 	}))
-	assert.Nil(t, bw.WriteConnection(&rosbag.Connection{
+	require.NoError(t, bw.WriteConnection(&rosbag.Connection{
 		Conn:  1,
 		Topic: "yoo",
 		Data: rosbag.ConnectionHeader{
@@ -74,20 +75,20 @@ func TestDeduplicatesSchemas(t *testing.T) {
 			MD5Sum: "123",
 		},
 	}))
-	assert.Nil(t, bw.WriteMessage(&rosbag.Message{
+	require.NoError(t, bw.WriteMessage(&rosbag.Message{
 		Conn: 0,
 		Time: 0,
 		Data: []byte{},
 	}))
-	assert.Nil(t, bw.WriteMessage(&rosbag.Message{
+	require.NoError(t, bw.WriteMessage(&rosbag.Message{
 		Conn: 1,
 		Time: 0,
 		Data: []byte{},
 	}))
-	assert.Nil(t, bw.Close())
+	require.NoError(t, bw.Close())
 
 	output := &bytes.Buffer{}
-	assert.Nil(t, Bag2MCAP(output, buf, &mcap.WriterOptions{
+	require.NoError(t, Bag2MCAP(output, buf, &mcap.WriterOptions{
 		IncludeCRC: true,
 		Chunked:    true,
 		ChunkSize:  1024,
@@ -95,10 +96,10 @@ func TestDeduplicatesSchemas(t *testing.T) {
 
 	rs := bytes.NewReader(output.Bytes())
 	reader, err := mcap.NewReader(rs)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	info, err := reader.Info()
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 2, int(info.Statistics.ChannelCount))
 	assert.Equal(t, 1, int(info.Statistics.SchemaCount))
 }
@@ -121,9 +122,9 @@ func BenchmarkBag2MCAP(b *testing.B) {
 	}
 	for _, c := range cases {
 		stats, err := os.Stat(c.inputfile)
-		assert.Nil(b, err)
+		require.NoError(b, err)
 		input, err := os.ReadFile(c.inputfile)
-		assert.Nil(b, err)
+		require.NoError(b, err)
 		reader := &bytes.Reader{}
 		writer := bytes.NewBuffer(make([]byte, 4*1024*1024*1024))
 		b.ResetTimer()
@@ -133,7 +134,7 @@ func BenchmarkBag2MCAP(b *testing.B) {
 				reader.Reset(input)
 				writer.Reset()
 				err = Bag2MCAP(writer, reader, opts)
-				assert.Nil(b, err)
+				require.NoError(b, err)
 				elapsed := time.Since(t0)
 				megabytesRead := stats.Size() / (1024 * 1024)
 				b.ReportMetric(float64(megabytesRead)/elapsed.Seconds(), "MB/sec")
@@ -145,7 +146,7 @@ func BenchmarkBag2MCAP(b *testing.B) {
 func TestConvertsBz2(t *testing.T) {
 	inputfile := "testdata/markers.bz2.bag"
 	f, err := os.Open(inputfile)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	opts := &mcap.WriterOptions{
 		IncludeCRC:  true,
 		Chunked:     true,
@@ -153,12 +154,12 @@ func TestConvertsBz2(t *testing.T) {
 		Compression: "",
 	}
 	output := &bytes.Buffer{}
-	assert.Nil(t, Bag2MCAP(output, f, opts))
+	require.NoError(t, Bag2MCAP(output, f, opts))
 
 	reader, err := mcap.NewReader(bytes.NewReader(output.Bytes()))
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	info, err := reader.Info()
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 10, int(info.Statistics.MessageCount))
 }
 
@@ -191,7 +192,7 @@ func TestChannelIdForConnection(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.label, func(t *testing.T) {
 			channelID, err := channelIDForConnection(c.connID)
-			assert.ErrorIs(t, err, c.expectedErr)
+			require.ErrorIs(t, err, c.expectedErr)
 			assert.Equal(t, c.expectedChannelID, channelID)
 		})
 	}

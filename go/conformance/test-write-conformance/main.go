@@ -1,3 +1,4 @@
+//nolint:goconst // input field names are repeated but it's harder to read out of line constants
 package main
 
 import (
@@ -5,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strconv"
 
@@ -130,7 +130,7 @@ func parseUint64(s string) (uint64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse uint64: %w", err)
 	}
-	return uint64(x), nil
+	return x, nil
 }
 
 func parseUint32(s string) (uint32, error) {
@@ -141,7 +141,7 @@ func parseUint32(s string) (uint32, error) {
 	return uint32(x), nil
 }
 
-func parseHeader(fields []InputField) (*mcap.Header, error) {
+func parseHeader(fields []InputField) *mcap.Header {
 	header := mcap.Header{}
 	for _, field := range fields {
 		switch field.Name {
@@ -151,8 +151,9 @@ func parseHeader(fields []InputField) (*mcap.Header, error) {
 			header.Library = field.Value.(string)
 		}
 	}
-	return &header, nil
+	return &header
 }
+
 func parseSchema(fields []InputField) (*mcap.Schema, error) {
 	schema := mcap.Schema{}
 	for _, field := range fields {
@@ -295,9 +296,9 @@ func parseMetadata(fields []InputField) (*mcap.Metadata, error) {
 		case "name":
 			metadata.Name = field.Value.(string)
 		case "metadata":
-			metadataJson := field.Value.(map[string]any)
+			metadataJSON := field.Value.(map[string]any)
 			m := make(map[string]string)
-			for k, v := range metadataJson {
+			for k, v := range metadataJSON {
 				m[k] = v.(string)
 			}
 			metadata.Metadata = m
@@ -307,25 +308,9 @@ func parseMetadata(fields []InputField) (*mcap.Metadata, error) {
 	}
 	return &metadata, nil
 }
-func parseDataEnd(fields []InputField) (*mcap.DataEnd, error) {
-	dataEnd := mcap.DataEnd{}
-	for _, field := range fields {
-		switch field.Name {
-		case "data_section_crc":
-			crc, err := parseUint32(field.Value.(string))
-			if err != nil {
-				return nil, err
-			}
-			dataEnd.DataSectionCRC = crc
-		default:
-			return nil, UnknownField(field.Name)
-		}
-	}
-	return &dataEnd, nil
-}
 
 func jsonToMCAP(w io.Writer, filepath string) error {
-	input, err := ioutil.ReadFile(filepath)
+	input, err := os.ReadFile(filepath)
 	if err != nil {
 		return err
 	}
@@ -349,11 +334,8 @@ func jsonToMCAP(w io.Writer, filepath string) error {
 	for _, record := range textInput.Records {
 		switch record.Type {
 		case "Header":
-			header, err := parseHeader(record.Fields)
-			if err != nil {
-				return err
-			}
-			err = writer.WriteHeader(header)
+			header := parseHeader(record.Fields)
+			err := writer.WriteHeader(header)
 			if err != nil {
 				return err
 			}

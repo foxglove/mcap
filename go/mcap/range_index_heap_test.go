@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var rangeIndexHeapTestItems = []rangeIndex{
@@ -66,13 +67,13 @@ func TestMessageOrdering(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			h := &rangeIndexHeap{order: c.order}
 			for _, item := range rangeIndexHeapTestItems {
-				assert.Nil(t, h.HeapPush(item))
+				require.NoError(t, h.HeapPush(item))
 			}
-			assert.Equal(t, h.Len(), len(rangeIndexHeapTestItems))
+			assert.Len(t, rangeIndexHeapTestItems, h.Len())
 			i := 0
 			for h.Len() > 0 {
 				poppedItem, err := h.HeapPop()
-				assert.Nil(t, err)
+				require.NoError(t, err)
 				found := false
 				for index, item := range rangeIndexHeapTestItems {
 					if reflect.DeepEqual(item, *poppedItem) {

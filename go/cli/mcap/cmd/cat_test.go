@@ -8,6 +8,7 @@ import (
 
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCat(t *testing.T) {
@@ -29,17 +30,17 @@ func TestCat(t *testing.T) {
 	}
 	for _, c := range cases {
 		input, err := os.ReadFile(c.inputfile)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		w := new(bytes.Buffer)
 		r := bytes.NewReader(input)
 		t.Run(c.assertion, func(t *testing.T) {
 			reader, err := mcap.NewReader(r)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			defer reader.Close()
 			it, err := reader.Messages()
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			err = printMessages(w, it, false)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			r.Reset(input)
 			assert.Equal(t, c.expected, w.String())
 		})
@@ -60,19 +61,19 @@ func BenchmarkCat(b *testing.B) {
 	}
 	for _, c := range cases {
 		input, err := os.ReadFile(c.inputfile)
-		assert.Nil(b, err)
+		require.NoError(b, err)
 		w := io.Discard
 		r := bytes.NewReader(input)
 		b.Run(c.assertion, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				func() {
 					reader, err := mcap.NewReader(r)
-					assert.Nil(b, err)
+					require.NoError(b, err)
 					defer reader.Close()
 					it, err := reader.Messages()
-					assert.Nil(b, err)
+					require.NoError(b, err)
 					err = printMessages(w, it, c.formatJSON)
-					assert.Nil(b, err)
+					require.NoError(b, err)
 					r.Reset(input)
 				}()
 			}
