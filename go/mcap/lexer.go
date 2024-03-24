@@ -55,13 +55,37 @@ func (e *ErrTruncatedRecord) Unwrap() error {
 	return io.ErrUnexpectedEOF
 }
 
-// ErrBadMagic indicates the lexer has detected invalid magic bytes.
+type magicLocation int
+
+const (
+	magicLocationStart magicLocation = iota
+	magicLocationEnd
+)
+
+func (m magicLocation) String() string {
+	switch m {
+	case magicLocationStart:
+		return "start"
+	case magicLocationEnd:
+		return "end"
+	default:
+		return "unknown"
+	}
+}
+
+// ErrBadMagic indicates invalid magic bytes were detected.
 type ErrBadMagic struct {
-	actual []byte
+	location magicLocation
+	actual   []byte
 }
 
 func (e *ErrBadMagic) Error() string {
-	return fmt.Sprintf("Invalid magic at start of file, found: %v", e.actual)
+	return fmt.Sprintf("Invalid magic at %s of file, found: %v", e.location, e.actual)
+}
+
+func (e *ErrBadMagic) Is(err error) bool {
+	_, ok := err.(*ErrBadMagic)
+	return ok
 }
 
 const (
@@ -311,13 +335,13 @@ type decoders struct {
 	none *bytes.Reader
 }
 
-func validateMagic(r io.Reader) error {
+func validateMagic(r io.Reader, location magicLocation) error {
 	magic := make([]byte, len(Magic))
 	if readLen, err := io.ReadFull(r, magic); err != nil {
-		return &ErrBadMagic{actual: magic[:readLen]}
+		return &ErrBadMagic{actual: magic[:readLen], location: location}
 	}
 	if !bytes.Equal(magic, Magic) {
-		return &ErrBadMagic{actual: magic}
+		return &ErrBadMagic{actual: magic, location: location}
 	}
 	return nil
 }
@@ -530,7 +554,7 @@ func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 		decompressors = opts[0].Decompressors
 	}
 	if !skipMagic {
-		err := validateMagic(r)
+		err := validateMagic(r, magicLocationStart)
 		if err != nil {
 			return nil, err
 		}
