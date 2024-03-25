@@ -112,6 +112,11 @@ const config = {
             label: "Specification",
           },
           {
+            href: "https://foxglove.dev",
+            label: "Foxglove",
+            position: "right",
+          },
+          {
             href: "https://foxglove.dev/slack",
             label: "Slack",
             position: "right",
@@ -168,8 +173,8 @@ const config = {
             title: "Enterprise",
             items: [
               {
-                label: "Foxglove Data Platform",
-                href: "https://foxglove.dev/data-platform",
+                label: "Foxglove",
+                href: "https://foxglove.dev/product",
               },
             ],
           },
