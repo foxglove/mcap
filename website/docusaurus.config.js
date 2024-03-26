@@ -168,8 +168,8 @@ const config = {
             title: "Enterprise",
             items: [
               {
-                label: "Foxglove Data Platform",
-                href: "https://foxglove.dev/data-platform",
+                label: "Foxglove",
+                href: "https://foxglove.dev/",
               },
             ],
           },
