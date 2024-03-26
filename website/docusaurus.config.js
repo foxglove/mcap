@@ -112,11 +112,6 @@ const config = {
             label: "Specification",
           },
           {
-            href: "https://foxglove.dev",
-            label: "Foxglove",
-            position: "right",
-          },
-          {
             href: "https://foxglove.dev/slack",
             label: "Slack",
             position: "right",
