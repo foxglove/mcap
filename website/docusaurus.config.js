@@ -169,7 +169,7 @@ const config = {
             items: [
               {
                 label: "Foxglove",
-                href: "https://foxglove.dev/product",
+                href: "https://foxglove.dev/",
               },
             ],
           },
