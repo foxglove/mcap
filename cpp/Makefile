@@ -22,7 +22,7 @@ clean:
 	docker rmi -f mcap_cpp_ci_jammy
 	rm -rf bench/build
 	rm -rf examples/build
-	rm -rf test/build
+	rm -rf build
 
 .PHONY: format-check
 format-check: dev-image
@@ -46,8 +46,8 @@ test: dev-image
 
 .PHONY: test-host
 test-host:
-	./test/build/Debug/bin/unit-tests
-	./test/build/Debug/bin/unit-tests-nocompress
+	./build/test/unit-tests
+	./build/test/unit-tests-nocompress
 
 .PHONY: hdoc-build
 hdoc-build:
@@ -71,7 +71,7 @@ test-examples-host:
 
 .PHONY: ci-image
 ci-image: hdoc-build
-	docker build -t mcap_cpp_ci -f ci.Dockerfile --build-arg IMAGE=ubuntu:focal --build-arg CC=clang-13 --build-arg CXX=clang++-13 .
+	docker build -t mcap_cpp_ci -f ci.Dockerfile --build-arg IMAGE=ubuntu:jammy --build-arg CC=clang-13 --build-arg CXX=clang++-13 .
 
 .PHONY: ci
 ci: ci-image
