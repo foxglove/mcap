@@ -49,6 +49,42 @@ function makeReadable(data: Uint8Array) {
   };
 }
 
+function writeChunkWithMessageIndexes(
+  builder: McapRecordBuilder,
+  chunk: ChunkBuilder,
+): TypedMcapRecords["ChunkIndex"] {
+  const chunkStartOffset = BigInt(builder.length);
+  const chunkLength = builder.writeChunk({
+    messageStartTime: chunk.messageStartTime,
+    messageEndTime: chunk.messageEndTime,
+    uncompressedSize: BigInt(chunk.buffer.length),
+    uncompressedCrc: 0,
+    compression: "",
+    records: chunk.buffer,
+  });
+
+  const messageIndexStart = BigInt(builder.length);
+  let messageIndexLength = 0n;
+  const chunkMessageIndexOffsets = new Map<number, bigint>();
+  for (const messageIndex of chunk.indices) {
+    chunkMessageIndexOffsets.set(messageIndex.channelId, messageIndexStart + messageIndexLength);
+    messageIndexLength += builder.writeMessageIndex(messageIndex);
+  }
+
+  return {
+    type: "ChunkIndex",
+    messageStartTime: chunk.messageStartTime,
+    messageEndTime: chunk.messageEndTime,
+    chunkStartOffset,
+    chunkLength,
+    messageIndexOffsets: chunkMessageIndexOffsets,
+    messageIndexLength,
+    compression: "",
+    compressedSize: BigInt(chunk.buffer.byteLength),
+    uncompressedSize: BigInt(chunk.buffer.byteLength),
+  };
+}
+
 describe("McapIndexedReader", () => {
   it("rejects files that are too small", async () => {
     await expect(
@@ -487,46 +523,10 @@ describe("McapIndexedReader", () => {
     builder.writeHeader({ profile: "", library: "" });
 
     const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
-    function writeChunk(chunk: ChunkBuilder) {
-      const chunkStartOffset = BigInt(builder.length);
-      const chunkLength = builder.writeChunk({
-        messageStartTime: chunk.messageStartTime,
-        messageEndTime: chunk.messageEndTime,
-        uncompressedSize: BigInt(chunk.buffer.length),
-        uncompressedCrc: 0,
-        compression: "",
-        records: chunk.buffer,
-      });
-
-      const messageIndexStart = BigInt(builder.length);
-      let messageIndexLength = 0n;
-      const chunkMessageIndexOffsets = new Map<number, bigint>();
-      for (const messageIndex of chunk.indices) {
-        chunkMessageIndexOffsets.set(
-          messageIndex.channelId,
-          messageIndexStart + messageIndexLength,
-        );
-        messageIndexLength += builder.writeMessageIndex(messageIndex);
-      }
-
-      chunkIndexes.push({
-        type: "ChunkIndex",
-        messageStartTime: chunk.messageStartTime,
-        messageEndTime: chunk.messageEndTime,
-        chunkStartOffset,
-        chunkLength,
-        messageIndexOffsets: chunkMessageIndexOffsets,
-        messageIndexLength,
-        compression: "",
-        compressedSize: BigInt(chunk.buffer.byteLength),
-        uncompressedSize: BigInt(chunk.buffer.byteLength),
-      });
-    }
-
-    writeChunk(chunk1);
-    writeChunk(chunk2);
-    writeChunk(chunk3);
-    writeChunk(chunk4);
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk1));
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk2));
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk3));
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk4));
 
     builder.writeDataEnd({ dataSectionCrc: 0 });
 
@@ -548,6 +548,73 @@ describe("McapIndexedReader", () => {
       message5,
       message6,
     ]);
+  });
+
+  it("supports reading topics that only occur in some chunks", async () => {
+    const channel1: TypedMcapRecords["Channel"] = {
+      type: "Channel",
+      id: 1,
+      schemaId: 0,
+      topic: "a",
+      messageEncoding: "utf12",
+      metadata: new Map(),
+    };
+    const channel2: TypedMcapRecords["Channel"] = {
+      type: "Channel",
+      id: 2,
+      schemaId: 0,
+      topic: "b",
+      messageEncoding: "utf13",
+      metadata: new Map(),
+    };
+
+    const message1: TypedMcapRecords["Message"] = {
+      type: "Message",
+      channelId: channel1.id,
+      sequence: 0,
+      logTime: 0n,
+      publishTime: 0n,
+      data: new Uint8Array(),
+    };
+    const message2: TypedMcapRecords["Message"] = {
+      type: "Message",
+      channelId: channel2.id,
+      sequence: 0,
+      logTime: 1n,
+      publishTime: 1n,
+      data: new Uint8Array(),
+    };
+
+    const chunk1 = new ChunkBuilder({ useMessageIndex: true });
+    chunk1.addChannel(channel1);
+    chunk1.addMessage(message1);
+
+    const chunk2 = new ChunkBuilder({ useMessageIndex: true });
+    chunk2.addChannel(channel2);
+    chunk2.addMessage(message2);
+
+    const builder = new McapRecordBuilder();
+    builder.writeMagic();
+    builder.writeHeader({ profile: "", library: "" });
+
+    const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk1));
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk2));
+
+    builder.writeDataEnd({ dataSectionCrc: 0 });
+
+    const summaryStart = BigInt(builder.length);
+    builder.writeChannel(channel1);
+    builder.writeChannel(channel2);
+    for (const index of chunkIndexes) {
+      builder.writeChunkIndex(index);
+    }
+
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeMagic();
+
+    const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
+    await expect(collect(reader.readMessages({ topics: ["b"] }))).resolves.toEqual([message2]);
   });
 
   it("uses stable sort when loading overlapping chunks", async () => {
@@ -599,45 +666,9 @@ describe("McapIndexedReader", () => {
     builder.writeHeader({ profile: "", library: "" });
 
     const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
-    function writeChunk(chunk: ChunkBuilder) {
-      const chunkStartOffset = BigInt(builder.length);
-      const chunkLength = builder.writeChunk({
-        messageStartTime: chunk.messageStartTime,
-        messageEndTime: chunk.messageEndTime,
-        uncompressedSize: BigInt(chunk.buffer.length),
-        uncompressedCrc: 0,
-        compression: "",
-        records: chunk.buffer,
-      });
-
-      const messageIndexStart = BigInt(builder.length);
-      let messageIndexLength = 0n;
-      const chunkMessageIndexOffsets = new Map<number, bigint>();
-      for (const messageIndex of chunk.indices) {
-        chunkMessageIndexOffsets.set(
-          messageIndex.channelId,
-          messageIndexStart + messageIndexLength,
-        );
-        messageIndexLength += builder.writeMessageIndex(messageIndex);
-      }
-
-      chunkIndexes.push({
-        type: "ChunkIndex",
-        messageStartTime: chunk.messageStartTime,
-        messageEndTime: chunk.messageEndTime,
-        chunkStartOffset,
-        chunkLength,
-        messageIndexOffsets: chunkMessageIndexOffsets,
-        messageIndexLength,
-        compression: "",
-        compressedSize: BigInt(chunk.buffer.byteLength),
-        uncompressedSize: BigInt(chunk.buffer.byteLength),
-      });
-    }
-
-    writeChunk(chunk1);
-    writeChunk(chunk2);
-    writeChunk(chunk3);
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk1));
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk2));
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk3));
 
     builder.writeDataEnd({ dataSectionCrc: 0 });
 
@@ -776,44 +807,8 @@ describe("McapIndexedReader", () => {
     builder.writeHeader({ profile: "", library: "" });
 
     const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
-    function writeChunk(chunk: ChunkBuilder) {
-      const chunkStartOffset = BigInt(builder.length);
-      const chunkLength = builder.writeChunk({
-        messageStartTime: chunk.messageStartTime,
-        messageEndTime: chunk.messageEndTime,
-        uncompressedSize: BigInt(chunk.buffer.length),
-        uncompressedCrc: 0,
-        compression: "",
-        records: chunk.buffer,
-      });
-
-      const messageIndexStart = BigInt(builder.length);
-      let messageIndexLength = 0n;
-      const chunkMessageIndexOffsets = new Map<number, bigint>();
-      for (const messageIndex of chunk.indices) {
-        chunkMessageIndexOffsets.set(
-          messageIndex.channelId,
-          messageIndexStart + messageIndexLength,
-        );
-        messageIndexLength += builder.writeMessageIndex(messageIndex);
-      }
-
-      chunkIndexes.push({
-        type: "ChunkIndex",
-        messageStartTime: chunk.messageStartTime,
-        messageEndTime: chunk.messageEndTime,
-        chunkStartOffset,
-        chunkLength,
-        messageIndexOffsets: chunkMessageIndexOffsets,
-        messageIndexLength,
-        compression: "",
-        compressedSize: BigInt(chunk.buffer.byteLength),
-        uncompressedSize: BigInt(chunk.buffer.byteLength),
-      });
-    }
-
-    writeChunk(chunk1);
-    writeChunk(chunk2);
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk1));
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk2));
 
     builder.writeDataEnd({ dataSectionCrc: 0 });
 

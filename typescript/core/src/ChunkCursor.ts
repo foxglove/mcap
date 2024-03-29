@@ -120,6 +120,7 @@ export class ChunkCursor {
       }
     }
     if (messageIndexStartOffset == undefined || relevantMessageIndexStartOffset == undefined) {
+      this.#orderedMessageOffsets = [];
       return;
     }
 
