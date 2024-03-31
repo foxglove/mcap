@@ -65,6 +65,8 @@ const config = {
       },
     }),
     () => {
+      // determines the current CLI download link to display by fetching the latest tag matching
+      // releases/mcap-cli/* at build time.
       return {
         name: "latestCLIReleaseTag",
         async loadContent() {
