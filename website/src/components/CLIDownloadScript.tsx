@@ -4,9 +4,12 @@ import React from "react";
 
 export default function CLIDownloadScript(): JSX.Element {
   const latestVersion = usePluginData("latestCLIReleaseTag") as { tag: string };
-  const shell = `wget https://github.com/foxglove/mcap/releases/download/${encodeURIComponent(
-    latestVersion.tag,
-  )}/mcap-linux-$(arch) -O mcap`;
+  const tag = encodeURIComponent(latestVersion.tag);
 
-  return <CodeBlock language="bash">$ {shell}</CodeBlock>;
+  return (
+    <CodeBlock language="bash">
+      $ wget https://github.com/foxglove/mcap/releases/download/{tag}
+      /mcap-linux-$(arch) -O mcap
+    </CodeBlock>
+  );
 }
