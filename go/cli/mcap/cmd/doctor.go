@@ -183,9 +183,15 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 				doctor.error("Got a Message record for channel: %d before a channel info.", message.ChannelID)
 			}
 
-			if strictMessageOrder && message.LogTime < doctor.maxLogTime {
-				doctor.error("Message.log_time %d on %s is less than the oldest log time %d",
+			if message.LogTime < doctor.maxLogTime {
+				errStr := fmt.Sprintf("Message.log_time %d on %s is less than the oldest log time %d",
 					message.LogTime, channel.Topic, doctor.maxLogTime)
+				if strictMessageOrder {
+					doctor.error(errStr)
+				} else {
+					doctor.warn(errStr)
+				}
+
 			}
 
 			if message.LogTime < minLogTime {
