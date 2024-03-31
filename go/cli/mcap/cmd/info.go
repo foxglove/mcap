@@ -181,14 +181,14 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 var infoCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Report statistics about an MCAP file",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
 			die("Unexpected number of args")
 		}
 		// check if it's a remote file
 		filename := args[0]
-		err := utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
+		err := utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
 			reader, err := mcap.NewReader(rs)
 			if err != nil {
 				return fmt.Errorf("failed to get reader: %w", err)

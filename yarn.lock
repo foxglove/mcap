@@ -2872,6 +2872,7 @@ __metadata:
     eslint-plugin-prettier: 5.0.1
     js-yaml: 4.1.0
     json-stable-stringify: 1.0.2
+    json-stringify-pretty-compact: 4.0.0
     kaitai-struct: 0.10.0
     kaitai-struct-compiler: 0.10.0
     lodash: 4.17.21
@@ -10724,6 +10725,13 @@ __metadata:
   dependencies:
     jsonify: ^0.0.1
   checksum: ec10863493fb728481ed7576551382768a173d5b884758db530def00523b862083a3fd70fee24b39e2f47f5f502e22f9a1489dd66da3535b63bf6241dbfca800
+  languageName: node
+  linkType: hard
+
+"json-stringify-pretty-compact@npm:4.0.0":
+  version: 4.0.0
+  resolution: "json-stringify-pretty-compact@npm:4.0.0"
+  checksum: a10d5c423e467872994a49c5c1b56b073f277ce02d899cf567fc625f3783b89406bee6408bfb3b4bdeeff509b6a562f5259227e26754a6186f721809ca895f0c
   languageName: node
   linkType: hard
 

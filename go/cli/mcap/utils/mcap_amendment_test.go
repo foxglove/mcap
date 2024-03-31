@@ -8,6 +8,7 @@ import (
 	"github.com/foxglove/mcap/go/cli/mcap/testutils"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAmendsIndexedFile(t *testing.T) {
@@ -17,15 +18,15 @@ func TestAmendsIndexedFile(t *testing.T) {
 		Chunked:    true,
 		ChunkSize:  1024,
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, writer.WriteHeader(&mcap.Header{}))
-	assert.Nil(t, writer.WriteSchema(&mcap.Schema{
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&mcap.Header{}))
+	require.NoError(t, writer.WriteSchema(&mcap.Schema{
 		ID:       1,
 		Name:     "s1",
 		Encoding: "txt",
 		Data:     []byte{0x01, 0x02, 0x03},
 	}))
-	assert.Nil(t, writer.WriteChannel(&mcap.Channel{
+	require.NoError(t, writer.WriteChannel(&mcap.Channel{
 		ID:              0,
 		SchemaID:        1,
 		Topic:           "/topic",
@@ -35,23 +36,23 @@ func TestAmendsIndexedFile(t *testing.T) {
 		},
 	}))
 	for i := 0; i < 100; i++ {
-		assert.Nil(t, writer.WriteMessage(&mcap.Message{
+		require.NoError(t, writer.WriteMessage(&mcap.Message{
 			ChannelID: 0,
 			Data:      []byte{0x01, 0x02, 0x03},
 		}))
 	}
-	assert.Nil(t, writer.Close())
+	require.NoError(t, writer.Close())
 
 	_, err = buf.Seek(0, io.SeekStart)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	reader, err := mcap.NewReader(buf)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	initialInfo, err := reader.Info()
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	reader.Close()
 
-	assert.Nil(t, AmendMCAP(buf, []*mcap.Attachment{
+	require.NoError(t, AmendMCAP(buf, []*mcap.Attachment{
 		{
 			LogTime:    0,
 			CreateTime: 0,
@@ -63,11 +64,11 @@ func TestAmendsIndexedFile(t *testing.T) {
 	}, nil))
 
 	_, err = buf.Seek(0, io.SeekStart)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	reader, err = mcap.NewReader(buf)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	newInfo, err := reader.Info()
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 1, int(newInfo.Statistics.AttachmentCount))
 	assert.Equal(t, initialInfo.Statistics.MessageCount, newInfo.Statistics.MessageCount)
 	assert.Equal(t, initialInfo.Statistics.ChannelCount, newInfo.Statistics.ChannelCount)
@@ -84,15 +85,15 @@ func TestDoesNotComputeCRCIfDisabled(t *testing.T) {
 		Chunked:    true,
 		ChunkSize:  1024,
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, writer.WriteHeader(&mcap.Header{}))
-	assert.Nil(t, writer.WriteSchema(&mcap.Schema{
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&mcap.Header{}))
+	require.NoError(t, writer.WriteSchema(&mcap.Schema{
 		ID:       1,
 		Name:     "s1",
 		Encoding: "txt",
 		Data:     []byte{0x01, 0x02, 0x03},
 	}))
-	assert.Nil(t, writer.WriteChannel(&mcap.Channel{
+	require.NoError(t, writer.WriteChannel(&mcap.Channel{
 		ID:              0,
 		SchemaID:        1,
 		Topic:           "/topic",
@@ -102,23 +103,23 @@ func TestDoesNotComputeCRCIfDisabled(t *testing.T) {
 		},
 	}))
 	for i := 0; i < 100; i++ {
-		assert.Nil(t, writer.WriteMessage(&mcap.Message{
+		require.NoError(t, writer.WriteMessage(&mcap.Message{
 			ChannelID: 0,
 			Data:      []byte{0x01, 0x02, 0x03},
 		}))
 	}
-	assert.Nil(t, writer.Close())
+	require.NoError(t, writer.Close())
 
 	_, err = buf.Seek(0, io.SeekStart)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	reader, err := mcap.NewReader(buf)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	initialInfo, err := reader.Info()
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	reader.Close()
 
-	assert.Nil(t, AmendMCAP(buf, []*mcap.Attachment{
+	require.NoError(t, AmendMCAP(buf, []*mcap.Attachment{
 		{
 			LogTime:    0,
 			CreateTime: 0,
@@ -130,11 +131,11 @@ func TestDoesNotComputeCRCIfDisabled(t *testing.T) {
 	}, nil))
 
 	_, err = buf.Seek(0, io.SeekStart)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	reader, err = mcap.NewReader(buf)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	newInfo, err := reader.Info()
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 1, int(newInfo.Statistics.AttachmentCount))
 	assert.Equal(t, initialInfo.Statistics.MessageCount, newInfo.Statistics.MessageCount)
 	assert.Equal(t, initialInfo.Statistics.ChannelCount, newInfo.Statistics.ChannelCount)
@@ -151,15 +152,15 @@ func TestAmendsUnindexedFile(t *testing.T) {
 		Chunked:    false,
 		ChunkSize:  1024,
 	})
-	assert.Nil(t, err)
-	assert.Nil(t, writer.WriteHeader(&mcap.Header{}))
-	assert.Nil(t, writer.WriteSchema(&mcap.Schema{
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&mcap.Header{}))
+	require.NoError(t, writer.WriteSchema(&mcap.Schema{
 		ID:       1,
 		Name:     "s1",
 		Encoding: "txt",
 		Data:     []byte{0x01, 0x02, 0x03},
 	}))
-	assert.Nil(t, writer.WriteChannel(&mcap.Channel{
+	require.NoError(t, writer.WriteChannel(&mcap.Channel{
 		ID:              0,
 		SchemaID:        1,
 		Topic:           "/topic",
@@ -169,23 +170,23 @@ func TestAmendsUnindexedFile(t *testing.T) {
 		},
 	}))
 	for i := 0; i < 100; i++ {
-		assert.Nil(t, writer.WriteMessage(&mcap.Message{
+		require.NoError(t, writer.WriteMessage(&mcap.Message{
 			ChannelID: 0,
 			Data:      []byte{0x01, 0x02, 0x03},
 		}))
 	}
-	assert.Nil(t, writer.Close())
+	require.NoError(t, writer.Close())
 
 	_, err = buf.Seek(0, io.SeekStart)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	reader, err := mcap.NewReader(buf)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	initialInfo, err := reader.Info()
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	reader.Close()
 
-	assert.Nil(t, AmendMCAP(buf, []*mcap.Attachment{
+	require.NoError(t, AmendMCAP(buf, []*mcap.Attachment{
 		{
 			LogTime:    0,
 			CreateTime: 0,
@@ -197,11 +198,11 @@ func TestAmendsUnindexedFile(t *testing.T) {
 	}, nil))
 
 	_, err = buf.Seek(0, io.SeekStart)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	reader, err = mcap.NewReader(buf)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	newInfo, err := reader.Info()
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 1, int(newInfo.Statistics.AttachmentCount))
 	assert.Equal(t, 100, int(newInfo.Statistics.MessageCount))
 	assert.Equal(t, 1, int(newInfo.Statistics.ChannelCount))

@@ -79,6 +79,8 @@ const (
 	AutoCoalescing  = "auto"
 	ForceCoalescing = "force"
 	NoCoalescing    = "none"
+
+	compressionNoneAlias = "none"
 )
 
 func newMCAPMerger(opts mergeOpts) *mcapMerger {
@@ -489,7 +491,7 @@ type namedReader struct {
 var mergeCmd = &cobra.Command{
 	Use:   "merge file1.mcap [file2.mcap] [file3.mcap]...",
 	Short: "Merge a selection of MCAP files by record timestamp",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		if mergeOutputFile == "" && !utils.StdoutRedirected() {
 			die(PleaseRedirect)
 		}
@@ -502,6 +504,11 @@ var mergeCmd = &cobra.Command{
 			defer f.Close()
 			readers = append(readers, namedReader{name: arg, reader: f})
 		}
+
+		if mergeCompression == compressionNoneAlias {
+			mergeCompression = ""
+		}
+
 		opts := mergeOpts{
 			compression:            mergeCompression,
 			chunkSize:              mergeChunkSize,

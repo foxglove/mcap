@@ -7,6 +7,7 @@ export { ChunkBuilder as McapChunkBuilder } from "./ChunkBuilder";
 export * as McapTypes from "./types";
 export * as McapConstants from "./constants";
 export type { IWritable } from "./IWritable";
+export type { ISeekableWriter } from "./ISeekableWriter";
 
 export * from "./hasMcapPrefix";
 export * from "./parse";

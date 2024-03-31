@@ -14,7 +14,7 @@ var printLibraryVersion bool
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Output version information",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(*cobra.Command, []string) {
 		if printLibraryVersion {
 			fmt.Println(mcap.Version)
 		} else {

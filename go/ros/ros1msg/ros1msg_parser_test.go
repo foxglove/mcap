@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestROS1MSGParser(t *testing.T) {
@@ -371,7 +372,7 @@ func TestROS1MSGParser(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
 			fields, err := ParseMessageDefinition(c.parentPackage, []byte(c.messageDefinition))
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, c.fields, fields)
 		})
 	}

@@ -69,12 +69,13 @@ async function runReaderTest(
     }
     const expectedOutputPath = filePath.replace(/\.mcap$/, ".json");
     if (options.update) {
+      const stringifyCompact = (await import("json-stringify-pretty-compact")).default;
       if (runner instanceof StreamedReadTestRunner) {
         const testCase: TestCase = {
           records: (output as StreamedReadTestResult).records,
           meta: { variant: { features: Array.from(variant.features) } },
         };
-        await fs.writeFile(expectedOutputPath, asNormalizedJSON(testCase));
+        await fs.writeFile(expectedOutputPath, stringifyCompact(testCase).trim() + "\n");
       }
     } else {
       const testCase = await fs

@@ -27,8 +27,8 @@ import (
 
 var (
 	catTopics     string
-	catStart      int64
-	catEnd        int64
+	catStart      uint64
+	catEnd        uint64
 	catFormatJSON bool
 )
 
@@ -168,10 +168,10 @@ func getReadOpts(useIndex bool) []mcap.ReadOpt {
 	topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
 	opts := []mcap.ReadOpt{mcap.UsingIndex(useIndex), mcap.WithTopics(topics)}
 	if catStart != 0 {
-		opts = append(opts, mcap.After(catStart*1e9))
+		opts = append(opts, mcap.AfterNanos(catStart*1e9))
 	}
 	if catEnd != math.MaxInt64 {
-		opts = append(opts, mcap.Before(catEnd*1e9))
+		opts = append(opts, mcap.BeforeNanos(catEnd*1e9))
 	}
 	return opts
 }
@@ -294,7 +294,7 @@ func printMessages(
 var catCmd = &cobra.Command{
 	Use:   "cat [file]",
 	Short: "Cat the messages in an MCAP file to stdout",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		stat, err := os.Stdin.Stat()
 		if err != nil {
@@ -329,7 +329,7 @@ var catCmd = &cobra.Command{
 			die("supply a file")
 		}
 		filename := args[0]
-		err = utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
+		err = utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
 			reader, err := mcap.NewReader(rs)
 			if err != nil {
 				return fmt.Errorf("failed to create reader: %w", err)
@@ -354,8 +354,8 @@ var catCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(catCmd)
 
-	catCmd.PersistentFlags().Int64VarP(&catStart, "start-secs", "", 0, "start time")
-	catCmd.PersistentFlags().Int64VarP(&catEnd, "end-secs", "", math.MaxInt64, "end time")
+	catCmd.PersistentFlags().Uint64VarP(&catStart, "start-secs", "", 0, "start time")
+	catCmd.PersistentFlags().Uint64VarP(&catEnd, "end-secs", "", math.MaxInt64, "end time")
 	catCmd.PersistentFlags().StringVarP(&catTopics, "topics", "", "", "comma-separated list of topics")
 	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false,
 		`print messages as JSON. Supported message encodings: ros1, protobuf, and json.`)

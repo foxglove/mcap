@@ -66,10 +66,10 @@ func makeProfileCloser(pprofProfile bool) func() {
 var rootCmd = &cobra.Command{
 	Use:   "mcap",
 	Short: "\U0001F52A Officially the top-rated CLI tool for slicing and dicing MCAP files.",
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRun: func(*cobra.Command, []string) {
 		profileCloser = makeProfileCloser(pprofProfile)
 	},
-	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+	PersistentPostRun: func(*cobra.Command, []string) {
 		profileCloser()
 	},
 }
