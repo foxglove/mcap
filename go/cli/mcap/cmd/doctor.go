@@ -191,7 +191,6 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 				} else {
 					doctor.warn(errStr)
 				}
-
 			}
 
 			if message.LogTime < minLogTime {
@@ -574,5 +573,4 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&strictMessageOrder, "strict-message-order", "", false, "Require that messages have a monotonic log time")
-
 }
