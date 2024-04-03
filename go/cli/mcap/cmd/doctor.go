@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	verbose bool
+	verbose            bool
 	strictMessageOrder bool
 )
 
