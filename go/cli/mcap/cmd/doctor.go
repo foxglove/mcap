@@ -19,7 +19,8 @@ import (
 )
 
 var (
-	verbose bool
+	verbose            bool
+	strictMessageOrder bool
 )
 
 type mcapDoctor struct {
@@ -182,6 +183,16 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 				doctor.error("Got a Message record for channel: %d before a channel info.", message.ChannelID)
 			}
 
+			if message.LogTime < doctor.maxLogTime {
+				errStr := fmt.Sprintf("Message.log_time %d on %s is less than the latest log time %d",
+					message.LogTime, channel.Topic, doctor.maxLogTime)
+				if strictMessageOrder {
+					doctor.error(errStr)
+				} else {
+					doctor.warn(errStr)
+				}
+			}
+
 			if message.LogTime < minLogTime {
 				minLogTime = message.LogTime
 			}
@@ -189,6 +200,11 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 			if message.LogTime > maxLogTime {
 				maxLogTime = message.LogTime
 			}
+
+			if message.LogTime > doctor.maxLogTime {
+				doctor.maxLogTime = message.LogTime
+			}
+
 			chunkMessageCount++
 			doctor.messageCount++
 
@@ -556,4 +572,6 @@ func init() {
 	rootCmd.AddCommand(doctorCommand)
 
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
+	rootCmd.PersistentFlags().BoolVarP(&strictMessageOrder, "strict-message-order", "",
+		false, "Require that messages have a monotonic log time")
 }
