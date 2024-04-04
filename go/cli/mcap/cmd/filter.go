@@ -57,12 +57,12 @@ func buildFilterOptions(flags *filterFlags) (*filterOpts, error) {
 	if flags.startSec > 0 {
 		opts.start = flags.startSec * 1e9
 	}
-	if flags.endSec == 0 && flags.endNano == 0 {
-		opts.end = math.MaxUint64
-	} else if flags.endSec > 0 {
+	opts.end = flags.endNano
+	if flags.endSec > 0 {
 		opts.end = flags.endSec * 1e9
-	} else {
-		opts.end = flags.endNano
+	}
+	if opts.end == 0 {
+		opts.end = math.MaxUint64
 	}
 	if opts.end < opts.start {
 		return nil, errors.New("invalid time range query, end-time is before start-time")
