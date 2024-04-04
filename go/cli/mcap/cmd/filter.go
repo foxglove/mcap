@@ -18,8 +18,10 @@ type filterFlags struct {
 	output             string
 	includeTopics      []string
 	excludeTopics      []string
-	start              uint64
-	end                uint64
+	startSec           uint64
+	endSec             uint64
+	startNano          uint64
+	endNano            uint64
 	includeMetadata    bool
 	includeAttachments bool
 	outputCompression  string
@@ -45,17 +47,28 @@ func buildFilterOptions(flags *filterFlags) (*filterOpts, error) {
 		includeMetadata:    flags.includeMetadata,
 		includeAttachments: flags.includeAttachments,
 	}
-	opts.start = flags.start * 1e9
-	if flags.end == 0 {
+	if flags.startSec > 0 && flags.startNano > 0 {
+		return nil, errors.New("can only use one of --start-sec and --start-nsec")
+	}
+	if flags.endSec > 0 && flags.endNano > 0 {
+		return nil, errors.New("can only use one of --end-sec and --end-nsec")
+	}
+	opts.start = flags.startNano
+	if flags.startSec > 0 {
+		opts.start = flags.startSec * 1e9
+	}
+	if flags.endSec == 0 && flags.endNano == 0 {
 		opts.end = math.MaxUint64
+	} else if flags.endSec > 0 {
+		opts.end = flags.endSec * 1e9
 	} else {
-		opts.end = flags.end * 1e9
+		opts.end = flags.endNano
+	}
+	if opts.end < opts.start {
+		return nil, errors.New("invalid time range query, end-time is before start-time")
 	}
 	if len(flags.includeTopics) > 0 && len(flags.excludeTopics) > 0 {
 		return nil, errors.New("can only use one of --include-topic-regex and --exclude-topic-regex")
-	}
-	if flags.end < flags.start {
-		return nil, errors.New("invalid time range query, end-time is before start-time")
 	}
 	opts.compressionFormat = mcap.CompressionNone
 	switch flags.outputCompression {
@@ -385,17 +398,29 @@ usage:
 			[]string{},
 			"messages with topic names matching this regex will be excluded, can be supplied multiple times",
 		)
-		start := filterCmd.PersistentFlags().Uint64P(
+		startSec := filterCmd.PersistentFlags().Uint64P(
 			"start-secs",
 			"s",
 			0,
 			"messages with log times after or equal to this timestamp will be included.",
 		)
-		end := filterCmd.PersistentFlags().Uint64P(
+		endSec := filterCmd.PersistentFlags().Uint64P(
 			"end-secs",
 			"e",
 			0,
 			"messages with log times before timestamp will be included.",
+		)
+		startNano := filterCmd.PersistentFlags().Uint64P(
+			"start-nsecs",
+			"S",
+			0,
+			"messages with log times after or equal to this nanosecond-precision timestamp will be included.",
+		)
+		endNano := filterCmd.PersistentFlags().Uint64P(
+			"end-nsecs",
+			"E",
+			0,
+			"messages with log times before nanosecond-precision timestamp will be included.",
 		)
 		chunkSize := filterCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
 		includeMetadata := filterCmd.PersistentFlags().Bool(
@@ -418,8 +443,10 @@ usage:
 				output:             *output,
 				includeTopics:      *includeTopics,
 				excludeTopics:      *excludeTopics,
-				start:              *start,
-				end:                *end,
+				startSec:           *startSec,
+				endSec:             *endSec,
+				startNano:          *startNano,
+				endNano:            *endNano,
 				chunkSize:          *chunkSize,
 				includeMetadata:    *includeMetadata,
 				includeAttachments: *includeAttachments,

@@ -27,8 +27,10 @@ import (
 
 var (
 	catTopics     string
-	catStart      uint64
-	catEnd        uint64
+	catStartSec   uint64
+	catEndSec     uint64
+	catStartNano  uint64
+	catEndNano    uint64
 	catFormatJSON bool
 )
 
@@ -167,11 +169,23 @@ func (w *jsonOutputWriter) writeMessage(
 func getReadOpts(useIndex bool) []mcap.ReadOpt {
 	topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
 	opts := []mcap.ReadOpt{mcap.UsingIndex(useIndex), mcap.WithTopics(topics)}
+
+	catStart := catStartNano
+	if catStartSec > 0 {
+		catStart = catStartSec * 1e9
+	}
+	catEnd := catEndNano
+	if catEndSec > 0 {
+		catEnd = catEndSec * 1e9
+	}
 	if catStart != 0 {
-		opts = append(opts, mcap.AfterNanos(catStart*1e9))
+		opts = append(opts, mcap.AfterNanos(catStart))
+	}
+	if catEnd == 0 {
+		catEnd = math.MaxInt64
 	}
 	if catEnd != math.MaxInt64 {
-		opts = append(opts, mcap.BeforeNanos(catEnd*1e9))
+		opts = append(opts, mcap.BeforeNanos(catEnd))
 	}
 	return opts
 }
@@ -304,6 +318,13 @@ var catCmd = &cobra.Command{
 		readingStdin := (stat.Mode()&os.ModeCharDevice == 0 && len(args) == 0)
 		// stdin is a special case, since we can't seek
 
+		if catStartSec > 0 && catStartNano > 0 {
+			die("can only use one of --start-sec and --start-nsec")
+		}
+		if catEndSec > 0 && catEndNano > 0 {
+			die("can only use one of --end-sec and --end-nsec")
+		}
+
 		output := bufio.NewWriter(os.Stdout)
 		defer output.Flush()
 
@@ -353,9 +374,10 @@ var catCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(catCmd)
-
-	catCmd.PersistentFlags().Uint64VarP(&catStart, "start-secs", "", 0, "start time")
-	catCmd.PersistentFlags().Uint64VarP(&catEnd, "end-secs", "", math.MaxInt64, "end time")
+	catCmd.PersistentFlags().Uint64VarP(&catStartSec, "start-secs", "", 0, "start time")
+	catCmd.PersistentFlags().Uint64VarP(&catEndSec, "end-secs", "", 0, "end time")
+	catCmd.PersistentFlags().Uint64VarP(&catStartNano, "start-nsecs", "", 0, "start time in nanoseconds")
+	catCmd.PersistentFlags().Uint64VarP(&catEndNano, "end-nsecs", "", 0, "end time in nanoseconds")
 	catCmd.PersistentFlags().StringVarP(&catTopics, "topics", "", "", "comma-separated list of topics")
 	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false,
 		`print messages as JSON. Supported message encodings: ros1, protobuf, and json.`)
