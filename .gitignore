@@ -13,6 +13,7 @@ site/
 !.yarn/patches
 !.yarn/plugins
 !.yarn/sdks
+*.tgz
 
 *.db3-shm
 *.db3-wal
