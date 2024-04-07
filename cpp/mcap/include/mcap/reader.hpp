@@ -440,9 +440,9 @@ public:
   const std::multimap<std::string, MetadataIndex>& metadataIndexes() const;
 
   /**
-   * @brief Returns all of the parsed MetadataIndex records. Call `readSummary()`
+   * @brief Returns all of the parsed AttachmentIndex records. Call `readSummary()`
    * first to fully populate this data structure.
-   * The multimap's keys are the `name` field from each indexed Metadata.
+   * The multimap's keys are the `name` field from each indexed Attachments.
    */
   const std::multimap<std::string, AttachmentIndex>& attachmentIndexes() const;
 
