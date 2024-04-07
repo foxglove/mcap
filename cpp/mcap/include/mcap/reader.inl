@@ -649,6 +649,10 @@ const std::multimap<std::string, MetadataIndex>& McapReader::metadataIndexes() c
   return metadataIndexes_;
 }
 
+const std::multimap<std::string, AttachmentIndex>& McapReader::attachmentIndexes() const {
+  return attachmentIndexes_;
+}
+
 Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record* record) {
   // Check that we can read at least 9 bytes (opcode + length)
   auto maxSize = reader.size() - offset;
