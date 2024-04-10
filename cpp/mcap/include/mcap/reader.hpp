@@ -442,7 +442,7 @@ public:
   /**
    * @brief Returns all of the parsed AttachmentIndex records. Call `readSummary()`
    * first to fully populate this data structure.
-   * The multimap's keys are the `name` field from each indexed Attachments.
+   * The multimap's keys are the `name` field from each indexed Attachment.
    */
   const std::multimap<std::string, AttachmentIndex>& attachmentIndexes() const;
 
