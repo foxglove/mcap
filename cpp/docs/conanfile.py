@@ -4,7 +4,7 @@ from conans import ConanFile, CMake
 class McapDocsConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     generators = "cmake"
-    requires = "mcap/1.3.0"
+    requires = "mcap/1.4.0"
 
     def build(self):
         cmake = CMake(self)
