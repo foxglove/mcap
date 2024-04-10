@@ -1,6 +1,6 @@
 {
   "name": "@mcap/nodejs",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Support library for using MCAP in Node.js",
   "license": "MIT",
   "repository": {
