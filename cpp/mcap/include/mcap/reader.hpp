@@ -439,6 +439,13 @@ public:
    */
   const std::multimap<std::string, MetadataIndex>& metadataIndexes() const;
 
+  /**
+   * @brief Returns all of the parsed AttachmentIndex records. Call `readSummary()`
+   * first to fully populate this data structure.
+   * The multimap's keys are the `name` field from each indexed Attachment.
+   */
+  const std::multimap<std::string, AttachmentIndex>& attachmentIndexes() const;
+
   // The following static methods are used internally for parsing MCAP records
   // and do not need to be called directly unless you are implementing your own
   // reader functionality or tests.
