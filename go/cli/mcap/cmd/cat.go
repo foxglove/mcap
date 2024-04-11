@@ -318,13 +318,6 @@ var catCmd = &cobra.Command{
 		readingStdin := (stat.Mode()&os.ModeCharDevice == 0 && len(args) == 0)
 		// stdin is a special case, since we can't seek
 
-		if catStartSec > 0 && catStartNano > 0 {
-			die("can only use one of --start-sec and --start-nsec")
-		}
-		if catEndSec > 0 && catEndNano > 0 {
-			die("can only use one of --end-sec and --end-nsec")
-		}
-
 		output := bufio.NewWriter(os.Stdout)
 		defer output.Flush()
 
@@ -381,4 +374,6 @@ func init() {
 	catCmd.PersistentFlags().StringVarP(&catTopics, "topics", "", "", "comma-separated list of topics")
 	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false,
 		`print messages as JSON. Supported message encodings: ros1, protobuf, and json.`)
+	catCmd.MarkFlagsMutuallyExclusive("start-secs", "start-nsecs")
+	catCmd.MarkFlagsMutuallyExclusive("end-secs", "end-nsecs")
 }

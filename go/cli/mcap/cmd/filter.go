@@ -47,12 +47,6 @@ func buildFilterOptions(flags *filterFlags) (*filterOpts, error) {
 		includeMetadata:    flags.includeMetadata,
 		includeAttachments: flags.includeAttachments,
 	}
-	if flags.startSec > 0 && flags.startNano > 0 {
-		return nil, errors.New("can only use one of --start-sec and --start-nsec")
-	}
-	if flags.endSec > 0 && flags.endNano > 0 {
-		return nil, errors.New("can only use one of --end-sec and --end-nsec")
-	}
 	opts.start = flags.startNano
 	if flags.startSec > 0 {
 		opts.start = flags.startSec * 1e9
@@ -422,6 +416,8 @@ usage:
 			0,
 			"messages with log times before nanosecond-precision timestamp will be included.",
 		)
+		filterCmd.MarkFlagsMutuallyExclusive("start-secs", "start-nsecs")
+		filterCmd.MarkFlagsMutuallyExclusive("end-secs", "end-nsecs")
 		chunkSize := filterCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
 		includeMetadata := filterCmd.PersistentFlags().Bool(
 			"include-metadata",
