@@ -10,7 +10,9 @@ const webpack = require("webpack");
 const execAsync = util.promisify(require("child_process").exec);
 
 /**
- * Modify the svgo configuration (in place) to prevent it from minifying IDs in SVGs
+ * Modify the svgo configuration (in place) to prevent it from minifying IDs in SVGs.
+ * This is necessary because it doesn't account for the global ID namespace, and causes
+ * ID collisions between the SVGs loaded into the same page.
  *
  * Refs:
  * - https://github.com/facebook/docusaurus/issues/8297
