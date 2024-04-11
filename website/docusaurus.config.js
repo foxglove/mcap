@@ -9,58 +9,7 @@ const util = require("util");
 const webpack = require("webpack");
 const execAsync = util.promisify(require("child_process").exec);
 
-/**
- * Modify the svgo configuration (in place) to prevent it from minifying IDs in SVGs.
- * This is necessary because it doesn't account for the global ID namespace, and causes
- * ID collisions between the SVGs loaded into the same page.
- *
- * Refs:
- * - https://github.com/facebook/docusaurus/issues/8297
- * - https://github.com/svg/svgo/issues/1714
- * - https://linear.app/foxglove/issue/FG-7251/logos-are-cut-off-on-mcapdev
- *
- * @param {webpack.Configuration} config
- */
-function modifySvgoConfig(config) {
-  const NEW_SVGO_CONFIG = {
-    plugins: [
-      {
-        name: "preset-default",
-        params: {
-          overrides: {
-            removeTitle: false,
-            removeViewBox: false,
-            cleanupIDs: false, // do not change IDs
-          },
-        },
-      },
-    ],
-  };
-  // find the svgo config rule and replace it
-  if (config.module?.rules instanceof Array) {
-    for (const rule of config.module.rules) {
-      if (typeof rule === "object" && rule.test?.toString() === "/\\.svg$/i") {
-        if (rule.oneOf instanceof Array) {
-          for (const nestedRule of rule.oneOf) {
-            if (nestedRule.use instanceof Array) {
-              for (const loader of nestedRule.use) {
-                if (
-                  typeof loader === "object" &&
-                  /* cspell:disable */
-                  loader.loader === require.resolve("@svgr/webpack")
-                ) {
-                  if (typeof loader.options === "object") {
-                    loader.options.svgoConfig = NEW_SVGO_CONFIG;
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
+const modifySvgoConfigInPlace = require("./modifySvgoConfigInPlace");
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -87,10 +36,7 @@ const config = {
     (_context, _options) => ({
       name: "MCAP website custom webpack config",
       configureWebpack(config, _isServer, _utils, _content) {
-        // Update config.module.rules directly.
-        // (Unclear if this is possible with a mergeStrategy below.)
-        modifySvgoConfig(config);
-
+        modifySvgoConfigInPlace(config);
         return {
           mergeStrategy: {
             "resolve.extensions": "replace",
