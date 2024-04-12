@@ -9,6 +9,8 @@ const util = require("util");
 const webpack = require("webpack");
 const execAsync = util.promisify(require("child_process").exec);
 
+const modifySvgoConfigInPlace = require("./modifySvgoConfigInPlace");
+
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "MCAP",
@@ -34,6 +36,7 @@ const config = {
     (_context, _options) => ({
       name: "MCAP website custom webpack config",
       configureWebpack(config, _isServer, _utils, _content) {
+        modifySvgoConfigInPlace(config);
         return {
           mergeStrategy: {
             "resolve.extensions": "replace",
