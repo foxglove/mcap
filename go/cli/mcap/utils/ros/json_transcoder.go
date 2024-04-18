@@ -277,7 +277,7 @@ func (t *JSONTranscoder) int64(w io.Writer, r io.Reader) error {
 }
 
 func (t *JSONTranscoder) uint64(w io.Writer, r io.Reader) error {
-	_, err := io.ReadFull(r, t.buf[:4])
+	_, err := io.ReadFull(r, t.buf[:8])
 	if err != nil {
 		return err
 	}
