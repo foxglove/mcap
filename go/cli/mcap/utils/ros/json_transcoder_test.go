@@ -179,6 +179,8 @@ func TestJSONTranscoding(t *testing.T) {
 			err = transcoder.Transcode(buf, bytes.NewReader(c.input))
 			require.NoError(t, err)
 			assert.Equal(t, c.expectedJSON, buf.String())
+			// ensure each test has a clean buffer
+			transcoder.buf = make([]byte, 8)
 		})
 	}
 }
@@ -530,6 +532,8 @@ func TestSingleRecordConversion(t *testing.T) {
 			err := converter(buf, bytes.NewBuffer(c.input))
 			require.NoError(t, err)
 			assert.Equal(t, c.output, buf.String())
+			// ensure each test has a clean buffer
+			transcoder.buf = make([]byte, 8)
 		})
 	}
 }
