@@ -312,8 +312,8 @@ func TestSingleRecordConversion(t *testing.T) {
 					converter: transcoder.uint64,
 				},
 			},
-			[]byte{0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07},
-			`{"foo":506381209866536711}`,
+			[]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+			`{"foo":18446744073709551615}`,
 		},
 		{
 			"float32",
