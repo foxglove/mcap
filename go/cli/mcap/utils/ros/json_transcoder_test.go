@@ -276,8 +276,8 @@ func TestSingleRecordConversion(t *testing.T) {
 					converter: transcoder.uint8,
 				},
 			},
-			[]byte{0x01},
-			`{"foo":1}`,
+			[]byte{0xff},
+			`{"foo":255}`,
 		},
 		{
 			"uint16",
@@ -288,8 +288,8 @@ func TestSingleRecordConversion(t *testing.T) {
 					converter: transcoder.uint16,
 				},
 			},
-			[]byte{0x07, 0x07},
-			`{"foo":1799}`,
+			[]byte{0xff, 0xff},
+			`{"foo":65535}`,
 		},
 		{
 			"uint32",
@@ -300,8 +300,8 @@ func TestSingleRecordConversion(t *testing.T) {
 					converter: transcoder.uint32,
 				},
 			},
-			[]byte{0x07, 0x07, 0x07, 0x07},
-			`{"foo":117901063}`,
+			[]byte{0xff, 0xff, 0xff, 0xff},
+			`{"foo":4294967295}`,
 		},
 		{
 			"uint64",
