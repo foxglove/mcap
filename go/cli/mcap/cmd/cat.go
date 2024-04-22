@@ -168,8 +168,12 @@ func (w *jsonOutputWriter) writeMessage(
 
 func getReadOpts(useIndex bool) []mcap.ReadOpt {
 	topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-	opts := []mcap.ReadOpt{mcap.UsingIndex(useIndex), mcap.WithTopics(topics)}
 
+	opts := []mcap.ReadOpt{mcap.WithTopics(topics)}
+
+	if useIndex {
+		opts = append(opts, mcap.UsingIndex(true), mcap.InOrder(mcap.LogTimeOrder))
+	}
 	catStart := catStartNano
 	if catStartSec > 0 {
 		catStart = catStartSec * 1e9
