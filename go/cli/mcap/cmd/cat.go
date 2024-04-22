@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/foxglove/go-rosbag/ros1msg"
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
-	"github.com/foxglove/mcap/go/cli/mcap/utils/ros"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -198,7 +198,7 @@ func printMessages(
 	msg := &bytes.Buffer{}
 	msgReader := &bytes.Reader{}
 	buf := make([]byte, 1024*1024)
-	transcoders := make(map[uint16]*ros.JSONTranscoder)
+	transcoders := make(map[uint16]*ros1msg.JSONTranscoder)
 	descriptors := make(map[uint16]protoreflect.MessageDescriptor)
 	jsonWriter := newJSONOutputWriter(w)
 	for {
@@ -239,7 +239,7 @@ func printMessages(
 				transcoder, ok := transcoders[channel.SchemaID]
 				if !ok {
 					packageName := strings.Split(schema.Name, "/")[0]
-					transcoder, err = ros.NewJSONTranscoder(packageName, schema.Data)
+					transcoder, err = ros1msg.NewJSONTranscoder(packageName, schema.Data)
 					if err != nil {
 						return fmt.Errorf("failed to build transcoder for %s: %w", channel.Topic, err)
 					}
