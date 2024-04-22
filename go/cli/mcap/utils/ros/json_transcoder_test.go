@@ -179,6 +179,8 @@ func TestJSONTranscoding(t *testing.T) {
 			err = transcoder.Transcode(buf, bytes.NewReader(c.input))
 			require.NoError(t, err)
 			assert.Equal(t, c.expectedJSON, buf.String())
+			// ensure each test has a clean buffer
+			transcoder.buf = make([]byte, 8)
 		})
 	}
 }
@@ -274,8 +276,8 @@ func TestSingleRecordConversion(t *testing.T) {
 					converter: transcoder.uint8,
 				},
 			},
-			[]byte{0x01},
-			`{"foo":1}`,
+			[]byte{0xff},
+			`{"foo":255}`,
 		},
 		{
 			"uint16",
@@ -286,8 +288,8 @@ func TestSingleRecordConversion(t *testing.T) {
 					converter: transcoder.uint16,
 				},
 			},
-			[]byte{0x07, 0x07},
-			`{"foo":1799}`,
+			[]byte{0xff, 0xff},
+			`{"foo":65535}`,
 		},
 		{
 			"uint32",
@@ -298,8 +300,8 @@ func TestSingleRecordConversion(t *testing.T) {
 					converter: transcoder.uint32,
 				},
 			},
-			[]byte{0x07, 0x07, 0x07, 0x07},
-			`{"foo":117901063}`,
+			[]byte{0xff, 0xff, 0xff, 0xff},
+			`{"foo":4294967295}`,
 		},
 		{
 			"uint64",
@@ -310,8 +312,8 @@ func TestSingleRecordConversion(t *testing.T) {
 					converter: transcoder.uint64,
 				},
 			},
-			[]byte{0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07},
-			`{"foo":506381209866536711}`,
+			[]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+			`{"foo":18446744073709551615}`,
 		},
 		{
 			"float32",
@@ -530,6 +532,8 @@ func TestSingleRecordConversion(t *testing.T) {
 			err := converter(buf, bytes.NewBuffer(c.input))
 			require.NoError(t, err)
 			assert.Equal(t, c.output, buf.String())
+			// ensure each test has a clean buffer
+			transcoder.buf = make([]byte, 8)
 		})
 	}
 }
