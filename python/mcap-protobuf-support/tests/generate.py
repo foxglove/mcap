@@ -16,20 +16,14 @@ from test_proto.intermediate_message_2_pb2 import IntermediateMessage2  # noqa: 
 from test_proto.simple_message_pb2 import SimpleMessage  # noqa: #402
 
 
-def register_schema(writer: McapWriter, message_class: Any):
-    file_descriptor_set = build_file_descriptor_set(message_class=message_class)
-
-    return writer.register_schema(
-        name=message_class.DESCRIPTOR.full_name,
-        encoding="protobuf",
-        data=file_descriptor_set.SerializeToString(),
-    )
-
-
-def build_file_descriptor_set(message_class: Any) -> FileDescriptorSet:
+def generate_sample_data_with_disordered_proto_fds(output: IO[Any]):
+    """generates a simple sample MCAP with a protobuf message. This library normally produces
+    file descriptor sets in topological dependency order, but the reader needs to be able to handle
+    schemas with file descriptor sets written in other orders.
+    """
     file_descriptor_set = FileDescriptorSet()
     seen_dependencies: Set[str] = set()
-    toplevel = message_class.DESCRIPTOR.file
+    toplevel = ComplexMessage.DESCRIPTOR.file
     to_add = {toplevel.name: toplevel}
     while to_add:
         fd = to_add.popitem()[1]
@@ -39,13 +33,13 @@ def build_file_descriptor_set(message_class: Any) -> FileDescriptorSet:
             if dep.name not in seen_dependencies:
                 to_add[dep.name] = dep
 
-    return file_descriptor_set
-
-
-def generate_sample_data_with_disordered_proto_fds(output: IO[Any]):
     writer = McapWriter(output)
     writer.start()
-    schema_id = register_schema(writer, ComplexMessage)
+    schema_id = writer.register_schema(
+        name=ComplexMessage.DESCRIPTOR.full_name,
+        encoding="protobuf",
+        data=file_descriptor_set.SerializeToString(),
+    )
     channel_id = writer.register_channel("/complex_msgs", "protobuf", schema_id)
     writer.add_message(
         channel_id,
