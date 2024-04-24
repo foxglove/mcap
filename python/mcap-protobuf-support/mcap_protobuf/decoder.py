@@ -2,7 +2,7 @@ import warnings
 from collections import Counter
 from typing import Any, Callable, Dict, Optional, Type
 
-from google.protobuf.descriptor_pb2 import FileDescriptorSet, FileDescriptorProto
+from google.protobuf.descriptor_pb2 import FileDescriptorProto, FileDescriptorSet
 from google.protobuf.descriptor_pool import DescriptorPool
 from google.protobuf.message_factory import GetMessageClassesForFiles
 
@@ -46,7 +46,7 @@ class DecoderFactory(McapDecoderFactory):
                     )
 
             pool = DescriptorPool()
-            descriptor_by_name = { fd.name: fd for fd in fds.file }
+            descriptor_by_name = {fd.name: fd for fd in fds.file}
 
             def _add(fd: FileDescriptorProto):
                 for dependency in fd.dependency:
