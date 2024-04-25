@@ -462,23 +462,6 @@ jobs:
           body_path: ${{ github.workspace }}-CHANGELOG.txt
           draft: false
 
-  update-homebrew-formula:
-    needs:
-      - go-release-cli
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Extract version
-        id: extract-version
-        run: |
-          printf "::set-output name=%s::%s\n" version-number "${GITHUB_REF#refs/tags/releases/mcap-cli/v}"
-      - uses: mislav/bump-homebrew-formula-action@868bf7871f81dda58cc50fe1d17ea83ae1f3f929
-        with:
-          # Note: Don't override push-to (see: https://github.com/foxglove/mcap/issues/1063)
-          formula-name: mcap
-        env:
-          COMMITTER_TOKEN: ${{ secrets.HOMEBREW_GITHUB_TOKEN }}
-
   swift:
     runs-on: ubuntu-latest
     steps:
