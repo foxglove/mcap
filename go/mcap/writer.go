@@ -38,7 +38,6 @@ type Writer struct {
 	w                *writeSizer
 	buf              []byte
 	msg              []byte
-	chunk            []byte
 	uncompressed     *bytes.Buffer
 	compressed       *bytes.Buffer
 	compressedWriter *countingCRCWriter
@@ -445,25 +444,45 @@ func (w *Writer) flushActiveChunk() error {
 	// when writing a chunk, we don't go through writerecord to avoid needing to
 	// materialize the compressed data again. Instead, write the leading bytes
 	// then copy from the compressed data buffer.
-	recordlen := 1 + 8 + msglen
-	if len(w.chunk) < recordlen {
-		w.chunk = make([]byte, recordlen*2)
-	}
-	offset, err := putByte(w.chunk, byte(OpChunk))
+	_, err = w.w.Write([]byte{byte(OpChunk)})
 	if err != nil {
 		return err
 	}
-
-	offset += putUint64(w.chunk[offset:], uint64(msglen))
-	offset += putUint64(w.chunk[offset:], start)
-	offset += putUint64(w.chunk[offset:], end)
-	offset += putUint64(w.chunk[offset:], uint64(uncompressedlen))
-	offset += putUint32(w.chunk[offset:], crc)
-	offset += putPrefixedString(w.chunk[offset:], string(w.opts.Compression))
-	offset += putUint64(w.chunk[offset:], uint64(w.compressed.Len()))
-	offset += copy(w.chunk[offset:recordlen], w.compressed.Bytes())
-	_, err = w.w.Write(w.chunk[:offset])
-	if err != nil {
+	var stackbuf [8]byte
+	buf8 := stackbuf[:]
+	buf4 := buf8[:4]
+	putUint64(buf8, uint64(msglen))
+	if _, err := w.w.Write(buf8); err != nil {
+		return err
+	}
+	putUint64(buf8, start)
+	if _, err := w.w.Write(buf8); err != nil {
+		return err
+	}
+	putUint64(buf8, end)
+	if _, err = w.w.Write(buf8); err != nil {
+		return err
+	}
+	putUint64(buf8, uint64(uncompressedlen))
+	if _, err = w.w.Write(buf8); err != nil {
+		return err
+	}
+	putUint32(buf4, crc)
+	if _, err = w.w.Write(buf4); err != nil {
+		return err
+	}
+	putUint32(buf4, uint32(len(w.opts.Compression)))
+	if _, err = w.w.Write(buf4); err != nil {
+		return err
+	}
+	if _, err = w.w.Write([]byte(w.opts.Compression)); err != nil {
+		return err
+	}
+	putUint64(buf8, uint64(compressedlen))
+	if _, err = w.w.Write(buf8); err != nil {
+		return err
+	}
+	if _, err := w.w.Write(w.compressed.Bytes()); err != nil {
 		return err
 	}
 	w.compressed.Reset()
