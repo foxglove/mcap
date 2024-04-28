@@ -433,6 +433,7 @@ func (w *Writer) flushActiveChunk() error {
 	crc := w.compressedWriter.CRC()
 	compressedlen := w.compressed.Len()
 	uncompressedlen := w.compressedWriter.Size()
+	// the "top fields" are all fields of the chunk record except for the compressed records.
 	topFieldsLen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8
 	msglen := topFieldsLen + compressedlen
 	chunkStartOffset := w.w.Size()
