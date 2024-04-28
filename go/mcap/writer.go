@@ -433,7 +433,8 @@ func (w *Writer) flushActiveChunk() error {
 	crc := w.compressedWriter.CRC()
 	compressedlen := w.compressed.Len()
 	uncompressedlen := w.compressedWriter.Size()
-	msglen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8 + compressedlen
+	topFieldsLen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8
+	msglen := topFieldsLen + compressedlen
 	chunkStartOffset := w.w.Size()
 	var start, end uint64
 	if w.currentChunkMessageCount != 0 {
@@ -444,45 +445,26 @@ func (w *Writer) flushActiveChunk() error {
 	// when writing a chunk, we don't go through writerecord to avoid needing to
 	// materialize the compressed data again. Instead, write the leading bytes
 	// then copy from the compressed data buffer.
-	_, err = w.w.Write([]byte{byte(OpChunk)})
+	recordHeaderLen := 1 + 8 + topFieldsLen
+	w.ensureSized(recordHeaderLen)
+	offset, err := putByte(w.msg, byte(OpChunk))
 	if err != nil {
 		return err
 	}
-	var stackbuf [8]byte
-	buf8 := stackbuf[:]
-	buf4 := buf8[:4]
-	putUint64(buf8, uint64(msglen))
-	if _, err := w.w.Write(buf8); err != nil {
+
+	offset += putUint64(w.msg[offset:], uint64(msglen))
+	offset += putUint64(w.msg[offset:], start)
+	offset += putUint64(w.msg[offset:], end)
+	offset += putUint64(w.msg[offset:], uint64(uncompressedlen))
+	offset += putUint32(w.msg[offset:], crc)
+	offset += putPrefixedString(w.msg[offset:], string(w.opts.Compression))
+	offset += putUint64(w.msg[offset:], uint64(w.compressed.Len()))
+	_, err = w.w.Write(w.msg[:offset])
+	if err != nil {
 		return err
 	}
-	putUint64(buf8, start)
-	if _, err := w.w.Write(buf8); err != nil {
-		return err
-	}
-	putUint64(buf8, end)
-	if _, err = w.w.Write(buf8); err != nil {
-		return err
-	}
-	putUint64(buf8, uint64(uncompressedlen))
-	if _, err = w.w.Write(buf8); err != nil {
-		return err
-	}
-	putUint32(buf4, crc)
-	if _, err = w.w.Write(buf4); err != nil {
-		return err
-	}
-	putUint32(buf4, uint32(len(w.opts.Compression)))
-	if _, err = w.w.Write(buf4); err != nil {
-		return err
-	}
-	if _, err = w.w.Write([]byte(w.opts.Compression)); err != nil {
-		return err
-	}
-	putUint64(buf8, uint64(compressedlen))
-	if _, err = w.w.Write(buf8); err != nil {
-		return err
-	}
-	if _, err := w.w.Write(w.compressed.Bytes()); err != nil {
+	_, err = w.w.Write(w.compressed.Bytes())
+	if err != nil {
 		return err
 	}
 	w.compressed.Reset()
