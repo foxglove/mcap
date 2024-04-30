@@ -741,3 +741,95 @@ func TestBYOCompressor(t *testing.T) {
 	assertReadable(t, bytes.NewReader(buf.Bytes()))
 	assert.Positive(t, blockCount)
 }
+
+func BenchmarkManyWriterAllocs(b *testing.B) {
+	cases := []struct {
+		assertion    string
+		chunkSize    int
+		messageCount int
+		channelCount int
+	}{
+		{
+			"big chunks many messages",
+			8 * 1024 * 1024,
+			2e6,
+			100,
+		},
+		{
+			"small chunks many messages",
+			8 * 1024,
+			2e6,
+			100,
+		},
+		{
+			"many channels",
+			4 * 1024 * 1024,
+			2e6,
+			55000,
+		},
+	}
+
+	stringData := "hello, world!"
+	messageData := []byte("hello, world")
+	schema := Schema{
+		Name:     stringData,
+		Encoding: "ros1msg",
+		Data:     messageData,
+	}
+	channel := Channel{
+		Topic:           stringData,
+		MessageEncoding: "msg",
+		Metadata: map[string]string{
+			"": "",
+		},
+	}
+	message := Message{
+		Sequence: 0,
+		Data:     messageData,
+	}
+	writers := make([]*Writer, 100)
+	for _, c := range cases {
+		b.ResetTimer()
+		b.Run(c.assertion, func(b *testing.B) {
+			for n := 0; n < b.N; n++ {
+				t0 := time.Now()
+				for i := 0; i < len(writers); i++ {
+					writer, err := NewWriter(io.Discard, &WriterOptions{
+						ChunkSize: int64(c.chunkSize),
+						Chunked:   true,
+					})
+					require.NoError(b, err)
+					require.NoError(b, writer.WriteHeader(&Header{
+						Profile: "ros1",
+						Library: "foo",
+					}))
+					for j := 0; j < c.channelCount; j++ {
+						schema.ID = uint16(j + 1)
+						require.NoError(b, writer.WriteSchema(&schema))
+						channel.SchemaID = uint16(j + 1)
+						channel.ID = uint16(j)
+						require.NoError(b, writer.WriteChannel(&channel))
+					}
+					writers[i] = writer
+				}
+				channelID := 0
+				messageCount := 0
+				for messageCount < c.messageCount {
+					writerIdx := messageCount % len(writers)
+					message.ChannelID = uint16(channelID)
+					message.LogTime = uint64(messageCount)
+					message.PublishTime = uint64(messageCount)
+					require.NoError(b, writers[writerIdx].WriteMessage(&message))
+					messageCount++
+					channelID++
+					channelID %= c.channelCount
+				}
+				for _, writer := range writers {
+					require.NoError(b, writer.Close())
+				}
+				elapsed := time.Since(t0)
+				b.ReportMetric(float64(c.messageCount)/elapsed.Seconds(), "messages/sec")
+			}
+		})
+	}
+}

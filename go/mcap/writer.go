@@ -38,7 +38,6 @@ type Writer struct {
 	w                *writeSizer
 	buf              []byte
 	msg              []byte
-	chunk            []byte
 	uncompressed     *bytes.Buffer
 	compressed       *bytes.Buffer
 	compressedWriter *countingCRCWriter
@@ -434,7 +433,9 @@ func (w *Writer) flushActiveChunk() error {
 	crc := w.compressedWriter.CRC()
 	compressedlen := w.compressed.Len()
 	uncompressedlen := w.compressedWriter.Size()
-	msglen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8 + compressedlen
+	// the "top fields" are all fields of the chunk record except for the compressed records.
+	topFieldsLen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8
+	msglen := topFieldsLen + compressedlen
 	chunkStartOffset := w.w.Size()
 	var start, end uint64
 	if w.currentChunkMessageCount != 0 {
@@ -445,24 +446,25 @@ func (w *Writer) flushActiveChunk() error {
 	// when writing a chunk, we don't go through writerecord to avoid needing to
 	// materialize the compressed data again. Instead, write the leading bytes
 	// then copy from the compressed data buffer.
-	recordlen := 1 + 8 + msglen
-	if len(w.chunk) < recordlen {
-		w.chunk = make([]byte, recordlen*2)
-	}
-	offset, err := putByte(w.chunk, byte(OpChunk))
+	recordHeaderLen := 1 + 8 + topFieldsLen
+	w.ensureSized(recordHeaderLen)
+	offset, err := putByte(w.msg, byte(OpChunk))
 	if err != nil {
 		return err
 	}
 
-	offset += putUint64(w.chunk[offset:], uint64(msglen))
-	offset += putUint64(w.chunk[offset:], start)
-	offset += putUint64(w.chunk[offset:], end)
-	offset += putUint64(w.chunk[offset:], uint64(uncompressedlen))
-	offset += putUint32(w.chunk[offset:], crc)
-	offset += putPrefixedString(w.chunk[offset:], string(w.opts.Compression))
-	offset += putUint64(w.chunk[offset:], uint64(w.compressed.Len()))
-	offset += copy(w.chunk[offset:recordlen], w.compressed.Bytes())
-	_, err = w.w.Write(w.chunk[:offset])
+	offset += putUint64(w.msg[offset:], uint64(msglen))
+	offset += putUint64(w.msg[offset:], start)
+	offset += putUint64(w.msg[offset:], end)
+	offset += putUint64(w.msg[offset:], uint64(uncompressedlen))
+	offset += putUint32(w.msg[offset:], crc)
+	offset += putPrefixedString(w.msg[offset:], string(w.opts.Compression))
+	offset += putUint64(w.msg[offset:], uint64(w.compressed.Len()))
+	_, err = w.w.Write(w.msg[:offset])
+	if err != nil {
+		return err
+	}
+	_, err = w.w.Write(w.compressed.Bytes())
 	if err != nil {
 		return err
 	}
