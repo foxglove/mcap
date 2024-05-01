@@ -47,7 +47,7 @@ func TestLexUnchunkedFile(t *testing.T) {
 		tokenType, _, err := lexer.Next(nil)
 		require.NoError(t, err)
 		assert.Equal(t, expected.token, tokenType)
-		offset := lexer.GetLastTokenOffset()
+		offset := lexer.GetLastRecordOffset()
 		assert.Equal(t, RecordNotInChunk, offset.ChunkOffset)
 		assert.Equal(t, expected.fileOffset, offset.FileOffset,
 			fmt.Sprintf("expected file offset %d, got %d at index %d", expected.fileOffset, offset.FileOffset, i))
@@ -280,7 +280,7 @@ func TestOffsetsInChunkedFile(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, expected.token, tokenType,
 					fmt.Sprintf("expected token %s but got %s at index %d", expected.token, tokenType, i))
-				offset := lexer.GetLastTokenOffset()
+				offset := lexer.GetLastRecordOffset()
 				assert.Equal(t, expected.offset.FileOffset, offset.FileOffset,
 					fmt.Sprintf("expected file offset %d but got %d at index %d",
 						expected.offset.FileOffset,

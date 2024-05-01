@@ -198,8 +198,8 @@ type Lexer struct {
 	decompressors            map[CompressionFormat]ResettableReader
 }
 
-// GetLastTokenOffset returns the TokenOffset of the last token returned from Next().
-func (l *Lexer) GetLastTokenOffset() RecordOffset {
+// GetLastRecordOffset returns the offset of the last record returned from Next().
+func (l *Lexer) GetLastRecordOffset() RecordOffset {
 	return l.lastOffset
 }
 
