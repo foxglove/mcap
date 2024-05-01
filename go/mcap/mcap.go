@@ -213,13 +213,15 @@ type Attachment struct {
 	Data       io.Reader
 }
 
+const RecordNotInChunk int64 = -1
+
 // RecordOffset represents the location of a MCAP record in a file.
 type RecordOffset struct {
 	// FileOffset is the offset from the start of file in bytes.
 	// If the record is in a chunk, this is the file offset of the chunk record.
-	FileOffset uint64
-	// ChunkOffset is the ffset from the start of chunk data if in a chunk, 0 otherwise.
-	ChunkOffset uint64
+	FileOffset int64
+	// ChunkOffset is the ffset from the start of chunk data if in a chunk, RecordNotInChunk otherwise.
+	ChunkOffset int64
 }
 
 // AttachmentReader represents an attachment for handling in a streaming manner.

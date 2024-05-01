@@ -14,12 +14,12 @@ import (
 
 type countingReader struct {
 	r   io.Reader
-	pos uint64
+	pos int64
 }
 
 func (cr *countingReader) Read(p []byte) (int, error) {
 	n, err := cr.r.Read(p)
-	cr.pos += uint64(n)
+	cr.pos += int64(n)
 	return n, err
 }
 
@@ -211,6 +211,7 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 	for {
 		if !l.inChunk {
 			l.lastOffset.FileOffset = l.reader.pos
+			l.lastOffset.ChunkOffset = RecordNotInChunk
 		} else {
 			l.lastOffset.ChunkOffset = l.reader.pos
 		}
@@ -220,7 +221,6 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			eof := errors.Is(err, io.EOF)
 			if l.inChunk && (eof || unexpectedEOF) {
 				l.inChunk = false
-				l.lastOffset.ChunkOffset = 0
 				l.reader = l.basereader
 				continue
 			}

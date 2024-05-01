@@ -33,7 +33,7 @@ func TestLexUnchunkedFile(t *testing.T) {
 	require.NoError(t, err)
 	expectations := []struct {
 		token      TokenType
-		fileOffset uint64
+		fileOffset int64
 	}{
 		{TokenHeader, 8},
 		{TokenChannel, 17},
@@ -48,7 +48,7 @@ func TestLexUnchunkedFile(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, expected.token, tokenType)
 		offset := lexer.GetLastTokenOffset()
-		assert.Equal(t, uint64(0), offset.ChunkOffset)
+		assert.Equal(t, RecordNotInChunk, offset.ChunkOffset)
 		assert.Equal(t, expected.fileOffset, offset.FileOffset,
 			fmt.Sprintf("expected file offset %d, got %d at index %d", expected.fileOffset, offset.FileOffset, i))
 	}
@@ -266,14 +266,14 @@ func TestOffsetsInChunkedFile(t *testing.T) {
 				token  TokenType
 				offset RecordOffset
 			}{
-				{TokenHeader, RecordOffset{8, 0}},
+				{TokenHeader, RecordOffset{8, RecordNotInChunk}},
 				{TokenChannel, RecordOffset{17, 0}},
 				{TokenMessage, RecordOffset{17, 9}},
 				{TokenMessage, RecordOffset{17, 18}},
 				{TokenChannel, RecordOffset{93, 0}},
 				{TokenMessage, RecordOffset{93, 9}},
 				{TokenMessage, RecordOffset{93, 18}},
-				{TokenFooter, RecordOffset{259, 0}},
+				{TokenFooter, RecordOffset{259, RecordNotInChunk}},
 			}
 			for i, expected := range expectations {
 				tokenType, _, err := lexer.Next(nil)
@@ -459,8 +459,8 @@ func TestAttachmentHandling(t *testing.T) {
 					assert.Equal(t, c.attachment.CreateTime, ar.CreateTime)
 					assert.Equal(t, c.attachment.Name, ar.Name)
 					assert.Equal(t, c.attachment.MediaType, ar.MediaType)
-					assert.Equal(t, uint64(39), ar.Offset.FileOffset)
-					assert.Equal(t, uint64(0), ar.Offset.ChunkOffset)
+					assert.Equal(t, int64(39), ar.Offset.FileOffset)
+					assert.Equal(t, RecordNotInChunk, ar.Offset.ChunkOffset)
 					data, err := io.ReadAll(ar.Data())
 					require.NoError(t, err)
 					assert.Equal(t, c.attachmentData, data)
