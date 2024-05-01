@@ -211,7 +211,7 @@ func (r *Reader) GetAttachmentReader(offset uint64) (*AttachmentReader, error) {
 	if err != nil {
 		return nil, err
 	}
-	ar, err := parseAttachmentReader(r.rs, true)
+	ar, err := parseAttachmentReader(r.rs, true, RecordOffset{FileOffset: offset})
 	if err != nil {
 		return nil, err
 	}

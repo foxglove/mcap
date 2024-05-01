@@ -12,6 +12,17 @@ import (
 	"github.com/pierrec/lz4/v4"
 )
 
+type countingReader struct {
+	r   io.Reader
+	pos uint64
+}
+
+func (cr *countingReader) Read(p []byte) (int, error) {
+	n, err := cr.r.Read(p)
+	cr.pos += uint64(n)
+	return n, err
+}
+
 // ErrNestedChunk indicates the lexer has detected a nested chunk.
 var ErrNestedChunk = errors.New("detected nested chunk")
 var ErrChunkTooLarge = errors.New("chunk exceeds configured maximum size")
@@ -168,9 +179,11 @@ func (t TokenType) String() string {
 // without parsing or interpreting them, except in the case of chunks, which may
 // be optionally de-chunked.
 type Lexer struct {
-	basereader io.Reader
-	reader     io.Reader
+	basereader *countingReader
+	reader     *countingReader
 	emitChunks bool
+
+	lastOffset RecordOffset
 
 	decoders                 decoders
 	inChunk                  bool
@@ -185,18 +198,29 @@ type Lexer struct {
 	decompressors            map[CompressionFormat]ResettableReader
 }
 
+// GetLastTokenOffset returns the TokenOffset of the last token returned from Next().
+func (l *Lexer) GetLastTokenOffset() RecordOffset {
+	return l.lastOffset
+}
+
 // Next returns the next token from the lexer as a byte array. The result will
 // be sliced out of the provided buffer `p`, if p has adequate space. If p does
 // not have adequate space, a new buffer with sufficient size is allocated for
 // the result.
 func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 	for {
+		if !l.inChunk {
+			l.lastOffset.FileOffset = l.reader.pos
+		} else {
+			l.lastOffset.ChunkOffset = l.reader.pos
+		}
 		readLength, err := io.ReadFull(l.reader, l.buf[:9])
 		if err != nil {
 			unexpectedEOF := errors.Is(err, io.ErrUnexpectedEOF)
 			eof := errors.Is(err, io.EOF)
 			if l.inChunk && (eof || unexpectedEOF) {
 				l.inChunk = false
+				l.lastOffset.ChunkOffset = 0
 				l.reader = l.basereader
 				continue
 			}
@@ -247,6 +271,7 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 				attachmentReader, err := parseAttachmentReader(
 					limitReader,
 					l.computeAttachmentCRCs,
+					l.lastOffset,
 				)
 				if err != nil {
 					return TokenError, nil, fmt.Errorf("failed to parse attachment: %w", err)
@@ -352,7 +377,7 @@ func (l *Lexer) setNoneDecoder(buf []byte) {
 	} else {
 		l.decoders.none.Reset(buf)
 	}
-	l.reader = l.decoders.none
+	l.reader = &countingReader{r: l.decoders.none}
 }
 
 func (l *Lexer) setZSTDDecoder(r io.Reader) error {
@@ -368,7 +393,7 @@ func (l *Lexer) setZSTDDecoder(r io.Reader) error {
 			return err
 		}
 	}
-	l.reader = l.decoders.zstd
+	l.reader = &countingReader{r: l.decoders.zstd}
 	return nil
 }
 
@@ -378,7 +403,7 @@ func (l *Lexer) setLZ4Decoder(r io.Reader) {
 	} else {
 		l.decoders.lz4.Reset(r)
 	}
-	l.reader = l.decoders.lz4
+	l.reader = &countingReader{r: l.decoders.lz4}
 }
 
 func loadChunk(l *Lexer, recordLen uint64) error {
@@ -446,9 +471,9 @@ func loadChunk(l *Lexer, recordLen uint64) error {
 		if err != nil {
 			return fmt.Errorf("failed to reset custom decompressor: %w", err)
 		}
-		l.reader = decoder
+		l.reader = &countingReader{r: decoder}
 	case compression == CompressionNone:
-		l.reader = lr
+		l.reader = &countingReader{r: lr}
 	case compression == CompressionZSTD:
 		err = l.setZSTDDecoder(lr)
 		if err != nil {
@@ -553,16 +578,17 @@ func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 		attachmentCallback = opts[0].AttachmentCallback
 		decompressors = opts[0].Decompressors
 	}
+	basereader := &countingReader{r: r}
 	if !skipMagic {
-		err := validateMagic(r, magicLocationStart)
+		err := validateMagic(basereader, magicLocationStart)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	return &Lexer{
-		basereader:               r,
-		reader:                   r,
+		basereader:               basereader,
+		reader:                   basereader,
 		buf:                      make([]byte, 32),
 		validateChunkCRCs:        validateChunkCRCs,
 		computeAttachmentCRCs:    computeAttachmentCRCs,

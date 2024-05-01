@@ -267,6 +267,7 @@ func ParseChunkIndex(buf []byte) (*ChunkIndex, error) {
 func parseAttachmentReader(
 	r io.Reader,
 	computeCRC bool,
+	tokenOffset RecordOffset,
 ) (*AttachmentReader, error) {
 	buf := make([]byte, 8)
 	crcReader := newCRCReader(r, computeCRC)
@@ -300,6 +301,7 @@ func parseAttachmentReader(
 		Name:       name,
 		MediaType:  mediaType,
 		DataSize:   dataSize,
+		Offset:     tokenOffset,
 
 		baseReader: r,
 		crcReader:  crcReader,

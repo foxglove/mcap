@@ -737,6 +737,8 @@ func TestGetAttachmentReader(t *testing.T) {
 	assert.Equal(t, 3, int(ar.DataSize))
 	assert.Equal(t, 10, int(ar.LogTime))
 	assert.Equal(t, 1000, int(ar.CreateTime))
+	assert.Equal(t, idx.Offset, ar.Offset.FileOffset)
+	assert.Equal(t, uint64(0), ar.Offset.ChunkOffset)
 
 	data, err := io.ReadAll(ar.Data())
 	require.NoError(t, err)

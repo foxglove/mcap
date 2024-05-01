@@ -28,21 +28,29 @@ func TestLexUnchunkedFile(t *testing.T) {
 		record(OpAttachmentIndex),
 		footer(),
 	)
-	lexer, err := NewLexer(bytes.NewReader(file))
+	r := bytes.NewReader(file)
+	lexer, err := NewLexer(r)
 	require.NoError(t, err)
-	expected := []TokenType{
-		TokenHeader,
-		TokenChannel,
-		TokenMessage,
-		TokenMessage,
-		TokenChannel,
-		TokenAttachmentIndex,
-		TokenFooter,
+	expectations := []struct {
+		token      TokenType
+		fileOffset uint64
+	}{
+		{TokenHeader, 8},
+		{TokenChannel, 17},
+		{TokenMessage, 26},
+		{TokenMessage, 35},
+		{TokenChannel, 134},
+		{TokenAttachmentIndex, 143},
+		{TokenFooter, 152},
 	}
-	for _, expectedTokenType := range expected {
+	for i, expected := range expectations {
 		tokenType, _, err := lexer.Next(nil)
 		require.NoError(t, err)
-		assert.Equal(t, expectedTokenType, tokenType)
+		assert.Equal(t, expected.token, tokenType)
+		offset := lexer.GetLastTokenOffset()
+		assert.Equal(t, uint64(0), offset.ChunkOffset)
+		assert.Equal(t, expected.fileOffset, offset.FileOffset,
+			fmt.Sprintf("expected file offset %d, got %d at index %d", expected.fileOffset, offset.FileOffset, i))
 	}
 }
 
@@ -210,9 +218,8 @@ func TestLexChunkedFile(t *testing.T) {
 						attachment(), attachment(),
 						footer(),
 					)
-					lexer, err := NewLexer(bytes.NewReader(file), &LexerOptions{
-						ValidateChunkCRCs: validateCRC,
-					})
+					r := bytes.NewReader(file)
+					lexer, err := NewLexer(r, &LexerOptions{ValidateChunkCRCs: validateCRC})
 					require.NoError(t, err)
 					expected := []TokenType{
 						TokenHeader,
@@ -236,6 +243,59 @@ func TestLexChunkedFile(t *testing.T) {
 					require.ErrorIs(t, err, io.EOF)
 				})
 			}
+		})
+	}
+}
+func TestOffsetsInChunkedFile(t *testing.T) {
+	for _, validateCRC := range []bool{
+		true,
+		false,
+	} {
+		t.Run(fmt.Sprintf("crc validation %v", validateCRC), func(t *testing.T) {
+			file := file(
+				header(),
+				chunk(t, CompressionNone, true, channelInfo(), message(), message()),
+				chunk(t, CompressionNone, true, channelInfo(), message(), message()),
+				attachment(), attachment(),
+				footer(),
+			)
+			r := bytes.NewReader(file)
+			lexer, err := NewLexer(r, &LexerOptions{ValidateChunkCRCs: validateCRC})
+			require.NoError(t, err)
+			expectations := []struct {
+				token  TokenType
+				offset RecordOffset
+			}{
+				{TokenHeader, RecordOffset{8, 0}},
+				{TokenChannel, RecordOffset{17, 0}},
+				{TokenMessage, RecordOffset{17, 9}},
+				{TokenMessage, RecordOffset{17, 18}},
+				{TokenChannel, RecordOffset{93, 0}},
+				{TokenMessage, RecordOffset{93, 9}},
+				{TokenMessage, RecordOffset{93, 18}},
+				{TokenFooter, RecordOffset{259, 0}},
+			}
+			for i, expected := range expectations {
+				tokenType, _, err := lexer.Next(nil)
+				require.NoError(t, err)
+				assert.Equal(t, expected.token, tokenType,
+					fmt.Sprintf("expected token %s but got %s at index %d", expected.token, tokenType, i))
+				offset := lexer.GetLastTokenOffset()
+				assert.Equal(t, expected.offset.FileOffset, offset.FileOffset,
+					fmt.Sprintf("expected file offset %d but got %d at index %d",
+						expected.offset.FileOffset,
+						offset.FileOffset,
+						i))
+				assert.Equal(t, expected.offset.ChunkOffset, offset.ChunkOffset,
+					fmt.Sprintf("expected chunk offset %d but got %d at index %d",
+						expected.offset.ChunkOffset,
+						offset.ChunkOffset,
+						i))
+			}
+
+			// now we are eof
+			_, _, err = lexer.Next(nil)
+			require.ErrorIs(t, err, io.EOF)
 		})
 	}
 }
@@ -399,6 +459,8 @@ func TestAttachmentHandling(t *testing.T) {
 					assert.Equal(t, c.attachment.CreateTime, ar.CreateTime)
 					assert.Equal(t, c.attachment.Name, ar.Name)
 					assert.Equal(t, c.attachment.MediaType, ar.MediaType)
+					assert.Equal(t, uint64(39), ar.Offset.FileOffset)
+					assert.Equal(t, uint64(0), ar.Offset.ChunkOffset)
 					data, err := io.ReadAll(ar.Data())
 					require.NoError(t, err)
 					assert.Equal(t, c.attachmentData, data)
