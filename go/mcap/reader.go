@@ -207,12 +207,16 @@ func (r *Reader) Info() (*Info, error) {
 // GetAttachmentReader returns an attachment reader located at the specific offset.
 // The reader must be consumed before the base reader is used again.
 func (r *Reader) GetAttachmentReader(offset uint64) (*AttachmentReader, error) {
-	_, err := r.rs.Seek(int64(offset+9), io.SeekStart)
+	if offset > math.MaxInt64 {
+		return nil, errors.New("attachment offset out of int64 range")
+	}
+	iOffset := int64(offset)
+	_, err := r.rs.Seek(iOffset+9, io.SeekStart)
 	if err != nil {
 		return nil, err
 	}
 	ar, err := parseAttachmentReader(r.rs, true, RecordOffset{
-		FileOffset:  int64(offset),
+		FileOffset:  iOffset,
 		ChunkOffset: RecordNotInChunk,
 	})
 	if err != nil {
