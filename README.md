@@ -93,3 +93,25 @@ Tag a release matching the version number `releases/swift/vX.Y.Z`
 
 1. Update the version in rust/Cargo.toml
 2. Tag a release matching the version number `releases/rust/vX.Y.Z`
+
+## Citations
+
+If you use MCAP in your research, please cite it in your work. Our suggested
+citation format is:
+
+```
+@software{MCAP,
+  title = {MCAP: serialization-agnostic log container file format},
+  author = {{Foxglove Developers}},
+  url = {https://mcap.dev},
+  version = {your version},
+  date = {your date of access},
+  year = {2024},
+  publisher = {{Foxglove Technologies}},
+  note = {Available from https://github.com/foxglove/mcap}
+}
+```
+
+Please replace the version and date fields with the version of the software you
+used, and the date you obtained it. Citing MCAP will help spread awareness of
+the project and strengthen the ecosystem.
