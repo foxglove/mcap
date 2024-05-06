@@ -15,6 +15,7 @@ var rangeIndexHeapTestItems = []rangeIndex{
 			MessageStartTime: 100,
 			MessageEndTime:   300,
 		},
+		ChunkSlotIndex: -1,
 	},
 	{
 		chunkIndex: &ChunkIndex{
@@ -22,7 +23,9 @@ var rangeIndexHeapTestItems = []rangeIndex{
 			MessageStartTime: 200,
 			MessageEndTime:   400,
 		},
-		messageIndexEntry: &MessageIndexEntry{Offset: 3, Timestamp: 200},
+		ChunkSlotIndex:       0,
+		MessageTimestamp:     200,
+		MessageOffsetInChunk: 3,
 	},
 	{
 		chunkIndex: &ChunkIndex{
@@ -30,7 +33,9 @@ var rangeIndexHeapTestItems = []rangeIndex{
 			MessageStartTime: 200,
 			MessageEndTime:   400,
 		},
-		messageIndexEntry: &MessageIndexEntry{Offset: 2, Timestamp: 250},
+		ChunkSlotIndex:       0,
+		MessageTimestamp:     250,
+		MessageOffsetInChunk: 2,
 	},
 	{
 		chunkIndex: &ChunkIndex{
@@ -38,6 +43,7 @@ var rangeIndexHeapTestItems = []rangeIndex{
 			MessageStartTime: 300,
 			MessageEndTime:   400,
 		},
+		ChunkSlotIndex: -1,
 	},
 }
 
@@ -67,16 +73,16 @@ func TestMessageOrdering(t *testing.T) {
 		t.Run(c.assertion, func(t *testing.T) {
 			h := &rangeIndexHeap{order: c.order}
 			for _, item := range rangeIndexHeapTestItems {
-				require.NoError(t, h.HeapPush(item))
+				require.NoError(t, h.heapPush(item))
 			}
-			assert.Len(t, rangeIndexHeapTestItems, h.Len())
+			assert.Len(t, rangeIndexHeapTestItems, h.len())
 			i := 0
-			for h.Len() > 0 {
-				poppedItem, err := h.HeapPop()
+			for h.len() > 0 {
+				poppedItem, err := h.Pop()
 				require.NoError(t, err)
 				found := false
 				for index, item := range rangeIndexHeapTestItems {
-					if reflect.DeepEqual(item, *poppedItem) {
+					if reflect.DeepEqual(item, poppedItem) {
 						assert.Equal(t, c.expectedIndexOrder[i], index)
 						found = true
 					}

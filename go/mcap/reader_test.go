@@ -2,12 +2,14 @@ package mcap
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,6 +74,7 @@ func TestIndexedReaderBreaksTiesOnChunkOffset(t *testing.T) {
 		if errors.Is(err, io.EOF) {
 			break
 		}
+		require.NoError(t, err)
 		assert.Equal(t, expectedTopics[i], channel.Topic)
 	}
 }
@@ -880,4 +883,76 @@ func TestReadingBigTimestamps(t *testing.T) {
 		}
 		assert.Equal(t, 1, count)
 	})
+}
+
+func BenchmarkReader(b *testing.B) {
+	for _, useIndex := range []bool{false, true} {
+		name := "with_index"
+		if !useIndex {
+			name = "no_index"
+		}
+		b.Run(name, func(b *testing.B) {
+			b.StopTimer()
+			buf := &bytes.Buffer{}
+			writer, err := NewWriter(buf, &WriterOptions{
+				Chunked:     true,
+				Compression: CompressionZSTD,
+			})
+			require.NoError(b, err)
+			channelCount := 200
+			messageCount := uint64(1000000)
+			messageSize := 32
+			require.NoError(b, writer.WriteHeader(&Header{}))
+			require.NoError(b, writer.WriteSchema(&Schema{ID: 1, Name: "empty", Encoding: "none"}))
+			for i := 0; i < channelCount; i++ {
+				require.NoError(b, writer.WriteChannel(&Channel{
+					ID:              uint16(i),
+					SchemaID:        1,
+					Topic:           "/chat",
+					MessageEncoding: "none",
+				}))
+			}
+			contentBuf := make([]byte, messageSize)
+			for i := uint64(0); i < messageCount; i++ {
+				channelID := uint16(i % uint64(channelCount))
+				_, err := rand.Read(contentBuf)
+				require.NoError(b, err)
+				require.NoError(b, writer.WriteMessage(&Message{
+					ChannelID:   channelID,
+					Sequence:    uint32(i),
+					LogTime:     i,
+					PublishTime: i,
+					Data:        contentBuf,
+				}))
+			}
+			require.NoError(b, writer.Close())
+			b.StartTimer()
+			for i := 0; i < b.N; i++ {
+				s := time.Now()
+				reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+				require.NoError(b, err)
+				it, err := reader.Messages(UsingIndex(useIndex))
+				require.NoError(b, err)
+				readMessages := uint64(0)
+				msgBytes := uint64(0)
+				var buf []byte
+				msg := Message{}
+				for {
+					msgBuf, err := it.ReadNextInto(buf, &msg)
+					if len(msgBuf) > len(buf) {
+						buf = msgBuf
+					}
+					if errors.Is(err, io.EOF) {
+						break
+					}
+					require.NoError(b, err)
+					readMessages++
+					msgBytes += uint64(len(msg.Data))
+				}
+				b.ReportMetric(float64(messageCount)/time.Since(s).Seconds(), "msg/s")
+				b.ReportMetric(float64(msgBytes)/(time.Since(s).Seconds()*1024*1024), "MB/s")
+				require.Equal(b, messageCount, readMessages)
+			}
+		})
+	}
 }

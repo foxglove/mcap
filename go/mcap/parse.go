@@ -99,32 +99,40 @@ func ParseChannel(buf []byte) (*Channel, error) {
 	}, nil
 }
 
-// ParseMessage parses a message record.
-func ParseMessage(buf []byte) (*Message, error) {
+// PopulateFrom populates the fields of a Message struct from the message data slice.
+func (m *Message) PopulateFrom(buf []byte) error {
 	channelID, offset, err := getUint16(buf, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read channel ID: %w", err)
+		return fmt.Errorf("failed to read channel ID: %w", err)
 	}
 	sequence, offset, err := getUint32(buf, offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read sequence: %w", err)
+		return fmt.Errorf("failed to read sequence: %w", err)
 	}
 	logTime, offset, err := getUint64(buf, offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read record time: %w", err)
+		return fmt.Errorf("failed to read record time: %w", err)
 	}
 	publishTime, offset, err := getUint64(buf, offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read publish time: %w", err)
+		return fmt.Errorf("failed to read publish time: %w", err)
 	}
 	data := buf[offset:]
-	return &Message{
-		ChannelID:   channelID,
-		Sequence:    sequence,
-		LogTime:     logTime,
-		PublishTime: publishTime,
-		Data:        data,
-	}, nil
+	m.ChannelID = channelID
+	m.Sequence = sequence
+	m.LogTime = logTime
+	m.PublishTime = publishTime
+	m.Data = data
+	return nil
+}
+
+// ParseMessage parses a message record.
+func ParseMessage(buf []byte) (*Message, error) {
+	msg := &Message{}
+	if err := msg.PopulateFrom(buf); err != nil {
+		return nil, err
+	}
+	return msg, nil
 }
 
 // ParseChunk parses a chunk record.

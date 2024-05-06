@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math/bits"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
@@ -14,6 +15,11 @@ import (
 const (
 	chunkBufferGrowthMultiple = 1.2
 )
+
+type decompressedChunk struct {
+	buf            []byte
+	unreadMessages uint64
+}
 
 // indexedMessageIterator is an iterator over an indexed mcap read seeker (as
 // seeking is required). It makes reads in alternation from the index data
@@ -39,8 +45,9 @@ type indexedMessageIterator struct {
 	lz4Reader             *lz4.Reader
 	hasReadSummarySection bool
 
-	compressedChunkAndMessageIndex []byte
-	metadataCallback               func(*Metadata) error
+	compressedChunk    []byte
+	decompressedChunks []decompressedChunk
+	metadataCallback   func(*Metadata) error
 }
 
 // parseIndexSection parses the index section of the file and populates the
@@ -126,10 +133,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			for _, channel := range it.channels {
 				if idx.MessageIndexOffsets[channel.ID] > 0 {
 					if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
-						rangeIndex := rangeIndex{
-							chunkIndex: idx,
-						}
-						if err := it.indexHeap.HeapPush(rangeIndex); err != nil {
+						if err := it.indexHeap.PushChunkIndex(idx); err != nil {
 							return err
 						}
 					}
@@ -155,24 +159,41 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		return err
 	}
 
-	compressedChunkLength := chunkIndex.ChunkLength + chunkIndex.MessageIndexLength
-	if len(it.compressedChunkAndMessageIndex) < int(compressedChunkLength) {
+	compressedChunkLength := chunkIndex.ChunkLength
+	if len(it.compressedChunk) < int(compressedChunkLength) {
 		newSize := int(float64(compressedChunkLength) * chunkBufferGrowthMultiple)
-		it.compressedChunkAndMessageIndex = make([]byte, newSize)
+		it.compressedChunk = make([]byte, newSize)
 	}
-	_, err = io.ReadFull(it.rs, it.compressedChunkAndMessageIndex[:compressedChunkLength])
+	_, err = io.ReadFull(it.rs, it.compressedChunk[:compressedChunkLength])
 	if err != nil {
 		return fmt.Errorf("failed to read chunk data: %w", err)
 	}
-	parsedChunk, err := ParseChunk(it.compressedChunkAndMessageIndex[9:chunkIndex.ChunkLength])
+	parsedChunk, err := ParseChunk(it.compressedChunk[9:chunkIndex.ChunkLength])
 	if err != nil {
 		return fmt.Errorf("failed to parse chunk: %w", err)
 	}
 	// decompress the chunk data
-	var chunkData []byte
+	chunkSlotIndex := -1
+	for i, decompressedChunk := range it.decompressedChunks {
+		if decompressedChunk.unreadMessages == 0 {
+			chunkSlotIndex = i
+			break
+		}
+	}
+	if chunkSlotIndex == -1 {
+		it.decompressedChunks = append(it.decompressedChunks, decompressedChunk{})
+		chunkSlotIndex = len(it.decompressedChunks) - 1
+	}
+	chunkSlot := &it.decompressedChunks[chunkSlotIndex]
+	bufSize := parsedChunk.UncompressedSize
+	if uint64(cap(chunkSlot.buf)) < bufSize {
+		chunkSlot.buf = make([]byte, bufSize)
+	} else {
+		chunkSlot.buf = chunkSlot.buf[:bufSize]
+	}
 	switch CompressionFormat(parsedChunk.Compression) {
 	case CompressionNone:
-		chunkData = parsedChunk.Records
+		copy(chunkSlot.buf, parsedChunk.Records)
 	case CompressionZSTD:
 		if it.zstdDecoder == nil {
 			it.zstdDecoder, err = zstd.NewReader(nil)
@@ -180,8 +201,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 				return fmt.Errorf("failed to instantiate zstd decoder: %w", err)
 			}
 		}
-		chunkData = make([]byte, 0, parsedChunk.UncompressedSize)
-		chunkData, err = it.zstdDecoder.DecodeAll(parsedChunk.Records, chunkData)
+		chunkSlot.buf, err = it.zstdDecoder.DecodeAll(parsedChunk.Records, chunkSlot.buf[:0])
 		if err != nil {
 			return fmt.Errorf("failed to decode chunk data: %w", err)
 		}
@@ -191,49 +211,56 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		} else {
 			it.lz4Reader.Reset(bytes.NewReader(parsedChunk.Records))
 		}
-		chunkData = make([]byte, parsedChunk.UncompressedSize)
-		_, err = io.ReadFull(it.lz4Reader, chunkData)
+		_, err = io.ReadFull(it.lz4Reader, chunkSlot.buf)
 		if err != nil {
 			return fmt.Errorf("failed to decompress lz4 chunk: %w", err)
 		}
 	default:
 		return fmt.Errorf("unsupported compression %s", parsedChunk.Compression)
 	}
-	// use the message index to find the messages we want from the chunk
-	messageIndexSection := it.compressedChunkAndMessageIndex[chunkIndex.ChunkLength:compressedChunkLength]
-	var recordLen uint64
-	offset := 0
-	for offset < len(messageIndexSection) {
-		if op := OpCode(messageIndexSection[offset]); op != OpMessageIndex {
-			return fmt.Errorf("unexpected token %s in message index section", op)
+	// lex the chunk
+	for offset := uint64(0); offset < bufSize; {
+		if bufSize < offset+1+8 {
+			return fmt.Errorf("expected another record in chunk, but left with %d bytes", bufSize-offset)
 		}
-		offset++
-		recordLen, offset, err = getUint64(messageIndexSection, offset)
-		if err != nil {
-			return fmt.Errorf("failed to get message index record length: %w", err)
+		opcodeAndLengthBuf := chunkSlot.buf[offset : offset+1+8]
+		op := OpCode(opcodeAndLengthBuf[0])
+		recordLen := binary.LittleEndian.Uint64(opcodeAndLengthBuf[1:])
+		recordStart := offset + 1 + 8
+		recordEnd, overflow := checkedAdd(recordStart, recordLen)
+		if overflow {
+			return fmt.Errorf("record length extends past uint64 range: start: %d, len: %d", recordStart, recordLen)
 		}
-		messageIndex, err := ParseMessageIndex(messageIndexSection[offset : uint64(offset)+recordLen])
-		if err != nil {
-			return fmt.Errorf("failed to parse message index: %w", err)
+		if bufSize < recordEnd {
+			return fmt.Errorf(
+				"%s record in chunk has length %d bytes but only %d remaining in chunk",
+				op.String(), recordLen, bufSize-recordStart)
 		}
-		offset += int(recordLen)
-		// skip message indexes for channels we don't need
-		if _, ok := it.channels[messageIndex.ChannelID]; !ok {
-			continue
-		}
-		// push any message index entries in the requested time range to the heap to read.
-		for i := range messageIndex.Records {
-			timestamp := messageIndex.Records[i].Timestamp
-			if timestamp >= it.start && timestamp < it.end {
-				if err := it.indexHeap.HeapPush(rangeIndex{
-					chunkIndex:        chunkIndex,
-					messageIndexEntry: &messageIndex.Records[i],
-					buf:               chunkData,
-				}); err != nil {
-					return err
+		recordContent := chunkSlot.buf[recordStart:recordEnd]
+		msg := Message{}
+		switch op {
+		case OpMessage:
+			if err := msg.PopulateFrom(recordContent); err != nil {
+				return fmt.Errorf("could not parse message in chunk: %w", err)
+			}
+			if _, ok := it.channels[msg.ChannelID]; ok {
+				if msg.LogTime >= it.start && msg.LogTime < it.end {
+					if err := it.indexHeap.PushMessage(chunkIndex, chunkSlotIndex, msg.LogTime, offset); err != nil {
+						return err
+					}
+					chunkSlot.unreadMessages++
 				}
 			}
+		case OpChannel, OpSchema:
+			// no-op
+		default:
+			return fmt.Errorf(
+				"expected only schema, channel, message opcodes in chunk, found %s at offset %d",
+				op.String(),
+				offset,
+			)
 		}
+		offset = recordEnd
 	}
 	return nil
 }
@@ -254,60 +281,99 @@ func readRecord(r io.Reader) (OpCode, []byte, error) {
 	return opcode, record, nil
 }
 
-func (it *indexedMessageIterator) Next(_ []byte) (*Schema, *Channel, *Message, error) {
+func (it *indexedMessageIterator) ReadNextInto(buf []byte, msg *Message) ([]byte, error) {
 	if !it.hasReadSummarySection {
 		err := it.parseSummarySection()
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 		// take care of the metadata here
 		if it.metadataCallback != nil {
 			for _, idx := range it.metadataIndexes {
 				_, err = it.rs.Seek(int64(idx.Offset), io.SeekStart)
 				if err != nil {
-					return nil, nil, nil, fmt.Errorf("failed to seek to metadata: %w", err)
+					return nil, fmt.Errorf("failed to seek to metadata: %w", err)
 				}
 				opcode, data, err := readRecord(it.rs)
 				if err != nil {
-					return nil, nil, nil, fmt.Errorf("failed to read metadata record: %w", err)
+					return nil, fmt.Errorf("failed to read metadata record: %w", err)
 				}
 				if opcode != OpMetadata {
-					return nil, nil, nil, fmt.Errorf("expected metadata record, found %v", data)
+					return nil, fmt.Errorf("expected metadata record, found %v", data)
 				}
 				metadata, err := ParseMetadata(data)
 				if err != nil {
-					return nil, nil, nil, fmt.Errorf("failed to parse metadata record: %w", err)
+					return nil, fmt.Errorf("failed to parse metadata record: %w", err)
 				}
 				err = it.metadataCallback(metadata)
 				if err != nil {
-					return nil, nil, nil, fmt.Errorf("metadata callback failed: %w", err)
+					return nil, fmt.Errorf("metadata callback failed: %w", err)
 				}
 			}
 		}
 	}
 
-	for it.indexHeap.Len() > 0 {
-		ri, err := it.indexHeap.HeapPop()
+	for it.indexHeap.len() > 0 {
+		ri, err := it.indexHeap.Pop()
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
-		if ri.messageIndexEntry == nil {
+		if ri.ChunkSlotIndex == -1 {
 			err := it.loadChunk(ri.chunkIndex)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, err
 			}
 			continue
 		}
-		chunkOffset := ri.messageIndexEntry.Offset
-		length := binary.LittleEndian.Uint64(ri.buf[chunkOffset+1:])
-		messageData := ri.buf[chunkOffset+1+8 : chunkOffset+1+8+length]
-		message, err := ParseMessage(messageData)
-		if err != nil {
-			return nil, nil, nil, err
+		chunkOffset := ri.MessageOffsetInChunk
+		decompressedChunk := it.decompressedChunks[ri.ChunkSlotIndex]
+		length := binary.LittleEndian.Uint64(decompressedChunk.buf[chunkOffset+1:])
+		messageData := decompressedChunk.buf[chunkOffset+1+8 : chunkOffset+1+8+length]
+		if cap(buf) < len(messageData) {
+			buf = append([]byte{}, messageData...)
+		} else {
+			buf = buf[:len(messageData)]
+			copy(buf, messageData)
 		}
-		channel := it.channels[message.ChannelID]
-		schema := it.schemas[channel.SchemaID]
-		return schema, channel, message, nil
+		if err := msg.PopulateFrom(buf); err != nil {
+			return nil, err
+		}
+		it.decompressedChunks[ri.ChunkSlotIndex].unreadMessages--
+		return buf, nil
 	}
-	return nil, nil, nil, io.EOF
+	return buf, io.EOF
+}
+
+func (it *indexedMessageIterator) Next(buf []byte) (*Schema, *Channel, *Message, error) {
+	msg := &Message{}
+	_, err := it.ReadNextInto(buf, msg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	schema, channel, err := it.SchemaAndChannelForID(msg.ChannelID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return schema, channel, msg, nil
+}
+
+func (it *indexedMessageIterator) SchemaAndChannelForID(channelID uint16) (*Schema, *Channel, error) {
+	channel, ok := it.channels[channelID]
+	if !ok {
+		return nil, nil, fmt.Errorf("no channel for id %d", channelID)
+	}
+	if channel.SchemaID == 0 {
+		return nil, channel, nil
+	}
+	schema, ok := it.schemas[channel.SchemaID]
+	if !ok {
+		return nil, nil, fmt.Errorf("no associated schema with id %d for channel %d", channel.SchemaID, channelID)
+	}
+	return schema, channel, nil
+}
+
+// returns the sum of two uint64s, with a boolean indicating if the sum overflowed.
+func checkedAdd(a, b uint64) (uint64, bool) {
+	res, carry := bits.Add64(a, b, 0)
+	return res, carry != 0
 }
