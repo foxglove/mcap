@@ -37,7 +37,7 @@ func (it *unindexedMessageIterator) ReadNextInto(buf []byte, msg *Message) ([]by
 		if err != nil {
 			return record, err
 		}
-		if len(record) > len(buf) {
+		if cap(record) > cap(buf) {
 			buf = record
 		}
 		switch tokenType {

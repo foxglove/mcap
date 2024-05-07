@@ -939,7 +939,7 @@ func BenchmarkReader(b *testing.B) {
 				msg := Message{}
 				for {
 					msgBuf, err := it.ReadNextInto(buf, &msg)
-					if len(msgBuf) > len(buf) {
+					if cap(msgBuf) > cap(buf) {
 						buf = msgBuf
 					}
 					if errors.Is(err, io.EOF) {
