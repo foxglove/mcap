@@ -12,39 +12,34 @@ type unindexedMessageIterator struct {
 	start    uint64
 	end      uint64
 
+	recordBuf []byte
+
 	metadataCallback func(*Metadata) error
 }
 
 func (it *unindexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, error) {
-	msg := &Message{}
-	_, err := it.ReadNextInto(p, msg)
+	msg := &Message{Data: p}
+	schema, channel, err := it.NextInto(msg)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	schema, channel, err := it.SchemaAndChannelForID(msg.ChannelID)
 	return schema, channel, msg, err
 }
 
-func (it *unindexedMessageIterator) SchemaAndChannelForID(channelID uint16) (*Schema, *Channel, error) {
-	channel := it.channels[channelID]
-	schema := it.schemas[channel.SchemaID]
-	return schema, channel, nil
-}
-
-func (it *unindexedMessageIterator) ReadNextInto(buf []byte, msg *Message) ([]byte, error) {
+func (it *unindexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, error) {
 	for {
-		tokenType, record, err := it.lexer.Next(buf)
+		tokenType, record, err := it.lexer.Next(it.recordBuf)
 		if err != nil {
-			return record, err
+			return nil, nil, err
 		}
-		if cap(record) > cap(buf) {
-			buf = record
+		if cap(record) > cap(it.recordBuf) {
+			it.recordBuf = record
 		}
 		switch tokenType {
 		case TokenSchema:
 			schema, err := ParseSchema(record)
 			if err != nil {
-				return record, fmt.Errorf("failed to parse schema: %w", err)
+				return nil, nil, fmt.Errorf("failed to parse schema: %w", err)
 			}
 			if _, ok := it.schemas[schema.ID]; !ok {
 				it.schemas[schema.ID] = schema
@@ -52,7 +47,7 @@ func (it *unindexedMessageIterator) ReadNextInto(buf []byte, msg *Message) ([]by
 		case TokenChannel:
 			channelInfo, err := ParseChannel(record)
 			if err != nil {
-				return record, fmt.Errorf("failed to parse channel info: %w", err)
+				return nil, nil, fmt.Errorf("failed to parse channel info: %w", err)
 			}
 			if _, ok := it.channels[channelInfo.ID]; !ok {
 				if len(it.topics) == 0 || it.topics[channelInfo.Topic] {
@@ -60,9 +55,11 @@ func (it *unindexedMessageIterator) ReadNextInto(buf []byte, msg *Message) ([]by
 				}
 			}
 		case TokenMessage:
+			existingbuf := msg.Data
 			if err := msg.PopulateFrom(record); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
+			msg.Data = append(existingbuf[:0], msg.Data...)
 			if _, ok := it.channels[msg.ChannelID]; !ok {
 				// skip messages on channels we don't know about. Note that if
 				// an unindexed reader encounters a message it would be
@@ -71,17 +68,25 @@ func (it *unindexedMessageIterator) ReadNextInto(buf []byte, msg *Message) ([]by
 				continue
 			}
 			if msg.LogTime >= it.start && msg.LogTime < it.end {
-				return record, nil
+				channel, ok := it.channels[msg.ChannelID]
+				if !ok {
+					return nil, nil, fmt.Errorf("message with unrecognized channel ID %d", msg.ChannelID)
+				}
+				schema, ok := it.schemas[channel.SchemaID]
+				if !ok && channel.SchemaID != 0 {
+					return nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
+				}
+				return schema, channel, nil
 			}
 		case TokenMetadata:
 			if it.metadataCallback != nil {
 				metadata, err := ParseMetadata(record)
 				if err != nil {
-					return nil, fmt.Errorf("failed to parse metadata: %w", err)
+					return nil, nil, fmt.Errorf("failed to parse metadata: %w", err)
 				}
 				err = it.metadataCallback(metadata)
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 			}
 			// we don't emit metadata from the reader, so continue onward

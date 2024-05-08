@@ -45,7 +45,7 @@ type indexedMessageIterator struct {
 	lz4Reader             *lz4.Reader
 	hasReadSummarySection bool
 
-	compressedChunk    []byte
+	recordBuf          []byte
 	decompressedChunks []decompressedChunk
 	metadataCallback   func(*Metadata) error
 }
@@ -160,15 +160,15 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	}
 
 	compressedChunkLength := chunkIndex.ChunkLength
-	if len(it.compressedChunk) < int(compressedChunkLength) {
+	if len(it.recordBuf) < int(compressedChunkLength) {
 		newSize := int(float64(compressedChunkLength) * chunkBufferGrowthMultiple)
-		it.compressedChunk = make([]byte, newSize)
+		it.recordBuf = make([]byte, newSize)
 	}
-	_, err = io.ReadFull(it.rs, it.compressedChunk[:compressedChunkLength])
+	_, err = io.ReadFull(it.rs, it.recordBuf[:compressedChunkLength])
 	if err != nil {
 		return fmt.Errorf("failed to read chunk data: %w", err)
 	}
-	parsedChunk, err := ParseChunk(it.compressedChunk[9:chunkIndex.ChunkLength])
+	parsedChunk, err := ParseChunk(it.recordBuf[9:chunkIndex.ChunkLength])
 	if err != nil {
 		return fmt.Errorf("failed to parse chunk: %w", err)
 	}
@@ -281,33 +281,33 @@ func readRecord(r io.Reader) (OpCode, []byte, error) {
 	return opcode, record, nil
 }
 
-func (it *indexedMessageIterator) ReadNextInto(buf []byte, msg *Message) ([]byte, error) {
+func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, error) {
 	if !it.hasReadSummarySection {
 		err := it.parseSummarySection()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// take care of the metadata here
 		if it.metadataCallback != nil {
 			for _, idx := range it.metadataIndexes {
 				_, err = it.rs.Seek(int64(idx.Offset), io.SeekStart)
 				if err != nil {
-					return nil, fmt.Errorf("failed to seek to metadata: %w", err)
+					return nil, nil, fmt.Errorf("failed to seek to metadata: %w", err)
 				}
 				opcode, data, err := readRecord(it.rs)
 				if err != nil {
-					return nil, fmt.Errorf("failed to read metadata record: %w", err)
+					return nil, nil, fmt.Errorf("failed to read metadata record: %w", err)
 				}
 				if opcode != OpMetadata {
-					return nil, fmt.Errorf("expected metadata record, found %v", data)
+					return nil, nil, fmt.Errorf("expected metadata record, found %v", data)
 				}
 				metadata, err := ParseMetadata(data)
 				if err != nil {
-					return nil, fmt.Errorf("failed to parse metadata record: %w", err)
+					return nil, nil, fmt.Errorf("failed to parse metadata record: %w", err)
 				}
 				err = it.metadataCallback(metadata)
 				if err != nil {
-					return nil, fmt.Errorf("metadata callback failed: %w", err)
+					return nil, nil, fmt.Errorf("metadata callback failed: %w", err)
 				}
 			}
 		}
@@ -316,12 +316,12 @@ func (it *indexedMessageIterator) ReadNextInto(buf []byte, msg *Message) ([]byte
 	for it.indexHeap.len() > 0 {
 		ri, err := it.indexHeap.Pop()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if ri.ChunkSlotIndex == -1 {
 			err := it.loadChunk(ri.chunkIndex)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			continue
 		}
@@ -329,47 +329,32 @@ func (it *indexedMessageIterator) ReadNextInto(buf []byte, msg *Message) ([]byte
 		decompressedChunk := it.decompressedChunks[ri.ChunkSlotIndex]
 		length := binary.LittleEndian.Uint64(decompressedChunk.buf[chunkOffset+1:])
 		messageData := decompressedChunk.buf[chunkOffset+1+8 : chunkOffset+1+8+length]
-		if cap(buf) < len(messageData) {
-			buf = append([]byte{}, messageData...)
-		} else {
-			buf = buf[:len(messageData)]
-			copy(buf, messageData)
+		existingbuf := msg.Data
+		if err := msg.PopulateFrom(messageData); err != nil {
+			return nil, nil, err
 		}
-		if err := msg.PopulateFrom(buf); err != nil {
-			return nil, err
-		}
+		msg.Data = append(existingbuf[:0], msg.Data...)
 		it.decompressedChunks[ri.ChunkSlotIndex].unreadMessages--
-		return buf, nil
+		channel, ok := it.channels[msg.ChannelID]
+		if !ok {
+			return nil, nil, fmt.Errorf("message with unrecognized channel ID %d", msg.ChannelID)
+		}
+		schema, ok := it.schemas[channel.SchemaID]
+		if !ok && channel.SchemaID != 0 {
+			return nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
+		}
+		return schema, channel, nil
 	}
-	return buf, io.EOF
+	return nil, nil, io.EOF
 }
 
 func (it *indexedMessageIterator) Next(buf []byte) (*Schema, *Channel, *Message, error) {
-	msg := &Message{}
-	_, err := it.ReadNextInto(buf, msg)
+	msg := &Message{Data: buf}
+	schema, channel, err := it.NextInto(msg)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	schema, channel, err := it.SchemaAndChannelForID(msg.ChannelID)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return schema, channel, msg, nil
-}
-
-func (it *indexedMessageIterator) SchemaAndChannelForID(channelID uint16) (*Schema, *Channel, error) {
-	channel, ok := it.channels[channelID]
-	if !ok {
-		return nil, nil, fmt.Errorf("no channel for id %d", channelID)
-	}
-	if channel.SchemaID == 0 {
-		return nil, channel, nil
-	}
-	schema, ok := it.schemas[channel.SchemaID]
-	if !ok {
-		return nil, nil, fmt.Errorf("no associated schema with id %d for channel %d", channel.SchemaID, channelID)
-	}
-	return schema, channel, nil
+	return schema, channel, msg, err
 }
 
 // returns the sum of two uint64s, with a boolean indicating if the sum overflowed.

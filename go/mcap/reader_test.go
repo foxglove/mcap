@@ -935,13 +935,9 @@ func BenchmarkReader(b *testing.B) {
 				require.NoError(b, err)
 				readMessages := uint64(0)
 				msgBytes := uint64(0)
-				var buf []byte
 				msg := Message{}
 				for {
-					msgBuf, err := it.ReadNextInto(buf, &msg)
-					if cap(msgBuf) > cap(buf) {
-						buf = msgBuf
-					}
+					_, _, err := it.NextInto(&msg)
 					if errors.Is(err, io.EOF) {
 						break
 					}
