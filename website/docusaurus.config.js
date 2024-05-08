@@ -5,9 +5,7 @@
 const path = require("path");
 const darkCodeTheme = require("prism-react-renderer/themes/dracula");
 const lightCodeTheme = require("prism-react-renderer/themes/github");
-const util = require("util");
 const webpack = require("webpack");
-const execAsync = util.promisify(require("child_process").exec);
 
 const modifySvgoConfigInPlace = require("./modifySvgoConfigInPlace");
 
@@ -67,32 +65,6 @@ const config = {
         };
       },
     }),
-    () => {
-      // determines the current CLI download link to display by fetching the latest tag matching
-      // releases/mcap-cli/* at build time.
-      return {
-        name: "latestCLIReleaseTag",
-        async loadContent() {
-          /* cspell:disable */
-          const result = await execAsync(
-            `git tag --sort=-creatordate --list "releases/mcap-cli/*"`,
-          );
-          /* cspell:enable */
-          if (result.stdout.length === 0) {
-            throw new Error(
-              `could not determine latest MCAP CLI tag ${JSON.stringify(
-                result,
-              )}`,
-            );
-          }
-          const latest = result.stdout.split("\n")[0];
-          return latest;
-        },
-        async contentLoaded({ content, actions }) {
-          actions.setGlobalData({ tag: content });
-        },
-      };
-    },
   ],
 
   presets: [

@@ -3,8 +3,6 @@ name: Website
 on:
   push:
     branches: [main]
-    # deploy the website for every new MCAP CLI release, so the version gets populated in CLI installation docs
-    tags: ["releases/mcap-cli/*"]
   pull_request:
     branches: ["*"]
 
@@ -15,9 +13,6 @@ jobs:
       - uses: actions/checkout@v3
         with:
           lfs: true
-          # https://github.com/actions/checkout/issues/701 - causes tags to be fetched, which
-          # are needed to determine the latest MCAP CLI release
-          fetch-depth: 0
 
       - run: corepack enable
       - uses: actions/setup-node@v4
