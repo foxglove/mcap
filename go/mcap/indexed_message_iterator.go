@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"math/bits"
+	"slices"
+	"sort"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
@@ -39,7 +41,13 @@ type indexedMessageIterator struct {
 	metadataIndexes   []*MetadataIndex
 	footer            *Footer
 
-	indexHeap rangeIndexHeap
+	chunksOverlap bool
+	indexHeap     rangeIndexHeap
+
+	chunkIndexesToLoad []*ChunkIndex
+	curChunkIndex      int
+	messageIndexes     []MessageIndexEntry
+	curMessageIndex    int
 
 	zstdDecoder           *zstd.Decoder
 	lz4Reader             *lz4.Reader
@@ -91,6 +99,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	}
 	defer lexer.Close()
 
+lexerloop:
 	for {
 		tokenType, record, err := lexer.Next(nil)
 		if err != nil {
@@ -133,9 +142,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			for _, channel := range it.channels {
 				if idx.MessageIndexOffsets[channel.ID] > 0 {
 					if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
-						if err := it.indexHeap.PushChunkIndex(idx); err != nil {
-							return err
-						}
+						it.chunkIndexesToLoad = append(it.chunkIndexesToLoad, idx)
 					}
 					break
 				}
@@ -148,9 +155,48 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			it.statistics = stats
 		case TokenFooter:
 			it.hasReadSummarySection = true
-			return nil
+			break lexerloop
 		}
 	}
+	it.chunksOverlap = false
+	switch it.indexHeap.order {
+	case FileOrder:
+		sort.Slice(it.chunkIndexesToLoad, func(i, j int) bool {
+			return it.chunkIndexesToLoad[i].ChunkStartOffset < it.chunkIndexesToLoad[j].ChunkStartOffset
+		})
+	case LogTimeOrder:
+		sort.Slice(it.chunkIndexesToLoad, func(i, j int) bool {
+			return it.chunkIndexesToLoad[i].MessageStartTime < it.chunkIndexesToLoad[j].MessageStartTime
+		})
+		for i := 1; i < len(it.chunkIndexesToLoad); i++ {
+			prev := it.chunkIndexesToLoad[i-1]
+			cur := it.chunkIndexesToLoad[i]
+			if prev.MessageEndTime > cur.MessageStartTime {
+				it.chunksOverlap = true
+				break
+			}
+		}
+	case ReverseLogTimeOrder:
+		sort.Slice(it.chunkIndexesToLoad, func(i, j int) bool {
+			return it.chunkIndexesToLoad[i].MessageEndTime > it.chunkIndexesToLoad[j].MessageEndTime
+		})
+		for i := 1; i < len(it.chunkIndexesToLoad); i++ {
+			prev := it.chunkIndexesToLoad[i-1]
+			cur := it.chunkIndexesToLoad[i]
+			if prev.MessageStartTime < cur.MessageEndTime {
+				it.chunksOverlap = true
+				break
+			}
+		}
+	}
+	if it.chunksOverlap {
+		for _, idx := range it.chunkIndexesToLoad {
+			if err := it.indexHeap.PushChunkIndex(idx); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
@@ -218,6 +264,9 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	default:
 		return fmt.Errorf("unsupported compression %s", parsedChunk.Compression)
 	}
+	chunkIsOrdered := true
+	var maxLogTime uint64
+	it.messageIndexes = it.messageIndexes[:0]
 	// lex the chunk
 	for offset := uint64(0); offset < bufSize; {
 		if bufSize < offset+1+8 {
@@ -245,8 +294,11 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 			}
 			if _, ok := it.channels[msg.ChannelID]; ok {
 				if msg.LogTime >= it.start && msg.LogTime < it.end {
-					if err := it.indexHeap.PushMessage(chunkIndex, chunkSlotIndex, msg.LogTime, offset); err != nil {
-						return err
+					it.messageIndexes = append(it.messageIndexes, MessageIndexEntry{Timestamp: msg.LogTime, Offset: offset})
+					if msg.LogTime < maxLogTime {
+						chunkIsOrdered = false
+					} else {
+						maxLogTime = msg.LogTime
 					}
 					chunkSlot.unreadMessages++
 				}
@@ -261,6 +313,27 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 			)
 		}
 		offset = recordEnd
+	}
+	if it.chunksOverlap {
+		for _, mi := range it.messageIndexes {
+			if err := it.indexHeap.PushMessage(
+				chunkIndex,
+				chunkSlotIndex,
+				mi.Timestamp,
+				mi.Offset,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if !chunkIsOrdered && it.indexHeap.order != FileOrder {
+		sort.Slice(it.messageIndexes, func(i, j int) bool {
+			return it.messageIndexes[i].Timestamp < it.messageIndexes[j].Timestamp
+		})
+	}
+	if it.indexHeap.order == ReverseLogTimeOrder {
+		slices.Reverse(it.messageIndexes)
 	}
 	return nil
 }
@@ -313,20 +386,21 @@ func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, err
 		}
 	}
 
-	for it.indexHeap.len() > 0 {
-		ri, err := it.indexHeap.Pop()
-		if err != nil {
-			return nil, nil, err
-		}
-		if ri.ChunkSlotIndex == -1 {
-			err := it.loadChunk(ri.chunkIndex)
-			if err != nil {
+	if !it.chunksOverlap {
+		if it.curMessageIndex >= len(it.messageIndexes) {
+			if it.curChunkIndex >= len(it.chunkIndexesToLoad) {
+				return nil, nil, io.EOF
+			}
+			chunkIndex := it.chunkIndexesToLoad[it.curChunkIndex]
+			if err := it.loadChunk(chunkIndex); err != nil {
 				return nil, nil, err
 			}
-			continue
+			it.curMessageIndex = 0
+			it.curChunkIndex++
+			return it.NextInto(msg)
 		}
-		chunkOffset := ri.MessageOffsetInChunk
-		decompressedChunk := it.decompressedChunks[ri.ChunkSlotIndex]
+		chunkOffset := it.messageIndexes[it.curMessageIndex].Offset
+		decompressedChunk := it.decompressedChunks[0]
 		length := binary.LittleEndian.Uint64(decompressedChunk.buf[chunkOffset+1:])
 		messageData := decompressedChunk.buf[chunkOffset+1+8 : chunkOffset+1+8+length]
 		existingbuf := msg.Data
@@ -334,7 +408,8 @@ func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, err
 			return nil, nil, err
 		}
 		msg.Data = append(existingbuf[:0], msg.Data...)
-		it.decompressedChunks[ri.ChunkSlotIndex].unreadMessages--
+		it.decompressedChunks[0].unreadMessages--
+		it.curMessageIndex++
 		channel, ok := it.channels[msg.ChannelID]
 		if !ok {
 			return nil, nil, fmt.Errorf("message with unrecognized channel ID %d", msg.ChannelID)
@@ -345,7 +420,39 @@ func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, err
 		}
 		return schema, channel, nil
 	}
-	return nil, nil, io.EOF
+
+	if it.indexHeap.len() == 0 {
+		return nil, nil, io.EOF
+	}
+	ri, err := it.indexHeap.Pop()
+	if err != nil {
+		return nil, nil, err
+	}
+	if ri.ChunkSlotIndex == -1 {
+		if err := it.loadChunk(ri.chunkIndex); err != nil {
+			return nil, nil, err
+		}
+		return it.NextInto(msg)
+	}
+	chunkOffset := ri.MessageOffsetInChunk
+	decompressedChunk := it.decompressedChunks[ri.ChunkSlotIndex]
+	length := binary.LittleEndian.Uint64(decompressedChunk.buf[chunkOffset+1:])
+	messageData := decompressedChunk.buf[chunkOffset+1+8 : chunkOffset+1+8+length]
+	existingbuf := msg.Data
+	if err := msg.PopulateFrom(messageData); err != nil {
+		return nil, nil, err
+	}
+	msg.Data = append(existingbuf[:0], msg.Data...)
+	it.decompressedChunks[ri.ChunkSlotIndex].unreadMessages--
+	channel, ok := it.channels[msg.ChannelID]
+	if !ok {
+		return nil, nil, fmt.Errorf("message with unrecognized channel ID %d", msg.ChannelID)
+	}
+	schema, ok := it.schemas[channel.SchemaID]
+	if !ok && channel.SchemaID != 0 {
+		return nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
+	}
+	return schema, channel, nil
 }
 
 func (it *indexedMessageIterator) Next(buf []byte) (*Schema, *Channel, *Message, error) {
