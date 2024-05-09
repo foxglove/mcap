@@ -44,10 +44,9 @@ type indexedMessageIterator struct {
 	chunksOverlap bool
 	indexHeap     rangeIndexHeap
 
-	chunkIndexesToLoad []*ChunkIndex
-	curChunkIndex      int
-	messageIndexes     []MessageIndexEntry
-	curMessageIndex    int
+	curChunkIndex   int
+	messageIndexes  []MessageIndexEntry
+	curMessageIndex int
 
 	zstdDecoder           *zstd.Decoder
 	lz4Reader             *lz4.Reader
@@ -137,12 +136,11 @@ lexerloop:
 			if err != nil {
 				return fmt.Errorf("failed to parse attachment index: %w", err)
 			}
-			it.chunkIndexes = append(it.chunkIndexes, idx)
 			// if the chunk overlaps with the requested parameters, load it
 			for _, channel := range it.channels.items {
 				if channel != nil && idx.MessageIndexOffsets[channel.ID] > 0 {
 					if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
-						it.chunkIndexesToLoad = append(it.chunkIndexesToLoad, idx)
+						it.chunkIndexes = append(it.chunkIndexes, idx)
 					}
 					break
 				}
@@ -161,28 +159,28 @@ lexerloop:
 	it.chunksOverlap = false
 	switch it.indexHeap.order {
 	case FileOrder:
-		sort.Slice(it.chunkIndexesToLoad, func(i, j int) bool {
-			return it.chunkIndexesToLoad[i].ChunkStartOffset < it.chunkIndexesToLoad[j].ChunkStartOffset
+		sort.Slice(it.chunkIndexes, func(i, j int) bool {
+			return it.chunkIndexes[i].ChunkStartOffset < it.chunkIndexes[j].ChunkStartOffset
 		})
 	case LogTimeOrder:
-		sort.Slice(it.chunkIndexesToLoad, func(i, j int) bool {
-			return it.chunkIndexesToLoad[i].MessageStartTime < it.chunkIndexesToLoad[j].MessageStartTime
+		sort.Slice(it.chunkIndexes, func(i, j int) bool {
+			return it.chunkIndexes[i].MessageStartTime < it.chunkIndexes[j].MessageStartTime
 		})
-		for i := 1; i < len(it.chunkIndexesToLoad); i++ {
-			prev := it.chunkIndexesToLoad[i-1]
-			cur := it.chunkIndexesToLoad[i]
+		for i := 1; i < len(it.chunkIndexes); i++ {
+			prev := it.chunkIndexes[i-1]
+			cur := it.chunkIndexes[i]
 			if prev.MessageEndTime > cur.MessageStartTime {
 				it.chunksOverlap = true
 				break
 			}
 		}
 	case ReverseLogTimeOrder:
-		sort.Slice(it.chunkIndexesToLoad, func(i, j int) bool {
-			return it.chunkIndexesToLoad[i].MessageEndTime > it.chunkIndexesToLoad[j].MessageEndTime
+		sort.Slice(it.chunkIndexes, func(i, j int) bool {
+			return it.chunkIndexes[i].MessageEndTime > it.chunkIndexes[j].MessageEndTime
 		})
-		for i := 1; i < len(it.chunkIndexesToLoad); i++ {
-			prev := it.chunkIndexesToLoad[i-1]
-			cur := it.chunkIndexesToLoad[i]
+		for i := 1; i < len(it.chunkIndexes); i++ {
+			prev := it.chunkIndexes[i-1]
+			cur := it.chunkIndexes[i]
 			if prev.MessageStartTime < cur.MessageEndTime {
 				it.chunksOverlap = true
 				break
@@ -190,7 +188,7 @@ lexerloop:
 		}
 	}
 	if it.chunksOverlap {
-		for _, idx := range it.chunkIndexesToLoad {
+		for _, idx := range it.chunkIndexes {
 			if err := it.indexHeap.PushChunkIndex(idx); err != nil {
 				return err
 			}
@@ -391,10 +389,10 @@ func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Me
 
 	if !it.chunksOverlap {
 		if it.curMessageIndex >= len(it.messageIndexes) {
-			if it.curChunkIndex >= len(it.chunkIndexesToLoad) {
+			if it.curChunkIndex >= len(it.chunkIndexes) {
 				return nil, nil, nil, io.EOF
 			}
-			chunkIndex := it.chunkIndexesToLoad[it.curChunkIndex]
+			chunkIndex := it.chunkIndexes[it.curChunkIndex]
 			if err := it.loadChunk(chunkIndex); err != nil {
 				return nil, nil, nil, err
 			}
