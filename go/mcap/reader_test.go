@@ -886,42 +886,45 @@ func TestReadingBigTimestamps(t *testing.T) {
 }
 
 func BenchmarkReader(b *testing.B) {
-			b.StopTimer()
-			buf := &bytes.Buffer{}
-			writer, err := NewWriter(buf, &WriterOptions{
-				Chunked:     true,
-				Compression: CompressionZSTD,
-			})
-			require.NoError(b, err)
-			channelCount := 200
-			messageCount := uint64(1000000)
-			messageSize := 32
-			require.NoError(b, writer.WriteHeader(&Header{}))
-			require.NoError(b, writer.WriteSchema(&Schema{ID: 1, Name: "empty", Encoding: "none"}))
-			for i := 0; i < channelCount; i++ {
-				require.NoError(b, writer.WriteChannel(&Channel{
-					ID:              uint16(i),
-					SchemaID:        1,
-					Topic:           "/chat",
-					MessageEncoding: "none",
-				}))
-			}
-			contentBuf := make([]byte, messageSize)
-			for i := uint64(0); i < messageCount; i++ {
-				channelID := uint16(i % uint64(channelCount))
-				_, err := rand.Read(contentBuf)
-				require.NoError(b, err)
-				require.NoError(b, writer.WriteMessage(&Message{
-					ChannelID:   channelID,
-					Sequence:    uint32(i),
-					LogTime:     i,
-					PublishTime: i,
-					Data:        contentBuf,
-				}))
-			}
-			require.NoError(b, writer.Close())
-			b.StartTimer()
-	cases := []struct{ opts []ReadOpt; name string }{
+	b.StopTimer()
+	buf := &bytes.Buffer{}
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		Compression: CompressionZSTD,
+	})
+	require.NoError(b, err)
+	channelCount := 200
+	messageCount := uint64(1000000)
+	messageSize := 32
+	require.NoError(b, writer.WriteHeader(&Header{}))
+	require.NoError(b, writer.WriteSchema(&Schema{ID: 1, Name: "empty", Encoding: "none"}))
+	for i := 0; i < channelCount; i++ {
+		require.NoError(b, writer.WriteChannel(&Channel{
+			ID:              uint16(i),
+			SchemaID:        1,
+			Topic:           "/chat",
+			MessageEncoding: "none",
+		}))
+	}
+	contentBuf := make([]byte, messageSize)
+	for i := uint64(0); i < messageCount; i++ {
+		channelID := uint16(i % uint64(channelCount))
+		_, err := rand.Read(contentBuf)
+		require.NoError(b, err)
+		require.NoError(b, writer.WriteMessage(&Message{
+			ChannelID:   channelID,
+			Sequence:    uint32(i),
+			LogTime:     i,
+			PublishTime: i,
+			Data:        contentBuf,
+		}))
+	}
+	require.NoError(b, writer.Close())
+	b.StartTimer()
+	cases := []struct {
+		opts []ReadOpt
+		name string
+	}{
 		{
 			opts: []ReadOpt{
 				UsingIndex(false),

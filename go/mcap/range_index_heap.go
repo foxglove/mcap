@@ -99,13 +99,11 @@ func (h *rangeIndexHeap) heapPush(ri rangeIndex) error {
 }
 
 func (h *rangeIndexHeap) Pop() (rangeIndex, error) {
-	n := h.len() - 1
-	h.swap(0, n)
-	heapDown(h, 0, n)
-	old := h.indices
-	newn := len(old)
-	result := old[newn-1]
-	h.indices = old[0 : newn-1]
+	lastIndex := h.len() - 1
+	h.swap(0, lastIndex)
+	heapDown(h, 0, lastIndex)
+	result := h.indices[lastIndex]
+	h.indices = h.indices[0:lastIndex]
 	if h.lastErr != nil {
 		return rangeIndex{}, h.lastErr
 	}
