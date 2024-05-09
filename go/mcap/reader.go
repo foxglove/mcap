@@ -66,7 +66,7 @@ type Reader struct {
 
 type MessageIterator interface {
 	Next([]byte) (*Schema, *Channel, *Message, error)
-	NextInto(msg *Message) (*Schema, *Channel, error)
+	NextInto(msg *Message) (*Schema, *Channel, *Message, error)
 }
 
 func Range(it MessageIterator, f func(*Schema, *Channel, *Message) error) error {

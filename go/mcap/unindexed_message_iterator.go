@@ -19,18 +19,17 @@ type unindexedMessageIterator struct {
 
 func (it *unindexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, error) {
 	msg := &Message{Data: p}
-	schema, channel, err := it.NextInto(msg)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return schema, channel, msg, err
+	return it.NextInto(msg)
 }
 
-func (it *unindexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, error) {
+func (it *unindexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Message, error) {
+	if msg == nil {
+		msg = &Message{}
+	}
 	for {
 		tokenType, record, err := it.lexer.Next(it.recordBuf)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if cap(record) > cap(it.recordBuf) {
 			it.recordBuf = record
@@ -39,7 +38,7 @@ func (it *unindexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, e
 		case TokenSchema:
 			schema, err := ParseSchema(record)
 			if err != nil {
-				return nil, nil, fmt.Errorf("failed to parse schema: %w", err)
+				return nil, nil, nil, fmt.Errorf("failed to parse schema: %w", err)
 			}
 			if _, ok := it.schemas[schema.ID]; !ok {
 				it.schemas[schema.ID] = schema
@@ -47,7 +46,7 @@ func (it *unindexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, e
 		case TokenChannel:
 			channelInfo, err := ParseChannel(record)
 			if err != nil {
-				return nil, nil, fmt.Errorf("failed to parse channel info: %w", err)
+				return nil, nil, nil, fmt.Errorf("failed to parse channel info: %w", err)
 			}
 			if _, ok := it.channels[channelInfo.ID]; !ok {
 				if len(it.topics) == 0 || it.topics[channelInfo.Topic] {
@@ -57,7 +56,7 @@ func (it *unindexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, e
 		case TokenMessage:
 			existingbuf := msg.Data
 			if err := msg.PopulateFrom(record); err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			msg.Data = append(existingbuf[:0], msg.Data...)
 			channel, ok := it.channels[msg.ChannelID]
@@ -71,19 +70,19 @@ func (it *unindexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, e
 			if msg.LogTime >= it.start && msg.LogTime < it.end {
 				schema, ok := it.schemas[channel.SchemaID]
 				if !ok && channel.SchemaID != 0 {
-					return nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
+					return nil, nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
 				}
-				return schema, channel, nil
+				return schema, channel, msg, nil
 			}
 		case TokenMetadata:
 			if it.metadataCallback != nil {
 				metadata, err := ParseMetadata(record)
 				if err != nil {
-					return nil, nil, fmt.Errorf("failed to parse metadata: %w", err)
+					return nil, nil, nil, fmt.Errorf("failed to parse metadata: %w", err)
 				}
 				err = it.metadataCallback(metadata)
 				if err != nil {
-					return nil, nil, err
+					return nil, nil, nil, err
 				}
 			}
 			// we don't emit metadata from the reader, so continue onward
