@@ -895,18 +895,17 @@ func BenchmarkReader(b *testing.B) {
 			name: "inorder",
 		},
 		{
-			name:                   "nonoverlapping",
+			name:                   "minor",
 			outOfOrderWithinChunks: true,
 		},
 		{
-			name:                   "outoforder",
+			name:                   "major",
 			outOfOrderWithinChunks: true,
 			chunksOverlap:          true,
 		},
 	}
 	for _, inputCfg := range inputParameters {
 		b.Run(inputCfg.name, func(b *testing.B) {
-
 			b.StopTimer()
 			buf := &bytes.Buffer{}
 			writer, err := NewWriter(buf, &WriterOptions{
