@@ -187,25 +187,13 @@ func (r *Reader) Info() (*Info, error) {
 	if err != nil {
 		return nil, err
 	}
-	channels := make(map[uint16]*Channel)
-	for _, channel := range it.channels {
-		if channel != nil {
-			channels[channel.ID] = channel
-		}
-	}
-	schemas := make(map[uint16]*Schema)
-	for _, schema := range it.schemas {
-		if schema != nil {
-			schemas[schema.ID] = schema
-		}
-	}
 	info := &Info{
 		Statistics:        it.statistics,
-		Channels:          channels,
+		Channels:          it.channels.toMap(),
 		ChunkIndexes:      it.chunkIndexes,
 		AttachmentIndexes: it.attachmentIndexes,
 		MetadataIndexes:   it.metadataIndexes,
-		Schemas:           schemas,
+		Schemas:           it.schemas.toMap(),
 		Footer:            it.footer,
 		Header:            r.header,
 	}

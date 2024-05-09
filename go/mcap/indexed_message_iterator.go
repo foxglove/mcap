@@ -33,8 +33,8 @@ type indexedMessageIterator struct {
 	start  uint64
 	end    uint64
 
-	channels          []*Channel
-	schemas           []*Schema
+	channels          slicemap[Channel]
+	schemas           slicemap[Schema]
 	statistics        *Statistics
 	chunkIndexes      []*ChunkIndex
 	attachmentIndexes []*AttachmentIndex
@@ -111,24 +111,14 @@ lexerloop:
 			if err != nil {
 				return fmt.Errorf("failed to parse schema: %w", err)
 			}
-			if len(it.schemas) <= int(schema.ID) {
-				newLen := (int(schema.ID) + 1) * 2
-				more := newLen - len(it.schemas)
-				it.schemas = append(it.schemas, make([]*Schema, more)...)
-			}
-			it.schemas[schema.ID] = schema
+			it.schemas.set(schema.ID, schema)
 		case TokenChannel:
 			channelInfo, err := ParseChannel(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse channel info: %w", err)
 			}
 			if len(it.topics) == 0 || it.topics[channelInfo.Topic] {
-				if len(it.channels) <= int(channelInfo.ID) {
-					newLen := (int(channelInfo.ID) + 1) * 2
-					more := newLen - len(it.channels)
-					it.channels = append(it.channels, make([]*Channel, more)...)
-				}
-				it.channels[channelInfo.ID] = channelInfo
+				it.channels.set(channelInfo.ID, channelInfo)
 			}
 		case TokenAttachmentIndex:
 			idx, err := ParseAttachmentIndex(record)
@@ -149,7 +139,7 @@ lexerloop:
 			}
 			it.chunkIndexes = append(it.chunkIndexes, idx)
 			// if the chunk overlaps with the requested parameters, load it
-			for _, channel := range it.channels {
+			for _, channel := range it.channels.items {
 				if channel != nil && idx.MessageIndexOffsets[channel.ID] > 0 {
 					if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
 						it.chunkIndexesToLoad = append(it.chunkIndexesToLoad, idx)
@@ -302,7 +292,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 			if err := msg.PopulateFrom(recordContent); err != nil {
 				return fmt.Errorf("could not parse message in chunk: %w", err)
 			}
-			if len(it.channels) > int(msg.ChannelID) && it.channels[msg.ChannelID] != nil {
+			if it.channels.get(msg.ChannelID) != nil {
 				if msg.LogTime >= it.start && msg.LogTime < it.end {
 					it.messageIndexes = append(it.messageIndexes, MessageIndexEntry{Timestamp: msg.LogTime, Offset: offset})
 					if msg.LogTime < maxLogTime {
@@ -423,17 +413,14 @@ func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Me
 		msg.Data = append(existingbuf[:0], msg.Data...)
 		it.decompressedChunks[0].unreadMessages--
 		it.curMessageIndex++
-		channel := it.channels[msg.ChannelID]
+		channel := it.channels.get(msg.ChannelID)
 		if channel == nil {
 			return nil, nil, nil, fmt.Errorf("message with unrecognized channel ID %d", msg.ChannelID)
 		}
-		if channel.SchemaID == 0 {
-			return nil, channel, msg, nil
-		}
-		if int(channel.SchemaID) >= len(it.schemas) || it.schemas[channel.SchemaID] == nil {
+		schema := it.schemas.get(channel.SchemaID)
+		if schema == nil && channel.SchemaID != 0 {
 			return nil, nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
 		}
-		schema := it.schemas[channel.SchemaID]
 		return schema, channel, msg, nil
 	}
 
@@ -460,17 +447,15 @@ func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Me
 	}
 	msg.Data = append(existingbuf[:0], msg.Data...)
 	it.decompressedChunks[ri.ChunkSlotIndex].unreadMessages--
-	channel := it.channels[msg.ChannelID]
+	channel := it.channels.get(msg.ChannelID)
 	if channel == nil {
 		return nil, nil, nil, fmt.Errorf("message with unrecognized channel ID %d", msg.ChannelID)
 	}
-	if channel.SchemaID == 0 {
-		return nil, channel, msg, err
-	}
-	if len(it.schemas) <= int(channel.SchemaID) || it.schemas[channel.SchemaID] == nil {
+	schema := it.schemas.get(channel.SchemaID)
+	if schema == nil && channel.SchemaID != 0 {
 		return nil, nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
 	}
-	return it.schemas[channel.SchemaID], channel, msg, nil
+	return schema, channel, msg, nil
 }
 
 func (it *indexedMessageIterator) Next(buf []byte) (*Schema, *Channel, *Message, error) {
