@@ -94,8 +94,6 @@ func (r *Reader) unindexedIterator(opts *ReadOptions) *unindexedMessageIterator 
 	r.l.emitChunks = false
 	return &unindexedMessageIterator{
 		lexer:            r.l,
-		channels:         make(map[uint16]*Channel),
-		schemas:          make(map[uint16]*Schema),
 		topics:           topicMap,
 		start:            opts.StartNanos,
 		end:              opts.EndNanos,
@@ -115,8 +113,6 @@ func (r *Reader) indexedMessageIterator(
 	return &indexedMessageIterator{
 		lexer:            r.l,
 		rs:               r.rs,
-		channels:         make(map[uint16]*Channel),
-		schemas:          make(map[uint16]*Schema),
 		topics:           topicMap,
 		start:            opts.StartNanos,
 		end:              opts.EndNanos,
@@ -191,13 +187,25 @@ func (r *Reader) Info() (*Info, error) {
 	if err != nil {
 		return nil, err
 	}
+	channels := make(map[uint16]*Channel)
+	for _, channel := range it.channels {
+		if channel != nil {
+			channels[channel.ID] = channel
+		}
+	}
+	schemas := make(map[uint16]*Schema)
+	for _, schema := range it.schemas {
+		if schema != nil {
+			schemas[schema.ID] = schema
+		}
+	}
 	info := &Info{
 		Statistics:        it.statistics,
-		Channels:          it.channels,
+		Channels:          channels,
 		ChunkIndexes:      it.chunkIndexes,
 		AttachmentIndexes: it.attachmentIndexes,
 		MetadataIndexes:   it.metadataIndexes,
-		Schemas:           it.schemas,
+		Schemas:           schemas,
 		Footer:            it.footer,
 		Header:            r.header,
 	}
