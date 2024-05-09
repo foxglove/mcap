@@ -886,124 +886,164 @@ func TestReadingBigTimestamps(t *testing.T) {
 }
 
 func BenchmarkReader(b *testing.B) {
-	b.StopTimer()
-	buf := &bytes.Buffer{}
-	writer, err := NewWriter(buf, &WriterOptions{
-		Chunked:     true,
-		Compression: CompressionZSTD,
-	})
-	require.NoError(b, err)
-	channelCount := 200
-	messageCount := uint64(1000000)
-	messageSize := 32
-	require.NoError(b, writer.WriteHeader(&Header{}))
-	require.NoError(b, writer.WriteSchema(&Schema{ID: 1, Name: "empty", Encoding: "none"}))
-	for i := 0; i < channelCount; i++ {
-		require.NoError(b, writer.WriteChannel(&Channel{
-			ID:              uint16(i),
-			SchemaID:        1,
-			Topic:           "/chat",
-			MessageEncoding: "none",
-		}))
-	}
-	contentBuf := make([]byte, messageSize)
-	for i := uint64(0); i < messageCount; i++ {
-		channelID := uint16(i % uint64(channelCount))
-		_, err := rand.Read(contentBuf)
-		require.NoError(b, err)
-		require.NoError(b, writer.WriteMessage(&Message{
-			ChannelID:   channelID,
-			Sequence:    uint32(i),
-			LogTime:     i,
-			PublishTime: i,
-			Data:        contentBuf,
-		}))
-	}
-	require.NoError(b, writer.Close())
-	b.StartTimer()
-	cases := []struct {
-		opts []ReadOpt
-		name string
+	inputParameters := []struct {
+		name                   string
+		outOfOrderWithinChunks bool
+		chunksOverlap          bool
 	}{
 		{
-			opts: []ReadOpt{
-				UsingIndex(false),
-			},
-			name: "no_index",
+			name: "inorder",
 		},
 		{
-			opts: []ReadOpt{
-				UsingIndex(true),
-				InOrder(FileOrder),
-			},
-			name: "index_file_order",
+			name:                   "nonoverlapping",
+			outOfOrderWithinChunks: true,
 		},
 		{
-			opts: []ReadOpt{
-				UsingIndex(true),
-				InOrder(LogTimeOrder),
-			},
-			name: "index_time_order",
-		},
-		{
-			opts: []ReadOpt{
-				UsingIndex(true),
-				InOrder(ReverseLogTimeOrder),
-			},
-			name: "index_rev_order",
+			name:                   "outoforder",
+			outOfOrderWithinChunks: true,
+			chunksOverlap:          true,
 		},
 	}
-	for _, c := range cases {
-		b.Run(c.name, func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				s := time.Now()
-				reader, err := NewReader(bytes.NewReader(buf.Bytes()))
-				require.NoError(b, err)
-				it, err := reader.Messages(c.opts...)
-				require.NoError(b, err)
-				readMessages := uint64(0)
-				msgBytes := uint64(0)
-				msg := Message{}
-				for {
-					_, _, msg, err := it.NextInto(&msg)
-					if errors.Is(err, io.EOF) {
-						break
-					}
-					require.NoError(b, err)
-					readMessages++
-					msgBytes += uint64(len(msg.Data))
-				}
-				b.ReportMetric(float64(messageCount)/time.Since(s).Seconds(), "msg/s")
-				b.ReportMetric(float64(msgBytes)/(time.Since(s).Seconds()*1024*1024), "MB/s")
-				require.Equal(b, messageCount, readMessages)
+	for _, inputCfg := range inputParameters {
+		b.Run(inputCfg.name, func(b *testing.B) {
+
+			b.StopTimer()
+			buf := &bytes.Buffer{}
+			writer, err := NewWriter(buf, &WriterOptions{
+				Chunked:     true,
+				Compression: CompressionZSTD,
+			})
+			require.NoError(b, err)
+			messageCount := uint64(1000000)
+			require.NoError(b, writer.WriteHeader(&Header{}))
+			require.NoError(b, writer.WriteSchema(&Schema{ID: 1, Name: "empty", Encoding: "none"}))
+			channelCount := 200
+			for i := 0; i < channelCount; i++ {
+				require.NoError(b, writer.WriteChannel(&Channel{
+					ID:              uint16(i),
+					SchemaID:        1,
+					Topic:           "/chat",
+					MessageEncoding: "none",
+				}))
 			}
+			contentBuf := make([]byte, 32)
+			lastChunkMax := uint64(0)
+			thisChunkMax := uint64(0)
+			for i := uint64(0); i < messageCount; i++ {
+				channelID := uint16(i % uint64(channelCount))
+				_, err := rand.Read(contentBuf)
+				require.NoError(b, err)
+				timestamp := i
+				if inputCfg.outOfOrderWithinChunks {
+					timestamp += (2 * (10 - (i % 10)))
+					if !inputCfg.chunksOverlap {
+						if timestamp < lastChunkMax {
+							timestamp = lastChunkMax
+						}
+					}
+				}
+				if timestamp > thisChunkMax {
+					thisChunkMax = timestamp
+				}
+				chunkCount := len(writer.ChunkIndexes)
+				require.NoError(b, writer.WriteMessage(&Message{
+					ChannelID:   channelID,
+					Sequence:    uint32(i),
+					LogTime:     timestamp,
+					PublishTime: timestamp,
+					Data:        contentBuf,
+				}))
+				if len(writer.ChunkIndexes) != chunkCount {
+					lastChunkMax = thisChunkMax
+				}
+			}
+			require.NoError(b, writer.Close())
+			b.StartTimer()
+			readerConfigs := []struct {
+				opts []ReadOpt
+				name string
+			}{
+				{
+					opts: []ReadOpt{
+						UsingIndex(false),
+					},
+					name: "no_index",
+				},
+				{
+					opts: []ReadOpt{
+						UsingIndex(true),
+						InOrder(FileOrder),
+					},
+					name: "index_file_order",
+				},
+				{
+					opts: []ReadOpt{
+						UsingIndex(true),
+						InOrder(LogTimeOrder),
+					},
+					name: "index_time_order",
+				},
+				{
+					opts: []ReadOpt{
+						UsingIndex(true),
+						InOrder(ReverseLogTimeOrder),
+					},
+					name: "index_rev_order",
+				},
+			}
+			for _, cfg := range readerConfigs {
+				b.Run(cfg.name, func(b *testing.B) {
+					for i := 0; i < b.N; i++ {
+						s := time.Now()
+						reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+						require.NoError(b, err)
+						it, err := reader.Messages(cfg.opts...)
+						require.NoError(b, err)
+						readMessages := uint64(0)
+						msgBytes := uint64(0)
+						msg := Message{}
+						for {
+							_, _, msg, err := it.NextInto(&msg)
+							if errors.Is(err, io.EOF) {
+								break
+							}
+							require.NoError(b, err)
+							readMessages++
+							msgBytes += uint64(len(msg.Data))
+						}
+						b.ReportMetric(float64(messageCount)/time.Since(s).Seconds(), "msg/s")
+						b.ReportMetric(float64(msgBytes)/(time.Since(s).Seconds()*1024*1024), "MB/s")
+						require.Equal(b, messageCount, readMessages)
+					}
+				})
+			}
+			b.Run("bare_lexer", func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					s := time.Now()
+					lexer, err := NewLexer(bytes.NewReader(buf.Bytes()))
+					require.NoError(b, err)
+					readMessages := uint64(0)
+					msgBytes := uint64(0)
+					var p []byte
+					for {
+						token, record, err := lexer.Next(p)
+						if errors.Is(err, io.EOF) {
+							break
+						}
+						require.NoError(b, err)
+						if cap(record) > cap(p) {
+							p = record
+						}
+						if token == TokenMessage {
+							readMessages++
+							msgBytes += uint64(len(record) - 22)
+						}
+					}
+					b.ReportMetric(float64(messageCount)/time.Since(s).Seconds(), "msg/s")
+					b.ReportMetric(float64(msgBytes)/(time.Since(s).Seconds()*1024*1024), "MB/s")
+					require.Equal(b, messageCount, readMessages)
+				}
+			})
 		})
 	}
-	b.Run("bare_lexer", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			s := time.Now()
-			lexer, err := NewLexer(bytes.NewReader(buf.Bytes()))
-			require.NoError(b, err)
-			readMessages := uint64(0)
-			msgBytes := uint64(0)
-			var p []byte
-			for {
-				token, record, err := lexer.Next(p)
-				if errors.Is(err, io.EOF) {
-					break
-				}
-				require.NoError(b, err)
-				if cap(record) > cap(p) {
-					p = record
-				}
-				if token == TokenMessage {
-					readMessages++
-					msgBytes += uint64(len(record) - 22)
-				}
-			}
-			b.ReportMetric(float64(messageCount)/time.Since(s).Seconds(), "msg/s")
-			b.ReportMetric(float64(msgBytes)/(time.Since(s).Seconds()*1024*1024), "MB/s")
-			require.Equal(b, messageCount, readMessages)
-		}
-	})
 }
