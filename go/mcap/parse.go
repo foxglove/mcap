@@ -122,7 +122,7 @@ func (m *Message) PopulateFrom(buf []byte) error {
 	m.Sequence = sequence
 	m.LogTime = logTime
 	m.PublishTime = publishTime
-	m.Data = data
+	m.Data = append(m.Data[:0], data...)
 	return nil
 }
 

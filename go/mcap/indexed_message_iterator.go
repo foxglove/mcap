@@ -393,8 +393,9 @@ func readRecord(r io.Reader) (OpCode, []byte, error) {
 	return opcode, record, nil
 }
 
-// Next2 yields the next message from the iterator, re-using the allocations from `msg` if
-// provided.
+// Next2 yields the next message from the iterator, writing the result into the provided Message
+// struct. The msg.Data buffer will be reused if it has enough capacity. If `msg` is nil, a new
+// Message will be allocated.
 func (it *indexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Message, error) {
 	if msg == nil {
 		msg = &Message{}
@@ -494,13 +495,9 @@ func (it *indexedMessageIterator) getSchemaAndChannel(channelID uint16) (*Schema
 func loadMessageAtOffset(decompressedChunk []byte, offset uint64, msg *Message) error {
 	length := binary.LittleEndian.Uint64(decompressedChunk[offset+1:])
 	messageData := decompressedChunk[offset+1+8 : offset+1+8+length]
-	previousData := msg.Data
 	if err := msg.PopulateFrom(messageData); err != nil {
 		return err
 	}
-	// after PopulateFrom, msg.Data is a slice of `decompressedChunk`. Copy it out so
-	// that the `decompressedChunk` buffer can be reused later.
-	msg.Data = append(previousData[:0], msg.Data...)
 	return nil
 }
 
