@@ -52,11 +52,11 @@ func (it *unindexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Mes
 				it.channels = slicemap.SetAt(it.channels, channelInfo.ID, channelInfo)
 			}
 		case TokenMessage:
-			existingbuf := msg.Data
+			previousData := msg.Data
 			if err := msg.PopulateFrom(record); err != nil {
 				return nil, nil, nil, err
 			}
-			msg.Data = append(existingbuf[:0], msg.Data...)
+			msg.Data = append(previousData[:0], msg.Data...)
 			channel := slicemap.GetAt(it.channels, msg.ChannelID)
 			if channel == nil {
 				// skip messages on channels we don't know about. Note that if
