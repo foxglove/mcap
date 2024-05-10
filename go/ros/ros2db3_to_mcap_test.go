@@ -67,7 +67,7 @@ func TestDB3MCAPConversion(t *testing.T) {
 			it, err := reader.Messages(mcap.WithTopics([]string{c.expectedTopic}))
 			require.NoError(t, err)
 			for {
-				schema, channel, message, err := it.NextInto(nil)
+				schema, channel, message, err := it.Next2(nil)
 				if err != nil {
 					if errors.Is(err, io.EOF) {
 						break

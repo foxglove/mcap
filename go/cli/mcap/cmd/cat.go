@@ -206,7 +206,7 @@ func printMessages(
 	descriptors := make(map[uint16]protoreflect.MessageDescriptor)
 	jsonWriter := newJSONOutputWriter(w)
 	for {
-		schema, channel, _, err := it.NextInto(&message)
+		schema, channel, _, err := it.Next2(&message)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break

@@ -1002,7 +1002,7 @@ func BenchmarkReader(b *testing.B) {
 						msgBytes := uint64(0)
 						msg := Message{}
 						for {
-							_, _, msg, err := it.NextInto(&msg)
+							_, _, msg, err := it.Next2(&msg)
 							if errors.Is(err, io.EOF) {
 								break
 							}

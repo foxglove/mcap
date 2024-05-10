@@ -69,7 +69,7 @@ func TestSortFile(t *testing.T) {
 	it, err := r.Messages(mcap.UsingIndex(false))
 	require.NoError(t, err)
 
-	_, _, msg, err := it.NextInto(nil)
+	_, _, msg, err := it.Next2(nil)
 	require.NoError(t, err)
 	assert.Equal(t, 25, int(msg.LogTime))
 }

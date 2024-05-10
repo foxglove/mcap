@@ -393,9 +393,9 @@ func readRecord(r io.Reader) (OpCode, []byte, error) {
 	return opcode, record, nil
 }
 
-// NextInto yields the next message from the iterator, re-using the allocations from `msg` if
+// Next2 yields the next message from the iterator, re-using the allocations from `msg` if
 // provided.
-func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Message, error) {
+func (it *indexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Message, error) {
 	if msg == nil {
 		msg = &Message{}
 	}
@@ -443,7 +443,7 @@ func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Me
 			}
 			it.curMessageIndex = 0
 			it.curChunkIndex++
-			return it.NextInto(msg)
+			return it.Next2(msg)
 		}
 		messageIndex := it.messageIndexes[it.curMessageIndex]
 		decompressedChunk := &it.decompressedChunks[0]
@@ -467,7 +467,7 @@ func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Me
 		if err := it.loadChunk(ri.chunkIndex); err != nil {
 			return nil, nil, nil, err
 		}
-		return it.NextInto(msg)
+		return it.Next2(msg)
 	}
 	decompressedChunk := &it.decompressedChunks[ri.ChunkSlotIndex]
 	if err := loadMessageAtOffset(decompressedChunk.buf, ri.MessageOffsetInChunk, msg); err != nil {
@@ -506,7 +506,7 @@ func loadMessageAtOffset(decompressedChunk []byte, offset uint64, msg *Message) 
 
 func (it *indexedMessageIterator) Next(buf []byte) (*Schema, *Channel, *Message, error) {
 	msg := &Message{Data: buf}
-	return it.NextInto(msg)
+	return it.Next2(msg)
 }
 
 // returns the sum of two uint64s, with a boolean indicating if the sum overflowed.

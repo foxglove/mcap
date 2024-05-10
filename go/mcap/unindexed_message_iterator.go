@@ -21,10 +21,10 @@ type unindexedMessageIterator struct {
 
 func (it *unindexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, error) {
 	msg := &Message{Data: p}
-	return it.NextInto(msg)
+	return it.Next2(msg)
 }
 
-func (it *unindexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Message, error) {
+func (it *unindexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Message, error) {
 	if msg == nil {
 		msg = &Message{}
 	}
