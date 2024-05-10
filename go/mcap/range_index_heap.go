@@ -16,7 +16,7 @@ type rangeIndex struct {
 // heap of rangeIndex entries, where the entries are sorted by their log time.
 type rangeIndexHeap struct {
 	indices []rangeIndex
-	order   ReadOrder
+	reverse bool
 	lastErr error
 }
 
@@ -24,7 +24,7 @@ type rangeIndexHeap struct {
 func (h rangeIndexHeap) timestamp(i int) uint64 {
 	ri := h.indices[i]
 	if ri.ChunkSlotIndex == -1 {
-		if h.order == ReverseLogTimeOrder {
+		if h.reverse {
 			return ri.chunkIndex.MessageEndTime
 		}
 		return ri.chunkIndex.MessageStartTime
@@ -74,22 +74,13 @@ func (h *rangeIndexHeap) PushChunkIndex(ci *ChunkIndex) error {
 
 // compares range indexes at indices i and j.
 func (h *rangeIndexHeap) less(i, j int) bool {
-	switch h.order {
-	case FileOrder:
+	if h.timestamp(i) == h.timestamp(j) {
 		return h.filePositionLess(i, j)
-	case LogTimeOrder:
-		if h.timestamp(i) == h.timestamp(j) {
-			return h.filePositionLess(i, j)
-		}
-		return h.timestamp(i) < h.timestamp(j)
-	case ReverseLogTimeOrder:
-		if h.timestamp(i) == h.timestamp(j) {
-			return h.filePositionLess(j, i)
-		}
-		return h.timestamp(i) > h.timestamp(j)
 	}
-	h.lastErr = fmt.Errorf("ReadOrder case not handled: %v", h.order)
-	return false
+	if h.reverse {
+		i, j = j, i
+	}
+	return h.timestamp(i) < h.timestamp(j)
 }
 
 func (h *rangeIndexHeap) heapPush(ri rangeIndex) error {

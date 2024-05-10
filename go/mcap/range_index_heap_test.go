@@ -50,28 +50,22 @@ var rangeIndexHeapTestItems = []rangeIndex{
 func TestMessageOrdering(t *testing.T) {
 	cases := []struct {
 		assertion          string
-		order              ReadOrder
+		reverse            bool
 		expectedIndexOrder []int
 	}{
 		{
-			assertion:          "read time order forwards",
-			order:              LogTimeOrder,
+			assertion:          "forwards",
 			expectedIndexOrder: []int{0, 1, 2, 3},
 		},
 		{
-			assertion:          "read time order backwards",
-			order:              ReverseLogTimeOrder,
+			assertion:          "reverse",
+			reverse:            true,
 			expectedIndexOrder: []int{3, 0, 2, 1},
-		},
-		{
-			assertion:          "read file order",
-			order:              FileOrder,
-			expectedIndexOrder: []int{0, 2, 1, 3},
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
-			h := &rangeIndexHeap{order: c.order}
+			h := &rangeIndexHeap{reverse: c.reverse}
 			for _, item := range rangeIndexHeapTestItems {
 				require.NoError(t, h.heapPush(item))
 			}

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/foxglove/mcap/go/mcap/slicemap"
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
 )
@@ -32,29 +33,29 @@ type indexedMessageIterator struct {
 	topics map[string]bool
 	start  uint64
 	end    uint64
+	order  ReadOrder
 
-	channels          slicemap[Channel]
-	schemas           slicemap[Schema]
+	channels          []*Channel
+	schemas           []*Schema
 	statistics        *Statistics
 	chunkIndexes      []*ChunkIndex
 	attachmentIndexes []*AttachmentIndex
 	metadataIndexes   []*MetadataIndex
 	footer            *Footer
 
-	chunksOverlap bool
-	indexHeap     rangeIndexHeap
-
-	curChunkIndex   int
-	messageIndexes  []MessageIndexEntry
-	curMessageIndex int
-
-	zstdDecoder           *zstd.Decoder
-	lz4Reader             *lz4.Reader
-	hasReadSummarySection bool
-
-	recordBuf          []byte
+	useHeap            bool
+	indexHeap          rangeIndexHeap
+	curChunkIndex      int
+	messageIndexes     []MessageIndexEntry
+	curMessageIndex    int
 	decompressedChunks []decompressedChunk
-	metadataCallback   func(*Metadata) error
+
+	zstdDecoder *zstd.Decoder
+	lz4Reader   *lz4.Reader
+	initialized bool
+
+	recordBuf        []byte
+	metadataCallback func(*Metadata) error
 }
 
 // parseIndexSection parses the index section of the file and populates the
@@ -82,7 +83,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 
 	// scan the whole summary section
 	if footer.SummaryStart == 0 {
-		it.hasReadSummarySection = true
+		it.initialized = true
 		return nil
 	}
 	_, err = it.rs.Seek(int64(footer.SummaryStart), io.SeekStart)
@@ -98,7 +99,6 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	}
 	defer lexer.Close()
 
-lexerloop:
 	for {
 		tokenType, record, err := lexer.Next(nil)
 		if err != nil {
@@ -110,14 +110,14 @@ lexerloop:
 			if err != nil {
 				return fmt.Errorf("failed to parse schema: %w", err)
 			}
-			it.schemas.set(schema.ID, schema)
+			it.schemas = slicemap.SetAt(it.schemas, schema.ID, schema)
 		case TokenChannel:
 			channelInfo, err := ParseChannel(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse channel info: %w", err)
 			}
 			if len(it.topics) == 0 || it.topics[channelInfo.Topic] {
-				it.channels.set(channelInfo.ID, channelInfo)
+				it.channels = slicemap.SetAt(it.channels, channelInfo.ID, channelInfo)
 			}
 		case TokenAttachmentIndex:
 			idx, err := ParseAttachmentIndex(record)
@@ -137,7 +137,7 @@ lexerloop:
 				return fmt.Errorf("failed to parse attachment index: %w", err)
 			}
 			// if the chunk overlaps with the requested parameters, load it
-			for _, channel := range it.channels.items {
+			for _, channel := range it.channels {
 				if channel != nil && idx.MessageIndexOffsets[channel.ID] > 0 {
 					if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
 						it.chunkIndexes = append(it.chunkIndexes, idx)
@@ -152,12 +152,15 @@ lexerloop:
 			}
 			it.statistics = stats
 		case TokenFooter:
-			it.hasReadSummarySection = true
-			break lexerloop
+			return nil
 		}
 	}
-	it.chunksOverlap = false
-	switch it.indexHeap.order {
+}
+
+func (it *indexedMessageIterator) initializeReader() error {
+	// sort chunk indexes in the order that they will need to be loaded, depending on the specified
+	// read order.
+	switch it.order {
 	case FileOrder:
 		sort.Slice(it.chunkIndexes, func(i, j int) bool {
 			return it.chunkIndexes[i].ChunkStartOffset < it.chunkIndexes[j].ChunkStartOffset
@@ -166,11 +169,12 @@ lexerloop:
 		sort.Slice(it.chunkIndexes, func(i, j int) bool {
 			return it.chunkIndexes[i].MessageStartTime < it.chunkIndexes[j].MessageStartTime
 		})
+		// check if chunks overlap, if so, we need to use a heap when loading messages.
 		for i := 1; i < len(it.chunkIndexes); i++ {
 			prev := it.chunkIndexes[i-1]
 			cur := it.chunkIndexes[i]
 			if prev.MessageEndTime > cur.MessageStartTime {
-				it.chunksOverlap = true
+				it.useHeap = true
 				break
 			}
 		}
@@ -178,22 +182,28 @@ lexerloop:
 		sort.Slice(it.chunkIndexes, func(i, j int) bool {
 			return it.chunkIndexes[i].MessageEndTime > it.chunkIndexes[j].MessageEndTime
 		})
+		// check if chunks overlap, if so, we need to use a heap when loading messages.
 		for i := 1; i < len(it.chunkIndexes); i++ {
 			prev := it.chunkIndexes[i-1]
 			cur := it.chunkIndexes[i]
 			if prev.MessageStartTime < cur.MessageEndTime {
-				it.chunksOverlap = true
+				it.useHeap = true
 				break
 			}
 		}
 	}
-	if it.chunksOverlap {
+	// if the heap is needed, initialize it with the full set of chunk indexes.
+	if it.useHeap {
+		if it.order == ReverseLogTimeOrder {
+			it.indexHeap.reverse = true
+		}
 		for _, idx := range it.chunkIndexes {
 			if err := it.indexHeap.PushChunkIndex(idx); err != nil {
 				return err
 			}
 		}
 	}
+	it.initialized = true
 	return nil
 }
 
@@ -262,10 +272,10 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	default:
 		return fmt.Errorf("unsupported compression %s", parsedChunk.Compression)
 	}
+	// produce message indexes for the newly decompressed chunk data.
 	chunkIsOrdered := true
 	var maxLogTime uint64
 	it.messageIndexes = it.messageIndexes[:0]
-	// lex the chunk
 	for offset := uint64(0); offset < bufSize; {
 		if bufSize < offset+1+8 {
 			return fmt.Errorf("expected another record in chunk, but left with %d bytes", bufSize-offset)
@@ -290,7 +300,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 			if err := msg.PopulateFrom(recordContent); err != nil {
 				return fmt.Errorf("could not parse message in chunk: %w", err)
 			}
-			if it.channels.get(msg.ChannelID) != nil {
+			if slicemap.GetAt(it.channels, msg.ChannelID) != nil {
 				if msg.LogTime >= it.start && msg.LogTime < it.end {
 					it.messageIndexes = append(it.messageIndexes, MessageIndexEntry{Timestamp: msg.LogTime, Offset: offset})
 					if msg.LogTime < maxLogTime {
@@ -312,7 +322,8 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		}
 		offset = recordEnd
 	}
-	if it.chunksOverlap {
+	// If using the heap, push all message indexes onto the heap.
+	if it.useHeap {
 		for _, mi := range it.messageIndexes {
 			if err := it.indexHeap.PushMessage(
 				chunkIndex,
@@ -325,14 +336,28 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		}
 		return nil
 	}
-	if !chunkIsOrdered && it.indexHeap.order != FileOrder {
-		sort.Slice(it.messageIndexes, func(i, j int) bool {
-			return it.messageIndexes[i].Timestamp < it.messageIndexes[j].Timestamp
-		})
-	}
-	if it.indexHeap.order == ReverseLogTimeOrder {
+	// otherwise, we'll iterate directly on the array of message indexes. Sort them into
+	// the required order.
+	switch it.order {
+	case FileOrder:
+		// message indexes are already in file order, no sorting needed
+	case LogTimeOrder:
+		if !chunkIsOrdered {
+			// need to stable-sort to ensure messages with equivalent timestamps remain in
+			// the same order
+			sort.SliceStable(it.messageIndexes, func(i, j int) bool {
+				return it.messageIndexes[i].Timestamp < it.messageIndexes[j].Timestamp
+			})
+		}
+	case ReverseLogTimeOrder:
+		if !chunkIsOrdered {
+			sort.SliceStable(it.messageIndexes, func(i, j int) bool {
+				return it.messageIndexes[i].Timestamp < it.messageIndexes[j].Timestamp
+			})
+		}
 		slices.Reverse(it.messageIndexes)
 	}
+
 	return nil
 }
 
@@ -356,15 +381,17 @@ func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Me
 	if msg == nil {
 		msg = &Message{}
 	}
-	if !it.hasReadSummarySection {
-		err := it.parseSummarySection()
-		if err != nil {
+	if !it.initialized {
+		if err := it.parseSummarySection(); err != nil {
+			return nil, nil, nil, err
+		}
+		if err := it.initializeReader(); err != nil {
 			return nil, nil, nil, err
 		}
 		// take care of the metadata here
 		if it.metadataCallback != nil {
 			for _, idx := range it.metadataIndexes {
-				_, err = it.rs.Seek(int64(idx.Offset), io.SeekStart)
+				_, err := it.rs.Seek(int64(idx.Offset), io.SeekStart)
 				if err != nil {
 					return nil, nil, nil, fmt.Errorf("failed to seek to metadata: %w", err)
 				}
@@ -387,7 +414,7 @@ func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Me
 		}
 	}
 
-	if !it.chunksOverlap {
+	if !it.useHeap {
 		if it.curMessageIndex >= len(it.messageIndexes) {
 			if it.curChunkIndex >= len(it.chunkIndexes) {
 				return nil, nil, nil, io.EOF
@@ -400,26 +427,15 @@ func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Me
 			it.curChunkIndex++
 			return it.NextInto(msg)
 		}
-		chunkOffset := it.messageIndexes[it.curMessageIndex].Offset
-		decompressedChunk := it.decompressedChunks[0]
-		length := binary.LittleEndian.Uint64(decompressedChunk.buf[chunkOffset+1:])
-		messageData := decompressedChunk.buf[chunkOffset+1+8 : chunkOffset+1+8+length]
-		existingbuf := msg.Data
-		if err := msg.PopulateFrom(messageData); err != nil {
+		messageIndex := it.messageIndexes[it.curMessageIndex]
+		decompressedChunk := &it.decompressedChunks[0]
+		if err := loadMessageAtOffset(decompressedChunk.buf, messageIndex.Offset, msg); err != nil {
 			return nil, nil, nil, err
 		}
-		msg.Data = append(existingbuf[:0], msg.Data...)
-		it.decompressedChunks[0].unreadMessages--
+		decompressedChunk.unreadMessages--
 		it.curMessageIndex++
-		channel := it.channels.get(msg.ChannelID)
-		if channel == nil {
-			return nil, nil, nil, fmt.Errorf("message with unrecognized channel ID %d", msg.ChannelID)
-		}
-		schema := it.schemas.get(channel.SchemaID)
-		if schema == nil && channel.SchemaID != 0 {
-			return nil, nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
-		}
-		return schema, channel, msg, nil
+		schema, channel, err := it.getSchemaAndChannel(msg.ChannelID)
+		return schema, channel, msg, err
 	}
 
 	if it.indexHeap.len() == 0 {
@@ -435,25 +451,36 @@ func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Me
 		}
 		return it.NextInto(msg)
 	}
-	chunkOffset := ri.MessageOffsetInChunk
-	decompressedChunk := it.decompressedChunks[ri.ChunkSlotIndex]
-	length := binary.LittleEndian.Uint64(decompressedChunk.buf[chunkOffset+1:])
-	messageData := decompressedChunk.buf[chunkOffset+1+8 : chunkOffset+1+8+length]
-	existingbuf := msg.Data
-	if err := msg.PopulateFrom(messageData); err != nil {
+	decompressedChunk := &it.decompressedChunks[ri.ChunkSlotIndex]
+	if err := loadMessageAtOffset(decompressedChunk.buf, ri.MessageOffsetInChunk, msg); err != nil {
 		return nil, nil, nil, err
 	}
-	msg.Data = append(existingbuf[:0], msg.Data...)
-	it.decompressedChunks[ri.ChunkSlotIndex].unreadMessages--
-	channel := it.channels.get(msg.ChannelID)
+	decompressedChunk.unreadMessages--
+	schema, channel, err := it.getSchemaAndChannel(msg.ChannelID)
+	return schema, channel, msg, err
+}
+
+func (it *indexedMessageIterator) getSchemaAndChannel(channelID uint16) (*Schema, *Channel, error) {
+	channel := slicemap.GetAt(it.channels, channelID)
 	if channel == nil {
-		return nil, nil, nil, fmt.Errorf("message with unrecognized channel ID %d", msg.ChannelID)
+		return nil, nil, fmt.Errorf("message with unrecognized channel ID %d", channelID)
 	}
-	schema := it.schemas.get(channel.SchemaID)
+	schema := slicemap.GetAt(it.schemas, channel.SchemaID)
 	if schema == nil && channel.SchemaID != 0 {
-		return nil, nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
+		return nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", channelID, channel.SchemaID)
 	}
-	return schema, channel, msg, nil
+	return schema, channel, nil
+}
+
+func loadMessageAtOffset(decompressedChunk []byte, offset uint64, msg *Message) error {
+	length := binary.LittleEndian.Uint64(decompressedChunk[offset+1:])
+	messageData := decompressedChunk[offset+1+8 : offset+1+8+length]
+	existingbuf := msg.Data
+	if err := msg.PopulateFrom(messageData); err != nil {
+		return err
+	}
+	msg.Data = append(existingbuf[:0], msg.Data...)
+	return nil
 }
 
 func (it *indexedMessageIterator) Next(buf []byte) (*Schema, *Channel, *Message, error) {
