@@ -445,7 +445,10 @@ func (it *indexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Messa
 		decompressedChunk.unreadMessages--
 		it.curMessageIndex++
 		schema, channel, err := it.getSchemaAndChannel(msg.ChannelID)
-		return schema, channel, msg, err
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return schema, channel, msg, nil
 	}
 
 	if it.indexHeap.len() == 0 {
@@ -467,7 +470,10 @@ func (it *indexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Messa
 	}
 	decompressedChunk.unreadMessages--
 	schema, channel, err := it.getSchemaAndChannel(msg.ChannelID)
-	return schema, channel, msg, err
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return schema, channel, msg, nil
 }
 
 func (it *indexedMessageIterator) getSchemaAndChannel(channelID uint16) (*Schema, *Channel, error) {
