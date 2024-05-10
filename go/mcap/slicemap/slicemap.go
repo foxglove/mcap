@@ -1,3 +1,4 @@
+// slicemap implements a generic array-map for uint16 keys and arbitrary structs.
 package slicemap
 
 import "math"

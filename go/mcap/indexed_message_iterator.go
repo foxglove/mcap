@@ -24,9 +24,20 @@ type decompressedChunk struct {
 	unreadMessages uint64
 }
 
-// indexedMessageIterator is an iterator over an indexed mcap read seeker (as
-// seeking is required). It makes reads in alternation from the index data
-// section, the message index at the end of a chunk, and the chunk's contents.
+// indexedMessageIterator is an iterator over an indexed mcap io.ReadSeeker (as
+// seeking is required). It reads index information from the MCAP summary section first, then
+// seeks to chunk records in the data section.
+//
+// This iterator yields messages using one of two strategies depending on whether any chunks have
+// overlapping time ranges.
+//   - If no chunks overlap, it seeks to each chunk in sequence, decompresses it and builds an
+//     in-memory ordered array of message indexes. Then it iterates through this array, copying
+//     all messages out of the decompressed chunk before seeking to the next chunk.
+//   - If some chunks have overlapping time ranges, it uses a heap containing both message and
+//     chunk indexes. Items are popped from the heap in time order. When a chunk index is popped
+//     from the heap, the chunk is decompressed and its message indexes are pushed into the heap.
+//     When a message index is popped from the heap, the corresponding message is copied out of the
+//     decompressed chunk and yielded.
 type indexedMessageIterator struct {
 	lexer  *Lexer
 	rs     io.ReadSeeker
@@ -157,6 +168,8 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	}
 }
 
+// initializeReader uses summary information to determine the order chunks will be read and
+// what technique will be used to read them.
 func (it *indexedMessageIterator) initializeReader() error {
 	// sort chunk indexes in the order that they will need to be loaded, depending on the specified
 	// read order.
@@ -207,6 +220,9 @@ func (it *indexedMessageIterator) initializeReader() error {
 	return nil
 }
 
+// loadChunk seeks to and decompresses a chunk into a chunk slot, then populates it.messageIndexes
+// with the offsets of messages in that chunk. If it.useHead is true, it pushes all message indexes
+// into the heap.
 func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	_, err := it.rs.Seek(int64(chunkIndex.ChunkStartOffset), io.SeekStart)
 	if err != nil {
@@ -377,6 +393,8 @@ func readRecord(r io.Reader) (OpCode, []byte, error) {
 	return opcode, record, nil
 }
 
+// NextInto yields the next message from the iterator, re-using the allocations from `msg` if
+// provided.
 func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Message, error) {
 	if msg == nil {
 		msg = &Message{}
@@ -472,14 +490,17 @@ func (it *indexedMessageIterator) getSchemaAndChannel(channelID uint16) (*Schema
 	return schema, channel, nil
 }
 
+// loadMessageAtOffset loads the Message record from `decompressedChunk` into `msg`.
 func loadMessageAtOffset(decompressedChunk []byte, offset uint64, msg *Message) error {
 	length := binary.LittleEndian.Uint64(decompressedChunk[offset+1:])
 	messageData := decompressedChunk[offset+1+8 : offset+1+8+length]
-	existingbuf := msg.Data
+	previousData := msg.Data
 	if err := msg.PopulateFrom(messageData); err != nil {
 		return err
 	}
-	msg.Data = append(existingbuf[:0], msg.Data...)
+	// after PopulateFrom, msg.Data is a slice of `decompressedChunk`. Copy it out so
+	// that the `decompressedChunk` buffer can be reused later.
+	msg.Data = append(previousData[:0], msg.Data...)
 	return nil
 }
 
