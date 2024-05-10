@@ -10,7 +10,7 @@ func GetAt[T any](items []*T, idx uint16) *T {
 	return items[idx]
 }
 
-// inserts item into items at idx, extending items to fit if neccessary.
+// inserts item into items at idx, extending items to fit if necessary.
 func SetAt[T any](items []*T, idx uint16, item *T) []*T {
 	if int(idx) >= len(items) {
 		// extend the len() of s.items up to idx + 1
