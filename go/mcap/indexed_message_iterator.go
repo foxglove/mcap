@@ -307,7 +307,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		if bufSize < recordEnd {
 			return fmt.Errorf(
 				"%s record in chunk has length %d bytes but only %d remaining in chunk",
-				op.String(), recordLen, bufSize-recordStart)
+				op, recordLen, bufSize-recordStart)
 		}
 		recordContent := chunkSlot.buf[recordStart:recordEnd]
 		msg := Message{}
