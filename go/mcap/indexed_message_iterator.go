@@ -311,9 +311,8 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		}
 		recordContent := chunkSlot.buf[recordStart:recordEnd]
 		msg := Message{}
-		switch op {
-		case OpMessage:
-			if err := msg.PopulateFrom(recordContent); err != nil {
+		if op == OpMessage {
+			if err := msg.PopulateFrom(recordContent, false); err != nil {
 				return fmt.Errorf("could not parse message in chunk: %w", err)
 			}
 			if slicemap.GetAt(it.channels, msg.ChannelID) != nil {
@@ -327,14 +326,6 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 					chunkSlot.unreadMessages++
 				}
 			}
-		case OpChannel, OpSchema:
-			// no-op
-		default:
-			return fmt.Errorf(
-				"expected only schema, channel, message opcodes in chunk, found %s at offset %d",
-				op.String(),
-				offset,
-			)
 		}
 		offset = recordEnd
 	}
@@ -495,7 +486,7 @@ func (it *indexedMessageIterator) getSchemaAndChannel(channelID uint16) (*Schema
 func loadMessageAtOffset(decompressedChunk []byte, offset uint64, msg *Message) error {
 	length := binary.LittleEndian.Uint64(decompressedChunk[offset+1:])
 	messageData := decompressedChunk[offset+1+8 : offset+1+8+length]
-	if err := msg.PopulateFrom(messageData); err != nil {
+	if err := msg.PopulateFrom(messageData, true); err != nil {
 		return err
 	}
 	return nil

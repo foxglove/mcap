@@ -52,7 +52,7 @@ func (it *unindexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Mes
 				it.channels = slicemap.SetAt(it.channels, channelInfo.ID, channelInfo)
 			}
 		case TokenMessage:
-			if err := msg.PopulateFrom(record); err != nil {
+			if err := msg.PopulateFrom(record, true); err != nil {
 				return nil, nil, nil, err
 			}
 			channel := slicemap.GetAt(it.channels, msg.ChannelID)

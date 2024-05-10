@@ -100,7 +100,7 @@ func ParseChannel(buf []byte) (*Channel, error) {
 }
 
 // PopulateFrom populates the fields of a Message struct from the message data slice.
-func (m *Message) PopulateFrom(buf []byte) error {
+func (m *Message) PopulateFrom(buf []byte, copyData bool) error {
 	channelID, offset, err := getUint16(buf, 0)
 	if err != nil {
 		return fmt.Errorf("failed to read channel ID: %w", err)
@@ -122,14 +122,18 @@ func (m *Message) PopulateFrom(buf []byte) error {
 	m.Sequence = sequence
 	m.LogTime = logTime
 	m.PublishTime = publishTime
-	m.Data = append(m.Data[:0], data...)
+	if copyData {
+		m.Data = append(m.Data[:0], data...)
+	} else {
+		m.Data = data
+	}
 	return nil
 }
 
 // ParseMessage parses a message record.
 func ParseMessage(buf []byte) (*Message, error) {
 	msg := &Message{}
-	if err := msg.PopulateFrom(buf); err != nil {
+	if err := msg.PopulateFrom(buf, false); err != nil {
 		return nil, err
 	}
 	return msg, nil
