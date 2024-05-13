@@ -2,14 +2,12 @@ package mcap
 
 import (
 	"fmt"
-
-	"github.com/foxglove/mcap/go/mcap/slicemap"
 )
 
 type unindexedMessageIterator struct {
 	lexer    *Lexer
-	schemas  []*Schema
-	channels []*Channel
+	schemas  slicemap[Schema]
+	channels slicemap[Channel]
 	topics   map[string]bool
 	start    uint64
 	end      uint64
@@ -42,20 +40,20 @@ func (it *unindexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Mes
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("failed to parse schema: %w", err)
 			}
-			it.schemas = slicemap.SetAt(it.schemas, schema.ID, schema)
+			it.schemas.Set(schema.ID, schema)
 		case TokenChannel:
 			channelInfo, err := ParseChannel(record)
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("failed to parse channel info: %w", err)
 			}
 			if len(it.topics) == 0 || it.topics[channelInfo.Topic] {
-				it.channels = slicemap.SetAt(it.channels, channelInfo.ID, channelInfo)
+				it.channels.Set(channelInfo.ID, channelInfo)
 			}
 		case TokenMessage:
 			if err := msg.PopulateFrom(record, true); err != nil {
 				return nil, nil, nil, err
 			}
-			channel := slicemap.GetAt(it.channels, msg.ChannelID)
+			channel := it.channels.Get(msg.ChannelID)
 			if channel == nil {
 				// skip messages on channels we don't know about. Note that if
 				// an unindexed reader encounters a message it would be
@@ -64,7 +62,7 @@ func (it *unindexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Mes
 				continue
 			}
 			if msg.LogTime >= it.start && msg.LogTime < it.end {
-				schema := slicemap.GetAt(it.schemas, channel.SchemaID)
+				schema := it.schemas.Get(channel.SchemaID)
 				if schema == nil && channel.SchemaID != 0 {
 					return nil, nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
 				}

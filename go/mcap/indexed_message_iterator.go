@@ -10,7 +10,6 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/foxglove/mcap/go/mcap/slicemap"
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
 )
@@ -44,8 +43,8 @@ type indexedMessageIterator struct {
 	end    uint64
 	order  ReadOrder
 
-	channels          []*Channel
-	schemas           []*Schema
+	channels          slicemap[Channel]
+	schemas           slicemap[Schema]
 	statistics        *Statistics
 	chunkIndexes      []*ChunkIndex
 	attachmentIndexes []*AttachmentIndex
@@ -117,14 +116,14 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			if err != nil {
 				return fmt.Errorf("failed to parse schema: %w", err)
 			}
-			it.schemas = slicemap.SetAt(it.schemas, schema.ID, schema)
+			it.schemas.Set(schema.ID, schema)
 		case TokenChannel:
 			channelInfo, err := ParseChannel(record)
 			if err != nil {
 				return fmt.Errorf("failed to parse channel info: %w", err)
 			}
 			if len(it.topics) == 0 || it.topics[channelInfo.Topic] {
-				it.channels = slicemap.SetAt(it.channels, channelInfo.ID, channelInfo)
+				it.channels.Set(channelInfo.ID, channelInfo)
 			}
 		case TokenAttachmentIndex:
 			idx, err := ParseAttachmentIndex(record)
@@ -144,7 +143,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 				return fmt.Errorf("failed to parse attachment index: %w", err)
 			}
 			// if the chunk overlaps with the requested parameters, load it
-			for _, channel := range it.channels {
+			for _, channel := range it.channels.Slice() {
 				if channel != nil && idx.MessageIndexOffsets[channel.ID] > 0 {
 					if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
 						it.chunkIndexes = append(it.chunkIndexes, idx)
@@ -279,7 +278,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 			if err := msg.PopulateFrom(recordContent, false); err != nil {
 				return fmt.Errorf("could not parse message in chunk: %w", err)
 			}
-			if slicemap.GetAt(it.channels, msg.ChannelID) != nil {
+			if it.channels.Get(msg.ChannelID) != nil {
 				if msg.LogTime >= it.start && msg.LogTime < it.end {
 					it.messageIndexes = append(it.messageIndexes, messageIndexWithChunkSlot{
 						timestamp:      msg.LogTime,
@@ -426,11 +425,11 @@ func (it *indexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Messa
 	}
 	decompressedChunk.unreadMessages--
 	it.curMessageIndex++
-	channel := slicemap.GetAt(it.channels, msg.ChannelID)
+	channel := it.channels.Get(msg.ChannelID)
 	if channel == nil {
 		return nil, nil, nil, fmt.Errorf("message with unrecognized channel ID %d", msg.ChannelID)
 	}
-	schema := slicemap.GetAt(it.schemas, channel.SchemaID)
+	schema := it.schemas.Get(channel.SchemaID)
 	if schema == nil && channel.SchemaID != 0 {
 		return nil, nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
 	}

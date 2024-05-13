@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-
-	"github.com/foxglove/mcap/go/mcap/slicemap"
 )
 
 var ErrMetadataNotFound = errors.New("metadata not found")
@@ -197,11 +195,11 @@ func (r *Reader) Info() (*Info, error) {
 	}
 	info := &Info{
 		Statistics:        it.statistics,
-		Channels:          slicemap.ToMap(it.channels),
+		Channels:          it.channels.ToMap(),
 		ChunkIndexes:      it.chunkIndexes,
 		AttachmentIndexes: it.attachmentIndexes,
 		MetadataIndexes:   it.metadataIndexes,
-		Schemas:           slicemap.ToMap(it.schemas),
+		Schemas:           it.schemas.ToMap(),
 		Footer:            it.footer,
 		Header:            r.header,
 	}
