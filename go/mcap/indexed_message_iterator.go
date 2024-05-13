@@ -334,20 +334,28 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	return nil
 }
 
-func readRecord(r io.Reader) (OpCode, []byte, error) {
-	buf := make([]byte, 9)
+func readRecord(r io.Reader, buf []byte) (OpCode, []byte, error) {
+	if cap(buf) < 9 {
+		buf = make([]byte, 9)
+	} else {
+		buf = buf[:9]
+	}
 	_, err := io.ReadFull(r, buf)
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to read record header: %w", err)
 	}
 	opcode := OpCode(buf[0])
 	recordLen := binary.LittleEndian.Uint64(buf[1:])
-	record := make([]byte, recordLen)
-	_, err = io.ReadFull(r, record)
+	if uint64(cap(buf)) < recordLen {
+		buf = make([]byte, recordLen)
+	} else {
+		buf = buf[:recordLen]
+	}
+	_, err = io.ReadFull(r, buf)
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to read record: %w", err)
 	}
-	return opcode, record, nil
+	return opcode, buf, nil
 }
 
 // Next2 yields the next message from the iterator, writing the result into the provided Message
@@ -369,7 +377,10 @@ func (it *indexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Messa
 				if err != nil {
 					return nil, nil, nil, fmt.Errorf("failed to seek to metadata: %w", err)
 				}
-				opcode, data, err := readRecord(it.rs)
+				opcode, data, err := readRecord(it.rs, it.recordBuf)
+				if cap(data) > cap(it.recordBuf) {
+					it.recordBuf = data
+				}
 				if err != nil {
 					return nil, nil, nil, fmt.Errorf("failed to read metadata record: %w", err)
 				}
@@ -387,53 +398,54 @@ func (it *indexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Messa
 			}
 		}
 	}
-
-	// if there are no indexed messages to yield, load another chunk
-	if it.curMessageIndex >= len(it.messageIndexes) {
-		// if there are no more chunks, iteration ends
-		if it.curChunkIndex >= len(it.chunkIndexes) {
-			return nil, nil, nil, io.EOF
-		}
-		chunkIndex := it.chunkIndexes[it.curChunkIndex]
-		if err := it.loadChunk(chunkIndex); err != nil {
-			return nil, nil, nil, err
-		}
-		it.curChunkIndex++
-		return it.Next2(msg)
-	}
-	// if there are more chunks left, check if the next one should be loaded before yielding another
-	// message
-	if it.curChunkIndex < len(it.chunkIndexes) {
-		chunkIndex := it.chunkIndexes[it.curChunkIndex]
-		messageIndex := it.messageIndexes[it.curMessageIndex]
-		if (it.order == LogTimeOrder && chunkIndex.MessageStartTime < messageIndex.timestamp) ||
-			(it.order == ReverseLogTimeOrder && chunkIndex.MessageEndTime > messageIndex.timestamp) {
+	for {
+		// if there are no indexed messages to yield, load a chunk
+		if it.curMessageIndex >= len(it.messageIndexes) {
+			// if there are no more chunks, iteration ends
+			if it.curChunkIndex >= len(it.chunkIndexes) {
+				return nil, nil, nil, io.EOF
+			}
+			chunkIndex := it.chunkIndexes[it.curChunkIndex]
 			if err := it.loadChunk(chunkIndex); err != nil {
 				return nil, nil, nil, err
 			}
 			it.curChunkIndex++
-			return it.Next2(msg)
+			continue
 		}
+		// if there are more chunks left, check if the next one should be loaded before yielding another
+		// message
+		if it.curChunkIndex < len(it.chunkIndexes) {
+			chunkIndex := it.chunkIndexes[it.curChunkIndex]
+			messageIndex := it.messageIndexes[it.curMessageIndex]
+			if (it.order == LogTimeOrder && chunkIndex.MessageStartTime < messageIndex.timestamp) ||
+				(it.order == ReverseLogTimeOrder && chunkIndex.MessageEndTime > messageIndex.timestamp) {
+				if err := it.loadChunk(chunkIndex); err != nil {
+					return nil, nil, nil, err
+				}
+				it.curChunkIndex++
+				continue
+			}
+		}
+		// yield the next message
+		messageIndex := it.messageIndexes[it.curMessageIndex]
+		decompressedChunk := &it.decompressedChunks[messageIndex.chunkSlotIndex]
+		length := binary.LittleEndian.Uint64(decompressedChunk.buf[messageIndex.offset+1:])
+		messageData := decompressedChunk.buf[messageIndex.offset+1+8 : messageIndex.offset+1+8+length]
+		if err := msg.PopulateFrom(messageData, true); err != nil {
+			return nil, nil, nil, err
+		}
+		decompressedChunk.unreadMessages--
+		it.curMessageIndex++
+		channel := it.channels.Get(msg.ChannelID)
+		if channel == nil {
+			return nil, nil, nil, fmt.Errorf("message with unrecognized channel ID %d", msg.ChannelID)
+		}
+		schema := it.schemas.Get(channel.SchemaID)
+		if schema == nil && channel.SchemaID != 0 {
+			return nil, nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
+		}
+		return schema, channel, msg, nil
 	}
-	// yield the next message
-	messageIndex := it.messageIndexes[it.curMessageIndex]
-	decompressedChunk := &it.decompressedChunks[messageIndex.chunkSlotIndex]
-	length := binary.LittleEndian.Uint64(decompressedChunk.buf[messageIndex.offset+1:])
-	messageData := decompressedChunk.buf[messageIndex.offset+1+8 : messageIndex.offset+1+8+length]
-	if err := msg.PopulateFrom(messageData, true); err != nil {
-		return nil, nil, nil, err
-	}
-	decompressedChunk.unreadMessages--
-	it.curMessageIndex++
-	channel := it.channels.Get(msg.ChannelID)
-	if channel == nil {
-		return nil, nil, nil, fmt.Errorf("message with unrecognized channel ID %d", msg.ChannelID)
-	}
-	schema := it.schemas.Get(channel.SchemaID)
-	if schema == nil && channel.SchemaID != 0 {
-		return nil, nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
-	}
-	return schema, channel, msg, nil
 }
 
 func (it *indexedMessageIterator) Next(buf []byte) (*Schema, *Channel, *Message, error) {
