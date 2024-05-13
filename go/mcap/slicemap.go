@@ -2,25 +2,27 @@ package mcap
 
 import "math"
 
+// slicemap is an arraymap implementation with uint16 keys. This is useful for associating a set of
+// Schema or Channel records with their IDs.
 type slicemap[T any] struct {
 	items []*T
 }
 
-func (s *slicemap[T]) Set(idx uint16, item *T) {
-	if int(idx) >= len(s.items) {
-		// extend the len() of s.items up to idx + 1
-		toAdd := int(idx) + 1 - len(s.items)
+func (s *slicemap[T]) Set(key uint16, val *T) {
+	if int(key) >= len(s.items) {
+		// extend the len() of s.items up to key + 1
+		toAdd := int(key) + 1 - len(s.items)
 		// let append decide how much to expand the capacity of the slice
 		s.items = append(s.items, make([]*T, toAdd)...)
 	}
-	s.items[idx] = item
+	s.items[key] = val
 }
 
-func (s *slicemap[T]) Get(idx uint16) *T {
-	if int(idx) >= len(s.items) {
+func (s *slicemap[T]) Get(key uint16) *T {
+	if int(key) >= len(s.items) {
 		return nil
 	}
-	return s.items[idx]
+	return s.items[key]
 }
 
 func (s *slicemap[T]) Slice() []*T {
@@ -29,14 +31,14 @@ func (s *slicemap[T]) Slice() []*T {
 
 func (s *slicemap[T]) ToMap() map[uint16]*T {
 	out := make(map[uint16]*T)
-	for idx, item := range s.items {
-		if idx > math.MaxUint16 {
+	for key, val := range s.items {
+		if key > math.MaxUint16 {
 			break
 		}
-		if item == nil {
+		if val == nil {
 			continue
 		}
-		out[uint16(idx)] = item
+		out[uint16(key)] = val
 	}
 	return out
 }
