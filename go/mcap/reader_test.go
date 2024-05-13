@@ -913,7 +913,7 @@ func BenchmarkReader(b *testing.B) {
 				Compression: CompressionZSTD,
 			})
 			require.NoError(b, err)
-			messageCount := uint64(1000000)
+			messageCount := uint64(4000000)
 			require.NoError(b, writer.WriteHeader(&Header{}))
 			require.NoError(b, writer.WriteSchema(&Schema{ID: 1, Name: "empty", Encoding: "none"}))
 			channelCount := 200
@@ -959,35 +959,29 @@ func BenchmarkReader(b *testing.B) {
 			require.NoError(b, writer.Close())
 			b.StartTimer()
 			readerConfigs := []struct {
-				opts []ReadOpt
-				name string
+				name     string
+				order    ReadOrder
+				useIndex bool
 			}{
 				{
-					opts: []ReadOpt{
-						UsingIndex(false),
-					},
-					name: "no_index",
+					name:     "no_index",
+					order:    FileOrder,
+					useIndex: false,
 				},
 				{
-					opts: []ReadOpt{
-						UsingIndex(true),
-						InOrder(FileOrder),
-					},
-					name: "index_file_order",
+					name:     "index_file_order",
+					order:    FileOrder,
+					useIndex: true,
 				},
 				{
-					opts: []ReadOpt{
-						UsingIndex(true),
-						InOrder(LogTimeOrder),
-					},
-					name: "index_time_order",
+					name:     "index_time_order",
+					order:    LogTimeOrder,
+					useIndex: true,
 				},
 				{
-					opts: []ReadOpt{
-						UsingIndex(true),
-						InOrder(ReverseLogTimeOrder),
-					},
-					name: "index_rev_order",
+					name:     "index_rev_order",
+					order:    ReverseLogTimeOrder,
+					useIndex: true,
 				},
 			}
 			for _, cfg := range readerConfigs {
@@ -996,23 +990,36 @@ func BenchmarkReader(b *testing.B) {
 						s := time.Now()
 						reader, err := NewReader(bytes.NewReader(buf.Bytes()))
 						require.NoError(b, err)
-						it, err := reader.Messages(cfg.opts...)
+						it, err := reader.Messages(UsingIndex(cfg.useIndex), InOrder(cfg.order))
 						require.NoError(b, err)
 						readMessages := uint64(0)
 						msgBytes := uint64(0)
 						msg := Message{}
+						var lastErr error
+						orderErrors := 0
+						var lastSeenTimestamp uint64
 						for {
 							_, _, msg, err := it.Next2(&msg)
-							if errors.Is(err, io.EOF) {
+							if err != nil {
+								lastErr = err
 								break
 							}
-							require.NoError(b, err)
+							if cfg.order == LogTimeOrder && msg.LogTime < lastSeenTimestamp {
+								orderErrors++
+							}
+							if cfg.order == ReverseLogTimeOrder && msg.LogTime > lastSeenTimestamp && readMessages != 0 {
+								orderErrors++
+							}
+							lastSeenTimestamp = msg.LogTime
 							readMessages++
 							msgBytes += uint64(len(msg.Data))
 						}
+						require.ErrorIs(b, lastErr, io.EOF)
+						require.Equal(b, messageCount, readMessages)
+						require.Equal(b, 0, orderErrors)
+
 						b.ReportMetric(float64(messageCount)/time.Since(s).Seconds(), "msg/s")
 						b.ReportMetric(float64(msgBytes)/(time.Since(s).Seconds()*1024*1024), "MB/s")
-						require.Equal(b, messageCount, readMessages)
 					}
 				})
 			}
@@ -1024,12 +1031,13 @@ func BenchmarkReader(b *testing.B) {
 					readMessages := uint64(0)
 					msgBytes := uint64(0)
 					var p []byte
+					var lastErr error
 					for {
 						token, record, err := lexer.Next(p)
-						if errors.Is(err, io.EOF) {
+						if err != nil {
+							lastErr = err
 							break
 						}
-						require.NoError(b, err)
 						if cap(record) > cap(p) {
 							p = record
 						}
@@ -1038,9 +1046,10 @@ func BenchmarkReader(b *testing.B) {
 							msgBytes += uint64(len(record) - 22)
 						}
 					}
+					require.ErrorIs(b, lastErr, io.EOF)
+					require.Equal(b, messageCount, readMessages)
 					b.ReportMetric(float64(messageCount)/time.Since(s).Seconds(), "msg/s")
 					b.ReportMetric(float64(msgBytes)/(time.Since(s).Seconds()*1024*1024), "MB/s")
-					require.Equal(b, messageCount, readMessages)
 				}
 			})
 		})
