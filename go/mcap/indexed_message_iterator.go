@@ -309,10 +309,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		// message indexes are already in file order, no sorting needed
 	case LogTimeOrder:
 		if sortingRequired {
-			sort.Slice(unreadMessageIndexes, func(i, j int) bool {
-				if unreadMessageIndexes[i].timestamp == unreadMessageIndexes[j].timestamp {
-					return unreadMessageIndexes[i].offset < unreadMessageIndexes[j].offset
-				}
+			sort.SliceStable(unreadMessageIndexes, func(i, j int) bool {
 				return unreadMessageIndexes[i].timestamp < unreadMessageIndexes[j].timestamp
 			})
 		}
@@ -322,10 +319,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		// If the chunk is in order, no sorting is needed after reversing.
 		slices.Reverse(it.messageIndexes[startIdx:])
 		if sortingRequired {
-			sort.Slice(unreadMessageIndexes, func(i, j int) bool {
-				if unreadMessageIndexes[i].timestamp == unreadMessageIndexes[j].timestamp {
-					return unreadMessageIndexes[i].offset > unreadMessageIndexes[j].offset
-				}
+			sort.SliceStable(unreadMessageIndexes, func(i, j int) bool {
 				return unreadMessageIndexes[i].timestamp > unreadMessageIndexes[j].timestamp
 			})
 		}
