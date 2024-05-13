@@ -178,6 +178,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 					return it.chunkIndexes[i].MessageEndTime > it.chunkIndexes[j].MessageEndTime
 				})
 			}
+			it.hasReadSummarySection = true
 			return nil
 		}
 	}
@@ -375,7 +376,6 @@ func (it *indexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Messa
 		if err := it.parseSummarySection(); err != nil {
 			return nil, nil, nil, err
 		}
-		it.hasReadSummarySection = true
 		// take care of the metadata here
 		if it.metadataCallback != nil {
 			for _, idx := range it.metadataIndexes {
