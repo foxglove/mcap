@@ -24,20 +24,18 @@ type decompressedChunk struct {
 	unreadMessages uint64
 }
 
+type messageIndexWithChunkSlot struct {
+	timestamp      uint64
+	offset         uint64
+	chunkSlotIndex int
+}
+
 // indexedMessageIterator is an iterator over an indexed mcap io.ReadSeeker (as
 // seeking is required). It reads index information from the MCAP summary section first, then
 // seeks to chunk records in the data section.
 //
-// This iterator yields messages using one of two strategies depending on whether any chunks have
-// overlapping time ranges.
-//   - If no chunks overlap, it seeks to each chunk in sequence, decompresses it and builds an
-//     in-memory ordered array of message indexes. Then it iterates through this array, copying
-//     all messages out of the decompressed chunk before seeking to the next chunk.
-//   - If some chunks have overlapping time ranges, it uses a heap containing both message and
-//     chunk indexes. Items are popped from the heap in time order. When a chunk index is popped
-//     from the heap, the chunk is decompressed and its message indexes are pushed into the heap.
-//     When a message index is popped from the heap, the corresponding message is copied out of the
-//     decompressed chunk and yielded.
+// This iterator seeks to chunks in the MCAP, decompresses them, builds an in-memory message index,
+// and yields messages according to that index.
 type indexedMessageIterator struct {
 	lexer  *Lexer
 	rs     io.ReadSeeker
@@ -54,16 +52,14 @@ type indexedMessageIterator struct {
 	metadataIndexes   []*MetadataIndex
 	footer            *Footer
 
-	useHeap            bool
-	indexHeap          rangeIndexHeap
 	curChunkIndex      int
-	messageIndexes     []MessageIndexEntry
+	messageIndexes     []messageIndexWithChunkSlot
 	curMessageIndex    int
 	decompressedChunks []decompressedChunk
 
-	zstdDecoder *zstd.Decoder
-	lz4Reader   *lz4.Reader
-	initialized bool
+	zstdDecoder           *zstd.Decoder
+	lz4Reader             *lz4.Reader
+	hasReadSummarySection bool
 
 	recordBuf        []byte
 	metadataCallback func(*Metadata) error
@@ -94,7 +90,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 
 	// scan the whole summary section
 	if footer.SummaryStart == 0 {
-		it.initialized = true
+		it.hasReadSummarySection = true
 		return nil
 	}
 	_, err = it.rs.Seek(int64(footer.SummaryStart), io.SeekStart)
@@ -163,66 +159,29 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			}
 			it.statistics = stats
 		case TokenFooter:
+			// sort chunk indexes in the order that they will need to be loaded, depending on the specified
+			// read order.
+			switch it.order {
+			case FileOrder:
+				sort.Slice(it.chunkIndexes, func(i, j int) bool {
+					return it.chunkIndexes[i].ChunkStartOffset < it.chunkIndexes[j].ChunkStartOffset
+				})
+			case LogTimeOrder:
+				sort.Slice(it.chunkIndexes, func(i, j int) bool {
+					return it.chunkIndexes[i].MessageStartTime < it.chunkIndexes[j].MessageStartTime
+				})
+			case ReverseLogTimeOrder:
+				sort.Slice(it.chunkIndexes, func(i, j int) bool {
+					return it.chunkIndexes[i].MessageEndTime > it.chunkIndexes[j].MessageEndTime
+				})
+			}
 			return nil
 		}
 	}
 }
 
-// initializeReader uses summary information to determine the order chunks will be read and
-// what technique will be used to read them.
-func (it *indexedMessageIterator) initializeReader() error {
-	// sort chunk indexes in the order that they will need to be loaded, depending on the specified
-	// read order.
-	switch it.order {
-	case FileOrder:
-		sort.Slice(it.chunkIndexes, func(i, j int) bool {
-			return it.chunkIndexes[i].ChunkStartOffset < it.chunkIndexes[j].ChunkStartOffset
-		})
-	case LogTimeOrder:
-		sort.Slice(it.chunkIndexes, func(i, j int) bool {
-			return it.chunkIndexes[i].MessageStartTime < it.chunkIndexes[j].MessageStartTime
-		})
-		// check if chunks overlap, if so, we need to use a heap when loading messages.
-		for i := 1; i < len(it.chunkIndexes); i++ {
-			prev := it.chunkIndexes[i-1]
-			cur := it.chunkIndexes[i]
-			if prev.MessageEndTime > cur.MessageStartTime {
-				it.useHeap = true
-				break
-			}
-		}
-	case ReverseLogTimeOrder:
-		sort.Slice(it.chunkIndexes, func(i, j int) bool {
-			return it.chunkIndexes[i].MessageEndTime > it.chunkIndexes[j].MessageEndTime
-		})
-		// check if chunks overlap, if so, we need to use a heap when loading messages.
-		for i := 1; i < len(it.chunkIndexes); i++ {
-			prev := it.chunkIndexes[i-1]
-			cur := it.chunkIndexes[i]
-			if prev.MessageStartTime < cur.MessageEndTime {
-				it.useHeap = true
-				break
-			}
-		}
-	}
-	// if the heap is needed, initialize it with the full set of chunk indexes.
-	if it.useHeap {
-		if it.order == ReverseLogTimeOrder {
-			it.indexHeap.reverse = true
-		}
-		for _, idx := range it.chunkIndexes {
-			if err := it.indexHeap.PushChunkIndex(idx); err != nil {
-				return err
-			}
-		}
-	}
-	it.initialized = true
-	return nil
-}
-
 // loadChunk seeks to and decompresses a chunk into a chunk slot, then populates it.messageIndexes
-// with the offsets of messages in that chunk. If it.useHead is true, it pushes all message indexes
-// into the heap.
+// with the offsets of messages in that chunk.
 func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	_, err := it.rs.Seek(int64(chunkIndex.ChunkStartOffset), io.SeekStart)
 	if err != nil {
@@ -289,9 +248,14 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		return fmt.Errorf("unsupported compression %s", parsedChunk.Compression)
 	}
 	// produce message indexes for the newly decompressed chunk data.
-	chunkIsOrdered := true
 	var maxLogTime uint64
-	it.messageIndexes = it.messageIndexes[:0]
+	// if there are no message indexes outstanding, truncate now.
+	if it.curMessageIndex == len(it.messageIndexes) {
+		it.curMessageIndex = 0
+		it.messageIndexes = it.messageIndexes[:0]
+	}
+	chunkIsOrdered := it.curMessageIndex == 0
+	startIdx := len(it.messageIndexes)
 	for offset := uint64(0); offset < bufSize; {
 		if bufSize < offset+1+8 {
 			return fmt.Errorf("expected another record in chunk, but left with %d bytes", bufSize-offset)
@@ -317,7 +281,11 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 			}
 			if slicemap.GetAt(it.channels, msg.ChannelID) != nil {
 				if msg.LogTime >= it.start && msg.LogTime < it.end {
-					it.messageIndexes = append(it.messageIndexes, MessageIndexEntry{Timestamp: msg.LogTime, Offset: offset})
+					it.messageIndexes = append(it.messageIndexes, messageIndexWithChunkSlot{
+						timestamp:      msg.LogTime,
+						offset:         offset,
+						chunkSlotIndex: chunkSlotIndex,
+					})
 					if msg.LogTime < maxLogTime {
 						chunkIsOrdered = false
 					} else {
@@ -329,40 +297,39 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		}
 		offset = recordEnd
 	}
-	// If using the heap, push all message indexes onto the heap.
-	if it.useHeap {
-		for _, mi := range it.messageIndexes {
-			if err := it.indexHeap.PushMessage(
-				chunkIndex,
-				chunkSlotIndex,
-				mi.Timestamp,
-				mi.Offset,
-			); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	// otherwise, we'll iterate directly on the array of message indexes. Sort them into
-	// the required order.
+	unreadMessageIndexes := it.messageIndexes[it.curMessageIndex:]
 	switch it.order {
 	case FileOrder:
 		// message indexes are already in file order, no sorting needed
 	case LogTimeOrder:
 		if !chunkIsOrdered {
-			// need to stable-sort to ensure messages with equivalent timestamps remain in
-			// the same order
-			sort.SliceStable(it.messageIndexes, func(i, j int) bool {
-				return it.messageIndexes[i].Timestamp < it.messageIndexes[j].Timestamp
+			sort.Slice(unreadMessageIndexes, func(i, j int) bool {
+				if unreadMessageIndexes[i].timestamp == unreadMessageIndexes[j].timestamp {
+					return unreadMessageIndexes[i].offset < unreadMessageIndexes[j].offset
+				}
+				return unreadMessageIndexes[i].timestamp < unreadMessageIndexes[j].timestamp
 			})
 		}
 	case ReverseLogTimeOrder:
+		// assume message indexes will always be mostly-in-order, so reversing the newly-added
+		// indexes will put them mostly into reverse order. If the chunk is in order,
+		// that's all we need to do.
+		slices.Reverse(it.messageIndexes[startIdx:])
 		if !chunkIsOrdered {
-			sort.SliceStable(it.messageIndexes, func(i, j int) bool {
-				return it.messageIndexes[i].Timestamp < it.messageIndexes[j].Timestamp
+			sort.Slice(unreadMessageIndexes, func(i, j int) bool {
+				if unreadMessageIndexes[i].timestamp == unreadMessageIndexes[j].timestamp {
+					return unreadMessageIndexes[i].offset > unreadMessageIndexes[j].offset
+				}
+				return unreadMessageIndexes[i].timestamp > unreadMessageIndexes[j].timestamp
 			})
 		}
-		slices.Reverse(it.messageIndexes)
+	}
+	// if there is more dead space at the front than unread, remove the dead space by
+	// copying the live data to the front and truncating.
+	if len(unreadMessageIndexes) < it.curMessageIndex {
+		copy(it.messageIndexes[:it.curMessageIndex], unreadMessageIndexes)
+		it.messageIndexes = it.messageIndexes[:len(unreadMessageIndexes)]
+		it.curMessageIndex = 0
 	}
 
 	return nil
@@ -391,13 +358,11 @@ func (it *indexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Messa
 	if msg == nil {
 		msg = &Message{}
 	}
-	if !it.initialized {
+	if !it.hasReadSummarySection {
 		if err := it.parseSummarySection(); err != nil {
 			return nil, nil, nil, err
 		}
-		if err := it.initializeReader(); err != nil {
-			return nil, nil, nil, err
-		}
+		it.hasReadSummarySection = true
 		// take care of the metadata here
 		if it.metadataCallback != nil {
 			for _, idx := range it.metadataIndexes {
@@ -424,78 +389,52 @@ func (it *indexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Messa
 		}
 	}
 
-	if !it.useHeap {
-		if it.curMessageIndex >= len(it.messageIndexes) {
-			if it.curChunkIndex >= len(it.chunkIndexes) {
-				return nil, nil, nil, io.EOF
-			}
-			chunkIndex := it.chunkIndexes[it.curChunkIndex]
+	// if there are no indexed messages to yield, load another chunk
+	if it.curMessageIndex >= len(it.messageIndexes) {
+		// if there are no more chunks, iteration ends
+		if it.curChunkIndex >= len(it.chunkIndexes) {
+			return nil, nil, nil, io.EOF
+		}
+		chunkIndex := it.chunkIndexes[it.curChunkIndex]
+		if err := it.loadChunk(chunkIndex); err != nil {
+			return nil, nil, nil, err
+		}
+		it.curChunkIndex++
+		return it.Next2(msg)
+	}
+	// if there are more chunks left, check if the next one should be loaded before yielding another
+	// message
+	if it.curChunkIndex < len(it.chunkIndexes) {
+		chunkIndex := it.chunkIndexes[it.curChunkIndex]
+		messageIndex := it.messageIndexes[it.curMessageIndex]
+		if (it.order == LogTimeOrder && chunkIndex.MessageStartTime < messageIndex.timestamp) ||
+			(it.order == ReverseLogTimeOrder && chunkIndex.MessageEndTime > messageIndex.timestamp) {
 			if err := it.loadChunk(chunkIndex); err != nil {
 				return nil, nil, nil, err
 			}
-			it.curMessageIndex = 0
 			it.curChunkIndex++
 			return it.Next2(msg)
 		}
-		messageIndex := it.messageIndexes[it.curMessageIndex]
-		decompressedChunk := &it.decompressedChunks[0]
-		if err := loadMessageAtOffset(decompressedChunk.buf, messageIndex.Offset, msg); err != nil {
-			return nil, nil, nil, err
-		}
-		decompressedChunk.unreadMessages--
-		it.curMessageIndex++
-		schema, channel, err := it.getSchemaAndChannel(msg.ChannelID)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		return schema, channel, msg, nil
 	}
-
-	if it.indexHeap.len() == 0 {
-		return nil, nil, nil, io.EOF
-	}
-	ri, err := it.indexHeap.Pop()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	if ri.ChunkSlotIndex == -1 {
-		if err := it.loadChunk(ri.chunkIndex); err != nil {
-			return nil, nil, nil, err
-		}
-		return it.Next2(msg)
-	}
-	decompressedChunk := &it.decompressedChunks[ri.ChunkSlotIndex]
-	if err := loadMessageAtOffset(decompressedChunk.buf, ri.MessageOffsetInChunk, msg); err != nil {
+	// yield the next message
+	messageIndex := it.messageIndexes[it.curMessageIndex]
+	decompressedChunk := &it.decompressedChunks[messageIndex.chunkSlotIndex]
+	length := binary.LittleEndian.Uint64(decompressedChunk.buf[messageIndex.offset+1:])
+	messageData := decompressedChunk.buf[messageIndex.offset+1+8 : messageIndex.offset+1+8+length]
+	if err := msg.PopulateFrom(messageData, true); err != nil {
 		return nil, nil, nil, err
 	}
 	decompressedChunk.unreadMessages--
-	schema, channel, err := it.getSchemaAndChannel(msg.ChannelID)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return schema, channel, msg, nil
-}
-
-func (it *indexedMessageIterator) getSchemaAndChannel(channelID uint16) (*Schema, *Channel, error) {
-	channel := slicemap.GetAt(it.channels, channelID)
+	it.curMessageIndex++
+	channel := slicemap.GetAt(it.channels, msg.ChannelID)
 	if channel == nil {
-		return nil, nil, fmt.Errorf("message with unrecognized channel ID %d", channelID)
+		return nil, nil, nil, fmt.Errorf("message with unrecognized channel ID %d", msg.ChannelID)
 	}
 	schema := slicemap.GetAt(it.schemas, channel.SchemaID)
 	if schema == nil && channel.SchemaID != 0 {
-		return nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", channelID, channel.SchemaID)
+		return nil, nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
 	}
-	return schema, channel, nil
-}
-
-// loadMessageAtOffset loads the Message record from `decompressedChunk` into `msg`.
-func loadMessageAtOffset(decompressedChunk []byte, offset uint64, msg *Message) error {
-	length := binary.LittleEndian.Uint64(decompressedChunk[offset+1:])
-	messageData := decompressedChunk[offset+1+8 : offset+1+8+length]
-	if err := msg.PopulateFrom(messageData, true); err != nil {
-		return err
-	}
-	return nil
+	return schema, channel, msg, nil
 }
 
 func (it *indexedMessageIterator) Next(buf []byte) (*Schema, *Channel, *Message, error) {
