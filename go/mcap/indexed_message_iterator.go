@@ -18,7 +18,7 @@ const (
 	chunkBufferGrowthMultiple = 1.2
 )
 
-type decompressedChunk struct {
+type chunkSlot struct {
 	buf            []byte
 	unreadMessages uint64
 }
@@ -33,8 +33,12 @@ type messageIndexWithChunkSlot struct {
 // seeking is required). It reads index information from the MCAP summary section first, then
 // seeks to chunk records in the data section.
 //
-// This iterator seeks to chunks in the MCAP, decompresses them, builds an in-memory message index,
-// and yields messages according to that index.
+// This iterator reads in order by maintaining two ordered queues, one for chunk indexes and one
+// for message indexes. On every call to Next2(), the front element of both queues is checked and
+// the earlier is used. When a chunk index is first, the chunk is decompressed, indexed, the
+// new message indexes are pushed onto the message index queue and sorted.
+// When a message index is first, that message is copied out of the decompressed chunk and yielded
+// to the caller.
 type indexedMessageIterator struct {
 	lexer  *Lexer
 	rs     io.ReadSeeker
@@ -51,10 +55,10 @@ type indexedMessageIterator struct {
 	metadataIndexes   []*MetadataIndex
 	footer            *Footer
 
-	curChunkIndex      int
-	messageIndexes     []messageIndexWithChunkSlot
-	curMessageIndex    int
-	decompressedChunks []decompressedChunk
+	curChunkIndex   int
+	messageIndexes  []messageIndexWithChunkSlot
+	curMessageIndex int
+	chunkSlots      []chunkSlot
 
 	zstdDecoder           *zstd.Decoder
 	lz4Reader             *lz4.Reader
@@ -188,31 +192,33 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	}
 
 	compressedChunkLength := chunkIndex.ChunkLength
-	if len(it.recordBuf) < int(compressedChunkLength) {
+	if uint64(cap(it.recordBuf)) < compressedChunkLength {
 		newSize := int(float64(compressedChunkLength) * chunkBufferGrowthMultiple)
 		it.recordBuf = make([]byte, newSize)
+	} else {
+		it.recordBuf = it.recordBuf[:compressedChunkLength]
 	}
-	_, err = io.ReadFull(it.rs, it.recordBuf[:compressedChunkLength])
+	_, err = io.ReadFull(it.rs, it.recordBuf)
 	if err != nil {
 		return fmt.Errorf("failed to read chunk data: %w", err)
 	}
-	parsedChunk, err := ParseChunk(it.recordBuf[9:chunkIndex.ChunkLength])
+	parsedChunk, err := ParseChunk(it.recordBuf[9:])
 	if err != nil {
 		return fmt.Errorf("failed to parse chunk: %w", err)
 	}
 	// decompress the chunk data
 	chunkSlotIndex := -1
-	for i, decompressedChunk := range it.decompressedChunks {
-		if decompressedChunk.unreadMessages == 0 {
+	for i, chunkSlot := range it.chunkSlots {
+		if chunkSlot.unreadMessages == 0 {
 			chunkSlotIndex = i
 			break
 		}
 	}
 	if chunkSlotIndex == -1 {
-		it.decompressedChunks = append(it.decompressedChunks, decompressedChunk{})
-		chunkSlotIndex = len(it.decompressedChunks) - 1
+		it.chunkSlots = append(it.chunkSlots, chunkSlot{})
+		chunkSlotIndex = len(it.chunkSlots) - 1
 	}
-	chunkSlot := &it.decompressedChunks[chunkSlotIndex]
+	chunkSlot := &it.chunkSlots[chunkSlotIndex]
 	bufSize := parsedChunk.UncompressedSize
 	if uint64(cap(chunkSlot.buf)) < bufSize {
 		chunkSlot.buf = make([]byte, bufSize)
@@ -253,7 +259,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		it.curMessageIndex = 0
 		it.messageIndexes = it.messageIndexes[:0]
 	}
-	chunkIsOrdered := it.curMessageIndex == 0
+	sortingRequired := it.curMessageIndex != 0
 	startIdx := len(it.messageIndexes)
 	for offset := uint64(0); offset < bufSize; {
 		if bufSize < offset+1+8 {
@@ -273,8 +279,8 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 				op, recordLen, bufSize-recordStart)
 		}
 		recordContent := chunkSlot.buf[recordStart:recordEnd]
-		msg := Message{}
 		if op == OpMessage {
+			msg := Message{}
 			if err := msg.PopulateFrom(recordContent, false); err != nil {
 				return fmt.Errorf("could not parse message in chunk: %w", err)
 			}
@@ -286,7 +292,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 						chunkSlotIndex: chunkSlotIndex,
 					})
 					if msg.LogTime < maxLogTime {
-						chunkIsOrdered = false
+						sortingRequired = true
 					} else {
 						maxLogTime = msg.LogTime
 					}
@@ -301,7 +307,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	case FileOrder:
 		// message indexes are already in file order, no sorting needed
 	case LogTimeOrder:
-		if !chunkIsOrdered {
+		if sortingRequired {
 			sort.Slice(unreadMessageIndexes, func(i, j int) bool {
 				if unreadMessageIndexes[i].timestamp == unreadMessageIndexes[j].timestamp {
 					return unreadMessageIndexes[i].offset < unreadMessageIndexes[j].offset
@@ -311,10 +317,10 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		}
 	case ReverseLogTimeOrder:
 		// assume message indexes will always be mostly-in-order, so reversing the newly-added
-		// indexes will put them mostly into reverse order. If the chunk is in order,
-		// that's all we need to do.
+		// indexes will put them mostly into reverse order, which speeds up sorting.
+		// If the chunk is in order, no sorting is needed after reversing.
 		slices.Reverse(it.messageIndexes[startIdx:])
-		if !chunkIsOrdered {
+		if sortingRequired {
 			sort.Slice(unreadMessageIndexes, func(i, j int) bool {
 				if unreadMessageIndexes[i].timestamp == unreadMessageIndexes[j].timestamp {
 					return unreadMessageIndexes[i].offset > unreadMessageIndexes[j].offset
@@ -323,10 +329,10 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 			})
 		}
 	}
-	// if there is more dead space at the front than unread, remove the dead space by
+	// if there is more dead space at the front than there is live, remove the dead space by
 	// copying the live data to the front and truncating.
 	if len(unreadMessageIndexes) < it.curMessageIndex {
-		copy(it.messageIndexes[:it.curMessageIndex], unreadMessageIndexes)
+		copy(it.messageIndexes[:len(unreadMessageIndexes)], unreadMessageIndexes)
 		it.messageIndexes = it.messageIndexes[:len(unreadMessageIndexes)]
 		it.curMessageIndex = 0
 	}
@@ -428,13 +434,21 @@ func (it *indexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Messa
 		}
 		// yield the next message
 		messageIndex := it.messageIndexes[it.curMessageIndex]
-		decompressedChunk := &it.decompressedChunks[messageIndex.chunkSlotIndex]
-		length := binary.LittleEndian.Uint64(decompressedChunk.buf[messageIndex.offset+1:])
-		messageData := decompressedChunk.buf[messageIndex.offset+1+8 : messageIndex.offset+1+8+length]
+		chunkSlot := &it.chunkSlots[messageIndex.chunkSlotIndex]
+		messageDataStart, overflow := checkedAdd(messageIndex.offset, 1+8)
+		if overflow {
+			return nil, nil, nil, fmt.Errorf("message offset in chunk too close to uint64 max: %d", messageIndex.offset)
+		}
+		length := binary.LittleEndian.Uint64(chunkSlot.buf[messageIndex.offset+1:])
+		messageDataEnd, overflow := checkedAdd(messageDataStart, length)
+		if overflow {
+			return nil, nil, nil, fmt.Errorf("message record length extends past uint64 range: %d", length)
+		}
+		messageData := chunkSlot.buf[messageDataStart:messageDataEnd]
 		if err := msg.PopulateFrom(messageData, true); err != nil {
 			return nil, nil, nil, err
 		}
-		decompressedChunk.unreadMessages--
+		chunkSlot.unreadMessages--
 		it.curMessageIndex++
 		channel := it.channels.Get(msg.ChannelID)
 		if channel == nil {
