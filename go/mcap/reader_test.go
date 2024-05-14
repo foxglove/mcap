@@ -963,14 +963,14 @@ func BenchmarkReader(b *testing.B) {
 		chunksOverlap          bool
 	}{
 		{
-			name: "inorder",
+			name: "msgs_in_order",
 		},
 		{
-			name:                   "minor",
+			name:                   "jitter_in_chunk",
 			outOfOrderWithinChunks: true,
 		},
 		{
-			name:                   "major",
+			name:                   "chunks_overlap",
 			outOfOrderWithinChunks: true,
 			chunksOverlap:          true,
 		},
@@ -1040,17 +1040,17 @@ func BenchmarkReader(b *testing.B) {
 					useIndex: false,
 				},
 				{
-					name:     "index_file_order",
+					name:     "file_order",
 					order:    FileOrder,
 					useIndex: true,
 				},
 				{
-					name:     "index_time_order",
+					name:     "time_order",
 					order:    LogTimeOrder,
 					useIndex: true,
 				},
 				{
-					name:     "index_rev_order",
+					name:     "rev_order",
 					order:    ReverseLogTimeOrder,
 					useIndex: true,
 				},
