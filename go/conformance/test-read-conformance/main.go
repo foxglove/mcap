@@ -354,7 +354,7 @@ func readIndexed(w io.Writer, filepath string) error {
 	knownChannelIDs := make(map[uint16]bool)
 
 	for {
-		schema, channel, message, err := it.Next(nil)
+		schema, channel, message, err := it.NextInto(nil)
 		if errors.Is(err, io.EOF) {
 			break
 		}
