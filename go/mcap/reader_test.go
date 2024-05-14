@@ -821,7 +821,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 
 	// check that timestamps monotonically decrease from the returned iterator
 	for i := 0; i < msgCount; i++ {
-		_, _, msg, err := reverseIt.Next2(nil)
+		_, _, msg, err := reverseIt.NextInto(nil)
 		require.NoError(t, err)
 		if i != 0 {
 			assert.Less(t, msg.LogTime, lastSeenTimestamp)
@@ -872,7 +872,7 @@ func TestOrderStableWithEquivalentTimestamps(t *testing.T) {
 	var lastMessageNumber uint64
 	var numRead uint64
 	for {
-		_, _, msg, err := it.Next2(nil)
+		_, _, msg, err := it.NextInto(nil)
 		if errors.Is(err, io.EOF) {
 			break
 		}
@@ -898,7 +898,7 @@ func TestOrderStableWithEquivalentTimestamps(t *testing.T) {
 	lastMessageNumber = 0
 	numRead = 0
 	for {
-		_, _, msg, err := reverseIt.Next2(nil)
+		_, _, msg, err := reverseIt.NextInto(nil)
 		if errors.Is(err, io.EOF) {
 			break
 		}
@@ -1070,7 +1070,7 @@ func BenchmarkReader(b *testing.B) {
 						orderErrors := 0
 						var lastSeenTimestamp uint64
 						for {
-							_, _, msg, err := it.Next2(&msg)
+							_, _, msg, err := it.NextInto(&msg)
 							if err != nil {
 								lastErr = err
 								break

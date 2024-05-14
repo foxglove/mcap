@@ -34,7 +34,7 @@ type messageIndexWithChunkSlot struct {
 // seeks to chunk records in the data section.
 //
 // This iterator reads in order by maintaining two ordered queues, one for chunk indexes and one
-// for message indexes. On every call to Next2(), the front element of both queues is checked and
+// for message indexes. On every call to NextInto(), the front element of both queues is checked and
 // the earlier is used. When a chunk index is first, the chunk is decompressed, indexed, the
 // new message indexes are pushed onto the message index queue and sorted.
 // When a message index is first, that message is copied out of the decompressed chunk and yielded
@@ -368,10 +368,10 @@ func readRecord(r io.Reader, buf []byte) (OpCode, []byte, error) {
 	return opcode, buf, nil
 }
 
-// Next2 yields the next message from the iterator, writing the result into the provided Message
+// NextInto yields the next message from the iterator, writing the result into the provided Message
 // struct. The msg.Data buffer will be reused if it has enough capacity. If `msg` is nil, a new
 // Message will be allocated.
-func (it *indexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Message, error) {
+func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Message, error) {
 	if msg == nil {
 		msg = &Message{}
 	}
@@ -467,7 +467,7 @@ func (it *indexedMessageIterator) Next2(msg *Message) (*Schema, *Channel, *Messa
 
 func (it *indexedMessageIterator) Next(buf []byte) (*Schema, *Channel, *Message, error) {
 	msg := &Message{Data: buf}
-	return it.Next2(msg)
+	return it.NextInto(msg)
 }
 
 // returns the sum of two uint64s, with a boolean indicating if the sum overflowed.

@@ -300,7 +300,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 	}
 	for inputID, iterator := range iterators {
 		inputName := inputs[inputID].name
-		schema, channel, message, err := iterator.Next2(nil)
+		schema, channel, message, err := iterator.NextInto(nil)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				// the file may be an empty mcap. if so, just ignore it.
@@ -336,7 +336,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 		// Pull the next message off the iterator, to replace the one just
 		// popped from the queue. Before pushing this message, it must be
 		// renumbered and the related channels/schemas may need to be inserted.
-		newSchema, newChannel, newMessage, err := iterators[msg.InputID].Next2(nil)
+		newSchema, newChannel, newMessage, err := iterators[msg.InputID].NextInto(nil)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				// if the iterator is empty, skip this read. No further messages

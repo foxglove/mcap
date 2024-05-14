@@ -65,14 +65,14 @@ type Reader struct {
 }
 
 type MessageIterator interface {
-	// Deprecated: use Next2 to avoid repeatedly heap-allocating Message structs while iterating.
+	// Deprecated: use NextInto to avoid repeatedly heap-allocating Message structs while iterating.
 	Next([]byte) (*Schema, *Channel, *Message, error)
-	// Next2 returns the next message from the MCAP. If the returned error is io.EOF,
+	// NextInto returns the next message from the MCAP. If the returned error is io.EOF,
 	// this signals the end of the MCAP.
-	// If `msg` is not nil, Next2 will populate it with new data and
+	// If `msg` is not nil, NextInto will populate it with new data and
 	// return the same pointer, re-using or resizing `msg.Data` as needed.
-	// If `msg` is nil, Next2 will allocate and return a new Message on the heap.
-	Next2(msg *Message) (*Schema, *Channel, *Message, error)
+	// If `msg` is nil, NextInto will allocate and return a new Message on the heap.
+	NextInto(msg *Message) (*Schema, *Channel, *Message, error)
 }
 
 func Range(it MessageIterator, f func(*Schema, *Channel, *Message) error) error {

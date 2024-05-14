@@ -45,7 +45,7 @@ func fileHasNoMessages(r io.ReadSeeker) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, _, _, err = it.Next2(nil)
+	_, _, _, err = it.NextInto(nil)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return true, nil
@@ -126,7 +126,7 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 	channels := make(map[uint16]*mcap.Schema)
 	message := mcap.Message{}
 	for {
-		schema, channel, _, err := it.Next2(&message)
+		schema, channel, _, err := it.NextInto(&message)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
