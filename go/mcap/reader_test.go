@@ -3,6 +3,7 @@ package mcap
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -757,29 +758,15 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, writer.WriteHeader(&Header{}))
-	require.NoError(t, writer.WriteSchema(&Schema{
-		ID:       1,
-		Name:     "",
-		Encoding: "",
-		Data:     []byte{},
-	}))
-	require.NoError(t, writer.WriteChannel(&Channel{
-		ID:              0,
-		Topic:           "",
-		SchemaID:        0,
-		MessageEncoding: "",
-		Metadata: map[string]string{
-			"": "",
-		},
-	}))
+	require.NoError(t, writer.WriteSchema(&Schema{ID: 1}))
+	require.NoError(t, writer.WriteChannel(&Channel{ID: 0}))
 	msgCount := 0
 	addMsg := func(timestamp uint64) {
 		require.NoError(t, writer.WriteMessage(&Message{
 			ChannelID:   0,
-			Sequence:    0,
 			LogTime:     timestamp,
 			PublishTime: timestamp,
-			Data:        []byte{'h', 'e', 'l', 'l', 'o'},
+			Data:        []byte("hello"),
 		}))
 		msgCount++
 	}
@@ -834,7 +821,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 
 	// check that timestamps monotonically decrease from the returned iterator
 	for i := 0; i < msgCount; i++ {
-		_, _, msg, err := reverseIt.Next(nil)
+		_, _, msg, err := reverseIt.Next2(nil)
 		require.NoError(t, err)
 		if i != 0 {
 			assert.Less(t, msg.LogTime, lastSeenTimestamp)
@@ -844,6 +831,90 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	_, _, msg, err = reverseIt.Next(nil)
 	require.Nil(t, msg)
 	require.ErrorIs(t, io.EOF, err)
+}
+
+func TestOrderStableWithEquivalentTimestamps(t *testing.T) {
+	buf := &bytes.Buffer{}
+	// write an MCAP with two chunks, where in each chunk all messages have ascending timestamps,
+	// but their timestamp ranges overlap.
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   200,
+		Compression: CompressionLZ4,
+	})
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&Header{}))
+	require.NoError(t, writer.WriteSchema(&Schema{ID: 1}))
+	require.NoError(t, writer.WriteChannel(&Channel{ID: 0, Topic: "a"}))
+	require.NoError(t, writer.WriteChannel(&Channel{ID: 1, Topic: "b"}))
+	var msgCount uint64
+	msgData := make([]byte, 8)
+	for len(writer.ChunkIndexes) < 3 {
+		binary.LittleEndian.PutUint64(msgData, msgCount)
+		require.NoError(t, writer.WriteMessage(&Message{
+			ChannelID:   uint16(msgCount % 2),
+			LogTime:     msgCount % 2,
+			PublishTime: msgCount % 2,
+			Data:        msgData,
+		}))
+		msgCount++
+	}
+	require.NoError(t, writer.Close())
+
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	require.NoError(t, err)
+
+	it, err := reader.Messages(
+		UsingIndex(true),
+		InOrder(LogTimeOrder),
+	)
+	require.NoError(t, err)
+	var lastMessageNumber uint64
+	var numRead uint64
+	for {
+		_, _, msg, err := it.Next2(nil)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		if msg.ChannelID != 0 {
+			continue
+		}
+		assert.Equal(t, uint64(0), msg.LogTime)
+		msgNumber := binary.LittleEndian.Uint64(msg.Data)
+		if numRead != 0 {
+			assert.Greater(t, msgNumber, lastMessageNumber)
+		}
+		lastMessageNumber = msgNumber
+		numRead++
+	}
+	assert.Equal(t, msgCount/2, numRead)
+
+	reverseIt, err := reader.Messages(
+		UsingIndex(true),
+		InOrder(ReverseLogTimeOrder),
+	)
+	require.NoError(t, err)
+	lastMessageNumber = 0
+	numRead = 0
+	for {
+		_, _, msg, err := reverseIt.Next2(nil)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		if msg.ChannelID != 0 {
+			continue
+		}
+		assert.Equal(t, uint64(0), msg.LogTime)
+		msgNumber := binary.LittleEndian.Uint64(msg.Data)
+		fmt.Printf("msgNumber: %d\n", msgNumber)
+		if numRead != 0 {
+			assert.Less(t, msgNumber, lastMessageNumber)
+		}
+		lastMessageNumber = msgNumber
+		numRead++
+	}
 }
 
 func TestReadingBigTimestamps(t *testing.T) {

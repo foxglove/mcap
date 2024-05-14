@@ -171,10 +171,16 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 				})
 			case LogTimeOrder:
 				sort.Slice(it.chunkIndexes, func(i, j int) bool {
+					if it.chunkIndexes[i].MessageStartTime == it.chunkIndexes[j].MessageStartTime {
+						return it.chunkIndexes[i].ChunkStartOffset < it.chunkIndexes[j].ChunkStartOffset
+					}
 					return it.chunkIndexes[i].MessageStartTime < it.chunkIndexes[j].MessageStartTime
 				})
 			case ReverseLogTimeOrder:
 				sort.Slice(it.chunkIndexes, func(i, j int) bool {
+					if it.chunkIndexes[i].MessageEndTime == it.chunkIndexes[j].MessageEndTime {
+						return it.chunkIndexes[i].ChunkStartOffset > it.chunkIndexes[j].ChunkStartOffset
+					}
 					return it.chunkIndexes[i].MessageEndTime > it.chunkIndexes[j].MessageEndTime
 				})
 			}
@@ -309,6 +315,9 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 		// message indexes are already in file order, no sorting needed
 	case LogTimeOrder:
 		if sortingRequired {
+			// We stable-sort to ensure that if messages in different chunks have the
+			// same timestamp, the one from the earlier-loaded chunk is returned first. The offset
+			// field of the message index is not comparable between indexes of different chunks.
 			sort.SliceStable(unreadMessageIndexes, func(i, j int) bool {
 				return unreadMessageIndexes[i].timestamp < unreadMessageIndexes[j].timestamp
 			})
