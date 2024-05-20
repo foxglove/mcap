@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
@@ -62,14 +64,32 @@ func TestSortFile(t *testing.T) {
 	w := &bytes.Buffer{}
 	require.NoError(t, sortFile(w, reader))
 
-	// verify it is now sorted
-	r, err := mcap.NewReader(bytes.NewReader(w.Bytes()))
+	lexer, err := mcap.NewLexer(bytes.NewReader(w.Bytes()))
 	require.NoError(t, err)
-
-	it, err := r.Messages(mcap.UsingIndex(false))
-	require.NoError(t, err)
-
-	_, _, msg, err := it.NextInto(nil)
-	require.NoError(t, err)
-	assert.Equal(t, 25, int(msg.LogTime))
+	var schemaCount, channelCount, messageCount int
+	var lastMessageTime uint64
+top:
+	for {
+		token, record, err := lexer.Next(nil)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		switch token {
+		case mcap.TokenMessage:
+			messageCount++
+			message, err := mcap.ParseMessage(record)
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, message.LogTime, lastMessageTime)
+			lastMessageTime = message.LogTime
+		case mcap.TokenSchema:
+			schemaCount++
+		case mcap.TokenChannel:
+			channelCount++
+		case mcap.TokenDataEnd:
+			break top
+		}
+	}
+	assert.Equal(t, 1, schemaCount, "incorrect schema count")
+	assert.Equal(t, 2, channelCount, "incorrect channel count")
 }
