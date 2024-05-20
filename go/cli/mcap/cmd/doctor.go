@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"reflect"
 
 	"github.com/fatih/color"
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
@@ -158,15 +159,78 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 			if schema.ID == 0 {
 				doctor.error("Schema.ID 0 is reserved. Do not make Schema records with ID 0.")
 			}
+			if previous, ok := doctor.schemas[schema.ID]; ok {
+				duplicate := true
+				if schema.Name != previous.Name {
+					doctor.error("Two schema records with same ID %d but different names (%s != %s)",
+						schema.ID,
+						schema.Name,
+						previous.Name,
+					)
+					duplicate = false
+				}
+				if schema.Encoding != previous.Encoding {
+					doctor.error("Two schema records with same ID %d but different encodings (%s != %s)",
+						schema.ID,
+						schema.Encoding,
+						previous.Encoding,
+					)
+					duplicate = false
+				}
+				if !bytes.Equal(schema.Data, previous.Data) {
+					doctor.error("Two schema records with different data present with same ID %d", schema.ID)
+					duplicate = false
+				}
+				if duplicate {
+					doctor.warn("duplicate schema records with ID %d", schema.ID)
+				}
+			} else {
+				doctor.schemas[schema.ID] = schema
+			}
 
-			doctor.schemas[schema.ID] = schema
 		case mcap.TokenChannel:
 			channel, err := mcap.ParseChannel(data)
 			if err != nil {
 				doctor.error("Error parsing Channel: %s", err)
 			}
+			if previous, ok := doctor.channels[channel.ID]; ok {
+				duplicate := true
+				if channel.SchemaID != previous.SchemaID {
+					doctor.error("Two channel records with same ID %d but different schema IDs (%d != %d)",
+						channel.ID,
+						channel.SchemaID,
+						previous.SchemaID,
+					)
+					duplicate = false
+				}
+				if channel.Topic != previous.Topic {
+					doctor.error("Two channel records with same ID %d but different topics (%s != %s)",
+						channel.ID,
+						channel.Topic,
+						previous.Topic,
+					)
+					duplicate = false
+				}
+				if channel.MessageEncoding != previous.MessageEncoding {
+					doctor.error("Two channel records with same ID %d but different message encodings (%s != %s)",
+						channel.ID,
+						channel.MessageEncoding,
+						previous.MessageEncoding,
+					)
+					duplicate = false
+				}
+				if !reflect.DeepEqual(channel.Metadata, previous.Metadata) {
+					doctor.error("Two channel records with different metadata present with same ID %d",
+						channel.ID)
+					duplicate = false
+				}
+				if duplicate {
+					doctor.warn("duplicate channel records with ID %d", channel.ID)
+				}
+			} else {
+				doctor.channels[channel.ID] = channel
+			}
 
-			doctor.channels[channel.ID] = channel
 			if channel.SchemaID != 0 {
 				if _, ok := doctor.schemas[channel.SchemaID]; !ok {
 					doctor.error("Encountered Channel (%d) with unknown Schema (%d)", channel.ID, channel.SchemaID)
