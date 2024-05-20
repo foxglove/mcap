@@ -123,7 +123,7 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 		return fmt.Errorf("failed to read messages: %w", err)
 	}
 	schemas := make(map[uint16]*mcap.Schema)
-	channels := make(map[uint16]*mcap.Schema)
+	channels := make(map[uint16]*mcap.Channel)
 	message := mcap.Message{}
 	for {
 		schema, channel, _, err := it.NextInto(&message)
@@ -138,6 +138,7 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 				if err != nil {
 					return fmt.Errorf("failed to write schema: %w", err)
 				}
+				schemas[schema.ID] = schema
 			}
 		}
 		if _, ok := channels[channel.ID]; !ok {
@@ -145,6 +146,7 @@ func sortFile(w io.Writer, r io.ReadSeeker) error {
 			if err != nil {
 				return fmt.Errorf("failed to write channel: %w", err)
 			}
+			channels[channel.ID] = channel
 		}
 		err = writer.WriteMessage(&message)
 		if err != nil {
