@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"os"
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
@@ -28,6 +29,28 @@ func TestNoErrorOnMessagelessChunks(t *testing.T) {
 
 	rs := bytes.NewReader(buf.Bytes())
 
+	doctor := newMcapDoctor(rs)
+	err = doctor.Examine()
+	require.NoError(t, err)
+}
+
+func TestRequiresDuplicatedSchemasForIndexedMessages(t *testing.T) {
+	rs, err := os.Open("../../../../tests/conformance/data/OneMessage/OneMessage-ch-chx-pad.mcap")
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, rs.Close())
+	}()
+	doctor := newMcapDoctor(rs)
+	err = doctor.Examine()
+	require.Error(t, err, "encountered 2 errors")
+}
+
+func TestPassesIndexedMessagesWithRepeatedSchemas(t *testing.T) {
+	rs, err := os.Open("../../../../tests/conformance/data/OneMessage/OneMessage-ch-chx-pad-rch-rsh.mcap")
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, rs.Close())
+	}()
 	doctor := newMcapDoctor(rs)
 	err = doctor.Examine()
 	require.NoError(t, err)
