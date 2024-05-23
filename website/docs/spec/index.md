@@ -225,7 +225,7 @@ A Chunk Index record exists for every Chunk in the file.
 | 8     | compressed_size       | uint64                | The size of the chunk `records` field.                                                                                                                                                   |
 | 8     | uncompressed_size     | uint64                | The uncompressed size of the chunk `records` field. This field should match the value in the corresponding Chunk record.                                                                 |
 
-A Schema and Channel record MUST exist in the summary section for all channels referenced by chunk index records.
+A Schema and Channel record MUST exist in the summary section for all messages in chunks that are indexed by Chunk Index records.
 
 > Why? The typical use case for file readers using an index is fast random access to a specific message timestamp. Channel is a prerequisite for decoding Message record data. Without an easy-to-access copy of the Channel records, readers would need to search for Channel records from the start of the file, degrading random access read performance.
 
