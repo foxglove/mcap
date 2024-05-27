@@ -70,9 +70,9 @@ func (doctor *mcapDoctor) fatalf(format string, v ...any) {
 func (doctor *mcapDoctor) examineSchema(schema *mcap.Schema) {
 	if schema.Encoding == "" {
 		if len(schema.Data) == 0 {
-			doctor.warn("Schema with ID: %d, Name: %s has empty Encoding and Data fields", schema.ID, schema.Name)
+			doctor.warn("Schema with ID: %d, Name: %q has empty Encoding and Data fields", schema.ID, schema.Name)
 		} else {
-			doctor.error("Schema with ID: %d has empty Encoding but Data contains: %s", schema.ID, string(schema.Data))
+			doctor.error("Schema with ID: %d has empty Encoding but Data contains: %q", schema.ID, string(schema.Data))
 		}
 	}
 
@@ -82,14 +82,14 @@ func (doctor *mcapDoctor) examineSchema(schema *mcap.Schema) {
 	previous := doctor.schemasInDataSection[schema.ID]
 	if previous != nil {
 		if schema.Name != previous.Name {
-			doctor.error("Two schema records with same ID %d but different names (%s != %s)",
+			doctor.error("Two schema records with same ID %d but different names (%q != %q)",
 				schema.ID,
 				schema.Name,
 				previous.Name,
 			)
 		}
 		if schema.Encoding != previous.Encoding {
-			doctor.error("Two schema records with same ID %d but different encodings (%s != %s)",
+			doctor.error("Two schema records with same ID %d but different encodings (%q != %q)",
 				schema.ID,
 				schema.Encoding,
 				previous.Encoding,
@@ -123,14 +123,14 @@ func (doctor *mcapDoctor) examineChannel(channel *mcap.Channel) {
 			)
 		}
 		if channel.Topic != previous.Topic {
-			doctor.error("Two channel records with same ID %d but different topics (%s != %s)",
+			doctor.error("Two channel records with same ID %d but different topics (%q != %q)",
 				channel.ID,
 				channel.Topic,
 				previous.Topic,
 			)
 		}
 		if channel.MessageEncoding != previous.MessageEncoding {
-			doctor.error("Two channel records with same ID %d but different message encodings (%s != %s)",
+			doctor.error("Two channel records with same ID %d but different message encodings (%q != %q)",
 				channel.ID,
 				channel.MessageEncoding,
 				previous.MessageEncoding,
@@ -190,7 +190,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64) {
 			return
 		}
 	default:
-		doctor.error("Unsupported compression format: %s", chunk.Compression)
+		doctor.error("Unsupported compression format: %q", chunk.Compression)
 		return
 	}
 
@@ -266,7 +266,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64) {
 			}
 
 			if message.LogTime < doctor.maxLogTime {
-				errStr := fmt.Sprintf("Message.log_time %d on %s is less than the latest log time %d",
+				errStr := fmt.Sprintf("Message.log_time %d on %q is less than the latest log time %d",
 					message.LogTime, channel.Topic, doctor.maxLogTime)
 				if strictMessageOrder {
 					doctor.error(errStr)
@@ -373,7 +373,7 @@ func (doctor *mcapDoctor) Examine() error {
 			}
 
 			if header.Profile != "" && header.Profile != "ros1" && header.Profile != "ros2" {
-				doctor.warn(`Header.profile field "%s" is not a well-known profile.`, header.Profile)
+				doctor.warn(`Header.profile field %q is not a well-known profile.`, header.Profile)
 			}
 		case mcap.TokenFooter:
 			footer, err = mcap.ParseFooter(data)
@@ -403,7 +403,7 @@ func (doctor *mcapDoctor) Examine() error {
 				doctor.error("Got a Message record for channel: %d before a channel info.", message.ChannelID)
 			}
 			if message.LogTime < lastMessageTime {
-				doctor.error("Message.log_time %d on %s is less than the previous message record time %d",
+				doctor.error("Message.log_time %d on %q is less than the previous message record time %d",
 					message.LogTime, channel.Topic, lastMessageTime)
 			}
 			lastMessageTime = message.LogTime
@@ -568,7 +568,7 @@ func (doctor *mcapDoctor) Examine() error {
 		}
 		if chunk.Compression != chunkIndex.Compression.String() {
 			doctor.error(
-				"Chunk at offset %d has compression %s, but its chunk index has compression %s",
+				"Chunk at offset %d has compression %q, but its chunk index has compression %q",
 				chunkOffset,
 				chunk.Compression,
 				chunkIndex.Compression,
@@ -576,7 +576,7 @@ func (doctor *mcapDoctor) Examine() error {
 		}
 		if uint64(len(chunk.Records)) != chunkIndex.CompressedSize {
 			doctor.error(
-				"Chunk at offset %d has data length %d, but its chunk index has compressed size %s",
+				"Chunk at offset %d has data length %d, but its chunk index has compressed size %d",
 				chunkOffset,
 				len(chunk.Records),
 				chunkIndex.CompressedSize,
