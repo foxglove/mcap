@@ -431,7 +431,7 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 			pos, err := doctor.reader.Seek(0, io.SeekCurrent)
 			if err != nil {
 				// cannot continue if seek fails
-				die("failed to determine read cursor: %s", err)
+				doctor.fatalf("failed to determine read cursor: %s", err)
 			}
 			chunkStartOffset := uint64(pos - int64(len(data)) - 9)
 			doctor.examineChunk(chunk, chunkStartOffset)
@@ -523,7 +523,7 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 
 		_, err := doctor.reader.Seek(int64(chunkOffset), io.SeekStart)
 		if err != nil {
-			die("failed to seek to chunk offset: %s", err)
+			doctor.fatalf("failed to seek to chunk offset: %s", err)
 		}
 		tokenType, data, err := lexer.Next(msg)
 		if err != nil {
