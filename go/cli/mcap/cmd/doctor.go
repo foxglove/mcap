@@ -43,16 +43,17 @@ type mcapDoctor struct {
 	maxLogTime   uint64
 	statistics   *mcap.Statistics
 
-	errorCount uint32
+	diagnosis Diagnosis
 }
 
 func (doctor *mcapDoctor) warn(format string, v ...any) {
 	color.Yellow(format, v...)
+	doctor.diagnosis.Warnings = append(doctor.diagnosis.Warnings, fmt.Sprintf(format, v...))
 }
 
 func (doctor *mcapDoctor) error(format string, v ...any) {
 	color.Red(format, v...)
-	doctor.errorCount++
+	doctor.diagnosis.Errors = append(doctor.diagnosis.Errors, fmt.Sprintf(format, v...))
 }
 
 func (doctor *mcapDoctor) fatal(v ...any) {
@@ -215,7 +216,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64) {
 		EmitChunks:        true,
 	})
 	if err != nil {
-		doctor.error("Failed to make lexer for chunk bytes", err)
+		doctor.error("Failed to make lexer for chunk bytes: %s", err)
 		return
 	}
 	defer lexer.Close()
@@ -244,7 +245,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64) {
 		case mcap.TokenSchema:
 			schema, err := mcap.ParseSchema(data)
 			if err != nil {
-				doctor.error("Failed to parse schema:", err)
+				doctor.error("Failed to parse schema: %s", err)
 			}
 			doctor.examineSchema(schema)
 		case mcap.TokenChannel:
@@ -326,7 +327,12 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64) {
 	doctor.channelsReferencedInChunksByOffset[startOffset] = asArray
 }
 
-func (doctor *mcapDoctor) Examine() error {
+type Diagnosis struct {
+	Errors   []string
+	Warnings []string
+}
+
+func (doctor *mcapDoctor) Examine() Diagnosis {
 	lexer, err := mcap.NewLexer(doctor.reader, &mcap.LexerOptions{
 		SkipMagic:         false,
 		ValidateChunkCRCs: true,
@@ -378,12 +384,12 @@ func (doctor *mcapDoctor) Examine() error {
 		case mcap.TokenFooter:
 			footer, err = mcap.ParseFooter(data)
 			if err != nil {
-				doctor.error("Failed to parse footer:", err)
+				doctor.error("Failed to parse footer: %s", err)
 			}
 		case mcap.TokenSchema:
 			schema, err := mcap.ParseSchema(data)
 			if err != nil {
-				doctor.error("Failed to parse schema:", err)
+				doctor.error("Failed to parse schema: %s", err)
 			}
 			doctor.examineSchema(schema)
 		case mcap.TokenChannel:
@@ -432,7 +438,7 @@ func (doctor *mcapDoctor) Examine() error {
 		case mcap.TokenMessageIndex:
 			_, err := mcap.ParseMessageIndex(data)
 			if err != nil {
-				doctor.error("Failed to parse message index:", err)
+				doctor.error("Failed to parse message index: %s", err)
 			}
 			if messageOutsideChunk {
 				doctor.warn("Message index in file has message records outside chunks. Indexed readers will miss these messages.")
@@ -440,24 +446,24 @@ func (doctor *mcapDoctor) Examine() error {
 		case mcap.TokenChunkIndex:
 			chunkIndex, err := mcap.ParseChunkIndex(data)
 			if err != nil {
-				doctor.error("Failed to parse chunk index:", err)
+				doctor.error("Failed to parse chunk index: %s", err)
 			}
 			if messageOutsideChunk {
 				doctor.warn("Message index in file has message records outside chunks. Indexed readers will miss these messages.")
 			}
 			if _, ok := doctor.chunkIndexes[chunkIndex.ChunkStartOffset]; ok {
-				doctor.error("Multiple chunk indexes found for chunk at offset", chunkIndex.ChunkStartOffset)
+				doctor.error("Multiple chunk indexes found for chunk at offset %d", chunkIndex.ChunkStartOffset)
 			}
 			doctor.chunkIndexes[chunkIndex.ChunkStartOffset] = chunkIndex
 		case mcap.TokenAttachmentIndex:
 			_, err := mcap.ParseAttachmentIndex(data)
 			if err != nil {
-				doctor.error("Failed to parse attachment index:", err)
+				doctor.error("Failed to parse attachment index: %s", err)
 			}
 		case mcap.TokenStatistics:
 			statistics, err := mcap.ParseStatistics(data)
 			if err != nil {
-				doctor.error("Failed to parse statistics:", err)
+				doctor.error("Failed to parse statistics: %s", err)
 			}
 			if doctor.statistics != nil {
 				doctor.error("File contains multiple Statistics records")
@@ -466,22 +472,22 @@ func (doctor *mcapDoctor) Examine() error {
 		case mcap.TokenMetadata:
 			_, err := mcap.ParseMetadata(data)
 			if err != nil {
-				doctor.error("Failed to parse metadata:", err)
+				doctor.error("Failed to parse metadata: %s", err)
 			}
 		case mcap.TokenMetadataIndex:
 			_, err := mcap.ParseMetadataIndex(data)
 			if err != nil {
-				doctor.error("Failed to parse metadata index:", err)
+				doctor.error("Failed to parse metadata index: %s", err)
 			}
 		case mcap.TokenSummaryOffset:
 			_, err := mcap.ParseSummaryOffset(data)
 			if err != nil {
-				doctor.error("Failed to parse summary offset:", err)
+				doctor.error("Failed to parse summary offset: %s", err)
 			}
 		case mcap.TokenDataEnd:
 			dataEnd, err = mcap.ParseDataEnd(data)
 			if err != nil {
-				doctor.error("Failed to parse data end:", err)
+				doctor.error("Failed to parse data end: %s", err)
 			}
 			doctor.inSummarySection = true
 		case mcap.TokenError:
@@ -617,10 +623,7 @@ func (doctor *mcapDoctor) Examine() error {
 			)
 		}
 	}
-	if doctor.errorCount == 0 {
-		return nil
-	}
-	return fmt.Errorf("encountered %d errors", doctor.errorCount)
+	return doctor.diagnosis
 }
 
 func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
@@ -651,7 +654,11 @@ func main(_ *cobra.Command, args []string) {
 		if verbose {
 			fmt.Printf("Examining %s\n", args[0])
 		}
-		return doctor.Examine()
+		diagnosis := doctor.Examine()
+		if len(diagnosis.Errors) > 0 {
+			return fmt.Errorf("encountered %d errors", len(diagnosis.Errors))
+		}
+		return nil
 	})
 	if err != nil {
 		die("Doctor command failed: %s", err)
