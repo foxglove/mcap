@@ -67,7 +67,7 @@ func (doctor *mcapDoctor) fatalf(format string, v ...any) {
 	os.Exit(1)
 }
 
-func (doctor *mcapDoctor) checkSchema(schema *mcap.Schema) {
+func (doctor *mcapDoctor) examineSchema(schema *mcap.Schema) {
 	if schema.Encoding == "" {
 		if len(schema.Data) == 0 {
 			doctor.warn("Schema with ID: %d, Name: %s has empty Encoding and Data fields", schema.ID, schema.Name)
@@ -101,18 +101,18 @@ func (doctor *mcapDoctor) checkSchema(schema *mcap.Schema) {
 	}
 	if doctor.inSummarySection {
 		if previous == nil {
-			doctor.error("schema with id %d in summary section does not exist in data section", schema.ID)
+			doctor.error("Schema with id %d in summary section does not exist in data section", schema.ID)
 		}
 		doctor.schemaIDsInSummarySection[schema.ID] = true
 	} else {
 		if previous != nil {
-			doctor.warn("duplicate schema records in data section with ID %d", schema.ID)
+			doctor.warn("Duplicate schema records in data section with ID %d", schema.ID)
 		}
 		doctor.schemasInDataSection[schema.ID] = schema
 	}
 }
 
-func (doctor *mcapDoctor) checkChannel(channel *mcap.Channel) {
+func (doctor *mcapDoctor) examineChannel(channel *mcap.Channel) {
 	previous := doctor.channelsInDataSection[channel.ID]
 	if previous != nil {
 		if channel.SchemaID != previous.SchemaID {
@@ -143,12 +143,12 @@ func (doctor *mcapDoctor) checkChannel(channel *mcap.Channel) {
 	}
 	if doctor.inSummarySection {
 		if previous == nil {
-			doctor.error("channel with ID %d in summary section does not exist in data section", channel.ID)
+			doctor.error("Channel with ID %d in summary section does not exist in data section", channel.ID)
 		}
 		doctor.channelIDsInSummarySection[channel.ID] = true
 	} else {
 		if previous != nil {
-			doctor.warn("duplicate channel records in data section with ID %d", channel.ID)
+			doctor.warn("Duplicate channel records in data section with ID %d", channel.ID)
 		}
 		doctor.channelsInDataSection[channel.ID] = channel
 	}
@@ -246,13 +246,13 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64) {
 			if err != nil {
 				doctor.error("Failed to parse schema:", err)
 			}
-			doctor.checkSchema(schema)
+			doctor.examineSchema(schema)
 		case mcap.TokenChannel:
 			channel, err := mcap.ParseChannel(data)
 			if err != nil {
 				doctor.error("Error parsing Channel: %s", err)
 			}
-			doctor.checkChannel(channel)
+			doctor.examineChannel(channel)
 		case mcap.TokenMessage:
 			message, err := mcap.ParseMessage(data)
 			if err != nil {
@@ -385,13 +385,13 @@ func (doctor *mcapDoctor) Examine() error {
 			if err != nil {
 				doctor.error("Failed to parse schema:", err)
 			}
-			doctor.checkSchema(schema)
+			doctor.examineSchema(schema)
 		case mcap.TokenChannel:
 			channel, err := mcap.ParseChannel(data)
 			if err != nil {
 				doctor.error("Error parsing Channel: %s", err)
 			}
-			doctor.checkChannel(channel)
+			doctor.examineChannel(channel)
 		case mcap.TokenMessage:
 			message, err := mcap.ParseMessage(data)
 			if err != nil {
