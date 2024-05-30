@@ -8,6 +8,7 @@
 #include <google/protobuf/dynamic_message.h>
 
 #include "mcap/reader.hpp"
+#include <memory>
 #include <vector>
 
 namespace gp = google::protobuf;
@@ -82,7 +83,7 @@ int main(int argc, char** argv) {
         return 1;
       }
     }
-    gp::Message* message = protoFactory.GetPrototype(descriptor)->New();
+    auto message = std::unique_ptr<gp::Message>(protoFactory.GetPrototype(descriptor)->New());
     if (!message->ParseFromArray(it->message.data, static_cast<int>(it->message.dataSize))) {
       std::cerr << "failed to parse message using included foxglove.PointCloud schema" << std::endl;
       reader.close();
