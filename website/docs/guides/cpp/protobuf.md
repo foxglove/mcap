@@ -162,7 +162,7 @@ descriptor = protoPool.FindMessageTypeByName(it->schema->name);
 We can use this descriptor to parse our message:
 
 ```cpp
-  auto message = std::unique_ptr<gp::Message>(protoFactory.GetPrototype(descriptor)->New());
+auto message = std::unique_ptr<gp::Message>(protoFactory.GetPrototype(descriptor)->New());
 if (!message->ParseFromArray(static_cast<const void*>(it->message.data),
                               it->message.dataSize)) {
   std::cerr << "failed to parse message using included schema" << std::endl;
