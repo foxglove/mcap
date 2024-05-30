@@ -103,7 +103,7 @@ auto messageView = reader.readMessages();
 
 #### Load schema definitions
 
-We build a `DynamicMessageFactory`, using a `google::Protobuf::SimpleDescriptorDatabase` as the underlying descriptor database. By constructing this ourselves and retaining a reference to the database, we can more easily load that database with definitions from the MCAP file.
+We build a `DynamicMessageFactory`, using a `google::protobuf::SimpleDescriptorDatabase` as the underlying descriptor database. By constructing this ourselves and retaining a reference to the database, we can more easily load that database with definitions from the MCAP file.
 
 ```cpp
 gp::SimpleDescriptorDatabase protoDb;
