@@ -908,7 +908,6 @@ func TestOrderStableWithEquivalentTimestamps(t *testing.T) {
 		}
 		assert.Equal(t, uint64(0), msg.LogTime)
 		msgNumber := binary.LittleEndian.Uint64(msg.Data)
-		fmt.Printf("msgNumber: %d\n", msgNumber)
 		if numRead != 0 {
 			assert.Less(t, msgNumber, lastMessageNumber)
 		}
@@ -958,21 +957,25 @@ func TestReadingBigTimestamps(t *testing.T) {
 
 func BenchmarkReader(b *testing.B) {
 	inputParameters := []struct {
-		name                   string
-		outOfOrderWithinChunks bool
-		chunksOverlap          bool
+		name                    string
+		outOfOrderWithinChunks  bool
+		chunksOverlap           bool
+		writeWithMessageIndexes bool
 	}{
 		{
-			name: "msgs_in_order",
+			name:                    "msgs_in_order",
+			writeWithMessageIndexes: true,
 		},
 		{
-			name:                   "jitter_in_chunk",
-			outOfOrderWithinChunks: true,
+			name:                    "jitter_in_chunk",
+			outOfOrderWithinChunks:  true,
+			writeWithMessageIndexes: true,
 		},
 		{
-			name:                   "chunks_overlap",
-			outOfOrderWithinChunks: true,
-			chunksOverlap:          true,
+			name:                    "chunks_overlap",
+			outOfOrderWithinChunks:  true,
+			chunksOverlap:           true,
+			writeWithMessageIndexes: true,
 		},
 	}
 	for _, inputCfg := range inputParameters {
@@ -980,8 +983,9 @@ func BenchmarkReader(b *testing.B) {
 			b.StopTimer()
 			buf := &bytes.Buffer{}
 			writer, err := NewWriter(buf, &WriterOptions{
-				Chunked:     true,
-				Compression: CompressionZSTD,
+				Chunked:             true,
+				Compression:         CompressionZSTD,
+				SkipMessageIndexing: !inputCfg.writeWithMessageIndexes,
 			})
 			require.NoError(b, err)
 			messageCount := uint64(4000000)
