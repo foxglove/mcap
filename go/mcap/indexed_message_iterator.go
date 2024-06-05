@@ -66,6 +66,8 @@ type indexedMessageIterator struct {
 
 	recordBuf        []byte
 	metadataCallback func(*Metadata) error
+
+	messageIndexOffsets []uint64
 }
 
 // parseIndexSection parses the index section of the file and populates the
@@ -201,7 +203,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	compressedChunkLength := chunkIndex.ChunkLength
 	if uint64(cap(it.recordBuf)) < compressedChunkLength {
 		newSize := int(float64(compressedChunkLength) * chunkBufferGrowthMultiple)
-		it.recordBuf = make([]byte, newSize)
+		it.recordBuf = make([]byte, compressedChunkLength, newSize)
 	} else {
 		it.recordBuf = it.recordBuf[:compressedChunkLength]
 	}
@@ -259,6 +261,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	default:
 		return fmt.Errorf("unsupported compression %s", parsedChunk.Compression)
 	}
+
 	// produce message indexes for the newly decompressed chunk data.
 	var maxLogTime uint64
 	// if there are no message indexes outstanding, truncate now.
@@ -268,46 +271,101 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	}
 	sortingRequired := it.curMessageIndex != 0
 	startIdx := len(it.messageIndexes)
-	for offset := uint64(0); offset < bufSize; {
-		if bufSize < offset+1+8 {
-			return fmt.Errorf("expected another record in chunk, but left with %d bytes", bufSize-offset)
-		}
-		opcodeAndLengthBuf := chunkSlot.buf[offset : offset+1+8]
-		op := OpCode(opcodeAndLengthBuf[0])
-		recordLen := binary.LittleEndian.Uint64(opcodeAndLengthBuf[1:])
-		recordStart := offset + 1 + 8
-		recordEnd, overflow := checkedAdd(recordStart, recordLen)
-		if overflow {
-			return fmt.Errorf("record length extends past uint64 range: start: %d, len: %d", recordStart, recordLen)
-		}
-		if bufSize < recordEnd {
-			return fmt.Errorf(
-				"%s record in chunk has length %d bytes but only %d remaining in chunk",
-				op, recordLen, bufSize-recordStart)
-		}
-		recordContent := chunkSlot.buf[recordStart:recordEnd]
-		if op == OpMessage {
-			msg := Message{}
-			if err := msg.PopulateFrom(recordContent, false); err != nil {
-				return fmt.Errorf("could not parse message in chunk: %w", err)
+	if len(chunkIndex.MessageIndexOffsets) == 0 {
+		for offset := uint64(0); offset < bufSize; {
+			if bufSize < offset+1+8 {
+				return fmt.Errorf("expected another record in chunk, but left with %d bytes", bufSize-offset)
 			}
-			if it.channels.Get(msg.ChannelID) != nil {
-				if msg.LogTime >= it.start && msg.LogTime < it.end {
-					it.messageIndexes = append(it.messageIndexes, messageIndexWithChunkSlot{
-						timestamp:      msg.LogTime,
-						offset:         offset,
-						chunkSlotIndex: chunkSlotIndex,
-					})
-					if msg.LogTime < maxLogTime {
+			opcodeAndLengthBuf := chunkSlot.buf[offset : offset+1+8]
+			op := OpCode(opcodeAndLengthBuf[0])
+			recordLen := binary.LittleEndian.Uint64(opcodeAndLengthBuf[1:])
+			recordStart := offset + 1 + 8
+			recordEnd, overflow := checkedAdd(recordStart, recordLen)
+			if overflow {
+				return fmt.Errorf("record length extends past uint64 range: start: %d, len: %d", recordStart, recordLen)
+			}
+			if bufSize < recordEnd {
+				return fmt.Errorf(
+					"%s record in chunk has length %d bytes but only %d remaining in chunk",
+					op, recordLen, bufSize-recordStart)
+			}
+			recordContent := chunkSlot.buf[recordStart:recordEnd]
+			if op == OpMessage {
+				msg := Message{}
+				if err := msg.PopulateFrom(recordContent, false); err != nil {
+					return fmt.Errorf("could not parse message in chunk: %w", err)
+				}
+				if it.channels.Get(msg.ChannelID) != nil {
+					if msg.LogTime >= it.start && msg.LogTime < it.end {
+						it.messageIndexes = append(it.messageIndexes, messageIndexWithChunkSlot{
+							timestamp:      msg.LogTime,
+							offset:         offset,
+							chunkSlotIndex: chunkSlotIndex,
+						})
+						if msg.LogTime < maxLogTime {
+							sortingRequired = true
+						} else {
+							maxLogTime = msg.LogTime
+						}
+						chunkSlot.unreadMessages++
+					}
+				}
+			}
+			offset = recordEnd
+		}
+	} else {
+		it.messageIndexOffsets = it.messageIndexOffsets[:0]
+		for _, ch := range it.channels.Slice() {
+			if ch == nil {
+				continue
+			}
+			if offset, ok := chunkIndex.MessageIndexOffsets[ch.ID]; ok {
+				it.messageIndexOffsets = append(it.messageIndexOffsets, offset)
+			}
+		}
+		// avoid seeking back and forth uneccessarily
+		sort.Slice(it.messageIndexOffsets, func(i, j int) bool {
+			return it.messageIndexOffsets[i] < it.messageIndexOffsets[j]
+		})
+		for _, offset := range it.messageIndexOffsets {
+			_, err := it.rs.Seek(int64(offset), io.SeekStart)
+			if err != nil {
+				return err
+			}
+			_, err = io.ReadFull(it.rs, it.recordBuf[:9])
+			if err != nil {
+				return err
+			}
+			op := OpCode(it.recordBuf[0])
+			if op != OpMessageIndex {
+				return fmt.Errorf("expected message index at offset %d, got %s", offset, op)
+			}
+			recordLen := binary.LittleEndian.Uint64(it.recordBuf[1:9])
+			it.recordBuf = append(it.recordBuf[:0], make([]byte, recordLen)...)
+			_, err = io.ReadFull(it.rs, it.recordBuf)
+			if err != nil {
+				return err
+			}
+			msgIndex, err := ParseMessageIndex(it.recordBuf)
+			if err != nil {
+				return err
+			}
+			for _, entry := range msgIndex.Records {
+				if entry.Timestamp >= it.start && entry.Timestamp < it.end {
+					if entry.Timestamp < maxLogTime {
 						sortingRequired = true
 					} else {
-						maxLogTime = msg.LogTime
+						maxLogTime = entry.Timestamp
 					}
+					it.messageIndexes = append(it.messageIndexes, messageIndexWithChunkSlot{
+						timestamp:      entry.Timestamp,
+						offset:         entry.Offset,
+						chunkSlotIndex: chunkSlotIndex,
+					})
 					chunkSlot.unreadMessages++
 				}
 			}
 		}
-		offset = recordEnd
 	}
 	unreadMessageIndexes := it.messageIndexes[it.curMessageIndex:]
 	switch it.order {

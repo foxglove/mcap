@@ -119,6 +119,7 @@ func (r *Reader) indexedMessageIterator(
 	return &indexedMessageIterator{
 		lexer:            r.l,
 		rs:               r.rs,
+		recordBuf:        make([]byte, 9),
 		topics:           topicMap,
 		start:            opts.StartNanos,
 		end:              opts.EndNanos,
