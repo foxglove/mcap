@@ -792,7 +792,7 @@ type WriterOptions struct {
 	// exact interpretation of this value depends on the compression format.
 	CompressionLevel CompressionLevel
 
-	// SkipMessageIndexing skips the message and chunk indexes for a chunked
+	// SkipMessageIndexing skips writing the message indexes for a chunked
 	// file.
 	SkipMessageIndexing bool
 
