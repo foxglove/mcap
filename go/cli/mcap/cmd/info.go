@@ -167,7 +167,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		rows = append(rows, row)
 	}
 	utils.FormatTable(buf, rows)
-	fmt.Fprintf("channels: %d\n", len(chanIDs))
+	fmt.Fprintf(buf, "channels: %d\n", len(chanIDs))
 	if info.Statistics != nil {
 		fmt.Fprintf(buf, "attachments: %d\n", info.Statistics.AttachmentCount)
 		fmt.Fprintf(buf, "metadata: %d\n", info.Statistics.MetadataCount)
