@@ -963,16 +963,28 @@ func BenchmarkReader(b *testing.B) {
 		writeWithMessageIndexes bool
 	}{
 		{
-			name:                    "msgs_in_order",
+			name: "msgs_in_order",
+		},
+		{
+			name:                    "with_msgindex_msgs_in_order",
 			writeWithMessageIndexes: true,
 		},
 		{
-			name:                    "jitter_in_chunk",
+			name:                   "jitter_in_chunk",
+			outOfOrderWithinChunks: true,
+		},
+		{
+			name:                    "with_msgindex_jitter_in_chunk",
 			outOfOrderWithinChunks:  true,
 			writeWithMessageIndexes: true,
 		},
 		{
-			name:                    "chunks_overlap",
+			name:                   "chunks_overlap",
+			outOfOrderWithinChunks: true,
+			chunksOverlap:          true,
+		},
+		{
+			name:                    "with_msgindex_chunks_overlap",
 			outOfOrderWithinChunks:  true,
 			chunksOverlap:           true,
 			writeWithMessageIndexes: true,
