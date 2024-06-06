@@ -194,7 +194,10 @@ All messages in the chunk must reference channels recorded earlier in the file (
 | 4 + N | compression        | String                       | compression algorithm. i.e. `zstd`, `lz4`, `""`. An empty string indicates no compression. Refer to [well-known compression formats][compression_formats]. |
 | 8 + N | records            | uint64 length-prefixed Bytes | Repeating sequences of `<record type><record content length><record content>`. Compressed with the algorithm in the `compression` field.                   |
 
-### Message Index (op=0x07)
+### Message Index (op=0x07) (Deprecated)
+
+> Deprecated: Message index records are optional. Files written without message index records are
+> faster to read and write.
 
 A Message Index record allows readers to locate individual message records within a chunk by their timestamp.
 
