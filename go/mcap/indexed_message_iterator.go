@@ -195,8 +195,8 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 
 	compressedChunkLength := chunkIndex.ChunkLength
 	if uint64(cap(it.recordBuf)) < compressedChunkLength {
-		newSize := int(float64(compressedChunkLength) * chunkBufferGrowthMultiple)
-		it.recordBuf = make([]byte, newSize)
+		newCapacity := int(float64(compressedChunkLength) * chunkBufferGrowthMultiple)
+		it.recordBuf = make([]byte, compressedChunkLength, newCapacity)
 	} else {
 		it.recordBuf = it.recordBuf[:compressedChunkLength]
 	}
