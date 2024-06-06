@@ -147,13 +147,8 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 				return fmt.Errorf("failed to parse attachment index: %w", err)
 			}
 			// if the chunk overlaps with the requested parameters, load it
-			for _, channel := range it.channels.Slice() {
-				if channel != nil && idx.MessageIndexOffsets[channel.ID] > 0 {
-					if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
-						it.chunkIndexes = append(it.chunkIndexes, idx)
-					}
-					break
-				}
+			if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
+				it.chunkIndexes = append(it.chunkIndexes, idx)
 			}
 		case TokenStatistics:
 			stats, err := ParseStatistics(record)
@@ -200,8 +195,8 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 
 	compressedChunkLength := chunkIndex.ChunkLength
 	if uint64(cap(it.recordBuf)) < compressedChunkLength {
-		newSize := int(float64(compressedChunkLength) * chunkBufferGrowthMultiple)
-		it.recordBuf = make([]byte, newSize)
+		newCapacity := int(float64(compressedChunkLength) * chunkBufferGrowthMultiple)
+		it.recordBuf = make([]byte, compressedChunkLength, newCapacity)
 	} else {
 		it.recordBuf = it.recordBuf[:compressedChunkLength]
 	}
