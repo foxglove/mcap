@@ -487,16 +487,12 @@ export class FastIndexedReader {
     }
     if (!reverse) {
       if (sortingRequired) {
-        const unreadMessages = messageIndexes.slice(curMessageIndex);
-        messageIndexes.sort((a, b) => Number(a.timestamp - b.timestamp));
-        replaceTail(messageIndexes, unreadMessages);
+        sortTail(messageIndexes, curMessageIndex, (a, b) => Number(a.timestamp - b.timestamp));
       }
     } else {
       reverseTail(messageIndexes, startIdx);
       if (sortingRequired) {
-        const unreadMessages = messageIndexes.slice(curMessageIndex);
-        messageIndexes.sort((a, b) => -Number(a.timestamp - b.timestamp));
-        replaceTail(messageIndexes, unreadMessages);
+        sortTail(messageIndexes, curMessageIndex, (a, b) => Number(a.timestamp - b.timestamp));
       }
     }
   }
@@ -512,11 +508,12 @@ function reverseTail<T>(arr: T[], start: number) {
   }
 }
 
-function replaceTail<T>(into: T[], newTail: T[]) {
-  const start = into.length - newTail.length;
+function sortTail<T>(arr: T[], start: number, cmp: (a: T, b: T) => number) {
+  const slice = arr.slice(start);
+  slice.sort(cmp);
   let i = 0;
-  for (const elem of newTail) {
-    into[i + start] = elem;
+  for (const elem of slice) {
+    arr[i + start] = elem;
     i++;
   }
 }

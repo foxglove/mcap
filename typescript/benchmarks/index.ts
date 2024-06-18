@@ -80,6 +80,22 @@ async function benchmarkReaders() {
   await writer.end();
   await suite(
     "reader",
+    add(description(McapStreamReader.name), async () => {
+      const reader = new McapStreamReader();
+      reader.append(buf.get());
+      let messageCount = 0;
+      for (;;) {
+        const rec = reader.nextRecord();
+        if (rec != undefined) {
+          if (rec.type === "Message") {
+            messageCount++;
+          }
+        } else {
+          break;
+        }
+      }
+      assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
+    }),
     add(description(FastIndexedReader.name), async () => {
       const reader = await FastIndexedReader.Initialize({ readable: buf });
       let messageCount = 0;
@@ -109,22 +125,6 @@ async function benchmarkReaders() {
       let messageCount = 0;
       for await (const _ of reader.readMessages({ reverse: true })) {
         messageCount++;
-      }
-      assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
-    }),
-    add(description(McapStreamReader.name), async () => {
-      const reader = new McapStreamReader();
-      reader.append(buf.get());
-      let messageCount = 0;
-      for (;;) {
-        const rec = reader.nextRecord();
-        if (rec != undefined) {
-          if (rec.type === "Message") {
-            messageCount++;
-          }
-        } else {
-          break;
-        }
       }
       assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
     }),
