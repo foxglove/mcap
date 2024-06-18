@@ -492,15 +492,23 @@ export class FastIndexedReader {
         replaceTail(messageIndexes, unreadMessages);
       }
     } else {
-      const newMessages = messageIndexes.slice(startIdx);
-      newMessages.reverse();
-      replaceTail(messageIndexes, newMessages);
+      reverseTail(messageIndexes, startIdx);
       if (sortingRequired) {
         const unreadMessages = messageIndexes.slice(curMessageIndex);
         messageIndexes.sort((a, b) => -Number(a.timestamp - b.timestamp));
         replaceTail(messageIndexes, unreadMessages);
       }
     }
+  }
+}
+
+function reverseTail<T>(arr: T[], start: number) {
+  const sliceLength = arr.length - start;
+  for (let i = 0; i < sliceLength / 2; i++) {
+    const j = arr.length - i;
+    const tmp = arr[i]!;
+    arr[i] = arr[j]!;
+    arr[j] = tmp;
   }
 }
 

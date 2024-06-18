@@ -39,12 +39,10 @@ export function parseRecord({
   view,
   startOffset,
   validateCrcs,
-  copyContent = true,
 }: {
   view: DataView;
   startOffset: number;
   validateCrcs: boolean;
-  copyContent?: boolean;
 }): { record: TypedMcapRecord; usedBytes: number } | { record?: undefined; usedBytes: 0 } {
   if (startOffset + /*opcode*/ 1 + /*record content length*/ 8 >= view.byteLength) {
     return { usedBytes: 0 };
@@ -68,11 +66,11 @@ export function parseRecord({
       view.buffer,
       view.byteOffset + headerReader.offset,
       recordLengthNum,
-    );
+    ).slice();
     const record: TypedMcapRecord = {
       type: "Unknown",
       opcode,
-      data: copyContent ? data.slice() : data,
+      data,
     };
     return { record, usedBytes: recordEndOffset - startOffset };
   }
@@ -162,14 +160,14 @@ export function parseRecord({
         recordView.buffer,
         recordView.byteOffset + reader.offset,
         recordView.byteLength - reader.offset,
-      );
+      ).slice();
       const record: TypedMcapRecord = {
         type: "Message",
         channelId,
         sequence,
         logTime,
         publishTime,
-        data: copyContent ? data.slice() : data,
+        data,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
@@ -188,7 +186,7 @@ export function parseRecord({
         recordView.buffer,
         recordView.byteOffset + reader.offset,
         recordByteLength,
-      );
+      ).slice();
       const record: TypedMcapRecord = {
         type: "Chunk",
         messageStartTime: startTime,
@@ -196,7 +194,7 @@ export function parseRecord({
         compression,
         uncompressedSize,
         uncompressedCrc,
-        records: copyContent ? records.slice() : records,
+        records,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
@@ -257,7 +255,7 @@ export function parseRecord({
         recordView.buffer,
         recordView.byteOffset + reader.offset,
         Number(dataLen),
-      );
+      ).slice();
       reader.offset += Number(dataLen);
       const crcLength = reader.offset;
       const expectedCrc = reader.uint32();
@@ -276,7 +274,7 @@ export function parseRecord({
         createTime,
         name,
         mediaType,
-        data: copyContent ? data.slice() : data,
+        data,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
