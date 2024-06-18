@@ -39,10 +39,12 @@ export function parseRecord({
   view,
   startOffset,
   validateCrcs,
+  copyContent = true,
 }: {
   view: DataView;
   startOffset: number;
   validateCrcs: boolean;
+  copyContent?: boolean;
 }): { record: TypedMcapRecord; usedBytes: number } | { record?: undefined; usedBytes: 0 } {
   if (startOffset + /*opcode*/ 1 + /*record content length*/ 8 >= view.byteLength) {
     return { usedBytes: 0 };
@@ -62,10 +64,15 @@ export function parseRecord({
   }
 
   if (!isKnownOpcode(opcode)) {
+    const data = new Uint8Array(
+      view.buffer,
+      view.byteOffset + headerReader.offset,
+      recordLengthNum,
+    );
     const record: TypedMcapRecord = {
       type: "Unknown",
       opcode,
-      data: new Uint8Array(view.buffer, view.byteOffset + headerReader.offset, recordLengthNum),
+      data: copyContent ? data.slice() : data,
     };
     return { record, usedBytes: recordEndOffset - startOffset };
   }
@@ -107,10 +114,9 @@ export function parseRecord({
         throw new Error(`Schema data length ${dataLen} exceeds bounds of record`);
       }
       const data = new Uint8Array(
-        recordView.buffer.slice(
-          recordView.byteOffset + reader.offset,
-          recordView.byteOffset + reader.offset + dataLen,
-        ),
+        recordView.buffer,
+        recordView.byteOffset + reader.offset,
+        dataLen,
       );
       reader.offset += dataLen;
 
@@ -153,10 +159,9 @@ export function parseRecord({
       const logTime = reader.uint64();
       const publishTime = reader.uint64();
       const data = new Uint8Array(
-        recordView.buffer.slice(
-          recordView.byteOffset + reader.offset,
-          recordView.byteOffset + recordView.byteLength,
-        ),
+        recordView.buffer,
+        recordView.byteOffset + reader.offset,
+        recordView.byteLength - reader.offset,
       );
       const record: TypedMcapRecord = {
         type: "Message",
@@ -164,7 +169,7 @@ export function parseRecord({
         sequence,
         logTime,
         publishTime,
-        data,
+        data: copyContent ? data.slice() : data,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
@@ -180,10 +185,9 @@ export function parseRecord({
         throw new Error("Chunk records length exceeds remaining record size");
       }
       const records = new Uint8Array(
-        recordView.buffer.slice(
-          recordView.byteOffset + reader.offset,
-          recordView.byteOffset + reader.offset + recordByteLength,
-        ),
+        recordView.buffer,
+        recordView.byteOffset + reader.offset,
+        recordByteLength,
       );
       const record: TypedMcapRecord = {
         type: "Chunk",
@@ -192,7 +196,7 @@ export function parseRecord({
         compression,
         uncompressedSize,
         uncompressedCrc,
-        records,
+        records: copyContent ? records.slice() : records,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
@@ -250,10 +254,9 @@ export function parseRecord({
         throw new Error(`Attachment data length ${dataLen} exceeds bounds of record`);
       }
       const data = new Uint8Array(
-        recordView.buffer.slice(
-          recordView.byteOffset + reader.offset,
-          recordView.byteOffset + reader.offset + Number(dataLen),
-        ),
+        recordView.buffer,
+        recordView.byteOffset + reader.offset,
+        Number(dataLen),
       );
       reader.offset += Number(dataLen);
       const crcLength = reader.offset;
@@ -273,7 +276,7 @@ export function parseRecord({
         createTime,
         name,
         mediaType,
-        data,
+        data: copyContent ? data.slice() : data,
       };
       return { record, usedBytes: recordEndOffset - startOffset };
     }
