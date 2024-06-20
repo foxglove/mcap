@@ -1,5 +1,4 @@
 export { McapIndexedReader } from "./McapIndexedReader";
-export { FastIndexedReader } from "./FastIndexedReader";
 export { default as McapStreamReader } from "./McapStreamReader";
 export { McapWriter } from "./McapWriter";
 export type { McapWriterOptions } from "./McapWriter";
