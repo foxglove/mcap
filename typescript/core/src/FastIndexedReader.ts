@@ -3,7 +3,7 @@ import assert from "assert";
 
 import { MCAP_MAGIC, Opcode, isKnownOpcode } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
-import { DecompressHandlers, IReadable, TypedMcapRecords } from "./types";
+import { ChunkIndex, DecompressHandlers, IReadable, TypedMcapRecords } from "./types";
 
 type FastIndexedReaderArgs = {
   readable: IReadable;
@@ -64,10 +64,6 @@ export class FastIndexedReader {
         this.#messageEndTime = chunk.messageEndTime;
       }
     }
-  }
-
-  #errorWithLibrary(message: string): Error {
-    return new Error(`${message} [library=${this.header.library}]`);
   }
 
   static async Initialize({
@@ -335,166 +331,42 @@ export class FastIndexedReader {
       validateCrcs?: boolean;
     } = {},
   ): AsyncGenerator<TypedMcapRecords["Message"], void, void> {
-    const {
-      topics,
-      startTime = this.#messageStartTime,
-      endTime = this.#messageEndTime,
-      reverse = false,
-      validateCrcs,
-    } = args;
+    const it = this.makeMessageIterator(args);
 
-    if (startTime == undefined || endTime == undefined) {
-      return;
-    }
-
-    let chunkIndexCursor = 0;
-    let messageIndexCursor = 0;
-    const messageIndexes: Array<MessageIndex> = [];
-    const chunkSlots: Array<ChunkSlot> = [];
     for (;;) {
-      if (messageIndexCursor >= messageIndexes.length) {
-        if (chunkIndexCursor >= this.chunkIndexes.length) {
+      const res = it.next();
+      switch (res.type) {
+        case "end":
           return;
-        }
-        const chunkIndex = this.chunkIndexes[chunkIndexCursor]!;
-        await this.#loadChunkData(chunkIndex, messageIndexes, messageIndexCursor, chunkSlots, {
-          validateCrcs,
-          topics,
-        });
-        chunkIndexCursor++;
-        continue;
+        case "wait":
+          await res.promise;
+          break;
+        case "message":
+          yield res.message;
       }
-      if (chunkIndexCursor < this.chunkIndexes.length) {
-        const chunkIndex = this.chunkIndexes[chunkIndexCursor]!;
-        const messageIndex = messageIndexes[messageIndexCursor]!;
-        if (
-          (!reverse && chunkIndex.messageStartTime < messageIndex.timestamp) ||
-          (reverse && chunkIndex.messageEndTime > messageIndex.timestamp)
-        ) {
-          await this.#loadChunkData(chunkIndex, messageIndexes, messageIndexCursor, chunkSlots, {
-            validateCrcs,
-            topics,
-          });
-          chunkIndexCursor++;
-          continue;
-        }
-      }
-      if (messageIndexes.length - messageIndexCursor < messageIndexCursor) {
-        messageIndexes.splice(0, messageIndexCursor);
-        messageIndexCursor = 0;
-      }
-      const messageIndex = messageIndexes[messageIndexCursor]!;
-      const chunkSlot = chunkSlots[messageIndex.chunkSlotIndex]!;
-      const res = parseRecord({
-        view: chunkSlot.buf,
-        startOffset: messageIndex.offset,
-        validateCrcs: false,
-      });
-      assert(res.record?.type === "Message", "failed to index message");
-      yield res.record;
-      messageIndexCursor++;
     }
   }
-
-  async #loadChunkData(
-    chunkIndex: TypedMcapRecords["ChunkIndex"],
-    messageIndexes: MessageIndex[],
-    curMessageIndex: number,
-    chunkSlots: ChunkSlot[],
-    options: {
-      validateCrcs?: boolean;
+  makeMessageIterator(
+    args: {
       topics?: readonly string[];
+      startTime?: bigint;
+      endTime?: bigint;
       reverse?: boolean;
-    },
-  ): Promise<void> {
-    const { reverse = false, validateCrcs = false } = options;
-    const chunkData = await this.#readable.read(
-      chunkIndex.chunkStartOffset,
-      chunkIndex.chunkLength,
-    );
-    const chunkResult = parseRecord({
-      view: new DataView(chunkData.buffer, chunkData.byteOffset, chunkData.byteLength),
-      startOffset: 0,
-      validateCrcs,
+      validateCrcs?: boolean;
+    } = {},
+  ): MessageIterator {
+    return new MessageIterator({
+      readable: this.#readable,
+      chunkIndexes: this.chunkIndexes,
+      library: this.header.library,
+      channels: this.channelsById,
+      topics: args.topics,
+      decompressHandlers: this.#decompressHandlers,
+      startTime: this.#messageStartTime,
+      endTime: this.#messageEndTime,
+      reverse: args.reverse,
+      validateCrcs: args.validateCrcs,
     });
-    if (chunkResult.record?.type !== "Chunk") {
-      throw this.#errorWithLibrary(
-        `Chunk start offset ${
-          chunkIndex.chunkStartOffset
-        } does not point to chunk record (found ${String(chunkResult.record?.type)})`,
-      );
-    }
-
-    const chunk = chunkResult.record;
-    let buffer = chunk.records;
-    if (chunk.compression !== "" && buffer.byteLength > 0) {
-      const decompress = this.#decompressHandlers?.[chunk.compression];
-      if (!decompress) {
-        throw this.#errorWithLibrary(`Unsupported compression ${chunk.compression}`);
-      }
-      buffer = decompress(buffer, chunk.uncompressedSize);
-    }
-    if (chunk.uncompressedCrc !== 0 && validateCrcs) {
-      const chunkCrc = crc32(buffer);
-      if (chunkCrc !== chunk.uncompressedCrc) {
-        throw this.#errorWithLibrary(
-          `Incorrect chunk CRC ${chunkCrc} (expected ${chunk.uncompressedCrc})`,
-        );
-      }
-    }
-    let chunkSlotIndex: number | undefined = undefined;
-    for (let i = 0; i < chunkSlots.length; i++) {
-      if (chunkSlots[i]!.unreadMessages === 0) {
-        chunkSlotIndex = i;
-        break;
-      }
-    }
-    if (chunkSlotIndex == undefined) {
-      chunkSlots.push({
-        buf: new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength),
-        unreadMessages: 0,
-      });
-      chunkSlotIndex = chunkSlots.length - 1;
-    }
-    const chunkSlot = chunkSlots[chunkSlotIndex]!;
-    let sortingRequired = curMessageIndex !== 0;
-    const startIdx = messageIndexes.length;
-    let maxLogTime = BigInt(0);
-    for (let offset = 0; offset < buffer.byteLength; ) {
-      if (buffer.byteLength < offset + 9) {
-        throw this.#errorWithLibrary(
-          `expected another record in chunk, but left with ${buffer.byteLength} bytes`,
-        );
-      }
-      const opcode = chunkSlot.buf.getUint8(offset + 0);
-      const length = chunkSlot.buf.getBigUint64(offset + 1, true);
-      if (!isKnownOpcode(opcode)) {
-        throw this.#errorWithLibrary(`expected known opcode, got ${opcode} at ${offset}`);
-      }
-      if (isKnownOpcode(opcode) && opcode === Opcode.MESSAGE) {
-        // TODO filter by topic
-        // const channelId = chunkSlot.buf.getUint16(offset + 9);
-        const logTime = chunkSlot.buf.getBigUint64(offset + 9 + 6, true);
-        messageIndexes.push({ offset, timestamp: logTime, chunkSlotIndex });
-        if (logTime < maxLogTime) {
-          sortingRequired = true;
-        } else {
-          maxLogTime = logTime;
-        }
-        chunkSlot.unreadMessages++;
-      }
-      offset = offset + 9 + Number(length);
-    }
-    if (!reverse) {
-      if (sortingRequired) {
-        sortTail(messageIndexes, curMessageIndex, (a, b) => Number(a.timestamp - b.timestamp));
-      }
-    } else {
-      reverseTail(messageIndexes, startIdx);
-      if (sortingRequired) {
-        sortTail(messageIndexes, curMessageIndex, (a, b) => Number(a.timestamp - b.timestamp));
-      }
-    }
   }
 }
 
@@ -515,5 +387,228 @@ function sortTail<T>(arr: T[], start: number, cmp: (a: T, b: T) => number) {
   for (const elem of slice) {
     arr[i + start] = elem;
     i++;
+  }
+}
+
+type MessageIteratorResult =
+  | {
+      type: "wait";
+      promise: Promise<void>;
+    }
+  | {
+      type: "message";
+      message: TypedMcapRecords["Message"];
+    }
+  | {
+      type: "end";
+    };
+
+export class MessageIterator {
+  #chunkIndexes: readonly ChunkIndex[];
+  #chunkIndexCursor = 0;
+  #messageIndexCursor = 0;
+  #messageIndexes: MessageIndex[] = [];
+  #chunkSlots: ChunkSlot[] = [];
+  #relevantChannels?: Set<number>;
+  #readable: IReadable;
+  #reverse: boolean;
+  #library: string;
+  #startTime?: bigint;
+  #endTime?: bigint;
+  #validateCrcs: boolean;
+  #decompressHandlers?: DecompressHandlers;
+
+  constructor(args: {
+    readable: IReadable;
+    chunkIndexes: readonly ChunkIndex[];
+    channels: ReadonlyMap<number, TypedMcapRecords["Channel"]>;
+    library: string;
+    topics?: readonly string[];
+    startTime?: bigint;
+    endTime?: bigint;
+    reverse?: boolean;
+    validateCrcs?: boolean;
+    decompressHandlers?: DecompressHandlers;
+  }) {
+    this.#readable = args.readable;
+    this.#chunkIndexCursor = 0;
+    this.#messageIndexCursor = 0;
+    this.#library = args.library;
+    this.#reverse = args.reverse ?? false;
+    this.#startTime = args.startTime;
+    this.#endTime = args.endTime;
+    this.#validateCrcs = args.validateCrcs ?? true;
+    this.#decompressHandlers = args.decompressHandlers;
+
+    const chunkIndexes: ChunkIndex[] = [];
+    if (this.#startTime != undefined && this.#endTime != undefined) {
+      for (const chunkIndex of args.chunkIndexes) {
+        if (
+          chunkIndex.messageStartTime <= this.#endTime &&
+          chunkIndex.messageEndTime >= this.#startTime
+        ) {
+          chunkIndexes.push(chunkIndex);
+        }
+      }
+      if (!this.#reverse) {
+        chunkIndexes.sort((a, b) => Number(a.messageStartTime - b.messageStartTime));
+      } else {
+        chunkIndexes.sort((a, b) => Number(b.messageEndTime - a.messageEndTime));
+      }
+    }
+    this.#chunkIndexes = chunkIndexes;
+    if (args.topics != undefined) {
+      this.#relevantChannels = new Set<number>();
+      for (const channel of args.channels.values()) {
+        if (channel.topic in args.topics) {
+          this.#relevantChannels.add(channel.id);
+        }
+      }
+    }
+  }
+
+  next(): MessageIteratorResult {
+    if (this.#startTime == undefined || this.#endTime == undefined) {
+      return { type: "end" };
+    }
+    if (this.#messageIndexCursor >= this.#messageIndexes.length) {
+      if (this.#chunkIndexCursor >= this.#chunkIndexes.length) {
+        return { type: "end" };
+      }
+      const chunkIndex = this.#chunkIndexes[this.#chunkIndexCursor]!;
+      this.#chunkIndexCursor++;
+      return { type: "wait", promise: this.#loadChunkData(chunkIndex) };
+    }
+    if (this.#chunkIndexCursor < this.#chunkIndexes.length) {
+      const chunkIndex = this.#chunkIndexes[this.#chunkIndexCursor]!;
+      const messageIndex = this.#messageIndexes[this.#messageIndexCursor]!;
+      if (
+        (!this.#reverse && chunkIndex.messageStartTime < messageIndex.timestamp) ||
+        (this.#reverse && chunkIndex.messageEndTime > messageIndex.timestamp)
+      ) {
+        this.#chunkIndexCursor++;
+        return { type: "wait", promise: this.#loadChunkData(chunkIndex) };
+      }
+    }
+    if (this.#messageIndexes.length - this.#messageIndexCursor < this.#messageIndexCursor) {
+      this.#messageIndexes.splice(0, this.#messageIndexCursor);
+      this.#messageIndexCursor = 0;
+    }
+    const messageIndex = this.#messageIndexes[this.#messageIndexCursor]!;
+    const chunkSlot = this.#chunkSlots[messageIndex.chunkSlotIndex]!;
+    const res = parseRecord({
+      view: chunkSlot.buf,
+      startOffset: messageIndex.offset,
+      validateCrcs: false,
+    });
+    assert(res.record?.type === "Message", "failed to index message");
+    this.#messageIndexCursor++;
+    return { type: "message", message: res.record };
+  }
+  async #loadChunkData(chunkIndex: ChunkIndex): Promise<void> {
+    if (this.#startTime == undefined || this.#endTime == undefined) {
+      return;
+    }
+    const chunkData = await this.#readable.read(
+      chunkIndex.chunkStartOffset,
+      chunkIndex.chunkLength,
+    );
+    const chunkResult = parseRecord({
+      view: new DataView(chunkData.buffer, chunkData.byteOffset, chunkData.byteLength),
+      startOffset: 0,
+      validateCrcs: this.#validateCrcs,
+    });
+    if (chunkResult.record?.type !== "Chunk") {
+      throw this.#errorWithLibrary(
+        `Chunk start offset ${
+          chunkIndex.chunkStartOffset
+        } does not point to chunk record (found ${String(chunkResult.record?.type)})`,
+      );
+    }
+
+    const chunk = chunkResult.record;
+    let buffer = chunk.records;
+    if (chunk.compression !== "" && buffer.byteLength > 0) {
+      const decompress = this.#decompressHandlers?.[chunk.compression];
+      if (!decompress) {
+        throw this.#errorWithLibrary(`Unsupported compression ${chunk.compression}`);
+      }
+      buffer = decompress(buffer, chunk.uncompressedSize);
+    }
+    if (chunk.uncompressedCrc !== 0 && this.#validateCrcs) {
+      const chunkCrc = crc32(buffer);
+      if (chunkCrc !== chunk.uncompressedCrc) {
+        throw this.#errorWithLibrary(
+          `Incorrect chunk CRC ${chunkCrc} (expected ${chunk.uncompressedCrc})`,
+        );
+      }
+    }
+    let chunkSlotIndex: number | undefined = undefined;
+    for (let i = 0; i < this.#chunkSlots.length; i++) {
+      if (this.#chunkSlots[i]!.unreadMessages === 0) {
+        chunkSlotIndex = i;
+        break;
+      }
+    }
+    if (chunkSlotIndex == undefined) {
+      this.#chunkSlots.push({
+        buf: new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength),
+        unreadMessages: 0,
+      });
+      chunkSlotIndex = this.#chunkSlots.length - 1;
+    }
+    const chunkSlot = this.#chunkSlots[chunkSlotIndex]!;
+    let sortingRequired = this.#messageIndexCursor !== 0;
+    const startIdx = this.#messageIndexes.length;
+    let maxLogTime = BigInt(0);
+    for (let offset = 0; offset < buffer.byteLength; ) {
+      if (buffer.byteLength < offset + 9) {
+        throw this.#errorWithLibrary(
+          `expected another record in chunk, but left with ${buffer.byteLength} bytes`,
+        );
+      }
+      const opcode = chunkSlot.buf.getUint8(offset + 0);
+      const length = chunkSlot.buf.getBigUint64(offset + 1, true);
+      if (!isKnownOpcode(opcode)) {
+        throw this.#errorWithLibrary(`expected known opcode, got ${opcode} at ${offset}`);
+      }
+      if (isKnownOpcode(opcode) && opcode === Opcode.MESSAGE) {
+        const channelId = chunkSlot.buf.getUint16(offset + 9);
+        const logTime = chunkSlot.buf.getBigUint64(offset + 9 + 6, true);
+        if (this.#relevantChannels != undefined && !this.#relevantChannels.has(channelId)) {
+          offset = offset + 9 + Number(length);
+          continue;
+        }
+        if (logTime < this.#startTime || logTime > this.#endTime) {
+          offset = offset + 9 + Number(length);
+          continue;
+        }
+        this.#messageIndexes.push({ offset, timestamp: logTime, chunkSlotIndex });
+        if (logTime < maxLogTime) {
+          sortingRequired = true;
+        } else {
+          maxLogTime = logTime;
+        }
+        chunkSlot.unreadMessages++;
+      }
+      offset = offset + 9 + Number(length);
+    }
+    if (!this.#reverse) {
+      if (sortingRequired) {
+        sortTail(this.#messageIndexes, this.#messageIndexCursor, (a, b) =>
+          Number(a.timestamp - b.timestamp),
+        );
+      }
+    } else {
+      reverseTail(this.#messageIndexes, startIdx);
+      if (sortingRequired) {
+        sortTail(this.#messageIndexes, this.#messageIndexCursor, (a, b) =>
+          Number(a.timestamp - b.timestamp),
+        );
+      }
+    }
+  }
+  #errorWithLibrary(message: string): Error {
+    return new Error(`${message} [library=${this.#library}]`);
   }
 }

@@ -132,6 +132,24 @@ async function benchmarkReaders() {
     assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
     await fd.close();
   });
+  await runBenchmark(FastIndexedReader.name + "_manual", async () => {
+    const fd = await fs.open(filepath);
+    const reader = await FastIndexedReader.Initialize({ readable: new ReadableFile(fd) });
+    let messageCount = 0;
+    const it = reader.makeMessageIterator({ reverse: false });
+    for (;;) {
+      const res = it.next();
+      if (res.type === "end") {
+        break;
+      } else if (res.type === "message") {
+        messageCount++;
+      } else {
+        await res.promise;
+      }
+    }
+    assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
+    await fd.close();
+  });
   await runBenchmark(FastIndexedReader.name + "_reverse", async () => {
     const fd = await fs.open(filepath);
     const reader = await FastIndexedReader.Initialize({ readable: new ReadableFile(fd) });
