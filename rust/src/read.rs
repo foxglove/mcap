@@ -624,8 +624,8 @@ impl<'a> RawMessageStream<'a> {
 }
 
 pub struct RawMessage<'a> {
-    header: records::MessageHeader,
-    data: Cow<'a, [u8]>,
+    pub header: records::MessageHeader,
+    pub data: Cow<'a, [u8]>,
 }
 
 impl<'a> Iterator for RawMessageStream<'a> {
