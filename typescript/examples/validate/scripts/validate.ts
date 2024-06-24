@@ -139,7 +139,7 @@ async function validate(
           throw new Error(`Missing schema ${record.schemaId} for channel ${record.id}`);
         }
         let messageDeserializer: (data: ArrayBufferView) => unknown;
-        if (record.messageEncoding === "ros1") {
+        if (schema.encoding === "ros1msg" && record.messageEncoding === "ros1") {
           const reader = new ROS1LazyMessageReader(
             parseMessageDefinition(new TextDecoder().decode(schema.data)),
           );
@@ -150,14 +150,14 @@ async function validate(
             }
             return reader.readMessage(data).toJSON();
           };
-        } else if (record.messageEncoding === "ros2") {
+        } else if (schema.encoding === "ros2msg" && record.messageEncoding === "cdr") {
           const reader = new ROS2MessageReader(
             parseMessageDefinition(new TextDecoder().decode(schema.data), {
               ros2: true,
             }),
           );
           messageDeserializer = (data) => reader.readMessage(data);
-        } else if (record.messageEncoding === "protobuf") {
+        } else if (schema.encoding === "protobuf" && record.messageEncoding === "protobuf") {
           const root = protobufjs.Root.fromDescriptor(FileDescriptorSet.decode(schema.data));
           const type = root.lookupType(schema.name);
 
@@ -167,7 +167,9 @@ async function validate(
           const textDecoder = new TextDecoder();
           messageDeserializer = (data) => JSON.parse(textDecoder.decode(data));
         } else {
-          throw new Error(`unsupported encoding ${record.messageEncoding}`);
+          throw new Error(
+            `unsupported message encoding ${record.messageEncoding} with schema encoding ${schema.encoding}`,
+          );
         }
         channelInfoById.set(record.id, { info: record, messageDeserializer });
         break;
