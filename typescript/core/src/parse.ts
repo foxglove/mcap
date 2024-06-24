@@ -66,7 +66,7 @@ export function parseRecord({
       view.buffer,
       view.byteOffset + headerReader.offset,
       recordLengthNum,
-    ).slice();
+    );
     const record: TypedMcapRecord = {
       type: "Unknown",
       opcode,
@@ -115,7 +115,7 @@ export function parseRecord({
         recordView.buffer,
         recordView.byteOffset + reader.offset,
         dataLen,
-      );
+      ).slice();
       reader.offset += dataLen;
 
       const record: TypedMcapRecord = {
