@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -155,6 +156,14 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			} else {
 				row = append(row, fmt.Sprintf("%*d msgs", maxCountWidth, channelMessageCount))
 			}
+		}
+		if len(channel.Metadata) > 0 {
+			mdJSON, _ := json.Marshal(channel.Metadata)
+			mdJSONStr := string(mdJSON)
+			if len(mdJSONStr) > 50 {
+				mdJSONStr = mdJSONStr[0:47] + "..."
+			}
+			row = append(row, mdJSONStr)
 		}
 		switch {
 		case schema != nil:
