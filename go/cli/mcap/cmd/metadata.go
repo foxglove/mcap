@@ -134,7 +134,7 @@ var addMetadataCmd = &cobra.Command{
 
 var getMetadataCmd = &cobra.Command{
 	Use:   "metadata",
-	Short: "get metadata by name",
+	Short: "Get metadata by name",
 	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
