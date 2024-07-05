@@ -184,7 +184,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	return err
 }
 
-// Similar to utils.FormatTable, but optimized for 'expanded' display of nested data
+// Similar to utils.FormatTable, but optimized for 'expanded' display of nested data.
 func printSummaryRows(w io.Writer, rows [][]string) error {
 	buf := &bytes.Buffer{}
 	tw := tablewriter.NewWriter(buf)
