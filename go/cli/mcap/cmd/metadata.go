@@ -214,7 +214,7 @@ func init() {
 	}
 
 	getCmd.AddCommand(getMetadataCmd)
-	getMetadataCmd.PersistentFlags().StringVarP(&getMetadataName, "name", "n", "", "name of metadata record to create")
+	getMetadataCmd.PersistentFlags().StringVarP(&getMetadataName, "name", "n", "", "name of metadata record to get")
 	err = getMetadataCmd.MarkPersistentFlagRequired("name")
 	if err != nil {
 		die("failed to mark --name flag as required: %s", err)
