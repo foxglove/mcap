@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
+	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
 
@@ -89,7 +91,9 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			header = addRow(header, "end:", "%s", decimalTime(endtime))
 		}
 	}
-	utils.FormatTable(buf, header)
+	if err := printSummaryRows(buf, header); err != nil {
+		return err
+	}
 	if len(info.ChunkIndexes) > 0 {
 		compressionFormatStats := make(map[mcap.CompressionFormat]struct {
 			count            int
@@ -166,7 +170,9 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		}
 		rows = append(rows, row)
 	}
-	utils.FormatTable(buf, rows)
+	if err := printSummaryRows(buf, rows); err != nil {
+		return err
+	}
 	if info.Statistics != nil {
 		fmt.Fprintf(buf, "attachments: %d\n", info.Statistics.AttachmentCount)
 		fmt.Fprintf(buf, "metadata: %d\n", info.Statistics.MetadataCount)
@@ -176,6 +182,26 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	}
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+// Similar to utils.FormatTable, but optimized for 'expanded' display of nested data.
+func printSummaryRows(w io.Writer, rows [][]string) error {
+	buf := &bytes.Buffer{}
+	tw := tablewriter.NewWriter(buf)
+	tw.SetBorder(false)
+	tw.SetAutoWrapText(false)
+	tw.SetAlignment(tablewriter.ALIGN_LEFT)
+	tw.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
+	tw.SetColumnSeparator("")
+	tw.AppendBulk(rows)
+	tw.Render()
+	// This tablewriter puts a leading space on the lines for some reason, so
+	// remove it.
+	scanner := bufio.NewScanner(buf)
+	for scanner.Scan() {
+		fmt.Fprintln(w, strings.TrimLeft(scanner.Text(), " "))
+	}
+	return scanner.Err()
 }
 
 var infoCmd = &cobra.Command{
