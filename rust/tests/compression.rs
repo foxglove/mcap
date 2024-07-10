@@ -18,7 +18,7 @@ fn round_trip(comp: Option<mcap::Compression>) -> Result<()> {
         .profile("fooey")
         .create(BufWriter::new(&mut tmp))?;
 
-    for m in mcap::MessageStream::new(&mapped)? {
+    for m in mcap::MappedMessageStream::new(&mapped)? {
         // IRL, we'd add channels, then write messages to known channels,
         // which skips having to re-hash the channel and its schema each time.
         // But since here we'd need to do the same anyways...
@@ -30,7 +30,7 @@ fn round_trip(comp: Option<mcap::Compression>) -> Result<()> {
 
     // Compare the message stream of our MCAP to the reference one.
     for (theirs, ours) in
-        mcap::MessageStream::new(&mapped)?.zip_eq(mcap::MessageStream::new(&ours)?)
+        mcap::MappedMessageStream::new(&mapped)?.zip_eq(mcap::MappedMessageStream::new(&ours)?)
     {
         assert_eq!(ours?, theirs?)
     }

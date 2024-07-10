@@ -11,7 +11,7 @@ use tempfile::tempfile;
 #[test]
 fn smoke() -> Result<()> {
     let mapped = map_mcap("../tests/conformance/data/OneMessage/OneMessage.mcap")?;
-    let messages = mcap::MessageStream::new(&mapped)?.collect::<mcap::McapResult<Vec<_>>>()?;
+    let messages = mcap::MappedMessageStream::new(&mapped)?.collect::<mcap::McapResult<Vec<_>>>()?;
 
     assert_eq!(messages.len(), 1);
 
@@ -40,7 +40,7 @@ fn smoke() -> Result<()> {
 #[test]
 fn round_trip() -> Result<()> {
     let mapped = map_mcap("../tests/conformance/data/OneMessage/OneMessage.mcap")?;
-    let messages = mcap::MessageStream::new(&mapped)?;
+    let messages = mcap::MappedMessageStream::new(&mapped)?;
 
     let mut tmp = tempfile()?;
     let mut writer = mcap::Writer::new(BufWriter::new(&mut tmp))?;
@@ -100,7 +100,7 @@ fn round_trip() -> Result<()> {
     };
 
     assert_eq!(
-        mcap::MessageStream::new(&ours)?.collect::<mcap::McapResult<Vec<_>>>()?,
+        mcap::MappedMessageStream::new(&ours)?.collect::<mcap::McapResult<Vec<_>>>()?,
         &[expected]
     );
 

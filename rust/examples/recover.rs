@@ -58,7 +58,7 @@ fn run() -> Result<()> {
 
     info!("recovering as many messages as possible...");
     let mut recovered_count = 0;
-    for maybe_message in mcap::MessageStream::new_with_options(
+    for maybe_message in mcap::MappedMessageStream::new_with_options(
         &mapped,
         enum_set!(mcap::read::Options::IgnoreEndMagic),
     )? {

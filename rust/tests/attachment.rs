@@ -11,7 +11,7 @@ use tempfile::tempfile;
 #[test]
 fn smoke() -> Result<()> {
     let mapped = map_mcap("../tests/conformance/data/OneAttachment/OneAttachment.mcap")?;
-    let attachments = mcap::read::LinearReader::new(&mapped)?
+    let attachments = mcap::read::MappedLinearReader::new(&mapped)?
         .filter_map(|record| match record.unwrap() {
             mcap::records::Record::Attachment { header, data } => Some((header, data)),
             _ => None,
@@ -37,7 +37,7 @@ fn smoke() -> Result<()> {
 fn round_trip() -> Result<()> {
     let mapped = map_mcap("../tests/conformance/data/OneAttachment/OneAttachment.mcap")?;
     let attachments =
-        mcap::read::LinearReader::new(&mapped)?.filter_map(|record| match record.unwrap() {
+        mcap::read::MappedLinearReader::new(&mapped)?.filter_map(|record| match record.unwrap() {
             mcap::records::Record::Attachment { header, data } => Some((header, data)),
             _ => None,
         });

@@ -11,7 +11,7 @@ use itertools::Itertools;
 fn flush_and_cut_chunks() -> Result<()> {
     let mapped = mcap_test_file()?;
 
-    let messages = mcap::MessageStream::new(&mapped)?;
+    let messages = mcap::MappedMessageStream::new(&mapped)?;
 
     let mut tmp: Vec<u8> = Vec::new();
     let mut writer = mcap::WriteOptions::new()
@@ -29,7 +29,7 @@ fn flush_and_cut_chunks() -> Result<()> {
 
     // Compare the message stream of our MCAP to the reference one.
     // Regardless of the chunk boundaries, they should be the same.
-    for (theirs, ours) in mcap::MessageStream::new(&mapped)?.zip_eq(mcap::MessageStream::new(&tmp)?)
+    for (theirs, ours) in mcap::MappedMessageStream::new(&mapped)?.zip_eq(mcap::MappedMessageStream::new(&tmp)?)
     {
         assert_eq!(ours?, theirs?)
     }

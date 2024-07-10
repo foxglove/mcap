@@ -32,7 +32,7 @@ fn run() -> Result<()> {
 
     let mapped = map_mcap(&args.mcap)?;
 
-    for message in mcap::MessageStream::new(&mapped)? {
+    for message in mcap::MappedMessageStream::new(&mapped)? {
         let message = message?;
         let ts = message.publish_time;
         println!(

@@ -12,7 +12,7 @@ use itertools::Itertools;
 fn auto_cut_chunks() -> Result<()> {
     let mapped = mcap_test_file()?;
 
-    let messages = mcap::MessageStream::new(&mapped)?;
+    let messages = mcap::MappedMessageStream::new(&mapped)?;
 
     let mut tmp: Vec<u8> = Vec::new();
     // Setting chunk size to 0 ensures that each message gets written to a new chunk.
@@ -27,12 +27,12 @@ fn auto_cut_chunks() -> Result<()> {
     }
 
     // ensure that all messages can be read in the new MCAP
-    for (theirs, ours) in mcap::MessageStream::new(&tmp)?.zip_eq(mcap::MessageStream::new(&tmp)?) {
+    for (theirs, ours) in mcap::MappedMessageStream::new(&tmp)?.zip_eq(mcap::MappedMessageStream::new(&tmp)?) {
         assert_eq!(ours?, theirs?)
     }
 
     // ensure that more than one chunk is present in the new MCAP
-    let num_chunks = mcap::read::LinearReader::new(&mapped)?
+    let num_chunks = mcap::read::MappedLinearReader::new(&mapped)?
         .filter(|r| matches!(r, Ok(mcap::records::Record::Chunk { .. })))
         .count();
     assert!(num_chunks > 1);

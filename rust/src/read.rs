@@ -43,12 +43,12 @@ pub enum Options {
 /// You probably want a [MessageStream] instead - this yields the raw records
 /// from the file without any postprocessing (decompressing chunks, etc.)
 /// and is mostly meant as a building block for higher-level readers.
-pub struct LinearReader<'a> {
+pub struct MappedLinearReader<'a> {
     buf: &'a [u8],
     malformed: bool,
 }
 
-impl<'a> LinearReader<'a> {
+impl<'a> MappedLinearReader<'a> {
     /// Create a reader for the given file,
     /// checking [`MAGIC`] bytes on both ends.
     pub fn new(buf: &'a [u8]) -> McapResult<Self> {
@@ -90,7 +90,7 @@ impl<'a> LinearReader<'a> {
     }
 }
 
-impl<'a> Iterator for LinearReader<'a> {
+impl<'a> Iterator for MappedLinearReader<'a> {
     type Item = McapResult<records::Record<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -253,7 +253,7 @@ fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
 }
 
 enum ChunkDecompressor<'a> {
-    Null(LinearReader<'a>),
+    Null(MappedLinearReader<'a>),
     /// This is not used when both `zstd` and `lz4` features are disabled.
     #[allow(dead_code)]
     Compressed(Option<CountingCrcReader<Box<dyn Read + Send + 'a>>>),
@@ -301,7 +301,7 @@ impl<'a> ChunkReader<'a> {
                     }
                 }
 
-                ChunkDecompressor::Null(LinearReader::sans_magic(data))
+                ChunkDecompressor::Null(MappedLinearReader::sans_magic(data))
             }
             wat => return Err(McapError::UnsupportedCompression(wat.to_string())),
         };
@@ -447,7 +447,7 @@ fn read_record_from_chunk_stream<'a, R: Read>(r: &mut R) -> McapResult<records::
 
 /// Like [`LinearReader`], but unpacks chunks' records into its stream
 pub struct ChunkFlattener<'a> {
-    top_level: LinearReader<'a>,
+    top_level: MappedLinearReader<'a>,
     dechunk: Option<ChunkReader<'a>>,
     malformed: bool,
 }
@@ -458,7 +458,7 @@ impl<'a> ChunkFlattener<'a> {
     }
 
     pub fn new_with_options(buf: &'a [u8], options: EnumSet<Options>) -> McapResult<Self> {
-        let top_level = LinearReader::new_with_options(buf, options)?;
+        let top_level = MappedLinearReader::new_with_options(buf, options)?;
         Ok(Self {
             top_level,
             dechunk: None,
@@ -593,14 +593,14 @@ impl<'a> ChannelAccumulator<'a> {
 /// (e.g., build some map of `Channel -> Vec<Message>`).
 ///
 /// This stops at the end of the data section and does not read the summary.
-pub struct RawMessageStream<'a> {
+pub struct RawMappedMessageStream<'a> {
     full_file: &'a [u8],
     records: ChunkFlattener<'a>,
     done: bool,
     channeler: ChannelAccumulator<'static>,
 }
 
-impl<'a> RawMessageStream<'a> {
+impl<'a> RawMappedMessageStream<'a> {
     pub fn new(buf: &'a [u8]) -> McapResult<Self> {
         Self::new_with_options(buf, enum_set!())
     }
@@ -628,7 +628,7 @@ pub struct RawMessage<'a> {
     pub data: Cow<'a, [u8]>,
 }
 
-impl<'a> Iterator for RawMessageStream<'a> {
+impl<'a> Iterator for RawMappedMessageStream<'a> {
     type Item = McapResult<RawMessage<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -701,7 +701,7 @@ impl<'a> Iterator for RawMessageStream<'a> {
     }
 }
 
-/// Like [`RawMessageStream`], but constructs a [`Message`]
+/// Like [`RawMappedMessageStream`], but constructs a [`Message`]
 /// (complete with its [`Channel`]) from the raw header and data.
 ///
 /// This stops at the end of the data section and does not read the summary.
@@ -712,21 +712,21 @@ impl<'a> Iterator for RawMessageStream<'a> {
 /// yielded [`Message`]s have unbounded lifetimes.
 /// For messages we've decompressed into their own buffers, this is free!
 /// For uncompressed messages, we take a copy of the message's data.
-pub struct MessageStream<'a> {
-    inner: RawMessageStream<'a>,
+pub struct MappedMessageStream<'a> {
+    inner: RawMappedMessageStream<'a>,
 }
 
-impl<'a> MessageStream<'a> {
+impl<'a> MappedMessageStream<'a> {
     pub fn new(buf: &'a [u8]) -> McapResult<Self> {
         Self::new_with_options(buf, enum_set!())
     }
 
     pub fn new_with_options(buf: &'a [u8], options: EnumSet<Options>) -> McapResult<Self> {
-        RawMessageStream::new_with_options(buf, options).map(|inner| Self { inner })
+        RawMappedMessageStream::new_with_options(buf, options).map(|inner| Self { inner })
     }
 }
 
-impl<'a> Iterator for MessageStream<'a> {
+impl<'a> Iterator for MappedMessageStream<'a> {
     type Item = McapResult<Message<'static>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -776,7 +776,7 @@ pub fn footer(mcap: &[u8]) -> McapResult<records::Footer> {
 
     let footer_buf = &mcap[mcap.len() - MAGIC.len() - FOOTER_LEN..];
 
-    match LinearReader::sans_magic(footer_buf).next() {
+    match MappedLinearReader::sans_magic(footer_buf).next() {
         Some(Ok(Record::Footer(f))) => Ok(f),
         _ => Err(McapError::BadFooter),
     }
@@ -844,7 +844,7 @@ impl<'a> Summary<'a> {
         };
         let summary_buf = &mcap[foot.summary_start as usize..summary_end];
 
-        for record in LinearReader::sans_magic(summary_buf) {
+        for record in MappedLinearReader::sans_magic(summary_buf) {
             match record? {
                 Record::Statistics(s) => {
                     if summary.stats.is_some() {
@@ -882,7 +882,7 @@ impl<'a> Summary<'a> {
         }
 
         // Get the chunk (as a header and its data) out of the file at the given offset.
-        let mut reader = LinearReader::sans_magic(&mcap[index.chunk_start_offset as usize..end]);
+        let mut reader = MappedLinearReader::sans_magic(&mcap[index.chunk_start_offset as usize..end]);
         let (h, d) = match reader.next().ok_or(McapError::BadIndex)? {
             Ok(records::Record::Chunk { header, data }) => (header, data),
             Ok(_other_record) => return Err(McapError::BadIndex),
@@ -962,7 +962,7 @@ impl<'a> Summary<'a> {
             }
 
             // Get the MessageIndex out of the file at the given offset.
-            let mut reader = LinearReader::sans_magic(&mcap[offset..]);
+            let mut reader = MappedLinearReader::sans_magic(&mcap[offset..]);
             let index = match reader.next().ok_or(McapError::BadIndex)? {
                 Ok(records::Record::MessageIndex(i)) => i,
                 Ok(_other_record) => return Err(McapError::BadIndex),
@@ -1011,7 +1011,7 @@ impl<'a> Summary<'a> {
             return Err(McapError::BadIndex);
         }
 
-        let mut reader = LinearReader::sans_magic(&mcap[index.chunk_start_offset as usize..end]);
+        let mut reader = MappedLinearReader::sans_magic(&mcap[index.chunk_start_offset as usize..end]);
         let (h, d) = match reader.next().ok_or(McapError::BadIndex)? {
             Ok(records::Record::Chunk { header, data }) => (header, data),
             Ok(_other_record) => return Err(McapError::BadIndex),
@@ -1097,7 +1097,7 @@ pub fn attachment<'a>(
         return Err(McapError::BadIndex);
     }
 
-    let mut reader = LinearReader::sans_magic(&mcap[index.offset as usize..end]);
+    let mut reader = MappedLinearReader::sans_magic(&mcap[index.offset as usize..end]);
     let (h, d) = match reader.next().ok_or(McapError::BadIndex)? {
         Ok(records::Record::Attachment { header, data }) => (header, data),
         Ok(_other_record) => return Err(McapError::BadIndex),
@@ -1125,7 +1125,7 @@ pub fn metadata(mcap: &[u8], index: &records::MetadataIndex) -> McapResult<recor
         return Err(McapError::BadIndex);
     }
 
-    let mut reader = LinearReader::sans_magic(&mcap[index.offset as usize..end]);
+    let mut reader = MappedLinearReader::sans_magic(&mcap[index.offset as usize..end]);
     let m = match reader.next().ok_or(McapError::BadIndex)? {
         Ok(records::Record::Metadata(m)) => m,
         Ok(_other_record) => return Err(McapError::BadIndex),
@@ -1175,20 +1175,20 @@ mod test {
     #[test]
     fn only_two_magics() {
         let two_magics = MAGIC.repeat(2);
-        let mut reader = LinearReader::new(&two_magics).unwrap();
+        let mut reader = MappedLinearReader::new(&two_magics).unwrap();
         assert!(reader.next().is_none());
     }
 
     #[test]
     fn only_one_magic() {
-        assert!(matches!(LinearReader::new(MAGIC), Err(McapError::BadMagic)));
+        assert!(matches!(MappedLinearReader::new(MAGIC), Err(McapError::BadMagic)));
     }
 
     #[test]
     fn only_two_magic_with_ignore_end_magic() {
         let two_magics = MAGIC.repeat(2);
         let mut reader =
-            LinearReader::new_with_options(&two_magics, enum_set!(Options::IgnoreEndMagic))
+            MappedLinearReader::new_with_options(&two_magics, enum_set!(Options::IgnoreEndMagic))
                 .unwrap();
         assert!(reader.next().is_none());
     }
@@ -1196,7 +1196,7 @@ mod test {
     #[test]
     fn only_one_magic_with_ignore_end_magic() {
         let mut reader =
-            LinearReader::new_with_options(MAGIC, enum_set!(Options::IgnoreEndMagic)).unwrap();
+            MappedLinearReader::new_with_options(MAGIC, enum_set!(Options::IgnoreEndMagic)).unwrap();
         assert!(reader.next().is_none());
     }
 

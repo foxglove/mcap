@@ -16,7 +16,7 @@ fn demo_round_trip() -> Result<()> {
 
     let mapped = mcap_test_file()?;
 
-    let messages = mcap::MessageStream::new(&mapped)?;
+    let messages = mcap::MappedMessageStream::new(&mapped)?;
 
     let mut tmp = tempfile()?;
     let mut writer = mcap::Writer::new(BufWriter::new(&mut tmp))?;
@@ -33,7 +33,7 @@ fn demo_round_trip() -> Result<()> {
 
     // Compare the message stream of our MCAP to the reference one.
     for (theirs, ours) in
-        mcap::MessageStream::new(&mapped)?.zip_eq(mcap::MessageStream::new(&ours)?)
+        mcap::MappedMessageStream::new(&mapped)?.zip_eq(mcap::MappedMessageStream::new(&ours)?)
     {
         assert_eq!(ours?, theirs?)
     }
@@ -45,7 +45,7 @@ fn demo_round_trip() -> Result<()> {
     const FOOTER_LEN: usize = 20 + 8 + 1; // 20 bytes + 8 byte len + 1 byte opcode
     let summary_offset_end = ours.len() - FOOTER_LEN - mcap::MAGIC.len();
 
-    for (i, rec) in mcap::read::LinearReader::sans_magic(
+    for (i, rec) in mcap::read::MappedLinearReader::sans_magic(
         &ours[footer.summary_offset_start as usize..summary_offset_end],
     )
     .enumerate()
@@ -68,7 +68,7 @@ fn demo_round_trip() -> Result<()> {
         // and the records should be the expected type.
         let group_start = offset.group_start as usize;
         let group_end = (offset.group_start + offset.group_length) as usize;
-        for group_rec in mcap::read::LinearReader::sans_magic(&ours[group_start..group_end]) {
+        for group_rec in mcap::read::MappedLinearReader::sans_magic(&ours[group_start..group_end]) {
             match group_rec {
                 Ok(rec) => assert_eq!(offset.group_opcode, rec.opcode()),
                 wut => panic!("Expected op {}, got {:?}", offset.group_opcode, wut),
@@ -83,7 +83,7 @@ fn demo_round_trip() -> Result<()> {
     assert!(summary.metadata_indexes.is_empty());
 
     // EZ mode: Streamed chunks should match up with a file-level message stream.
-    for (whole, by_chunk) in mcap::MessageStream::new(&ours)?.zip_eq(
+    for (whole, by_chunk) in mcap::MappedMessageStream::new(&ours)?.zip_eq(
         summary
             .chunk_indexes
             .iter()
@@ -113,7 +113,7 @@ fn demo_round_trip() -> Result<()> {
         }
     }
 
-    for (streamed, seeked) in mcap::MessageStream::new(&ours)?.zip_eq(messages.into_iter()) {
+    for (streamed, seeked) in mcap::MappedMessageStream::new(&ours)?.zip_eq(messages.into_iter()) {
         assert_eq!(streamed?, seeked);
     }
 
@@ -138,7 +138,7 @@ fn demo_random_chunk_access() -> Result<()> {
         .map(|entries| entries.len())
         .sum();
 
-    for (whole, random) in mcap::MessageStream::new(&mapped)?
+    for (whole, random) in mcap::MappedMessageStream::new(&mapped)?
         .skip(messages_in_first_chunk)
         .take(messages_in_second_chunk)
         .zip_eq(summary.stream_chunk(&mapped, &summary.chunk_indexes[1])?)
