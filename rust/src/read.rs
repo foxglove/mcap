@@ -7,6 +7,14 @@
 //! Consider [memory-mapping](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
 //! the file - the OS will load (and cache!) it on-demand, without any
 //! further system calls.
+use binrw::prelude::*;
+use byteorder::{ReadBytesExt, LE};
+use crc32fast::hash as crc32;
+use enumset::{enum_set, EnumSet, EnumSetType};
+use log::*;
+use std::cmp::Ordering;
+use std::collections::binary_heap::IntoIter;
+use std::collections::BinaryHeap;
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
@@ -15,14 +23,6 @@ use std::{
     mem::size_of,
     sync::Arc,
 };
-use std::cmp::Ordering;
-use std::collections::binary_heap::IntoIter;
-use std::collections::BinaryHeap;
-use binrw::prelude::*;
-use byteorder::{ReadBytesExt, LE};
-use crc32fast::hash as crc32;
-use enumset::{enum_set, EnumSet, EnumSetType};
-use log::*;
 
 use crate::{
     io_utils::CountingCrcReader,
@@ -783,7 +783,7 @@ impl Ord for OrderedMessage<'_> {
 
         match self.reversed {
             true => cmp.reverse(),
-            false => cmp
+            false => cmp,
         }
     }
 }
@@ -793,7 +793,7 @@ pub struct OrderedMessageStream<'a> {
     ordered_iter: IntoIter<OrderedMessage<'static>>,
     // should only be set by the 'read until err', returned only after
     // all correctly ordered messages have been read
-    next: Option<McapResult<Message<'static>>>
+    next: Option<McapResult<Message<'static>>>,
 }
 
 impl<'a> OrderedMessageStream<'a> {
@@ -805,15 +805,17 @@ impl<'a> OrderedMessageStream<'a> {
             match inner.next() {
                 None => break,
                 Some(Ok(msg)) => {
-                    heap.push(OrderedMessage { message: msg, reversed });
-                },
+                    heap.push(OrderedMessage {
+                        message: msg,
+                        reversed,
+                    });
+                }
                 Some(Err(e)) => {
                     next = Some(Err(e));
                     break;
                 }
             }
         }
-
 
         OrderedMessageStream {
             remaining_iter: inner,
@@ -835,10 +837,7 @@ impl<'a> Iterator for OrderedMessageStream<'a> {
             return Some(Ok(msg.message));
         }
 
-        match self.remaining_iter.next() {
-            None => None,
-            Some(msg) => Some(msg)
-        }
+        self.remaining_iter.next()
     }
 }
 
