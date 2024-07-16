@@ -94,7 +94,7 @@ manager can be used with the included
 
 ### CMake
 
-For how to use MCAP with CMake see the [cmake](website/docs/guides/cpp/cmake.md) page.
+For using MCAP with CMake, the third-party [olympus-robotics/mcap_builder](https://github.com/olympus-robotics/mcap_builder) repository provides a helpful wrapper.
 
 ### Alternatives
 
