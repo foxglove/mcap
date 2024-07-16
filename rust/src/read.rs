@@ -797,31 +797,38 @@ pub struct OrderedMessageStream<'a> {
 }
 
 impl<'a> OrderedMessageStream<'a> {
-    pub fn new(mut inner: MessageStream<'a>, reversed: bool) -> OrderedMessageStream<'a> {
-        let mut heap = BinaryHeap::new();
-        let mut next: Option<McapResult<Message>> = None;
+    pub fn new(buf: &'a [u8]) -> McapResult<Self> {
+        Self::new_with_options(buf, enum_set!(), false)
+    }
 
-        loop {
-            match inner.next() {
-                None => break,
-                Some(Ok(msg)) => {
-                    heap.push(OrderedMessage {
-                        message: msg,
-                        reversed,
-                    });
-                }
-                Some(Err(e)) => {
-                    next = Some(Err(e));
-                    break;
-                }
-            }
-        }
+    pub fn new_with_options(buf: &'a [u8], options: EnumSet<Options>, reversed: bool) -> McapResult<Self> {
+        MessageStream::new_with_options(buf, options)
+            .map(|mut msg_stream| {
+                let mut heap = BinaryHeap::new();
+                let mut next: Option<McapResult<Message>> = None;
 
-        OrderedMessageStream {
-            remaining_iter: inner,
-            ordered_iter: heap.into_iter(),
-            next,
-        }
+                loop {
+                    match msg_stream.next() {
+                        None => break,
+                        Some(Ok(msg)) => {
+                            heap.push(OrderedMessage {
+                                message: msg,
+                                reversed,
+                            });
+                        }
+                        Some(Err(e)) => {
+                            next = Some(Err(e));
+                            break;
+                        }
+                    }
+                }
+
+                OrderedMessageStream {
+                    remaining_iter: msg_stream,
+                    ordered_iter: heap.into_iter(),
+                    next,
+                }
+            })
     }
 }
 
