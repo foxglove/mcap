@@ -15,7 +15,9 @@ use std::{
     mem::size_of,
     sync::Arc,
 };
-
+use std::cmp::Ordering;
+use std::collections::binary_heap::IntoIter;
+use std::collections::BinaryHeap;
 use binrw::prelude::*;
 use byteorder::{ReadBytesExt, LE};
 use crc32fast::hash as crc32;
@@ -754,6 +756,88 @@ impl<'a> Iterator for MessageStream<'a> {
             // Coerce Option<McapResult<(header, data)>> into Option<McapResult<Message>>
             Some(Err(e)) => Some(Err(e)),
             None => None,
+        }
+    }
+}
+
+#[derive(Eq, PartialEq)]
+struct OrderedMessage<'a> {
+    message: Message<'a>,
+    reversed: bool,
+}
+
+impl PartialOrd for OrderedMessage<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for OrderedMessage<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let mut cmp = self.message.log_time.cmp(&other.message.log_time);
+
+        if cmp.is_eq() {
+            // todo: does this match up to the python position behaviour? does it need to?
+            cmp = self.message.sequence.cmp(&other.message.sequence);
+        }
+
+        match self.reversed {
+            true => cmp.reverse(),
+            false => cmp
+        }
+    }
+}
+
+pub struct OrderedMessageStream<'a> {
+    remaining_iter: MessageStream<'a>,
+    ordered_iter: IntoIter<OrderedMessage<'static>>,
+    // should only be set by the 'read until err', returned only after
+    // all correctly ordered messages have been read
+    next: Option<McapResult<Message<'static>>>
+}
+
+impl<'a> OrderedMessageStream<'a> {
+    pub fn new(mut inner: MessageStream<'a>, reversed: bool) -> OrderedMessageStream<'a> {
+        let mut heap = BinaryHeap::new();
+        let mut next: Option<McapResult<Message>> = None;
+
+        loop {
+            match inner.next() {
+                None => break,
+                Some(Ok(msg)) => {
+                    heap.push(OrderedMessage { message: msg, reversed });
+                },
+                Some(Err(e)) => {
+                    next = Some(Err(e));
+                    break;
+                }
+            }
+        }
+
+
+        OrderedMessageStream {
+            remaining_iter: inner,
+            ordered_iter: heap.into_iter(),
+            next,
+        }
+    }
+}
+
+impl<'a> Iterator for OrderedMessageStream<'a> {
+    type Item = McapResult<Message<'static>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next.is_some() {
+            return self.next.take();
+        }
+
+        if let Some(msg) = self.ordered_iter.next() {
+            return Some(Ok(msg.message));
+        }
+
+        match self.remaining_iter.next() {
+            None => None,
+            Some(msg) => Some(msg)
         }
     }
 }
