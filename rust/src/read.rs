@@ -791,9 +791,9 @@ impl Ord for OrderedMessage<'_> {
 pub struct OrderedMessageStream<'a> {
     remaining_iter: MessageStream<'a>,
     ordered_iter: IntoIter<OrderedMessage<'static>>,
-    // should only be set by the 'read until err', returned only after
-    // all correctly ordered messages have been read
-    next: Option<McapResult<Message<'static>>>,
+    // should only be set if there's an error while reading from MessageStream into
+    // ordered iterator
+    next_remaining: Option<McapResult<Message<'static>>>,
 }
 
 impl<'a> OrderedMessageStream<'a> {
@@ -826,7 +826,7 @@ impl<'a> OrderedMessageStream<'a> {
                 OrderedMessageStream {
                     remaining_iter: msg_stream,
                     ordered_iter: heap.into_iter(),
-                    next,
+                    next_remaining: next,
                 }
             })
     }
@@ -836,12 +836,12 @@ impl<'a> Iterator for OrderedMessageStream<'a> {
     type Item = McapResult<Message<'static>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.next.is_some() {
-            return self.next.take();
-        }
-
         if let Some(msg) = self.ordered_iter.next() {
             return Some(Ok(msg.message));
+        }
+
+        if self.next.is_some() {
+            return self.next.take();
         }
 
         self.remaining_iter.next()
