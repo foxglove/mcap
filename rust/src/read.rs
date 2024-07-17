@@ -7,14 +7,6 @@
 //! Consider [memory-mapping](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
 //! the file - the OS will load (and cache!) it on-demand, without any
 //! further system calls.
-use binrw::prelude::*;
-use byteorder::{ReadBytesExt, LE};
-use crc32fast::hash as crc32;
-use enumset::{enum_set, EnumSet, EnumSetType};
-use log::*;
-use std::cmp::Ordering;
-use std::collections::binary_heap::IntoIter;
-use std::collections::BinaryHeap;
 use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
@@ -23,6 +15,15 @@ use std::{
     mem::size_of,
     sync::Arc,
 };
+
+use binrw::prelude::*;
+use byteorder::{ReadBytesExt, LE};
+use crc32fast::hash as crc32;
+use enumset::{enum_set, EnumSet, EnumSetType};
+use log::*;
+use std::cmp::Ordering;
+use std::collections::binary_heap::IntoIter;
+use std::collections::BinaryHeap;
 
 use crate::{
     io_utils::CountingCrcReader,
