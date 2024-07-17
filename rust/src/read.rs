@@ -801,34 +801,37 @@ impl<'a> OrderedMessageStream<'a> {
         Self::new_with_options(buf, enum_set!(), false)
     }
 
-    pub fn new_with_options(buf: &'a [u8], options: EnumSet<Options>, reversed: bool) -> McapResult<Self> {
-        MessageStream::new_with_options(buf, options)
-            .map(|mut msg_stream| {
-                let mut heap = BinaryHeap::new();
-                let mut next: Option<McapResult<Message>> = None;
+    pub fn new_with_options(
+        buf: &'a [u8],
+        options: EnumSet<Options>,
+        reversed: bool,
+    ) -> McapResult<Self> {
+        MessageStream::new_with_options(buf, options).map(|mut msg_stream| {
+            let mut heap = BinaryHeap::new();
+            let mut next: Option<McapResult<Message>> = None;
 
-                loop {
-                    match msg_stream.next() {
-                        None => break,
-                        Some(Ok(msg)) => {
-                            heap.push(OrderedMessage {
-                                message: msg,
-                                reversed,
-                            });
-                        }
-                        Some(Err(e)) => {
-                            next = Some(Err(e));
-                            break;
-                        }
+            loop {
+                match msg_stream.next() {
+                    None => break,
+                    Some(Ok(msg)) => {
+                        heap.push(OrderedMessage {
+                            message: msg,
+                            reversed,
+                        });
+                    }
+                    Some(Err(e)) => {
+                        next = Some(Err(e));
+                        break;
                     }
                 }
+            }
 
-                OrderedMessageStream {
-                    remaining_iter: msg_stream,
-                    ordered_iter: heap.into_iter(),
-                    next_remaining: next,
-                }
-            })
+            OrderedMessageStream {
+                remaining_iter: msg_stream,
+                ordered_iter: heap.into_iter(),
+                next_remaining: next,
+            }
+        })
     }
 }
 
@@ -840,8 +843,8 @@ impl<'a> Iterator for OrderedMessageStream<'a> {
             return Some(Ok(msg.message));
         }
 
-        if self.next.is_some() {
-            return self.next.take();
+        if self.next_remaining.is_some() {
+            return self.next_remaining.take();
         }
 
         self.remaining_iter.next()
