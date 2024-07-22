@@ -493,8 +493,6 @@ private:
   std::unordered_map<ChannelId, ChannelPtr> channels_;
   ByteOffset dataStart_ = 0;
   ByteOffset dataEnd_ = EndOffset;
-  Timestamp startTime_ = 0;
-  Timestamp endTime_ = 0;
   bool parsedSummary_ = false;
 
   void reset_();
