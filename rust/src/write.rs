@@ -440,9 +440,10 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         // (That would leave it in an unspecified state if we bailed here!)
         // Instead briefly swap it out for a null writer while we set up the chunker
         // The writer will only be None if finish() was called.
-        if !self.options.use_chunks {
-            unreachable!("Trying to write to a chunk when chunking is disabled")
-        }
+        assert!(
+            self.options.use_chunks,
+            "Trying to write to a chunk when chunking is disabled"
+        );
 
         let prev_writer = self.writer.take().expect(Self::WHERE_WRITER);
 
