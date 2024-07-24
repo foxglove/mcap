@@ -777,21 +777,17 @@ impl Ord for OrderedMessage<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         let mut cmp = self.message.log_time.cmp(&other.message.log_time);
 
-        if cmp.is_eq() {
-            // todo: does this match up to the python position behaviour? does it need to?
-            cmp = self.message.sequence.cmp(&other.message.sequence);
-        }
-
+        // default order is largest to smallest
         match self.reversed {
-            true => cmp.reverse(),
-            false => cmp,
+            true => cmp,
+            false => cmp.reverse(),
         }
     }
 }
 
 pub struct OrderedMessageStream<'a> {
     remaining_iter: MessageStream<'a>,
-    ordered_iter: IntoIter<OrderedMessage<'static>>,
+    ordered_msgs: BinaryHeap<OrderedMessage<'static>>,
     // should only be set if there's an error while reading from MessageStream into
     // ordered iterator
     next_remaining: Option<McapResult<Message<'static>>>,
@@ -829,7 +825,7 @@ impl<'a> OrderedMessageStream<'a> {
 
             OrderedMessageStream {
                 remaining_iter: msg_stream,
-                ordered_iter: heap.into_iter(),
+                ordered_msgs: heap,
                 next_remaining: next,
             }
         })
@@ -840,7 +836,7 @@ impl<'a> Iterator for OrderedMessageStream<'a> {
     type Item = McapResult<Message<'static>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(msg) = self.ordered_iter.next() {
+        if let Some(msg) = self.ordered_msgs.pop() {
             return Some(Ok(msg.message));
         }
 
@@ -1262,6 +1258,8 @@ reader!(u64);
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::records::MessageHeader;
+    use crate::Writer;
 
     // Can we read a file that's only magic?
     // (Probably considered malformed by the spec, but let's not panic on user input)
