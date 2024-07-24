@@ -47,5 +47,8 @@
   "C_Cpp.default.cppStandard": "c++17",
   "[go]": {
     "editor.defaultFormatter": "golang.go"
+  },
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
   }
 }
