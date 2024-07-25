@@ -39,11 +39,22 @@ fn smoke() -> Result<()> {
 
 #[test]
 fn round_trip() -> Result<()> {
+    run_round_trip(true)
+}
+
+#[test]
+fn round_trip_no_chunks() -> Result<()> {
+    run_round_trip(false)
+}
+
+fn run_round_trip(use_chunks: bool) -> Result<()> {
     let mapped = map_mcap("../tests/conformance/data/OneMessage/OneMessage.mcap")?;
     let messages = mcap::MessageStream::new(&mapped)?;
 
     let mut tmp = tempfile()?;
-    let mut writer = mcap::Writer::new(BufWriter::new(&mut tmp))?;
+    let mut writer = mcap::WriteOptions::default()
+        .use_chunks(use_chunks)
+        .create(BufWriter::new(&mut tmp))?;
 
     for m in messages {
         writer.write(&m?)?;
@@ -71,7 +82,7 @@ fn round_trip() -> Result<()> {
             message_count: 1,
             schema_count: 1,
             channel_count: 1,
-            chunk_count: 1,
+            chunk_count: if use_chunks { 1 } else { 0 },
             message_start_time: 2,
             message_end_time: 2,
             channel_message_counts: [(0, 1)].into(),
