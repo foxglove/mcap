@@ -4,7 +4,6 @@ run:
 linters:
   disable-all: true
   enable:
-    - deadcode
     - errcheck
     - gosimple
     - govet
@@ -12,11 +11,9 @@ linters:
     - staticcheck
     - typecheck
     - unused
-    - varcheck
     - gocritic
     - godot
     - gofmt
-    - ifshort
     - misspell
     - prealloc
     - sqlclosecheck
