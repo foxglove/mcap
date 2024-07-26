@@ -1,8 +1,43 @@
-import { McapIndexedReader, McapStreamReader, McapWriter, TempBuffer } from "@mcap/core";
+import { McapIndexedReader, McapStreamReader, McapWriter, McapTypes, IWritable } from "@mcap/core";
 import assert from "assert";
 import { program } from "commander";
+import fs from "fs/promises";
+import os from "os";
+import path from "path";
 
 import { runBenchmark } from "./bench";
+
+class ReadableFile implements McapTypes.IReadable {
+  #fd: fs.FileHandle;
+  constructor(fd: fs.FileHandle) {
+    this.#fd = fd;
+  }
+  async read(offset: bigint, size: bigint): Promise<Uint8Array> {
+    const res = new Uint8Array(Number(size));
+    await this.#fd.read(res, 0, Number(size), Number(offset));
+    return res;
+  }
+  async size(): Promise<bigint> {
+    const stat = await this.#fd.stat();
+    return BigInt(stat.size);
+  }
+}
+
+class WritableFile implements IWritable {
+  #fd: fs.FileHandle;
+  #pos: bigint;
+  constructor(fd: fs.FileHandle) {
+    this.#fd = fd;
+    this.#pos = BigInt(0);
+  }
+  async write(buffer: Uint8Array): Promise<void> {
+    await this.#fd.write(buffer);
+    this.#pos = this.#pos + BigInt(buffer.length);
+  }
+  position(): bigint {
+    return this.#pos;
+  }
+}
 
 /**
  * An IWritable that copies data to memory, but overwrites previous data. This allows benchmarking
@@ -38,56 +73,95 @@ async function benchmarkReaders() {
   const chunkSize = 1024 * 1024 * 4;
   const numMessages = 1_000_000;
   const messageData = new Uint8Array(messageSize).fill(42);
-  const buf = new TempBuffer();
-  const writer = new McapWriter({ writable: buf, chunkSize });
-  await writer.start({ library: "", profile: "" });
-  const channelId = await writer.registerChannel({
-    schemaId: 0,
-    topic: "",
-    messageEncoding: "",
-    metadata: new Map([]),
-  });
-  for (let i = 0; i < numMessages; i++) {
-    await writer.addMessage({
-      channelId,
-      sequence: i,
-      logTime: BigInt(i),
-      publishTime: BigInt(i),
-      data: messageData,
+  const filepath = path.join(os.tmpdir(), "sample.mcap");
+  {
+    const fd = await fs.open(filepath, "w");
+
+    const writer = new McapWriter({ writable: new WritableFile(fd), chunkSize });
+    await writer.start({ library: "", profile: "" });
+    const channelId = await writer.registerChannel({
+      schemaId: 0,
+      topic: "",
+      messageEncoding: "",
+      metadata: new Map([]),
     });
+    for (let i = 0; i < numMessages; i++) {
+      await writer.addMessage({
+        channelId,
+        sequence: i,
+        logTime: BigInt(i),
+        publishTime: BigInt(i),
+        data: messageData,
+      });
+    }
+    await writer.end();
+    await fd.close();
   }
-  await writer.end();
   await runBenchmark(McapStreamReader.name, async () => {
+    const fd = await fs.open(filepath);
+    const stream = fd.createReadStream();
     const reader = new McapStreamReader();
-    reader.append(buf.get());
     let messageCount = 0;
-    for (;;) {
-      const rec = reader.nextRecord();
-      if (rec != undefined) {
-        if (rec.type === "Message") {
+    stream.on("data", (chunk) => {
+      reader.append(Buffer.from(chunk));
+      for (let record; (record = reader.nextRecord()); ) {
+        if (record.type === "Message") {
           messageCount++;
         }
-      } else {
-        break;
       }
-    }
+    });
+    await new Promise((resolve) => stream.on("end", resolve));
+    stream.close();
     assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
+    await fd.close();
   });
-  await runBenchmark(McapIndexedReader.name, async () => {
-    const reader = await McapIndexedReader.Initialize({ readable: buf });
+  await runBenchmark("readMessages_async", async () => {
+    const fd = await fs.open(filepath);
+    const reader = await McapIndexedReader.Initialize({ readable: new ReadableFile(fd) });
     let messageCount = 0;
     for await (const _ of reader.readMessages()) {
       messageCount++;
     }
     assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
+    await fd.close();
   });
-  await runBenchmark(McapIndexedReader.name + "_reverse", async () => {
-    const reader = await McapIndexedReader.Initialize({ readable: buf });
+  await runBenchmark("readMessages_async_reverse", async () => {
+    const fd = await fs.open(filepath);
+    const reader = await McapIndexedReader.Initialize({ readable: new ReadableFile(fd) });
     let messageCount = 0;
     for await (const _ of reader.readMessages({ reverse: true })) {
       messageCount++;
     }
     assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
+    await fd.close();
+  });
+  await runBenchmark("readMessages_sync", async () => {
+    const fd = await fs.open(filepath);
+    const reader = await McapIndexedReader.Initialize({ readable: new ReadableFile(fd) });
+    let messageCount = 0;
+    for (const { promise } of reader.readMessagesSync()) {
+      if (promise != undefined) {
+        await promise;
+      } else {
+        messageCount++;
+      }
+    }
+    assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
+    await fd.close();
+  });
+  await runBenchmark("readMessages_sync_reverse", async () => {
+    const fd = await fs.open(filepath);
+    const reader = await McapIndexedReader.Initialize({ readable: new ReadableFile(fd) });
+    let messageCount = 0;
+    for (const { promise } of reader.readMessagesSync({ reverse: true })) {
+      if (promise != undefined) {
+        await promise;
+      } else {
+        messageCount++;
+      }
+    }
+    assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
+    await fd.close();
   });
 }
 
