@@ -35,7 +35,7 @@ Download the latest `mcap-cli` version from the [releases page](https://github.c
 
 ## License
 
-[MIT License](/LICENSE). Contributors are required to accept the [Contributor License Agreement](https://github.com/foxglove/cla).
+[MIT License](/LICENSE).
 
 ## Release process
 
