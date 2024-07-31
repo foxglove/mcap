@@ -83,7 +83,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	}
 	magic := buf[20:]
 	if !bytes.Equal(magic, Magic) {
-		return fmt.Errorf("not an MCAP file")
+		return &ErrBadMagic{location: magicLocationEnd, actual: magic}
 	}
 	footer, err := ParseFooter(buf[:20])
 	if err != nil {
