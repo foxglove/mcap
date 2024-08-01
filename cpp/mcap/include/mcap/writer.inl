@@ -473,7 +473,6 @@ void McapWriter::terminate() {
   zstdChunk_.reset();
 #endif
 
-  channels_.clear();
   attachmentIndex_.clear();
   metadataIndex_.clear();
   chunkIndex_.clear();
