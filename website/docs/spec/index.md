@@ -159,6 +159,7 @@ Channel records are uniquely identified within a file by their channel ID. A Cha
 | ----- | ---------------- | --------------------- | ----------------------------------------------------------------------------------------------------------- |
 | 2     | id               | uint16                | A unique identifier for this channel within the file.                                                       |
 | 2     | schema_id        | uint16                | The schema for messages on this channel. A schema_id of 0 indicates there is no schema for this channel.    |
+| 4 + N | timestamp_names  | `Array<String>`       | The names of available timestamps for this channel, for example `["log_time", "publish_time"]`.             |
 | 4 + N | topic            | String                | The channel topic.                                                                                          |
 | 4 + N | message_encoding | String                | Encoding for messages on this channel. The [well-known message encodings][message_encodings] are preferred. |
 | 4 + N | metadata         | `Map<string, string>` | Metadata about this channel                                                                                 |
@@ -171,13 +172,12 @@ A message record encodes a single timestamped message on a channel.
 
 The message encoding and schema must match that of the Channel record corresponding to the message's channel ID.
 
-| Bytes | Name         | Type      | Description                                                                                                                                                                                                                               |
-| ----- | ------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2     | channel_id   | uint16    | Channel ID                                                                                                                                                                                                                                |
-| 4     | sequence     | uint32    | Optional message counter to detect message gaps. If your middleware publisher provides a sequence number you can use that, or you can assign a sequence number in the recorder, or set to zero if this is not relevant for your workflow. |
-| 8     | log_time     | Timestamp | Time at which the message was recorded.                                                                                                                                                                                                   |
-| 8     | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time.                                                                                                                                                   |
-| N     | data         | Bytes     | Message data, to be decoded according to the schema of the channel.                                                                                                                                                                       |
+| Bytes  | Name       | Type                  | Description                                                                                                                                                                                                                               |
+| ------ | ---------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2      | channel_id | uint16                | Channel ID                                                                                                                                                                                                                                |
+| 4      | sequence   | uint32                | Optional message counter to detect message gaps. If your middleware publisher provides a sequence number you can use that, or you can assign a sequence number in the recorder, or set to zero if this is not relevant for your workflow. |
+| 8 \* N | timestamps | `Array[N]<Timestamp>` | A fixed length array of timestamps (matching the length and order of the corresponding Channel's `timestamp_names`).                                                                                                                      |
+| N      | data       | Bytes                 | Message data, to be decoded according to the schema of the channel.                                                                                                                                                                       |
 
 ### Chunk (op=0x06)
 
@@ -213,17 +213,17 @@ A Chunk Index record contains the location of a Chunk record and its associated 
 
 A Chunk Index record exists for every Chunk in the file.
 
-| Bytes | Name                  | Type                  | Description                                                                                                                                                                              |
-| ----- | --------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 8     | message_start_time    | Timestamp             | Earliest message log_time in the chunk. Zero if the chunk has no messages.                                                                                                               |
-| 8     | message_end_time      | Timestamp             | Latest message log_time in the chunk. Zero if the chunk has no messages.                                                                                                                 |
-| 8     | chunk_start_offset    | uint64                | Offset to the chunk record from the start of the file.                                                                                                                                   |
-| 8     | chunk_length          | uint64                | Byte length of the chunk record, including opcode and length prefix.                                                                                                                     |
-| 4 + N | message_index_offsets | `Map<uint16, uint64>` | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. An empty map indicates no message indexing is available. |
-| 8     | message_index_length  | uint64                | Total length in bytes of the message index records after the chunk.                                                                                                                      |
-| 4 + N | compression           | String                | The compression used within the chunk. Refer to [well-known compression formats][compression_formats]. This field should match the the value in the corresponding Chunk record.          |
-| 8     | compressed_size       | uint64                | The size of the chunk `records` field.                                                                                                                                                   |
-| 8     | uncompressed_size     | uint64                | The uncompressed size of the chunk `records` field. This field should match the value in the corresponding Chunk record.                                                                 |
+| Bytes  | Name                  | Type                  | Description                                                                                                                                                                              |
+| ------ | --------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 8 \* N | start_timestamps      | `Array[N]<Timestamp>` | Earliest of each message timestamp in the chunk. Zero if the chunk has no messages.                                                                                                      |
+| 8 \* N | end_timestamps        | Timestamp             | Latest of each message timestamp in the chunk. Zero if the chunk has no messages.                                                                                                        |
+| 8      | chunk_start_offset    | uint64                | Offset to the chunk record from the start of the file.                                                                                                                                   |
+| 8      | chunk_length          | uint64                | Byte length of the chunk record, including opcode and length prefix.                                                                                                                     |
+| 4 + N  | message_index_offsets | `Map<uint16, uint64>` | Mapping from channel ID to the offset of the message index record for that channel after the chunk, from the start of the file. An empty map indicates no message indexing is available. |
+| 8      | message_index_length  | uint64                | Total length in bytes of the message index records after the chunk.                                                                                                                      |
+| 4 + N  | compression           | String                | The compression used within the chunk. Refer to [well-known compression formats][compression_formats]. This field should match the the value in the corresponding Chunk record.          |
+| 8      | compressed_size       | uint64                | The size of the chunk `records` field.                                                                                                                                                   |
+| 8      | uncompressed_size     | uint64                | The uncompressed size of the chunk `records` field. This field should match the value in the corresponding Chunk record.                                                                 |
 
 A Schema and Channel record MUST exist in the summary section for all messages in chunks that are indexed by Chunk Index records.
 
@@ -355,7 +355,7 @@ Example `Tuple<uint16, string>`:
 
 ### Array<array_type>
 
-Arrays are serialized using a `uint32` byte length followed by the serialized array elements.
+Variable length arrays are serialized using a `uint32` byte length followed by the serialized array elements.
 
     <byte length><serialized element><serialized element>...
 
@@ -364,6 +364,16 @@ An array of uint64 is specified as `Array<uint64>` and serialized as:
     <byte length><uint64><uint64><uint64>...
 
 > Since arrays use a `uint32` byte length prefix, the maximum size of the serialized array elements cannot exceed 4,294,967,295 bytes.
+
+### Array[N]<array_time>
+
+Fixed length arrays contain only the serialized array elements.
+
+    <serialized element><serialized element>...
+
+A fixed length array of uint64 is specified as `Array[4]<uint64>` and serialized as:
+
+    <uint64><uint64><uint64><uint64>
 
 ### Timestamp
 
