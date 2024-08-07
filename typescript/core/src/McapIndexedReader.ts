@@ -22,6 +22,16 @@ type McapIndexedReaderArgs = {
   dataSectionCrc?: number;
 };
 
+type ReadMessagesSyncResult =
+  | {
+      promise: Promise<void>;
+      message: undefined;
+    }
+  | {
+      promise: undefined;
+      message: TypedMcapRecords["Message"];
+    };
+
 export class McapIndexedReader {
   readonly chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
   readonly attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
@@ -345,6 +355,13 @@ export class McapIndexedReader {
     });
   }
 
+  /** Returns an async iterator that iterates over messages in the MCAP file in order of log time.
+   * @param args.topics: if defined, only messages from channels matching the topics will be yielded.
+   * @param args.startTime: if defined, only messages with log times on or after this time  will be yielded.
+   * @param args.endTime: if defined, only messages with log times on or before this time  will be yielded.
+   * @param args.reverse: if true, messages will be yielded in reverse log-time order.
+   * @param args.validateCrcs: if false, chunk CRCs will not be validated while reading the MCAP.
+   */
   async *readMessages(
     args: {
       topics?: readonly string[];
@@ -354,6 +371,33 @@ export class McapIndexedReader {
       validateCrcs?: boolean;
     } = {},
   ): AsyncGenerator<TypedMcapRecords["Message"], void, void> {
+    for (const { promise, message } of this.readMessagesSync(args)) {
+      if (promise != undefined) {
+        await promise;
+      } else {
+        yield message;
+      }
+    }
+  }
+
+  /** Returns an iterator that iterates over messages in the MCAP file in order of log time.
+   * The returned object will have either the `message` or `promise` member defined. If `promise`
+   * is not undefined, the caller must wait for it to resolve before calling next().
+   * @param args.topics: if defined, only messages from channels matching the topics will be yielded.
+   * @param args.startTime: if defined, only messages with log times on or after this time  will be yielded.
+   * @param args.endTime: if defined, only messages with log times on or before this time  will be yielded.
+   * @param args.reverse: if true, messages will be yielded in reverse log-time order.
+   * @param args.validateCrcs: if false, chunk CRCs will not be validated while reading the MCAP.
+   */
+  *readMessagesSync(
+    args: {
+      topics?: readonly string[];
+      startTime?: bigint;
+      endTime?: bigint;
+      reverse?: boolean;
+      validateCrcs?: boolean;
+    } = {},
+  ): Generator<ReadMessagesSyncResult, void, void> {
     const {
       topics,
       startTime = this.#messageStartTime,
@@ -398,7 +442,10 @@ export class McapIndexedReader {
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
-        await cursor.loadMessageIndexes(this.#readable);
+        yield {
+          promise: cursor.loadMessageIndexes(this.#readable),
+          message: undefined,
+        };
         if (cursor.hasMoreMessages()) {
           chunkCursors.replace(cursor);
         } else {
@@ -409,12 +456,17 @@ export class McapIndexedReader {
 
       let chunkView = chunkViewCache.get(cursor.chunkIndex.chunkStartOffset);
       if (!chunkView) {
-        chunkView = await this.#loadChunkData(cursor.chunkIndex, {
-          validateCrcs: validateCrcs ?? true,
-        });
-        chunkViewCache.set(cursor.chunkIndex.chunkStartOffset, chunkView);
+        const promise = (async () => {
+          chunkView = await this.#loadChunkData(cursor.chunkIndex, {
+            validateCrcs: validateCrcs ?? true,
+          });
+          chunkViewCache.set(cursor.chunkIndex.chunkStartOffset, chunkView);
+        })();
+        yield { promise, message: undefined };
       }
-
+      if (chunkView == undefined) {
+        throw new Error("must wait on yielded promise before continuing");
+      }
       const [logTime, offset] = cursor.popMessage();
       if (offset >= BigInt(chunkView.byteLength)) {
         throw this.#errorWithLibrary(
@@ -441,7 +493,7 @@ export class McapIndexedReader {
           `Message log time ${result.record.logTime} did not match message index entry (${logTime} at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
         );
       }
-      yield result.record;
+      yield { promise: undefined, message: result.record };
 
       if (cursor.hasMoreMessages()) {
         // There is no need to reorganize the heap when chunks are ordered and not overlapping.
