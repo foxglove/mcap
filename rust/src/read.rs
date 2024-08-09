@@ -144,7 +144,7 @@ fn read_record_from_slice<'a>(buf: &mut &'a [u8]) -> McapResult<records::Record<
 }
 
 /// Given a record's opcode and its slice, read it into a [Record]
-fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
+pub(crate) fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
     macro_rules! record {
         ($b:ident) => {{
             let mut cur = Cursor::new($b);
@@ -278,7 +278,7 @@ impl<'a> ChunkReader<'a> {
 
             #[cfg(feature = "lz4")]
             "lz4" => ChunkDecompressor::Compressed(Some(CountingCrcReader::new(Box::new(
-                lz4_flex::frame::FrameDecoder::new(data),
+                lz4::Decoder::new(data)?,
             )))),
 
             #[cfg(not(feature = "lz4"))]

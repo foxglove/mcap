@@ -75,6 +75,8 @@
 
 pub mod read;
 pub mod records;
+#[cfg(feature = "tokio")]
+pub mod tokio;
 pub mod write;
 
 mod io_utils;
@@ -119,6 +121,8 @@ pub enum McapError {
     UnexpectedEof,
     #[error("Chunk ended in the middle of a record")]
     UnexpectedEoc,
+    #[error("Record with opcode {opcode:02X} has length {len}, need at least {expected} to parse")]
+    RecordTooShort { opcode: u8, len: u64, expected: u64 },
     #[error("Message {0} referenced unknown channel {1}")]
     UnknownChannel(u32, u16),
     #[error("Channel `{0}` referenced unknown schema {1}")]

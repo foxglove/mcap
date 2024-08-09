@@ -711,7 +711,7 @@ enum Compressor<W: Write> {
     #[cfg(feature = "zstd")]
     Zstd(zstd::Encoder<'static, W>),
     #[cfg(feature = "lz4")]
-    Lz4(lz4_flex::frame::FrameEncoder<W>),
+    Lz4(lz4::Encoder<W>),
 }
 
 impl<W: Write> Compressor<W> {
@@ -721,7 +721,11 @@ impl<W: Write> Compressor<W> {
             #[cfg(feature = "zstd")]
             Compressor::Zstd(w) => w.finish()?,
             #[cfg(feature = "lz4")]
-            Compressor::Lz4(w) => w.finish()?,
+            Compressor::Lz4(w) => {
+                let (output, result) = w.finish();
+                result?;
+                output
+            }
         })
     }
 }
@@ -797,7 +801,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
                 Compressor::Zstd(enc)
             }
             #[cfg(feature = "lz4")]
-            Some(Compression::Lz4) => Compressor::Lz4(lz4_flex::frame::FrameEncoder::new(writer)),
+            Some(Compression::Lz4) => Compressor::Lz4(lz4::EncoderBuilder::new().build(writer)?),
             #[cfg(not(any(feature = "zstd", feature = "lz4")))]
             Some(_) => unreachable!("`Compression` is an empty enum that cannot be instantiated"),
             None => Compressor::Null(writer),
