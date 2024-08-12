@@ -1,4 +1,5 @@
 import { hrtime, memoryUsage } from "process";
+import { getHeapStatistics } from "v8";
 
 const COUNT = 5;
 
@@ -9,10 +10,8 @@ type BenchmarkResult =
       samples: {
         duration: bigint;
         memoryUsage: {
-          rss: number;
-          heapTotal: number;
-          heapUsed: number;
-          external: number;
+          usedHeapSize: number;
+          totalHeapSize: number;
           arrayBuffers: number;
         };
       }[];
@@ -40,12 +39,22 @@ export async function runBenchmark(name: string, run: () => Promise<void>): Prom
     };
     for (let i = 0; i < COUNT; i++) {
       global.gc();
+      const baseline = getHeapStatistics();
+      const baselineArrayBuffers = memoryUsage().arrayBuffers;
       const before = hrtime.bigint();
+
       await run();
+
       const after = hrtime.bigint();
+      const currentMemoryUsage = getHeapStatistics();
+      const currentArrayBuffers = process.memoryUsage().arrayBuffers;
       result.samples.push({
         duration: after - before,
-        memoryUsage: memoryUsage(),
+        memoryUsage: {
+          usedHeapSize: currentMemoryUsage.used_heap_size - baseline.used_heap_size,
+          totalHeapSize: currentMemoryUsage.total_heap_size - baseline.total_heap_size,
+          arrayBuffers: currentArrayBuffers - baselineArrayBuffers,
+        },
       });
     }
   } else {
@@ -84,11 +93,11 @@ function printStats(result: BenchmarkResult) {
   let memoryResult = "(use --expose-gc to gather memory statistics)";
   if (result.gcExposed) {
     const used = humanReadableStatistics(
-      result.samples.map((sample) => sample.memoryUsage.heapUsed / 2 ** 20),
+      result.samples.map((sample) => sample.memoryUsage.usedHeapSize / 2 ** 20),
       "MB/op",
     );
     const total = humanReadableStatistics(
-      result.samples.map((sample) => sample.memoryUsage.heapTotal / 2 ** 20),
+      result.samples.map((sample) => sample.memoryUsage.totalHeapSize / 2 ** 20),
       "MB/op",
     );
     const arrayBuffers = humanReadableStatistics(
