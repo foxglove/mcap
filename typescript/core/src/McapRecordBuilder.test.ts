@@ -20,29 +20,29 @@ describe("McapRecordBuilder", () => {
     const buffer = new BufferBuilder();
     buffer
       .uint8(1) // opcode
-      .uint64(BigInt(14)) // record content byte length
+      .uint64(14) // record content byte length
       .string("foo")
       .string("bar");
 
     expect(writer.buffer).toEqual(buffer.buffer);
-    expect(written).toEqual(BigInt(buffer.length));
+    expect(written).toEqual(buffer.length);
   });
 
   it("writes footer", () => {
     const writer = new McapRecordBuilder();
 
     writer.writeFooter({
-      summaryStart: 0n,
-      summaryOffsetStart: 0n,
+      summaryStart: 0,
+      summaryOffsetStart: 0,
       summaryCrc: 0,
     });
 
     const buffer = new BufferBuilder();
     buffer
       .uint8(2) // opcode
-      .uint64(BigInt(20)) // record content byte length
-      .uint64(0n)
-      .uint64(0n)
+      .uint64(20) // record content byte length
+      .uint64(0)
+      .uint64(0)
       .uint32(0);
 
     expect(writer.buffer).toEqual(buffer.buffer);
@@ -61,7 +61,7 @@ describe("McapRecordBuilder", () => {
     const buffer = new BufferBuilder();
     buffer
       .uint8(3) // opcode
-      .uint64(BigInt(42)) // record content byte length
+      .uint64(42) // record content byte length
       .uint16(1)
       .string("schema name")
       .string("some format")
@@ -69,7 +69,7 @@ describe("McapRecordBuilder", () => {
       .bytes(new TextEncoder().encode("schema"));
 
     expect(writer.buffer).toEqual(buffer.buffer);
-    expect(written).toEqual(BigInt(buffer.length));
+    expect(written).toEqual(buffer.length);
   });
 
   it("writes channel", () => {
@@ -86,7 +86,7 @@ describe("McapRecordBuilder", () => {
     const buffer = new BufferBuilder();
     buffer
       .uint8(4) // opcode
-      .uint64(BigInt(30)) // record content byte length
+      .uint64(30) // record content byte length
       .uint16(1)
       .uint16(2)
       .string("/topic")
@@ -94,7 +94,7 @@ describe("McapRecordBuilder", () => {
       .uint32(0); // user data length
 
     expect(writer.buffer).toEqual(buffer.buffer);
-    expect(written).toEqual(BigInt(buffer.length));
+    expect(written).toEqual(buffer.length);
   });
 
   it("writes messages", () => {
@@ -102,8 +102,8 @@ describe("McapRecordBuilder", () => {
 
     writer.writeMessage({
       channelId: 1,
-      logTime: 5n,
-      publishTime: 3n,
+      logTime: 5,
+      publishTime: 3,
       sequence: 7,
       data: new Uint8Array(),
     });
@@ -111,11 +111,11 @@ describe("McapRecordBuilder", () => {
     const buffer = new BufferBuilder();
     buffer
       .uint8(5) // opcode
-      .uint64(BigInt(22)) // record content byte length
+      .uint64(22) // record content byte length
       .uint16(1)
       .uint32(7)
-      .uint64(5n)
-      .uint64(3n);
+      .uint64(5)
+      .uint64(3);
 
     expect(buffer.length).toEqual(22 + 9);
     expect(writer.buffer).toEqual(buffer.buffer);
@@ -132,13 +132,13 @@ describe("McapRecordBuilder", () => {
     const buffer = new BufferBuilder();
     buffer
       .uint8(0x0c) // opcode
-      .uint64(BigInt(36)) // record content byte length
+      .uint64(36) // record content byte length
       .string("name")
       .uint32(24) // metadata byte length
       .string("something")
       .string("magical");
 
     expect(writer.buffer).toEqual(buffer.buffer);
-    expect(written).toEqual(BigInt(buffer.length));
+    expect(written).toEqual(buffer.length);
   });
 });

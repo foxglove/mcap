@@ -55,12 +55,12 @@ export class McapRecordBuilder {
     this.#bufferBuilder.bytes(new Uint8Array(MCAP_MAGIC));
   }
 
-  writeHeader(header: Header): bigint {
+  writeHeader(header: Header): number {
     this.#bufferBuilder.uint8(Opcode.HEADER);
 
     const startPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
-      .uint64(0n) // placeholder size
+      .uint64(0) // placeholder size
       .string(header.profile)
       .string(header.library);
 
@@ -71,29 +71,29 @@ export class McapRecordBuilder {
     const endPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
+      .uint64(endPosition - startPosition - 8)
       .seek(endPosition);
 
-    return BigInt(endPosition - startPosition + 1);
+    return endPosition - startPosition + 1;
   }
 
-  writeFooter(footer: Footer): bigint {
+  writeFooter(footer: Footer): number {
     this.#bufferBuilder
       .uint8(Opcode.FOOTER)
-      .uint64(20n) // footer is fixed length
+      .uint64(20) // footer is fixed length
       .uint64(footer.summaryStart)
       .uint64(footer.summaryOffsetStart)
       .uint32(footer.summaryCrc);
     // footer record cannot be padded
-    return 20n;
+    return 20;
   }
 
-  writeSchema(schema: Schema): bigint {
+  writeSchema(schema: Schema): number {
     this.#bufferBuilder.uint8(Opcode.SCHEMA);
 
     const startPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
-      .uint64(0n) // placeholder
+      .uint64(0) // placeholder
       .uint16(schema.id)
       .string(schema.name)
       .string(schema.encoding)
@@ -106,18 +106,18 @@ export class McapRecordBuilder {
     const endPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
+      .uint64(endPosition - startPosition - 8)
       .seek(endPosition);
 
-    return BigInt(endPosition - startPosition + 1);
+    return endPosition - startPosition + 1;
   }
 
-  writeChannel(info: Channel): bigint {
+  writeChannel(info: Channel): number {
     this.#bufferBuilder.uint8(Opcode.CHANNEL);
 
     const startPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
-      .uint64(0n) // placeholder
+      .uint64(0) // placeholder
       .uint16(info.id)
       .uint16(info.schemaId)
       .string(info.topic)
@@ -133,17 +133,17 @@ export class McapRecordBuilder {
     const endPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
+      .uint64(endPosition - startPosition - 8)
       .seek(endPosition);
 
-    return BigInt(endPosition - startPosition + 1);
+    return endPosition - startPosition + 1;
   }
 
   writeMessage(message: Message): void {
     this.#bufferBuilder.uint8(Opcode.MESSAGE);
     const startPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
-      .uint64(0n) // placeholder
+      .uint64(0) // placeholder
       .uint16(message.channelId)
       .uint32(message.sequence)
       .uint64(message.logTime)
@@ -153,22 +153,22 @@ export class McapRecordBuilder {
     const endPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
+      .uint64(endPosition - startPosition - 8)
       .seek(endPosition);
   }
 
-  writeAttachment(attachment: Attachment): bigint {
+  writeAttachment(attachment: Attachment): number {
     this.#bufferBuilder.uint8(Opcode.ATTACHMENT);
 
     const startPosition = this.#bufferBuilder.length;
-    this.#bufferBuilder.uint64(0n); // placeholder
+    this.#bufferBuilder.uint64(0); // placeholder
     const crcStartPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .uint64(attachment.logTime)
       .uint64(attachment.createTime)
       .string(attachment.name)
       .string(attachment.mediaType)
-      .uint64(BigInt(attachment.data.byteLength))
+      .uint64(attachment.data.byteLength)
       .bytes(attachment.data);
     this.#bufferBuilder.uint32(
       crc32(
@@ -185,18 +185,18 @@ export class McapRecordBuilder {
     const endPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
+      .uint64(endPosition - startPosition - 8)
       .seek(endPosition);
 
-    return BigInt(endPosition - startPosition + 1);
+    return endPosition - startPosition + 1;
   }
 
-  writeAttachmentIndex(attachmentIndex: AttachmentIndex): bigint {
+  writeAttachmentIndex(attachmentIndex: AttachmentIndex): number {
     this.#bufferBuilder.uint8(Opcode.ATTACHMENT_INDEX);
 
     const startPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
-      .uint64(0n) // placeholder
+      .uint64(0) // placeholder
       .uint64(attachmentIndex.offset)
       .uint64(attachmentIndex.length)
       .uint64(attachmentIndex.logTime)
@@ -211,41 +211,41 @@ export class McapRecordBuilder {
     const endPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
+      .uint64(endPosition - startPosition - 8)
       .seek(endPosition);
 
-    return BigInt(endPosition - startPosition + 1);
+    return endPosition - startPosition + 1;
   }
 
-  writeChunk(chunk: Chunk): bigint {
+  writeChunk(chunk: Chunk): number {
     this.#bufferBuilder.uint8(Opcode.CHUNK);
 
     const startPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
-      .uint64(0n) // placeholder
+      .uint64(0) // placeholder
       .uint64(chunk.messageStartTime)
       .uint64(chunk.messageEndTime)
       .uint64(chunk.uncompressedSize)
       .uint32(chunk.uncompressedCrc)
       .string(chunk.compression)
-      .uint64(BigInt(chunk.records.byteLength))
+      .uint64(chunk.records.byteLength)
       .bytes(chunk.records);
     // chunk record cannot be padded
     const endPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
+      .uint64(endPosition - startPosition - 8)
       .seek(endPosition);
 
-    return BigInt(endPosition - startPosition + 1);
+    return endPosition - startPosition + 1;
   }
 
-  writeChunkIndex(chunkIndex: ChunkIndex): bigint {
+  writeChunkIndex(chunkIndex: ChunkIndex): number {
     this.#bufferBuilder.uint8(Opcode.CHUNK_INDEX);
 
     const startPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
-      .uint64(0n) // placeholder
+      .uint64(0) // placeholder
       .uint64(chunkIndex.messageStartTime)
       .uint64(chunkIndex.messageEndTime)
       .uint64(chunkIndex.chunkStartOffset)
@@ -268,13 +268,13 @@ export class McapRecordBuilder {
     const endPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
+      .uint64(endPosition - startPosition - 8)
       .seek(endPosition);
 
-    return BigInt(endPosition - startPosition + 1);
+    return endPosition - startPosition + 1;
   }
 
-  writeMessageIndex(messageIndex: MessageIndex): bigint {
+  writeMessageIndex(messageIndex: MessageIndex): number {
     this.#bufferBuilder.uint8(Opcode.MESSAGE_INDEX);
     const startPosition = this.#bufferBuilder.length;
 
@@ -282,7 +282,7 @@ export class McapRecordBuilder {
     const messageIndexRecordsByteLength = messageIndex.records.length * 16;
 
     this.#bufferBuilder
-      .uint64(0n) // placeholder
+      .uint64(0) // placeholder
       .uint16(messageIndex.channelId)
       .uint32(messageIndexRecordsByteLength);
 
@@ -296,17 +296,17 @@ export class McapRecordBuilder {
     const endPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
+      .uint64(endPosition - startPosition - 8)
       .seek(endPosition);
-    return BigInt(endPosition - startPosition + 1);
+    return endPosition - startPosition + 1;
   }
 
-  writeMetadata(metadata: Metadata): bigint {
+  writeMetadata(metadata: Metadata): number {
     this.#bufferBuilder.uint8(Opcode.METADATA);
 
     const startPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
-      .uint64(0n) // placeholder size
+      .uint64(0) // placeholder size
       .string(metadata.name)
       .tupleArray(
         (key) => this.#bufferBuilder.string(key),
@@ -320,18 +320,18 @@ export class McapRecordBuilder {
     const endPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
+      .uint64(endPosition - startPosition - 8)
       .seek(endPosition);
 
-    return BigInt(endPosition - startPosition + 1);
+    return endPosition - startPosition + 1;
   }
 
-  writeMetadataIndex(metadataIndex: MetadataIndex): bigint {
+  writeMetadataIndex(metadataIndex: MetadataIndex): number {
     this.#bufferBuilder.uint8(Opcode.METADATA_INDEX);
 
     const startPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
-      .uint64(0n) // placeholder size
+      .uint64(0) // placeholder size
       .uint64(metadataIndex.offset)
       .uint64(metadataIndex.length)
       .string(metadataIndex.name);
@@ -342,18 +342,18 @@ export class McapRecordBuilder {
     const endPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
+      .uint64(endPosition - startPosition - 8)
       .seek(endPosition);
 
-    return BigInt(endPosition - startPosition + 1);
+    return endPosition - startPosition + 1;
   }
 
-  writeSummaryOffset(summaryOffset: SummaryOffset): bigint {
+  writeSummaryOffset(summaryOffset: SummaryOffset): number {
     this.#bufferBuilder.uint8(Opcode.SUMMARY_OFFSET);
 
     const startPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
-      .uint64(0n) // placeholder size
+      .uint64(0) // placeholder size
       .uint8(summaryOffset.groupOpcode)
       .uint64(summaryOffset.groupStart)
       .uint64(summaryOffset.groupLength);
@@ -364,19 +364,19 @@ export class McapRecordBuilder {
     const endPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
+      .uint64(endPosition - startPosition - 8)
       .seek(endPosition);
 
-    return BigInt(endPosition - startPosition + 1);
+    return endPosition - startPosition + 1;
   }
 
-  writeStatistics(statistics: Statistics): bigint {
+  writeStatistics(statistics: Statistics): number {
     this.#bufferBuilder.uint8(Opcode.STATISTICS);
 
     const startPosition = this.#bufferBuilder.length;
 
     this.#bufferBuilder
-      .uint64(0n) // placeholder size
+      .uint64(0) // placeholder size
       .uint64(statistics.messageCount)
       .uint16(statistics.schemaCount)
       .uint32(statistics.channelCount)
@@ -397,18 +397,18 @@ export class McapRecordBuilder {
     const endPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .seek(startPosition)
-      .uint64(BigInt(endPosition - startPosition - 8))
+      .uint64(endPosition - startPosition - 8)
       .seek(endPosition);
 
-    return BigInt(endPosition - startPosition + 1);
+    return endPosition - startPosition + 1;
   }
 
-  writeDataEnd(dataEnd: DataEnd): bigint {
+  writeDataEnd(dataEnd: DataEnd): number {
     this.#bufferBuilder
       .uint8(Opcode.DATA_END)
-      .uint64(4n) // data end is fixed length
+      .uint64(4) // data end is fixed length
       .uint32(dataEnd.dataSectionCrc);
     // data end record cannot be padded
-    return 4n;
+    return 4;
   }
 }

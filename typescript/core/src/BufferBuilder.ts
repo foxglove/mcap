@@ -73,15 +73,17 @@ export class BufferBuilder {
     this.#offset += 4;
     return this;
   }
-  int64(value: bigint): this {
+  int64(value: number | bigint): this {
+    const bigIntValue = typeof value === "number" ? BigInt(value) : value;
     this.#ensureAdditionalCapacity(8);
-    this.#view.setBigInt64(this.#offset, value, LITTLE_ENDIAN);
+    this.#view.setBigInt64(this.#offset, bigIntValue, LITTLE_ENDIAN);
     this.#offset += 8;
     return this;
   }
-  uint64(value: bigint): this {
+  uint64(value: number | bigint): this {
+    const bigIntValue = typeof value === "number" ? BigInt(value) : value;
     this.#ensureAdditionalCapacity(8);
-    this.#view.setBigUint64(this.#offset, value, LITTLE_ENDIAN);
+    this.#view.setBigUint64(this.#offset, bigIntValue, LITTLE_ENDIAN);
     this.#offset += 8;
     return this;
   }

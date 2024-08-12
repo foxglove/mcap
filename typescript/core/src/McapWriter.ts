@@ -99,14 +99,14 @@ export class McapWriter {
     this.#useSummaryOffsets = useSummaryOffsets;
     if (useStatistics) {
       this.statistics = {
-        messageCount: 0n,
+        messageCount: 0,
         schemaCount: 0,
         channelCount: 0,
         attachmentCount: 0,
         metadataCount: 0,
         chunkCount: 0,
-        messageStartTime: 0n,
-        messageEndTime: 0n,
+        messageStartTime: 0,
+        messageEndTime: 0,
         channelMessageCounts: new Map(),
       };
     }
@@ -217,7 +217,7 @@ export class McapWriter {
 
     if (this.#repeatSchemas) {
       const schemaStart = this.#writable.position();
-      let schemaLength = 0n;
+      let schemaLength = 0;
       for (const schema of this.#schemas.values()) {
         schemaLength += this.#recordWriter.writeSchema(schema);
       }
@@ -233,7 +233,7 @@ export class McapWriter {
       await this.#writable.write(this.#recordWriter.buffer);
       this.#recordWriter.reset();
       const channelStart = this.#writable.position();
-      let channelLength = 0n;
+      let channelLength = 0;
       for (const channel of this.#channels.values()) {
         channelLength += this.#recordWriter.writeChannel(channel);
       }
@@ -266,7 +266,7 @@ export class McapWriter {
       await this.#writable.write(this.#recordWriter.buffer);
       this.#recordWriter.reset();
       const metadataIndexStart = this.#writable.position();
-      let metadataIndexLength = 0n;
+      let metadataIndexLength = 0;
       for (const metadataIndex of this.#metadataIndices) {
         metadataIndexLength += this.#recordWriter.writeMetadataIndex(metadataIndex);
       }
@@ -282,7 +282,7 @@ export class McapWriter {
       await this.#writable.write(this.#recordWriter.buffer);
       this.#recordWriter.reset();
       const attachmentIndexStart = this.#writable.position();
-      let attachmentIndexLength = 0n;
+      let attachmentIndexLength = 0;
       for (const attachmentIndex of this.#attachmentIndices) {
         attachmentIndexLength += this.#recordWriter.writeAttachmentIndex(attachmentIndex);
       }
@@ -298,7 +298,7 @@ export class McapWriter {
       await this.#writable.write(this.#recordWriter.buffer);
       this.#recordWriter.reset();
       const chunkIndexStart = this.#writable.position();
-      let chunkIndexLength = 0n;
+      let chunkIndexLength = 0;
       for (const chunkIndex of this.#chunkIndices) {
         chunkIndexLength += this.#recordWriter.writeChunkIndex(chunkIndex);
       }
@@ -318,7 +318,7 @@ export class McapWriter {
 
     if (this.#useSummaryOffsets) {
       for (const summaryOffset of summaryOffsets) {
-        if (summaryOffset.groupLength !== 0n) {
+        if (summaryOffset.groupLength !== 0) {
           this.#recordWriter.writeSummaryOffset(summaryOffset);
         }
       }
@@ -327,15 +327,15 @@ export class McapWriter {
     summaryCrc = crc32Update(summaryCrc, this.#recordWriter.buffer);
 
     const footer: Footer = {
-      summaryStart: summaryLength === 0n ? 0n : summaryStart,
-      summaryOffsetStart: this.#useSummaryOffsets ? summaryOffsetStart : 0n,
+      summaryStart: summaryLength === 0 ? 0 : summaryStart,
+      summaryOffsetStart: this.#useSummaryOffsets ? summaryOffsetStart : 0,
       summaryCrc: 0,
     };
     const tempBuffer = new DataView(new ArrayBuffer(1 + 8 + 8 + 8));
     tempBuffer.setUint8(0, Opcode.FOOTER);
-    tempBuffer.setBigUint64(1, 8n + 8n + 4n, true);
-    tempBuffer.setBigUint64(1 + 8, footer.summaryStart, true);
-    tempBuffer.setBigUint64(1 + 8 + 8, footer.summaryOffsetStart, true);
+    tempBuffer.setBigUint64(1, BigInt(8 + 8 + 4), true);
+    tempBuffer.setBigUint64(1 + 8, BigInt(footer.summaryStart), true);
+    tempBuffer.setBigUint64(1 + 8 + 8, BigInt(footer.summaryOffsetStart), true);
     summaryCrc = crc32Update(summaryCrc, tempBuffer);
     footer.summaryCrc = crc32Final(summaryCrc);
 
@@ -373,7 +373,7 @@ export class McapWriter {
 
   async addMessage(message: Message): Promise<void> {
     if (this.statistics) {
-      if (this.statistics.messageCount === 0n) {
+      if (this.statistics.messageCount === 0) {
         this.statistics.messageStartTime = message.logTime;
         this.statistics.messageEndTime = message.logTime;
       } else {
@@ -386,7 +386,7 @@ export class McapWriter {
       }
       this.statistics.channelMessageCounts.set(
         message.channelId,
-        (this.statistics.channelMessageCounts.get(message.channelId) ?? 0n) + 1n,
+        (this.statistics.channelMessageCounts.get(message.channelId) ?? 0) + 1,
       );
       ++this.statistics.messageCount;
     }
@@ -448,7 +448,7 @@ export class McapWriter {
         name: attachment.name,
         mediaType: attachment.mediaType,
         offset,
-        dataSize: BigInt(attachment.data.byteLength),
+        dataSize: attachment.data.byteLength,
         length,
       });
     }
@@ -491,7 +491,7 @@ export class McapWriter {
     }
 
     const chunkData = this.#chunkBuilder.buffer;
-    const uncompressedSize = BigInt(chunkData.length);
+    const uncompressedSize = chunkData.length;
     const uncompressedCrc = crc32(chunkData);
     let compression = "";
     let compressedData = chunkData;
@@ -512,7 +512,7 @@ export class McapWriter {
 
     const chunkLength = this.#recordWriter.writeChunk(chunkRecord);
 
-    const messageIndexOffsets = this.#chunkIndices ? new Map<number, bigint>() : undefined;
+    const messageIndexOffsets = this.#chunkIndices ? new Map<number, number>() : undefined;
 
     if (this.#dataSectionCrc != undefined) {
       this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
@@ -521,7 +521,7 @@ export class McapWriter {
     this.#recordWriter.reset();
 
     const messageIndexStart = this.#writable.position();
-    let messageIndexLength = 0n;
+    let messageIndexLength = 0;
     for (const messageIndex of this.#chunkBuilder.indices) {
       messageIndexOffsets?.set(messageIndex.channelId, messageIndexStart + messageIndexLength);
       messageIndexLength += this.#recordWriter.writeMessageIndex(messageIndex);
@@ -536,7 +536,7 @@ export class McapWriter {
         messageIndexOffsets: messageIndexOffsets!,
         messageIndexLength,
         compression: chunkRecord.compression,
-        compressedSize: BigInt(chunkRecord.records.byteLength),
+        compressedSize: chunkRecord.records.byteLength,
         uncompressedSize: chunkRecord.uncompressedSize,
       });
     }

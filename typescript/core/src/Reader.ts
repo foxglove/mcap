@@ -46,8 +46,8 @@ export default class Reader {
     return value;
   }
 
-  uint64(): bigint {
-    const value = getBigUint64.call(this.#view, this.offset, true);
+  uint64(): number {
+    const value = getBigUint64(this.#view, this.offset, true);
     this.offset += 8;
     return value;
   }

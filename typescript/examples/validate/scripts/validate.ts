@@ -42,7 +42,7 @@ async function readStream(
   processRecord: (record: TypedMcapRecord) => void,
 ) {
   const startTime = performance.now();
-  let readBytes = 0n;
+  let readBytes = 0;
 
   let lastRecordType: TypedMcapRecord["type"] | undefined;
   await new Promise<void>((resolve, reject) => {
@@ -52,7 +52,7 @@ async function readStream(
         if (typeof data === "string") {
           throw new Error("expected buffer");
         }
-        readBytes += BigInt(data.byteLength);
+        readBytes += data.byteLength;
         reader.append(data);
         for (let record; (record = reader.nextRecord()); ) {
           lastRecordType = record.type;

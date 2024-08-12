@@ -31,8 +31,8 @@ describe("McapStreamReader", () => {
       new Uint8Array([
         ...MCAP_MAGIC,
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0x0123456789abcdefn), // summary start
-          ...uint64LE(0x0123456789abcdefn), // summary offset start
+          ...uint64LE(0x0123456789abcdef), // summary start
+          ...uint64LE(0x0123456789abcdef), // summary offset start
           ...uint32LE(0x01234567), // summary crc
         ]),
         ...MCAP_MAGIC.slice(0, MCAP_MAGIC.length - 1),
@@ -49,8 +49,8 @@ describe("McapStreamReader", () => {
         ...MCAP_MAGIC,
         ...record(Opcode.HEADER, [...string("prof"), ...string("lib")]),
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0x0123456789abcdefn), // summary start
-          ...uint64LE(0x0123456789abcdefn), // summary offset start
+          ...uint64LE(0x0123456789abcdef), // summary start
+          ...uint64LE(0x0123456789abcdef), // summary offset start
           ...uint32LE(0x01234567), // summary crc
         ]),
         ...[0, 0, 0, 0, 0, 0, 0, 0],
@@ -66,8 +66,8 @@ describe("McapStreamReader", () => {
       new Uint8Array([
         ...MCAP_MAGIC,
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0x0123456789abcdefn), // summary start
-          ...uint64LE(0x0123456789abcdefn), // summary offset start
+          ...uint64LE(0x0123456789abcdef), // summary start
+          ...uint64LE(0x0123456789abcdef), // summary offset start
           ...uint32LE(0x01234567), // summary crc
         ]),
         ...[0, 0, 0, 0, 0, 0, 0, 0],
@@ -82,8 +82,8 @@ describe("McapStreamReader", () => {
       new Uint8Array([
         ...MCAP_MAGIC,
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0x0123456789abcdefn), // summary start
-          ...uint64LE(0x0123456789abcdefn), // summary offset start
+          ...uint64LE(0x0123456789abcdef), // summary start
+          ...uint64LE(0x0123456789abcdef), // summary offset start
           ...uint32LE(0x01234567), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -91,8 +91,8 @@ describe("McapStreamReader", () => {
     );
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      summaryStart: 0x0123456789abcdefn,
-      summaryOffsetStart: 0x0123456789abcdefn,
+      summaryStart: 0x0123456789abcdef,
+      summaryOffsetStart: 0x0123456789abcdef,
       summaryCrc: 0x01234567,
     });
     expect(reader.done()).toBe(true);
@@ -104,20 +104,20 @@ describe("McapStreamReader", () => {
       new Uint8Array([
         ...MCAP_MAGIC,
         ...record(Opcode.CHUNK, [
-          ...uint64LE(0n), // start_time
-          ...uint64LE(0n), // end_time
-          ...uint64LE(0n), // decompressed size
+          ...uint64LE(0), // start_time
+          ...uint64LE(0), // end_time
+          ...uint64LE(0), // decompressed size
           ...uint32LE(0), // decompressed crc32
           ...string("lz4"), // compression
-          ...uint64LE(BigInt(0n)),
+          ...uint64LE(0),
           // no chunk data
         ]),
         ...record(Opcode.DATA_END, [
           ...uint32LE(0), // data section crc
         ]),
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary start
-          ...uint64LE(0n), // summary offset start
+          ...uint64LE(0), // summary start
+          ...uint64LE(0), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -129,8 +129,8 @@ describe("McapStreamReader", () => {
     });
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      summaryStart: 0n,
-      summaryOffsetStart: 0n,
+      summaryStart: 0,
+      summaryOffsetStart: 0,
       summaryCrc: 0,
     });
     expect(reader.done()).toBe(true);
@@ -141,8 +141,8 @@ describe("McapStreamReader", () => {
     const data = new Uint8Array([
       ...MCAP_MAGIC,
       ...record(Opcode.FOOTER, [
-        ...uint64LE(0x0123456789abcdefn), // summary start
-        ...uint64LE(0x0123456789abcdefn), // summary offset start
+        ...uint64LE(0x0123456789abcdef), // summary start
+        ...uint64LE(0x0123456789abcdef), // summary offset start
         ...uint32LE(0x01234567), // summary crc
       ]),
       ...MCAP_MAGIC,
@@ -155,8 +155,8 @@ describe("McapStreamReader", () => {
     reader.append(new Uint8Array(data.buffer, data.length - 1, 1));
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      summaryStart: 0x0123456789abcdefn,
-      summaryOffsetStart: 0x0123456789abcdefn,
+      summaryStart: 0x0123456789abcdef,
+      summaryOffsetStart: 0x0123456789abcdef,
       summaryCrc: 0x01234567,
     });
     expect(reader.done()).toBe(true);
@@ -171,8 +171,8 @@ describe("McapStreamReader", () => {
       new Uint8Array([
         ...MCAP_MAGIC,
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0x0123456789abcdefn), // summary start
-          ...uint64LE(0x0123456789abcdefn), // summary offset start
+          ...uint64LE(0x0123456789abcdef), // summary start
+          ...uint64LE(0x0123456789abcdef), // summary offset start
           ...uint32LE(0x01234567), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -189,18 +189,18 @@ describe("McapStreamReader", () => {
         ...MCAP_MAGIC,
 
         ...record(Opcode.CHUNK, [
-          ...uint64LE(0n), // start_time
-          ...uint64LE(0n), // end_time
-          ...uint64LE(0n), // decompressed size
+          ...uint64LE(0), // start_time
+          ...uint64LE(0), // end_time
+          ...uint64LE(0), // decompressed size
           ...uint32LE(0), // decompressed crc32
           ...string(""), // compression
-          ...uint64LE(BigInt(0n)),
+          ...uint64LE(0),
           // (no chunk data)
         ]),
 
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary start
-          ...uint64LE(0n), // summary offset start
+          ...uint64LE(0), // summary start
+          ...uint64LE(0), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -208,8 +208,8 @@ describe("McapStreamReader", () => {
     );
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      summaryStart: 0n,
-      summaryOffsetStart: 0n,
+      summaryStart: 0,
+      summaryOffsetStart: 0,
       summaryCrc: 0,
     });
     expect(reader.done()).toBe(true);
@@ -222,18 +222,18 @@ describe("McapStreamReader", () => {
         ...MCAP_MAGIC,
 
         ...record(Opcode.CHUNK, [
-          ...uint64LE(0n), // start_time
-          ...uint64LE(0n), // end_time
-          ...uint64LE(1n), // decompressed size
+          ...uint64LE(0), // start_time
+          ...uint64LE(0), // end_time
+          ...uint64LE(1), // decompressed size
           ...uint32LE(crc32(new Uint8Array([Opcode.CHANNEL]))), // decompressed crc32
           ...string(""), // compression
-          ...uint64LE(BigInt(1n)),
+          ...uint64LE(1),
           Opcode.CHANNEL, // truncated record
         ]),
 
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary start
-          ...uint64LE(0n), // summary offset start
+          ...uint64LE(0), // summary start
+          ...uint64LE(0), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -251,13 +251,13 @@ describe("McapStreamReader", () => {
         ...record(Opcode.MESSAGE, [
           ...uint16LE(42), // channel id
           ...uint32LE(0), // sequence
-          ...uint64LE(0n), // log time
-          ...uint64LE(0n), // publish time
+          ...uint64LE(0), // log time
+          ...uint64LE(0), // publish time
         ]),
 
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary start
-          ...uint64LE(0n), // summary offset start
+          ...uint64LE(0), // summary start
+          ...uint64LE(0), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -272,8 +272,8 @@ describe("McapStreamReader", () => {
     const message = record(Opcode.MESSAGE, [
       ...uint16LE(42), // channel id
       ...uint32LE(0), // sequence
-      ...uint64LE(0n), // log time
-      ...uint64LE(0n), // publish time
+      ...uint64LE(0), // log time
+      ...uint64LE(0), // publish time
     ]);
     const reader = new McapStreamReader();
     reader.append(
@@ -281,18 +281,18 @@ describe("McapStreamReader", () => {
         ...MCAP_MAGIC,
 
         ...record(Opcode.CHUNK, [
-          ...uint64LE(0n), // start_time
-          ...uint64LE(0n), // end_time
-          ...uint64LE(0n), // decompressed size
+          ...uint64LE(0), // start_time
+          ...uint64LE(0), // end_time
+          ...uint64LE(0), // decompressed size
           ...uint32LE(crc32(message)), // decompressed crc32
           ...string(""), // compression
-          ...uint64LE(BigInt(message.byteLength)),
+          ...uint64LE(message.byteLength),
           ...message,
         ]),
 
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary start
-          ...uint64LE(0n), // summary offset start
+          ...uint64LE(0), // summary start
+          ...uint64LE(0), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -317,8 +317,8 @@ describe("McapStreamReader", () => {
           11,
         ]),
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary start
-          ...uint64LE(0n), // summary offset start
+          ...uint64LE(0), // summary start
+          ...uint64LE(0), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -335,18 +335,18 @@ describe("McapStreamReader", () => {
         ...record(
           Opcode.ATTACHMENT,
           crcSuffix([
-            ...uint64LE(2n), // log time
-            ...uint64LE(1n), // create time
+            ...uint64LE(2), // log time
+            ...uint64LE(1), // create time
             ...string("myFile"), // name
             ...string("text/plain"), // media type
-            ...uint64LE(3n), // data length
+            ...uint64LE(3), // data length
             10,
             11,
           ]),
         ),
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary start
-          ...uint64LE(0n), // summary offset start
+          ...uint64LE(0), // summary start
+          ...uint64LE(0), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -370,8 +370,8 @@ describe("McapStreamReader", () => {
         ]),
 
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary start
-          ...uint64LE(0n), // summary offset start
+          ...uint64LE(0), // summary start
+          ...uint64LE(0), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -387,8 +387,8 @@ describe("McapStreamReader", () => {
     } as TypedMcapRecords["Channel"]);
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      summaryStart: 0n,
-      summaryOffsetStart: 0n,
+      summaryStart: 0,
+      summaryOffsetStart: 0,
       summaryCrc: 0,
     });
     expect(reader.done()).toBe(true);
@@ -411,18 +411,18 @@ describe("McapStreamReader", () => {
         ...MCAP_MAGIC,
 
         ...record(Opcode.CHUNK, [
-          ...uint64LE(0n), // start_time
-          ...uint64LE(0n), // end_time
-          ...uint64LE(0n), // decompressed size
+          ...uint64LE(0), // start_time
+          ...uint64LE(0), // end_time
+          ...uint64LE(0), // decompressed size
           ...uint32LE(crc32(channel)), // decompressed crc32
           ...string(compressed ? "xyz" : ""), // compression
-          ...uint64LE(BigInt(payload.byteLength)),
+          ...uint64LE(payload.byteLength),
           ...payload,
         ]),
 
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary start
-          ...uint64LE(0n), // summary offset start
+          ...uint64LE(0), // summary start
+          ...uint64LE(0), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -438,8 +438,8 @@ describe("McapStreamReader", () => {
     } as TypedMcapRecords["Channel"]);
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      summaryStart: 0n,
-      summaryOffsetStart: 0n,
+      summaryStart: 0,
+      summaryOffsetStart: 0,
       summaryCrc: 0,
     });
     expect(reader.done()).toBe(true);
@@ -496,39 +496,39 @@ describe("McapStreamReader", () => {
               ? [...channel, ...channel2]
               : testType === "same chunk"
                 ? record(Opcode.CHUNK, [
-                    ...uint64LE(0n), // start_time
-                    ...uint64LE(0n), // end_time
-                    ...uint64LE(0n), // decompressed size
+                    ...uint64LE(0), // start_time
+                    ...uint64LE(0), // end_time
+                    ...uint64LE(0), // decompressed size
                     ...uint32LE(crc32(new Uint8Array([...channel, ...channel2]))), // decompressed crc32
                     ...string(""), // compression
-                    ...uint64LE(BigInt(channel.byteLength + channel2.byteLength)),
+                    ...uint64LE(channel.byteLength + channel2.byteLength),
                     ...channel,
                     ...channel2,
                   ])
                 : [
                     ...record(Opcode.CHUNK, [
-                      ...uint64LE(0n), // start_time
-                      ...uint64LE(0n), // end_time
-                      ...uint64LE(0n), // decompressed size
+                      ...uint64LE(0), // start_time
+                      ...uint64LE(0), // end_time
+                      ...uint64LE(0), // decompressed size
                       ...uint32LE(crc32(new Uint8Array(channel))), // decompressed crc32
                       ...string(""), // compression
-                      ...uint64LE(BigInt(channel.byteLength)),
+                      ...uint64LE(channel.byteLength),
                       ...channel,
                     ]),
                     ...record(Opcode.CHUNK, [
-                      ...uint64LE(0n), // start_time
-                      ...uint64LE(0n), // end_time
-                      ...uint64LE(0n), // decompressed size
+                      ...uint64LE(0), // start_time
+                      ...uint64LE(0), // end_time
+                      ...uint64LE(0), // decompressed size
                       ...uint32LE(crc32(new Uint8Array(channel2))), // decompressed crc32
                       ...string(""), // compression
-                      ...uint64LE(BigInt(channel2.byteLength)),
+                      ...uint64LE(channel2.byteLength),
                       ...channel2,
                     ]),
                   ]),
 
             ...record(Opcode.FOOTER, [
-              ...uint64LE(0n), // summary start
-              ...uint64LE(0n), // summary offset start
+              ...uint64LE(0), // summary start
+              ...uint64LE(0), // summary offset start
               ...uint32LE(0), // summary crc
             ]),
             ...MCAP_MAGIC,
@@ -557,16 +557,16 @@ describe("McapStreamReader", () => {
         ...record(
           Opcode.ATTACHMENT,
           crcSuffix([
-            ...uint64LE(2n), // log time
-            ...uint64LE(1n), // create time
+            ...uint64LE(2), // log time
+            ...uint64LE(1), // create time
             ...string("myFile"), // name
             ...string("text/plain"), // media type
             ...uint64PrefixedBytes(new TextEncoder().encode("hello")), // data
           ]),
         ),
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary start
-          ...uint64LE(0n), // summary offset start
+          ...uint64LE(0), // summary start
+          ...uint64LE(0), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -575,15 +575,15 @@ describe("McapStreamReader", () => {
     expect(reader.nextRecord()).toEqual({
       type: "Attachment",
       name: "myFile",
-      logTime: 2n,
-      createTime: 1n,
+      logTime: 2,
+      createTime: 1,
       mediaType: "text/plain",
       data: new TextEncoder().encode("hello"),
     } as TypedMcapRecords["Attachment"]);
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      summaryStart: 0n,
-      summaryOffsetStart: 0n,
+      summaryStart: 0,
+      summaryOffsetStart: 0,
       summaryCrc: 0,
     });
     expect(reader.done()).toBe(true);
@@ -600,20 +600,20 @@ describe("McapStreamReader", () => {
     const fullMcap = new Uint8Array([
       ...MCAP_MAGIC,
       ...record(Opcode.CHUNK, [
-        ...uint64LE(0n), // start_time
-        ...uint64LE(0n), // end_time
-        ...uint64LE(BigInt(channel.byteLength)), // decompressed size
+        ...uint64LE(0), // start_time
+        ...uint64LE(0), // end_time
+        ...uint64LE(channel.byteLength), // decompressed size
         ...uint32LE(0), // decompressed crc32
         ...string(""), // compression
-        ...uint64LE(BigInt(channel.byteLength)),
+        ...uint64LE(channel.byteLength),
         ...channel,
       ]),
       ...record(Opcode.DATA_END, [
         ...uint32LE(0), // data section crc
       ]),
       ...record(Opcode.FOOTER, [
-        ...uint64LE(0n), // summary start
-        ...uint64LE(0n), // summary offset start
+        ...uint64LE(0), // summary start
+        ...uint64LE(0), // summary offset start
         ...uint32LE(0), // summary crc
       ]),
       ...MCAP_MAGIC,
@@ -627,9 +627,9 @@ describe("McapStreamReader", () => {
     reader.append(fullMcap.slice(MCAP_MAGIC.length));
     expect(reader.nextRecord()).toEqual({
       type: "Chunk",
-      messageStartTime: 0n,
-      messageEndTime: 0n,
-      uncompressedSize: BigInt(channel.byteLength),
+      messageStartTime: 0,
+      messageEndTime: 0,
+      uncompressedSize: channel.byteLength,
       uncompressedCrc: 0,
       compression: "",
       records: channel,
@@ -648,8 +648,8 @@ describe("McapStreamReader", () => {
     });
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
-      summaryStart: 0n,
-      summaryOffsetStart: 0n,
+      summaryStart: 0,
+      summaryOffsetStart: 0,
       summaryCrc: 0,
     });
     expect(reader.done()).toBe(true);

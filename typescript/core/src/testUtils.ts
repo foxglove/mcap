@@ -14,9 +14,9 @@ export function uint32LE(n: number): Uint8Array {
   return result;
 }
 
-export function uint64LE(n: bigint): Uint8Array {
+export function uint64LE(n: number | bigint): Uint8Array {
   const result = new Uint8Array(8);
-  new DataView(result.buffer).setBigUint64(0, n, true);
+  new DataView(result.buffer).setBigUint64(0, BigInt(n), true);
   return result;
 }
 

@@ -1,6 +1,7 @@
 import { crc32, crc32Final, crc32Init, crc32Update } from "@foxglove/crc";
 import Heap from "heap-js";
 
+import { getBigUint64 } from "./getBigUint64";
 import { ChunkCursor } from "./ChunkCursor";
 import Reader from "./Reader";
 import { MCAP_MAGIC } from "./constants";
@@ -19,7 +20,7 @@ type McapIndexedReaderArgs = {
   summaryOffsetsByOpcode: ReadonlyMap<number, TypedMcapRecords["SummaryOffset"]>;
   header: TypedMcapRecords["Header"];
   footer: TypedMcapRecords["Footer"];
-  dataEndOffset: bigint;
+  dataEndOffset: number;
   dataSectionCrc?: number;
 };
 
@@ -34,16 +35,16 @@ export class McapIndexedReader {
   readonly header: TypedMcapRecords["Header"];
   readonly footer: TypedMcapRecords["Footer"];
   // Used for appending attachments/metadata to existing MCAP files
-  readonly dataEndOffset: bigint;
+  readonly dataEndOffset: number;
   readonly dataSectionCrc?: number;
 
   #readable: IReadable;
   #decompressHandlers?: DecompressHandlers;
 
-  #messageStartTime: bigint | undefined;
-  #messageEndTime: bigint | undefined;
-  #attachmentStartTime: bigint | undefined;
-  #attachmentEndTime: bigint | undefined;
+  #messageStartTime: number | undefined;
+  #messageEndTime: number | undefined;
+  #attachmentStartTime: number | undefined;
+  #attachmentEndTime: number | undefined;
 
   private constructor(args: McapIndexedReaderArgs) {
     this.#readable = args.readable;
@@ -101,11 +102,11 @@ export class McapIndexedReader {
     const size = await readable.size();
 
     let header: TypedMcapRecords["Header"];
-    let headerEndOffset: bigint;
+    let headerEndOffset: number;
     {
       const headerPrefix = await readable.read(
-        0n,
-        BigInt(MCAP_MAGIC.length + /* Opcode.HEADER */ 1 + /* record content length */ 8),
+        0,
+        MCAP_MAGIC.length + /* Opcode.HEADER */ 1 + /* record content length */ 8,
       );
       const headerPrefixView = new DataView(
         headerPrefix.buffer,
@@ -113,15 +114,16 @@ export class McapIndexedReader {
         headerPrefix.byteLength,
       );
       void parseMagic(new Reader(headerPrefixView));
-      const headerContentLength = headerPrefixView.getBigUint64(
+      const headerContentLength = getBigUint64(
+        headerPrefixView,
         MCAP_MAGIC.length + /* Opcode.HEADER */ 1,
         true,
       );
       const headerReadLength =
-        /* Opcode.HEADER */ 1n + /* record content length */ 8n + headerContentLength;
+        /* Opcode.HEADER */ 1 + /* record content length */ 8 + headerContentLength;
 
-      const headerRecord = await readable.read(BigInt(MCAP_MAGIC.length), headerReadLength);
-      headerEndOffset = BigInt(MCAP_MAGIC.length) + headerReadLength;
+      const headerRecord = await readable.read(MCAP_MAGIC.length, headerReadLength);
+      headerEndOffset = MCAP_MAGIC.length + headerReadLength;
       const headerReader = new Reader(
         new DataView(headerRecord.buffer, headerRecord.byteOffset, headerRecord.byteLength),
       );
@@ -141,24 +143,22 @@ export class McapIndexedReader {
       return new Error(`${message} [library=${header.library}]`);
     }
 
-    let footerOffset: bigint;
+    let footerOffset: number;
     let footerAndMagicView: DataView;
     {
-      const headerLengthLowerBound = BigInt(
+      const headerLengthLowerBound =
         MCAP_MAGIC.length +
-          /* Opcode.HEADER */ 1 +
-          /* record content length */ 8 +
-          /* profile length */ 4 +
-          /* library length */ 4,
-      );
-      const footerAndMagicReadLength = BigInt(
+        /* Opcode.HEADER */ 1 +
+        /* record content length */ 8 +
+        /* profile length */ 4 +
+        /* library length */ 4;
+      const footerAndMagicReadLength =
         /* Opcode.FOOTER */ 1 +
-          /* record content length */ 8 +
-          /* summaryStart */ 8 +
-          /* summaryOffsetStart */ 8 +
-          /* crc */ 4 +
-          MCAP_MAGIC.length,
-      );
+        /* record content length */ 8 +
+        /* summaryStart */ 8 +
+        /* summaryOffsetStart */ 8 +
+        /* crc */ 4 +
+        MCAP_MAGIC.length;
       if (size < headerLengthLowerBound + footerAndMagicReadLength) {
         throw errorWithLibrary(`File size (${size}) is too small to be valid MCAP`);
       }
@@ -200,7 +200,7 @@ export class McapIndexedReader {
       }
       footer = footerRecord;
     }
-    if (footer.summaryStart === 0n) {
+    if (footer.summaryStart === 0) {
       throw errorWithLibrary("File is not indexed");
     }
 
@@ -220,7 +220,7 @@ export class McapIndexedReader {
     );
 
     const dataEndLength =
-      /* Opcode.DATA_END */ 1n + /* record content length */ 8n + /* data_section_crc */ 4n;
+      /* Opcode.DATA_END */ 1 + /* record content length */ 8 + /* data_section_crc */ 4;
 
     const dataEndOffset = footer.summaryStart - dataEndLength;
     if (dataEndOffset < headerEndOffset) {
@@ -338,8 +338,8 @@ export class McapIndexedReader {
   async *readMessages(
     args: {
       topics?: readonly string[];
-      startTime?: bigint;
-      endTime?: bigint;
+      startTime?: number;
+      endTime?: number;
       reverse?: boolean;
       validateCrcs?: boolean;
     } = {},
@@ -368,7 +368,7 @@ export class McapIndexedReader {
 
     const chunkCursors = new Heap<ChunkCursor>((a, b) => a.compare(b));
     let chunksOrdered = true;
-    let prevChunkEndTime: bigint | undefined;
+    let prevChunkEndTime: number | undefined;
     for (const chunkIndex of this.chunkIndexes) {
       if (chunkIndex.messageStartTime <= endTime && chunkIndex.messageEndTime >= startTime) {
         chunkCursors.push(
@@ -384,7 +384,7 @@ export class McapIndexedReader {
     // Holds the decompressed chunk data for "active" chunks. Items are added below when a chunk
     // cursor becomes active (i.e. when we first need to access messages from the chunk) and removed
     // when the cursor is removed from the heap.
-    const chunkViewCache = new Map<bigint, DataView>();
+    const chunkViewCache = new Map<number, DataView>();
     const chunkReader = new Reader(new DataView(new ArrayBuffer(0)));
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
@@ -407,7 +407,7 @@ export class McapIndexedReader {
       }
 
       const [logTime, offset] = cursor.popMessage();
-      if (offset >= BigInt(chunkView.byteLength)) {
+      if (offset >= chunkView.byteLength) {
         throw this.#errorWithLibrary(
           `Message offset beyond chunk bounds (log time ${logTime}, offset ${offset}, chunk data length ${chunkView.byteLength}) in chunk at offset ${cursor.chunkIndex.chunkStartOffset}`,
         );
@@ -475,8 +475,8 @@ export class McapIndexedReader {
     args: {
       name?: string;
       mediaType?: string;
-      startTime?: bigint;
-      endTime?: bigint;
+      startTime?: number;
+      endTime?: number;
       validateCrcs?: boolean;
     } = {},
   ): AsyncGenerator<TypedMcapRecords["Attachment"], void, void> {

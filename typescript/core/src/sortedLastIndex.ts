@@ -3,9 +3,9 @@
  * order. This is a specialization of lodash's sortedIndexBy().
  */
 export function sortedLastIndexBy(
-  array: [bigint, bigint][],
-  value: bigint,
-  iteratee: (value: bigint) => bigint,
+  array: [number, number][],
+  value: number,
+  iteratee: (value: number) => number,
 ): number {
   let low = 0;
   let high = array.length;

@@ -27,12 +27,12 @@ export class TempBuffer implements IReadable, IWritable, ISeekableWriter {
     }
   }
 
-  position(): bigint {
-    return BigInt(this.#position);
+  position(): number {
+    return this.#position;
   }
 
-  async seek(position: bigint): Promise<void> {
-    if (position < 0n) {
+  async seek(position: number): Promise<void> {
+    if (position < 0) {
       throw new Error(`Attempted to seek to negative position ${position}`);
     } else if (position > this.#buffer.byteLength) {
       this.#setCapacity(Number(position));
@@ -54,12 +54,12 @@ export class TempBuffer implements IReadable, IWritable, ISeekableWriter {
     this.#position += data.byteLength;
   }
 
-  async size(): Promise<bigint> {
-    return BigInt(this.#buffer.byteLength);
+  async size(): Promise<number> {
+    return this.#buffer.byteLength;
   }
 
-  async read(offset: bigint, size: bigint): Promise<Uint8Array> {
-    if (offset < 0n || offset + size > BigInt(this.#buffer.byteLength)) {
+  async read(offset: number, size: number): Promise<Uint8Array> {
+    if (offset < 0 || offset + size > this.#buffer.byteLength) {
       throw new Error("read out of range");
     }
     return new Uint8Array(this.#buffer, Number(offset), Number(size));

@@ -37,21 +37,21 @@ describe("McapWriter", () => {
       channelId,
       data: new Uint8Array(),
       sequence: 0,
-      logTime: 0n,
-      publishTime: 0n,
+      logTime: 0,
+      publishTime: 0,
     });
     await writer.addMessage({
       channelId,
       data: new Uint8Array(),
       sequence: 1,
-      logTime: 1n,
-      publishTime: 1n,
+      logTime: 1,
+      publishTime: 1,
     });
     await writer.end();
 
     const reader = await McapIndexedReader.Initialize({ readable: tempBuffer });
 
-    expect(reader.chunkIndexes).toMatchObject([{ messageStartTime: 0n, messageEndTime: 1n }]);
+    expect(reader.chunkIndexes).toMatchObject([{ messageStartTime: 0, messageEndTime: 1 }]);
 
     await expect(collect(reader.readMessages())).resolves.toEqual([
       {
@@ -59,36 +59,36 @@ describe("McapWriter", () => {
         channelId,
         data: new Uint8Array(),
         sequence: 0,
-        logTime: 0n,
-        publishTime: 0n,
+        logTime: 0,
+        publishTime: 0,
       },
       {
         type: "Message",
         channelId,
         data: new Uint8Array(),
         sequence: 1,
-        logTime: 1n,
-        publishTime: 1n,
+        logTime: 1,
+        publishTime: 1,
       },
     ]);
-    await expect(collect(reader.readMessages({ endTime: 0n }))).resolves.toEqual([
+    await expect(collect(reader.readMessages({ endTime: 0 }))).resolves.toEqual([
       {
         type: "Message",
         channelId,
         data: new Uint8Array(),
         sequence: 0,
-        logTime: 0n,
-        publishTime: 0n,
+        logTime: 0,
+        publishTime: 0,
       },
     ]);
-    await expect(collect(reader.readMessages({ startTime: 1n }))).resolves.toEqual([
+    await expect(collect(reader.readMessages({ startTime: 1 }))).resolves.toEqual([
       {
         type: "Message",
         channelId,
         data: new Uint8Array(),
         sequence: 1,
-        logTime: 1n,
-        publishTime: 1n,
+        logTime: 1,
+        publishTime: 1,
       },
     ]);
   });
@@ -108,15 +108,15 @@ describe("McapWriter", () => {
       channelId,
       data: new Uint8Array(),
       sequence: 0,
-      logTime: 0n,
-      publishTime: 0n,
+      logTime: 0,
+      publishTime: 0,
     });
     await writer.addMessage({
       channelId,
       data: new Uint8Array(),
       sequence: 1,
-      logTime: 1n,
-      publishTime: 1n,
+      logTime: 1,
+      publishTime: 1,
     });
     await writer.end();
 
@@ -145,27 +145,27 @@ describe("McapWriter", () => {
         type: "Message",
         channelId: 0,
         data: new Uint8Array(),
-        logTime: 0n,
-        publishTime: 0n,
+        logTime: 0,
+        publishTime: 0,
         sequence: 0,
       },
       {
         type: "MessageIndex",
         channelId: 0,
-        records: [[0n, 33n]],
+        records: [[0, 33]],
       },
       {
         type: "Message",
         channelId: 0,
         data: new Uint8Array(),
-        logTime: 1n,
-        publishTime: 1n,
+        logTime: 1,
+        publishTime: 1,
         sequence: 1,
       },
       {
         type: "MessageIndex",
         channelId: 0,
-        records: [[1n, 0n]],
+        records: [[1, 0]],
       },
       {
         type: "DataEnd",
@@ -183,61 +183,61 @@ describe("McapWriter", () => {
         type: "Statistics",
         attachmentCount: 0,
         channelCount: 1,
-        channelMessageCounts: new Map([[0, 2n]]),
+        channelMessageCounts: new Map([[0, 2]]),
         chunkCount: 2,
-        messageCount: 2n,
-        messageEndTime: 1n,
-        messageStartTime: 0n,
+        messageCount: 2,
+        messageEndTime: 1,
+        messageStartTime: 0,
         metadataCount: 0,
         schemaCount: 0,
       },
       {
         type: "ChunkIndex",
-        chunkLength: 113n,
-        chunkStartOffset: 25n,
-        compressedSize: 64n,
+        chunkLength: 113,
+        chunkStartOffset: 25,
+        compressedSize: 64,
         compression: "",
-        messageEndTime: 0n,
-        messageIndexLength: 31n,
-        messageIndexOffsets: new Map([[0, 138n]]),
-        messageStartTime: 0n,
-        uncompressedSize: 64n,
+        messageEndTime: 0,
+        messageIndexLength: 31,
+        messageIndexOffsets: new Map([[0, 138]]),
+        messageStartTime: 0,
+        uncompressedSize: 64,
       },
       {
         type: "ChunkIndex",
-        chunkLength: 80n,
-        chunkStartOffset: 169n,
-        compressedSize: 31n,
+        chunkLength: 80,
+        chunkStartOffset: 169,
+        compressedSize: 31,
         compression: "",
-        messageEndTime: 1n,
-        messageIndexLength: 31n,
-        messageIndexOffsets: new Map([[0, 249n]]),
-        messageStartTime: 1n,
-        uncompressedSize: 31n,
+        messageEndTime: 1,
+        messageIndexLength: 31,
+        messageIndexOffsets: new Map([[0, 249]]),
+        messageStartTime: 1,
+        uncompressedSize: 31,
       },
       {
         type: "SummaryOffset",
-        groupLength: 33n,
+        groupLength: 33,
         groupOpcode: Opcode.CHANNEL,
-        groupStart: 293n,
+        groupStart: 293,
       },
       {
         type: "SummaryOffset",
-        groupLength: 65n,
+        groupLength: 65,
         groupOpcode: Opcode.STATISTICS,
-        groupStart: 326n,
+        groupStart: 326,
       },
       {
         type: "SummaryOffset",
-        groupLength: 166n,
+        groupLength: 166,
         groupOpcode: Opcode.CHUNK_INDEX,
-        groupStart: 391n,
+        groupStart: 391,
       },
       {
         type: "Footer",
         summaryCrc: 3779440972,
-        summaryOffsetStart: 557n,
-        summaryStart: 293n,
+        summaryOffsetStart: 557,
+        summaryStart: 293,
       },
     ]);
   });
@@ -272,8 +272,8 @@ describe("McapWriter", () => {
       channelId,
       data: new Uint8Array(),
       sequence: 0,
-      logTime: 0n,
-      publishTime: 0n,
+      logTime: 0,
+      publishTime: 0,
     });
     await writer.end();
 
@@ -298,8 +298,8 @@ describe("McapWriter", () => {
       ...record(Opcode.MESSAGE, [
         ...uint16LE(channelId), // channel id
         ...uint32LE(0), // sequence
-        ...uint64LE(0n), // log time
-        ...uint64LE(0n), // publish time
+        ...uint64LE(0), // log time
+        ...uint64LE(0), // publish time
       ]),
     ]);
 
@@ -312,16 +312,16 @@ describe("McapWriter", () => {
       {
         type: "Chunk",
         compression: "reverse double",
-        messageStartTime: 0n,
-        messageEndTime: 0n,
+        messageStartTime: 0,
+        messageEndTime: 0,
         uncompressedCrc: crc32(expectedChunkData),
-        uncompressedSize: BigInt(expectedChunkData.byteLength),
+        uncompressedSize: expectedChunkData.byteLength,
         records: reverseDouble(expectedChunkData),
       },
       {
         type: "MessageIndex",
         channelId: 0,
-        records: [[0n, 33n]],
+        records: [[0, 33]],
       },
       {
         type: "DataEnd",
@@ -337,21 +337,21 @@ describe("McapWriter", () => {
       },
       {
         type: "ChunkIndex",
-        chunkLength: expect.any(BigInt) as bigint,
-        chunkStartOffset: 25n,
-        compressedSize: BigInt(2 * expectedChunkData.byteLength),
+        chunkLength: expect.any(Number) as number,
+        chunkStartOffset: 25,
+        compressedSize: 2 * expectedChunkData.byteLength,
         compression: "reverse double",
-        messageEndTime: 0n,
-        messageIndexLength: 31n,
-        messageIndexOffsets: new Map([[0, expect.any(BigInt) as bigint]]),
-        messageStartTime: 0n,
-        uncompressedSize: BigInt(expectedChunkData.byteLength),
+        messageEndTime: 0,
+        messageIndexLength: 31,
+        messageIndexOffsets: new Map([[0, expect.any(Number) as number]]),
+        messageStartTime: 0,
+        uncompressedSize: expectedChunkData.byteLength,
       },
       {
         type: "Footer",
         summaryCrc: expect.any(Number) as number,
-        summaryOffsetStart: expect.any(BigInt) as bigint,
-        summaryStart: expect.any(BigInt) as bigint,
+        summaryOffsetStart: expect.any(Number) as number,
+        summaryStart: expect.any(Number) as number,
       },
     ]);
   });
@@ -377,8 +377,8 @@ describe("McapWriter", () => {
       channelId: channelId1,
       data: new Uint8Array(),
       sequence: 0,
-      logTime: 0n,
-      publishTime: 0n,
+      logTime: 0,
+      publishTime: 0,
     });
     await writer.end();
 
@@ -408,14 +408,14 @@ describe("McapWriter", () => {
         type: "Message",
         channelId: 0,
         data: new Uint8Array(),
-        logTime: 0n,
-        publishTime: 0n,
+        logTime: 0,
+        publishTime: 0,
         sequence: 0,
       },
       {
         type: "MessageIndex",
         channelId: 0,
-        records: [[0n, 71n]],
+        records: [[0, 71]],
       },
     ];
 
@@ -445,55 +445,55 @@ describe("McapWriter", () => {
         type: "Statistics",
         attachmentCount: 0,
         channelCount: 1,
-        channelMessageCounts: new Map([[0, 1n]]),
+        channelMessageCounts: new Map([[0, 1]]),
         chunkCount: 1,
-        messageCount: 1n,
-        messageEndTime: 0n,
-        messageStartTime: 0n,
+        messageCount: 1,
+        messageEndTime: 0,
+        messageStartTime: 0,
         metadataCount: 0,
         schemaCount: 1,
       },
       {
         type: "ChunkIndex",
-        chunkLength: 151n,
-        chunkStartOffset: 25n,
-        compressedSize: 102n,
+        chunkLength: 151,
+        chunkStartOffset: 25,
+        compressedSize: 102,
         compression: "",
-        messageEndTime: 0n,
-        messageIndexLength: 31n,
-        messageIndexOffsets: new Map([[0, 176n]]),
-        messageStartTime: 0n,
-        uncompressedSize: 102n,
+        messageEndTime: 0,
+        messageIndexLength: 31,
+        messageIndexOffsets: new Map([[0, 176]]),
+        messageStartTime: 0,
+        uncompressedSize: 102,
       },
       {
         type: "SummaryOffset",
-        groupLength: 34n,
+        groupLength: 34,
         groupOpcode: Opcode.SCHEMA,
-        groupStart: 220n,
+        groupStart: 220,
       },
       {
         type: "SummaryOffset",
-        groupLength: 37n,
+        groupLength: 37,
         groupOpcode: Opcode.CHANNEL,
-        groupStart: 254n,
+        groupStart: 254,
       },
       {
         type: "SummaryOffset",
-        groupLength: 65n,
+        groupLength: 65,
         groupOpcode: Opcode.STATISTICS,
-        groupStart: 291n,
+        groupStart: 291,
       },
       {
         type: "SummaryOffset",
-        groupLength: 83n,
+        groupLength: 83,
         groupOpcode: Opcode.CHUNK_INDEX,
-        groupStart: 356n,
+        groupStart: 356,
       },
       {
         type: "Footer",
         summaryCrc: 2739614603,
-        summaryOffsetStart: 439n,
-        summaryStart: 220n,
+        summaryOffsetStart: 439,
+        summaryStart: 220,
       },
     ]);
 
@@ -501,8 +501,8 @@ describe("McapWriter", () => {
 
     await appendWriter.addAttachment({
       name: "attachment1",
-      logTime: 0n,
-      createTime: 0n,
+      logTime: 0,
+      createTime: 0,
       mediaType: "text/plain",
       data: new TextEncoder().encode("foo"),
     });
@@ -514,8 +514,8 @@ describe("McapWriter", () => {
       channelId: channelId1,
       data: new Uint8Array(),
       sequence: 1,
-      logTime: 1n,
-      publishTime: 1n,
+      logTime: 1,
+      publishTime: 1,
     });
     const channelId2 = await appendWriter.registerChannel({
       topic: "channel2",
@@ -527,15 +527,15 @@ describe("McapWriter", () => {
       channelId: channelId2,
       data: new Uint8Array(),
       sequence: 2,
-      logTime: 2n,
-      publishTime: 2n,
+      logTime: 2,
+      publishTime: 2,
     });
     await appendWriter.end();
 
     const appendedRecords = readAsMcapStream(tempBuffer.get());
 
-    const newSummaryStart = 546n;
-    const dataEndLength = 1n + 8n + 4n;
+    const newSummaryStart = 546;
+    const dataEndLength = 1 + 8 + 4;
     const expectedDataCrc = crc32(
       tempBuffer.get().slice(0, Number(newSummaryStart - dataEndLength)),
     );
@@ -545,8 +545,8 @@ describe("McapWriter", () => {
       {
         type: "Attachment",
         name: "attachment1",
-        logTime: 0n,
-        createTime: 0n,
+        logTime: 0,
+        createTime: 0,
         mediaType: "text/plain",
         data: new TextEncoder().encode("foo"),
       },
@@ -559,8 +559,8 @@ describe("McapWriter", () => {
         type: "Message",
         channelId: 0,
         data: new Uint8Array(),
-        logTime: 1n,
-        publishTime: 1n,
+        logTime: 1,
+        publishTime: 1,
         sequence: 1,
       },
       {
@@ -575,19 +575,19 @@ describe("McapWriter", () => {
         type: "Message",
         channelId: 1,
         data: new Uint8Array(),
-        logTime: 2n,
-        publishTime: 2n,
+        logTime: 2,
+        publishTime: 2,
         sequence: 2,
       },
       {
         type: "MessageIndex",
         channelId: 0,
-        records: [[1n, 0n]],
+        records: [[1, 0]],
       },
       {
         type: "MessageIndex",
         channelId: 1,
-        records: [[2n, 68n]],
+        records: [[2, 68]],
       },
       {
         type: "DataEnd",
@@ -621,99 +621,99 @@ describe("McapWriter", () => {
         attachmentCount: 1,
         channelCount: 2,
         channelMessageCounts: new Map([
-          [0, 2n],
-          [1, 1n],
+          [0, 2],
+          [1, 1],
         ]),
         chunkCount: 2,
-        messageCount: 3n,
-        messageEndTime: 2n,
-        messageStartTime: 0n,
+        messageCount: 3,
+        messageEndTime: 2,
+        messageStartTime: 0,
         metadataCount: 1,
         schemaCount: 1,
       },
       {
         type: "MetadataIndex",
-        offset: 276n,
-        length: 47n,
+        offset: 276,
+        length: 47,
         name: "metadata1",
       },
       {
         type: "AttachmentIndex",
-        offset: 207n,
-        length: 69n,
-        logTime: 0n,
-        createTime: 0n,
-        dataSize: 3n,
+        offset: 207,
+        length: 69,
+        logTime: 0,
+        createTime: 0,
+        dataSize: 3,
         name: "attachment1",
         mediaType: "text/plain",
       },
       {
         type: "ChunkIndex",
-        chunkLength: 151n,
-        chunkStartOffset: 25n,
-        compressedSize: 102n,
+        chunkLength: 151,
+        chunkStartOffset: 25,
+        compressedSize: 102,
         compression: "",
-        messageEndTime: 0n,
-        messageIndexLength: 31n,
-        messageIndexOffsets: new Map([[0, 176n]]),
-        messageStartTime: 0n,
-        uncompressedSize: 102n,
+        messageEndTime: 0,
+        messageIndexLength: 31,
+        messageIndexOffsets: new Map([[0, 176]]),
+        messageStartTime: 0,
+        uncompressedSize: 102,
       },
       {
         type: "ChunkIndex",
-        chunkLength: 148n,
-        chunkStartOffset: 323n,
-        compressedSize: 99n,
+        chunkLength: 148,
+        chunkStartOffset: 323,
+        compressedSize: 99,
         compression: "",
-        messageEndTime: 2n,
-        messageIndexLength: 62n,
+        messageEndTime: 2,
+        messageIndexLength: 62,
         messageIndexOffsets: new Map([
-          [0, 471n],
-          [1, 502n],
+          [0, 471],
+          [1, 502],
         ]),
-        messageStartTime: 1n,
-        uncompressedSize: 99n,
+        messageStartTime: 1,
+        uncompressedSize: 99,
       },
       {
         type: "SummaryOffset",
-        groupLength: 34n,
+        groupLength: 34,
         groupOpcode: Opcode.SCHEMA,
-        groupStart: 546n,
+        groupStart: 546,
       },
       {
         type: "SummaryOffset",
-        groupLength: 74n,
+        groupLength: 74,
         groupOpcode: Opcode.CHANNEL,
-        groupStart: 580n,
+        groupStart: 580,
       },
       {
         type: "SummaryOffset",
-        groupLength: 75n,
+        groupLength: 75,
         groupOpcode: Opcode.STATISTICS,
-        groupStart: 654n,
+        groupStart: 654,
       },
       {
         type: "SummaryOffset",
-        groupLength: 38n,
+        groupLength: 38,
         groupOpcode: Opcode.METADATA_INDEX,
-        groupStart: 729n,
+        groupStart: 729,
       },
       {
         type: "SummaryOffset",
-        groupLength: 78n,
+        groupLength: 78,
         groupOpcode: Opcode.ATTACHMENT_INDEX,
-        groupStart: 767n,
+        groupStart: 767,
       },
       {
         type: "SummaryOffset",
-        groupLength: 176n,
+        groupLength: 176,
         groupOpcode: Opcode.CHUNK_INDEX,
-        groupStart: 845n,
+        groupStart: 845,
       },
       {
         type: "Footer",
         summaryCrc: 758669511,
-        summaryOffsetStart: 1021n,
+        summaryOffsetStart: 1021,
         summaryStart: newSummaryStart,
       },
     ]);
@@ -737,19 +737,19 @@ describe("McapWriter", () => {
             ...uint32LE(useDataSectionCrc ? crc32(originalDataSection) : 0), // data crc
           ]),
           ...record(Opcode.STATISTICS, [
-            ...uint64LE(0n), // message count
+            ...uint64LE(0), // message count
             ...uint16LE(0), // schema count
             ...uint32LE(0), // channel count
             ...uint32LE(0), // attachment count
             ...uint32LE(0), // metadata count
             ...uint32LE(0), // chunk count
-            ...uint64LE(0n), // message start time
-            ...uint64LE(0n), // message end time
+            ...uint64LE(0), // message start time
+            ...uint64LE(0), // message end time
             ...uint32LE(0), // channel message counts length
           ]),
           ...record(Opcode.FOOTER, [
-            ...uint64LE(BigInt(originalDataSection.length + dataEndLength)), // summary start
-            ...uint64LE(0n), // summary offset start
+            ...uint64LE(originalDataSection.length + dataEndLength), // summary start
+            ...uint64LE(0), // summary offset start
             ...uint32LE(0), // summary crc
           ]),
           ...MCAP_MAGIC,
@@ -768,8 +768,8 @@ describe("McapWriter", () => {
       });
       await appendWriter.addMessage({
         channelId: chanId,
-        logTime: 0n,
-        publishTime: 0n,
+        logTime: 0,
+        publishTime: 0,
         sequence: 0,
         data: new Uint8Array([]),
       });
@@ -777,15 +777,15 @@ describe("McapWriter", () => {
 
       const summarySection = new Uint8Array([
         ...record(Opcode.STATISTICS, [
-          ...uint64LE(1n), // message count
+          ...uint64LE(1), // message count
           ...uint16LE(0), // schema count
           ...uint32LE(1), // channel count
           ...uint32LE(0), // attachment count
           ...uint32LE(0), // metadata count
           ...uint32LE(0), // chunk count
-          ...uint64LE(0n), // message start time
-          ...uint64LE(0n), // message end time
-          ...keyValues(uint16LE, uint64LE, [[0, 1n]]), // channel message counts length
+          ...uint64LE(0), // message start time
+          ...uint64LE(0), // message end time
+          ...keyValues(uint16LE, uint64LE, [[0, 1]]), // channel message counts length
         ]),
       ]);
 
@@ -801,8 +801,8 @@ describe("McapWriter", () => {
         ...record(Opcode.MESSAGE, [
           ...uint16LE(chanId),
           ...uint32LE(0), // sequence
-          ...uint64LE(0n), // log time
-          ...uint64LE(0n), // publish time
+          ...uint64LE(0), // log time
+          ...uint64LE(0), // publish time
         ]),
       ]);
 
@@ -814,17 +814,17 @@ describe("McapWriter", () => {
           ]),
           ...summarySection,
           ...record(Opcode.FOOTER, [
-            ...uint64LE(BigInt(newDataSection.length + dataEndLength)), // summary start
-            ...uint64LE(0n), // summary offset start
+            ...uint64LE(newDataSection.length + dataEndLength), // summary start
+            ...uint64LE(0), // summary offset start
             ...uint32LE(
               // summary crc
               crc32(
                 new Uint8Array([
                   ...summarySection,
                   Opcode.FOOTER,
-                  ...uint64LE(8n + 8n + 4n), // footer record length
-                  ...uint64LE(BigInt(newDataSection.length + dataEndLength)), // summary start
-                  ...uint64LE(0n), // summary offset start
+                  ...uint64LE(8 + 8 + 4), // footer record length
+                  ...uint64LE(newDataSection.length + dataEndLength), // summary start
+                  ...uint64LE(0), // summary offset start
                 ]),
               ),
             ),

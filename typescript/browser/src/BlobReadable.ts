@@ -10,11 +10,11 @@ export class BlobReadable implements McapTypes.IReadable {
     this.#blob = blob;
   }
 
-  public async size(): Promise<bigint> {
-    return BigInt(this.#blob.size);
+  public async size(): Promise<number> {
+    return this.#blob.size;
   }
 
-  public async read(offset: bigint, size: bigint): Promise<Uint8Array> {
+  public async read(offset: number, size: number): Promise<Uint8Array> {
     if (offset + size > this.#blob.size) {
       throw new Error(
         `Read of ${size} bytes at offset ${offset} exceeds file size ${this.#blob.size}`,

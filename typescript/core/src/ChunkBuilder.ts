@@ -9,8 +9,8 @@ class ChunkBuilder {
   #messageIndices: Map<number, MessageIndex> | undefined;
   #totalMessageCount = 0;
 
-  messageStartTime = 0n;
-  messageEndTime = 0n;
+  messageStartTime = 0;
+  messageEndTime = 0;
 
   constructor({ useMessageIndex = true }: ChunkBuilderOptions) {
     if (useMessageIndex) {
@@ -68,7 +68,7 @@ class ChunkBuilder {
         };
         this.#messageIndices.set(message.channelId, messageIndex);
       }
-      messageIndex.records.push([message.logTime, BigInt(this.#recordWriter.length)]);
+      messageIndex.records.push([message.logTime, this.#recordWriter.length]);
     }
 
     this.#totalMessageCount += 1;
@@ -76,8 +76,8 @@ class ChunkBuilder {
   }
 
   reset(): void {
-    this.messageStartTime = 0n;
-    this.messageEndTime = 0n;
+    this.messageStartTime = 0;
+    this.messageEndTime = 0;
     this.#totalMessageCount = 0;
     this.#messageIndices?.clear();
     this.#recordWriter.reset();
