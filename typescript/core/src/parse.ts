@@ -1,7 +1,7 @@
 import { crc32 } from "@foxglove/crc";
 
 import Reader from "./Reader";
-import { isKnownOpcode, MCAP_MAGIC, Opcode } from "./constants";
+import { MCAP_MAGIC, Opcode } from "./constants";
 import { McapMagic, TypedMcapRecord } from "./types";
 
 /**
