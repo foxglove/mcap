@@ -17,7 +17,7 @@ export class FileHandleWritable implements IWritable {
     this.#totalBytesWritten += written.bytesWritten;
   }
 
-  position(): bigint {
-    return BigInt(this.#totalBytesWritten);
+  position(): number {
+    return this.#totalBytesWritten;
   }
 }

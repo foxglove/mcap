@@ -86,27 +86,27 @@ async function main() {
   ) {
     scene.renderScene();
 
-    const bigTime = BigInt(Math.floor(currentTimeSeconds * 1_000_000_000));
+    const bigTime = Math.floor(currentTimeSeconds * 1_000_000_000);
     const rosTime = fromNanoSec(bigTime);
 
     await mcapFile.addMessage({
       channelId: calibrationChannelId,
       sequence: 0,
-      publishTime: 0n,
+      publishTime: 0,
       logTime: bigTime,
       data: Buffer.from(JSON.stringify(scene.getCameraCalibration(rosTime))),
     });
     await mcapFile.addMessage({
       channelId: imageChannelId,
       sequence: 0,
-      publishTime: 0n,
+      publishTime: 0,
       logTime: bigTime,
       data: Buffer.from(JSON.stringify(scene.getRawImage(rosTime))),
     });
     await mcapFile.addMessage({
       channelId: annotationsChannelId,
       sequence: 0,
-      publishTime: 0n,
+      publishTime: 0,
       logTime: bigTime,
       data: Buffer.from(JSON.stringify(scene.getImageAnnotations(rosTime))),
     });
@@ -120,12 +120,12 @@ async function main() {
  * @param nsec Nanoseconds integer
  * @returns Time object
  */
-function fromNanoSec(nsec: bigint): Time {
+function fromNanoSec(nsec: number): Time {
   // From https://github.com/ros/roscpp_core/blob/86720717c0e1200234cc0a3545a255b60fb541ec/rostime/include/ros/impl/time.h#L63
   // and https://github.com/ros/roscpp_core/blob/7583b7d38c6e1c2e8623f6d98559c483f7a64c83/rostime/src/time.cpp#L536
   //
-  // Note: BigInt(1e9) is slower than writing out the number
-  return { sec: Number(nsec / 1_000_000_000n), nsec: Number(nsec % 1_000_000_000n) };
+  // Note: 1e9 is slower than writing out the number
+  return { sec: Number(nsec / 1_000_000_000), nsec: Number(nsec % 1_000_000_000) };
 }
 
 void main();

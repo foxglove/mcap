@@ -70,7 +70,7 @@ export function buildTfMessage(builder: Builder, tfJson: FrameTransform): number
   FbFrameTransform.addRotation(builder, quat);
   FbFrameTransform.addTimestamp(
     builder,
-    FbTime.createTime(builder, BigInt(tfJson.timestamp.sec), tfJson.timestamp.nsec),
+    FbTime.createTime(builder, tfJson.timestamp.sec, tfJson.timestamp.nsec),
   );
 
   const tf = FbFrameTransform.endFrameTransform(builder);
@@ -103,7 +103,7 @@ export function buildGridMessage(builder: Builder, json: Grid): number {
   FbGrid.startGrid(builder);
   FbGrid.addTimestamp(
     builder,
-    FbTime.createTime(builder, BigInt(json.timestamp.sec), json.timestamp.nsec),
+    FbTime.createTime(builder, json.timestamp.sec, json.timestamp.nsec),
   );
   FbGrid.addFrameId(builder, frameId);
   FbGrid.addPose(builder, pose);

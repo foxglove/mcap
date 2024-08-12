@@ -28,8 +28,8 @@ describe("BlobReadable", () => {
     const message = {
       channelId,
       sequence: 1,
-      logTime: 1n,
-      publishTime: 2n,
+      logTime: 1,
+      publishTime: 2,
       data: new Uint8Array([1, 2, 3]),
     };
     await writer.addMessage(message);

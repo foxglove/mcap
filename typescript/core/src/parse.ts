@@ -284,7 +284,7 @@ function parseAttachment(
   const mediaType = reader.string();
   const dataLen = reader.uint64();
   // NOTE: probably not necessary, but just in case
-  if (BigInt(reader.offset) + dataLen > Number.MAX_SAFE_INTEGER) {
+  if (reader.offset + dataLen > Number.MAX_SAFE_INTEGER) {
     throw new Error(`Attachment too large: ${dataLen}`);
   }
   if (reader.offset + Number(dataLen) + 4 /*crc*/ > startOffset + recordLength) {

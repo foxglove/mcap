@@ -6,5 +6,5 @@ export interface IWritable {
   write(buffer: Uint8Array): Promise<unknown>;
 
   // The current position in bytes from the start of the output
-  position(): bigint;
+  position(): number;
 }

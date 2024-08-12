@@ -8,17 +8,17 @@ describe("ChunkBuilder", () => {
       channelId: 0,
       data: new Uint8Array(),
       sequence: 0,
-      logTime: 0n,
-      publishTime: 0n,
+      logTime: 0,
+      publishTime: 0,
     });
     builder.addMessage({
       channelId: 0,
       data: new Uint8Array(),
       sequence: 1,
-      logTime: 1n,
-      publishTime: 1n,
+      logTime: 1,
+      publishTime: 1,
     });
-    expect(builder.messageStartTime).toBe(0n);
-    expect(builder.messageEndTime).toBe(1n);
+    expect(builder.messageStartTime).toBe(0);
+    expect(builder.messageEndTime).toBe(1);
   });
 });

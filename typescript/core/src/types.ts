@@ -6,8 +6,8 @@ export type Header = {
   library: string;
 };
 export type Footer = {
-  summaryStart: bigint;
-  summaryOffsetStart: bigint;
+  summaryStart: number;
+  summaryOffsetStart: number;
   summaryCrc: number;
 };
 export type Schema = {
@@ -26,73 +26,73 @@ export type Channel = {
 export type Message = {
   channelId: number;
   sequence: number;
-  logTime: bigint;
-  publishTime: bigint;
+  logTime: number;
+  publishTime: number;
   data: Uint8Array;
 };
 export type Chunk = {
-  messageStartTime: bigint;
-  messageEndTime: bigint;
-  uncompressedSize: bigint;
+  messageStartTime: number;
+  messageEndTime: number;
+  uncompressedSize: number;
   uncompressedCrc: number;
   compression: string;
   records: Uint8Array;
 };
 export type MessageIndex = {
   channelId: number;
-  records: [logTime: bigint, offset: bigint][];
+  records: [logTime: number, offset: number][];
 };
 export type ChunkIndex = {
-  messageStartTime: bigint;
-  messageEndTime: bigint;
-  chunkStartOffset: bigint;
-  chunkLength: bigint;
-  messageIndexOffsets: Map<number, bigint>;
-  messageIndexLength: bigint;
+  messageStartTime: number;
+  messageEndTime: number;
+  chunkStartOffset: number;
+  chunkLength: number;
+  messageIndexOffsets: Map<number, number>;
+  messageIndexLength: number;
   compression: string;
-  compressedSize: bigint;
-  uncompressedSize: bigint;
+  compressedSize: number;
+  uncompressedSize: number;
 };
 export type Attachment = {
   name: string;
-  logTime: bigint;
-  createTime: bigint;
+  logTime: number;
+  createTime: number;
   mediaType: string;
   data: Uint8Array;
 };
 export type AttachmentIndex = {
-  offset: bigint;
-  length: bigint;
-  logTime: bigint;
-  createTime: bigint;
-  dataSize: bigint;
+  offset: number;
+  length: number;
+  logTime: number;
+  createTime: number;
+  dataSize: number;
   name: string;
   mediaType: string;
 };
 export type Statistics = {
-  messageCount: bigint;
+  messageCount: number;
   schemaCount: number;
   channelCount: number;
   attachmentCount: number;
   metadataCount: number;
   chunkCount: number;
-  messageStartTime: bigint;
-  messageEndTime: bigint;
-  channelMessageCounts: Map<number, bigint>;
+  messageStartTime: number;
+  messageEndTime: number;
+  channelMessageCounts: Map<number, number>;
 };
 export type Metadata = {
   name: string;
   metadata: Map<string, string>;
 };
 export type MetadataIndex = {
-  offset: bigint;
-  length: bigint;
+  offset: number;
+  length: number;
   name: string;
 };
 export type SummaryOffset = {
   groupOpcode: number;
-  groupStart: bigint;
-  groupLength: bigint;
+  groupStart: number;
+  groupLength: number;
 };
 export type DataEnd = {
   dataSectionCrc: number;
@@ -130,13 +130,13 @@ export type TypedMcapRecord = Values<TypedMcapRecords>;
 export type McapRecord = Values<McapRecords>;
 
 export type DecompressHandlers = {
-  [compression: string]: (buffer: Uint8Array, decompressedSize: bigint) => Uint8Array;
+  [compression: string]: (buffer: Uint8Array, decompressedSize: number) => Uint8Array;
 };
 
 /**
  * IReadable describes a random-access reader interface.
  */
 export interface IReadable {
-  size(): Promise<bigint>;
-  read(offset: bigint, size: bigint): Promise<Uint8Array>;
+  size(): Promise<number>;
+  read(offset: number, size: number): Promise<Uint8Array>;
 }

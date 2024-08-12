@@ -29,8 +29,8 @@ function makeReadable(data: Uint8Array) {
     get readCalls() {
       return readCalls;
     },
-    size: async () => BigInt(data.length),
-    read: async (offset: bigint, size: bigint) => {
+    size: async () => data.length,
+    read: async (offset: number, size: number) => {
       ++readCalls;
       if (offset > Number.MAX_SAFE_INTEGER || size > Number.MAX_SAFE_INTEGER) {
         throw new Error(`Read too large: offset ${offset}, size ${size}`);
@@ -53,19 +53,19 @@ function writeChunkWithMessageIndexes(
   builder: McapRecordBuilder,
   chunk: ChunkBuilder,
 ): TypedMcapRecords["ChunkIndex"] {
-  const chunkStartOffset = BigInt(builder.length);
+  const chunkStartOffset = builder.length;
   const chunkLength = builder.writeChunk({
     messageStartTime: chunk.messageStartTime,
     messageEndTime: chunk.messageEndTime,
-    uncompressedSize: BigInt(chunk.buffer.length),
+    uncompressedSize: chunk.buffer.length,
     uncompressedCrc: 0,
     compression: "",
     records: chunk.buffer,
   });
 
-  const messageIndexStart = BigInt(builder.length);
-  let messageIndexLength = 0n;
-  const chunkMessageIndexOffsets = new Map<number, bigint>();
+  const messageIndexStart = builder.length;
+  let messageIndexLength = 0;
+  const chunkMessageIndexOffsets = new Map<number, number>();
   for (const messageIndex of chunk.indices) {
     chunkMessageIndexOffsets.set(messageIndex.channelId, messageIndexStart + messageIndexLength);
     messageIndexLength += builder.writeMessageIndex(messageIndex);
@@ -80,8 +80,8 @@ function writeChunkWithMessageIndexes(
     messageIndexOffsets: chunkMessageIndexOffsets,
     messageIndexLength,
     compression: "",
-    compressedSize: BigInt(chunk.buffer.byteLength),
-    uncompressedSize: BigInt(chunk.buffer.byteLength),
+    compressedSize: chunk.buffer.byteLength,
+    uncompressedSize: chunk.buffer.byteLength,
   };
 }
 
@@ -93,8 +93,8 @@ describe("McapIndexedReader", () => {
           new Uint8Array([
             ...MCAP_MAGIC,
             ...record(Opcode.FOOTER, [
-              ...uint64LE(0n), // summary start
-              ...uint64LE(0n), // summary offset start
+              ...uint64LE(0), // summary start
+              ...uint64LE(0), // summary offset start
               ...uint32LE(0), // summary crc
             ]),
             ...MCAP_MAGIC,
@@ -128,8 +128,8 @@ describe("McapIndexedReader", () => {
           ...string(""), // library
         ]),
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary start
-          ...uint64LE(0n), // summary offset start
+          ...uint64LE(0), // summary start
+          ...uint64LE(0), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -147,8 +147,8 @@ describe("McapIndexedReader", () => {
           ...string("lib"), // library
         ]),
         ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary start
-          ...uint64LE(0n), // summary offset start
+          ...uint64LE(0), // summary start
+          ...uint64LE(0), // summary offset start
           ...uint32LE(0), // summary crc
         ]),
         ...MCAP_MAGIC,
@@ -179,8 +179,8 @@ describe("McapIndexedReader", () => {
 
     data.push(
       ...record(Opcode.FOOTER, [
-        ...uint64LE(BigInt(summaryStart)), // summary start
-        ...uint64LE(0n), // summary offset start
+        ...uint64LE(summaryStart), // summary start
+        ...uint64LE(0), // summary offset start
         ...uint32LE(crc32(new Uint8Array([42]))), // summary crc
       ]),
       ...MCAP_MAGIC,
@@ -216,8 +216,8 @@ describe("McapIndexedReader", () => {
         ...keyValues(string, string, [["foo", "bar"]]), // user data
       ]),
       ...record(Opcode.FOOTER, [
-        ...uint64LE(BigInt(summaryStart)), // summary start
-        ...uint64LE(0n), // summary offset start
+        ...uint64LE(summaryStart), // summary start
+        ...uint64LE(0), // summary offset start
         ...uint32LE(crc32(new Uint8Array(0))), // summary crc
       ]),
       ...MCAP_MAGIC,
@@ -262,32 +262,32 @@ describe("McapIndexedReader", () => {
       type: "Message",
       channelId: 42,
       sequence: 1,
-      publishTime: 0n,
-      logTime: 10n,
+      publishTime: 0,
+      logTime: 10,
       data: new Uint8Array(),
     };
     const message2: TypedMcapRecords["Message"] = {
       type: "Message",
       channelId: 42,
       sequence: 2,
-      publishTime: 1n,
-      logTime: 11n,
+      publishTime: 1,
+      logTime: 11,
       data: new Uint8Array(),
     };
     const message3: TypedMcapRecords["Message"] = {
       type: "Message",
       channelId: 42,
       sequence: 3,
-      publishTime: 2n,
-      logTime: 12n,
+      publishTime: 2,
+      logTime: 12,
       data: new Uint8Array(),
     };
     it.each([
       { startTime: undefined, endTime: undefined, expected: [message1, message2, message3] },
-      { startTime: 11n, endTime: 11n, expected: [message2] },
-      { startTime: 11n, endTime: undefined, expected: [message2, message3] },
-      { startTime: undefined, endTime: 11n, expected: [message1, message2] },
-      { startTime: 10n, endTime: 12n, expected: [message1, message2, message3] },
+      { startTime: 11, endTime: 11, expected: [message2] },
+      { startTime: 11, endTime: undefined, expected: [message2, message3] },
+      { startTime: undefined, endTime: 11, expected: [message1, message2] },
+      { startTime: 10, endTime: 12, expected: [message1, message2, message3] },
     ])(
       "fetches chunk data and reads requested messages between $startTime and $endTime",
       async ({ startTime, endTime, expected }) => {
@@ -323,11 +323,11 @@ describe("McapIndexedReader", () => {
           ...uint64LE(message3.publishTime),
         ]);
         const chunkContents = [...schema, ...channel];
-        const message1Offset = BigInt(chunkContents.length);
+        const message1Offset = chunkContents.length;
         chunkContents.push(...message1Data);
-        const message2Offset = BigInt(chunkContents.length);
+        const message2Offset = chunkContents.length;
         chunkContents.push(...message2Data);
-        const message3Offset = BigInt(chunkContents.length);
+        const message3Offset = chunkContents.length;
         chunkContents.push(...message3Data);
 
         const data = [
@@ -337,20 +337,20 @@ describe("McapIndexedReader", () => {
             ...string(""), // library
           ]),
         ];
-        const chunkOffset = BigInt(data.length);
+        const chunkOffset = data.length;
         data.push(
           ...record(Opcode.CHUNK, [
-            ...uint64LE(0n), // start time
-            ...uint64LE(0n), // end time
-            ...uint64LE(0n), // decompressed size
+            ...uint64LE(0), // start time
+            ...uint64LE(0), // end time
+            ...uint64LE(0), // decompressed size
             ...uint32LE(crc32(new Uint8Array(chunkContents))), // decompressed crc32
             ...string(""), // compression
-            ...uint64LE(BigInt(chunkContents.length)),
+            ...uint64LE(chunkContents.length),
             ...chunkContents,
           ]),
         );
-        const chunkLength = BigInt(data.length) - chunkOffset;
-        const messageIndexOffset = BigInt(data.length);
+        const chunkLength = data.length - chunkOffset;
+        const messageIndexOffset = data.length;
         data.push(
           ...record(Opcode.MESSAGE_INDEX, [
             ...uint16LE(42), // channel id
@@ -361,7 +361,7 @@ describe("McapIndexedReader", () => {
             ]), // records
           ]),
         );
-        const messageIndexLength = BigInt(data.length) - messageIndexOffset;
+        const messageIndexLength = data.length - messageIndexOffset;
         data.push(...record(Opcode.DATA_END, [...uint32LE(0)]));
         const summaryStart = data.length;
         data.push(
@@ -374,12 +374,12 @@ describe("McapIndexedReader", () => {
             ...keyValues(uint16LE, uint64LE, [[42, messageIndexOffset]]), // message index offsets
             ...uint64LE(messageIndexLength), // message index length
             ...string(""), // compression
-            ...uint64LE(BigInt(chunkContents.length)), // compressed size
-            ...uint64LE(BigInt(chunkContents.length)), // uncompressed size
+            ...uint64LE(chunkContents.length), // compressed size
+            ...uint64LE(chunkContents.length), // uncompressed size
           ]),
           ...record(Opcode.FOOTER, [
-            ...uint64LE(BigInt(summaryStart)), // summary start
-            ...uint64LE(0n), // summary offset start
+            ...uint64LE(summaryStart), // summary start
+            ...uint64LE(0), // summary offset start
             ...uint32LE(crc32(new Uint8Array(0))), // summary crc
           ]),
           ...MCAP_MAGIC,
@@ -411,25 +411,25 @@ describe("McapIndexedReader", () => {
       {
         type: "Message",
         sequence: 1,
-        publishTime: 0n,
-        logTime: 10n,
+        publishTime: 0,
+        logTime: 10,
         data: new Uint8Array(),
       },
       {
         type: "Message",
         sequence: 2,
-        publishTime: 1n,
-        logTime: 11n,
+        publishTime: 1,
+        logTime: 11,
         data: new Uint8Array(),
       },
     ];
     it.each([
       { startTime: undefined, endTime: undefined, expectedIndices: [0, 1] },
-      { startTime: undefined, endTime: 10n, expectedIndices: [0] },
-      { startTime: 11n, endTime: 11n, expectedIndices: [1] },
-      { startTime: 11n, endTime: undefined, expectedIndices: [1] },
-      { startTime: undefined, endTime: 11n, expectedIndices: [0, 1] },
-      { startTime: 10n, endTime: 12n, expectedIndices: [0, 1] },
+      { startTime: undefined, endTime: 10, expectedIndices: [0] },
+      { startTime: 11, endTime: 11, expectedIndices: [1] },
+      { startTime: 11, endTime: undefined, expectedIndices: [1] },
+      { startTime: undefined, endTime: 11, expectedIndices: [0, 1] },
+      { startTime: 10, endTime: 12, expectedIndices: [0, 1] },
     ])(
       "fetches chunk data and reads requested messages between $startTime and $endTime",
       async ({ startTime, endTime, expectedIndices }) => {
@@ -488,8 +488,8 @@ describe("McapIndexedReader", () => {
         type: "Message",
         channelId: channel1.id,
         sequence: idx,
-        logTime: BigInt(idx),
-        publishTime: 0n,
+        logTime: idx,
+        publishTime: 0,
         data: new Uint8Array(),
       };
     };
@@ -530,13 +530,13 @@ describe("McapIndexedReader", () => {
 
     builder.writeDataEnd({ dataSectionCrc: 0 });
 
-    const summaryStart = BigInt(builder.length);
+    const summaryStart = builder.length;
 
     for (const index of chunkIndexes) {
       builder.writeChunkIndex(index);
     }
 
-    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0, summaryCrc: 0 });
     builder.writeMagic();
 
     const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
@@ -572,16 +572,16 @@ describe("McapIndexedReader", () => {
       type: "Message",
       channelId: channel1.id,
       sequence: 0,
-      logTime: 0n,
-      publishTime: 0n,
+      logTime: 0,
+      publishTime: 0,
       data: new Uint8Array(),
     };
     const message2: TypedMcapRecords["Message"] = {
       type: "Message",
       channelId: channel2.id,
       sequence: 0,
-      logTime: 1n,
-      publishTime: 1n,
+      logTime: 1,
+      publishTime: 1,
       data: new Uint8Array(),
     };
 
@@ -603,14 +603,14 @@ describe("McapIndexedReader", () => {
 
     builder.writeDataEnd({ dataSectionCrc: 0 });
 
-    const summaryStart = BigInt(builder.length);
+    const summaryStart = builder.length;
     builder.writeChannel(channel1);
     builder.writeChannel(channel2);
     for (const index of chunkIndexes) {
       builder.writeChunkIndex(index);
     }
 
-    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0, summaryCrc: 0 });
     builder.writeMagic();
 
     const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
@@ -631,8 +631,8 @@ describe("McapIndexedReader", () => {
         type: "Message",
         channelId: channel1.id,
         sequence: idx,
-        logTime: BigInt(idx),
-        publishTime: 0n,
+        logTime: idx,
+        publishTime: 0,
         data: new Uint8Array(),
       };
     };
@@ -672,13 +672,13 @@ describe("McapIndexedReader", () => {
 
     builder.writeDataEnd({ dataSectionCrc: 0 });
 
-    const summaryStart = BigInt(builder.length);
+    const summaryStart = builder.length;
 
     for (const index of chunkIndexes) {
       builder.writeChunkIndex(index);
     }
 
-    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0, summaryCrc: 0 });
     builder.writeMagic();
 
     for (const reverse of [true, false]) {
@@ -723,24 +723,24 @@ describe("McapIndexedReader", () => {
       type: "Message",
       channelId: channelId1,
       sequence: 1,
-      logTime: 0n,
-      publishTime: 0n,
+      logTime: 0,
+      publishTime: 0,
       data: new Uint8Array([1]),
     };
     const message2: TypedMcapRecords["Message"] = {
       type: "Message",
       channelId: channelId1,
       sequence: 2,
-      logTime: 0n,
-      publishTime: 0n,
+      logTime: 0,
+      publishTime: 0,
       data: new Uint8Array([2]),
     };
     const message3: TypedMcapRecords["Message"] = {
       type: "Message",
       channelId: channelId1,
       sequence: 3,
-      logTime: 0n,
-      publishTime: 0n,
+      logTime: 0,
+      publishTime: 0,
       data: new Uint8Array([3]),
     };
     await writer.addMessage(message1);
@@ -782,8 +782,8 @@ describe("McapIndexedReader", () => {
         type: "Message",
         channelId: channel.id,
         sequence: idx,
-        logTime: BigInt(idx),
-        publishTime: 0n,
+        logTime: idx,
+        publishTime: 0,
         data: new Uint8Array(),
       };
     };
@@ -812,7 +812,7 @@ describe("McapIndexedReader", () => {
 
     builder.writeDataEnd({ dataSectionCrc: 0 });
 
-    const summaryStart = BigInt(builder.length);
+    const summaryStart = builder.length;
 
     builder.writeChannel(channelA);
     builder.writeChannel(channelB);
@@ -821,7 +821,7 @@ describe("McapIndexedReader", () => {
       builder.writeChunkIndex(index);
     }
 
-    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0, summaryCrc: 0 });
     builder.writeMagic();
 
     {
@@ -905,23 +905,23 @@ describe("McapIndexedReader", () => {
     const summaryStart = data.length;
     data.push(
       ...record(Opcode.METADATA_INDEX, [
-        ...uint64LE(BigInt(metadata1Start)), // offset
-        ...uint64LE(BigInt(metadata2Start - metadata1Start)), // length
+        ...uint64LE(metadata1Start), // offset
+        ...uint64LE(metadata2Start - metadata1Start), // length
         ...string("foo"), // name
       ]),
       ...record(Opcode.METADATA_INDEX, [
-        ...uint64LE(BigInt(metadata2Start)), // offset
-        ...uint64LE(BigInt(metadata3Start - metadata2Start)), // length
+        ...uint64LE(metadata2Start), // offset
+        ...uint64LE(metadata3Start - metadata2Start), // length
         ...string("bar"), // name
       ]),
       ...record(Opcode.METADATA_INDEX, [
-        ...uint64LE(BigInt(metadata3Start)), // offset
-        ...uint64LE(BigInt(dataEndStart - metadata3Start)), // length
+        ...uint64LE(metadata3Start), // offset
+        ...uint64LE(dataEndStart - metadata3Start), // length
         ...string("foo"), // name
       ]),
       ...record(Opcode.FOOTER, [
-        ...uint64LE(BigInt(summaryStart)), // summary start
-        ...uint64LE(0n), // summary offset start
+        ...uint64LE(summaryStart), // summary start
+        ...uint64LE(0), // summary offset start
         ...uint32LE(0), // summary crc
       ]),
       ...MCAP_MAGIC,
@@ -980,11 +980,11 @@ describe("McapIndexedReader", () => {
     const attachment1Start = data.length;
     data.push(
       ...record(Opcode.ATTACHMENT, [
-        ...uint64LE(1n), // log time
-        ...uint64LE(2n), // create time
+        ...uint64LE(1), // log time
+        ...uint64LE(2), // create time
         ...string("foo"), // name
         ...string("text/plain"), // media type
-        ...uint64LE(5n), // data length
+        ...uint64LE(5), // data length
         ...new Uint8Array([0x68, 0x65, 0x6c, 0x6c, 0x6f]), // data
         ...uint32LE(0), // data crc
       ]),
@@ -992,11 +992,11 @@ describe("McapIndexedReader", () => {
     const attachment2Start = data.length;
     data.push(
       ...record(Opcode.ATTACHMENT, [
-        ...uint64LE(4n), // log time
-        ...uint64LE(5n), // create time
+        ...uint64LE(4), // log time
+        ...uint64LE(5), // create time
         ...string("bar"), // name
         ...string("application/octet-stream"), // media type
-        ...uint64LE(3n), // data length
+        ...uint64LE(3), // data length
         ...new Uint8Array([1, 2, 3]), // data
         ...uint32LE(0), // data crc
       ]),
@@ -1004,11 +1004,11 @@ describe("McapIndexedReader", () => {
     const attachment3Start = data.length;
     data.push(
       ...record(Opcode.ATTACHMENT, [
-        ...uint64LE(6n), // log time
-        ...uint64LE(7n), // create time
+        ...uint64LE(6), // log time
+        ...uint64LE(7), // create time
         ...string("foo"), // name
         ...string("application/json"), // media type
-        ...uint64LE(2n), // data length
+        ...uint64LE(2), // data length
         ...new Uint8Array([0x7b, 0x7d]), // data
         ...uint32LE(0), // data crc
       ]),
@@ -1022,35 +1022,35 @@ describe("McapIndexedReader", () => {
     const summaryStart = data.length;
     data.push(
       ...record(Opcode.ATTACHMENT_INDEX, [
-        ...uint64LE(BigInt(attachment1Start)), // offset
-        ...uint64LE(BigInt(attachment2Start - attachment1Start)), // length
-        ...uint64LE(1n), // log time
-        ...uint64LE(2n), // create time
-        ...uint64LE(5n), // data size
+        ...uint64LE(attachment1Start), // offset
+        ...uint64LE(attachment2Start - attachment1Start), // length
+        ...uint64LE(1), // log time
+        ...uint64LE(2), // create time
+        ...uint64LE(5), // data size
         ...string("foo"), // name
         ...string("text/plain"), // media type
       ]),
       ...record(Opcode.ATTACHMENT_INDEX, [
-        ...uint64LE(BigInt(attachment2Start)), // offset
-        ...uint64LE(BigInt(attachment3Start - attachment2Start)), // length
-        ...uint64LE(4n), // log time
-        ...uint64LE(5n), // create time
-        ...uint64LE(3n), // data size
+        ...uint64LE(attachment2Start), // offset
+        ...uint64LE(attachment3Start - attachment2Start), // length
+        ...uint64LE(4), // log time
+        ...uint64LE(5), // create time
+        ...uint64LE(3), // data size
         ...string("bar"), // name
         ...string("application/octet-stream"), // media type
       ]),
       ...record(Opcode.ATTACHMENT_INDEX, [
-        ...uint64LE(BigInt(attachment3Start)), // offset
-        ...uint64LE(BigInt(dataEndStart - attachment3Start)), // length
-        ...uint64LE(6n), // log time
-        ...uint64LE(7n), // create time
-        ...uint64LE(2n), // data size
+        ...uint64LE(attachment3Start), // offset
+        ...uint64LE(dataEndStart - attachment3Start), // length
+        ...uint64LE(6), // log time
+        ...uint64LE(7), // create time
+        ...uint64LE(2), // data size
         ...string("foo"), // name
         ...string("application/json"), // media type
       ]),
       ...record(Opcode.FOOTER, [
-        ...uint64LE(BigInt(summaryStart)), // summary start
-        ...uint64LE(0n), // summary offset start
+        ...uint64LE(summaryStart), // summary start
+        ...uint64LE(0), // summary offset start
         ...uint32LE(0), // summary crc
       ]),
       ...MCAP_MAGIC,
@@ -1064,24 +1064,24 @@ describe("McapIndexedReader", () => {
     expect(attachments).toEqual([
       {
         name: "foo",
-        logTime: 1n,
-        createTime: 2n,
+        logTime: 1,
+        createTime: 2,
         mediaType: "text/plain",
         data: new Uint8Array([0x68, 0x65, 0x6c, 0x6c, 0x6f]),
         type: "Attachment",
       },
       {
         name: "bar",
-        logTime: 4n,
-        createTime: 5n,
+        logTime: 4,
+        createTime: 5,
         mediaType: "application/octet-stream",
         data: new Uint8Array([1, 2, 3]),
         type: "Attachment",
       },
       {
         name: "foo",
-        logTime: 6n,
-        createTime: 7n,
+        logTime: 6,
+        createTime: 7,
         mediaType: "application/json",
         data: new Uint8Array([0x7b, 0x7d]),
         type: "Attachment",
@@ -1092,8 +1092,8 @@ describe("McapIndexedReader", () => {
     expect(attachments).toEqual([
       {
         name: "bar",
-        logTime: 4n,
-        createTime: 5n,
+        logTime: 4,
+        createTime: 5,
         mediaType: "application/octet-stream",
         data: new Uint8Array([1, 2, 3]),
         type: "Attachment",
@@ -1104,20 +1104,20 @@ describe("McapIndexedReader", () => {
     expect(attachments).toEqual([
       {
         name: "foo",
-        logTime: 6n,
-        createTime: 7n,
+        logTime: 6,
+        createTime: 7,
         mediaType: "application/json",
         data: new Uint8Array([0x7b, 0x7d]),
         type: "Attachment",
       },
     ]);
 
-    attachments = await collect(reader.readAttachments({ startTime: 3n, endTime: 5n }));
+    attachments = await collect(reader.readAttachments({ startTime: 3, endTime: 5 }));
     expect(attachments).toEqual([
       {
         name: "bar",
-        logTime: 4n,
-        createTime: 5n,
+        logTime: 4,
+        createTime: 5,
         mediaType: "application/octet-stream",
         data: new Uint8Array([1, 2, 3]),
         type: "Attachment",

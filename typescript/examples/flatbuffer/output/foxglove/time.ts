@@ -29,7 +29,7 @@ static sizeOf():number {
   return 16;
 }
 
-static createTime(builder:flatbuffers.Builder, sec: bigint, nsec: number):flatbuffers.Offset {
+static createTime(builder:flatbuffers.Builder, sec: number, nsec: number):flatbuffers.Offset {
   builder.prep(8, 16);
   builder.pad(4);
   builder.writeInt32(nsec);

@@ -173,8 +173,8 @@ async function main() {
   await mcapFile.addMessage({
     channelId: tfChannelId,
     sequence: 0,
-    publishTime: 0n,
-    logTime: 0n,
+    publishTime: 0,
+    logTime: 0,
     data: tfBuilder.asUint8Array(),
   });
 
@@ -211,7 +211,7 @@ async function main() {
   let count = 0;
   while (currTime <= mcapTimeLength) {
     console.log(`Adding grid ${count}`);
-    const nsTime = BigInt(currTime) * 1_000_000n;
+    const nsTime = currTime * 1_000_000;
     const message = getGridMessageData(currTime);
     await mcapFile.addMessage({
       channelId: gridChannelId,

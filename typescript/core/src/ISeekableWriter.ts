@@ -5,7 +5,7 @@ import { IWritable } from "./IWritable";
  */
 export interface ISeekableWriter extends IWritable {
   /** Move the cursor to the given position */
-  seek(position: bigint): Promise<void>;
+  seek(position: number): Promise<void>;
   /** Remove data after the current write position */
   truncate(): Promise<void>;
 }

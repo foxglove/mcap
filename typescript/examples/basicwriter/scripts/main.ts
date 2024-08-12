@@ -51,8 +51,8 @@ async function main() {
   await mcapFile.addMessage({
     channelId,
     sequence: 0,
-    publishTime: 0n,
-    logTime: BigInt(Date.now()) * 1_000_000n,
+    publishTime: 0,
+    logTime: Date.now() * 1_000_000,
     data: msgData,
   });
 

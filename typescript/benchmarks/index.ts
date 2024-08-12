@@ -20,7 +20,7 @@ class FakeMemoryWritable {
     this.#size = 0;
   }
   position() {
-    return BigInt(this.#size);
+    return this.#size;
   }
   async write(data: Uint8Array) {
     if (data.byteLength > this.#lastWrittenData.byteLength) {
@@ -51,8 +51,8 @@ async function benchmarkReaders() {
     await writer.addMessage({
       channelId,
       sequence: i,
-      logTime: BigInt(i),
-      publishTime: BigInt(i),
+      logTime: i,
+      publishTime: i,
       data: messageData,
     });
   }
@@ -133,8 +133,8 @@ async function runWriteBenchmark({
         await writer.addMessage({
           channelId,
           sequence: i,
-          logTime: BigInt(i),
-          publishTime: BigInt(i),
+          logTime: i,
+          publishTime: i,
           data: messageData,
         });
       }

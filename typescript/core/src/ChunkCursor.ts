@@ -7,8 +7,8 @@ import { IReadable, TypedMcapRecords } from "./types";
 type ChunkCursorParams = {
   chunkIndex: TypedMcapRecords["ChunkIndex"];
   relevantChannels: Set<number> | undefined;
-  startTime: bigint | undefined;
-  endTime: bigint | undefined;
+  startTime: number | undefined;
+  endTime: number | undefined;
   reverse: boolean;
 };
 
@@ -23,12 +23,12 @@ export class ChunkCursor {
   readonly chunkIndex: TypedMcapRecords["ChunkIndex"];
 
   #relevantChannels?: Set<number>;
-  #startTime: bigint | undefined;
-  #endTime: bigint | undefined;
+  #startTime: number | undefined;
+  #endTime: number | undefined;
   #reverse: boolean;
 
   // List of message offsets (across all channels) sorted by logTime.
-  #orderedMessageOffsets?: [logTime: bigint, offset: bigint][];
+  #orderedMessageOffsets?: [logTime: number, offset: number][];
   // Index for the next message offset. Gets incremented for every popMessage() call.
   #nextMessageOffsetIndex = 0;
 
@@ -39,7 +39,7 @@ export class ChunkCursor {
     this.#endTime = params.endTime;
     this.#reverse = params.reverse;
 
-    if (this.chunkIndex.messageIndexLength === 0n) {
+    if (this.chunkIndex.messageIndexLength === 0) {
       throw new Error(`Chunks without message indexes are not currently supported`);
     }
   }
@@ -82,7 +82,7 @@ export class ChunkCursor {
    * Pop a message offset off of the chunk cursor. Message indexes must have been loaded before
    * using this method.
    */
-  popMessage(): [logTime: bigint, offset: bigint] {
+  popMessage(): [logTime: number, offset: number] {
     if (this.#orderedMessageOffsets == undefined) {
       throw new Error("loadMessageIndexes() must be called before popMessage()");
     }
@@ -105,8 +105,8 @@ export class ChunkCursor {
 
   async loadMessageIndexes(readable: IReadable): Promise<void> {
     const reverse = this.#reverse;
-    let messageIndexStartOffset: bigint | undefined;
-    let relevantMessageIndexStartOffset: bigint | undefined;
+    let messageIndexStartOffset: number | undefined;
+    let relevantMessageIndexStartOffset: number | undefined;
     for (const [channelId, offset] of this.chunkIndex.messageIndexOffsets) {
       if (messageIndexStartOffset == undefined || offset < messageIndexStartOffset) {
         messageIndexStartOffset = offset;
@@ -138,7 +138,7 @@ export class ChunkCursor {
     );
 
     const reader = new Reader(messageIndexesView);
-    const arrayOfMessageOffsets: [logTime: bigint, offset: bigint][][] = [];
+    const arrayOfMessageOffsets: [logTime: number, offset: number][][] = [];
     let record;
     while ((record = parseRecord(reader, true))) {
       if (record.type !== "MessageIndex") {
@@ -200,7 +200,7 @@ export class ChunkCursor {
     // Determine the indexes corresponding to the start and end time.
     const startTime = reverse ? this.#endTime : this.#startTime;
     const endTime = reverse ? this.#startTime : this.#endTime;
-    const iteratee = reverse ? (logTime: bigint) => -logTime : (logTime: bigint) => logTime;
+    const iteratee = reverse ? (logTime: number) => -logTime : (logTime: number) => logTime;
     let startIndex: number | undefined;
     let endIndex: number | undefined;
 
@@ -219,7 +219,7 @@ export class ChunkCursor {
   }
 
   // Get the next available message logTime which is being used when comparing chunkCursors (for ordering purposes).
-  #getSortTime(): bigint {
+  #getSortTime(): number {
     // If message indexes have been loaded and are non-empty, we return the logTime of the next available message.
     if (
       this.#orderedMessageOffsets != undefined &&
