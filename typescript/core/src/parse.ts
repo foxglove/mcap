@@ -27,6 +27,7 @@ export function parseMagic(reader: Reader): McapMagic | undefined {
 /**
  * Parse a MCAP record from the given reader
  */
+// eslint-disable-next-line @foxglove/no-boolean-parameters
 export function parseRecord(reader: Reader, validateCrcs = false): TypedMcapRecord | undefined {
   const RECORD_HEADER_SIZE = 1 /*opcode*/ + 8; /*record content length*/
   if (reader.bytesRemaining() < RECORD_HEADER_SIZE) {
@@ -46,7 +47,7 @@ export function parseRecord(reader: Reader, validateCrcs = false): TypedMcapReco
     return undefined;
   }
 
-  switch (opcode) {
+  switch (opcode as Opcode) {
     case Opcode.HEADER:
       return parseHeader(reader);
     case Opcode.FOOTER:
@@ -78,13 +79,17 @@ export function parseRecord(reader: Reader, validateCrcs = false): TypedMcapReco
     case Opcode.DATA_END:
       return parseDataEnd(reader);
     default:
-      const data = reader.u8ArrayBorrow(recordLengthNum);
-      return {
-        type: "Unknown",
-        opcode,
-        data,
-      };
+      return parseUnknown(reader, recordLengthNum, opcode);
   }
+}
+
+function parseUnknown(reader: Reader, recordLength: number, opcode: number): TypedMcapRecord {
+  const data = reader.u8ArrayBorrow(recordLength);
+  return {
+    type: "Unknown",
+    opcode,
+    data,
+  };
 }
 
 function parseHeader(reader: Reader): TypedMcapRecord {
@@ -229,6 +234,7 @@ function parseChunkIndex(reader: Reader): TypedMcapRecord {
 function parseAttachment(
   reader: Reader,
   recordLength: number,
+  // eslint-disable-next-line @foxglove/no-boolean-parameters
   validateCrcs: boolean,
 ): TypedMcapRecord {
   const start = reader.offset;

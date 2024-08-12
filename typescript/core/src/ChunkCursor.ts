@@ -1,8 +1,8 @@
+import Reader from "./Reader";
 import { parseRecord } from "./parse";
 import { sortedIndexBy } from "./sortedIndexBy";
 import { sortedLastIndexBy } from "./sortedLastIndex";
 import { IReadable, TypedMcapRecords } from "./types";
-import Reader from "./Reader";
 
 type ChunkCursorParams = {
   chunkIndex: TypedMcapRecords["ChunkIndex"];

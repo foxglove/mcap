@@ -1,9 +1,9 @@
 import { crc32 } from "@foxglove/crc";
 
+import Reader from "./Reader";
 import { MCAP_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
 import { Channel, DecompressHandlers, McapMagic, TypedMcapRecord, TypedMcapRecords } from "./types";
-import Reader from "./Reader";
 
 type McapReaderOptions = {
   /**
@@ -174,13 +174,8 @@ export default class McapStreamReader {
 
     let header: TypedMcapRecords["Header"] | undefined;
 
-    const that = this;
     function errorWithLibrary(message: string): Error {
-      return new Error(
-        `${message} ${header ? `[library=${header.library}]` : "[no header]"} offset=${
-          that.#reader.offset
-        }`,
-      );
+      return new Error(`${message} ${header ? `[library=${header.library}]` : "[no header]"}`);
     }
 
     for (;;) {

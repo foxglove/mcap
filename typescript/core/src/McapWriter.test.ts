@@ -3,12 +3,12 @@ import { crc32 } from "@foxglove/crc";
 import { McapIndexedReader } from "./McapIndexedReader";
 import McapStreamReader from "./McapStreamReader";
 import { McapWriter } from "./McapWriter";
+import Reader from "./Reader";
 import { TempBuffer } from "./TempBuffer";
 import { MCAP_MAGIC, Opcode } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
 import { collect, keyValues, record, string, uint16LE, uint32LE, uint64LE } from "./testUtils";
 import { TypedMcapRecord } from "./types";
-import Reader from "./Reader";
 
 function readAsMcapStream(data: Uint8Array) {
   const reader = new McapStreamReader();

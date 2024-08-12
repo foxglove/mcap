@@ -16,7 +16,7 @@ export default class Reader {
     this.offset = offset;
   }
 
-  reset(view: DataView, offset = 0) {
+  reset(view: DataView, offset = 0): void {
     this.#view = view;
     this.#viewU8 = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
     this.offset = offset;
@@ -26,7 +26,7 @@ export default class Reader {
     return this.#viewU8.length - this.offset;
   }
 
-  rewind(bytes: number) {
+  rewind(bytes: number): void {
     this.offset -= bytes;
   }
 
