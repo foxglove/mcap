@@ -7,11 +7,27 @@ const textDecoder = new TextDecoder();
 
 export default class Reader {
   #view: DataView;
+  #viewU8: Uint8Array;
   offset: number;
 
   constructor(view: DataView, offset = 0) {
     this.#view = view;
+    this.#viewU8 = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
     this.offset = offset;
+  }
+
+  reset(view: DataView, offset = 0) {
+    this.#view = view;
+    this.#viewU8 = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+    this.offset = offset;
+  }
+
+  bytesRemaining(): number {
+    return this.#viewU8.length - this.offset;
+  }
+
+  rewind(bytes: number) {
+    this.offset -= bytes;
   }
 
   uint8(): number {
@@ -101,6 +117,18 @@ export default class Reader {
         `Map length (${this.offset - endOffset + length}) greater than expected (${length})`,
       );
     }
+    return result;
+  }
+
+  u8ArrayBorrow(length: number): Uint8Array {
+    const result = this.#viewU8.subarray(this.offset, this.offset + length);
+    this.offset += length;
+    return result;
+  }
+
+  u8ArrayCopy(length: number): Uint8Array {
+    const result = this.#viewU8.slice(this.offset, this.offset + length);
+    this.offset += length;
     return result;
   }
 }

@@ -8,6 +8,7 @@ import { MCAP_MAGIC, Opcode } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
 import { collect, keyValues, record, string, uint16LE, uint32LE, uint64LE } from "./testUtils";
 import { TypedMcapRecord } from "./types";
+import Reader from "./Reader";
 
 function readAsMcapStream(data: Uint8Array) {
   const reader = new McapStreamReader();
@@ -278,13 +279,12 @@ describe("McapWriter", () => {
 
     const array = tempBuffer.get();
     const view = new DataView(array.buffer, array.byteOffset, array.byteLength);
+    const reader = new Reader(view);
     const records: TypedMcapRecord[] = [];
-    for (
-      let offset = parseMagic(view, 0).usedBytes, result;
-      (result = parseRecord({ view, startOffset: offset, validateCrcs: true })), result.record;
-      offset += result.usedBytes
-    ) {
-      records.push(result.record);
+    parseMagic(reader);
+    let result;
+    while ((result = parseRecord(reader, true))) {
+      records.push(result);
     }
 
     const expectedChunkData = new Uint8Array([
