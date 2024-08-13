@@ -56,14 +56,12 @@ export default class Reader {
 
   string(): string {
     const length = this.uint32();
-    if (this.offset + length > this.#view.byteLength) {
+    if (length === 0) {
+      return "";
+    } else if (length > this.bytesRemaining()) {
       throw new Error(`String length ${length} exceeds bounds of buffer`);
     }
-    const value = textDecoder.decode(
-      new Uint8Array(this.#view.buffer, this.#view.byteOffset + this.offset, length),
-    );
-    this.offset += length;
-    return value;
+    return textDecoder.decode(this.u8ArrayBorrow(length));
   }
 
   keyValuePairs<K, V>(readKey: (reader: Reader) => K, readValue: (reader: Reader) => V): [K, V][] {
