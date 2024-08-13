@@ -273,33 +273,32 @@ function parseAttachment(
   // eslint-disable-next-line @foxglove/no-boolean-parameters
   validateCrcs: boolean,
 ): TypedMcapRecord {
-  const start = reader.offset;
+  const startOffset = reader.offset;
   const logTime = reader.uint64();
   const createTime = reader.uint64();
   const name = reader.string();
   const mediaType = reader.string();
   const dataLen = reader.uint64();
-  const end = reader.offset;
   // NOTE: probably not necessary, but just in case
   if (BigInt(reader.offset) + dataLen > Number.MAX_SAFE_INTEGER) {
     throw new Error(`Attachment too large: ${dataLen}`);
   }
-  if (recordLength - (end - start) < Number(dataLen) + 4 /*crc*/) {
+  if (reader.offset + Number(dataLen) + 4 /*crc*/ > startOffset + recordLength) {
     throw new Error(`Attachment data length ${dataLen} exceeds bounds of record`);
   }
   const data = reader.u8ArrayCopy(Number(dataLen));
-  const crcEnd = reader.offset;
+  const crcLength = reader.offset - startOffset;
   const expectedCrc = reader.uint32();
   if (validateCrcs && expectedCrc !== 0) {
-    reader.offset = start;
-    const fullData = reader.u8ArrayBorrow(recordLength - 4);
+    reader.offset = startOffset;
+    const fullData = reader.u8ArrayBorrow(crcLength);
     const actualCrc = crc32(fullData);
-    reader.offset = crcEnd + 4;
+    reader.offset = startOffset + crcLength + 4;
     if (actualCrc !== expectedCrc) {
       throw new Error(`Attachment CRC32 mismatch: expected ${expectedCrc}, actual ${actualCrc}`);
     }
   }
-  reader.offset = start + recordLength;
+  reader.offset = startOffset + recordLength;
 
   return {
     type: "Attachment",
