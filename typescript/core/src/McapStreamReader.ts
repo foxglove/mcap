@@ -169,7 +169,6 @@ export default class McapStreamReader {
       while (((magic = parseMagic(this.#reader)), !magic)) {
         yield;
       }
-      // this.#buffer.consume(usedBytes);
     }
 
     let header: TypedMcapRecords["Header"] | undefined;
@@ -269,7 +268,6 @@ export default class McapStreamReader {
             while (((magic = parseMagic(this.#reader)), !magic)) {
               yield;
             }
-            // this.#buffer.consume(usedBytes);
           } catch (error) {
             throw errorWithLibrary((error as Error).message);
           }
