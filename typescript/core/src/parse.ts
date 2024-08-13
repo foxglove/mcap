@@ -44,7 +44,7 @@ export function parseRecord(reader: Reader, validateCrcs = false): TypedMcapReco
   const recordLengthNum = Number(recordLength);
 
   if (reader.bytesRemaining() < recordLengthNum) {
-    reader.rewind(RECORD_HEADER_SIZE);
+    reader.offset = start; // Rewind to the start of the record
     return undefined;
   }
 

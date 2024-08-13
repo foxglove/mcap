@@ -26,10 +26,6 @@ export default class Reader {
     return this.#viewU8.length - this.offset;
   }
 
-  rewind(bytes: number): void {
-    this.offset -= bytes;
-  }
-
   uint8(): number {
     const value = this.#view.getUint8(this.offset);
     this.offset += 1;
