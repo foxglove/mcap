@@ -62,6 +62,8 @@ pub struct RecordReader<R> {
     start_magic_seen: bool,
     footer_seen: bool,
     scratch: [u8; 9],
+    to_discard_after_chunk: usize,
+    discard_buf: Box<[u8]>,
 }
 
 #[derive(Default, Clone)]
@@ -77,7 +79,10 @@ pub struct Options {
 
 enum Cmd {
     YieldRecord(u8),
-    EnterChunk(records::ChunkHeader),
+    EnterChunk {
+        header: records::ChunkHeader,
+        len: u64,
+    },
     ExitChunk,
     Stop,
 }
@@ -97,6 +102,8 @@ where
             start_magic_seen: false,
             footer_seen: false,
             scratch: [0; 9],
+            to_discard_after_chunk: 0,
+            discard_buf: vec![0; 1024].into_boxed_slice(),
         }
     }
 
@@ -112,7 +119,7 @@ where
             match cmd {
                 Cmd::Stop => return Ok(None),
                 Cmd::YieldRecord(opcode) => return Ok(Some(opcode)),
-                Cmd::EnterChunk(header) => {
+                Cmd::EnterChunk { header, len } => {
                     let mut rdr = ReaderState::Empty;
                     std::mem::swap(&mut rdr, &mut self.reader);
                     match header.compression.as_str() {
@@ -138,11 +145,24 @@ where
                             ));
                         }
                     }
+                    self.to_discard_after_chunk = len as usize
+                        - (40 + header.compression.len() + header.compressed_size as usize);
                 }
                 Cmd::ExitChunk => {
                     let mut rdr = ReaderState::Empty;
                     std::mem::swap(&mut rdr, &mut self.reader);
-                    self.reader = ReaderState::Base(rdr.into_inner()?)
+                    self.reader = ReaderState::Base(rdr.into_inner()?);
+                    while self.to_discard_after_chunk > 0 {
+                        let to_read = if self.to_discard_after_chunk > self.discard_buf.len() {
+                            self.discard_buf.len()
+                        } else {
+                            self.to_discard_after_chunk
+                        };
+                        self.reader
+                            .read_exact(&mut self.discard_buf[..to_read])
+                            .await?;
+                        self.to_discard_after_chunk -= to_read;
+                    }
                 }
             };
         }
@@ -171,8 +191,11 @@ where
             }
             let record_len = byteorder::LittleEndian::read_u64(&self.scratch[1..]);
             if opcode == records::op::CHUNK && !self.options.emit_chunks {
-                let chunk_header = read_chunk_header(reader, data, record_len).await?;
-                return Ok(Cmd::EnterChunk(chunk_header));
+                let header = read_chunk_header(reader, data, record_len).await?;
+                return Ok(Cmd::EnterChunk {
+                    header,
+                    len: record_len,
+                });
             }
             data.resize(record_len as usize, 0);
             reader.read_exact(&mut data[..]).await?;
