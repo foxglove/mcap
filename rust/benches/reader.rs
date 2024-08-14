@@ -13,7 +13,8 @@ fn create_test_mcap(n: usize, compression: Option<mcap::Compression>) -> Vec<u8>
             .profile("fooey")
             .create(Cursor::new(&mut buffer))
             .unwrap();
-        const MESSAGE_DATA: &[u8] = &[0; 42];
+        // Mock message data to align with reader benchmarks in ts
+        const MESSAGE_DATA: &[u8] = &[42; 10];
 
         let schema = Arc::new(Schema {
             name: "TestSchema".to_string(),
