@@ -36,3 +36,11 @@ def test_write_wrong_schema():
         writer.write_message("timestamps", Timestamp(seconds=5, nanos=10))
         with pytest.raises(ValueError):
             writer.write_message("timestamps", Duration(seconds=5, nanos=10))
+
+
+def test_get_underlying_writer():
+    output = BytesIO()
+    writer = Writer(output=output)
+    underlying_writer = writer.writer
+    assert underlying_writer
+    assert writer != underlying_writer

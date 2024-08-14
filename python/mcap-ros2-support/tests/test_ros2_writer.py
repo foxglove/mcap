@@ -59,3 +59,11 @@ def test_write_std_msgs_empty_messages():
         assert msg.message.log_time == index
         assert msg.message.publish_time == index
         assert msg.message.sequence == index
+
+
+def test_get_underlying_writer():
+    output = BytesIO()
+    ros_writer = Ros2Writer(output=output)
+    underlying_writer = ros_writer.writer
+    assert underlying_writer
+    assert ros_writer != underlying_writer

@@ -97,3 +97,7 @@ class Writer:
 
     def __exit__(self, exc_: Any, exc_type_: Any, tb_: Any):
         self.finish()
+
+    @property
+    def writer(self) -> McapWriter:
+        return self._writer

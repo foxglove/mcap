@@ -24,3 +24,11 @@ def test_write_messages():
         assert msg.channel.topic == "/chatter"
         assert msg.decoded_message.data == f"string message {index}"
         assert msg.message.log_time == index
+
+
+def test_get_underlying_writer():
+    output = BytesIO()
+    ros_writer = Ros1Writer(output=output)
+    underlying_writer = ros_writer.writer
+    assert underlying_writer
+    assert ros_writer != underlying_writer
