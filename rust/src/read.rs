@@ -368,7 +368,7 @@ fn read_record_from_chunk_stream<'a, R: Read>(r: &mut R) -> McapResult<records::
     debug!("chunk: opcode {op:02X}, length {len}");
     let record = match op {
         op::SCHEMA => {
-            let mut record = Vec::new();
+            let mut record = Vec::with_capacity(len as usize);
             r.take(len).read_to_end(&mut record)?;
             if len as usize != record.len() {
                 return Err(McapError::UnexpectedEoc);
@@ -396,7 +396,7 @@ fn read_record_from_chunk_stream<'a, R: Read>(r: &mut R) -> McapResult<records::
             }
         }
         op::CHANNEL => {
-            let mut record = Vec::new();
+            let mut record = Vec::with_capacity(len as usize);
             r.take(len).read_to_end(&mut record)?;
             if len as usize != record.len() {
                 return Err(McapError::UnexpectedEoc);
@@ -421,14 +421,14 @@ fn read_record_from_chunk_stream<'a, R: Read>(r: &mut R) -> McapResult<records::
             // Fortunately, message headers are fixed length.
             const HEADER_LEN: u64 = 22;
 
-            let mut header_buf = Vec::new();
+            let mut header_buf = Vec::with_capacity(HEADER_LEN as usize);
             r.take(HEADER_LEN).read_to_end(&mut header_buf)?;
             if header_buf.len() as u64 != HEADER_LEN {
                 return Err(McapError::UnexpectedEoc);
             }
             let header: records::MessageHeader = Cursor::new(header_buf).read_le()?;
 
-            let mut data = Vec::new();
+            let mut data = Vec::with_capacity((len - HEADER_LEN) as usize);
             r.take(len - HEADER_LEN).read_to_end(&mut data)?;
             if data.len() as u64 != len - HEADER_LEN {
                 return Err(McapError::UnexpectedEoc);
