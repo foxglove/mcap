@@ -1,9 +1,12 @@
+use std::io::{Error, ErrorKind, Result};
+use std::pin::{pin, Pin};
+use std::ptr;
+use std::task::{Context, Poll};
+
 use lz4::liblz4::{
     check_error, LZ4FDecompressionContext, LZ4F_createDecompressionContext, LZ4F_decompress,
     LZ4F_freeDecompressionContext, LZ4F_VERSION,
 };
-use std::io::{Error, ErrorKind, Result};
-use std::ptr;
 use tokio::io::{AsyncRead, ReadBuf};
 
 const BUFFER_SIZE: usize = 32 * 1024;
@@ -57,12 +60,12 @@ impl<R: AsyncRead> Lz4Decoder<R> {
 
 impl<R: AsyncRead + std::marker::Unpin> AsyncRead for Lz4Decoder<R> {
     fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
         if self.next == 0 || buf.remaining() == 0 {
-            return std::task::Poll::Ready(Ok(()));
+            return Poll::Ready(Ok(()));
         }
         let mut written_len: usize = 0;
         let mself = self.get_mut();
@@ -75,10 +78,10 @@ impl<R: AsyncRead + std::marker::Unpin> AsyncRead for Lz4Decoder<R> {
                 };
                 {
                     let mut comp_buf = ReadBuf::new(&mut mself.buf[..need]);
-                    let result = std::pin::pin!(&mut mself.r).poll_read(cx, &mut comp_buf);
+                    let result = pin!(&mut mself.r).poll_read(cx, &mut comp_buf);
                     match result {
-                        std::task::Poll::Pending => return result,
-                        std::task::Poll::Ready(Err(_)) => return result,
+                        Poll::Pending => return result,
+                        Poll::Ready(Err(_)) => return result,
                         _ => {}
                     };
                     mself.len = comp_buf.filled().len();
@@ -107,13 +110,13 @@ impl<R: AsyncRead + std::marker::Unpin> AsyncRead for Lz4Decoder<R> {
                 buf.set_filled(written_len);
                 if len == 0 {
                     mself.next = 0;
-                    return std::task::Poll::Ready(Ok(()));
+                    return Poll::Ready(Ok(()));
                 } else if mself.next < len {
                     mself.next = len;
                 }
             }
         }
-        return std::task::Poll::Ready(Ok(()));
+        return Poll::Ready(Ok(()));
     }
 }
 

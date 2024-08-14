@@ -1,11 +1,14 @@
-use byteorder::ByteOrder;
 use std::future::Future;
-use tokio::io::{AsyncRead, AsyncReadExt, BufReader, Take};
+use std::pin::{pin, Pin};
+use std::task::{Context, Poll};
+
+use async_compression::tokio::bufread::ZstdDecoder;
+use byteorder::ByteOrder;
+use tokio::io::{AsyncRead, AsyncReadExt, BufReader, ReadBuf, Take};
 use tokio_stream::Stream;
 
 use crate::tokio::lz4::Lz4Decoder;
 use crate::{records, McapError, McapResult, MAGIC};
-use async_compression::tokio::bufread::ZstdDecoder;
 
 enum ReaderState<R> {
     Base(R),
@@ -20,15 +23,15 @@ where
     R: AsyncRead + std::marker::Unpin,
 {
     fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
         match self.get_mut() {
-            ReaderState::Base(r) => std::pin::pin!(r).poll_read(cx, buf),
-            ReaderState::UncompressedChunk(r) => std::pin::pin!(r).poll_read(cx, buf),
-            ReaderState::ZstdChunk(r) => std::pin::pin!(r).poll_read(cx, buf),
-            ReaderState::Lz4Chunk(r) => std::pin::pin!(r).poll_read(cx, buf),
+            ReaderState::Base(r) => pin!(r).poll_read(cx, buf),
+            ReaderState::UncompressedChunk(r) => pin!(r).poll_read(cx, buf),
+            ReaderState::ZstdChunk(r) => pin!(r).poll_read(cx, buf),
+            ReaderState::Lz4Chunk(r) => pin!(r).poll_read(cx, buf),
             ReaderState::Empty => {
                 panic!("invariant: reader is only set to empty while swapping with another valid variant")
             }
@@ -61,9 +64,8 @@ pub struct RecordReader<R> {
     options: Options,
     start_magic_seen: bool,
     footer_seen: bool,
-    scratch: [u8; 9],
     to_discard_after_chunk: usize,
-    discard_buf: Box<[u8]>,
+    scratch: Box<[u8]>,
 }
 
 #[derive(Default, Clone)]
@@ -101,9 +103,8 @@ where
             options: options.clone(),
             start_magic_seen: false,
             footer_seen: false,
-            scratch: [0; 9],
             to_discard_after_chunk: 0,
-            discard_buf: vec![0; 1024].into_boxed_slice(),
+            scratch: vec![0; 1024].into_boxed_slice(),
         }
     }
 
@@ -153,14 +154,12 @@ where
                     std::mem::swap(&mut rdr, &mut self.reader);
                     self.reader = ReaderState::Base(rdr.into_inner()?);
                     while self.to_discard_after_chunk > 0 {
-                        let to_read = if self.to_discard_after_chunk > self.discard_buf.len() {
-                            self.discard_buf.len()
+                        let to_read = if self.to_discard_after_chunk > self.scratch.len() {
+                            self.scratch.len()
                         } else {
                             self.to_discard_after_chunk
                         };
-                        self.reader
-                            .read_exact(&mut self.discard_buf[..to_read])
-                            .await?;
+                        self.reader.read_exact(&mut self.scratch[..to_read]).await?;
                         self.to_discard_after_chunk -= to_read;
                     }
                 }
@@ -184,12 +183,12 @@ where
                 }
                 return Ok(Cmd::Stop);
             }
-            reader.read_exact(&mut self.scratch).await?;
+            reader.read_exact(&mut self.scratch[..9]).await?;
             let opcode = self.scratch[0];
             if opcode == records::op::FOOTER {
                 self.footer_seen = true;
             }
-            let record_len = byteorder::LittleEndian::read_u64(&self.scratch[1..]);
+            let record_len = byteorder::LittleEndian::read_u64(&self.scratch[1..9]);
             if opcode == records::op::CHUNK && !self.options.emit_chunks {
                 let header = read_chunk_header(reader, data, record_len).await?;
                 return Ok(Cmd::EnterChunk {
@@ -201,15 +200,15 @@ where
             reader.read_exact(&mut data[..]).await?;
             Ok(Cmd::YieldRecord(opcode))
         } else {
-            let len = self.reader.read(&mut self.scratch).await?;
+            let len = self.reader.read(&mut self.scratch[..9]).await?;
             if len == 0 {
                 return Ok(Cmd::ExitChunk);
             }
-            if len != self.scratch.len() {
+            if len != 9 {
                 return Err(McapError::UnexpectedEof);
             }
             let opcode = self.scratch[0];
-            let record_len = byteorder::LittleEndian::read_u64(&self.scratch[1..]);
+            let record_len = byteorder::LittleEndian::read_u64(&self.scratch[1..9]);
             data.resize(record_len as usize, 0);
             self.reader.read_exact(&mut data[..]).await?;
             Ok(Cmd::YieldRecord(opcode))
@@ -298,35 +297,35 @@ impl<R: AsyncRead + std::marker::Unpin> LinearStream<R> {
 impl<R: AsyncRead + std::marker::Unpin> Stream for LinearStream<R> {
     type Item = McapResult<crate::records::Record<'static>>;
     fn poll_next(
-        mut self: std::pin::Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
+    ) -> Poll<Option<Self::Item>> {
         // we do this swap maneuver in order to appease the borrow checker and also reuse one read
         // buf across several records.
         let mut buf = Vec::new();
         std::mem::swap(&mut buf, &mut self.buf);
         let opcode = {
-            let res = std::pin::pin!((&mut self).r.next_record(&mut buf)).poll(cx);
+            let res = pin!((&mut self).r.next_record(&mut buf)).poll(cx);
             match res {
-                std::task::Poll::Pending => {
+                Poll::Pending => {
                     std::mem::swap(&mut buf, &mut self.buf);
-                    return std::task::Poll::Pending;
+                    return Poll::Pending;
                 }
-                std::task::Poll::Ready(result) => match result {
+                Poll::Ready(result) => match result {
                     Err(err) => {
                         std::mem::swap(&mut buf, &mut self.buf);
-                        return std::task::Poll::Ready(Some(Err(err)));
+                        return Poll::Ready(Some(Err(err)));
                     }
                     Ok(None) => {
                         std::mem::swap(&mut buf, &mut self.buf);
-                        return std::task::Poll::Ready(None);
+                        return Poll::Ready(None);
                     }
                     Ok(Some(op)) => op,
                 },
             }
         };
         let parse_res = crate::read::read_record(opcode, &buf[..]);
-        let result = std::task::Poll::Ready(Some(match parse_res {
+        let result = Poll::Ready(Some(match parse_res {
             Ok(record) => Ok(record.into_owned()),
             Err(err) => Err(err),
         }));
@@ -372,13 +371,8 @@ mod tests {
             let mut reader = RecordReader::new(std::io::Cursor::new(buf.into_inner()));
             let mut record = Vec::new();
             let mut opcodes: Vec<u8> = Vec::new();
-            loop {
-                let opcode = reader.next_record(&mut record).await?;
-                if let Some(opcode) = opcode {
-                    opcodes.push(opcode);
-                } else {
-                    break;
-                }
+            while let Some(opcode) = reader.next_record(&mut record).await? {
+                opcodes.push(opcode);
             }
             assert_eq!(
                 opcodes.as_slice(),
