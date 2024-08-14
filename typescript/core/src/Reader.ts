@@ -16,6 +16,8 @@ export default class Reader {
     this.offset = offset;
   }
 
+  // Should be ~identical to the constructor, it allows us to reinitialize the reader when
+  // the view changes,  without creating a new instance, avoiding allocation / GC overhead
   reset(view: DataView, offset = 0): void {
     this.#view = view;
     this.#viewU8 = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
@@ -114,12 +116,14 @@ export default class Reader {
     return result;
   }
 
+  // Read a borrowed Uint8Array, useful temp references or borrow semantics
   u8ArrayBorrow(length: number): Uint8Array {
     const result = this.#viewU8.subarray(this.offset, this.offset + length);
     this.offset += length;
     return result;
   }
 
+  // Read a copied Uint8Array from the underlying buffer, use when you need to keep the data around
   u8ArrayCopy(length: number): Uint8Array {
     const result = this.#viewU8.slice(this.offset, this.offset + length);
     this.offset += length;

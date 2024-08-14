@@ -183,11 +183,12 @@ function parseChannel(reader: Reader, recordLength: number): TypedMcapRecord {
 }
 
 function parseMessage(reader: Reader, recordLength: number): TypedMcapRecord {
+  const MESSAGE_PREFIX_SIZE = 2 + 4 + 8 + 8; // channelId, sequence, logTime, publishTime
   const channelId = reader.uint16();
   const sequence = reader.uint32();
   const logTime = reader.uint64();
   const publishTime = reader.uint64();
-  const data = reader.u8ArrayCopy(recordLength - 22 /*channelId, sequence, logTime, publishTime*/);
+  const data = reader.u8ArrayCopy(recordLength - MESSAGE_PREFIX_SIZE);
   return {
     type: "Message",
     channelId,
@@ -205,12 +206,13 @@ function parseChunk(reader: Reader, recordLength: number): TypedMcapRecord {
   const uncompressedSize = reader.uint64();
   const uncompressedCrc = reader.uint32();
   const compression = reader.string();
-  const recordByteLength = Number(reader.uint64());
+  const recordsByteLength = Number(reader.uint64());
   const end = reader.offset;
-  if (recordLength - (end - start) < recordByteLength) {
+  const prefixSize = end - start;
+  if (recordsByteLength + prefixSize > recordLength) {
     throw new Error("Chunk records length exceeds remaining record size");
   }
-  const records = reader.u8ArrayCopy(recordByteLength);
+  const records = reader.u8ArrayCopy(recordsByteLength);
   reader.offset = start + recordLength;
   return {
     type: "Chunk",
