@@ -66,7 +66,7 @@ fn round_trip() -> Result<()> {
             ..Default::default()
         }),
         attachment_indexes: vec![mcap::records::AttachmentIndex {
-            offset: 38, // Finicky - depends on the length of the library version string
+            offset: 39, // Finicky - depends on the length of the library version string
             length: 78,
             log_time: 2,
             create_time: 1,
