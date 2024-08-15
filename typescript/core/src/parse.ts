@@ -229,10 +229,7 @@ function parseChunk(reader: Reader, recordLength: number): TypedMcapRecord {
 function parseMessageIndex(reader: Reader, recordLength: number): TypedMcapRecord {
   const startOffset = reader.offset;
   const channelId = reader.uint16();
-  const records = reader.keyValuePairs(
-    (r) => r.uint64(),
-    (r) => r.uint64(),
-  );
+  const records = reader.kvPairsU64Fast();
   reader.offset = startOffset + recordLength;
   return {
     type: "MessageIndex",
