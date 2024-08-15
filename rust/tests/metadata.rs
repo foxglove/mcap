@@ -56,7 +56,7 @@ fn round_trip() -> Result<()> {
             ..Default::default()
         }),
         metadata_indexes: vec![mcap::records::MetadataIndex {
-            offset: 38, // Finicky - depends on the length of the library version string
+            offset: 39, // Finicky - depends on the length of the library version string
             length: 41,
             name: String::from("myMetadata"),
         }],

@@ -143,8 +143,9 @@ fn read_record_from_slice<'a>(buf: &mut &'a [u8]) -> McapResult<records::Record<
     Ok(record)
 }
 
-/// Given a record's opcode and its slice, read it into a [Record]
-pub(crate) fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
+/// Given a records' opcode and data, parse into a Record. The resulting Record will contain
+/// borrowed slices from `body`.
+pub fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
     macro_rules! record {
         ($b:ident) => {{
             let mut cur = Cursor::new($b);

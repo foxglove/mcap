@@ -1,11 +1,9 @@
-use std::future::Future;
 use std::pin::{pin, Pin};
 use std::task::{Context, Poll};
 
 use async_compression::tokio::bufread::ZstdDecoder;
 use byteorder::ByteOrder;
 use tokio::io::{AsyncRead, AsyncReadExt, BufReader, ReadBuf, Take};
-use tokio_stream::Stream;
 
 use crate::tokio::lz4::Lz4Decoder;
 use crate::{records, McapError, McapResult, MAGIC};
@@ -274,70 +272,10 @@ async fn read_chunk_header<R: AsyncRead + std::marker::Unpin>(
     Ok(header)
 }
 
-/// implements a Stream of owned `crate::record::Record` values.
-pub struct LinearStream<R> {
-    r: RecordReader<R>,
-    buf: Vec<u8>,
-}
-
-impl<R: AsyncRead + std::marker::Unpin> LinearStream<R> {
-    /// Creates a new stream of records from a reader.
-    pub fn new(r: R) -> Self {
-        Self {
-            r: RecordReader::new(r),
-            buf: Vec::new(),
-        }
-    }
-
-    pub fn into_inner(self) -> McapResult<R> {
-        self.r.into_inner()
-    }
-}
-
-impl<R: AsyncRead + std::marker::Unpin> Stream for LinearStream<R> {
-    type Item = McapResult<crate::records::Record<'static>>;
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
-        // we do this swap maneuver in order to appease the borrow checker and also reuse one read
-        // buf across several records.
-        let mut buf = Vec::new();
-        std::mem::swap(&mut buf, &mut self.buf);
-        let opcode = {
-            let res = pin!((&mut self).r.next_record(&mut buf)).poll(cx);
-            match res {
-                Poll::Pending => {
-                    std::mem::swap(&mut buf, &mut self.buf);
-                    return Poll::Pending;
-                }
-                Poll::Ready(result) => match result {
-                    Err(err) => {
-                        std::mem::swap(&mut buf, &mut self.buf);
-                        return Poll::Ready(Some(Err(err)));
-                    }
-                    Ok(None) => {
-                        std::mem::swap(&mut buf, &mut self.buf);
-                        return Poll::Ready(None);
-                    }
-                    Ok(Some(op)) => op,
-                },
-            }
-        };
-        let parse_res = crate::read::read_record(opcode, &buf[..]);
-        let result = Poll::Ready(Some(match parse_res {
-            Ok(record) => Ok(record.into_owned()),
-            Err(err) => Err(err),
-        }));
-        std::mem::swap(&mut buf, &mut self.buf);
-        return result;
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::read::read_record;
     use std::collections::BTreeMap;
-    use tokio_stream::StreamExt;
 
     use super::*;
     #[tokio::test]
@@ -373,6 +311,7 @@ mod tests {
             let mut opcodes: Vec<u8> = Vec::new();
             while let Some(opcode) = reader.next_record(&mut record).await? {
                 opcodes.push(opcode);
+                read_record(opcode, &record)?;
             }
             assert_eq!(
                 opcodes.as_slice(),
@@ -391,62 +330,6 @@ mod tests {
                     records::op::FOOTER,
                 ],
                 "reads opcodes from MCAP compressed with {:?}",
-                compression
-            );
-        }
-        Ok(())
-    }
-    #[tokio::test]
-    async fn test_linear_stream() -> Result<(), McapError> {
-        for compression in [
-            None,
-            Some(crate::Compression::Lz4),
-            Some(crate::Compression::Zstd),
-        ] {
-            let mut buf = std::io::Cursor::new(Vec::new());
-            {
-                let mut writer = crate::WriteOptions::new()
-                    .compression(compression)
-                    .create(&mut buf)?;
-                let channel = std::sync::Arc::new(crate::Channel {
-                    topic: "chat".to_owned(),
-                    schema: None,
-                    message_encoding: "json".to_owned(),
-                    metadata: BTreeMap::new(),
-                });
-                writer.add_channel(&channel)?;
-                writer.write(&crate::Message {
-                    channel,
-                    sequence: 0,
-                    log_time: 0,
-                    publish_time: 0,
-                    data: (&[0, 1, 2]).into(),
-                })?;
-                writer.finish()?;
-            }
-            let mut reader = LinearStream::new(std::io::Cursor::new(buf.into_inner()));
-            let mut opcodes: Vec<u8> = Vec::new();
-            while let Some(result) = reader.next().await {
-                let record = result?;
-                opcodes.push(record.opcode())
-            }
-            assert_eq!(
-                opcodes.as_slice(),
-                [
-                    records::op::HEADER,
-                    records::op::CHANNEL,
-                    records::op::MESSAGE,
-                    records::op::MESSAGE_INDEX,
-                    records::op::DATA_END,
-                    records::op::CHANNEL,
-                    records::op::CHUNK_INDEX,
-                    records::op::STATISTICS,
-                    records::op::SUMMARY_OFFSET,
-                    records::op::SUMMARY_OFFSET,
-                    records::op::SUMMARY_OFFSET,
-                    records::op::FOOTER,
-                ],
-                "reads records from MCAP compressed with {:?}",
                 compression
             );
         }

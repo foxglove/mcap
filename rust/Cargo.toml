@@ -25,7 +25,6 @@ thiserror = "1.0"
 lz4 = { version = "1", optional = true }
 async-compression = { version = "*", features = ["tokio", "zstd"], optional = true }
 tokio = { version = "1", features = ["io-util"] , optional = true }
-tokio-stream = { version = "*", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 zstd = { version = "0.11", features = ["wasm"], optional = true }
@@ -37,7 +36,7 @@ zstd = { version = "0.11", features = ["zstdmt"], optional = true }
 default = ["zstd", "lz4"]
 zstd = ["dep:zstd"]
 lz4 = ["dep:lz4"]
-tokio = ["dep:async-compression", "dep:tokio", "dep:tokio-stream"]
+tokio = ["dep:async-compression", "dep:tokio"]
 
 [dev-dependencies]
 anyhow = "1"
