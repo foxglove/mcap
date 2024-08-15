@@ -294,7 +294,9 @@ mod tests {
     async fn test_record_reader() -> Result<(), McapError> {
         for compression in [
             None,
+            #[cfg(feature = "zstd")]
             Some(crate::Compression::Zstd),
+            #[cfg(feature = "lz4")]
             Some(crate::Compression::Lz4),
         ] {
             let mut buf = std::io::Cursor::new(Vec::new());
