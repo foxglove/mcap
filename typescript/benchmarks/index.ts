@@ -1,4 +1,4 @@
-import { McapStreamReader, McapWriter, TempBuffer } from "@mcap/core";
+import { McapIndexedReader, McapStreamDispatch, McapStreamReader, McapWriter, TempBuffer } from "@mcap/core";
 import assert from "assert";
 import { program } from "commander";
 
@@ -57,20 +57,30 @@ async function benchmarkReaders() {
     });
   }
   await writer.end();
-  await runBenchmark(McapStreamReader.name, async () => {
-    const reader = new McapStreamReader();
-    reader.append(buf.get());
+  // await runBenchmark(McapStreamReader.name, async () => {
+  //   const reader = new McapStreamReader();
+  //   reader.append(buf.get());
+  //   let messageCount = 0;
+  //   for (;;) {
+  //     const rec = reader.nextRecord();
+  //     if (rec != undefined) {
+  //       if (rec.type === "Message") {
+  //         messageCount++;
+  //       }
+  //     } else {
+  //       break;
+  //     }
+  //   }
+  //   assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
+  // });
+  await runBenchmark(McapStreamDispatch.name, async () => {
     let messageCount = 0;
-    for (;;) {
-      const rec = reader.nextRecord();
-      if (rec != undefined) {
-        if (rec.type === "Message") {
-          messageCount++;
-        }
-      } else {
-        break;
-      }
-    }
+    const dispatch = new McapStreamDispatch({
+      onMessage: (_msg) => {
+        messageCount++;
+      },
+    });
+    dispatch.append(buf.get());
     assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
   });
   // await runBenchmark(McapIndexedReader.name, async () => {

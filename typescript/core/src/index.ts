@@ -1,5 +1,6 @@
 export { McapIndexedReader } from "./McapIndexedReader";
 export { default as McapStreamReader } from "./McapStreamReader";
+export { default as McapStreamDispatch } from "./McapStreamDispatch";
 export { McapWriter } from "./McapWriter";
 export type { McapWriterOptions } from "./McapWriter";
 export { McapRecordBuilder } from "./McapRecordBuilder";
