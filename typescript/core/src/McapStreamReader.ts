@@ -2,7 +2,7 @@ import { crc32 } from "@foxglove/crc";
 
 import Reader from "./Reader";
 import { MCAP_MAGIC } from "./constants";
-import { parseMagic, parseRecord } from "./parse";
+import { monoParseMessage, parseMagic, parseRecord } from "./parse";
 import { Channel, DecompressHandlers, McapMagic, TypedMcapRecord, TypedMcapRecords } from "./types";
 
 type McapReaderOptions = {
@@ -233,7 +233,15 @@ export default class McapStreamReader {
           const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
           const chunkReader = new Reader(view);
           let chunkRecord;
-          while ((chunkRecord = parseRecord(chunkReader, this.#validateCrcs))) {
+          for (;;) {
+            if ((chunkRecord = monoParseMessage(chunkReader))) {
+              yield chunkRecord;
+              continue;
+            }
+            chunkRecord = parseRecord(chunkReader, this.#validateCrcs);
+            if (!chunkRecord) {
+              break;
+            }
             switch (chunkRecord.type) {
               case "Unknown":
                 break;

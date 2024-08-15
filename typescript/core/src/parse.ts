@@ -414,3 +414,27 @@ function parseDataEnd(reader: Reader, recordLength: number): TypedMcapRecord {
     dataSectionCrc,
   };
 }
+
+export function monoParseMessage(reader: Reader): TypedMcapRecord | undefined | null {
+  const RECORD_HEADER_SIZE = 1 /*opcode*/ + 8; /*record content length*/
+  if (reader.bytesRemaining() < RECORD_HEADER_SIZE) {
+    return undefined;
+  }
+  const start = reader.offset;
+  const opcode = reader.uint8() as Opcode;
+  const recordLength = reader.uint64();
+
+  if (opcode !== Opcode.MESSAGE) {
+    reader.offset = start; // Rewind to the start of the record
+    return null;
+  }
+
+  const recordLengthNum = Number(recordLength);
+
+  if (reader.bytesRemaining() < recordLengthNum) {
+    reader.offset = start; // Rewind to the start of the record
+    return undefined;
+  }
+
+  return parseMessage(reader, recordLengthNum);
+}
