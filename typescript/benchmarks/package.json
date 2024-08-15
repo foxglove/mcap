@@ -18,6 +18,7 @@
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
     "bench": "TS_NODE_TRANSPILE_ONLY=true TS_NODE_FILES=true TS_NODE_PROJECT=tsconfig.cjs.json node --huge-max-old-generation-size --expose-gc -r 'ts-node/register' index.ts",
+    "bench:trace": "TS_NODE_TRANSPILE_ONLY=true TS_NODE_FILES=true TS_NODE_PROJECT=tsconfig.cjs.json node --trace-opt --trace-deopt --huge-max-old-generation-size --expose-gc -r 'ts-node/register' index.ts",
     "bench:debug": "TS_NODE_TRANSPILE_ONLY=true TS_NODE_FILES=true TS_NODE_PROJECT=tsconfig.cjs.json node --huge-max-old-generation-size --inspect-brk --expose-gc -r 'ts-node/register' index.ts"
   },
   "devDependencies": {

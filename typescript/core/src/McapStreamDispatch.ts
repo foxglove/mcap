@@ -1,8 +1,10 @@
-import { crc32 } from "@foxglove/crc";
+// import { crc32 } from "@foxglove/crc";
+import { crc32 } from "./crc32";
+import { crc32 as zlibCrc32 } from "node:zlib";
 
 import Reader from "./Reader";
 import { MCAP_MAGIC } from "./constants";
-import { monoParseMessage, parseMagic, parseRecord } from "./parse";
+import { monoParseMessage, monoParseMessage2, parseMagic, parseRecord } from "./parse";
 import { Channel, DecompressHandlers, McapMagic, TypedMcapRecord, TypedMcapRecords } from "./types";
 
 type McapDispatchOptions = {
@@ -205,20 +207,26 @@ export default class McapStreamDispatch {
     }
 
     if (this.#validateCrcs && record.uncompressedCrc !== 0) {
-      const chunkCrc = crc32(buffer);
+      const chunkCrc = zlibCrc32(buffer);
       if (chunkCrc !== record.uncompressedCrc) {
         this.#handleError(new Error(`Incorrect chunk CRC ${chunkCrc} (expected ${record.uncompressedCrc})`));
         return;
       }
     }
 
+    this.#parseChunkRecords(buffer);
+  }
+
+  #parseChunkRecords(buffer: Uint8Array) {
     const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
     const chunkReader = new Reader(view);
     const onMessage = this.#handlers.onMessage;
 
-    while (chunkReader.bytesRemaining() > 0) {
+
+    const end = chunkReader.offset + chunkReader.bytesRemaining();
+    while (chunkReader.offset < end) {
       let chunkRecord;
-      if ((chunkRecord = monoParseMessage(chunkReader)) ) {
+      if ((chunkRecord = monoParseMessage2(chunkReader, end)) ) {
         onMessage!(chunkRecord as TypedMcapRecord & { type: "Message" });
         continue;
       }
@@ -233,7 +241,7 @@ export default class McapStreamDispatch {
       }
     }
 
-    if (chunkReader.bytesRemaining() !== 0) {
+    if (chunkReader.offset !== end) {
       this.#handleError(new Error(`${chunkReader.bytesRemaining()} bytes remaining in chunk`));
     }
   }

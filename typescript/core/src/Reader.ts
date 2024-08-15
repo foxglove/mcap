@@ -125,8 +125,11 @@ export default class Reader {
 
   // Read a borrowed Uint8Array, useful temp references or borrow semantics
   u8ArrayBorrow(length: number): Uint8Array {
-    const result = this.#viewU8.subarray(this.offset, this.offset + length);
-    this.offset += length;
+    const begin = this.offset;
+    const end = begin + length;
+    // const result = this.#viewU8.subarray(begin, end);
+    const result = new Uint8Array(this.#view.buffer, this.#view.byteOffset + begin, length);
+    this.offset = end;
     return result;
   }
 
