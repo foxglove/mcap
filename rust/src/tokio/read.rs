@@ -1,14 +1,17 @@
+use std::io::SeekFrom;
 use std::pin::{pin, Pin};
 use std::task::{Context, Poll};
 
 #[cfg(feature = "zstd")]
 use async_compression::tokio::bufread::ZstdDecoder;
 use byteorder::ByteOrder;
-use tokio::io::{AsyncRead, AsyncReadExt, ReadBuf, Take};
 
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, BufReader, ReadBuf, Take};
+
+use crate::records::{op, Footer, Record};
 #[cfg(feature = "lz4")]
 use crate::tokio::lz4::Lz4Decoder;
-use crate::{records, McapError, McapResult, MAGIC};
+use crate::{parse_record, records, McapError, McapResult, MAGIC};
 
 enum ReaderState<R> {
     Base(R),
@@ -18,6 +21,18 @@ enum ReaderState<R> {
     #[cfg(feature = "lz4")]
     Lz4Chunk(Lz4Decoder<Take<R>>),
     Empty,
+}
+
+impl<R> ReaderState<R> {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Base(_) => "Base",
+            Self::UncompressedChunk(_) => "UncompressedChunk",
+            Self::ZstdChunk(_) => "ZstdChunk",
+            Self::Lz4Chunk(_) => "Lz4Chunk",
+            Self::Empty => "Empty",
+        }
+    }
 }
 
 impl<R> AsyncRead for ReaderState<R>
@@ -63,6 +78,14 @@ where
             }
         }
     }
+
+    pub fn as_base_mut(&mut self) -> Option<&mut R> {
+        if let ReaderState::Base(reader) = self {
+            Some(reader)
+        } else {
+            None
+        }
+    }
 }
 /// Reads an MCAP file record-by-record, writing the raw record data into a caller-provided Vec.
 pub struct RecordReader<R> {
@@ -77,12 +100,12 @@ pub struct RecordReader<R> {
 #[derive(Default, Clone)]
 pub struct RecordReaderOptions {
     /// If true, the reader will not expect the MCAP magic at the start of the stream.
-    skip_start_magic: bool,
+    pub skip_start_magic: bool,
     /// If true, the reader will not expect the MCAP magic at the end of the stream.
-    skip_end_magic: bool,
+    pub skip_end_magic: bool,
     // If true, the reader will yield entire chunk records. Otherwise, the reader will decompress
     // and read into the chunk, yielding the records inside.
-    emit_chunks: bool,
+    pub emit_chunks: bool,
 }
 
 enum Cmd {
@@ -116,6 +139,22 @@ where
 
     pub fn into_inner(self) -> McapResult<R> {
         self.reader.into_inner()
+    }
+
+    pub fn as_inner_base_mut(&mut self) -> Option<&mut R> {
+        self.reader.as_base_mut()
+    }
+
+    pub async fn read_record(&mut self) -> McapResult<Option<Record>> {
+        let mut buf = vec![];
+
+        let Some(op) = self.next_record(&mut buf).await.transpose()? else {
+            return Ok(None);
+        };
+
+        let record = parse_record(op, &buf)?;
+
+        Ok(Some(record.into_owned()))
     }
 
     /// Reads the next record from the input stream and copies the raw content into `data`.
@@ -249,6 +288,60 @@ where
             data.resize(record_len as usize, 0);
             self.reader.read_exact(&mut data[..]).await?;
             Ok(Cmd::YieldRecord(opcode))
+        }
+    }
+}
+
+// opcode + length + summary_start + summary_offset_start + summary_crc + magic
+const FOOTER_SIZE_BYTES: usize = 1 + 8 + 8 + 8 + 4 + 8;
+
+impl<R> RecordReader<R>
+where
+    R: AsyncSeek + AsyncRead + std::marker::Unpin,
+{
+    pub async fn seek(&mut self, position: SeekFrom) -> McapResult<u64> {
+        let ReaderState::Base(reader) = &mut self.reader else {
+            return Err(McapError::FailedToStartSeek(format!(
+                "Reader was in invalid state {}",
+                self.reader.name()
+            )));
+        };
+
+        let position = reader.seek(position).await?;
+
+        Ok(position)
+    }
+
+    pub async fn seek_and_read_footer(&mut self) -> McapResult<records::Footer> {
+        let ReaderState::Base(reader) = &mut self.reader else {
+            return Err(McapError::FailedToStartSeek(format!(
+                "Reader was in invalid state {}",
+                self.reader.name()
+            )));
+        };
+
+        let position = reader.stream_position().await?;
+
+        reader
+            .seek(SeekFrom::End(-(FOOTER_SIZE_BYTES as i64)))
+            .await?;
+
+        let mut buf = [0_u8; FOOTER_SIZE_BYTES];
+        reader.read_exact(&mut buf).await?;
+
+        // Seek back to where the file started so we can continue to read records
+        reader.seek(SeekFrom::Start(position)).await?;
+
+        if &buf[buf.len() - MAGIC.len()..] != MAGIC {
+            return Err(McapError::BadMagic);
+        }
+
+        match parse_record(buf[0], &buf[9..buf.len() - MAGIC.len()])? {
+            Record::Footer(footer) => Ok(footer),
+            record => Err(McapError::UnexpectedRecord {
+                expected: op::FOOTER,
+                recieved: record.opcode(),
+            }),
         }
     }
 }

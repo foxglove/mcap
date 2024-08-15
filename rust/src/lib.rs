@@ -131,6 +131,10 @@ pub enum McapError {
     UnexpectedChunkRecord(u8),
     #[error("Unsupported compression format `{0}`")]
     UnsupportedCompression(String),
+    #[error("Failed to start seek: {0}")]
+    FailedToStartSeek(String),
+    #[error("Expected record returned with opcode {recieved:02x}, expected {expected:02x}")]
+    UnexpectedRecord { expected: u8, recieved: u8 },
 }
 
 pub type McapResult<T> = Result<T, McapError>;
