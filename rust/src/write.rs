@@ -153,10 +153,7 @@ impl WriteOptions {
     /// If `None`, chunks will not be automatically closed and the user must call `flush()` to
     /// begin a new chunk.
     pub fn chunk_size(self, chunk_size: Option<u64>) -> Self {
-        Self {
-            chunk_size: chunk_size,
-            ..self
-        }
+        Self { chunk_size, ..self }
     }
 
     /// specifies whether to use chunks for storing messages.

@@ -132,7 +132,7 @@ impl Record<'_> {
             Record::SummaryOffset(offset) => Record::SummaryOffset(offset),
             Record::DataEnd(end) => Record::DataEnd(end),
             Record::Unknown { opcode, data } => Record::Unknown {
-                opcode: opcode,
+                opcode,
                 data: Cow::Owned(data.into_owned()),
             },
         }

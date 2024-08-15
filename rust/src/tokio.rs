@@ -1,3 +1,4 @@
+#[cfg(feature = "lz4")]
 mod lz4;
 pub mod read;
 

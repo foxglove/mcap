@@ -1,17 +1,21 @@
 use std::pin::{pin, Pin};
 use std::task::{Context, Poll};
 
+#[cfg(feature = "zstd")]
 use async_compression::tokio::bufread::ZstdDecoder;
 use byteorder::ByteOrder;
-use tokio::io::{AsyncRead, AsyncReadExt, BufReader, ReadBuf, Take};
+use tokio::io::{AsyncRead, AsyncReadExt, ReadBuf, Take};
 
+#[cfg(feature = "lz4")]
 use crate::tokio::lz4::Lz4Decoder;
 use crate::{records, McapError, McapResult, MAGIC};
 
 enum ReaderState<R> {
     Base(R),
     UncompressedChunk(Take<R>),
-    ZstdChunk(ZstdDecoder<BufReader<Take<R>>>),
+    #[cfg(feature = "zstd")]
+    ZstdChunk(ZstdDecoder<tokio::io::BufReader<Take<R>>>),
+    #[cfg(feature = "lz4")]
     Lz4Chunk(Lz4Decoder<Take<R>>),
     Empty,
 }
@@ -28,7 +32,9 @@ where
         match self.get_mut() {
             ReaderState::Base(r) => pin!(r).poll_read(cx, buf),
             ReaderState::UncompressedChunk(r) => pin!(r).poll_read(cx, buf),
+            #[cfg(feature = "zstd")]
             ReaderState::ZstdChunk(r) => pin!(r).poll_read(cx, buf),
+            #[cfg(feature = "lz4")]
             ReaderState::Lz4Chunk(r) => pin!(r).poll_read(cx, buf),
             ReaderState::Empty => {
                 panic!("invariant: reader is only set to empty while swapping with another valid variant")
@@ -44,7 +50,9 @@ where
         match self {
             ReaderState::Base(reader) => Ok(reader),
             ReaderState::UncompressedChunk(take) => Ok(take.into_inner()),
+            #[cfg(feature = "zstd")]
             ReaderState::ZstdChunk(decoder) => Ok(decoder.into_inner().into_inner().into_inner()),
+            #[cfg(feature = "lz4")]
             ReaderState::Lz4Chunk(decoder) => {
                 let (output, result) = decoder.finish();
                 result?;
@@ -122,11 +130,15 @@ where
                     let mut rdr = ReaderState::Empty;
                     std::mem::swap(&mut rdr, &mut self.reader);
                     match header.compression.as_str() {
+                        #[cfg(feature = "zstd")]
                         "zstd" => {
-                            self.reader = ReaderState::ZstdChunk(ZstdDecoder::new(BufReader::new(
-                                rdr.into_inner()?.take(header.compressed_size),
-                            )));
+                            self.reader = ReaderState::ZstdChunk(ZstdDecoder::new(
+                                tokio::io::BufReader::new(
+                                    rdr.into_inner()?.take(header.compressed_size),
+                                ),
+                            ));
                         }
+                        #[cfg(feature = "lz4")]
                         "lz4" => {
                             let decoder =
                                 Lz4Decoder::new(rdr.into_inner()?.take(header.compressed_size))?;
@@ -282,8 +294,8 @@ mod tests {
     async fn test_record_reader() -> Result<(), McapError> {
         for compression in [
             None,
-            Some(crate::Compression::Lz4),
             Some(crate::Compression::Zstd),
+            Some(crate::Compression::Lz4),
         ] {
             let mut buf = std::io::Cursor::new(Vec::new());
             {

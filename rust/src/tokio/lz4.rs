@@ -105,8 +105,8 @@ impl<R: AsyncRead + std::marker::Unpin> AsyncRead for Lz4Decoder<R> {
                         ptr::null(),
                     )
                 })?;
-                mself.pos += src_size as usize;
-                written_len += dst_size as usize;
+                mself.pos += src_size;
+                written_len += dst_size;
                 buf.set_filled(written_len);
                 if len == 0 {
                     mself.next = 0;
@@ -116,7 +116,7 @@ impl<R: AsyncRead + std::marker::Unpin> AsyncRead for Lz4Decoder<R> {
                 }
             }
         }
-        return Poll::Ready(Ok(()));
+        Poll::Ready(Ok(()))
     }
 }
 
