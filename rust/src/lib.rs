@@ -200,5 +200,5 @@ pub struct Attachment<'a> {
     pub data: Cow<'a, [u8]>,
 }
 
-pub use read::{read_record, MessageStream, Summary};
+pub use read::{parse_record, MessageStream, Summary};
 pub use write::{WriteOptions, Writer};

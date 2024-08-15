@@ -274,7 +274,7 @@ async fn read_chunk_header<R: AsyncRead + std::marker::Unpin>(
 
 #[cfg(test)]
 mod tests {
-    use crate::read::read_record;
+    use crate::read::parse_record;
     use std::collections::BTreeMap;
 
     use super::*;
@@ -311,7 +311,7 @@ mod tests {
             let mut opcodes: Vec<u8> = Vec::new();
             while let Some(opcode) = reader.next_record(&mut record).await? {
                 opcodes.push(opcode);
-                read_record(opcode, &record)?;
+                parse_record(opcode, &record)?;
             }
             assert_eq!(
                 opcodes.as_slice(),

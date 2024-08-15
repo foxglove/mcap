@@ -160,7 +160,8 @@ jobs:
         with:
           toolchain: stable
           default: true
-      - run: cd rust && cargo build --example=conformance_reader
+      - run: cargo build --example=conformance_reader --example=conformance_reader_async --features=tokio
+        working-directory: rust
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner rust-
