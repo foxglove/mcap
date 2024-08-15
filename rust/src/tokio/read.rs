@@ -120,56 +120,77 @@ where
 
     /// Reads the next record from the input stream and copies the raw content into `data`.
     /// Returns the record's opcode as a result.
-    pub async fn next_record(&mut self, data: &mut Vec<u8>) -> McapResult<Option<u8>> {
+    pub async fn next_record(&mut self, data: &mut Vec<u8>) -> Option<McapResult<u8>> {
         loop {
-            let cmd = self.next_record_inner(data).await?;
+            let cmd = match self.next_record_inner(data).await {
+                Ok(cmd) => cmd,
+                Err(err) => return Some(Err(err)),
+            };
             match cmd {
-                Cmd::Stop => return Ok(None),
-                Cmd::YieldRecord(opcode) => return Ok(Some(opcode)),
+                Cmd::Stop => return None,
+                Cmd::YieldRecord(opcode) => return Some(Ok(opcode)),
                 Cmd::EnterChunk { header, len } => {
-                    let mut rdr = ReaderState::Empty;
-                    std::mem::swap(&mut rdr, &mut self.reader);
+                    let mut reader_state = ReaderState::Empty;
+                    std::mem::swap(&mut reader_state, &mut self.reader);
                     match header.compression.as_str() {
                         #[cfg(feature = "zstd")]
                         "zstd" => {
+                            let reader = match reader_state.into_inner() {
+                                Ok(reader) => reader,
+                                Err(err) => return Some(Err(err)),
+                            };
                             self.reader = ReaderState::ZstdChunk(ZstdDecoder::new(
-                                tokio::io::BufReader::new(
-                                    rdr.into_inner()?.take(header.compressed_size),
-                                ),
+                                tokio::io::BufReader::new(reader.take(header.compressed_size)),
                             ));
                         }
                         #[cfg(feature = "lz4")]
                         "lz4" => {
-                            let decoder =
-                                Lz4Decoder::new(rdr.into_inner()?.take(header.compressed_size))?;
+                            let reader = match reader_state.into_inner() {
+                                Ok(reader) => reader,
+                                Err(err) => return Some(Err(err)),
+                            };
+                            let decoder = match Lz4Decoder::new(reader.take(header.compressed_size))
+                            {
+                                Ok(decoder) => decoder,
+                                Err(err) => return Some(Err(err.into())),
+                            };
                             self.reader = ReaderState::Lz4Chunk(decoder);
                         }
                         "" => {
-                            self.reader = ReaderState::UncompressedChunk(
-                                rdr.into_inner()?.take(header.compressed_size),
-                            );
+                            let reader = match reader_state.into_inner() {
+                                Ok(reader) => reader,
+                                Err(err) => return Some(Err(err)),
+                            };
+                            self.reader =
+                                ReaderState::UncompressedChunk(reader.take(header.compressed_size));
                         }
                         _ => {
-                            std::mem::swap(&mut rdr, &mut self.reader);
-                            return Err(McapError::UnsupportedCompression(
+                            std::mem::swap(&mut reader_state, &mut self.reader);
+                            return Some(Err(McapError::UnsupportedCompression(
                                 header.compression.clone(),
-                            ));
+                            )));
                         }
                     }
                     self.to_discard_after_chunk = len as usize
                         - (40 + header.compression.len() + header.compressed_size as usize);
                 }
                 Cmd::ExitChunk => {
-                    let mut rdr = ReaderState::Empty;
-                    std::mem::swap(&mut rdr, &mut self.reader);
-                    self.reader = ReaderState::Base(rdr.into_inner()?);
+                    let mut reader_state = ReaderState::Empty;
+                    std::mem::swap(&mut reader_state, &mut self.reader);
+                    self.reader = ReaderState::Base(match reader_state.into_inner() {
+                        Ok(reader) => reader,
+                        Err(err) => return Some(Err(err)),
+                    });
                     while self.to_discard_after_chunk > 0 {
                         let to_read = if self.to_discard_after_chunk > self.scratch.len() {
                             self.scratch.len()
                         } else {
                             self.to_discard_after_chunk
                         };
-                        self.reader.read_exact(&mut self.scratch[..to_read]).await?;
+                        if let Err(err) = self.reader.read_exact(&mut self.scratch[..to_read]).await
+                        {
+                            return Some(Err(err.into()));
+                        }
                         self.to_discard_after_chunk -= to_read;
                     }
                 }
@@ -323,7 +344,8 @@ mod tests {
             let mut reader = RecordReader::new(std::io::Cursor::new(buf.into_inner()));
             let mut record = Vec::new();
             let mut opcodes: Vec<u8> = Vec::new();
-            while let Some(opcode) = reader.next_record(&mut record).await? {
+            while let Some(opcode) = reader.next_record(&mut record).await {
+                let opcode = opcode?;
                 opcodes.push(opcode);
                 parse_record(opcode, &record)?;
             }

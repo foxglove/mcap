@@ -22,13 +22,10 @@ async fn main() {
 
     let mut json_records: Vec<Value> = vec![];
     let mut buf: Vec<u8> = Vec::new();
-    while let Some(op) = reader
-        .next_record(&mut buf)
-        .await
-        .expect("failed to read next record")
-    {
-        if op != mcap::records::op::MESSAGE_INDEX {
-            let parsed = mcap::parse_record(op, &buf[..]).expect("failed to parse record");
+    while let Some(opcode) = reader.next_record(&mut buf).await {
+        let opcode = opcode.expect("failed to read next record");
+        if opcode != mcap::records::op::MESSAGE_INDEX {
+            let parsed = mcap::parse_record(opcode, &buf[..]).expect("failed to parse record");
             json_records.push(as_json(&parsed));
         }
     }
