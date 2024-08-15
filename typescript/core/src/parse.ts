@@ -417,3 +417,28 @@ function parseDataEnd(reader: Reader, recordLength: number): TypedMcapRecord {
     dataSectionCrc,
   };
 }
+
+// mono(morphic) parseMessage, used in the hot path
+export function monoParseMessage(reader: Reader): TypedMcapRecord | undefined {
+  const RECORD_HEADER_SIZE = 1 /*opcode*/ + 8; /*record content length*/
+  if (reader.bytesRemaining() < RECORD_HEADER_SIZE) {
+    return undefined;
+  }
+  const start = reader.offset;
+  const opcode = reader.uint8() as Opcode;
+  const recordLength = reader.uint64();
+
+  if (opcode !== Opcode.MESSAGE) {
+    reader.offset = start; // Rewind to the start of the record
+    return undefined;
+  }
+
+  const recordLengthNum = Number(recordLength);
+
+  if (reader.bytesRemaining() < recordLengthNum) {
+    reader.offset = start; // Rewind to the start of the record
+    return undefined;
+  }
+
+  return parseMessage(reader, recordLengthNum);
+}
