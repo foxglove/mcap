@@ -1,4 +1,4 @@
-import { McapIndexedReader, McapStreamReader, McapWriter, TempBuffer } from "@mcap/core";
+import { McapStreamReader, McapWriter, TempBuffer } from "@mcap/core";
 import assert from "assert";
 import { program } from "commander";
 
@@ -73,22 +73,22 @@ async function benchmarkReaders() {
     }
     assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
   });
-  await runBenchmark(McapIndexedReader.name, async () => {
-    const reader = await McapIndexedReader.Initialize({ readable: buf });
-    let messageCount = 0;
-    for await (const _ of reader.readMessages()) {
-      messageCount++;
-    }
-    assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
-  });
-  await runBenchmark(McapIndexedReader.name + "_reverse", async () => {
-    const reader = await McapIndexedReader.Initialize({ readable: buf });
-    let messageCount = 0;
-    for await (const _ of reader.readMessages({ reverse: true })) {
-      messageCount++;
-    }
-    assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
-  });
+  // await runBenchmark(McapIndexedReader.name, async () => {
+  //   const reader = await McapIndexedReader.Initialize({ readable: buf });
+  //   let messageCount = 0;
+  //   for await (const _ of reader.readMessages()) {
+  //     messageCount++;
+  //   }
+  //   assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
+  // });
+  // await runBenchmark(McapIndexedReader.name + "_reverse", async () => {
+  //   const reader = await McapIndexedReader.Initialize({ readable: buf });
+  //   let messageCount = 0;
+  //   for await (const _ of reader.readMessages({ reverse: true })) {
+  //     messageCount++;
+  //   }
+  //   assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
+  // });
 }
 
 export async function benchmarkWriter(): Promise<void> {

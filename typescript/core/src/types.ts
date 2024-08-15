@@ -40,7 +40,7 @@ export type Chunk = {
 };
 export type MessageIndex = {
   channelId: number;
-  records: [logTime: bigint, offset: bigint][];
+  records: BigUint64Array;
 };
 export type ChunkIndex = {
   messageStartTime: bigint;

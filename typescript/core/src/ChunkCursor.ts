@@ -1,7 +1,8 @@
 import Reader from "./Reader";
+import { sortKvPairs } from "./kvpairs";
 import { parseRecord } from "./parse";
-import { sortedIndexBy } from "./sortedIndexBy";
-import { sortedLastIndexBy } from "./sortedLastIndex";
+// import { sortedIndexBy } from "./sortedIndexBy";
+// import { sortedLastIndexBy } from "./sortedLastIndex";
 import { IReadable, TypedMcapRecords } from "./types";
 
 type ChunkCursorParams = {
@@ -28,7 +29,7 @@ export class ChunkCursor {
   #reverse: boolean;
 
   // List of message offsets (across all channels) sorted by logTime.
-  #orderedMessageOffsets?: [logTime: bigint, offset: bigint][];
+  #orderedMessageOffsets?: BigUint64Array;
   // Index for the next message offset. Gets incremented for every popMessage() call.
   #nextMessageOffsetIndex = 0;
 
@@ -92,7 +93,10 @@ export class ChunkCursor {
       );
     }
 
-    return this.#orderedMessageOffsets[this.#nextMessageOffsetIndex++]!;
+    const logTime = this.#orderedMessageOffsets[this.#nextMessageOffsetIndex]!;
+    const offset = this.#orderedMessageOffsets[this.#nextMessageOffsetIndex + 1]!;
+    this.#nextMessageOffsetIndex += 2;
+    return [logTime, offset];
   }
 
   /**
@@ -121,7 +125,7 @@ export class ChunkCursor {
       }
     }
     if (messageIndexStartOffset == undefined || relevantMessageIndexStartOffset == undefined) {
-      this.#orderedMessageOffsets = [];
+      this.#orderedMessageOffsets = new BigUint64Array(0);
       return;
     }
 
@@ -138,7 +142,7 @@ export class ChunkCursor {
     );
 
     const reader = new Reader(messageIndexesView);
-    const arrayOfMessageOffsets: [logTime: bigint, offset: bigint][][] = [];
+    let arrayOfMessageOffsets: BigUint64Array = new BigUint64Array(0);
     let record;
     while ((record = parseRecord(reader, true))) {
       if (record.type !== "MessageIndex") {
@@ -150,47 +154,28 @@ export class ChunkCursor {
       ) {
         continue;
       }
-
-      arrayOfMessageOffsets.push(record.records);
+      arrayOfMessageOffsets = BigUint64ArrayConcat(arrayOfMessageOffsets, record.records);
     }
 
     if (reader.bytesRemaining() !== 0) {
       throw new Error(`${reader.bytesRemaining()} bytes remaining in message index section`);
     }
 
-    this.#orderedMessageOffsets = arrayOfMessageOffsets
-      .flat()
-      .sort(([logTimeA, offsetA], [logTimeB, offsetB]) => {
-        let diff = Number(logTimeA - logTimeB);
-
-        // Break ties by message offset in the file
-        if (diff === 0) {
-          diff = Number(offsetA - offsetB);
-        }
-
-        return diff;
-      });
-
-    if (reverse) {
-      // If we used `logTimeB - logTimeA` as the comparator for reverse iteration, messages with
-      // the same timestamp would not be in reverse order. To avoid this problem we use reverse()
-      // instead.
-      this.#orderedMessageOffsets.reverse();
-    }
-
+    this.#orderedMessageOffsets = arrayOfMessageOffsets;
     if (this.#orderedMessageOffsets.length === 0) {
       return;
     }
+    // Sort the message offsets
+    sortKvPairs(this.#orderedMessageOffsets, reverse);
 
-    const [logTimeFirstMessage] = this.#orderedMessageOffsets[0]!;
+    const logTimeFirstMessage = this.#orderedMessageOffsets[0]!;
     if (logTimeFirstMessage < this.chunkIndex.messageStartTime) {
       throw new Error(
         `Chunk at offset ${this.chunkIndex.chunkStartOffset} contains a message with logTime (${logTimeFirstMessage}) earlier than chunk messageStartTime (${this.chunkIndex.messageStartTime})`,
       );
     }
 
-    const [logTimeLastMessage] =
-      this.#orderedMessageOffsets[this.#orderedMessageOffsets.length - 1]!;
+    const logTimeLastMessage = this.#orderedMessageOffsets[this.#orderedMessageOffsets.length - 2]!;
     if (logTimeLastMessage > this.chunkIndex.messageEndTime) {
       throw new Error(
         `Chunk at offset ${this.chunkIndex.chunkStartOffset} contains a message with logTime with logTime (${logTimeLastMessage}) later than chunk messageEndTime (${this.chunkIndex.messageEndTime})`,
@@ -205,16 +190,20 @@ export class ChunkCursor {
     let endIndex: number | undefined;
 
     if (startTime != undefined) {
-      startIndex = sortedIndexBy(this.#orderedMessageOffsets, startTime, iteratee);
+      startIndex = sortedIndexBy(this.#orderedMessageOffsets, startTime, iteratee) * 2;
     }
     if (endTime != undefined) {
-      endIndex = sortedLastIndexBy(this.#orderedMessageOffsets, endTime, iteratee);
+      endIndex = sortedLastIndexBy(this.#orderedMessageOffsets, endTime, iteratee) * 2;
     }
 
     // Remove offsets whose log time is outside of the range [startTime, endTime] which
     // avoids having to do additional book-keep of additional array start & stop indexes.
     if (startIndex != undefined || endIndex != undefined) {
-      this.#orderedMessageOffsets = this.#orderedMessageOffsets.slice(startIndex, endIndex);
+      startIndex = startIndex ? Math.max(0, startIndex) : 0;
+      endIndex = endIndex ? Math.min(this.#orderedMessageOffsets.length, endIndex) : this.#orderedMessageOffsets.length;
+      if (startIndex !== 0 || endIndex !== this.#orderedMessageOffsets.length) {
+        this.#orderedMessageOffsets = this.#orderedMessageOffsets.subarray(startIndex, endIndex);
+      }
     }
   }
 
@@ -226,10 +215,85 @@ export class ChunkCursor {
       this.#orderedMessageOffsets.length > 0 &&
       this.#nextMessageOffsetIndex < this.#orderedMessageOffsets.length
     ) {
-      return this.#orderedMessageOffsets[this.#nextMessageOffsetIndex]![0];
+      return this.#orderedMessageOffsets[this.#nextMessageOffsetIndex]!;
     }
 
     // Fall back to the chunk index' start time or end time.
     return this.#reverse ? this.chunkIndex.messageEndTime : this.chunkIndex.messageStartTime;
   }
+}
+
+function BigUint64ArrayConcat(a: BigUint64Array, b: BigUint64Array) {
+  if (a.length === 0) {
+    return b;
+  }
+  if (b.length === 0) {
+    return a;
+  }
+  const c = new BigUint64Array(a.length + b.length);
+  c.set(a);
+  c.set(b, a.length);
+  return c;
+}
+
+/**
+ * Return the lowest index of `array` where an element can be inserted and maintain its sorted
+ * order. This is a specialization of lodash's sortedIndexBy() for flat key-value pairs.
+ */
+function sortedIndexBy(
+  array: BigUint64Array,
+  value: bigint,
+  iteratee: (value: bigint) => bigint,
+): number {
+  let low = 0;
+  let high = array.length / 2;
+
+  if (high === 0) {
+    return 0;
+  }
+
+  const computedValue = iteratee(value);
+
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    const computed = iteratee(array[mid * 2]!);
+
+    if (computed < computedValue) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
+}
+
+/**
+ * Return the lowest index of `array` where an element can be inserted and maintain its sorted
+ * order. This is a specialization of lodash's sortedLastIndexBy() for flat key-value pairs.
+ */
+function sortedLastIndexBy(
+  array: BigUint64Array,
+  value: bigint,
+  iteratee: (value: bigint) => bigint,
+): number {
+  let low = 0;
+  let high = array.length / 2;
+
+  if (high === 0) {
+    return 0;
+  }
+
+  const computedValue = iteratee(value);
+
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    const computed = iteratee(array[mid * 2]!);
+
+    if (computed <= computedValue) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return high;
 }

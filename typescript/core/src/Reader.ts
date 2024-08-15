@@ -62,28 +62,35 @@ export default class Reader {
     return textDecoder.decode(this.u8ArrayBorrow(length));
   }
 
-  keyValuePairs<K, V>(readKey: (reader: Reader) => K, readValue: (reader: Reader) => V): [K, V][] {
-    const length = this.uint32();
-    if (this.offset + length > this.#view.byteLength) {
-      throw new Error(`Key-value pairs length ${length} exceeds bounds of buffer`);
+  // Returns a flat array of bigint pairs, i.e. [x1, y1, x2, y2, ...]
+  kvPairsU64(): bigint[] {
+    const byteLength = this.uint32();
+    if (this.offset + byteLength > this.#view.byteLength) {
+      throw new Error(`Key-value pairs byte length ${byteLength} exceeds bounds of buffer`);
+    } else if (byteLength % 16 !== 0) {
+      throw new Error(`Key-value pairs byte length ${byteLength} is not a multiple of 16`);
     }
-    const result: [K, V][] = [];
-    const endOffset = this.offset + length;
-    try {
-      while (this.offset < endOffset) {
-        result.push([readKey(this), readValue(this)]);
-      }
-    } catch (err) {
-      throw new Error(`Error reading key-value pairs: ${(err as Error).message}`);
-    }
-    if (this.offset !== endOffset) {
-      throw new Error(
-        `Key-value pairs length (${
-          this.offset - endOffset + length
-        }) greater than expected (${length})`,
-      );
+    const result: bigint[] = new Array(byteLength / 8);
+    const endOffset = this.offset + byteLength;
+
+    let i = 0;
+    while (this.offset < endOffset) {
+      result[i++] = this.uint64();
+      result[i++] = this.uint64();
     }
     return result;
+  }
+
+  // WARNING: This assumes little-endian arch (true for x86/x64 & arm64)
+  kvPairsU64Fast(): BigUint64Array {
+    const byteLength = this.uint32();
+    if (this.offset + byteLength > this.#view.byteLength) {
+      throw new Error(`Key-value pairs byte length ${byteLength} exceeds bounds of buffer`);
+    } else if (byteLength % 16 !== 0) {
+      throw new Error(`Key-value pairs byte length ${byteLength} is not a multiple of 16`);
+    }
+    const u8arr = this.u8ArrayCopy(byteLength);
+    return new BigUint64Array(u8arr.buffer, u8arr.byteOffset, Math.floor(u8arr.byteLength / 8));
   }
 
   map<K, V>(readKey: (reader: Reader) => K, readValue: (reader: Reader) => V): Map<K, V> {
