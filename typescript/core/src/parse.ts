@@ -27,6 +27,7 @@ export function parseMagic(reader: Reader): McapMagic | undefined {
 /**
  * Parse a MCAP record from the given reader
  */
+// NOTE: internal function in the hot path, (de)structuring  args would be wasteful, acceptable perf/clarity tradeoff
 // eslint-disable-next-line @foxglove/no-boolean-parameters
 export function parseRecord(reader: Reader, validateCrcs = false): TypedMcapRecord | undefined {
   const RECORD_HEADER_SIZE = 1 /*opcode*/ + 8; /*record content length*/
@@ -272,6 +273,7 @@ function parseChunkIndex(reader: Reader, recordLength: number): TypedMcapRecord 
 function parseAttachment(
   reader: Reader,
   recordLength: number,
+  // NOTE: internal function in the hot path, (de)structuring  args would be wasteful, acceptable perf/clarity tradeoff
   // eslint-disable-next-line @foxglove/no-boolean-parameters
   validateCrcs: boolean,
 ): TypedMcapRecord {
