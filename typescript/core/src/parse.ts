@@ -149,7 +149,7 @@ function parseSchema(reader: Reader, recordLength: number): TypedMcapRecord {
   if (recordLength - (end - start) < dataLen) {
     throw new Error(`Schema data length ${dataLen} exceeds bounds of record`);
   }
-  const data = reader.u8ArrayCopy(dataLen);
+  const data = reader.u8ArrayBorrow(dataLen);
   reader.offset = start + recordLength;
 
   return {
@@ -189,7 +189,7 @@ function parseMessage(reader: Reader, recordLength: number): TypedMcapRecord {
   const sequence = reader.uint32();
   const logTime = reader.uint64();
   const publishTime = reader.uint64();
-  const data = reader.u8ArrayCopy(recordLength - MESSAGE_PREFIX_SIZE);
+  const data = reader.u8ArrayBorrow(recordLength - MESSAGE_PREFIX_SIZE);
   return {
     type: "Message",
     channelId,
@@ -213,7 +213,7 @@ function parseChunk(reader: Reader, recordLength: number): TypedMcapRecord {
   if (recordsByteLength + prefixSize > recordLength) {
     throw new Error("Chunk records length exceeds remaining record size");
   }
-  const records = reader.u8ArrayCopy(recordsByteLength);
+  const records = reader.u8ArrayBorrow(recordsByteLength);
   reader.offset = start + recordLength;
   return {
     type: "Chunk",
@@ -287,7 +287,7 @@ function parseAttachment(
   if (reader.offset + Number(dataLen) + 4 /*crc*/ > startOffset + recordLength) {
     throw new Error(`Attachment data length ${dataLen} exceeds bounds of record`);
   }
-  const data = reader.u8ArrayCopy(Number(dataLen));
+  const data = reader.u8ArrayBorrow(Number(dataLen));
   const crcLength = reader.offset - startOffset;
   const expectedCrc = reader.uint32();
   if (validateCrcs && expectedCrc !== 0) {
@@ -433,6 +433,7 @@ export function monoParseMessage(reader: Reader): TypedMcapRecord | undefined | 
 
   if (reader.bytesRemaining() < recordLengthNum) {
     reader.offset = start; // Rewind to the start of the record
+    throw new Error("Message record length exceeds bounds of record");
     return undefined;
   }
 

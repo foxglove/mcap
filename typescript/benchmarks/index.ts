@@ -57,22 +57,23 @@ async function benchmarkReaders() {
     });
   }
   await writer.end();
-  // await runBenchmark(McapStreamReader.name, async () => {
-  //   const reader = new McapStreamReader();
-  //   reader.append(buf.get());
-  //   let messageCount = 0;
-  //   for (;;) {
-  //     const rec = reader.nextRecord();
-  //     if (rec != undefined) {
-  //       if (rec.type === "Message") {
-  //         messageCount++;
-  //       }
-  //     } else {
-  //       break;
-  //     }
-  //   }
-  //   assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
-  // });
+  console.log("Buf size", buf.get().byteLength);
+  await runBenchmark(McapStreamReader.name, async () => {
+    const reader = new McapStreamReader({ validateCrcs: true });
+    reader.append(buf.get());
+    let messageCount = 0;
+    for (;;) {
+      const rec = reader.nextRecord();
+      if (rec != undefined) {
+        if (rec.type === "Message") {
+          messageCount++;
+        }
+      } else {
+        break;
+      }
+    }
+    assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
+  });
   await runBenchmark(McapStreamDispatch.name, async () => {
     let messageCount = 0;
     const dispatch = new McapStreamDispatch({

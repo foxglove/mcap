@@ -65,6 +65,14 @@ export default class McapStreamDispatch {
     const remainingBytes = this.#reader.bytesRemaining();
     const totalNeededBytes = remainingBytes + data.byteLength;
 
+    // If remaining bytes are zero just ref the new data, no copy
+    // NOTE: review if ref is correct
+    if (remainingBytes === 0) {
+      this.#buffer = data.buffer;
+      this.#view = new DataView(this.#buffer, data.byteOffset, data.byteLength);
+      return;
+    }
+
     if (totalNeededBytes <= this.#buffer.byteLength) {
       if (this.#view.byteOffset + totalNeededBytes <= this.#buffer.byteLength) {
         const array = new Uint8Array(this.#buffer, this.#view.byteOffset);
@@ -206,12 +214,18 @@ export default class McapStreamDispatch {
 
     const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
     const chunkReader = new Reader(view);
+    const onMessage = this.#handlers.onMessage;
 
     while (chunkReader.bytesRemaining() > 0) {
-      const chunkRecord = monoParseMessage(chunkReader) ?? parseRecord(chunkReader, this.#validateCrcs);
+      let chunkRecord;
+      if ((chunkRecord = monoParseMessage(chunkReader)) ) {
+        onMessage!(chunkRecord as TypedMcapRecord & { type: "Message" });
+        continue;
+      }
+      chunkRecord = parseRecord(chunkReader, this.#validateCrcs);
       if (!chunkRecord) break;
 
-      if (chunkRecord.type === "Schema" || chunkRecord.type === "Channel" || chunkRecord.type === "Message") {
+      if (chunkRecord.type === "Schema" || chunkRecord.type === "Channel") {
         this.#handleRecord(chunkRecord);
       } else if (chunkRecord.type !== "Unknown") {
         this.#handleError(new Error(`${chunkRecord.type} record not allowed inside a chunk`));
