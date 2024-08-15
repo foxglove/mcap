@@ -59,7 +59,7 @@ where
 /// Reads an MCAP file record-by-record, writing the raw record data into a caller-provided Vec.
 pub struct RecordReader<R> {
     reader: ReaderState<R>,
-    options: Options,
+    options: RecordReaderOptions,
     start_magic_seen: bool,
     footer_seen: bool,
     to_discard_after_chunk: usize,
@@ -67,7 +67,7 @@ pub struct RecordReader<R> {
 }
 
 #[derive(Default, Clone)]
-pub struct Options {
+pub struct RecordReaderOptions {
     /// If true, the reader will not expect the MCAP magic at the start of the stream.
     skip_start_magic: bool,
     /// If true, the reader will not expect the MCAP magic at the end of the stream.
@@ -92,10 +92,10 @@ where
     R: AsyncRead + std::marker::Unpin,
 {
     pub fn new(reader: R) -> Self {
-        Self::new_with_options(reader, &Options::default())
+        Self::new_with_options(reader, &RecordReaderOptions::default())
     }
 
-    pub fn new_with_options(reader: R, options: &Options) -> Self {
+    pub fn new_with_options(reader: R, options: &RecordReaderOptions) -> Self {
         Self {
             reader: ReaderState::Base(reader),
             options: options.clone(),
