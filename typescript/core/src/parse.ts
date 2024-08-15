@@ -442,3 +442,27 @@ export function monoParseMessage(reader: Reader): TypedMcapRecord | undefined {
 
   return parseMessage(reader, recordLengthNum);
 }
+
+export function monoParseMessage2(reader: Reader, end: number): TypedMcapRecord | undefined {
+  const RECORD_HEADER_SIZE = 1 /*opcode*/ + 8; /*record content length*/
+  if (reader.offset + RECORD_HEADER_SIZE > end) {
+    return undefined;
+  }
+  const start = reader.offset;
+  const opcode = reader.uint8() as Opcode;
+  const recordLength = reader.uint64();
+
+  if (opcode !== Opcode.MESSAGE) {
+    reader.offset = start; // Rewind to the start of the record
+    return undefined;
+  }
+
+  const recordLengthNum = Number(recordLength);
+
+  if (reader.offset + recordLengthNum > end) {
+    reader.offset = start; // Rewind to the start of the record
+    return undefined;
+  }
+
+  return parseMessage(reader, recordLengthNum);
+}

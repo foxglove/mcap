@@ -1,4 +1,4 @@
-import { McapIndexedReader, McapStreamReader, McapWriter, TempBuffer } from "@mcap/core";
+import { McapIndexedReader, McapStreamDispatcher, McapStreamReader, McapWriter, TempBuffer } from "@mcap/core";
 import assert from "assert";
 import { program } from "commander";
 
@@ -71,6 +71,16 @@ async function benchmarkReaders() {
         break;
       }
     }
+    assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
+  });
+  await runBenchmark(McapStreamDispatcher.name, async () => {
+    let messageCount = 0;
+    const dispatch = new McapStreamDispatcher({
+      onMessage: (_msg) => {
+        messageCount++;
+      },
+    });
+    dispatch.append(buf.get());
     assert(messageCount === numMessages, `expected ${numMessages} messages, got ${messageCount}`);
   });
   await runBenchmark(McapIndexedReader.name, async () => {
