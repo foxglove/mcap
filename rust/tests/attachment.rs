@@ -66,7 +66,8 @@ fn round_trip() -> Result<()> {
             ..Default::default()
         }),
         attachment_indexes: vec![mcap::records::AttachmentIndex {
-            offset: 39, // Finicky - depends on the length of the library version string
+            // offset depends on the length of the embedded library string, which includes the crate version
+            offset: 33 + (env!("CARGO_PKG_VERSION").len() as u64),
             length: 78,
             log_time: 2,
             create_time: 1,
