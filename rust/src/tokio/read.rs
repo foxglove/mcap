@@ -314,7 +314,7 @@ where
         self.seek(SeekFrom::Current(0)).await
     }
 
-    pub async fn seek_and_read_footer(&mut self) -> McapResult<records::Footer> {
+    pub async fn read_footer(&mut self) -> McapResult<records::Footer> {
         let ReaderState::Base(reader) = &mut self.reader else {
             return Err(McapError::FailedToStartSeek(format!(
                 "Reader was in invalid state {}",
@@ -322,17 +322,12 @@ where
             )));
         };
 
-        let position = reader.stream_position().await?;
-
         reader
             .seek(SeekFrom::End(-(FOOTER_LEN_BYTES as i64)))
             .await?;
 
         let mut buf = [0_u8; FOOTER_LEN_BYTES];
         reader.read_exact(&mut buf).await?;
-
-        // Seek back to where the file started so we can continue to read records
-        reader.seek(SeekFrom::Start(position)).await?;
 
         if &buf[buf.len() - MAGIC.len()..] != MAGIC {
             return Err(McapError::BadMagic);

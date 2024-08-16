@@ -12,6 +12,9 @@ const GCS_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'.')
     .remove(b'_');
 
+/// Create a reader the implements [`AsyncRead`] and [`AsyncWrite`], and is backed by a GCS file.
+///
+/// The current implementation does not support authenticated requests to GCS.
 pub async fn create_gcs_reader(
     bucket_name: &str,
     object_name: &str,
@@ -26,9 +29,9 @@ pub async fn create_gcs_reader(
     let (mut file, _) = AsyncHttpRangeReader::new(
         reqwest_middleware::ClientWithMiddleware::default(),
         Url::parse(&url)?,
-        // Fetch the last 4096KiB of the file. This will include the footer and for most files much of
+        // Fetch the last 8KiB of the file. This will include the footer and for many files much of
         // the summary information.
-        CheckSupportMethod::NegativeRangeRequest(4096 as _),
+        CheckSupportMethod::NegativeRangeRequest(8192 as _),
         HeaderMap::default(),
     )
     .await?;
@@ -41,6 +44,8 @@ pub async fn create_gcs_reader(
 
 #[async_trait]
 impl McapReader for AsyncHttpRangeReader {
+    // Since GCS files are latency bound, add an implementation of prefetch so certain known
+    // regions of the file can be ready to go.
     async fn prefetch(&mut self, bytes: std::ops::Range<u64>) {
         self.prefetch(bytes).await;
     }

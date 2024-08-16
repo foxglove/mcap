@@ -1,14 +1,3 @@
-//	info := &Info{
-//		Statistics:        it.statistics,
-//		Channels:          it.channels.ToMap(),
-//		ChunkIndexes:      it.chunkIndexes,
-//		AttachmentIndexes: it.attachmentIndexes,
-//		MetadataIndexes:   it.metadataIndexes,
-//		Schemas:           it.schemas.ToMap(),
-//		Footer:            it.footer,
-//		Header:            r.header,
-//	}
-
 use std::{io::SeekFrom, ops::Range, pin::Pin};
 
 use mcap::{
@@ -16,7 +5,7 @@ use mcap::{
         AttachmentIndex, Channel, ChunkIndex, Footer, Header, MetadataIndex, Record, SchemaHeader,
         Statistics,
     },
-    tokio::read::Options,
+    tokio::read::RecordReaderOptions,
 };
 
 use crate::{
@@ -24,6 +13,7 @@ use crate::{
     traits::McapReader,
 };
 
+/// The information specified by the header, footer and summary sections of the MCAP file.
 pub struct McapInfo {
     pub statistics: Option<Statistics>,
     pub channels: Vec<Channel>,
@@ -37,12 +27,21 @@ pub struct McapInfo {
 
 type RecordReader = mcap::tokio::read::RecordReader<Pin<Box<dyn McapReader>>>;
 
-const MIN_PREFETCH_SIZE: u64 = 4096;
+/// The minimum amount that should be prefetched when doing a prefetch operation.
+///
+/// It's useful to buffer certain amounts of the file in memory as below a certain size latency
+/// becomes the bottleneck for networks requests, not bandwidth.
+const MIN_PREFETCH_SIZE: u64 = 8192;
 
-fn create_prefetch_range(start: u64) -> Range<u64> {
+/// Create a range for prefetching a small amount from a certain offset.
+fn default_prefetch(start: u64) -> Range<u64> {
     start..start + MIN_PREFETCH_SIZE
 }
 
+/// Using the provided [`RecordReader`] read all the summary information after the provided
+/// summary offset start.
+///
+/// This operation will increment the readers internal position.
 async fn read_summary_records(
     reader: &mut RecordReader,
     summary_offset_start: u64,
@@ -53,7 +52,7 @@ async fn read_summary_records(
 
     reader
         .as_base_reader_mut()?
-        .prefetch(create_prefetch_range(summary_offset_start))
+        .prefetch(default_prefetch(summary_offset_start))
         .await;
 
     let mut offsets = vec![];
@@ -78,22 +77,26 @@ async fn read_summary_records(
 
         let end = offset.group_start + offset.group_length;
 
-        while let Some(record) = reader.read_record().await? {
+        loop {
+            let current_position = reader.position().await?;
+
+            if current_position >= end {
+                break;
+            }
+
+            let Some(record) = reader.read_record().await? else {
+                break;
+            };
+
             if record.opcode() != offset.group_opcode {
                 return Err(CliError::UnexpectedResponse(format!(
-                    "summary group opcode was {:02x} but record opcode was {:02x}",
+                    "summary group opcode was 0x{:02x} but record opcode was 0x{:02x}",
                     offset.group_opcode,
                     record.opcode()
                 )));
             }
 
             records.push(record.into_owned());
-
-            let current_position = reader.position().await?;
-
-            if current_position >= end {
-                break;
-            }
         }
     }
 
@@ -101,9 +104,9 @@ async fn read_summary_records(
 }
 
 pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> {
-    let options = Options {
+    let options = RecordReaderOptions {
         // skip the end magic so running over the
-        // skip_end_magic: true,
+        skip_end_magic: true,
         ..Default::default()
     };
     let mut reader = RecordReader::new_with_options(reader, &options);
@@ -121,7 +124,7 @@ pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> 
         ));
     };
 
-    let footer = reader.seek_and_read_footer().await?;
+    let footer = reader.read_footer().await?;
     let summary = read_summary_records(&mut reader, footer.summary_offset_start).await?;
 
     for record in summary.into_iter() {

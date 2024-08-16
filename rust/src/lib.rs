@@ -113,7 +113,7 @@ pub enum McapError {
     ConflictingSchemas(String),
     #[error("Record parse failed")]
     Parse(#[from] binrw::Error),
-    #[error("I/O error from writing, or reading a compression stream")]
+    #[error("I/O error from writing, or reading a compression stream: {0}")]
     Io(#[from] std::io::Error),
     #[error("Schema has an ID of 0")]
     InvalidSchemaId,

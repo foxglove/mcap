@@ -1,11 +1,11 @@
-use std::{collections::HashMap, ops::Range, pin::Pin};
+use std::{collections::HashMap, pin::Pin};
 
-use chrono::{Local, TimeDelta, TimeZone};
+use chrono::{Duration, Local, TimeZone};
 use mcap::records::ChunkIndex;
 use tokio::fs::File;
 
 use tabled::settings::{
-    object::{Columns, Object, Rows},
+    object::{Cell, Columns},
     Alignment, Margin, Padding, Style, Theme,
 };
 
@@ -14,7 +14,7 @@ use crate::{
     gcs_reader::create_gcs_reader,
     mcap::read_info,
     traits::McapReader,
-    utils::human_bytes,
+    utils::{format_decimal_nanos, format_human_nanos, format_human_bytes},
 };
 
 #[derive(Debug)]
@@ -58,16 +58,11 @@ impl McapFd {
 
 const NANOSECONDS_IN_SECOND: f64 = 1e9;
 
-fn format_time(nanoseconds: u64) -> String {
-    let time = TimeDelta::nanoseconds(nanoseconds as _);
-    format!("{}.{}s", time.num_seconds(), time.subsec_nanos())
-}
-
 #[derive(Default)]
 struct CompressionInfo {
-    total_compressed: u64,
-    total_uncompressed: u64,
-    total_count: u64,
+    compressed_size: u64,
+    uncompressed_size: u64,
+    chunk_count: u64,
 }
 
 fn get_compression_stats(info: Vec<ChunkIndex>) -> HashMap<String, CompressionInfo> {
@@ -76,9 +71,9 @@ fn get_compression_stats(info: Vec<ChunkIndex>) -> HashMap<String, CompressionIn
     for chunk in info.into_iter() {
         let entry = compression_stats.entry(chunk.compression).or_default();
 
-        entry.total_count += 1;
-        entry.total_compressed += chunk.compressed_size;
-        entry.total_uncompressed += chunk.uncompressed_size;
+        entry.chunk_count += 1;
+        entry.compressed_size += chunk.compressed_size;
+        entry.uncompressed_size += chunk.uncompressed_size;
     }
 
     compression_stats
@@ -86,76 +81,87 @@ fn get_compression_stats(info: Vec<ChunkIndex>) -> HashMap<String, CompressionIn
 
 pub async fn print_info(path: String) -> CliResult<()> {
     let fd = McapFd::parse(path)?;
-    let mut reader = fd.create_reader().await?;
+    let reader = fd.create_reader().await?;
 
     let info = read_info(reader).await?;
 
     let mut builder = tabled::builder::Builder::default();
 
-    let mut message_count = "<unknown>".to_string();
-    let mut duration = "<unknown>".to_string();
-    let mut start_time = "<unknown>".to_string();
-    let mut end_time = "<unknown>".to_string();
-
-    if let Some(stats) = &info.statistics {
-        message_count = stats.message_count.to_string();
-
-        let start = Local.timestamp_nanos(stats.message_start_time as _);
-        start_time = format!("{start} ({})", format_time(stats.message_start_time));
-
-        let end = Local.timestamp_nanos(stats.message_end_time as _);
-        end_time = format!("{end} ({})", format_time(stats.message_end_time));
-
-        duration = format_time(stats.message_end_time - stats.message_start_time);
-    }
-
     builder.push_record(["library:", &info.header.library]);
     builder.push_record(["profile:", &info.header.profile]);
-    builder.push_record(["messages:", &message_count]);
-    builder.push_record(["duration:", &duration]);
-    builder.push_record(["start:", &start_time]);
-    builder.push_record(["end:", &end_time]);
 
-    builder.push_record(["compression:"]);
+    if let Some(stats) = &info.statistics {
+        let message_count = stats.message_count.to_string();
 
-    let total_chunks = info.chunk_indexes.len();
+        let long_ago = Local::now() - Duration::days(20 * 365);
+
+        let start = Local.timestamp_nanos(stats.message_start_time as _);
+        let end = Local.timestamp_nanos(stats.message_end_time as _);
+
+        let start_time;
+        let end_time;
+
+        if start > long_ago {
+            start_time = format!(
+                "{start} ({})",
+                format_decimal_nanos(stats.message_start_time)
+            );
+            end_time = format!("{end} ({})", format_decimal_nanos(stats.message_end_time));
+        } else {
+            start_time = format_decimal_nanos(stats.message_start_time);
+            end_time = format_decimal_nanos(stats.message_end_time);
+        }
+
+        let duration = format_human_nanos(stats.message_end_time - stats.message_start_time);
+
+        builder.push_record(["messages:", &message_count]);
+        builder.push_record(["duration:", &duration]);
+        builder.push_record(["start:", &start_time]);
+        builder.push_record(["end:", &end_time]);
+    }
 
     let mut indented_rows = vec![];
 
-    for (kind, compression_info) in get_compression_stats(info.chunk_indexes).into_iter() {
-        let CompressionInfo {
-            total_compressed,
-            total_uncompressed,
-            total_count,
-        } = compression_info;
+    let total_chunks = info.chunk_indexes.len();
 
-        let mut throughput = String::new();
+    if total_chunks > 0 {
+        builder.push_record(["compression:"]);
 
-        if let Some(stats) = &info.statistics {
-            let duration_seconds =
-                (stats.message_end_time - stats.message_start_time) as f64 / NANOSECONDS_IN_SECOND;
+        for (kind, compression_info) in get_compression_stats(info.chunk_indexes).into_iter() {
+            let CompressionInfo {
+                compressed_size: total_compressed,
+                uncompressed_size: total_uncompressed,
+                chunk_count: total_count,
+            } = compression_info;
 
-            if duration_seconds > 0. {
-                throughput = format!(
-                    "[{}/sec]",
-                    human_bytes((total_compressed as f64 / duration_seconds) as _)
-                );
+            let mut throughput = String::new();
+
+            if let Some(stats) = &info.statistics {
+                let duration_seconds = (stats.message_end_time - stats.message_start_time) as f64
+                    / NANOSECONDS_IN_SECOND;
+
+                if duration_seconds > 0. {
+                    throughput = format!(
+                        "[{}/sec]",
+                        format_human_bytes((total_compressed as f64 / duration_seconds) as _)
+                    );
+                }
             }
-        }
 
-        let compression_ratio = format!(
-            "{:.2}",
-            (1. - total_compressed as f64 / total_uncompressed as f64) * 100.
-        );
-        let total_compressed = human_bytes(total_compressed);
-        let total_uncompressed = human_bytes(total_uncompressed);
+            let compression_ratio = format!(
+                "{:.2}",
+                (1. - total_compressed as f64 / total_uncompressed as f64) * 100.
+            );
+            let total_compressed = format_human_bytes(total_compressed);
+            let total_uncompressed = format_human_bytes(total_uncompressed);
 
-        indented_rows.push(builder.count_records());
+            indented_rows.push(builder.count_records());
 
-        builder.push_record([
+            builder.push_record([
             format!("{kind}:"),
             format!("[{total_count}/{total_chunks} chunks] [{total_uncompressed}/{total_compressed} ({compression_ratio}%)] {throughput}"),
         ])
+        }
     }
 
     builder.push_record(["channels:"]);
@@ -216,6 +222,9 @@ pub async fn print_info(path: String) -> CliResult<()> {
 
     if let Some(stats) = &info.statistics {
         builder.push_record(["attachments:", &stats.attachment_count.to_string()]);
+
+        println!("{}", &stats.metadata_count);
+
         builder.push_record(["metadata:", &stats.metadata_count.to_string()]);
     } else {
         builder.push_record(["attachments:", "<unknown>"]);
@@ -231,15 +240,11 @@ pub async fn print_info(path: String) -> CliResult<()> {
         .with(style)
         .with(Margin::new(0, 0, 0, 0))
         .with(Alignment::left())
-        .modify(Columns::first(), Padding::new(0, 0, 0, 0))
-        .modify(Columns::first().and(Rows::single(8)), Alignment::right());
+        .modify(Columns::first(), Padding::new(0, 0, 0, 0));
 
-    // for row in indented_rows.into_iter() {
-
-    //     Rows
-
-    //     table.modify(Row::from(row), Alignment::right());
-    // }
+    for row in indented_rows.into_iter() {
+        table.modify(Cell::new(row, 0), Alignment::right());
+    }
 
     println!("{table}");
 

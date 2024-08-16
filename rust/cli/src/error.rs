@@ -4,17 +4,17 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum CliError {
-    #[error("Unexpected input was recieved: {0}")]
+    #[error("{0}")]
     UnexpectedInput(String),
-    #[error("An unexpected response was returned: {0}")]
+    #[error("{0}")]
     UnexpectedResponse(String),
-    #[error("An IO error occurred: {0}")]
+    #[error("{0}")]
     Io(#[from] tokio::io::Error),
     #[error("An error occurred when parsing a url: {0}")]
     UrlParse(#[from] url::ParseError),
-    #[error("An http error occurred: {0}")]
+    #[error("{0}")]
     HttpReader(#[from] AsyncHttpRangeReaderError),
-    #[error("An MCAP error occurred: {0}")]
+    #[error("{0}")]
     Mcap(#[from] McapError),
 }
 
