@@ -8,6 +8,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, ReadBuf, Take};
 
 #[cfg(feature = "lz4")]
 use crate::tokio::lz4::Lz4Decoder;
+use crate::tokio::read_exact_or_zero;
 use crate::{records, McapError, McapResult, MAGIC};
 
 enum ReaderState<R> {
@@ -187,11 +188,10 @@ where
                         } else {
                             self.to_discard_after_chunk
                         };
-                        if let Err(err) = self.reader.read_exact(&mut self.scratch[..to_read]).await
-                        {
-                            return Some(Err(err.into()));
-                        }
-                        self.to_discard_after_chunk -= to_read;
+                        match self.reader.read(&mut self.scratch[..to_read]).await {
+                            Ok(n) => self.to_discard_after_chunk -= n,
+                            Err(err) => return Some(Err(err.into())),
+                        };
                     }
                 }
             };
@@ -214,12 +214,13 @@ where
                 }
                 return Ok(Cmd::Stop);
             }
-            let readlen = reader.read(&mut self.scratch[..9]).await?;
-            if readlen == 0 && self.options.skip_end_magic {
-                return Ok(Cmd::Stop);
-            }
-            if readlen != 9 {
-                return Err(McapError::UnexpectedEof);
+            let readlen = read_exact_or_zero(reader, &mut self.scratch[..9]).await?;
+            if readlen == 0 {
+                if self.options.skip_end_magic {
+                    return Ok(Cmd::Stop);
+                } else {
+                    return Err(McapError::UnexpectedEof);
+                }
             }
             let opcode = self.scratch[0];
             if opcode == records::op::FOOTER {
@@ -237,12 +238,9 @@ where
             reader.read_exact(&mut data[..]).await?;
             Ok(Cmd::YieldRecord(opcode))
         } else {
-            let len = self.reader.read(&mut self.scratch[..9]).await?;
+            let len = read_exact_or_zero(&mut self.reader, &mut self.scratch[..9]).await?;
             if len == 0 {
                 return Ok(Cmd::ExitChunk);
-            }
-            if len != 9 {
-                return Err(McapError::UnexpectedEof);
             }
             let opcode = self.scratch[0];
             let record_len = byteorder::LittleEndian::read_u64(&self.scratch[1..9]);
