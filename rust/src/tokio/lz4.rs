@@ -28,7 +28,7 @@ pub struct Lz4Decoder<R> {
     next: usize,
 }
 
-impl<R: AsyncRead> Lz4Decoder<R> {
+impl<R> Lz4Decoder<R> {
     /// Creates a new decoder which reads its input from the given
     /// input stream. The input stream can be re-acquired by calling
     /// `finish()`
