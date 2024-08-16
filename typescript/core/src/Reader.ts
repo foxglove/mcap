@@ -1,4 +1,6 @@
 import { getBigUint64 } from "./getBigUint64";
+import { timestampFromU32x2 } from "./timestamp";
+import { NsTimestamp } from "./types";
 
 // For performance reasons we use a single TextDecoder instance whose internal state is merely
 // the encoding (defaults to UTF-8). This means that a TextDecoder.decode() call is not affected
@@ -128,5 +130,13 @@ export default class Reader {
     const result = this.#viewU8.slice(this.offset, this.offset + length);
     this.offset += length;
     return result;
+  }
+
+  // Extract a u64 ns-timestamp into { sec, nsec }
+  timestamp(): NsTimestamp {
+    const low = this.#view.getUint32(this.offset, true);
+    const high = this.#view.getUint32(this.offset + 4, true);
+    this.offset += 8;
+    return timestampFromU32x2(low, high);
   }
 }

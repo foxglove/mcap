@@ -1,11 +1,13 @@
+import { NsTimestamp } from "./types";
+
 /**
  * Return the lowest index of `array` where an element can be inserted and maintain its sorted
  * order. This is a specialization of lodash's sortedIndexBy().
  */
 export function sortedLastIndexBy(
-  array: [number, number][],
-  value: number,
-  iteratee: (value: number) => number,
+  array: [NsTimestamp, number][],
+  value: NsTimestamp,
+  iteratee: (value: NsTimestamp) => number,
 ): number {
   let low = 0;
   let high = array.length;

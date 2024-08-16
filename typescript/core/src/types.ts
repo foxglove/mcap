@@ -26,13 +26,13 @@ export type Channel = {
 export type Message = {
   channelId: number;
   sequence: number;
-  logTime: number;
-  publishTime: number;
+  logTime: NsTimestamp;
+  publishTime: NsTimestamp;
   data: Uint8Array;
 };
 export type Chunk = {
-  messageStartTime: number;
-  messageEndTime: number;
+  messageStartTime: NsTimestamp;
+  messageEndTime: NsTimestamp;
   uncompressedSize: number;
   uncompressedCrc: number;
   compression: string;
@@ -40,11 +40,11 @@ export type Chunk = {
 };
 export type MessageIndex = {
   channelId: number;
-  records: [logTime: number, offset: number][];
+  records: [logTime: NsTimestamp, offset: number][];
 };
 export type ChunkIndex = {
-  messageStartTime: number;
-  messageEndTime: number;
+  messageStartTime: NsTimestamp;
+  messageEndTime: NsTimestamp;
   chunkStartOffset: number;
   chunkLength: number;
   messageIndexOffsets: Map<number, number>;
@@ -55,16 +55,16 @@ export type ChunkIndex = {
 };
 export type Attachment = {
   name: string;
-  logTime: number;
-  createTime: number;
+  logTime: NsTimestamp;
+  createTime: NsTimestamp;
   mediaType: string;
   data: Uint8Array;
 };
 export type AttachmentIndex = {
   offset: number;
   length: number;
-  logTime: number;
-  createTime: number;
+  logTime: NsTimestamp;
+  createTime: NsTimestamp;
   dataSize: number;
   name: string;
   mediaType: string;
@@ -76,8 +76,8 @@ export type Statistics = {
   attachmentCount: number;
   metadataCount: number;
   chunkCount: number;
-  messageStartTime: number;
-  messageEndTime: number;
+  messageStartTime: NsTimestamp;
+  messageEndTime: NsTimestamp;
   channelMessageCounts: Map<number, number>;
 };
 export type Metadata = {
@@ -140,3 +140,12 @@ export interface IReadable {
   size(): Promise<number>;
   read(offset: number, size: number): Promise<Uint8Array>;
 }
+
+/**
+ * Nanosecond resolution timestamp in 2 fields, seconds and nanoseconds
+ * (up to 2^32 seconds, 2^32 nanoseconds, or 1e9 more precisely)
+ */
+export type NsTimestamp = {
+  sec: number;
+  nsec: number;
+};

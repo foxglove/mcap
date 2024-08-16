@@ -187,8 +187,8 @@ function parseMessage(reader: Reader, recordLength: number): TypedMcapRecord {
   const MESSAGE_PREFIX_SIZE = 2 + 4 + 8 + 8; // channelId, sequence, logTime, publishTime
   const channelId = reader.uint16();
   const sequence = reader.uint32();
-  const logTime = reader.uint64();
-  const publishTime = reader.uint64();
+  const logTime = reader.timestamp();
+  const publishTime = reader.timestamp();
   const data = reader.u8ArrayCopy(recordLength - MESSAGE_PREFIX_SIZE);
   return {
     type: "Message",
@@ -202,8 +202,8 @@ function parseMessage(reader: Reader, recordLength: number): TypedMcapRecord {
 
 function parseChunk(reader: Reader, recordLength: number): TypedMcapRecord {
   const start = reader.offset;
-  const startTime = reader.uint64();
-  const endTime = reader.uint64();
+  const startTime = reader.timestamp();
+  const endTime = reader.timestamp();
   const uncompressedSize = reader.uint64();
   const uncompressedCrc = reader.uint32();
   const compression = reader.string();
@@ -230,7 +230,7 @@ function parseMessageIndex(reader: Reader, recordLength: number): TypedMcapRecor
   const startOffset = reader.offset;
   const channelId = reader.uint16();
   const records = reader.keyValuePairs(
-    (r) => r.uint64(),
+    (r) => r.timestamp(),
     (r) => r.uint64(),
   );
   reader.offset = startOffset + recordLength;
@@ -243,8 +243,8 @@ function parseMessageIndex(reader: Reader, recordLength: number): TypedMcapRecor
 
 function parseChunkIndex(reader: Reader, recordLength: number): TypedMcapRecord {
   const startOffset = reader.offset;
-  const messageStartTime = reader.uint64();
-  const messageEndTime = reader.uint64();
+  const messageStartTime = reader.timestamp();
+  const messageEndTime = reader.timestamp();
   const chunkStartOffset = reader.uint64();
   const chunkLength = reader.uint64();
   const messageIndexOffsets = reader.map(
@@ -278,8 +278,8 @@ function parseAttachment(
   validateCrcs: boolean,
 ): TypedMcapRecord {
   const startOffset = reader.offset;
-  const logTime = reader.uint64();
-  const createTime = reader.uint64();
+  const logTime = reader.timestamp();
+  const createTime = reader.timestamp();
   const name = reader.string();
   const mediaType = reader.string();
   const dataLen = reader.uint64();
@@ -318,8 +318,8 @@ function parseAttachmentIndex(reader: Reader, recordLength: number): TypedMcapRe
   const startOffset = reader.offset;
   const offset = reader.uint64();
   const length = reader.uint64();
-  const logTime = reader.uint64();
-  const createTime = reader.uint64();
+  const logTime = reader.timestamp();
+  const createTime = reader.timestamp();
   const dataSize = reader.uint64();
   const name = reader.string();
   const mediaType = reader.string();
@@ -345,8 +345,8 @@ function parseStatistics(reader: Reader, recordLength: number): TypedMcapRecord 
   const attachmentCount = reader.uint32();
   const metadataCount = reader.uint32();
   const chunkCount = reader.uint32();
-  const messageStartTime = reader.uint64();
-  const messageEndTime = reader.uint64();
+  const messageStartTime = reader.timestamp();
+  const messageEndTime = reader.timestamp();
   const channelMessageCounts = reader.map(
     (r) => r.uint16(),
     (r) => r.uint64(),

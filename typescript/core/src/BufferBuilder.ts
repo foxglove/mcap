@@ -1,3 +1,6 @@
+import { timestampToU32x2 } from "./timestamp";
+import { NsTimestamp } from "./types";
+
 const LITTLE_ENDIAN = true;
 
 /**
@@ -85,6 +88,12 @@ export class BufferBuilder {
     this.#ensureAdditionalCapacity(8);
     this.#view.setBigUint64(this.#offset, bigIntValue, LITTLE_ENDIAN);
     this.#offset += 8;
+    return this;
+  }
+  timestamp(value: NsTimestamp): this {
+    const [low, high] = timestampToU32x2(value);
+    this.uint32(low);
+    this.uint32(high);
     return this;
   }
   string(value: string): this {

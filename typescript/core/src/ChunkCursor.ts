@@ -2,13 +2,14 @@ import Reader from "./Reader";
 import { parseRecord } from "./parse";
 import { sortedIndexBy } from "./sortedIndexBy";
 import { sortedLastIndexBy } from "./sortedLastIndex";
-import { IReadable, TypedMcapRecords } from "./types";
+import { timestampCompare, timestampMul, timestampToNumber } from "./timestamp";
+import { IReadable, NsTimestamp, TypedMcapRecords } from "./types";
 
 type ChunkCursorParams = {
   chunkIndex: TypedMcapRecords["ChunkIndex"];
   relevantChannels: Set<number> | undefined;
-  startTime: number | undefined;
-  endTime: number | undefined;
+  startTime: NsTimestamp | undefined;
+  endTime: NsTimestamp | undefined;
   reverse: boolean;
 };
 
@@ -23,12 +24,12 @@ export class ChunkCursor {
   readonly chunkIndex: TypedMcapRecords["ChunkIndex"];
 
   #relevantChannels?: Set<number>;
-  #startTime: number | undefined;
-  #endTime: number | undefined;
+  #startTime: NsTimestamp | undefined;
+  #endTime: NsTimestamp | undefined;
   #reverse: boolean;
 
   // List of message offsets (across all channels) sorted by logTime.
-  #orderedMessageOffsets?: [logTime: number, offset: number][];
+  #orderedMessageOffsets?: [logTime: NsTimestamp, offset: number][];
   // Index for the next message offset. Gets incremented for every popMessage() call.
   #nextMessageOffsetIndex = 0;
 
@@ -57,7 +58,7 @@ export class ChunkCursor {
       throw new Error("Cannot compare a reversed ChunkCursor to a non-reversed ChunkCursor");
     }
 
-    let diff = Number(this.#getSortTime() - other.#getSortTime());
+    let diff = timestampCompare(this.#getSortTime(), other.#getSortTime());
 
     // Break ties by chunk offset in the file
     if (diff === 0) {
@@ -82,7 +83,7 @@ export class ChunkCursor {
    * Pop a message offset off of the chunk cursor. Message indexes must have been loaded before
    * using this method.
    */
-  popMessage(): [logTime: number, offset: number] {
+  popMessage(): [logTime: NsTimestamp, offset: number] {
     if (this.#orderedMessageOffsets == undefined) {
       throw new Error("loadMessageIndexes() must be called before popMessage()");
     }
@@ -138,7 +139,7 @@ export class ChunkCursor {
     );
 
     const reader = new Reader(messageIndexesView);
-    const arrayOfMessageOffsets: [logTime: number, offset: number][][] = [];
+    const arrayOfMessageOffsets: [logTime: NsTimestamp, offset: number][][] = [];
     let record;
     while ((record = parseRecord(reader, true))) {
       if (record.type !== "MessageIndex") {
@@ -161,11 +162,11 @@ export class ChunkCursor {
     this.#orderedMessageOffsets = arrayOfMessageOffsets
       .flat()
       .sort(([logTimeA, offsetA], [logTimeB, offsetB]) => {
-        let diff = Number(logTimeA - logTimeB);
+        let diff = timestampCompare(logTimeA, logTimeB);
 
         // Break ties by message offset in the file
         if (diff === 0) {
-          diff = Number(offsetA - offsetB);
+          diff = offsetA - offsetB;
         }
 
         return diff;
@@ -200,7 +201,10 @@ export class ChunkCursor {
     // Determine the indexes corresponding to the start and end time.
     const startTime = reverse ? this.#endTime : this.#startTime;
     const endTime = reverse ? this.#startTime : this.#endTime;
-    const iteratee = reverse ? (logTime: number) => -logTime : (logTime: number) => logTime;
+    // NOTE: can optimize and simplify this by just passing a comparator function
+    const iteratee = reverse
+      ? (logTime: NsTimestamp) => timestampToNumber(timestampMul(logTime, -1))
+      : (logTime: NsTimestamp) => timestampToNumber(logTime);
     let startIndex: number | undefined;
     let endIndex: number | undefined;
 
@@ -219,7 +223,7 @@ export class ChunkCursor {
   }
 
   // Get the next available message logTime which is being used when comparing chunkCursors (for ordering purposes).
-  #getSortTime(): number {
+  #getSortTime(): NsTimestamp {
     // If message indexes have been loaded and are non-empty, we return the logTime of the next available message.
     if (
       this.#orderedMessageOffsets != undefined &&

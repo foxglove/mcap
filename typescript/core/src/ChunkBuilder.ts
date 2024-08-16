@@ -1,5 +1,6 @@
 import { McapRecordBuilder } from "./McapRecordBuilder";
-import { Channel, Message, MessageIndex, Schema } from "./types";
+import { TIMESTAMP_UNIX_EPOCH, timestampCompare } from "./timestamp";
+import { Channel, Message, MessageIndex, NsTimestamp, Schema } from "./types";
 
 type ChunkBuilderOptions = {
   useMessageIndex?: boolean;
@@ -9,8 +10,8 @@ class ChunkBuilder {
   #messageIndices: Map<number, MessageIndex> | undefined;
   #totalMessageCount = 0;
 
-  messageStartTime = 0;
-  messageEndTime = 0;
+  messageStartTime: NsTimestamp = TIMESTAMP_UNIX_EPOCH;
+  messageEndTime: NsTimestamp = TIMESTAMP_UNIX_EPOCH;
 
   constructor({ useMessageIndex = true }: ChunkBuilderOptions) {
     if (useMessageIndex) {
@@ -52,10 +53,16 @@ class ChunkBuilder {
   }
 
   addMessage(message: Message): void {
-    if (this.#totalMessageCount === 0 || message.logTime < this.messageStartTime) {
+    if (
+      this.#totalMessageCount === 0 ||
+      timestampCompare(message.logTime, this.messageStartTime) < 0
+    ) {
       this.messageStartTime = message.logTime;
     }
-    if (this.#totalMessageCount === 0 || message.logTime > this.messageEndTime) {
+    if (
+      this.#totalMessageCount === 0 ||
+      timestampCompare(message.logTime, this.messageEndTime) > 0
+    ) {
       this.messageEndTime = message.logTime;
     }
 
@@ -76,8 +83,8 @@ class ChunkBuilder {
   }
 
   reset(): void {
-    this.messageStartTime = 0;
-    this.messageEndTime = 0;
+    this.messageStartTime = TIMESTAMP_UNIX_EPOCH;
+    this.messageEndTime = TIMESTAMP_UNIX_EPOCH;
     this.#totalMessageCount = 0;
     this.#messageIndices?.clear();
     this.#recordWriter.reset();

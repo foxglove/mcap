@@ -1,12 +1,13 @@
 import { crc32, crc32Final, crc32Init, crc32Update } from "@foxglove/crc";
 import Heap from "heap-js";
 
-import { getBigUint64 } from "./getBigUint64";
 import { ChunkCursor } from "./ChunkCursor";
 import Reader from "./Reader";
 import { MCAP_MAGIC } from "./constants";
+import { getBigUint64 } from "./getBigUint64";
 import { parseMagic, parseRecord } from "./parse";
-import { DecompressHandlers, IReadable, TypedMcapRecords } from "./types";
+import { timestampCompare, timestampToNumber } from "./timestamp";
+import { DecompressHandlers, IReadable, NsTimestamp, TypedMcapRecords } from "./types";
 
 type McapIndexedReaderArgs = {
   readable: IReadable;
@@ -41,10 +42,10 @@ export class McapIndexedReader {
   #readable: IReadable;
   #decompressHandlers?: DecompressHandlers;
 
-  #messageStartTime: number | undefined;
-  #messageEndTime: number | undefined;
-  #attachmentStartTime: number | undefined;
-  #attachmentEndTime: number | undefined;
+  #messageStartTime: NsTimestamp | undefined;
+  #messageEndTime: NsTimestamp | undefined;
+  #attachmentStartTime: NsTimestamp | undefined;
+  #attachmentEndTime: NsTimestamp | undefined;
 
   private constructor(args: McapIndexedReaderArgs) {
     this.#readable = args.readable;
@@ -62,10 +63,16 @@ export class McapIndexedReader {
     this.dataSectionCrc = args.dataSectionCrc;
 
     for (const chunk of args.chunkIndexes) {
-      if (this.#messageStartTime == undefined || chunk.messageStartTime < this.#messageStartTime) {
+      if (
+        this.#messageStartTime == undefined ||
+        timestampCompare(chunk.messageStartTime, this.#messageStartTime) < 0
+      ) {
         this.#messageStartTime = chunk.messageStartTime;
       }
-      if (this.#messageEndTime == undefined || chunk.messageEndTime > this.#messageEndTime) {
+      if (
+        this.#messageEndTime == undefined ||
+        timestampCompare(chunk.messageEndTime, this.#messageEndTime) > 0
+      ) {
         this.#messageEndTime = chunk.messageEndTime;
       }
     }
@@ -73,11 +80,14 @@ export class McapIndexedReader {
     for (const attachment of args.attachmentIndexes) {
       if (
         this.#attachmentStartTime == undefined ||
-        attachment.logTime < this.#attachmentStartTime
+        timestampCompare(attachment.logTime, this.#attachmentStartTime) < 0
       ) {
         this.#attachmentStartTime = attachment.logTime;
       }
-      if (this.#attachmentEndTime == undefined || attachment.logTime > this.#attachmentEndTime) {
+      if (
+        this.#attachmentEndTime == undefined ||
+        timestampCompare(attachment.logTime, this.#attachmentEndTime) > 0
+      ) {
         this.#attachmentEndTime = attachment.logTime;
       }
     }
@@ -368,14 +378,17 @@ export class McapIndexedReader {
 
     const chunkCursors = new Heap<ChunkCursor>((a, b) => a.compare(b));
     let chunksOrdered = true;
-    let prevChunkEndTime: number | undefined;
+    let prevChunkEndTime: NsTimestamp | undefined;
     for (const chunkIndex of this.chunkIndexes) {
-      if (chunkIndex.messageStartTime <= endTime && chunkIndex.messageEndTime >= startTime) {
+      if (
+        timestampCompare(chunkIndex.messageStartTime, endTime) <= 0 &&
+        timestampCompare(chunkIndex.messageEndTime, startTime) >= 0
+      ) {
         chunkCursors.push(
           new ChunkCursor({ chunkIndex, relevantChannels, startTime, endTime, reverse }),
         );
         if (chunksOrdered && prevChunkEndTime != undefined) {
-          chunksOrdered = chunkIndex.messageStartTime >= prevChunkEndTime;
+          chunksOrdered = timestampCompare(chunkIndex.messageStartTime, prevChunkEndTime) >= 0;
         }
         prevChunkEndTime = chunkIndex.messageEndTime;
       }
@@ -424,9 +437,13 @@ export class McapIndexedReader {
           `Unexpected record type ${record.type} in message index (time ${logTime}, offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
         );
       }
-      if (record.logTime !== logTime) {
+      if (timestampCompare(record.logTime, logTime) !== 0) {
         throw this.#errorWithLibrary(
-          `Message log time ${record.logTime} did not match message index entry (${logTime} at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
+          `Message log time ${
+            record.logTime
+          } did not match message index entry (${timestampToNumber(
+            logTime,
+          )} at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
         );
       }
       yield record;
@@ -475,8 +492,8 @@ export class McapIndexedReader {
     args: {
       name?: string;
       mediaType?: string;
-      startTime?: number;
-      endTime?: number;
+      startTime?: NsTimestamp;
+      endTime?: NsTimestamp;
       validateCrcs?: boolean;
     } = {},
   ): AsyncGenerator<TypedMcapRecords["Attachment"], void, void> {
@@ -499,7 +516,10 @@ export class McapIndexedReader {
       if (mediaType != undefined && attachmentIndex.mediaType !== mediaType) {
         continue;
       }
-      if (attachmentIndex.logTime > endTime || attachmentIndex.logTime < startTime) {
+      if (
+        timestampCompare(attachmentIndex.logTime, endTime) > 0 ||
+        timestampCompare(attachmentIndex.logTime, startTime) < 0
+      ) {
         continue;
       }
       const attachmentData = await this.#readable.read(

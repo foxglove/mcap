@@ -6,6 +6,7 @@ import { IWritable } from "./IWritable";
 import { McapIndexedReader } from "./McapIndexedReader";
 import { McapRecordBuilder } from "./McapRecordBuilder";
 import { Opcode } from "./constants";
+import { TIMESTAMP_UNIX_EPOCH, timestampCompare } from "./timestamp";
 import {
   Schema,
   Channel,
@@ -105,8 +106,8 @@ export class McapWriter {
         attachmentCount: 0,
         metadataCount: 0,
         chunkCount: 0,
-        messageStartTime: 0,
-        messageEndTime: 0,
+        messageStartTime: TIMESTAMP_UNIX_EPOCH,
+        messageEndTime: TIMESTAMP_UNIX_EPOCH,
         channelMessageCounts: new Map(),
       };
     }
@@ -377,10 +378,10 @@ export class McapWriter {
         this.statistics.messageStartTime = message.logTime;
         this.statistics.messageEndTime = message.logTime;
       } else {
-        if (message.logTime < this.statistics.messageStartTime) {
+        if (timestampCompare(message.logTime, this.statistics.messageStartTime) < 0) {
           this.statistics.messageStartTime = message.logTime;
         }
-        if (message.logTime > this.statistics.messageEndTime) {
+        if (timestampCompare(message.logTime, this.statistics.messageEndTime) > 0) {
           this.statistics.messageEndTime = message.logTime;
         }
       }

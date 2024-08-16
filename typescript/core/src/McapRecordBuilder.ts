@@ -146,8 +146,8 @@ export class McapRecordBuilder {
       .uint64(0) // placeholder
       .uint16(message.channelId)
       .uint32(message.sequence)
-      .uint64(message.logTime)
-      .uint64(message.publishTime)
+      .timestamp(message.logTime)
+      .timestamp(message.publishTime)
       .bytes(message.data);
     // message record cannot be padded
     const endPosition = this.#bufferBuilder.length;
@@ -164,8 +164,8 @@ export class McapRecordBuilder {
     this.#bufferBuilder.uint64(0); // placeholder
     const crcStartPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
-      .uint64(attachment.logTime)
-      .uint64(attachment.createTime)
+      .timestamp(attachment.logTime)
+      .timestamp(attachment.createTime)
       .string(attachment.name)
       .string(attachment.mediaType)
       .uint64(attachment.data.byteLength)
@@ -199,8 +199,8 @@ export class McapRecordBuilder {
       .uint64(0) // placeholder
       .uint64(attachmentIndex.offset)
       .uint64(attachmentIndex.length)
-      .uint64(attachmentIndex.logTime)
-      .uint64(attachmentIndex.createTime)
+      .timestamp(attachmentIndex.logTime)
+      .timestamp(attachmentIndex.createTime)
       .uint64(attachmentIndex.dataSize)
       .string(attachmentIndex.name)
       .string(attachmentIndex.mediaType);
@@ -223,8 +223,8 @@ export class McapRecordBuilder {
     const startPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .uint64(0) // placeholder
-      .uint64(chunk.messageStartTime)
-      .uint64(chunk.messageEndTime)
+      .timestamp(chunk.messageStartTime)
+      .timestamp(chunk.messageEndTime)
       .uint64(chunk.uncompressedSize)
       .uint32(chunk.uncompressedCrc)
       .string(chunk.compression)
@@ -246,8 +246,8 @@ export class McapRecordBuilder {
     const startPosition = this.#bufferBuilder.length;
     this.#bufferBuilder
       .uint64(0) // placeholder
-      .uint64(chunkIndex.messageStartTime)
-      .uint64(chunkIndex.messageEndTime)
+      .timestamp(chunkIndex.messageStartTime)
+      .timestamp(chunkIndex.messageEndTime)
       .uint64(chunkIndex.chunkStartOffset)
       .uint64(chunkIndex.chunkLength)
       .uint32(chunkIndex.messageIndexOffsets.size * 10);
@@ -287,7 +287,7 @@ export class McapRecordBuilder {
       .uint32(messageIndexRecordsByteLength);
 
     for (const record of messageIndex.records) {
-      this.#bufferBuilder.uint64(record[0]).uint64(record[1]);
+      this.#bufferBuilder.timestamp(record[0]).uint64(record[1]);
     }
     if (this.options?.padRecords === true) {
       this.#bufferBuilder.uint8(0x01).uint8(0xff).uint8(0xff);
@@ -383,8 +383,8 @@ export class McapRecordBuilder {
       .uint32(statistics.attachmentCount)
       .uint32(statistics.metadataCount)
       .uint32(statistics.chunkCount)
-      .uint64(statistics.messageStartTime)
-      .uint64(statistics.messageEndTime)
+      .timestamp(statistics.messageStartTime)
+      .timestamp(statistics.messageEndTime)
       .tupleArray(
         (key) => this.#bufferBuilder.uint16(key),
         (value) => this.#bufferBuilder.uint64(value),
