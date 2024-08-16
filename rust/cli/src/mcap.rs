@@ -7,6 +7,7 @@ use mcap::{
     },
     tokio::read::RecordReaderOptions,
 };
+use tracing::warn;
 
 use crate::{
     error::{CliError, CliResult},
@@ -38,18 +39,64 @@ fn default_prefetch(start: u64) -> Range<u64> {
     start..start + MIN_PREFETCH_SIZE
 }
 
+/// Create a range for prefetching a larger amount from a certain offset.
+///
+/// This is useful when you know you will need to read a lot of records and aren't worried about
+/// prefetching too much data.
+fn large_prefetch(start: u64) -> Range<u64> {
+    start..start + MIN_PREFETCH_SIZE * 8
+}
+
+const SUMMARY_PREFETCH_LEEWAY: u64 = MIN_PREFETCH_SIZE * 4;
+
+async fn read_summary_records_slow(
+    reader: &mut RecordReader,
+    summary_start: u64,
+) -> CliResult<Vec<Record>> {
+    let mut current_prefetech = large_prefetch(summary_start);
+
+    reader
+        .as_base_reader_mut()?
+        .prefetch(current_prefetech.clone())
+        .await;
+
+    let mut records = vec![];
+
+    reader.seek(SeekFrom::Start(summary_start)).await?;
+
+    while let Some(
+        record @ (Record::Statistics(_)
+        | Record::Channel(_)
+        | Record::ChunkIndex(_)
+        | Record::AttachmentIndex(_)
+        | Record::MetadataIndex(_)
+        | Record::Schema { .. }),
+    ) = reader.read_record().await?
+    {
+        records.push(record.into_owned());
+
+        // If the current position is over half way through the prefetched range, it'd probably
+        // make sense to prefetch some more just in case.
+        if reader.position().await? + SUMMARY_PREFETCH_LEEWAY > current_prefetech.end {
+            current_prefetech = large_prefetch(current_prefetech.end);
+            reader
+                .as_base_reader_mut()?
+                .prefetch(current_prefetech.clone())
+                .await;
+        }
+    }
+
+    Ok(records)
+}
+
 /// Using the provided [`RecordReader`] read all the summary information after the provided
 /// summary offset start.
 ///
 /// This operation will increment the readers internal position.
-async fn read_summary_records(
+async fn read_summary_records_from_offset(
     reader: &mut RecordReader,
     summary_offset_start: u64,
 ) -> CliResult<Vec<Record>> {
-    if summary_offset_start == 0 {
-        return Ok(Vec::with_capacity(0));
-    }
-
     reader
         .as_base_reader_mut()?
         .prefetch(default_prefetch(summary_offset_start))
@@ -80,6 +127,8 @@ async fn read_summary_records(
         loop {
             let current_position = reader.position().await?;
 
+            // If the position we're at (the end of the previous record) is past the end of the
+            // group then bail out. This makes sure we only read in the offset group.
             if current_position >= end {
                 break;
             }
@@ -105,7 +154,7 @@ async fn read_summary_records(
 
 pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> {
     let options = RecordReaderOptions {
-        // skip the end magic so running over the
+        // skip the end magic so overreading doesn't throw errors
         skip_end_magic: true,
         ..Default::default()
     };
@@ -118,6 +167,8 @@ pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> 
     let mut metadata_indexes = vec![];
     let mut schemas = vec![];
 
+    // Since nothing has been read yet, calling read_record() will read the start of the MCAP file
+    // and check for the magic, returning the header.
     let Some(Record::Header(header)) = reader.read_record().await? else {
         return Err(CliError::UnexpectedResponse(
             "Expected first record to be header record".into(),
@@ -125,7 +176,17 @@ pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> 
     };
 
     let footer = reader.read_footer().await?;
-    let summary = read_summary_records(&mut reader, footer.summary_offset_start).await?;
+
+    // It's more efficient to get the summary information from the summary offset section as we're
+    // able to preftch the entire summary section using the group lenghts provided. If there are
+    // no summary offset records then fall back to reading the entire summary - which may be slow dependning on the size.
+    let summary = if footer.summary_offset_start > 0 {
+        read_summary_records_from_offset(&mut reader, footer.summary_offset_start).await?
+    } else if footer.summary_start > 0 {
+        read_summary_records_slow(&mut reader, footer.summary_start).await?
+    } else {
+        Vec::with_capacity(0)
+    };
 
     for record in summary.into_iter() {
         match record {
@@ -153,11 +214,13 @@ pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> 
                 schemas.push(header);
             }
 
+            // The MCAP spec says that only the above records can be in the summary section.
+            // However for backwards compatibility reasons don't throw an error here, just warn.
             record => {
-                CliError::UnexpectedResponse(format!(
+                warn!(
                     "Received unexpected record in summary response. Record opcode: {:02x}",
                     record.opcode()
-                ));
+                );
             }
         }
     }

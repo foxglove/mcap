@@ -21,6 +21,12 @@ struct Args {
     cmd: Command,
 }
 
+macro_rules! err_msg {
+    ($($t:tt)*) => {
+        |e| e.into_human_message(format!($($t)*))
+    };
+}
+
 /// Parse the CLI arguments and run the CLI.
 pub async fn run() -> Result<(), String> {
     let Args { cmd } = Args::parse();
@@ -28,6 +34,6 @@ pub async fn run() -> Result<(), String> {
     match cmd {
         Command::Info { path } => print_info(path.clone())
             .await
-            .map_err(|e| format!("Failed to read MCAP file '{path}': {e}")),
+            .map_err(err_msg!("Failed to get info for MCAP file '{path}'")),
     }
 }

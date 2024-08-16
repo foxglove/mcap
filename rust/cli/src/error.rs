@@ -1,6 +1,8 @@
 use async_http_range_reader::AsyncHttpRangeReaderError;
 use mcap::McapError;
+use std::fmt::Display;
 use thiserror::Error;
+use tracing::debug;
 
 #[derive(Debug, Error)]
 pub enum CliError {
@@ -16,6 +18,13 @@ pub enum CliError {
     HttpReader(#[from] AsyncHttpRangeReaderError),
     #[error("{0}")]
     Mcap(#[from] McapError),
+}
+
+impl CliError {
+    pub fn into_human_message(self, prefix: impl Display) -> String {
+        debug!("CLI error was returned: {self:#?}");
+        format!("{prefix}: {self}")
+    }
 }
 
 pub type CliResult<T> = Result<T, CliError>;
