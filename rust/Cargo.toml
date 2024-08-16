@@ -43,7 +43,7 @@ anyhow = "1"
 atty = "0.2"
 camino = "1.0"
 clap = { version = "3.2", features = ["derive"]}
-criterion = "0.5.1"
+criterion = { version = "0.5.1", features = ["async_tokio"] }
 itertools = "0.10"
 memmap = "0.7"
 rayon = "1.5"
