@@ -61,3 +61,9 @@ harness = false
 opt-level = 3
 debug = true
 lto = true
+
+[workspace]
+members = [
+	".",
+	"cli"
+]

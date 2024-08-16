@@ -6,9 +6,9 @@ use std::task::{Context, Poll};
 use async_compression::tokio::bufread::ZstdDecoder;
 use byteorder::ByteOrder;
 
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, BufReader, ReadBuf, Take};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, ReadBuf, Take};
 
-use crate::records::{op, Footer, Record};
+use crate::records::{op, Record, FOOTER_LEN_BYTES};
 #[cfg(feature = "lz4")]
 use crate::tokio::lz4::Lz4Decoder;
 use crate::{parse_record, records, McapError, McapResult, MAGIC};
@@ -292,12 +292,9 @@ where
     }
 }
 
-// opcode + length + summary_start + summary_offset_start + summary_crc + magic
-const FOOTER_SIZE_BYTES: usize = 1 + 8 + 8 + 8 + 4 + 8;
-
 impl<R> RecordReader<R>
 where
-    R: AsyncSeek + AsyncRead + std::marker::Unpin,
+    R: AsyncSeek + AsyncRead + Unpin,
 {
     pub async fn seek(&mut self, position: SeekFrom) -> McapResult<u64> {
         let ReaderState::Base(reader) = &mut self.reader else {
@@ -312,6 +309,10 @@ where
         Ok(position)
     }
 
+    pub async fn position(&mut self) -> McapResult<u64> {
+        self.seek(SeekFrom::Current(0)).await
+    }
+
     pub async fn seek_and_read_footer(&mut self) -> McapResult<records::Footer> {
         let ReaderState::Base(reader) = &mut self.reader else {
             return Err(McapError::FailedToStartSeek(format!(
@@ -323,10 +324,10 @@ where
         let position = reader.stream_position().await?;
 
         reader
-            .seek(SeekFrom::End(-(FOOTER_SIZE_BYTES as i64)))
+            .seek(SeekFrom::End(-(FOOTER_LEN_BYTES as i64)))
             .await?;
 
-        let mut buf = [0_u8; FOOTER_SIZE_BYTES];
+        let mut buf = [0_u8; FOOTER_LEN_BYTES];
         reader.read_exact(&mut buf).await?;
 
         // Seek back to where the file started so we can continue to read records

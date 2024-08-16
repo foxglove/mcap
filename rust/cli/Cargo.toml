@@ -1,0 +1,17 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.16", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+mcap = { path = "..", features = ["tokio"] }
+thiserror = "1.0.63"
+reqwest-middleware = { version = "0.3.3", features = ["rustls-tls"] }
+async_http_range_reader = "0.8.0"
+chrono = "0.4.38"
+percent-encoding = "2.3.1"
+url = "2.5.2"
+async-trait = "0.1.81"
+tabled = "0.16.0"
