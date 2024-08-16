@@ -2,7 +2,7 @@ import Reader from "./Reader";
 import { parseRecord } from "./parse";
 import { sortedIndexBy } from "./sortedIndexBy";
 import { sortedLastIndexBy } from "./sortedLastIndex";
-import { timestampCompare, timestampMul, timestampToNumber } from "./timestamp";
+import { timestampCompare } from "./timestamp";
 import { IReadable, NsTimestamp, TypedMcapRecords } from "./types";
 
 type ChunkCursorParams = {
@@ -202,17 +202,17 @@ export class ChunkCursor {
     const startTime = reverse ? this.#endTime : this.#startTime;
     const endTime = reverse ? this.#startTime : this.#endTime;
     // NOTE: can optimize and simplify this by just passing a comparator function
-    const iteratee = reverse
-      ? (logTime: NsTimestamp) => timestampToNumber(timestampMul(logTime, -1))
-      : (logTime: NsTimestamp) => timestampToNumber(logTime);
+    const compare = reverse
+      ? (a: NsTimestamp, b: NsTimestamp) => -1 * timestampCompare(a, b)
+      : timestampCompare;
     let startIndex: number | undefined;
     let endIndex: number | undefined;
 
     if (startTime != undefined) {
-      startIndex = sortedIndexBy(this.#orderedMessageOffsets, startTime, iteratee);
+      startIndex = sortedIndexBy(this.#orderedMessageOffsets, startTime, compare);
     }
     if (endTime != undefined) {
-      endIndex = sortedLastIndexBy(this.#orderedMessageOffsets, endTime, iteratee);
+      endIndex = sortedLastIndexBy(this.#orderedMessageOffsets, endTime, compare);
     }
 
     // Remove offsets whose log time is outside of the range [startTime, endTime] which

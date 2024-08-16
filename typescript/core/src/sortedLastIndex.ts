@@ -7,7 +7,7 @@ import { NsTimestamp } from "./types";
 export function sortedLastIndexBy(
   array: [NsTimestamp, number][],
   value: NsTimestamp,
-  iteratee: (value: NsTimestamp) => number,
+  compare: (a: NsTimestamp, b: NsTimestamp) => number,
 ): number {
   let low = 0;
   let high = array.length;
@@ -15,13 +15,9 @@ export function sortedLastIndexBy(
     return 0;
   }
 
-  const computedValue = iteratee(value);
-
   while (low < high) {
     const mid = (low + high) >>> 1;
-    const computed = iteratee(array[mid]![0]);
-
-    if (computed <= computedValue) {
+    if (compare(array[mid]![0], value) <= 0) {
       low = mid + 1;
     } else {
       high = mid;
