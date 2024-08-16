@@ -95,6 +95,7 @@ impl<R: AsyncRead + std::marker::Unpin> AsyncRead for Lz4Decoder<R> {
             while (written_len < buf.remaining()) && (mself.pos < mself.len) {
                 let mut src_size = mself.len - mself.pos;
                 let mut dst_size = buf.remaining() - written_len;
+                let prev_filled = buf.filled().len();
                 let len = check_error(unsafe {
                     LZ4F_decompress(
                         mself.c.c,
@@ -107,7 +108,7 @@ impl<R: AsyncRead + std::marker::Unpin> AsyncRead for Lz4Decoder<R> {
                 })?;
                 mself.pos += src_size;
                 written_len += dst_size;
-                buf.set_filled(written_len);
+                buf.set_filled(prev_filled + written_len);
                 if len == 0 {
                     mself.next = 0;
                     return Poll::Ready(Ok(()));

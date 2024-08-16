@@ -377,4 +377,43 @@ mod tests {
         }
         Ok(())
     }
+    #[cfg(feature = "lz4")]
+    #[tokio::test]
+    async fn test_lz4_decompression() -> Result<(), McapError> {
+        let mut buf = std::io::Cursor::new(Vec::new());
+        {
+            let mut writer = crate::WriteOptions::new()
+                .compression(Some(crate::Compression::Lz4))
+                .create(&mut buf)?;
+            let channel = std::sync::Arc::new(crate::Channel {
+                topic: "chat".to_owned(),
+                schema: None,
+                message_encoding: "json".to_owned(),
+                metadata: BTreeMap::new(),
+            });
+            let data: Vec<u8> = vec![0; 1024];
+            writer.add_channel(&channel)?;
+            for n in 0..10000 {
+                {
+                    writer.write(&crate::Message {
+                        channel: channel.clone(),
+                        log_time: n,
+                        publish_time: n,
+                        sequence: n as u32,
+                        data: std::borrow::Cow::Owned(data.clone()),
+                    })?;
+                }
+            }
+            writer.finish()?;
+        }
+        let mut reader = RecordReader::new(std::io::Cursor::new(buf.into_inner()));
+        let mut record = Vec::new();
+        let mut opcodes: Vec<u8> = Vec::new();
+        while let Some(opcode) = reader.next_record(&mut record).await {
+            let opcode = opcode?;
+            opcodes.push(opcode);
+            parse_record(opcode, &record)?;
+        }
+        Ok(())
+    }
 }
