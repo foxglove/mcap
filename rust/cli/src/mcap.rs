@@ -37,17 +37,10 @@ pub struct McapInfo {
 
 type RecordReader = mcap::tokio::read::RecordReader<Pin<Box<dyn McapReader>>>;
 
-// 8KiB
-const MIN_PREFETCH_SIZE: u64 = 8192;
+const MIN_PREFETCH_SIZE: u64 = 4096;
 
 fn create_prefetch_range(start: u64) -> Range<u64> {
     start..start + MIN_PREFETCH_SIZE
-}
-
-async fn prefetch(reader: &mut RecordReader, range: Range<u64>) {
-    if let Some(reader) = reader.as_inner_base_mut() {
-        reader.prefetch(range).await;
-    }
 }
 
 async fn read_summary_records(
@@ -58,7 +51,10 @@ async fn read_summary_records(
         return Ok(Vec::with_capacity(0));
     }
 
-    prefetch(reader, create_prefetch_range(summary_offset_start)).await;
+    reader
+        .as_base_reader_mut()?
+        .prefetch(create_prefetch_range(summary_offset_start))
+        .await;
 
     let mut offsets = vec![];
 
@@ -72,7 +68,7 @@ async fn read_summary_records(
     let max_offset_end_position = offsets.iter().map(|x| x.group_start + x.group_length).max();
 
     if let (Some(min), Some(max)) = (min_offset_start_position, max_offset_end_position) {
-        prefetch(reader, min..max).await;
+        reader.as_base_reader_mut()?.prefetch(min..max).await;
     }
 
     let mut records = vec![];
@@ -107,7 +103,7 @@ async fn read_summary_records(
 pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> {
     let options = Options {
         // skip the end magic so running over the
-        skip_end_magic: true,
+        // skip_end_magic: true,
         ..Default::default()
     };
     let mut reader = RecordReader::new_with_options(reader, &options);

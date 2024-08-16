@@ -56,13 +56,7 @@ impl McapFd {
     }
 }
 
-// 8KiB
-const MIN_PREFETCH_SIZE: u64 = 8192;
 const NANOSECONDS_IN_SECOND: f64 = 1e9;
-
-fn create_prefetch_range(start: u64) -> Range<u64> {
-    start..start + MIN_PREFETCH_SIZE
-}
 
 fn format_time(nanoseconds: u64) -> String {
     let time = TimeDelta::nanoseconds(nanoseconds as _);
@@ -93,8 +87,6 @@ fn get_compression_stats(info: Vec<ChunkIndex>) -> HashMap<String, CompressionIn
 pub async fn print_info(path: String) -> CliResult<()> {
     let fd = McapFd::parse(path)?;
     let mut reader = fd.create_reader().await?;
-
-    reader.prefetch(create_prefetch_range(0)).await;
 
     let info = read_info(reader).await?;
 

@@ -26,9 +26,9 @@ pub async fn create_gcs_reader(
     let (mut file, _) = AsyncHttpRangeReader::new(
         reqwest_middleware::ClientWithMiddleware::default(),
         Url::parse(&url)?,
-        // Fetch the last 8KiB of the file. This will include the footer and for most files much of
+        // Fetch the last 4096KiB of the file. This will include the footer and for most files much of
         // the summary information.
-        CheckSupportMethod::NegativeRangeRequest(8192 as _),
+        CheckSupportMethod::NegativeRangeRequest(4096 as _),
         HeaderMap::default(),
     )
     .await?;

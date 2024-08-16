@@ -78,14 +78,6 @@ where
             }
         }
     }
-
-    pub fn as_base_mut(&mut self) -> Option<&mut R> {
-        if let ReaderState::Base(reader) = self {
-            Some(reader)
-        } else {
-            None
-        }
-    }
 }
 /// Reads an MCAP file record-by-record, writing the raw record data into a caller-provided Vec.
 pub struct RecordReader<R> {
@@ -141,8 +133,17 @@ where
         self.reader.into_inner()
     }
 
-    pub fn as_inner_base_mut(&mut self) -> Option<&mut R> {
-        self.reader.as_base_mut()
+    pub fn as_base_reader_mut(&mut self) -> McapResult<&mut R> {
+        let reader = &mut self.reader;
+
+        let ReaderState::Base(reader) = reader else {
+            return Err(McapError::FailedToStartSeek(format!(
+                "Reader was in invalid state {}",
+                reader.name()
+            )));
+        };
+
+        Ok(reader)
     }
 
     pub async fn read_record(&mut self) -> McapResult<Option<Record>> {
