@@ -214,7 +214,13 @@ where
                 }
                 return Ok(Cmd::Stop);
             }
-            reader.read_exact(&mut self.scratch[..9]).await?;
+            let readlen = reader.read(&mut self.scratch[..9]).await?;
+            if readlen == 0 && self.options.skip_end_magic {
+                return Ok(Cmd::Stop);
+            }
+            if readlen != 9 {
+                return Err(McapError::UnexpectedEof);
+            }
             let opcode = self.scratch[0];
             if opcode == records::op::FOOTER {
                 self.footer_seen = true;
