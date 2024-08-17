@@ -4,11 +4,10 @@ use tracing_subscriber::EnvFilter;
 
 mod cli;
 mod error;
-mod gcs_reader;
 mod info;
 mod mcap;
-mod traits;
-mod url_reader;
+mod filter;
+mod reader;
 mod utils;
 
 #[tokio::main]

@@ -1,80 +1,19 @@
-use std::{collections::HashMap, pin::Pin};
+use std::collections::HashMap;
 
 use chrono::{Duration, Local, TimeZone};
 use mcap::records::ChunkIndex;
-use tokio::fs::File;
 
 use tabled::settings::{
     object::{Cell, Columns},
     Alignment, Margin, Padding, Style, Theme,
 };
-use url::Url;
 
 use crate::{
-    error::{CliError, CliResult},
-    gcs_reader::create_gcs_reader,
+    error::CliResult,
     mcap::read_info,
-    traits::McapReader,
-    url_reader::create_url_reader,
+    reader::McapFd,
     utils::{format_decimal_nanos, format_human_bytes, format_human_nanos},
 };
-
-#[derive(Debug)]
-enum McapFd {
-    Gcs {
-        bucket_name: String,
-        object_name: String,
-    },
-    Url(Url),
-    File(String),
-}
-
-fn is_valid_scheme(scheme: &str) -> bool {
-    ["https", "http"].contains(&scheme)
-}
-
-impl McapFd {
-    fn parse(path: String) -> CliResult<McapFd> {
-        if path.starts_with("gs://") {
-            let Some((bucket_name, object_name)) = path.trim_start_matches("gs://").split_once('/')
-            else {
-                return Err(CliError::UnexpectedInput(
-                    "The provided path was not a valid GCS url.".to_string(),
-                ));
-            };
-
-            Ok(McapFd::Gcs {
-                bucket_name: bucket_name.into(),
-                object_name: object_name.into(),
-            })
-        } else {
-            // If the path is a
-            if let Ok(url) = Url::parse(&path) {
-                if !is_valid_scheme(url.scheme()) {
-                    return Err(CliError::UnexpectedInput(format!(
-                        "The provided remote scheme '{}' is not supported.",
-                        url.scheme()
-                    )));
-                }
-
-                return Ok(McapFd::Url(url));
-            }
-
-            Ok(McapFd::File(path))
-        }
-    }
-
-    async fn create_reader(&self) -> CliResult<Pin<Box<dyn McapReader>>> {
-        match self {
-            Self::File(path) => Ok(Box::pin(File::open(path).await?)),
-            Self::Url(url) => Ok(Box::pin(create_url_reader(url.clone()).await?)),
-            Self::Gcs {
-                bucket_name,
-                object_name,
-            } => Ok(Box::pin(create_gcs_reader(bucket_name, object_name).await?)),
-        }
-    }
-}
 
 const NANOSECONDS_IN_SECOND: f64 = 1e9;
 

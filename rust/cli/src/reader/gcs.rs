@@ -7,7 +7,7 @@ use reqwest_middleware::reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION}
 use tracing::debug;
 use url::Url;
 
-use crate::{error::CliResult, traits::McapReader};
+use crate::{error::CliResult, reader::McapReader};
 
 const GCS_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'*')

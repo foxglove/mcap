@@ -11,7 +11,7 @@ use tracing::{debug, warn};
 
 use crate::{
     error::{CliError, CliResult},
-    traits::McapReader,
+    reader::McapReader,
 };
 
 /// The information specified by the header, footer and summary sections of the MCAP file.
