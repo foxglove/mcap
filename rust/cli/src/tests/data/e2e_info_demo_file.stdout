@@ -1,0 +1,18 @@
+library:     golang-mcap-v0                                                                                                                   
+profile:     ros1                                                                                                                             
+messages:    1606                                                                                                                             
+duration:    7.780758504s                                                                                                                     
+start:       2017-03-22 12:26:20.103843113 +10:00 (1490149580.103843113)                                                                      
+end:         2017-03-22 12:26:27.884601617 +10:00 (1490149587.884601617)                                                                      
+compression:                                                                                                                                  
+       zstd: [14/14 chunks] [119.10 MiB/58.61 MiB (50.79%)] [7.53 MiB/sec]                                                                    
+channels:                                                                                                                                     
+         (0) /diagnostics                                                    52 msgs (6.68 Hz)    : diagnostic_msgs/DiagnosticArray [ros1msg] 
+         (1) /image_color/compressed                                        234 msgs (30.07 Hz)   : sensor_msgs/CompressedImage [ros1msg]     
+         (2) /tf                                                            774 msgs (99.48 Hz)   : tf2_msgs/TFMessage [ros1msg]              
+         (3) /radar/points                                                  156 msgs (20.05 Hz)   : sensor_msgs/PointCloud2 [ros1msg]         
+         (4) /radar/range                                                   156 msgs (20.05 Hz)   : sensor_msgs/Range [ros1msg]               
+         (5) /radar/tracks                                                  156 msgs (20.05 Hz)   : radar_driver/RadarTracks [ros1msg]        
+         (6) /velodyne_points                                                78 msgs (10.02 Hz)   : sensor_msgs/PointCloud2 [ros1msg]         
+attachments: 0                                                                                                                                
+metadata:    0                                                                                                                                
