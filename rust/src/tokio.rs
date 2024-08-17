@@ -1,3 +1,4 @@
+//! Read MCAP data from a stream asynchronously
 #[cfg(feature = "lz4")]
 mod lz4;
 pub mod read;

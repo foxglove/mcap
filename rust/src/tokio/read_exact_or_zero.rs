@@ -1,9 +1,10 @@
 use tokio::io::{AsyncRead, AsyncReadExt};
 
-/// read from `r` into `buf` until `buf` is completely full or EOF is reached.
-/// if R was already at EOF, this is not considered an error.
-/// If R was not at EOF, but EOF came before the end of the buffer, this is considered an error.
-/// This is useful for cases where we expect either another record full record or EOF.
+/// read up to buf.len() bytes from  `r` into `buf`. This repeatedly calls read() on `r` until
+/// either the buffer is full or EOF is reached. If either 0 or buf.len() bytes were read before
+/// EOF, Ok(n) is returned. If EOF is reached after 0 bytes but before buf.len(), Err(UnexpectedEOF)
+/// is returned.
+/// This is useful for cases where we expect either to read either a whole MCAP record or EOF.
 pub(crate) async fn read_exact_or_zero<R: AsyncRead + std::marker::Unpin>(
     r: &mut R,
     buf: &mut [u8],

@@ -65,7 +65,24 @@ where
         }
     }
 }
+
 /// Reads an MCAP file record-by-record, writing the raw record data into a caller-provided Vec.
+/// ```no_run
+/// use std::fs;
+///
+/// use tokio::fs::File;
+///
+/// async fn read_it() {
+///     let file = File::open("in.mcap").await.expect("couldn't open file");
+///     let mut record_buf: Vec<u8> = Vec::new();
+///     let mut reader = mcap::tokio::RecordReader::new(file);
+///     while let Some(result) = reader.next_record(&mut record_buf).await {
+///         let opcode = result.expect("couldn't read next record");
+///         let raw_record = mcap::parse_record(opcode, &record_buf[..]).expect("couldn't parse");
+///         // do something with the record...
+///     }
+/// }
+/// ```
 pub struct RecordReader<R> {
     reader: ReaderState<R>,
     options: RecordReaderOptions,
@@ -78,12 +95,12 @@ pub struct RecordReader<R> {
 #[derive(Default, Clone)]
 pub struct RecordReaderOptions {
     /// If true, the reader will not expect the MCAP magic at the start of the stream.
-    skip_start_magic: bool,
+    pub skip_start_magic: bool,
     /// If true, the reader will not expect the MCAP magic at the end of the stream.
-    skip_end_magic: bool,
-    // If true, the reader will yield entire chunk records. Otherwise, the reader will decompress
-    // and read into the chunk, yielding the records inside.
-    emit_chunks: bool,
+    pub skip_end_magic: bool,
+    /// If true, the reader will yield entire chunk records. Otherwise, the reader will decompress
+    /// and read into the chunk, yielding the records inside.
+    pub emit_chunks: bool,
 }
 
 enum Cmd {
