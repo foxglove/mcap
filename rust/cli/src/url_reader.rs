@@ -4,6 +4,7 @@ use url::Url;
 
 use crate::error::CliResult;
 
+/// Create a reader the implements [`AsyncRead`] and [`AsyncWrite`], and is backed by an arbitrary URL.
 pub async fn create_url_reader(url: Url) -> CliResult<AsyncHttpRangeReader> {
     let (mut file, _) = AsyncHttpRangeReader::new(
         reqwest_middleware::ClientWithMiddleware::default(),

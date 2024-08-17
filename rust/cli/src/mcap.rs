@@ -7,7 +7,7 @@ use mcap::{
     },
     tokio::read::RecordReaderOptions,
 };
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::{
     error::{CliError, CliResult},
@@ -183,8 +183,10 @@ pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> 
     let summary = if footer.summary_offset_start > 0 {
         read_summary_records_from_offset(&mut reader, footer.summary_offset_start).await?
     } else if footer.summary_start > 0 {
+        debug!(target = "mcap::cli", "Summary offset was missing from footer. Reading full summary instead.");
         read_summary_records_slow(&mut reader, footer.summary_start).await?
     } else {
+        debug!(target = "mcap::cli", "Summary section missing from file, ignoring.");
         Vec::with_capacity(0)
     };
 
@@ -218,6 +220,7 @@ pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> 
             // However for backwards compatibility reasons don't throw an error here, just warn.
             record => {
                 warn!(
+                    target = "mcap::cli",
                     "Received unexpected record in summary response. Record opcode: {:02x}",
                     record.opcode()
                 );

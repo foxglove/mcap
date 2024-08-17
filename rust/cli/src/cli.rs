@@ -21,7 +21,7 @@ struct Args {
     cmd: Command,
 }
 
-macro_rules! err_msg {
+macro_rules! msg {
     ($($t:tt)*) => {
         |e| e.into_human_message(format!($($t)*))
     };
@@ -34,6 +34,6 @@ pub async fn run() -> Result<(), String> {
     match cmd {
         Command::Info { path } => print_info(path.clone())
             .await
-            .map_err(err_msg!("Failed to get info for MCAP file '{path}'")),
+            .map_err(msg!("Failed to get info for MCAP file '{path}'")),
     }
 }
