@@ -103,6 +103,28 @@ impl Record<'_> {
         }
     }
 
+    /// Return a human readable name for the current record
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Header(_) => "Header",
+            Self::Footer(_) => "Footer",
+            Self::Schema { .. } => "Schema",
+            Self::Channel(_) => "Channel",
+            Self::Message { .. } => "Message",
+            Self::Chunk { .. } => "Chunk",
+            Self::MessageIndex(_) => "MessageIndex",
+            Self::ChunkIndex(_) => "ChunkIndex",
+            Self::Attachment { .. } => "Attachment",
+            Self::AttachmentIndex(_) => "AttachmentIndex",
+            Self::Statistics(_) => "Statistics",
+            Self::Metadata(_) => "Metadata",
+            Self::MetadataIndex(_) => "MetadataIndex",
+            Self::SummaryOffset(_) => "SummaryOffset",
+            Self::DataEnd(_) => "DataEnd",
+            Self::Unknown { .. } => "Unknown",
+        }
+    }
+
     /// Moves this value into a fully-owned variant with no borrows. This should be free for
     /// already-owned values.
     pub fn into_owned(self) -> Record<'static> {

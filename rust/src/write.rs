@@ -105,10 +105,10 @@ fn write_record<W: Write>(w: &mut W, r: &Record) -> io::Result<()> {
 
 #[derive(Debug, Clone)]
 pub struct WriteOptions {
-    compression: Option<Compression>,
-    profile: String,
-    chunk_size: Option<u64>,
-    use_chunks: bool,
+    pub compression: Option<Compression>,
+    pub profile: String,
+    pub chunk_size: Option<u64>,
+    pub use_chunks: bool,
 }
 
 impl Default for WriteOptions {
@@ -196,7 +196,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         Self::with_options(writer, WriteOptions::default())
     }
 
-    fn with_options(mut writer: W, opts: WriteOptions) -> McapResult<Self> {
+    pub fn with_options(mut writer: W, opts: WriteOptions) -> McapResult<Self> {
         writer.write_all(MAGIC)?;
 
         write_record(

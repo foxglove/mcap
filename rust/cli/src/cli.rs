@@ -2,12 +2,23 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use crate::info::print_info;
+use crate::{filter::filter_mcap, info::print_info};
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum OutputCompression {
-    /// Compression using the Zstandard algorithm
     Zstd,
+    Lz4,
+    None,
+}
+
+impl From<OutputCompression> for Option<mcap::Compression> {
+    fn from(value: OutputCompression) -> Self {
+        match value {
+            OutputCompression::Zstd => Some(mcap::Compression::Zstd),
+            OutputCompression::Lz4 => Some(mcap::Compression::Lz4),
+            OutputCompression::None => None,
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -32,7 +43,7 @@ pub struct FilterArgs {
     pub path: String,
 
     /// Chunk size of the output file
-    #[arg(long, default_value_t = 4194303)]
+    #[arg(long, default_value_t = 4194304)]
     pub chunk_size: u64,
 
     /// Messages with log times before nanosecond-precision timestamp will be included
@@ -63,7 +74,7 @@ pub struct FilterArgs {
 
     /// Output filename
     #[arg(short = 'o', long)]
-    pub output: Option<PathBuf>,
+    pub output: PathBuf,
 
     /// Compression algorithm to use on output file
     #[arg(long, value_enum, default_value_t = OutputCompression::Zstd)]
@@ -100,6 +111,8 @@ pub async fn run() -> Result<(), String> {
         Command::Info { path } => print_info(path.clone())
             .await
             .map_err(msg!("Failed to get info for MCAP file '{path}'")),
-        Command::Filter(filter) => todo!(),
+        Command::Filter(filter) => filter_mcap(filter)
+            .await
+            .map_err(msg!("Failed to filter MCAP file")),
     }
 }

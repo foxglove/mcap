@@ -19,3 +19,4 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 google-cloud-auth = "0.16.0"
 google-cloud-token = "0.1.2"
+regex = "1.10.6"

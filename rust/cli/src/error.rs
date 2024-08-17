@@ -18,6 +18,8 @@ pub enum CliError {
     HttpReader(#[from] AsyncHttpRangeReaderError),
     #[error("{0}")]
     Mcap(#[from] McapError),
+    #[error("Failed to parse regex: {0}")]
+    RegexParse(#[from] regex::Error),
 }
 
 impl CliError {
