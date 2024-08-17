@@ -10,6 +10,9 @@ mod mcap;
 mod reader;
 mod utils;
 
+#[cfg(test)]
+mod tests;
+
 #[tokio::main]
 async fn main() -> ExitCode {
     tracing_subscriber::fmt()
