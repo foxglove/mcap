@@ -133,19 +133,23 @@ where
         self.reader.into_inner()
     }
 
+    /// Return a mutable reference to the underlying reader R if it is available.
+    ///
+    /// This method will return an error if the reader is currently being used to 
     pub fn as_base_reader_mut(&mut self) -> McapResult<&mut R> {
         let reader = &mut self.reader;
 
         let ReaderState::Base(reader) = reader else {
-            return Err(McapError::FailedToStartSeek(format!(
-                "Reader was in invalid state {}",
-                reader.name()
-            )));
+            return Err(McapError::AccessBaseReader(reader.name()));
         };
 
         Ok(reader)
     }
 
+    /// Read a record and return it's owned [`Record`] value.
+    ///
+    /// This method allocates and drops a temporary buffer for reading.
+    /// Use the [`Self::next_record`] method if you want to reuse a single buffer for reading.
     pub async fn read_record(&mut self) -> McapResult<Option<Record>> {
         let mut buf = vec![];
 
@@ -297,30 +301,21 @@ impl<R> RecordReader<R>
 where
     R: AsyncSeek + AsyncRead + Unpin,
 {
+    /// Seek to a certain position using the underlying reader
     pub async fn seek(&mut self, position: SeekFrom) -> McapResult<u64> {
-        let ReaderState::Base(reader) = &mut self.reader else {
-            return Err(McapError::FailedToStartSeek(format!(
-                "Reader was in invalid state {}",
-                self.reader.name()
-            )));
-        };
-
+        let reader = self.as_base_reader_mut()?;
         let position = reader.seek(position).await?;
-
         Ok(position)
     }
 
+    /// Return the current position of the underlying seekable reader
     pub async fn position(&mut self) -> McapResult<u64> {
         self.seek(SeekFrom::Current(0)).await
     }
 
-    pub async fn read_footer(&mut self) -> McapResult<records::Footer> {
-        let ReaderState::Base(reader) = &mut self.reader else {
-            return Err(McapError::FailedToStartSeek(format!(
-                "Reader was in invalid state {}",
-                self.reader.name()
-            )));
-        };
+    /// Seek to the end of the file and read the footer record
+    pub async fn seek_and_read_footer(&mut self) -> McapResult<records::Footer> {
+        let reader = self.as_base_reader_mut()?;
 
         reader
             .seek(SeekFrom::End(-(FOOTER_LEN_BYTES as i64)))

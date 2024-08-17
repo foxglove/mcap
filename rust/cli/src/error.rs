@@ -22,7 +22,11 @@ pub enum CliError {
 
 impl CliError {
     pub fn into_human_message(self, prefix: impl Display) -> String {
-        debug!(target = "mcap::cli", "top level error was returned: {self:#?}");
+        debug!(
+            target = "mcap::cli",
+            "top level error was returned: {self:#?}"
+        );
+
         format!("{prefix}: {self}")
     }
 }

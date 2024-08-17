@@ -175,7 +175,7 @@ pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> 
         ));
     };
 
-    let footer = reader.read_footer().await?;
+    let footer = reader.seek_and_read_footer().await?;
 
     // It's more efficient to get the summary information from the summary offset section as we're
     // able to preftch the entire summary section using the group lenghts provided. If there are
