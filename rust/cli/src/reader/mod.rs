@@ -1,11 +1,11 @@
 use std::ops::Range;
 
+use ::url::Url;
 use async_trait::async_trait;
 use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncSeek};
-use ::url::Url;
 
-use crate::error::{ CliResult, CliError };
+use crate::error::{CliError, CliResult};
 
 mod gcs;
 mod url;
@@ -79,7 +79,9 @@ impl McapFd {
             Self::Gcs {
                 bucket_name,
                 object_name,
-            } => Ok(Box::pin(gcs::create_gcs_reader(bucket_name, object_name).await?)),
+            } => Ok(Box::pin(
+                gcs::create_gcs_reader(bucket_name, object_name).await?,
+            )),
         }
     }
 }

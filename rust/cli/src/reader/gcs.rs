@@ -29,7 +29,10 @@ async fn get_gcloud_header() -> Option<HeaderValue> {
     let token_source = match token_source_fut.await {
         Ok(t) => t,
         Err(e) => {
-            debug!(target = "mcap::cli", "Ignoring gcloud credentials due to error: {e:#?}");
+            debug!(
+                target = "mcap::cli",
+                "Ignoring gcloud credentials due to error: {e:#?}"
+            );
             return None;
         }
     };
@@ -37,7 +40,10 @@ async fn get_gcloud_header() -> Option<HeaderValue> {
     let token = match token_source.token_source().token().await {
         Ok(t) => t,
         Err(e) => {
-            debug!(target = "mcap::cli", "Failed to fetch gcloud credentials: {e:#?}");
+            debug!(
+                target = "mcap::cli",
+                "Failed to fetch gcloud credentials: {e:#?}"
+            );
             return None;
         }
     };
@@ -45,7 +51,10 @@ async fn get_gcloud_header() -> Option<HeaderValue> {
     match HeaderValue::from_str(&token) {
         Ok(t) => Some(t),
         Err(e) => {
-            debug!(target = "mcap::cli", "Returned gcloud header was malformed: {e:#?}");
+            debug!(
+                target = "mcap::cli",
+                "Returned gcloud header was malformed: {e:#?}"
+            );
             None
         }
     }

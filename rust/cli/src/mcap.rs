@@ -183,10 +183,16 @@ pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> 
     let summary = if footer.summary_offset_start > 0 {
         read_summary_records_from_offset(&mut reader, footer.summary_offset_start).await?
     } else if footer.summary_start > 0 {
-        debug!(target = "mcap::cli", "Summary offset was missing from footer. Reading full summary instead.");
+        debug!(
+            target = "mcap::cli",
+            "Summary offset was missing from footer. Reading full summary instead."
+        );
         read_summary_records_slow(&mut reader, footer.summary_start).await?
     } else {
-        debug!(target = "mcap::cli", "Summary section missing from file, ignoring.");
+        debug!(
+            target = "mcap::cli",
+            "Summary section missing from file, ignoring."
+        );
         Vec::with_capacity(0)
     };
 

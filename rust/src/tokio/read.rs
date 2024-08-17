@@ -8,10 +8,13 @@ use byteorder::ByteOrder;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, ReadBuf, Take};
 
-use crate::records::{op, Record, FOOTER_LEN_BYTES};
+use crate::records::{op, Record};
 #[cfg(feature = "lz4")]
 use crate::tokio::lz4::Lz4Decoder;
 use crate::{parse_record, records, McapError, McapResult, MAGIC};
+
+/// The length of the footer section of the file in bytes, including the magic bytes.
+const FOOTER_LEN_BYTES: usize = 1 + 8 + 8 + 8 + 4 + 8;
 
 enum ReaderState<R> {
     Base(R),
@@ -135,7 +138,8 @@ where
 
     /// Return a mutable reference to the underlying reader R if it is available.
     ///
-    /// This method will return an error if the reader is currently being used to 
+    /// This method will return an error if the reader is currently being used to decode or
+    /// decompress a chunk.
     pub fn as_base_reader_mut(&mut self) -> McapResult<&mut R> {
         let reader = &mut self.reader;
 

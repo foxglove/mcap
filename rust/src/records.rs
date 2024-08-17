@@ -37,9 +37,6 @@ pub mod op {
     pub const DATA_END: u8 = 0x0F;
 }
 
-/// The length of the footer section of the file in bytes, including the magic bytes.
-pub(crate) const FOOTER_LEN_BYTES: usize = 1 + 8 + 8 + 8 + 4 + 8;
-
 /// A raw record from an MCAP file.
 ///
 /// For records with large slices of binary data (schemas, messages, chunks...),

@@ -4,9 +4,9 @@ use tracing_subscriber::EnvFilter;
 
 mod cli;
 mod error;
+mod filter;
 mod info;
 mod mcap;
-mod filter;
 mod reader;
 mod utils;
 
