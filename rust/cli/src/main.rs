@@ -13,9 +13,6 @@ mod utils;
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "timings")]
-mod timings;
-
 #[tokio::main]
 async fn main() -> ExitCode {
     #[cfg(feature = "timings")]
