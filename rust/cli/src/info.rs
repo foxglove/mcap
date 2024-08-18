@@ -25,6 +25,8 @@ struct CompressionInfo {
     chunk_count: u64,
 }
 
+/// Get the chunk count, compressed size and uncompressed size for all the provided chunks, grouped
+/// by the compression algorithm.
 fn get_compression_stats(info: Vec<ChunkIndex>) -> HashMap<String, CompressionInfo> {
     let mut compression_stats = HashMap::<String, CompressionInfo>::new();
 
@@ -39,6 +41,7 @@ fn get_compression_stats(info: Vec<ChunkIndex>) -> HashMap<String, CompressionIn
     compression_stats
 }
 
+/// For a provided MCAP file, print out a table of information.
 #[instrument]
 pub async fn print_info(path: String) -> CliResult<()> {
     let fd = McapFd::parse(path)?;
@@ -81,14 +84,19 @@ pub async fn print_info(path: String) -> CliResult<()> {
         builder.push_record(["end:", &end_time]);
     }
 
-    let mut indented_rows = vec![];
+    // Some of the nested data like channels and compression algorithm looks better when
+    // right-aligned in the cell. Keep track of these indexes when pushing records so they can be
+    // modified before the table is printed.
+    let mut right_align_rows = vec![];
 
     let total_chunks = info.chunk_indexes.len();
 
     if total_chunks > 0 {
         builder.push_record(["compression:"]);
 
-        for (kind, compression_info) in get_compression_stats(info.chunk_indexes).into_iter() {
+        for (compression_algorithm, compression_info) in
+            get_compression_stats(info.chunk_indexes).into_iter()
+        {
             let CompressionInfo {
                 compressed_size: total_compressed,
                 uncompressed_size: total_uncompressed,
@@ -116,10 +124,16 @@ pub async fn print_info(path: String) -> CliResult<()> {
             let total_compressed = format_human_bytes(total_compressed);
             let total_uncompressed = format_human_bytes(total_uncompressed);
 
-            indented_rows.push(builder.count_records());
+            right_align_rows.push(builder.count_records());
+
+            let name = if compression_algorithm.is_empty() {
+                "<none>"
+            } else {
+                &compression_algorithm
+            };
 
             builder.push_record([
-            format!("{kind}:"),
+            format!("{name}:"),
             format!("[{total_count}/{total_chunks} chunks] [{total_uncompressed}/{total_compressed} ({compression_ratio}%)] {throughput}"),
         ])
         }
@@ -128,6 +142,7 @@ pub async fn print_info(path: String) -> CliResult<()> {
     builder.push_record(["channels:"]);
 
     let mut channels = info.channels;
+    // ensure the channels are sorted in numerical order
     channels.sort_by_key(|x| x.id);
 
     let max_count_width = info
@@ -177,7 +192,7 @@ pub async fn print_info(path: String) -> CliResult<()> {
             row.push(" : <no schema>".to_string());
         }
 
-        indented_rows.push(builder.count_records());
+        right_align_rows.push(builder.count_records());
         builder.push_record(row);
     }
 
@@ -200,7 +215,7 @@ pub async fn print_info(path: String) -> CliResult<()> {
         .with(Alignment::left())
         .modify(Columns::first(), Padding::new(0, 0, 0, 0));
 
-    for row in indented_rows.into_iter() {
+    for row in right_align_rows.into_iter() {
         table.modify(Cell::new(row, 0), Alignment::right());
     }
 

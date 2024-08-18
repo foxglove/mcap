@@ -153,6 +153,15 @@ async fn read_summary_records_from_offset(
     Ok(records)
 }
 
+/// For a provided reader backed by an MCAP file, read all the information in the summary section. 
+///
+/// This method takes the following approach:
+///
+/// 1. Read the start of the file and extract the header
+/// 2. Seek to the end of the file and read the footer
+/// 3. Using the offsets specified in the footer, jump to and read the summary offset section
+/// 4. Using the summary offsets (if they are available), read the summary section
+/// 5. Return all the summary information available
 #[instrument(skip(reader))]
 pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> {
     let options = RecordReaderOptions {
