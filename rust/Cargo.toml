@@ -25,6 +25,7 @@ thiserror = "1.0"
 lz4 = { version = "1", optional = true }
 async-compression = { version = "*", features = ["tokio"], optional = true }
 tokio = { version = "1", features = ["io-util"] , optional = true }
+tracing = "0.1.40"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 zstd = { version = "0.11", features = ["wasm"], optional = true }

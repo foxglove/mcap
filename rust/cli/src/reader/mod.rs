@@ -1,5 +1,6 @@
 use std::ops::Range;
 
+use tracing::instrument;
 use ::url::Url;
 use async_trait::async_trait;
 use tokio::fs::File;
@@ -72,6 +73,7 @@ impl McapFd {
     }
 
     /// Create an [`McapReader`] for the current descriptor
+    #[instrument]
     pub async fn create_reader(&self) -> CliResult<std::pin::Pin<Box<dyn McapReader>>> {
         match self {
             Self::File(path) => Ok(Box::pin(File::open(path).await?)),

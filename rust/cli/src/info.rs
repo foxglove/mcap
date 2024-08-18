@@ -7,6 +7,7 @@ use tabled::settings::{
     object::{Cell, Columns},
     Alignment, Margin, Padding, Style, Theme,
 };
+use tracing::instrument;
 
 use crate::{
     error::CliResult,
@@ -38,6 +39,7 @@ fn get_compression_stats(info: Vec<ChunkIndex>) -> HashMap<String, CompressionIn
     compression_stats
 }
 
+#[instrument]
 pub async fn print_info(path: String) -> CliResult<()> {
     let fd = McapFd::parse(path)?;
     let reader = fd.create_reader().await?;

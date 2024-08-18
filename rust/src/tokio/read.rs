@@ -7,6 +7,7 @@ use async_compression::tokio::bufread::ZstdDecoder;
 use byteorder::ByteOrder;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, ReadBuf, Take};
+use tracing::instrument;
 
 use crate::records::{op, Record};
 #[cfg(feature = "lz4")]
@@ -154,6 +155,7 @@ where
     ///
     /// This method allocates and drops a temporary buffer for reading.
     /// Use the [`Self::next_record`] method if you want to reuse a single buffer for reading.
+    #[instrument(skip(self))]
     pub async fn read_record(&mut self) -> McapResult<Option<Record>> {
         let mut buf = vec![];
 
@@ -318,6 +320,7 @@ where
     }
 
     /// Seek to the end of the file and read the footer record
+    #[instrument(skip(self))]
     pub async fn seek_and_read_footer(&mut self) -> McapResult<records::Footer> {
         let reader = self.as_base_reader_mut()?;
 

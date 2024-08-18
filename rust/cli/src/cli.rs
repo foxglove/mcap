@@ -1,13 +1,17 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use tracing::instrument;
 
 use crate::{filter::filter_mcap, info::print_info};
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum OutputCompression {
+    /// Compression using the Zstandard algorithm
     Zstd,
+    /// Compression using the LZ4 algorithm
     Lz4,
+    /// No compression
     None,
 }
 
@@ -25,7 +29,7 @@ impl From<OutputCompression> for Option<mcap::Compression> {
 enum Command {
     /// Report statistics about an MCAP file
     Info {
-        /// Path to the MCAP file to filter
+        /// Path to the MCAP file to report statistics on
         ///
         /// This can either be a local file, a URL, or a file in Google Cloud Storage prefixed with `gs://`.
         path: String,
@@ -90,6 +94,8 @@ pub struct FilterArgs {
     pub start_secs: Option<u64>,
 }
 
+/// 🔪 Officially the top-rated CLI tool for slicing and dicing MCAP files.
+///
 #[derive(Parser)]
 #[command(bin_name="mcap", author, version, about, long_about = None)]
 struct Cli {
@@ -104,6 +110,7 @@ macro_rules! msg {
 }
 
 /// Parse the CLI arguments and run the CLI.
+#[instrument(name = "mcap_cli::run")]
 pub async fn run() -> Result<(), String> {
     let Cli { cmd } = Cli::parse();
 

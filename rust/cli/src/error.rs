@@ -17,6 +17,8 @@ pub enum CliError {
     #[error("{0}")]
     HttpReader(#[from] AsyncHttpRangeReaderError),
     #[error("{0}")]
+    ReqwestError(#[from] reqwest_middleware::reqwest::Error),
+    #[error("{0}")]
     Mcap(#[from] McapError),
     #[error("Failed to parse regex: {0}")]
     RegexParse(#[from] regex::Error),

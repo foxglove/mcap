@@ -21,8 +21,16 @@ google-cloud-auth = "0.16.0"
 google-cloud-token = "0.1.2"
 regex = "1.10.6"
 
+opentelemetry = { version = "0.24.0", optional = true }
+opentelemetry-otlp = { version = "0.17.0", optional = true }
+opentelemetry_sdk = { version = "0.24.1", features = ["rt-tokio"], optional = true }
+tracing-opentelemetry = { version = "0.25.0", optional = true }
+
 [dev-dependencies]
 assert_cmd = "2.0.16"
 predicates = "3.1.2"
 tempfile = "3.12.0"
 walkdir = "2.5.0"
+
+[features]
+timings = ["opentelemetry","opentelemetry-otlp","opentelemetry_sdk","tracing-opentelemetry"]

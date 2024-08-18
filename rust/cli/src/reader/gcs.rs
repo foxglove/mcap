@@ -4,7 +4,7 @@ use google_cloud_auth::{project::Config as GcloudConfig, token::DefaultTokenSour
 use google_cloud_token::TokenSourceProvider;
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use reqwest_middleware::reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-use tracing::debug;
+use tracing::{debug, instrument};
 use url::Url;
 
 use crate::{error::CliResult, reader::McapReader};
@@ -16,6 +16,7 @@ const GCS_ENCODE_SET: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'_');
 
 /// Authenticate with gcloud and return an authorization header
+#[instrument]
 async fn get_gcloud_header() -> Option<HeaderValue> {
     let token_source_fut = DefaultTokenSourceProvider::new(GcloudConfig {
         audience: None,
@@ -63,6 +64,7 @@ async fn get_gcloud_header() -> Option<HeaderValue> {
 /// Create a reader the implements [`AsyncRead`] and [`AsyncWrite`], and is backed by a GCS file.
 ///
 /// The current implementation does not support authenticated requests to GCS.
+#[instrument]
 pub async fn create_gcs_reader(
     bucket_name: &str,
     object_name: &str,

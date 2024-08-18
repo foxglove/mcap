@@ -7,7 +7,7 @@ use mcap::{
     },
     tokio::read::RecordReaderOptions,
 };
-use tracing::{debug, warn};
+use tracing::{debug, instrument, warn};
 
 use crate::{
     error::{CliError, CliResult},
@@ -93,6 +93,7 @@ async fn read_summary_records_slow(
 /// summary offset start.
 ///
 /// This operation will increment the readers internal position.
+#[instrument(skip(reader))]
 async fn read_summary_records_from_offset(
     reader: &mut RecordReader,
     summary_offset_start: u64,
@@ -152,6 +153,7 @@ async fn read_summary_records_from_offset(
     Ok(records)
 }
 
+#[instrument(skip(reader))]
 pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> {
     let options = RecordReaderOptions {
         // skip the end magic so overreading doesn't throw errors
