@@ -45,7 +45,7 @@ fn get_compression_stats(info: Vec<ChunkIndex>) -> HashMap<String, CompressionIn
 #[instrument]
 pub async fn print_info(path: String) -> CliResult<()> {
     let fd = McapFd::parse(path)?;
-    let reader = fd.create_reader().await?;
+    let reader = fd.create_seekable_reader().await?;
 
     let info = read_info(reader).await?;
 

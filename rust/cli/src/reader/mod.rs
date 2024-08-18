@@ -1,23 +1,24 @@
 use std::ops::Range;
 
-use tracing::instrument;
 use ::url::Url;
 use async_trait::async_trait;
 use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncSeek};
+use tracing::instrument;
 
 use crate::error::{CliError, CliResult};
 
 mod gcs;
 mod url;
 
+/// Asynchronously seek, read and prefetch bytes in a way that can be used by [`mcap::tokio::RecordReader`]
 #[async_trait]
-pub trait McapReader: AsyncSeek + AsyncRead + Unpin {
+pub trait SeekableMcapReader: AsyncSeek + AsyncRead + Unpin {
     async fn prefetch(&mut self, bytes: Range<u64>);
 }
 
 #[async_trait]
-impl McapReader for File {
+impl SeekableMcapReader for File {
     async fn prefetch(&mut self, _bytes: Range<u64>) {
         // noop for files
     }
@@ -72,12 +73,33 @@ impl McapFd {
         }
     }
 
-    /// Create an [`McapReader`] for the current descriptor
+    /// Create a [`SeekableMcapReader`] for the current descriptor
     #[instrument]
-    pub async fn create_reader(&self) -> CliResult<std::pin::Pin<Box<dyn McapReader>>> {
+    pub async fn create_seekable_reader(
+        &self,
+    ) -> CliResult<std::pin::Pin<Box<dyn SeekableMcapReader>>> {
         match self {
             Self::File(path) => Ok(Box::pin(File::open(path).await?)),
-            Self::Url(url) => Ok(Box::pin(url::create_url_reader(url.clone()).await?)),
+            Self::Url(url) => Ok(Box::pin(
+                url::create_seekable_url_reader(url.clone(), Default::default()).await?,
+            )),
+            Self::Gcs {
+                bucket_name,
+                object_name,
+            } => Ok(Box::pin(
+                gcs::create_seekable_gcs_reader(bucket_name, object_name).await?,
+            )),
+        }
+    }
+
+    /// Create a reader for the current descriptor that implements `AsyncRead`
+    #[instrument]
+    pub async fn create_reader(&self) -> CliResult<std::pin::Pin<Box<dyn AsyncRead>>> {
+        match self {
+            Self::File(path) => Ok(Box::pin(File::open(path).await?)),
+            Self::Url(url) => Ok(Box::pin(
+                url::create_url_reader(url.clone(), Default::default()).await?,
+            )),
             Self::Gcs {
                 bucket_name,
                 object_name,

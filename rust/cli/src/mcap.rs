@@ -11,7 +11,7 @@ use tracing::{debug, instrument, warn};
 
 use crate::{
     error::{CliError, CliResult},
-    reader::McapReader,
+    reader::SeekableMcapReader,
 };
 
 /// The information specified by the header, footer and summary sections of the MCAP file.
@@ -26,7 +26,7 @@ pub struct McapInfo {
     pub header: Header,
 }
 
-type RecordReader = mcap::tokio::read::RecordReader<Pin<Box<dyn McapReader>>>;
+type RecordReader = mcap::tokio::read::RecordReader<Pin<Box<dyn SeekableMcapReader>>>;
 
 /// The minimum amount that should be prefetched when doing a prefetch operation.
 ///
@@ -35,31 +35,14 @@ type RecordReader = mcap::tokio::read::RecordReader<Pin<Box<dyn McapReader>>>;
 const MIN_PREFETCH_SIZE: u64 = 8192;
 
 /// Create a range for prefetching a small amount from a certain offset.
-fn default_prefetch(start: u64) -> Range<u64> {
+pub fn default_prefetch(start: u64) -> Range<u64> {
     start..start + MIN_PREFETCH_SIZE
 }
-
-/// Create a range for prefetching a larger amount from a certain offset.
-///
-/// This is useful when you know you will need to read a lot of records and aren't worried about
-/// prefetching too much data.
-fn large_prefetch(start: u64) -> Range<u64> {
-    start..start + MIN_PREFETCH_SIZE * 8
-}
-
-const SUMMARY_PREFETCH_LEEWAY: u64 = MIN_PREFETCH_SIZE * 4;
 
 async fn read_summary_records_slow(
     reader: &mut RecordReader,
     summary_start: u64,
 ) -> CliResult<Vec<Record>> {
-    let mut current_prefetech = large_prefetch(summary_start);
-
-    reader
-        .as_base_reader_mut()?
-        .prefetch(current_prefetech.clone())
-        .await;
-
     let mut records = vec![];
 
     reader.seek(SeekFrom::Start(summary_start)).await?;
@@ -74,16 +57,6 @@ async fn read_summary_records_slow(
     ) = reader.read_record().await?
     {
         records.push(record.into_owned());
-
-        // If the current position is over half way through the prefetched range, it'd probably
-        // make sense to prefetch some more just in case.
-        if reader.position().await? + SUMMARY_PREFETCH_LEEWAY > current_prefetech.end {
-            current_prefetech = large_prefetch(current_prefetech.end);
-            reader
-                .as_base_reader_mut()?
-                .prefetch(current_prefetech.clone())
-                .await;
-        }
     }
 
     Ok(records)
@@ -153,7 +126,7 @@ async fn read_summary_records_from_offset(
     Ok(records)
 }
 
-/// For a provided reader backed by an MCAP file, read all the information in the summary section. 
+/// For a provided reader backed by an MCAP file, read all the information in the summary section.
 ///
 /// This method takes the following approach:
 ///
@@ -163,7 +136,7 @@ async fn read_summary_records_from_offset(
 /// 4. Using the summary offsets (if they are available), read the summary section
 /// 5. Return all the summary information available
 #[instrument(skip(reader))]
-pub async fn read_info(reader: Pin<Box<dyn McapReader>>) -> CliResult<McapInfo> {
+pub async fn read_info(reader: Pin<Box<dyn SeekableMcapReader>>) -> CliResult<McapInfo> {
     let options = RecordReaderOptions {
         // skip the end magic so overreading doesn't throw errors
         skip_end_magic: true,

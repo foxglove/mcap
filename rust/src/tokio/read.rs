@@ -170,6 +170,7 @@ where
 
     /// Reads the next record from the input stream and copies the raw content into `data`.
     /// Returns the record's opcode as a result.
+    #[instrument(skip(self, data))]
     pub async fn next_record(&mut self, data: &mut Vec<u8>) -> Option<McapResult<u8>> {
         loop {
             let cmd = match self.next_record_inner(data).await {

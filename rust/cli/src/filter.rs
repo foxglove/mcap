@@ -10,7 +10,7 @@ use mcap::{
     Attachment, Channel, Schema, WriteOptions,
 };
 use regex::Regex;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use crate::{
     cli::FilterArgs,
@@ -18,6 +18,7 @@ use crate::{
     reader::McapFd,
 };
 
+/// Check whether a certain topic passes a check again include and exclude Regex
 struct TopicMatcher {
     include_topics: Vec<Regex>,
     exclude_topics: Vec<Regex>,
@@ -46,6 +47,7 @@ impl TopicMatcher {
         })
     }
 
+    /// Returned whether the provided topic should be included
     fn is_match(&self, topic: &str) -> bool {
         if self.exclude_topics.iter().any(|re| re.is_match(topic)) {
             return false;
@@ -63,6 +65,7 @@ impl TopicMatcher {
     }
 }
 
+/// Get the start and end time in nanos from the provided arguments
 fn get_start_and_end_time(input: &FilterArgs) -> CliResult<(u64, Option<u64>)> {
     let start_time = match (input.start_secs, input.start_nsecs) {
         (Some(secs), None) => Duration::from_secs(secs).as_nanos() as u64,
@@ -93,6 +96,7 @@ fn get_start_and_end_time(input: &FilterArgs) -> CliResult<(u64, Option<u64>)> {
     Ok((start_time, end_time))
 }
 
+#[instrument(skip(input))]
 pub async fn filter_mcap(input: FilterArgs) -> CliResult<()> {
     let (start_time, end_time) = get_start_and_end_time(&input)?;
 
@@ -108,8 +112,6 @@ pub async fn filter_mcap(input: FilterArgs) -> CliResult<()> {
 
     let matcher = TopicMatcher::new(input.include_topic_regex, input.exclude_topic_regex)?;
 
-    let input_file = McapFd::parse(input.path)?;
-
     // Currently only writing to files is supported as [`Writer`] needs a value that implements
     // [`Seek`].
     let mut output_writer = BufWriter::new(
@@ -120,7 +122,11 @@ pub async fn filter_mcap(input: FilterArgs) -> CliResult<()> {
             .open(input.output)?,
     );
 
-    let mut record_reader = RecordReader::new(input_file.create_reader().await?);
+    let input_file = McapFd::parse(input.path)?;
+    // create a normal reader since we don't need to seek while filtering
+    let reader = input_file.create_reader().await?;
+
+    let mut record_reader = RecordReader::new(reader);
 
     // Since records are read and then immediately written we don't need to own the [`Record`]
     // values. Create a temporary buffer that the [`RecordReader`] will read into before writing
