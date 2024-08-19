@@ -37,8 +37,7 @@ pub async fn create_seekable_url_reader(
     // Also prefetch the beginning of the file as we'll need it to extract the header information.
     reader.prefetch(0..1024).await;
 
-    // Wrap with a 1MiB buffer so frequent small reads don't slow everything down
-    Ok(BufReader::with_capacity(1024 * 1024, reader))
+    Ok(reader)
 }
 
 /// Create a reader the implements [`AsyncRead`] and is backed by an arbitrary URL.
