@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use mcap::{parse_record, Channel, Message, MessageStream, Schema};
+use mcap::{Channel, Message, MessageStream, Schema};
 use std::borrow::Cow;
 use std::io::Cursor;
 use std::sync::Arc;
@@ -79,51 +79,6 @@ fn bench_read_messages(c: &mut Criterion) {
             }
         });
     });
-    #[cfg(feature = "tokio")]
-    {
-        use mcap::tokio::read::RecordReader;
-        use tokio::runtime::Builder;
-
-        let rt = Builder::new_current_thread().build().unwrap();
-        group.bench_function("AsyncMessageStream_1M_uncompressed", |b| {
-            b.to_async(&rt).iter(|| async {
-                let mut reader = RecordReader::new(Cursor::new(&mcap_data_uncompressed));
-                let mut record = Vec::new();
-                let mut count = 0;
-                while let Some(result) = reader.next_record(&mut record).await {
-                    count += 1;
-                    std::hint::black_box(parse_record(result.unwrap(), &record).unwrap());
-                }
-                assert_eq!(count, N + 118);
-            });
-        });
-
-        group.bench_function("AsyncMessageStream_1M_zstd", |b| {
-            b.to_async(&rt).iter(|| async {
-                let mut reader = RecordReader::new(Cursor::new(&mcap_data_zstd));
-                let mut record = Vec::new();
-                let mut count = 0;
-                while let Some(result) = reader.next_record(&mut record).await {
-                    count += 1;
-                    std::hint::black_box(parse_record(result.unwrap(), &record).unwrap());
-                }
-                assert_eq!(count, N + 118);
-            });
-        });
-
-        group.bench_function("AsyncMessageStream_1M_lz4", |b| {
-            b.to_async(&rt).iter(|| async {
-                let mut reader = RecordReader::new(Cursor::new(&mcap_data_lz4));
-                let mut record = Vec::new();
-                let mut count = 0;
-                while let Some(result) = reader.next_record(&mut record).await {
-                    count += 1;
-                    std::hint::black_box(parse_record(result.unwrap(), &record).unwrap());
-                }
-                assert_eq!(count, N + 118);
-            });
-        });
-    }
 
     group.finish();
 }
