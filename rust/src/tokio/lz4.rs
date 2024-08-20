@@ -16,8 +16,8 @@ struct DecoderContext {
     c: LZ4FDecompressionContext,
 }
 
-// An equivalent of the lz4::Decoder `std::io::Read` wrapper for `tokio::io::AsyncRead`.
-// Code below is adapted from the https://github.com/bozaro/lz4-rs crate.
+// An adaptation of the [`lz4::Decoder`] [`std::io::Read`] impl, but for [`tokio::io::AsyncRead`].
+// Code below is adapted from the [lz4](https://github.com/bozaro/lz4-rs) crate source.
 #[derive(Debug)]
 pub struct Lz4Decoder<R> {
     c: DecoderContext,
