@@ -51,9 +51,15 @@ FileReader::FileReader(std::FILE* file)
   assert(file_);
 
   // Determine the size of the file
+#ifdef WIN32
+  _fseeki64(file_, 0, SEEK_END);
+  size_ = _ftelli64(file_);
+  _fseeki64(file_, 0, SEEK_SET);
+#else
   std::fseek(file_, 0, SEEK_END);
   size_ = std::ftell(file_);
   std::fseek(file_, 0, SEEK_SET);
+#endif
 }
 
 uint64_t FileReader::size() const {
@@ -66,7 +72,11 @@ uint64_t FileReader::read(std::byte** output, uint64_t offset, uint64_t size) {
   }
 
   if (offset != position_) {
+#ifdef WIN32
+    _fseeki64(file_, offset, SEEK_SET);
+#else
     std::fseek(file_, (long)(offset), SEEK_SET);
+#endif
     std::fflush(file_);
     position_ = offset;
   }
