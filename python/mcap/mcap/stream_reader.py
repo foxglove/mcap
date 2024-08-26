@@ -7,7 +7,7 @@ import lz4.frame  # type: ignore
 import zstandard
 
 from .data_stream import ReadDataStream
-from .exceptions import InvalidMagic
+from .exceptions import InvalidMagic, InvalidRecordLength
 from .opcode import Opcode
 from .records import (
     Attachment,
@@ -98,7 +98,46 @@ def read_magic(stream: ReadDataStream) -> bool:
 class StreamReader:
     """
     Reads MCAP data sequentially from an input stream.
+
+    :param input: a file-like object for reading the source data from.
+    :param skip_magic: if ``True``, will not expect MCAP magic at start or end of stream.
+    :param emit_chunks: if ``True``, will return Chunk records directly and do not parse out the
+        records inside.
+    :param validate_crcs: if ``True``, will validate chunk and data section CRC values.
+    :param record_size_limit: An upper bound to the size of MCAP records that this reader will
+        attempt to load, defaulting to 4 GiB. If this reader encounters a record with a greater
+        length, it will throw an :py:class:`~mcap.exceptions.RecordLengthInvalid` error. Setting to
+        ``None`` removes the limit, but can allow corrupted MCAP files to trigger a ``MemoryError``
+        exception.
     """
+
+    def __init__(
+        self,
+        input: Union[str, BytesIO, RawIOBase, BufferedReader, IO[bytes]],
+        skip_magic: bool = False,
+        emit_chunks: bool = False,
+        validate_crcs: bool = False,
+        record_size_limit: Optional[int] = (4 * 2**30),  # 4 Gib
+    ):
+        """
+        input: The input stream from which to read records.
+        """
+        if isinstance(input, str):
+            self._stream = ReadDataStream(
+                open(input, "rb"), calculate_crc=validate_crcs
+            )
+        elif isinstance(input, RawIOBase):
+            self._stream = ReadDataStream(
+                BufferedReader(input), calculate_crc=validate_crcs
+            )
+        else:
+            self._stream = ReadDataStream(input, calculate_crc=validate_crcs)
+        self._footer: Optional[Footer] = None
+        self._skip_magic: bool = skip_magic
+        self._emit_chunks: bool = emit_chunks
+        self._validate_crcs: bool = validate_crcs
+        self._calculated_data_section_crc = None
+        self._record_size_limit = record_size_limit
 
     @property
     def records(self) -> Iterator[McapRecord]:
@@ -116,6 +155,10 @@ class StreamReader:
                 checksum_before_read = self._stream.checksum()
             opcode = self._stream.read1()
             length = self._stream.read8()
+            if self._record_size_limit is not None and length > self._record_size_limit:
+                raise InvalidRecordLength(
+                    Opcode(opcode), length, self._record_size_limit
+                )
             count = self._stream.count
             record = self._read_record(opcode, length)
             if (
@@ -142,32 +185,6 @@ class StreamReader:
             if isinstance(record, Footer):
                 self._footer = record
                 read_magic(self._stream)
-
-    def __init__(
-        self,
-        input: Union[str, BytesIO, RawIOBase, BufferedReader, IO[bytes]],
-        skip_magic: bool = False,
-        emit_chunks: bool = False,
-        validate_crcs: bool = False,
-    ):
-        """
-        input: The input stream from which to read records.
-        """
-        if isinstance(input, str):
-            self._stream = ReadDataStream(
-                open(input, "rb"), calculate_crc=validate_crcs
-            )
-        elif isinstance(input, RawIOBase):
-            self._stream = ReadDataStream(
-                BufferedReader(input), calculate_crc=validate_crcs
-            )
-        else:
-            self._stream = ReadDataStream(input, calculate_crc=validate_crcs)
-        self._footer: Optional[Footer] = None
-        self._skip_magic: bool = skip_magic
-        self._emit_chunks: bool = emit_chunks
-        self._validate_crcs: bool = validate_crcs
-        self._calculated_data_section_crc = None
 
     def _read_record(self, opcode: int, length: int) -> Optional[McapRecord]:
         if opcode == Opcode.ATTACHMENT:

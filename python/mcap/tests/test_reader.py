@@ -1,15 +1,18 @@
 """tests for the McapReader implementations."""
+# cspell:words getbuffer
 import json
 import os
+from io import BytesIO
 from pathlib import Path
 from typing import IO, Any, Optional, Tuple, Type, Union
 
 import pytest
 
 from mcap.decoder import DecoderFactory
-from mcap.exceptions import DecoderNotFoundError, InvalidMagic
+from mcap.exceptions import DecoderNotFoundError, InvalidMagic, InvalidRecordLength
 from mcap.reader import McapReader, NonSeekingReader, SeekingReader, make_reader
 from mcap.records import Channel, Message, Schema
+from mcap.stream_reader import StreamReader
 from mcap.writer import IndexType, Writer
 
 DEMO_MCAP = (
@@ -212,7 +215,7 @@ def write_no_summary_mcap(filepath: Path):
         writer.add_attachment(10, 10, "my_attach", "text", b"some data")
         writer.add_metadata("my_meta", {"foo": "bar"})
         foo_channel = writer.register_channel("/foo", "json", 0)
-        for i in range(200):
+        for _ in range(200):
             writer.add_message(foo_channel, 10, json.dumps({"a": 0}).encode("utf8"), 10)
         writer.finish()
 
@@ -252,3 +255,68 @@ def test_detect_invalid_initial_magic(tmpdir: Path):
     with open(filepath, "rb") as f:
         with pytest.raises(InvalidMagic):
             NonSeekingReader(f).get_header()
+
+
+def test_record_size_limit():
+    # create a simple small MCAP
+    write_stream = BytesIO()
+    writer = Writer(write_stream)
+    writer.start("profile", "library")
+    writer.finish()
+
+    # default stream reader can read it
+    stream_reader = StreamReader(
+        BytesIO(write_stream.getbuffer()), record_size_limit=100
+    )
+    records = [r for r in stream_reader.records]
+    assert len(records) == 10
+
+    # can cause "large" records to raise an error by setting a low limit
+    stream_reader = StreamReader(
+        BytesIO(write_stream.getbuffer()), record_size_limit=10
+    )
+    with pytest.raises(
+        InvalidRecordLength,
+        match="HEADER record has invalid length 22, limit is set to 10",
+    ):
+        next(stream_reader.records)
+
+    # default seeking reader can read it
+    seeking_reader = SeekingReader(
+        BytesIO(write_stream.getbuffer()), record_size_limit=100
+    )
+    seeking_reader.get_header()
+    seeking_reader.get_summary()
+    assert len([m for m in seeking_reader.iter_messages()]) == 0
+
+    # can cause "large" records to raise an error by setting a low limit
+    seeking_reader = SeekingReader(
+        BytesIO(write_stream.getbuffer()), record_size_limit=10
+    )
+    with pytest.raises(
+        InvalidRecordLength,
+        match="HEADER record has invalid length 22, limit is set to 10",
+    ):
+        seeking_reader.get_header()
+
+    with pytest.raises(
+        InvalidRecordLength,
+        match="FOOTER record has invalid length 20, limit is set to 10",
+    ):
+        seeking_reader.get_summary()
+
+    # default non-seeking reader can read it
+    non_seeking_reader = NonSeekingReader(
+        BytesIO(write_stream.getbuffer()), record_size_limit=100
+    )
+    non_seeking_reader.get_header()
+
+    # can cause "large" records to raise an error by setting a low limit
+    non_seeking_reader = NonSeekingReader(
+        BytesIO(write_stream.getbuffer()), record_size_limit=10
+    )
+    with pytest.raises(
+        InvalidRecordLength,
+        match="HEADER record has invalid length 22, limit is set to 10",
+    ):
+        non_seeking_reader.get_header()
