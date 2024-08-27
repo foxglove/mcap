@@ -7,7 +7,7 @@ import lz4.frame  # type: ignore
 import zstandard
 
 from .data_stream import ReadDataStream
-from .exceptions import InvalidMagic, InvalidRecordLength
+from .exceptions import InvalidMagic, RecordLengthLimitExceeded
 from .opcode import Opcode
 from .records import (
     Attachment,
@@ -105,10 +105,10 @@ class StreamReader:
         records inside.
     :param validate_crcs: if ``True``, will validate chunk and data section CRC values.
     :param record_size_limit: An upper bound to the size of MCAP records that this reader will
-        attempt to load, defaulting to 4 GiB. If this reader encounters a record with a greater
-        length, it will throw an :py:class:`~mcap.exceptions.RecordLengthInvalid` error. Setting to
-        ``None`` removes the limit, but can allow corrupted MCAP files to trigger a ``MemoryError``
-        exception.
+        attempt to load in bytes, defaulting to 4 GiB. If this reader encounters a record with a
+        greater length, it will throw an :py:class:`~mcap.exceptions.RecordLengthLimitExceeded`
+        error.  Setting to ``None`` removes the limit, but can allow corrupted MCAP files to trigger
+        a `MemoryError` exception.
     """
 
     def __init__(
@@ -156,9 +156,7 @@ class StreamReader:
             opcode = self._stream.read1()
             length = self._stream.read8()
             if self._record_size_limit is not None and length > self._record_size_limit:
-                raise InvalidRecordLength(
-                    Opcode(opcode), length, self._record_size_limit
-                )
+                raise RecordLengthLimitExceeded(opcode, length, self._record_size_limit)
             count = self._stream.count
             record = self._read_record(opcode, length)
             if (

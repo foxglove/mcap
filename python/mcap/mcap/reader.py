@@ -241,10 +241,10 @@ class SeekingReader(McapReader):
         instances which can provide decoding functionality to
         :py:meth:`~mcap.reader.McapReader.iter_decoded_messages`.
     :param record_size_limit: An upper bound to the size of MCAP records that this reader will
-        attempt to load, defaulting to 4 GiB. If this reader encounters a record with a greater
-        length, it will throw an :py:class:`~mcap.exceptions.RecordLengthInvalid` error. Setting to
-        ``None`` removes the limit, but can allow corrupted MCAP files to trigger a `MemoryError`
-        exception.
+        attempt to load in bytes, defaulting to 4 GiB. If this reader encounters a record with a
+        greater length, it will throw an :py:class:`~mcap.exceptions.RecordLengthLimitExceeded`
+        error.  Setting to ``None`` removes the limit, but can allow corrupted MCAP files to trigger
+        a `MemoryError` exception.
     """
 
     def __init__(
@@ -423,10 +423,10 @@ class NonSeekingReader(McapReader):
         instances which can provide decoding functionality to
         :py:meth:`~mcap.reader.McapReader.iter_decoded_messages`.
     :param record_size_limit: An upper bound to the size of MCAP records that this reader will
-        attempt to load, defaulting to 4 GiB. If this reader encounters a record with a greater
-        length, it will throw an :py:class:`~mcap.exceptions.RecordLengthInvalid` error. Setting to
-        ``None`` removes the limit, but can allow corrupted MCAP files to trigger a `MemoryError`
-        exception.
+        attempt to load in bytes, defaulting to 4 GiB. If this reader encounters a record with a
+        greater length, it will throw an :py:class:`~mcap.exceptions.RecordLengthLimitExceeded`
+        error.  Setting to ``None`` removes the limit, but can allow corrupted MCAP files to trigger
+        a `MemoryError` exception.
     """
 
     def __init__(

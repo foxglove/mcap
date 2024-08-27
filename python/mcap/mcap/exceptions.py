@@ -20,8 +20,14 @@ class EndOfFile(McapError):
     pass
 
 
-class InvalidRecordLength(McapError):
-    def __init__(self, opcode: Opcode, length: int, limit: int):
+class RecordLengthLimitExceeded(McapError):
+    def __init__(self, opcode: int, length: int, limit: int):
+        opcode_name = f"unknown (opcode {opcode})"
+        try:
+            opcode_name = Opcode(opcode).name
+        except ValueError:
+            # unknown opcode will trigger a ValueError
+            pass
         super().__init__(
-            f"{opcode.name} record has invalid length {length}, limit is set to {limit}",
+            f"{opcode_name} record has length {length} that exceeds limit {limit}",
         )

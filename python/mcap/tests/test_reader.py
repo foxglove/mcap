@@ -9,7 +9,11 @@ from typing import IO, Any, Optional, Tuple, Type, Union
 import pytest
 
 from mcap.decoder import DecoderFactory
-from mcap.exceptions import DecoderNotFoundError, InvalidMagic, InvalidRecordLength
+from mcap.exceptions import (
+    DecoderNotFoundError,
+    InvalidMagic,
+    RecordLengthLimitExceeded,
+)
 from mcap.reader import McapReader, NonSeekingReader, SeekingReader, make_reader
 from mcap.records import Channel, Message, Schema
 from mcap.stream_reader import StreamReader
@@ -276,8 +280,8 @@ def test_record_size_limit():
         BytesIO(write_stream.getbuffer()), record_size_limit=10
     )
     with pytest.raises(
-        InvalidRecordLength,
-        match="HEADER record has invalid length 22, limit is set to 10",
+        RecordLengthLimitExceeded,
+        match="HEADER record has length 22 that exceeds limit 10",
     ):
         next(stream_reader.records)
 
@@ -294,14 +298,14 @@ def test_record_size_limit():
         BytesIO(write_stream.getbuffer()), record_size_limit=10
     )
     with pytest.raises(
-        InvalidRecordLength,
-        match="HEADER record has invalid length 22, limit is set to 10",
+        RecordLengthLimitExceeded,
+        match="HEADER record has length 22 that exceeds limit 10",
     ):
         seeking_reader.get_header()
 
     with pytest.raises(
-        InvalidRecordLength,
-        match="FOOTER record has invalid length 20, limit is set to 10",
+        RecordLengthLimitExceeded,
+        match="FOOTER record has length 20 that exceeds limit 10",
     ):
         seeking_reader.get_summary()
 
@@ -316,7 +320,7 @@ def test_record_size_limit():
         BytesIO(write_stream.getbuffer()), record_size_limit=10
     )
     with pytest.raises(
-        InvalidRecordLength,
-        match="HEADER record has invalid length 22, limit is set to 10",
+        RecordLengthLimitExceeded,
+        match="HEADER record has length 22 that exceeds limit 10",
     ):
         non_seeking_reader.get_header()
