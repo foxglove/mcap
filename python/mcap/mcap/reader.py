@@ -240,6 +240,11 @@ class SeekingReader(McapReader):
     :param decoder_factories: An iterable of :py:class:`~mcap.decoder.DecoderFactory`
         instances which can provide decoding functionality to
         :py:meth:`~mcap.reader.McapReader.iter_decoded_messages`.
+    :param record_size_limit: An upper bound to the size of MCAP records that this reader will
+        attempt to load in bytes, defaulting to 4 GiB. If this reader encounters a record with a
+        greater length, it will throw an :py:class:`~mcap.exceptions.RecordLengthLimitExceeded`
+        error.  Setting to ``None`` removes the limit, but can allow corrupted MCAP files to trigger
+        a `MemoryError` exception.
     """
 
     def __init__(
@@ -247,12 +252,14 @@ class SeekingReader(McapReader):
         stream: IO[bytes],
         validate_crcs: bool = False,
         decoder_factories: Iterable[DecoderFactory] = (),
+        record_size_limit: Optional[int] = 4 * 2**30,
     ):
         super().__init__(decoder_factories=decoder_factories)
         read_magic(ReadDataStream(stream, calculate_crc=False))
         self._stream = stream
         self._validate_crcs = validate_crcs
         self._summary: Optional[Summary] = None
+        self._record_size_limit = record_size_limit
 
     def iter_messages(
         self,
@@ -323,7 +330,13 @@ class SeekingReader(McapReader):
     def get_header(self) -> Header:
         """Reads the Header record from the beginning of the MCAP file."""
         self._stream.seek(0)
-        header = next(StreamReader(self._stream, skip_magic=False).records)
+        header = next(
+            StreamReader(
+                self._stream,
+                skip_magic=False,
+                record_size_limit=self._record_size_limit,
+            ).records
+        )
         if not isinstance(header, Header):
             raise McapError(
                 f"expected header at beginning of MCAP file, found {type(header)}"
@@ -335,7 +348,13 @@ class SeekingReader(McapReader):
         if self._summary is not None:
             return self._summary
         self._stream.seek(-(FOOTER_SIZE + MAGIC_SIZE), io.SEEK_END)
-        footer = next(StreamReader(self._stream, skip_magic=True).records)
+        footer = next(
+            StreamReader(
+                self._stream,
+                skip_magic=True,
+                record_size_limit=self._record_size_limit,
+            ).records
+        )
         if not isinstance(footer, Footer):
             raise McapError(
                 f"expected footer at end of MCAP file, found {type(footer)}"
@@ -344,7 +363,9 @@ class SeekingReader(McapReader):
             return None
         self._stream.seek(footer.summary_start, io.SEEK_SET)
         self._summary = _read_summary_from_stream_reader(
-            StreamReader(self._stream, skip_magic=True)
+            StreamReader(
+                self._stream, skip_magic=True, record_size_limit=self._record_size_limit
+            )
         )
         return self._summary
 
@@ -358,7 +379,13 @@ class SeekingReader(McapReader):
             return
         for attachment_index in summary.attachment_indexes:
             self._stream.seek(attachment_index.offset)
-            record = next(StreamReader(self._stream, skip_magic=True).records)
+            record = next(
+                StreamReader(
+                    self._stream,
+                    skip_magic=True,
+                    record_size_limit=self._record_size_limit,
+                ).records
+            )
             if isinstance(record, Attachment):
                 yield record
             else:
@@ -374,7 +401,13 @@ class SeekingReader(McapReader):
             return
         for metadata_index in summary.metadata_indexes:
             self._stream.seek(metadata_index.offset)
-            record = next(StreamReader(self._stream, skip_magic=True).records)
+            record = next(
+                StreamReader(
+                    self._stream,
+                    skip_magic=True,
+                    record_size_limit=self._record_size_limit,
+                ).records
+            )
             if isinstance(record, Metadata):
                 yield record
             else:
@@ -389,6 +422,11 @@ class NonSeekingReader(McapReader):
     :param decoder_factories: An iterable of :py:class:`~mcap.decoder.DecoderFactory`
         instances which can provide decoding functionality to
         :py:meth:`~mcap.reader.McapReader.iter_decoded_messages`.
+    :param record_size_limit: An upper bound to the size of MCAP records that this reader will
+        attempt to load in bytes, defaulting to 4 GiB. If this reader encounters a record with a
+        greater length, it will throw an :py:class:`~mcap.exceptions.RecordLengthLimitExceeded`
+        error.  Setting to ``None`` removes the limit, but can allow corrupted MCAP files to trigger
+        a `MemoryError` exception.
     """
 
     def __init__(
@@ -396,9 +434,14 @@ class NonSeekingReader(McapReader):
         stream: IO[bytes],
         validate_crcs: bool = False,
         decoder_factories: Iterable[DecoderFactory] = (),
+        record_size_limit: Optional[int] = 4 * 2**30,
     ):
         super().__init__(decoder_factories=decoder_factories)
-        self._stream_reader = StreamReader(stream, validate_crcs=validate_crcs)
+        self._stream_reader = StreamReader(
+            stream,
+            validate_crcs=validate_crcs,
+            record_size_limit=record_size_limit,
+        )
         self._schemas: Dict[int, Schema] = {}
         self._channels: Dict[int, Channel] = {}
         self._spent: bool = False
