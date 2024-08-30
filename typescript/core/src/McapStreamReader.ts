@@ -1,6 +1,6 @@
 import { crc32 } from "@foxglove/crc";
 
-import Reader from "./Reader";
+import StreamBuffer from "./StreamBuffer";
 import { MCAP_MAGIC } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
 import { Channel, DecompressHandlers, McapMagic, TypedMcapRecord, TypedMcapRecords } from "./types";
@@ -50,9 +50,7 @@ type McapReaderOptions = {
  * ```
  */
 export default class McapStreamReader {
-  #buffer = new ArrayBuffer(MCAP_MAGIC.length * 2);
-  #view = new DataView(this.#buffer);
-  #reader = new Reader(this.#view, MCAP_MAGIC.length * 2); // Cursor starts at end of initial buffer
+  #buffer = new StreamBuffer(MCAP_MAGIC.length * 2);
   #decompressHandlers;
   #includeChunks;
   #validateCrcs;
@@ -80,7 +78,7 @@ export default class McapStreamReader {
 
   /** @returns The number of bytes that have been received by `append()` but not yet parsed. */
   bytesRemaining(): number {
-    return this.#reader.bytesRemaining();
+    return this.#buffer.bytesRemaining();
   }
 
   /**
@@ -91,41 +89,7 @@ export default class McapStreamReader {
     if (this.#doneReading) {
       throw new Error("Already done reading");
     }
-    this.#appendOrShift(data);
-    this.#reader.reset(this.#view);
-  }
-  #appendOrShift(data: Uint8Array): void {
-    /** Add data to the buffer, shifting existing data or reallocating if necessary. */
-    const remainingBytes = this.#reader.bytesRemaining();
-    const totalNeededBytes = remainingBytes + data.byteLength;
-
-    if (totalNeededBytes <= this.#buffer.byteLength) {
-      // Data fits in the current buffer
-      if (this.#view.byteOffset + totalNeededBytes <= this.#buffer.byteLength) {
-        // Data fits by appending only
-        const array = new Uint8Array(this.#buffer, this.#view.byteOffset);
-        array.set(data, remainingBytes);
-        this.#view = new DataView(this.#buffer, this.#view.byteOffset, totalNeededBytes);
-      } else {
-        // Data fits but requires moving existing data to start of buffer
-        const existingData = new Uint8Array(this.#buffer, this.#view.byteOffset, remainingBytes);
-        const array = new Uint8Array(this.#buffer);
-        array.set(existingData, 0);
-        array.set(data, existingData.byteLength);
-        this.#view = new DataView(this.#buffer, 0, totalNeededBytes);
-      }
-    } else {
-      // New data doesn't fit, copy to a new buffer
-
-      // Currently, the new buffer size may be smaller than the old size. For future optimizations,
-      // we could consider making the buffer size increase monotonically.
-      this.#buffer = new ArrayBuffer(totalNeededBytes * 2);
-      const array = new Uint8Array(this.#buffer);
-      const existingData = new Uint8Array(this.#view.buffer, this.#view.byteOffset, remainingBytes);
-      array.set(existingData, 0);
-      array.set(data, existingData.byteLength);
-      this.#view = new DataView(this.#buffer, 0, totalNeededBytes);
-    }
+    this.#buffer.append(data);
   }
 
   /**
@@ -165,10 +129,11 @@ export default class McapStreamReader {
 
   *#read(): Generator<TypedMcapRecord | undefined, TypedMcapRecord | undefined, void> {
     if (!this.#noMagicPrefix) {
-      let magic: McapMagic | undefined;
-      while (((magic = parseMagic(this.#reader)), !magic)) {
+      let magic: McapMagic | undefined, usedBytes: number | undefined;
+      while ((({ magic, usedBytes } = parseMagic(this.#buffer.view, 0)), !magic)) {
         yield;
       }
+      this.#buffer.consume(usedBytes);
     }
 
     let header: TypedMcapRecords["Header"] | undefined;
@@ -179,10 +144,20 @@ export default class McapStreamReader {
 
     for (;;) {
       let record;
-      while (((record = parseRecord(this.#reader, this.#validateCrcs)), !record)) {
-        yield;
+      {
+        let usedBytes;
+        while (
+          (({ record, usedBytes } = parseRecord({
+            view: this.#buffer.view,
+            startOffset: 0,
+            validateCrcs: this.#validateCrcs,
+          })),
+          !record)
+        ) {
+          yield;
+        }
+        this.#buffer.consume(usedBytes);
       }
-
       switch (record.type) {
         case "Unknown":
           break;
@@ -231,10 +206,18 @@ export default class McapStreamReader {
             }
           }
           const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-          const chunkReader = new Reader(view);
-          let chunkRecord;
-          while ((chunkRecord = parseRecord(chunkReader, this.#validateCrcs))) {
-            switch (chunkRecord.type) {
+          let chunkOffset = 0;
+          for (
+            let chunkResult;
+            (chunkResult = parseRecord({
+              view,
+              startOffset: chunkOffset,
+              validateCrcs: this.#validateCrcs,
+            })),
+              chunkResult.record;
+            chunkOffset += chunkResult.usedBytes
+          ) {
+            switch (chunkResult.record.type) {
               case "Unknown":
                 break;
               case "Header":
@@ -249,31 +232,34 @@ export default class McapStreamReader {
               case "MetadataIndex":
               case "SummaryOffset":
               case "DataEnd":
-                throw errorWithLibrary(`${chunkRecord.type} record not allowed inside a chunk`);
+                throw errorWithLibrary(
+                  `${chunkResult.record.type} record not allowed inside a chunk`,
+                );
               case "Schema":
               case "Channel":
               case "Message":
-                yield chunkRecord;
+                yield chunkResult.record;
                 break;
             }
           }
-          if (chunkReader.bytesRemaining() !== 0) {
-            throw errorWithLibrary(`${chunkReader.bytesRemaining()} bytes remaining in chunk`);
+          if (chunkOffset !== buffer.byteLength) {
+            throw errorWithLibrary(`${buffer.byteLength - chunkOffset} bytes remaining in chunk`);
           }
           break;
         }
         case "Footer":
           try {
-            let magic;
-            while (((magic = parseMagic(this.#reader)), !magic)) {
+            let magic, usedBytes;
+            while ((({ magic, usedBytes } = parseMagic(this.#buffer.view, 0)), !magic)) {
               yield;
             }
+            this.#buffer.consume(usedBytes);
           } catch (error) {
             throw errorWithLibrary((error as Error).message);
           }
-          if (this.#reader.bytesRemaining() !== 0) {
+          if (this.#buffer.bytesRemaining() !== 0) {
             throw errorWithLibrary(
-              `${this.#reader.bytesRemaining()} bytes remaining after MCAP footer and trailing magic`,
+              `${this.#buffer.bytesRemaining()} bytes remaining after MCAP footer and trailing magic`,
             );
           }
           return record;
