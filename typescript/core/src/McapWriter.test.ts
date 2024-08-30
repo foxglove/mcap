@@ -3,7 +3,6 @@ import { crc32 } from "@foxglove/crc";
 import { McapIndexedReader } from "./McapIndexedReader";
 import McapStreamReader from "./McapStreamReader";
 import { McapWriter } from "./McapWriter";
-import Reader from "./Reader";
 import { TempBuffer } from "./TempBuffer";
 import { MCAP_MAGIC, Opcode } from "./constants";
 import { parseMagic, parseRecord } from "./parse";
@@ -279,12 +278,13 @@ describe("McapWriter", () => {
 
     const array = tempBuffer.get();
     const view = new DataView(array.buffer, array.byteOffset, array.byteLength);
-    const reader = new Reader(view);
     const records: TypedMcapRecord[] = [];
-    parseMagic(reader);
-    let result;
-    while ((result = parseRecord(reader, true))) {
-      records.push(result);
+    for (
+      let offset = parseMagic(view, 0).usedBytes, result;
+      (result = parseRecord({ view, startOffset: offset, validateCrcs: true })), result.record;
+      offset += result.usedBytes
+    ) {
+      records.push(result.record);
     }
 
     const expectedChunkData = new Uint8Array([
