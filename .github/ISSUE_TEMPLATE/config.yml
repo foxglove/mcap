@@ -10,5 +10,5 @@ contact_links:
     url: https://robotics.stackexchange.com/questions/ask
     about: Get help from the robotics community
   - name: "💬 Live chat"
-    url: https://foxglove.dev/slack
-    about: Join the discussion in our Slack community
+    url: https://foxglove.dev/chat
+    about: Join the discussion in our Discord community
