@@ -115,8 +115,8 @@ const config = {
             label: "Specification",
           },
           {
-            href: "https://foxglove.dev/slack",
-            label: "Slack",
+            href: "https://foxglove.dev/chat",
+            label: "Discord",
             position: "right",
           },
           {
@@ -154,8 +154,8 @@ const config = {
                 href: "https://github.com/foxglove/mcap",
               },
               {
-                label: "Slack",
-                href: "https://foxglove.dev/slack",
+                label: "Discord",
+                href: "https://foxglove.dev/chat",
               },
               {
                 label: "Stack Overflow",
