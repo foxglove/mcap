@@ -423,11 +423,8 @@ mod tests {
         }
         let mut reader = RecordReader::new(std::io::Cursor::new(buf.into_inner()));
         let mut record = Vec::new();
-        let mut opcodes: Vec<u8> = Vec::new();
         while let Some(opcode) = reader.next_record(&mut record).await {
-            let opcode = opcode?;
-            opcodes.push(opcode);
-            parse_record(opcode, &record)?;
+            parse_record(opcode?, &record)?;
         }
         Ok(())
     }
