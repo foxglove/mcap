@@ -17,14 +17,14 @@ struct DecoderContext {
 }
 
 // An adaptation of the [`lz4::Decoder`] [`std::io::Read`] impl, but for [`tokio::io::AsyncRead`].
-// Code below is adapted from the [lz4](https://github.com/bozaro/lz4-rs) crate source.
+// Code below is adapted from the [lz4](https://github.com/10XGenomics/lz4-rs) crate source.
 #[derive(Debug)]
 pub struct Lz4Decoder<R> {
     c: DecoderContext,
     r: R,
-    buf: Box<[u8]>,
-    pos: usize,
-    len: usize,
+    input_buf: Box<[u8]>,
+    unread_input_start: usize,
+    unread_input_end: usize,
     next: usize,
 }
 
@@ -36,9 +36,9 @@ impl<R> Lz4Decoder<R> {
         Ok(Lz4Decoder {
             r,
             c: DecoderContext::new()?,
-            buf: vec![0; BUFFER_SIZE].into_boxed_slice(),
-            pos: BUFFER_SIZE,
-            len: BUFFER_SIZE,
+            input_buf: vec![0; BUFFER_SIZE].into_boxed_slice(),
+            unread_input_start: BUFFER_SIZE,
+            unread_input_end: BUFFER_SIZE,
             // Minimal LZ4 stream size
             next: 11,
         })
@@ -51,7 +51,7 @@ impl<R> Lz4Decoder<R> {
                 0 => Ok(()),
                 _ => Err(Error::new(
                     ErrorKind::Interrupted,
-                    "Finish runned before read end of compressed stream",
+                    "Finish called before end of compressed stream",
                 )),
             },
         )
@@ -62,58 +62,68 @@ impl<R: AsyncRead + std::marker::Unpin> AsyncRead for Lz4Decoder<R> {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
+        output_buf: &mut ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
-        if self.next == 0 || buf.remaining() == 0 {
+        // Thre's nothing left to read.
+        if self.next == 0 || output_buf.remaining() == 0 {
             return Poll::Ready(Ok(()));
         }
         let mut written_len: usize = 0;
-        let mself = self.get_mut();
+        let this = self.get_mut();
         while written_len == 0 {
-            if mself.pos >= mself.len {
-                let need = if mself.buf.len() < mself.next {
-                    mself.buf.len()
-                } else {
-                    mself.next
-                };
+            // this reader buffers input data until it has enough to present to the lz4 frame decoder.
+            // if there's nothing unread, request more data from the reader.
+            if this.unread_input_start >= this.unread_input_end {
+                // request a full BUFFER_SIZE or the amount requested by the lz4 frame decoder,
+                // whichever is less.
+                let need = std::cmp::min(BUFFER_SIZE, this.next);
+                // try reading more input data. If it's not ready, return and try again later.
+                // NOTE: we don't need to save this stack frame as a future and re-enter it later
+                // because the only frame-local state `written_len` has not been modified and can be
+                // discarded.
                 {
-                    let mut comp_buf = ReadBuf::new(&mut mself.buf[..need]);
-                    let result = pin!(&mut mself.r).poll_read(cx, &mut comp_buf);
+                    let mut input_buf = ReadBuf::new(&mut this.input_buf[..need]);
+                    let result = pin!(&mut this.r).poll_read(cx, &mut input_buf);
                     match result {
                         Poll::Pending => return result,
                         Poll::Ready(Err(_)) => return result,
                         _ => {}
                     };
-                    mself.len = comp_buf.filled().len();
+                    this.unread_input_start = 0;
+                    this.unread_input_end = input_buf.filled().len();
+                    this.next -= this.unread_input_end;
                 }
-                if mself.len == 0 {
-                    break;
+                // The read succeeded. If zero bytes were read, we're at the end of the stream.
+                if this.unread_input_end == 0 {
+                    return Poll::Ready(Ok(()));
                 }
-                mself.pos = 0;
-                mself.next -= mself.len;
             }
-            while (written_len < buf.remaining()) && (mself.pos < mself.len) {
-                let mut src_size = mself.len - mself.pos;
-                let mut dst_size = buf.remaining() - written_len;
-                let prev_filled = buf.filled().len();
+            // feed bytes from our input buffer into the compressor, writing into the output
+            // buffer until either the output buffer is full or the input buffer is consumed.
+            while (written_len < output_buf.remaining())
+                && (this.unread_input_start < this.unread_input_end)
+            {
+                let mut src_size = this.unread_input_end - this.unread_input_start;
+                let mut dst_size = output_buf.remaining() - written_len;
+                let prev_filled = output_buf.filled().len();
                 let len = check_error(unsafe {
                     LZ4F_decompress(
-                        mself.c.c,
-                        buf.initialize_unfilled().as_mut_ptr(),
+                        this.c.c,
+                        output_buf.initialize_unfilled().as_mut_ptr(),
                         &mut dst_size,
-                        mself.buf[mself.pos..].as_ptr(),
+                        this.input_buf[this.unread_input_start..].as_ptr(),
                         &mut src_size,
                         ptr::null(),
                     )
                 })?;
-                mself.pos += src_size;
+                this.unread_input_start += src_size;
                 written_len += dst_size;
-                buf.set_filled(prev_filled + written_len);
+                output_buf.set_filled(prev_filled + written_len);
                 if len == 0 {
-                    mself.next = 0;
+                    this.next = 0;
                     return Poll::Ready(Ok(()));
-                } else if mself.next < len {
-                    mself.next = len;
+                } else if this.next < len {
+                    this.next = len;
                 }
             }
         }
