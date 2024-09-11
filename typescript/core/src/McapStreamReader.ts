@@ -92,27 +92,42 @@ export default class McapStreamReader {
       throw new Error("Already done reading");
     }
     this.#appendOrShift(data);
-    this.#reader.reset(this.#view);
   }
   #appendOrShift(data: Uint8Array): void {
     /** Add data to the buffer, shifting existing data or reallocating if necessary. */
-    const remainingBytes = this.#reader.bytesRemaining();
+    const consumedBytes = this.#reader.offset;
+    const remainingBytes = this.#view.byteLength - consumedBytes;
     const totalNeededBytes = remainingBytes + data.byteLength;
 
     if (totalNeededBytes <= this.#buffer.byteLength) {
       // Data fits in the current buffer
-      if (this.#view.byteOffset + totalNeededBytes <= this.#buffer.byteLength) {
+      if (
+        this.#view.byteOffset + this.#view.byteLength + data.byteLength <=
+        this.#buffer.byteLength
+      ) {
         // Data fits by appending only
         const array = new Uint8Array(this.#buffer, this.#view.byteOffset);
-        array.set(data, remainingBytes);
-        this.#view = new DataView(this.#buffer, this.#view.byteOffset, totalNeededBytes);
+        array.set(data, this.#view.byteLength);
+        this.#view = new DataView(
+          this.#buffer,
+          this.#view.byteOffset,
+          this.#view.byteLength + data.byteLength,
+        );
+        // Reset the reader to use the new larger view. We keep the reader's previous offset as the
+        // view's byte offset didn't change, it only got larger.
+        this.#reader.reset(this.#view, this.#reader.offset);
       } else {
         // Data fits but requires moving existing data to start of buffer
-        const existingData = new Uint8Array(this.#buffer, this.#view.byteOffset, remainingBytes);
+        const existingData = new Uint8Array(
+          this.#buffer,
+          this.#view.byteOffset + consumedBytes,
+          remainingBytes,
+        );
         const array = new Uint8Array(this.#buffer);
         array.set(existingData, 0);
         array.set(data, existingData.byteLength);
-        this.#view = new DataView(this.#buffer, 0, totalNeededBytes);
+        this.#view = new DataView(this.#buffer, 0, existingData.byteLength + data.byteLength);
+        this.#reader.reset(this.#view);
       }
     } else {
       // New data doesn't fit, copy to a new buffer
@@ -121,10 +136,15 @@ export default class McapStreamReader {
       // we could consider making the buffer size increase monotonically.
       this.#buffer = new ArrayBuffer(totalNeededBytes * 2);
       const array = new Uint8Array(this.#buffer);
-      const existingData = new Uint8Array(this.#view.buffer, this.#view.byteOffset, remainingBytes);
+      const existingData = new Uint8Array(
+        this.#view.buffer,
+        this.#view.byteOffset + consumedBytes,
+        remainingBytes,
+      );
       array.set(existingData, 0);
       array.set(data, existingData.byteLength);
-      this.#view = new DataView(this.#buffer, 0, totalNeededBytes);
+      this.#view = new DataView(this.#buffer, 0, existingData.byteLength + data.byteLength);
+      this.#reader.reset(this.#view);
     }
   }
 
