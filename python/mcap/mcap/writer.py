@@ -169,10 +169,10 @@ class Writer:
 
         :param channel_id: The id of the channel to which the message should be added.
         :param sequence: Optional message counter assigned by publisher.
-        :param log_time: Time at which the message was recorded as an integer number of nanoseconds
-            since the epoch.
-        :param publish_time: Time at which the message was published as nanoseconds since epoch. If
-            not available, must be set to the log time.
+        :param log_time: Time at which the message was recorded as nanoseconds since a
+            user-understood epoch (i.e unix epoch, robot boot time, etc.).
+        :param publish_time: Time at which the message was published as nanoseconds since a
+            user-understood epoch (i.e unix epoch, robot boot time, etc.).
         :param data: Message data, to be decoded according to the schema of the channel.
         """
         message = Message(
