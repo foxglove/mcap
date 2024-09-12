@@ -1126,3 +1126,29 @@ func BenchmarkReader(b *testing.B) {
 		})
 	}
 }
+
+func TestFooterOffsetErrorDetected(t *testing.T) {
+	buf := &bytes.Buffer{}
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   1024,
+		Compression: "",
+	})
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&Header{}))
+	require.NoError(t, writer.WriteChannel(&Channel{ID: 1}))
+	require.NoError(t, writer.WriteMessage(&Message{ChannelID: 1}))
+	require.NoError(t, writer.Close())
+
+	// break the footer summary offset field. This is 8 + 8 + 4 + 8 bytes from end of file.
+	mcapBytes := buf.Bytes()
+	end := len(mcapBytes)
+	fmt.Printf("end is %d\n", end)
+	binary.LittleEndian.PutUint64(mcapBytes[end-8-8-4-8:], 999999999)
+
+	reader, err := NewReader(bytes.NewReader(mcapBytes))
+	require.NoError(t, err)
+
+	_, err = reader.Info()
+	require.ErrorIs(t, err, ErrBadOffset)
+}
