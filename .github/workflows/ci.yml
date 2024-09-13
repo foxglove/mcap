@@ -491,6 +491,7 @@ jobs:
           toolchain: stable
           default: true
           components: "rustfmt, clippy"
+      - run: rustup target add wasm32-unknown-unknown
       - run: cargo fmt --all -- --check
       - run: cargo clippy -- --no-deps
       - run: cargo clippy --no-default-features -- --no-deps
@@ -501,6 +502,8 @@ jobs:
       - run: cargo clippy --no-default-features --features tokio,zstd -- --no-deps
       - run: cargo build --all-features
       - run: cargo test --all-features
+      - run: cargo build --all-features --target wasm32-unknown-unknown
+      - run: cargo check --all-features --target wasm32-unknown-unknown
       - name: "publish to crates.io"
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/rust/v')
         run: cargo publish --token ${{ secrets.RUST_CRATES_IO_TOKEN }}
