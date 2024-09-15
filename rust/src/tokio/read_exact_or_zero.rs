@@ -82,7 +82,7 @@ mod tests {
     async fn test_repeated_read_calls() {
         let mut r = ZeroReader {
             remaining: 10,
-            max_read_len: 1,
+            max_read_len: 4,
         };
         let mut buf: Vec<u8> = vec![1; 10];
         let result = read_exact_or_zero(&mut r, &mut buf).await;
