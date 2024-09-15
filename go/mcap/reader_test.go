@@ -908,7 +908,6 @@ func TestOrderStableWithEquivalentTimestamps(t *testing.T) {
 		}
 		assert.Equal(t, uint64(0), msg.LogTime)
 		msgNumber := binary.LittleEndian.Uint64(msg.Data)
-		fmt.Printf("msgNumber: %d\n", msgNumber)
 		if numRead != 0 {
 			assert.Less(t, msgNumber, lastMessageNumber)
 		}
@@ -1143,7 +1142,6 @@ func TestFooterOffsetErrorDetected(t *testing.T) {
 	// break the footer summary offset field. This is 8 + 8 + 4 + 8 bytes from end of file.
 	mcapBytes := buf.Bytes()
 	end := len(mcapBytes)
-	fmt.Printf("end is %d\n", end)
 	binary.LittleEndian.PutUint64(mcapBytes[end-8-8-4-8:], 999999999)
 
 	reader, err := NewReader(bytes.NewReader(mcapBytes))
