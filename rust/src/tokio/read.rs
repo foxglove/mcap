@@ -3,7 +3,7 @@ use std::task::{Context, Poll};
 
 #[cfg(feature = "zstd")]
 use async_compression::tokio::bufread::ZstdDecoder;
-use byteorder::ByteOrder;
+use binrw::BinReaderExt;
 use tokio::io::{AsyncRead, AsyncReadExt, ReadBuf, Take};
 
 #[cfg(feature = "lz4")]
@@ -243,7 +243,7 @@ where
             if opcode == records::op::FOOTER {
                 self.footer_seen = true;
             }
-            let record_len = byteorder::LittleEndian::read_u64(&self.scratch[1..9]);
+            let record_len = u64::from_le_bytes(self.scratch[1..9].try_into().unwrap());
             if opcode == records::op::CHUNK && !self.options.emit_chunks {
                 let header = read_chunk_header(reader, data, record_len).await?;
                 return Ok(Cmd::EnterChunk {
@@ -260,7 +260,7 @@ where
                 return Ok(Cmd::ExitChunk);
             }
             let opcode = self.scratch[0];
-            let record_len = byteorder::LittleEndian::read_u64(&self.scratch[1..9]);
+            let record_len = u64::from_le_bytes(self.scratch[1..9].try_into().unwrap());
             data.resize(record_len as usize, 0);
             self.reader.read_exact(&mut data[..]).await?;
             Ok(Cmd::YieldRecord(opcode))
@@ -290,11 +290,14 @@ async fn read_chunk_header<R: AsyncRead + std::marker::Unpin>(
     }
     scratch.resize(32, 0);
     reader.read_exact(&mut scratch[..]).await?;
-    header.message_start_time = byteorder::LittleEndian::read_u64(&scratch[0..8]);
-    header.message_end_time = byteorder::LittleEndian::read_u64(&scratch[8..16]);
-    header.uncompressed_size = byteorder::LittleEndian::read_u64(&scratch[16..24]);
-    header.uncompressed_crc = byteorder::LittleEndian::read_u32(&scratch[24..28]);
-    let compression_len = byteorder::LittleEndian::read_u32(&scratch[28..32]);
+    let compression_len: u32 = {
+        let mut cursor = std::io::Cursor::new(&scratch);
+        header.message_start_time = cursor.read_le()?;
+        header.message_end_time = cursor.read_le()?;
+        header.uncompressed_size = cursor.read_le()?;
+        header.uncompressed_crc = cursor.read_le()?;
+        cursor.read_le()?
+    };
     scratch.resize(compression_len as usize, 0);
     if record_len < (40 + compression_len) as u64 {
         return Err(McapError::RecordTooShort {
@@ -315,7 +318,7 @@ async fn read_chunk_header<R: AsyncRead + std::marker::Unpin>(
     };
     scratch.resize(8, 0);
     reader.read_exact(&mut scratch[..]).await?;
-    header.compressed_size = byteorder::LittleEndian::read_u64(&scratch[..]);
+    header.compressed_size = u64::from_le_bytes(scratch[..].try_into().unwrap());
     let available = record_len - (32 + compression_len as u64 + 8);
     if available < header.compressed_size {
         return Err(McapError::BadChunkLength {

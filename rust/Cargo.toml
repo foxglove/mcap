@@ -61,3 +61,7 @@ harness = false
 opt-level = 3
 debug = true
 lto = true
+
+[[example]]
+name = "conformance_reader_async"
+required-features = ["tokio"]
