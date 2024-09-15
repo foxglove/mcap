@@ -136,15 +136,16 @@ fn read_record_from_slice<'a>(buf: &mut &'a [u8]) -> McapResult<records::Record<
 
     let body = &buf[..len as usize];
     debug!("slice: opcode {op:02X}, length {len}");
-    let record = read_record(op, body)?;
+    let record = parse_record(op, body)?;
     trace!("       {:?}", record);
 
     *buf = &buf[len as usize..];
     Ok(record)
 }
 
-/// Given a record's opcode and its slice, read it into a [Record]
-fn read_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
+/// Given a records' opcode and data, parse into a Record. The resulting Record will contain
+/// borrowed slices from `body`.
+pub fn parse_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
     macro_rules! record {
         ($b:ident) => {{
             let mut cur = Cursor::new($b);
@@ -278,7 +279,7 @@ impl<'a> ChunkReader<'a> {
 
             #[cfg(feature = "lz4")]
             "lz4" => ChunkDecompressor::Compressed(Some(CountingCrcReader::new(Box::new(
-                lz4_flex::frame::FrameDecoder::new(data),
+                lz4::Decoder::new(data)?,
             )))),
 
             #[cfg(not(feature = "lz4"))]
