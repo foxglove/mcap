@@ -131,6 +131,8 @@ pub enum McapError {
     UnexpectedChunkRecord(u8),
     #[error("Unsupported compression format `{0}`")]
     UnsupportedCompression(String),
+    #[error("No index information available")]
+    NoIndexAvailable,
 }
 
 pub type McapResult<T> = Result<T, McapError>;
