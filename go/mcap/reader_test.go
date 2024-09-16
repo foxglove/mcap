@@ -908,7 +908,6 @@ func TestOrderStableWithEquivalentTimestamps(t *testing.T) {
 		}
 		assert.Equal(t, uint64(0), msg.LogTime)
 		msgNumber := binary.LittleEndian.Uint64(msg.Data)
-		fmt.Printf("msgNumber: %d\n", msgNumber)
 		if numRead != 0 {
 			assert.Less(t, msgNumber, lastMessageNumber)
 		}
@@ -1125,4 +1124,29 @@ func BenchmarkReader(b *testing.B) {
 			})
 		})
 	}
+}
+
+func TestFooterOffsetErrorDetected(t *testing.T) {
+	buf := &bytes.Buffer{}
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   1024,
+		Compression: "",
+	})
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&Header{}))
+	require.NoError(t, writer.WriteChannel(&Channel{ID: 1}))
+	require.NoError(t, writer.WriteMessage(&Message{ChannelID: 1}))
+	require.NoError(t, writer.Close())
+
+	// break the footer summary offset field. This is 8 + 8 + 4 + 8 bytes from end of file.
+	mcapBytes := buf.Bytes()
+	end := len(mcapBytes)
+	binary.LittleEndian.PutUint64(mcapBytes[end-8-8-4-8:], 999999999)
+
+	reader, err := NewReader(bytes.NewReader(mcapBytes))
+	require.NoError(t, err)
+
+	_, err = reader.Info()
+	require.ErrorIs(t, err, ErrBadOffset)
 }
