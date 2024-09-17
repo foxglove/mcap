@@ -667,9 +667,12 @@ describe("McapStreamReader", () => {
       topic: "foo",
       metadata: new Map(),
     };
+    const messageSize = 1_000;
+    const messageRecordBytes = 1 + 8 + 2 + 4 + 8 + 8 + messageSize;
+
     const makeMessage = (fillNumber: number) => ({
       channelId: 0,
-      data: new Uint8Array(1_000).fill(fillNumber),
+      data: new Uint8Array(messageSize).fill(fillNumber),
       logTime: 0n,
       publishTime: 0n,
       sequence: 0,
@@ -686,25 +689,26 @@ describe("McapStreamReader", () => {
     recordBuilder.writeMessage(makeMessage(1));
     recordBuilder.writeMessage(makeMessage(2));
     streamReader.append(recordBuilder.buffer);
-    expect(streamReader.bytesRemaining()).toBe(recordBuilder.buffer.byteLength);
-    const remainingBytes = recordBuilder.buffer.byteLength;
+    expect(streamReader.bytesRemaining()).toBe(2 * messageRecordBytes);
 
     // Add one more message. Nothing has been consumed yet, but the internal buffer should be
     // large enough to simply append the new data.
     recordBuilder.reset();
     recordBuilder.writeMessage(makeMessage(3));
     streamReader.append(recordBuilder.buffer);
-    expect(streamReader.bytesRemaining()).toBe(remainingBytes + recordBuilder.buffer.byteLength);
+    expect(streamReader.bytesRemaining()).toBe(3 * messageRecordBytes);
 
     // Read some (but not all) messages to forward the reader's internal offset
     expect(streamReader.nextRecord()).toEqual({ ...makeMessage(1), type: "Message" });
     expect(streamReader.nextRecord()).toEqual({ ...makeMessage(2), type: "Message" });
+    expect(streamReader.bytesRemaining()).toBe(1 * messageRecordBytes);
 
     // Add more messages. This will cause existing data to be shifted to the beginning of the buffer.
     recordBuilder.reset();
     recordBuilder.writeMessage(makeMessage(4));
     recordBuilder.writeMessage(makeMessage(5));
     streamReader.append(recordBuilder.buffer);
+    expect(streamReader.bytesRemaining()).toBe(3 * messageRecordBytes);
 
     expect(streamReader.nextRecord()).toEqual({ ...makeMessage(3), type: "Message" });
     expect(streamReader.nextRecord()).toEqual({ ...makeMessage(4), type: "Message" });

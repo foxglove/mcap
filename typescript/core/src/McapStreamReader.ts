@@ -51,8 +51,8 @@ type McapReaderOptions = {
  */
 export default class McapStreamReader {
   #buffer = new ArrayBuffer(MCAP_MAGIC.length * 2);
-  #view = new DataView(this.#buffer);
-  #reader = new Reader(this.#view, MCAP_MAGIC.length * 2); // Cursor starts at end of initial buffer
+  #view = new DataView(this.#buffer, 0, 0);
+  #reader = new Reader(this.#view);
   #decompressHandlers;
   #includeChunks;
   #validateCrcs;
@@ -93,13 +93,14 @@ export default class McapStreamReader {
     }
     this.#appendOrShift(data);
   }
+
   #appendOrShift(data: Uint8Array): void {
     /** Add data to the buffer, shifting existing data or reallocating if necessary. */
     const consumedBytes = this.#reader.offset;
-    const remainingBytes = this.#view.byteLength - consumedBytes;
-    const totalNeededBytes = remainingBytes + data.byteLength;
+    const unconsumedBytes = this.#view.byteLength - consumedBytes;
+    const neededCapacity = unconsumedBytes + data.byteLength;
 
-    if (totalNeededBytes <= this.#buffer.byteLength) {
+    if (neededCapacity <= this.#buffer.byteLength) {
       // Data fits in the current buffer
       if (
         this.#view.byteOffset + this.#view.byteLength + data.byteLength <=
@@ -121,7 +122,7 @@ export default class McapStreamReader {
         const existingData = new Uint8Array(
           this.#buffer,
           this.#view.byteOffset + consumedBytes,
-          remainingBytes,
+          unconsumedBytes,
         );
         const array = new Uint8Array(this.#buffer);
         array.set(existingData, 0);
@@ -134,12 +135,12 @@ export default class McapStreamReader {
 
       // Currently, the new buffer size may be smaller than the old size. For future optimizations,
       // we could consider making the buffer size increase monotonically.
-      this.#buffer = new ArrayBuffer(totalNeededBytes * 2);
+      this.#buffer = new ArrayBuffer(neededCapacity * 2);
       const array = new Uint8Array(this.#buffer);
       const existingData = new Uint8Array(
         this.#view.buffer,
         this.#view.byteOffset + consumedBytes,
-        remainingBytes,
+        unconsumedBytes,
       );
       array.set(existingData, 0);
       array.set(data, existingData.byteLength);
