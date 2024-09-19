@@ -138,7 +138,9 @@ inline Status ParseByteArray(const std::byte* data, uint64_t maxSize, ByteArray*
     return Status(StatusCode::InvalidRecord, msg);
   }
   output->resize(size);
-  std::memcpy(output->data(), data + 4, size);
+  if (size > 0) {
+    std::memcpy(output->data(), data + 4, size);
+  }
   return StatusCode::Success;
 }
 
