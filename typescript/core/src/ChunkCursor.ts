@@ -1,3 +1,4 @@
+import Reader from "./Reader";
 import { parseRecord } from "./parse";
 import { sortedIndexBy } from "./sortedIndexBy";
 import { sortedLastIndexBy } from "./sortedLastIndex";
@@ -136,31 +137,25 @@ export class ChunkCursor {
       messageIndexes.byteLength,
     );
 
-    let offset = 0;
+    const reader = new Reader(messageIndexesView);
     const arrayOfMessageOffsets: [logTime: bigint, offset: bigint][][] = [];
-    for (
-      let result;
-      (result = parseRecord({ view: messageIndexesView, startOffset: offset, validateCrcs: true })),
-        result.record;
-      offset += result.usedBytes
-    ) {
-      if (result.record.type !== "MessageIndex") {
+    let record;
+    while ((record = parseRecord(reader, true))) {
+      if (record.type !== "MessageIndex") {
         continue;
       }
       if (
-        result.record.records.length === 0 ||
-        (this.#relevantChannels && !this.#relevantChannels.has(result.record.channelId))
+        record.records.length === 0 ||
+        (this.#relevantChannels && !this.#relevantChannels.has(record.channelId))
       ) {
         continue;
       }
 
-      arrayOfMessageOffsets.push(result.record.records);
+      arrayOfMessageOffsets.push(record.records);
     }
 
-    if (offset !== messageIndexesView.byteLength) {
-      throw new Error(
-        `${messageIndexesView.byteLength - offset} bytes remaining in message index section`,
-      );
+    if (reader.bytesRemaining() !== 0) {
+      throw new Error(`${reader.bytesRemaining()} bytes remaining in message index section`);
     }
 
     this.#orderedMessageOffsets = arrayOfMessageOffsets
