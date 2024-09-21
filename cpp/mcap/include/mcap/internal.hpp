@@ -138,6 +138,8 @@ inline Status ParseByteArray(const std::byte* data, uint64_t maxSize, ByteArray*
     return Status(StatusCode::InvalidRecord, msg);
   }
   output->resize(size);
+  //  output->data() may return nullptr if 'output' is empty, but memcpy() does not accept nullptr.
+  // 'output' will be empty only if the 'size' is equal to 0.
   if (size > 0) {
     std::memcpy(output->data(), data + 4, size);
   }
