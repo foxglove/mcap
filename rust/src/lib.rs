@@ -80,6 +80,7 @@ pub mod tokio;
 pub mod write;
 
 mod io_utils;
+pub mod sans_io;
 
 use std::{borrow::Cow, collections::BTreeMap, fmt, sync::Arc};
 
@@ -133,6 +134,10 @@ pub enum McapError {
     UnsupportedCompression(String),
     #[error("No index information available")]
     NoIndexAvailable,
+    #[error("Error during decompression: `{0}`")]
+    DecompressionError(String),
+    #[error("No new data passed to reader")]
+    NoNewData,
 }
 
 pub type McapResult<T> = Result<T, McapError>;

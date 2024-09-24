@@ -1,4 +1,4 @@
-use crate::sans_io::read::{DecompressResult, Decompressor};
+use crate::sans_io::decompressor::{DecompressResult, Decompressor};
 use crate::McapResult;
 use std::ptr;
 
@@ -10,17 +10,13 @@ use lz4::liblz4::{
 #[derive(Debug)]
 pub struct Lz4Decoder {
     c: LZ4FDecompressionContext,
-    next_size_hint: usize,
 }
 
 impl Lz4Decoder {
     pub fn new() -> McapResult<Lz4Decoder> {
         let mut context = LZ4FDecompressionContext(ptr::null_mut());
         check_error(unsafe { LZ4F_createDecompressionContext(&mut context, LZ4F_VERSION) })?;
-        Ok(Lz4Decoder {
-            c: context,
-            next_size_hint: 11,
-        })
+        Ok(Lz4Decoder { c: context })
     }
 }
 
@@ -31,6 +27,9 @@ impl Drop for Lz4Decoder {
 }
 
 impl Decompressor for Lz4Decoder {
+    fn init_size_hint(&self) -> usize {
+        11 // min frame size
+    }
     fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<DecompressResult> {
         let mut dst_size = dst.len();
         let mut src_size = src.len();
@@ -44,7 +43,6 @@ impl Decompressor for Lz4Decoder {
                 ptr::null(),
             )
         })?;
-        self.next_size_hint = need;
         return Ok(DecompressResult {
             consumed: src_size,
             wrote: dst_size,
@@ -55,5 +53,9 @@ impl Decompressor for Lz4Decoder {
     fn reset(&mut self) -> McapResult<()> {
         unsafe { LZ4F_resetDecompressionContext(self.c) };
         Ok(())
+    }
+
+    fn name(&self) -> &'static str {
+        "lz4"
     }
 }
