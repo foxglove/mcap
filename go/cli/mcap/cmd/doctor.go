@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"reflect"
 
 	"github.com/fatih/color"
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
@@ -26,27 +27,33 @@ var (
 type mcapDoctor struct {
 	reader io.ReadSeeker
 
-	channels map[uint16]*mcap.Channel
-	schemas  map[uint16]*mcap.Schema
+	channelsInDataSection              map[uint16]*mcap.Channel
+	schemasInDataSection               map[uint16]*mcap.Schema
+	channelsReferencedInChunksByOffset map[uint64][]uint16
+	channelIDsInSummarySection         map[uint16]bool
+	schemaIDsInSummarySection          map[uint16]bool
 
 	// Map from chunk offset to chunk index
 	chunkIndexes map[uint64]*mcap.ChunkIndex
+
+	inSummarySection bool
 
 	messageCount uint64
 	minLogTime   uint64
 	maxLogTime   uint64
 	statistics   *mcap.Statistics
 
-	errorCount uint32
+	diagnosis Diagnosis
 }
 
 func (doctor *mcapDoctor) warn(format string, v ...any) {
 	color.Yellow(format, v...)
+	doctor.diagnosis.Warnings = append(doctor.diagnosis.Warnings, fmt.Sprintf(format, v...))
 }
 
 func (doctor *mcapDoctor) error(format string, v ...any) {
 	color.Red(format, v...)
-	doctor.errorCount++
+	doctor.diagnosis.Errors = append(doctor.diagnosis.Errors, fmt.Sprintf(format, v...))
 }
 
 func (doctor *mcapDoctor) fatal(v ...any) {
@@ -61,7 +68,101 @@ func (doctor *mcapDoctor) fatalf(format string, v ...any) {
 	os.Exit(1)
 }
 
-func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
+func (doctor *mcapDoctor) examineSchema(schema *mcap.Schema) {
+	if schema.Encoding == "" {
+		if len(schema.Data) == 0 {
+			doctor.warn("Schema with ID: %d, Name: %q has empty Encoding and Data fields", schema.ID, schema.Name)
+		} else {
+			doctor.error("Schema with ID: %d has empty Encoding but Data contains: %q", schema.ID, string(schema.Data))
+		}
+	}
+
+	if schema.ID == 0 {
+		doctor.error("Schema.ID 0 is reserved. Do not make Schema records with ID 0.")
+	}
+	previous := doctor.schemasInDataSection[schema.ID]
+	if previous != nil {
+		if schema.Name != previous.Name {
+			doctor.error("Two schema records with same ID %d but different names (%q != %q)",
+				schema.ID,
+				schema.Name,
+				previous.Name,
+			)
+		}
+		if schema.Encoding != previous.Encoding {
+			doctor.error("Two schema records with same ID %d but different encodings (%q != %q)",
+				schema.ID,
+				schema.Encoding,
+				previous.Encoding,
+			)
+		}
+		if !bytes.Equal(schema.Data, previous.Data) {
+			doctor.error("Two schema records with different data present with same ID %d", schema.ID)
+		}
+	}
+	if doctor.inSummarySection {
+		if previous == nil {
+			doctor.error("Schema with id %d in summary section does not exist in data section", schema.ID)
+		}
+		doctor.schemaIDsInSummarySection[schema.ID] = true
+	} else {
+		if previous != nil {
+			doctor.warn("Duplicate schema records in data section with ID %d", schema.ID)
+		}
+		doctor.schemasInDataSection[schema.ID] = schema
+	}
+}
+
+func (doctor *mcapDoctor) examineChannel(channel *mcap.Channel) {
+	previous := doctor.channelsInDataSection[channel.ID]
+	if previous != nil {
+		if channel.SchemaID != previous.SchemaID {
+			doctor.error("Two channel records with same ID %d but different schema IDs (%d != %d)",
+				channel.ID,
+				channel.SchemaID,
+				previous.SchemaID,
+			)
+		}
+		if channel.Topic != previous.Topic {
+			doctor.error("Two channel records with same ID %d but different topics (%q != %q)",
+				channel.ID,
+				channel.Topic,
+				previous.Topic,
+			)
+		}
+		if channel.MessageEncoding != previous.MessageEncoding {
+			doctor.error("Two channel records with same ID %d but different message encodings (%q != %q)",
+				channel.ID,
+				channel.MessageEncoding,
+				previous.MessageEncoding,
+			)
+		}
+		if !reflect.DeepEqual(channel.Metadata, previous.Metadata) {
+			doctor.error("Two channel records with different metadata present with same ID %d",
+				channel.ID)
+		}
+	}
+	if doctor.inSummarySection {
+		if previous == nil {
+			doctor.error("Channel with ID %d in summary section does not exist in data section", channel.ID)
+		}
+		doctor.channelIDsInSummarySection[channel.ID] = true
+	} else {
+		if previous != nil {
+			doctor.warn("Duplicate channel records in data section with ID %d", channel.ID)
+		}
+		doctor.channelsInDataSection[channel.ID] = channel
+	}
+
+	if channel.SchemaID != 0 {
+		if _, ok := doctor.schemasInDataSection[channel.SchemaID]; !ok {
+			doctor.error("Encountered Channel (%d) with unknown Schema (%d)", channel.ID, channel.SchemaID)
+		}
+	}
+}
+
+func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64) {
+	referencedChannels := make(map[uint16]bool)
 	compressionFormat := mcap.CompressionFormat(chunk.Compression)
 	var uncompressedBytes []byte
 
@@ -90,7 +191,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 			return
 		}
 	default:
-		doctor.error("Unsupported compression format: %s", chunk.Compression)
+		doctor.error("Unsupported compression format: %q", chunk.Compression)
 		return
 	}
 
@@ -115,7 +216,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 		EmitChunks:        true,
 	})
 	if err != nil {
-		doctor.error("Failed to make lexer for chunk bytes", err)
+		doctor.error("Failed to make lexer for chunk bytes: %s", err)
 		return
 	}
 	defer lexer.Close()
@@ -144,47 +245,29 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 		case mcap.TokenSchema:
 			schema, err := mcap.ParseSchema(data)
 			if err != nil {
-				doctor.error("Failed to parse schema:", err)
+				doctor.error("Failed to parse schema: %s", err)
 			}
-
-			if schema.Encoding == "" {
-				if len(schema.Data) == 0 {
-					doctor.warn("Schema with ID: %d, Name: %s has empty Encoding and Data fields", schema.ID, schema.Name)
-				} else {
-					doctor.error("Schema with ID: %d has empty Encoding but Data contains: %s", schema.ID, string(schema.Data))
-				}
-			}
-
-			if schema.ID == 0 {
-				doctor.error("Schema.ID 0 is reserved. Do not make Schema records with ID 0.")
-			}
-
-			doctor.schemas[schema.ID] = schema
+			doctor.examineSchema(schema)
 		case mcap.TokenChannel:
 			channel, err := mcap.ParseChannel(data)
 			if err != nil {
 				doctor.error("Error parsing Channel: %s", err)
 			}
-
-			doctor.channels[channel.ID] = channel
-			if channel.SchemaID != 0 {
-				if _, ok := doctor.schemas[channel.SchemaID]; !ok {
-					doctor.error("Encountered Channel (%d) with unknown Schema (%d)", channel.ID, channel.SchemaID)
-				}
-			}
+			doctor.examineChannel(channel)
 		case mcap.TokenMessage:
 			message, err := mcap.ParseMessage(data)
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
 			}
+			referencedChannels[message.ChannelID] = true
 
-			channel := doctor.channels[message.ChannelID]
+			channel := doctor.channelsInDataSection[message.ChannelID]
 			if channel == nil {
-				doctor.error("Got a Message record for channel: %d before a channel info.", message.ChannelID)
+				doctor.error("Got a Message record for channel: %d before a channel record.", message.ChannelID)
 			}
 
 			if message.LogTime < doctor.maxLogTime {
-				errStr := fmt.Sprintf("Message.log_time %d on %s is less than the latest log time %d",
+				errStr := fmt.Sprintf("Message.log_time %d on %q is less than the latest log time %d",
 					message.LogTime, channel.Topic, doctor.maxLogTime)
 				if strictMessageOrder {
 					doctor.error(errStr)
@@ -237,9 +320,19 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk) {
 			doctor.maxLogTime = maxLogTime
 		}
 	}
+	asArray := make([]uint16, 0, len(referencedChannels))
+	for id := range referencedChannels {
+		asArray = append(asArray, id)
+	}
+	doctor.channelsReferencedInChunksByOffset[startOffset] = asArray
 }
 
-func (doctor *mcapDoctor) Examine() error {
+type Diagnosis struct {
+	Errors   []string
+	Warnings []string
+}
+
+func (doctor *mcapDoctor) Examine() Diagnosis {
 	lexer, err := mcap.NewLexer(doctor.reader, &mcap.LexerOptions{
 		SkipMagic:         false,
 		ValidateChunkCRCs: true,
@@ -286,61 +379,37 @@ func (doctor *mcapDoctor) Examine() error {
 			}
 
 			if header.Profile != "" && header.Profile != "ros1" && header.Profile != "ros2" {
-				doctor.warn(`Header.profile field "%s" is not a well-known profile.`, header.Profile)
+				doctor.warn(`Header.profile field %q is not a well-known profile.`, header.Profile)
 			}
 		case mcap.TokenFooter:
 			footer, err = mcap.ParseFooter(data)
 			if err != nil {
-				doctor.error("Failed to parse footer:", err)
+				doctor.error("Failed to parse footer: %s", err)
 			}
 		case mcap.TokenSchema:
 			schema, err := mcap.ParseSchema(data)
 			if err != nil {
-				doctor.error("Failed to parse schema:", err)
+				doctor.error("Failed to parse schema: %s", err)
 			}
-
-			if schema.Encoding == "" {
-				if len(schema.Data) == 0 {
-					doctor.warn("Schema with ID: %d, Name: %s has empty Encoding and Data fields", schema.ID, schema.Name)
-				} else {
-					doctor.error("Schema with ID: %d has empty Encoding but Data contains: %s", schema.ID, string(schema.Data))
-				}
-			}
-
-			if schema.ID == 0 {
-				doctor.error("Schema.ID 0 is reserved. Do not make Schema records with ID 0.")
-			}
-
-			doctor.schemas[schema.ID] = schema
+			doctor.examineSchema(schema)
 		case mcap.TokenChannel:
 			channel, err := mcap.ParseChannel(data)
 			if err != nil {
 				doctor.error("Error parsing Channel: %s", err)
 			}
-
-			doctor.channels[channel.ID] = channel
-
-			if channel.SchemaID != 0 {
-				if _, ok := doctor.schemas[channel.SchemaID]; !ok {
-					doctor.error(
-						"Encountered Channel (%d) with unknown Schema (%d)",
-						channel.ID,
-						channel.SchemaID,
-					)
-				}
-			}
+			doctor.examineChannel(channel)
 		case mcap.TokenMessage:
 			message, err := mcap.ParseMessage(data)
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
 			}
 			messageOutsideChunk = true
-			channel := doctor.channels[message.ChannelID]
+			channel := doctor.channelsInDataSection[message.ChannelID]
 			if channel == nil {
 				doctor.error("Got a Message record for channel: %d before a channel info.", message.ChannelID)
 			}
 			if message.LogTime < lastMessageTime {
-				doctor.error("Message.log_time %d on %s is less than the previous message record time %d",
+				doctor.error("Message.log_time %d on %q is less than the previous message record time %d",
 					message.LogTime, channel.Topic, lastMessageTime)
 			}
 			lastMessageTime = message.LogTime
@@ -359,11 +428,17 @@ func (doctor *mcapDoctor) Examine() error {
 			if err != nil {
 				doctor.error("Error parsing Message: %s", err)
 			}
-			doctor.examineChunk(chunk)
+			pos, err := doctor.reader.Seek(0, io.SeekCurrent)
+			if err != nil {
+				// cannot continue if seek fails
+				doctor.fatalf("failed to determine read cursor: %s", err)
+			}
+			chunkStartOffset := uint64(pos - int64(len(data)) - 9)
+			doctor.examineChunk(chunk, chunkStartOffset)
 		case mcap.TokenMessageIndex:
 			_, err := mcap.ParseMessageIndex(data)
 			if err != nil {
-				doctor.error("Failed to parse message index:", err)
+				doctor.error("Failed to parse message index: %s", err)
 			}
 			if messageOutsideChunk {
 				doctor.warn("Message index in file has message records outside chunks. Indexed readers will miss these messages.")
@@ -371,24 +446,24 @@ func (doctor *mcapDoctor) Examine() error {
 		case mcap.TokenChunkIndex:
 			chunkIndex, err := mcap.ParseChunkIndex(data)
 			if err != nil {
-				doctor.error("Failed to parse chunk index:", err)
+				doctor.error("Failed to parse chunk index: %s", err)
 			}
 			if messageOutsideChunk {
 				doctor.warn("Message index in file has message records outside chunks. Indexed readers will miss these messages.")
 			}
 			if _, ok := doctor.chunkIndexes[chunkIndex.ChunkStartOffset]; ok {
-				doctor.error("Multiple chunk indexes found for chunk at offset", chunkIndex.ChunkStartOffset)
+				doctor.error("Multiple chunk indexes found for chunk at offset %d", chunkIndex.ChunkStartOffset)
 			}
 			doctor.chunkIndexes[chunkIndex.ChunkStartOffset] = chunkIndex
 		case mcap.TokenAttachmentIndex:
 			_, err := mcap.ParseAttachmentIndex(data)
 			if err != nil {
-				doctor.error("Failed to parse attachment index:", err)
+				doctor.error("Failed to parse attachment index: %s", err)
 			}
 		case mcap.TokenStatistics:
 			statistics, err := mcap.ParseStatistics(data)
 			if err != nil {
-				doctor.error("Failed to parse statistics:", err)
+				doctor.error("Failed to parse statistics: %s", err)
 			}
 			if doctor.statistics != nil {
 				doctor.error("File contains multiple Statistics records")
@@ -397,23 +472,24 @@ func (doctor *mcapDoctor) Examine() error {
 		case mcap.TokenMetadata:
 			_, err := mcap.ParseMetadata(data)
 			if err != nil {
-				doctor.error("Failed to parse metadata:", err)
+				doctor.error("Failed to parse metadata: %s", err)
 			}
 		case mcap.TokenMetadataIndex:
 			_, err := mcap.ParseMetadataIndex(data)
 			if err != nil {
-				doctor.error("Failed to parse metadata index:", err)
+				doctor.error("Failed to parse metadata index: %s", err)
 			}
 		case mcap.TokenSummaryOffset:
 			_, err := mcap.ParseSummaryOffset(data)
 			if err != nil {
-				doctor.error("Failed to parse summary offset:", err)
+				doctor.error("Failed to parse summary offset: %s", err)
 			}
 		case mcap.TokenDataEnd:
 			dataEnd, err = mcap.ParseDataEnd(data)
 			if err != nil {
-				doctor.error("Failed to parse data end:", err)
+				doctor.error("Failed to parse data end: %s", err)
 			}
+			doctor.inSummarySection = true
 		case mcap.TokenError:
 			// this is the value of the tokenType when there is an error
 			// from the lexer, which we caught at the top.
@@ -422,9 +498,32 @@ func (doctor *mcapDoctor) Examine() error {
 	}
 
 	for chunkOffset, chunkIndex := range doctor.chunkIndexes {
+		channelsReferenced := doctor.channelsReferencedInChunksByOffset[chunkOffset]
+		for _, id := range channelsReferenced {
+			if present := doctor.channelIDsInSummarySection[id]; !present {
+				doctor.error(
+					"Indexed chunk at offset %d contains messages referencing channel (%d) not duplicated in summary section",
+					chunkOffset,
+					id,
+				)
+			}
+			channel := doctor.channelsInDataSection[id]
+			if channel == nil {
+				// message with unknown channel, this is checked when that message is scanned
+				continue
+			}
+			if present := doctor.schemaIDsInSummarySection[channel.SchemaID]; !present {
+				doctor.error(
+					"Indexed chunk at offset %d contains messages referencing schema (%d) not duplicated in summary section",
+					chunkOffset,
+					channel.SchemaID,
+				)
+			}
+		}
+
 		_, err := doctor.reader.Seek(int64(chunkOffset), io.SeekStart)
 		if err != nil {
-			die("failed to seek to chunk offset: %s", err)
+			doctor.fatalf("failed to seek to chunk offset: %s", err)
 		}
 		tokenType, data, err := lexer.Next(msg)
 		if err != nil {
@@ -475,7 +574,7 @@ func (doctor *mcapDoctor) Examine() error {
 		}
 		if chunk.Compression != chunkIndex.Compression.String() {
 			doctor.error(
-				"Chunk at offset %d has compression %s, but its chunk index has compression %s",
+				"Chunk at offset %d has compression %q, but its chunk index has compression %q",
 				chunkOffset,
 				chunk.Compression,
 				chunkIndex.Compression,
@@ -483,7 +582,7 @@ func (doctor *mcapDoctor) Examine() error {
 		}
 		if uint64(len(chunk.Records)) != chunkIndex.CompressedSize {
 			doctor.error(
-				"Chunk at offset %d has data length %d, but its chunk index has compressed size %s",
+				"Chunk at offset %d has data length %d, but its chunk index has compressed size %d",
 				chunkOffset,
 				len(chunk.Records),
 				chunkIndex.CompressedSize,
@@ -524,19 +623,19 @@ func (doctor *mcapDoctor) Examine() error {
 			)
 		}
 	}
-	if doctor.errorCount == 0 {
-		return nil
-	}
-	return fmt.Errorf("encountered %d errors", doctor.errorCount)
+	return doctor.diagnosis
 }
 
 func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
 	return &mcapDoctor{
-		reader:       reader,
-		channels:     make(map[uint16]*mcap.Channel),
-		schemas:      make(map[uint16]*mcap.Schema),
-		chunkIndexes: make(map[uint64]*mcap.ChunkIndex),
-		minLogTime:   math.MaxUint64,
+		reader:                             reader,
+		channelsInDataSection:              make(map[uint16]*mcap.Channel),
+		channelsReferencedInChunksByOffset: make(map[uint64][]uint16),
+		channelIDsInSummarySection:         make(map[uint16]bool),
+		schemaIDsInSummarySection:          make(map[uint16]bool),
+		schemasInDataSection:               make(map[uint16]*mcap.Schema),
+		chunkIndexes:                       make(map[uint64]*mcap.ChunkIndex),
+		minLogTime:                         math.MaxUint64,
 	}
 }
 
@@ -555,7 +654,11 @@ func main(_ *cobra.Command, args []string) {
 		if verbose {
 			fmt.Printf("Examining %s\n", args[0])
 		}
-		return doctor.Examine()
+		diagnosis := doctor.Examine()
+		if len(diagnosis.Errors) > 0 {
+			return fmt.Errorf("encountered %d errors", len(diagnosis.Errors))
+		}
+		return nil
 	})
 	if err != nil {
 		die("Doctor command failed: %s", err)

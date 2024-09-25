@@ -60,7 +60,7 @@ Schema `encoding` may only be omitted for self-describing message encodings such
 
 - `name`: Fully qualified name to the message within the descriptor set. For example, in a proto file containing `package foo.bar; message Baz {}` the fully qualified message name is `foo.bar.Baz`.
 - `encoding`: `protobuf`
-- `data`: A binary [FileDescriptorSet](https://github.com/protocolbuffers/protobuf/blob/master/src/google/protobuf/descriptor.proto) as produced by `protoc --descriptor_set_out`.
+- `data`: A binary [FileDescriptorSet](https://github.com/protocolbuffers/protobuf/blob/master/src/google/protobuf/descriptor.proto) as produced by `protoc --include_imports --descriptor_set_out`.
 
 ### flatbuffer
 

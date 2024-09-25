@@ -363,8 +363,6 @@ void McapReader::reset_() {
   channels_.clear();
   dataStart_ = 0;
   dataEnd_ = EndOffset;
-  startTime_ = 0;
-  endTime_ = 0;
   parsedSummary_ = false;
 }
 

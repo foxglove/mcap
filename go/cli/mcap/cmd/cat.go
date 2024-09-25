@@ -201,12 +201,12 @@ func printMessages(
 ) error {
 	msg := &bytes.Buffer{}
 	msgReader := &bytes.Reader{}
-	buf := make([]byte, 1024*1024)
+	message := mcap.Message{Data: make([]byte, 0, 1024*1024)}
 	transcoders := make(map[uint16]*ros1msg.JSONTranscoder)
 	descriptors := make(map[uint16]protoreflect.MessageDescriptor)
 	jsonWriter := newJSONOutputWriter(w)
 	for {
-		schema, channel, message, err := it.Next(buf)
+		schema, channel, _, err := it.NextInto(&message)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break

@@ -265,7 +265,7 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			continue
 		}
 
-		if recordLen > uint64(len(p)) {
+		if recordLen > uint64(cap(p)) {
 			p, err = makeSafe(recordLen)
 			if err != nil {
 				return TokenError, nil, fmt.Errorf("failed to allocate %d bytes for %s token: %w", recordLen, opcode, err)

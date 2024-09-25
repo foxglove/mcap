@@ -134,7 +134,7 @@ var addMetadataCmd = &cobra.Command{
 
 var getMetadataCmd = &cobra.Command{
 	Use:   "metadata",
-	Short: "get metadata by name",
+	Short: "Get metadata by name",
 	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
@@ -214,7 +214,7 @@ func init() {
 	}
 
 	getCmd.AddCommand(getMetadataCmd)
-	getMetadataCmd.PersistentFlags().StringVarP(&getMetadataName, "name", "n", "", "name of metadata record to create")
+	getMetadataCmd.PersistentFlags().StringVarP(&getMetadataName, "name", "n", "", "name of metadata record to get")
 	err = getMetadataCmd.MarkPersistentFlagRequired("name")
 	if err != nil {
 		die("failed to mark --name flag as required: %s", err)

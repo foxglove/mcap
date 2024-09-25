@@ -156,7 +156,6 @@ int main(int argc, char** argv) {
     if (!res.ok()) {
       std::cerr << "Failed to write message: " << res.message << "\n";
       writer.terminate();
-      writer.close();
       std::ignore = std::remove(outputFilename);
       return 1;
     }

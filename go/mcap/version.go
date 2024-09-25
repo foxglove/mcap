@@ -1,4 +1,4 @@
 package mcap
 
 // Version of the MCAP library.
-var Version = "v1.2.0"
+var Version = "v1.6.0"

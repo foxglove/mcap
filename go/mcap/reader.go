@@ -65,7 +65,14 @@ type Reader struct {
 }
 
 type MessageIterator interface {
+	// Deprecated: use NextInto to avoid repeatedly heap-allocating Message structs while iterating.
 	Next([]byte) (*Schema, *Channel, *Message, error)
+	// NextInto returns the next message from the MCAP. If the returned error is io.EOF,
+	// this signals the end of the MCAP.
+	// If `msg` is not nil, NextInto will populate it with new data and
+	// return the same pointer, re-using or resizing `msg.Data` as needed.
+	// If `msg` is nil, NextInto will allocate and return a new Message on the heap.
+	NextInto(msg *Message) (*Schema, *Channel, *Message, error)
 }
 
 func Range(it MessageIterator, f func(*Schema, *Channel, *Message) error) error {
@@ -93,8 +100,6 @@ func (r *Reader) unindexedIterator(opts *ReadOptions) *unindexedMessageIterator 
 	r.l.emitChunks = false
 	return &unindexedMessageIterator{
 		lexer:            r.l,
-		channels:         make(map[uint16]*Channel),
-		schemas:          make(map[uint16]*Schema),
 		topics:           topicMap,
 		start:            opts.StartNanos,
 		end:              opts.EndNanos,
@@ -114,12 +119,10 @@ func (r *Reader) indexedMessageIterator(
 	return &indexedMessageIterator{
 		lexer:            r.l,
 		rs:               r.rs,
-		channels:         make(map[uint16]*Channel),
-		schemas:          make(map[uint16]*Schema),
 		topics:           topicMap,
 		start:            opts.StartNanos,
 		end:              opts.EndNanos,
-		indexHeap:        rangeIndexHeap{order: opts.Order},
+		order:            opts.Order,
 		metadataCallback: opts.MetadataCallback,
 	}
 }
@@ -192,11 +195,11 @@ func (r *Reader) Info() (*Info, error) {
 	}
 	info := &Info{
 		Statistics:        it.statistics,
-		Channels:          it.channels,
+		Channels:          it.channels.ToMap(),
 		ChunkIndexes:      it.chunkIndexes,
 		AttachmentIndexes: it.attachmentIndexes,
 		MetadataIndexes:   it.metadataIndexes,
-		Schemas:           it.schemas,
+		Schemas:           it.schemas.ToMap(),
 		Footer:            it.footer,
 		Header:            r.header,
 	}

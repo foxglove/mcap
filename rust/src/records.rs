@@ -99,6 +99,44 @@ impl Record<'_> {
             Record::Unknown { opcode, .. } => *opcode,
         }
     }
+
+    /// Moves this value into a fully-owned variant with no borrows. This should be free for
+    /// already-owned values.
+    pub fn into_owned(self) -> Record<'static> {
+        match self {
+            Record::Header(header) => Record::Header(header),
+            Record::Footer(footer) => Record::Footer(footer),
+            Record::Schema { header, data } => Record::Schema {
+                header,
+                data: Cow::Owned(data.into_owned()),
+            },
+            Record::Channel(channel) => Record::Channel(channel),
+            Record::Message { header, data } => Record::Message {
+                header,
+                data: Cow::Owned(data.into_owned()),
+            },
+            Record::Chunk { header, data } => Record::Chunk {
+                header,
+                data: Cow::Owned(data.into_owned()),
+            },
+            Record::MessageIndex(index) => Record::MessageIndex(index),
+            Record::ChunkIndex(index) => Record::ChunkIndex(index),
+            Record::Attachment { header, data } => Record::Attachment {
+                header,
+                data: Cow::Owned(data.into_owned()),
+            },
+            Record::AttachmentIndex(index) => Record::AttachmentIndex(index),
+            Record::Statistics(statistics) => Record::Statistics(statistics),
+            Record::Metadata(metadata) => Record::Metadata(metadata),
+            Record::MetadataIndex(index) => Record::MetadataIndex(index),
+            Record::SummaryOffset(offset) => Record::SummaryOffset(offset),
+            Record::DataEnd(end) => Record::DataEnd(end),
+            Record::Unknown { opcode, data } => Record::Unknown {
+                opcode,
+                data: Cow::Owned(data.into_owned()),
+            },
+        }
+    }
 }
 
 #[binrw]

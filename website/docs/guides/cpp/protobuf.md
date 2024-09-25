@@ -31,6 +31,12 @@ We also include the MCAP reader implementation:
 #include "mcap/reader.hpp"
 ```
 
+And standard library dependencies:
+
+```cpp
+#include <memory>
+```
+
 Use the `mcap::McapReader::open()` method to open an MCAP file for reading:
 
 ```cpp
@@ -103,7 +109,7 @@ auto messageView = reader.readMessages();
 
 #### Load schema definitions
 
-We build a `DynamicMessageFactory`, using a `google::Protobuf::SimpleDescriptorDatabase` as the underlying descriptor database. By constructing this ourselves and retaining a reference to the database, we can more easily load that database with definitions from the MCAP file.
+We build a `DynamicMessageFactory`, using a `google::protobuf::SimpleDescriptorDatabase` as the underlying descriptor database. By constructing this ourselves and retaining a reference to the database, we can more easily load that database with definitions from the MCAP file.
 
 ```cpp
 gp::SimpleDescriptorDatabase protoDb;
@@ -157,7 +163,7 @@ descriptor = protoPool.FindMessageTypeByName(it->schema->name);
 We can use this descriptor to parse our message:
 
 ```cpp
-gp::Message* message = protoFactory.GetPrototype(descriptor)->New();
+auto message = std::unique_ptr<gp::Message>(protoFactory.GetPrototype(descriptor)->New());
 if (!message->ParseFromArray(static_cast<const void*>(it->message.data),
                               it->message.dataSize)) {
   std::cerr << "failed to parse message using included schema" << std::endl;

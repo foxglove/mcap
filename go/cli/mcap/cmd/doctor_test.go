@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"bytes"
+	"os"
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,6 +31,36 @@ func TestNoErrorOnMessagelessChunks(t *testing.T) {
 	rs := bytes.NewReader(buf.Bytes())
 
 	doctor := newMcapDoctor(rs)
-	err = doctor.Examine()
+	diagnosis := doctor.Examine()
+	assert.Empty(t, diagnosis.Errors)
+}
+
+func TestRequiresDuplicatedSchemasForIndexedMessages(t *testing.T) {
+	rs, err := os.Open("../../../../tests/conformance/data/OneMessage/OneMessage-ch-chx-pad.mcap")
 	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, rs.Close())
+	}()
+	doctor := newMcapDoctor(rs)
+	diagnosis := doctor.Examine()
+	assert.Len(t, diagnosis.Errors, 2)
+	assert.Equal(t,
+		"Indexed chunk at offset 28 contains messages referencing channel (1) not duplicated in summary section",
+		diagnosis.Errors[0],
+	)
+	assert.Equal(t,
+		"Indexed chunk at offset 28 contains messages referencing schema (1) not duplicated in summary section",
+		diagnosis.Errors[1],
+	)
+}
+
+func TestPassesIndexedMessagesWithRepeatedSchemas(t *testing.T) {
+	rs, err := os.Open("../../../../tests/conformance/data/OneMessage/OneMessage-ch-chx-pad-rch-rsh.mcap")
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, rs.Close())
+	}()
+	doctor := newMcapDoctor(rs)
+	diagnosis := doctor.Examine()
+	assert.Empty(t, diagnosis.Errors)
 }
