@@ -178,7 +178,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		fmt.Fprintf(buf, "attachments: %d\n", info.Statistics.AttachmentCount)
 		fmt.Fprintf(buf, "metadata: %d\n", info.Statistics.MetadataCount)
 	} else {
-		fmt.Fprintf(buf, "channels: %d\n", len(chanIDs))
+		fmt.Fprintf(buf, "channels: unknown\n")
 		fmt.Fprintf(buf, "attachments: unknown\n")
 		fmt.Fprintf(buf, "metadata: unknown\n")
 	}
