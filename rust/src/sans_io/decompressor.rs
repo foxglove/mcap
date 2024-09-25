@@ -9,7 +9,6 @@ pub trait Decompressor {
     fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<DecompressResult>;
     fn reset(&mut self) -> McapResult<()>;
     fn name(&self) -> &'static str;
-    fn init_size_hint(&self) -> usize;
 }
 
 pub struct NoneDecompressor {}
@@ -30,9 +29,5 @@ impl Decompressor for NoneDecompressor {
 
     fn name(&self) -> &'static str {
         return "";
-    }
-
-    fn init_size_hint(&self) -> usize {
-        9 // header + opcode
     }
 }

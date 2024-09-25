@@ -27,9 +27,6 @@ impl Drop for Lz4Decoder {
 }
 
 impl Decompressor for Lz4Decoder {
-    fn init_size_hint(&self) -> usize {
-        11 // min frame size
-    }
     fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<DecompressResult> {
         let mut dst_size = dst.len();
         let mut src_size = src.len();

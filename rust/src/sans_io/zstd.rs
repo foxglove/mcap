@@ -24,9 +24,6 @@ fn handle_error(res: SafeResult) -> McapResult<usize> {
 }
 
 impl Decompressor for ZstdDecoder {
-    fn init_size_hint(&self) -> usize {
-        DStream::in_size()
-    }
     fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> crate::McapResult<DecompressResult> {
         let mut in_buffer = InBuffer::around(src);
         let mut out_buffer = OutBuffer::around(dst);
