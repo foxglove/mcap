@@ -226,8 +226,6 @@ impl LinearReader {
 
     fn decompress_if_compressed(&mut self, amount: usize) -> McapResult<()> {
         let slice_end = self.uncompressed_data_start + amount;
-        let mut switch_to_file = false;
-        // we don't have enough uncompressed data  - decompress some.
         if let ReadingFrom::Chunk(chunk_state) = &mut self.from {
             if self.compressed_data_end > self.compressed_data_start {
                 self.uncompressed_data.resize(slice_end, 0);
@@ -239,9 +237,6 @@ impl LinearReader {
                 self.uncompressed_data_end += res.wrote;
                 chunk_state.compressed_remaining -= res.consumed as u64;
                 chunk_state.uncompressed_remaining -= res.wrote as u64;
-                if chunk_state.compressed_remaining == 0 {
-                    switch_to_file = true;
-                }
                 let next_size_hint = if res.need == 0 {
                     DEFAULT_CHUNK_DATA_READ_SIZE
                 } else {
@@ -257,9 +252,6 @@ impl LinearReader {
                     self.compressed_data_end = 0;
                 }
             }
-        }
-        if switch_to_file {
-            self.from = ReadingFrom::File;
         }
         Ok(())
     }
@@ -327,7 +319,7 @@ mod tests {
     use std::io::Read;
 
     #[test]
-    fn maybe_it_works() -> Result<(), McapError> {
+    fn test_un_chunked() -> Result<(), McapError> {
         let mut buf = std::io::Cursor::new(Vec::new());
         {
             let mut writer = crate::WriteOptions::new()
@@ -383,6 +375,71 @@ mod tests {
                 op::FOOTER
             ]
         );
+
+        Ok(())
+    }
+    #[test]
+    fn test_chunked() -> Result<(), McapError> {
+        for compression in [Some(Compression::Zstd), Some(Compression::Lz4), None] {
+            let mut buf = std::io::Cursor::new(Vec::new());
+            {
+                let mut writer = crate::WriteOptions::new()
+                    .compression(compression)
+                    .create(&mut buf)?;
+                let channel = std::sync::Arc::new(crate::Channel {
+                    topic: "chat".to_owned(),
+                    schema: None,
+                    message_encoding: "json".to_owned(),
+                    metadata: BTreeMap::new(),
+                });
+                writer.add_channel(&channel)?;
+                writer.write(&crate::Message {
+                    channel,
+                    sequence: 0,
+                    log_time: 0,
+                    publish_time: 0,
+                    data: (&[0, 1, 2]).into(),
+                })?;
+                writer.finish()?;
+            }
+            let mut reader = LinearReader::new();
+            let mut cursor = std::io::Cursor::new(buf.into_inner());
+            let mut opcodes: Vec<u8> = Vec::new();
+            let mut iter_count = 0;
+            loop {
+                match reader.next()? {
+                    ReadState::Finished => break,
+                    ReadState::Fill(mut into) => {
+                        let written = cursor.read(into.buf)?;
+                        into.set_filled(written);
+                    }
+                    ReadState::GetRecord { data, opcode } => {
+                        opcodes.push(opcode);
+                        parse_record(opcode, data)?;
+                    }
+                }
+                iter_count += 1;
+                // guard against infinite loop
+                assert!(iter_count < 10000);
+            }
+            assert_eq!(
+                opcodes,
+                vec![
+                    op::HEADER,
+                    op::CHANNEL,
+                    op::MESSAGE,
+                    op::MESSAGE_INDEX,
+                    op::DATA_END,
+                    op::CHANNEL,
+                    op::CHUNK_INDEX,
+                    op::STATISTICS,
+                    op::SUMMARY_OFFSET,
+                    op::SUMMARY_OFFSET,
+                    op::SUMMARY_OFFSET,
+                    op::FOOTER
+                ]
+            );
+        }
 
         Ok(())
     }
