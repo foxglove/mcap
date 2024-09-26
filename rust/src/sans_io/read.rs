@@ -296,7 +296,7 @@ impl RecordReader {
         ));
     }
 
-    // Return a FillBuff that requests `want` uncompressed bytes from the input file. If reading
+    // Return an InputBuf that requests `want` uncompressed bytes from the input file. If reading
     // from a chunk, requests the amount hinted by the decompressor on the previous iteration.
     fn request(&mut self, want: usize) -> McapResult<ReadState> {
         let desired_end = self.uncompressed_data_end + want;

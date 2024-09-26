@@ -522,7 +522,7 @@ impl<'a> Iterator for ChunkFlattener<'a> {
 
 /// Parses schemas and channels and wires them together
 #[derive(Debug, Default)]
-pub(crate) struct ChannelAccumulator<'a> {
+struct ChannelAccumulator<'a> {
     schemas: HashMap<u16, Arc<Schema<'a>>>,
     channels: HashMap<u16, Arc<Channel<'a>>>,
 }
@@ -784,7 +784,7 @@ pub fn footer(mcap: &[u8]) -> McapResult<records::Footer> {
 }
 
 /// Indexes of an MCAP file parsed from its (optional) summary section
-#[derive(Default, Eq, PartialEq, Clone)]
+#[derive(Default, Eq, PartialEq)]
 pub struct Summary<'a> {
     pub stats: Option<records::Statistics>,
     /// Maps channel IDs to their channel
@@ -835,12 +835,37 @@ impl<'a> Summary<'a> {
                 });
             }
         }
+
+        let mut summary = Summary::default();
+        let mut channeler = ChannelAccumulator::default();
+
         let summary_end = match foot.summary_offset_start {
             0 => MAGIC.len() - FOOTER_LEN,
             sos => sos as usize,
         };
         let summary_buf = &mcap[foot.summary_start as usize..summary_end];
-        Ok(Some(Self::from_buf(summary_buf)?))
+
+        for record in LinearReader::sans_magic(summary_buf) {
+            match record? {
+                Record::Statistics(s) => {
+                    if summary.stats.is_some() {
+                        warn!("Multiple statistics records found in summary");
+                    }
+                    summary.stats = Some(s);
+                }
+                Record::Schema { header, data } => channeler.add_schema(header, data)?,
+                Record::Channel(c) => channeler.add_channel(c)?,
+                Record::ChunkIndex(c) => summary.chunk_indexes.push(c),
+                Record::AttachmentIndex(a) => summary.attachment_indexes.push(a),
+                Record::MetadataIndex(i) => summary.metadata_indexes.push(i),
+                _ => {}
+            };
+        }
+
+        summary.schemas = channeler.schemas;
+        summary.channels = channeler.channels;
+
+        Ok(Some(summary))
     }
 
     /// Stream messages from the chunk with the given index.
@@ -1060,33 +1085,6 @@ impl<'a> Summary<'a> {
             Some(Err(e)) => Err(e),
             None => Err(McapError::BadIndex),
         }
-    }
-
-    pub(crate) fn from_buf(summary_buf: &'a [u8]) -> McapResult<Self> {
-        let mut summary = Summary::default();
-        let mut channeler = ChannelAccumulator::default();
-
-        for record in LinearReader::sans_magic(summary_buf) {
-            match record? {
-                Record::Statistics(s) => {
-                    if summary.stats.is_some() {
-                        warn!("Multiple statistics records found in summary");
-                    }
-                    summary.stats = Some(s);
-                }
-                Record::Schema { header, data } => channeler.add_schema(header, data)?,
-                Record::Channel(c) => channeler.add_channel(c)?,
-                Record::ChunkIndex(c) => summary.chunk_indexes.push(c),
-                Record::AttachmentIndex(a) => summary.attachment_indexes.push(a),
-                Record::MetadataIndex(i) => summary.metadata_indexes.push(i),
-                _ => {}
-            };
-        }
-
-        summary.schemas = channeler.schemas;
-        summary.channels = channeler.channels;
-
-        Ok(summary)
     }
 }
 
