@@ -35,7 +35,18 @@ enum ReadingFrom {
     Chunk(ChunkState),
 }
 
-pub struct LinearReader {
+#[derive(Default, Clone)]
+pub struct RecordReaderOptions {
+    /// If true, the reader will not expect the MCAP magic at the start of the stream.
+    pub skip_start_magic: bool,
+    /// If true, the reader will not expect the MCAP magic at the end of the stream.
+    pub skip_end_magic: bool,
+    /// If true, the reader will yield entire chunk records. Otherwise, the reader will decompress
+    /// and read into the chunk, yielding the records inside.
+    pub emit_chunks: bool,
+}
+
+pub struct RecordReader {
     currently_reading: CurrentlyReading,
     from: ReadingFrom,
     uncompressed_data_start: usize,
@@ -45,11 +56,16 @@ pub struct LinearReader {
     compressed_data_end: usize,
     compressed_data: Vec<u8>,
     decompressors: HashMap<String, Box<dyn Decompressor>>,
+    options: RecordReaderOptions,
 }
 
-impl LinearReader {
+impl RecordReader {
     pub fn new() -> Self {
-        LinearReader {
+        Self::new_with_options(RecordReaderOptions::default())
+    }
+
+    pub fn new_with_options(options: RecordReaderOptions) -> Self {
+        RecordReader {
             currently_reading: CurrentlyReading::StartMagic,
             from: ReadingFrom::File,
             uncompressed_data: Vec::new(),
@@ -59,6 +75,7 @@ impl LinearReader {
             compressed_data_start: 0,
             compressed_data_end: 0,
             decompressors: HashMap::new(),
+            options: options,
         }
     }
     fn get_decompressor(&mut self, name: &str) -> McapResult<Box<dyn Decompressor>> {
@@ -95,6 +112,10 @@ impl LinearReader {
 
             match self.currently_reading {
                 CurrentlyReading::StartMagic => {
+                    if self.options.skip_start_magic {
+                        self.currently_reading = CurrentlyReading::RecordOpcodeLength;
+                        continue;
+                    }
                     let input = match self.consume(MAGIC.len())? {
                         BufOrRemainder::Buf(input) => input,
                         BufOrRemainder::Remainder(want) => return self.request(want),
@@ -105,6 +126,9 @@ impl LinearReader {
                     self.currently_reading = CurrentlyReading::RecordOpcodeLength;
                 }
                 CurrentlyReading::EndMagic => {
+                    if self.options.skip_end_magic {
+                        return Ok(ReadState::Finished);
+                    }
                     let input = match self.consume(MAGIC.len())? {
                         BufOrRemainder::Buf(input) => input,
                         BufOrRemainder::Remainder(want) => return self.request(want),
@@ -122,7 +146,7 @@ impl LinearReader {
                     };
                     let opcode = input[0];
                     let record_length: u64 = u64::from_le_bytes(input[1..9].try_into().unwrap());
-                    if opcode == op::CHUNK {
+                    if opcode == op::CHUNK && !self.options.emit_chunks {
                         self.currently_reading = CurrentlyReading::ChunkHeader { record_length };
                     } else {
                         self.currently_reading = CurrentlyReading::RecordContent {
@@ -341,7 +365,7 @@ mod tests {
             })?;
             writer.finish()?;
         }
-        let mut reader = LinearReader::new();
+        let mut reader = RecordReader::new();
         let mut cursor = std::io::Cursor::new(buf.into_inner());
         let mut opcodes: Vec<u8> = Vec::new();
         let mut iter_count = 0;
@@ -402,7 +426,7 @@ mod tests {
                 })?;
                 writer.finish()?;
             }
-            let mut reader = LinearReader::new();
+            let mut reader = RecordReader::new();
             let mut cursor = std::io::Cursor::new(buf.into_inner());
             let mut opcodes: Vec<u8> = Vec::new();
             let mut iter_count = 0;
