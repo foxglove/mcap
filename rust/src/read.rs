@@ -473,7 +473,7 @@ impl<'a> ChunkFlattener<'a> {
     }
 
     fn bytes_remaining(&self) -> usize {
-        self.buf.len() - self.pos
+        self.buf.len() - self.pos - MAGIC.len()
     }
 }
 

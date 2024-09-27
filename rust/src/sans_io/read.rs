@@ -411,7 +411,7 @@ pub enum ReadAction<'a> {
 mod tests {
 
     use super::*;
-    use crate::{parse_record, Compression, McapError};
+    use crate::{parse_record, Compression};
     use std::collections::BTreeMap;
     use std::io::Read;
 
