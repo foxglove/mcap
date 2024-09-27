@@ -484,9 +484,6 @@ impl<'a> Iterator for ChunkFlattener<'a> {
         loop {
             match self.reader.next_action() {
                 Ok(ReadAction::GetRecord { data, opcode }) => {
-                    if opcode == crate::records::op::DATA_END {
-                        return None;
-                    }
                     match parse_record(opcode, data) {
                         Ok(rec) => return Some(Ok(rec.into_owned())),
                         Err(err) => return Some(Err(err)),
