@@ -14,11 +14,13 @@ use super::{lz4, zstd};
 enum CurrentlyReading {
     StartMagic,
     RecordOpcodeLength,
-    RecordContent { opcode: u8, record_length: u64 },
-    ChunkHeader { record_length: u64 },
+    RecordContent { opcode: u8, len: u64 },
+    ChunkHeader { len: u64 },
+    ValidatingChunkCrc { len: u64, crc: u32 },
     PaddingAfterChunk { len: u64 },
     EndMagic,
 }
+use CurrentlyReading::*;
 
 const DEFAULT_CHUNK_DATA_READ_SIZE: usize = 32 * 1024;
 
@@ -26,7 +28,6 @@ struct ChunkState {
     decompressor: Box<dyn Decompressor>,
     next_read_size: usize,
     compressed_remaining: u64,
-    uncompressed_remaining: u64,
     padding_after_compressed_data: u64,
 }
 
@@ -34,6 +35,13 @@ enum ReadingFrom {
     File,
     Chunk(ChunkState),
 }
+use ReadingFrom::*;
+
+enum BoundsOrRemainder {
+    Bounds((usize, usize)),
+    Remainder(usize),
+}
+use BoundsOrRemainder::*;
 
 #[derive(Default, Clone)]
 pub struct RecordReaderOptions {
@@ -44,6 +52,10 @@ pub struct RecordReaderOptions {
     /// If true, the reader will yield entire chunk records. Otherwise, the reader will decompress
     /// and read into the chunk, yielding the records inside.
     pub emit_chunks: bool,
+    /// If true, the reader will read all content from a chunk and validate its CRC
+    /// before yielding any messages from it. By default, this reader does not validate CRCs and
+    /// performs streaming decompression of chunks.
+    pub validate_chunk_crcs: bool,
 }
 
 pub struct RecordReader {
@@ -57,6 +69,7 @@ pub struct RecordReader {
     compressed_data: Vec<u8>,
     decompressors: HashMap<String, Box<dyn Decompressor>>,
     options: RecordReaderOptions,
+    at_eof: bool,
 }
 
 impl RecordReader {
@@ -66,8 +79,8 @@ impl RecordReader {
 
     pub fn new_with_options(options: RecordReaderOptions) -> Self {
         RecordReader {
-            currently_reading: CurrentlyReading::StartMagic,
-            from: ReadingFrom::File,
+            currently_reading: StartMagic,
+            from: File,
             uncompressed_data: Vec::new(),
             uncompressed_data_start: 0,
             uncompressed_data_end: 0,
@@ -75,7 +88,8 @@ impl RecordReader {
             compressed_data_start: 0,
             compressed_data_end: 0,
             decompressors: HashMap::new(),
-            options: options,
+            at_eof: false,
+            options,
         }
     }
     fn get_decompressor(&mut self, name: &str) -> McapResult<Box<dyn Decompressor>> {
@@ -98,7 +112,7 @@ impl RecordReader {
         Ok(())
     }
 
-    pub fn next(&mut self) -> McapResult<ReadState> {
+    pub fn next_action(&mut self) -> McapResult<ReadAction> {
         // keep processing through the file until we need more data or can yield a record.
         loop {
             // check if we have consumed all uncompressed data in the last iteration - if so,
@@ -109,148 +123,200 @@ impl RecordReader {
                 self.uncompressed_data_start = 0;
                 self.uncompressed_data_end = 0;
             }
+            if self.at_eof {
+                if matches!(&self.currently_reading, RecordOpcodeLength { .. })
+                    && self.uncompressed_data_start == self.uncompressed_data_end
+                    && self.options.skip_end_magic
+                {
+                    return Ok(ReadAction::Finished);
+                } else {
+                    return Err(McapError::UnexpectedEof);
+                }
+            }
 
             match self.currently_reading {
-                CurrentlyReading::StartMagic => {
+                StartMagic => {
                     if self.options.skip_start_magic {
-                        self.currently_reading = CurrentlyReading::RecordOpcodeLength;
+                        self.currently_reading = RecordOpcodeLength;
                         continue;
                     }
-                    let input = match self.consume(MAGIC.len())? {
-                        BufOrRemainder::Buf(input) => input,
-                        BufOrRemainder::Remainder(want) => return self.request(want),
+                    let (start, end) = match self.consume(MAGIC.len())? {
+                        Bounds(input) => input,
+                        Remainder(want) => return self.request(want),
                     };
+                    let input = &self.uncompressed_data[start..end];
                     if input != MAGIC {
                         return Err(McapError::BadMagic);
                     }
-                    self.currently_reading = CurrentlyReading::RecordOpcodeLength;
+                    self.currently_reading = RecordOpcodeLength;
                 }
-                CurrentlyReading::EndMagic => {
+                EndMagic => {
                     if self.options.skip_end_magic {
-                        return Ok(ReadState::Finished);
+                        return Ok(ReadAction::Finished);
                     }
-                    let input = match self.consume(MAGIC.len())? {
-                        BufOrRemainder::Buf(input) => input,
-                        BufOrRemainder::Remainder(want) => return self.request(want),
+                    let (start, end) = match self.consume(MAGIC.len())? {
+                        Bounds(input) => input,
+                        Remainder(want) => return self.request(want),
                     };
+                    let input = &self.uncompressed_data[start..end];
                     if input != MAGIC {
                         return Err(McapError::BadMagic);
                     }
-                    return Ok(ReadState::Finished);
+                    return Ok(ReadAction::Finished);
                 }
-                CurrentlyReading::RecordOpcodeLength => {
-                    self.decompress_if_compressed(9)?;
-                    let input = match self.consume(9)? {
-                        BufOrRemainder::Buf(input) => input,
-                        BufOrRemainder::Remainder(want) => return self.request(want),
+                RecordOpcodeLength => {
+                    let (start, end) = match self.consume(9)? {
+                        Bounds(input) => input,
+                        Remainder(want) => return self.request(want),
                     };
+                    let input = &self.uncompressed_data[start..end];
                     let opcode = input[0];
                     let record_length: u64 = u64::from_le_bytes(input[1..9].try_into().unwrap());
                     if opcode == op::CHUNK && !self.options.emit_chunks {
-                        self.currently_reading = CurrentlyReading::ChunkHeader { record_length };
-                    } else {
-                        self.currently_reading = CurrentlyReading::RecordContent {
-                            opcode,
-                            record_length,
-                        }
-                    }
-                }
-                CurrentlyReading::RecordContent {
-                    opcode,
-                    record_length,
-                } => {
-                    self.decompress_if_compressed(record_length as usize)?;
-                    // improvement: the borrow checker doesn't let us just use `consume()` here to
-                    // determine the request amount and yield the input buffer at the same time.
-                    if self.uncompressed_data_end - self.uncompressed_data_start
-                        < (record_length as usize)
-                    {
-                        return self.request(
-                            (record_length as usize)
-                                - (self.uncompressed_data_end - self.uncompressed_data_start),
-                        );
-                    }
-                    if opcode == op::FOOTER {
-                        self.currently_reading = CurrentlyReading::EndMagic;
-                    } else {
-                        self.currently_reading = CurrentlyReading::RecordOpcodeLength;
-                    }
-                    let mut padding_after_chunk: Option<u64> = None;
-                    if let ReadingFrom::Chunk(chunk_state) = &self.from {
-                        if chunk_state.compressed_remaining == 0 {
-                            padding_after_chunk = Some(chunk_state.padding_after_compressed_data)
-                        }
-                    }
-                    if let Some(padding) = padding_after_chunk {
-                        self.from = ReadingFrom::File;
                         self.currently_reading =
-                            CurrentlyReading::PaddingAfterChunk { len: padding }
+                            CurrentlyReading::ChunkHeader { len: record_length };
+                    } else {
+                        self.currently_reading = RecordContent {
+                            opcode,
+                            len: record_length,
+                        }
                     }
-                    let data = match self.consume(record_length as usize)? {
-                        BufOrRemainder::Buf(buf) => buf,
-                        BufOrRemainder::Remainder(need) => panic!("oh fuck {need}"),
-                    };
-                    return Ok(ReadState::GetRecord { data, opcode });
                 }
-                CurrentlyReading::ChunkHeader { record_length } => {
-                    let min_chunk_header_len: usize = 8 + 8 + 8 + 4 + 4 + 8;
-                    let have = self.uncompressed_data_end - self.uncompressed_data_start;
-                    if have < min_chunk_header_len {
-                        return self.request(min_chunk_header_len - have);
+                RecordContent {
+                    opcode,
+                    len: record_length,
+                } => {
+                    let (start, end) = match self.consume(record_length as usize)? {
+                        Bounds(bounds) => bounds,
+                        Remainder(remainder) => return self.request(remainder),
+                    };
+                    if opcode == op::FOOTER {
+                        self.currently_reading = EndMagic;
+                    } else {
+                        self.currently_reading = RecordOpcodeLength;
                     }
-                    let input = &self.uncompressed_data
-                        [self.uncompressed_data_start..self.uncompressed_data_end];
+                    // need to borrow to check for end of chunk and mutate self after dropping that
+                    // borrow.
+                    let padding = match &self.from {
+                        Chunk(state) => {
+                            if state.compressed_remaining == 0
+                                && self.uncompressed_data_start == self.uncompressed_data_end
+                            {
+                                Some(state.padding_after_compressed_data)
+                            } else {
+                                None
+                            }
+                        }
+                        File => None,
+                    };
+                    if let Some(padding) = padding {
+                        let mut from = File;
+                        std::mem::swap(&mut from, &mut self.from);
+                        let decompressor = match from {
+                            Chunk(state) => state.decompressor,
+                            File => panic!(
+                                "invariant: padding should only be Some if reading from chunk"
+                            ),
+                        };
+                        self.return_decompressor(decompressor)?;
+                        self.currently_reading = PaddingAfterChunk { len: padding }
+                    }
+                    return Ok(ReadAction::GetRecord {
+                        data: &self.uncompressed_data[start..end],
+                        opcode,
+                    });
+                }
+                CurrentlyReading::ChunkHeader { len } => {
+                    let min_chunk_header_len: usize = 8 + 8 + 8 + 4 + 4 + 8;
+                    if len < min_chunk_header_len as u64 {
+                        return Err(McapError::RecordTooShort {
+                            opcode: op::CHUNK,
+                            len,
+                            expected: min_chunk_header_len as u64,
+                        });
+                    }
+                    let (start, end) = match self.load(min_chunk_header_len)? {
+                        Bounds(bounds) => bounds,
+                        Remainder(remainder) => return self.request(remainder),
+                    };
+                    let input = &self.uncompressed_data[start..end];
                     let compression_string_length =
                         u32::from_le_bytes(input[28..32].try_into().unwrap());
                     let chunk_header_len =
                         min_chunk_header_len + compression_string_length as usize;
-                    if chunk_header_len as u64 > record_length {
+                    if len < chunk_header_len as u64 {
                         return Err(McapError::RecordTooShort {
                             opcode: op::CHUNK,
-                            len: record_length,
+                            len,
                             expected: chunk_header_len as u64,
                         });
                     }
-                    let bringis = match self.consume(chunk_header_len)? {
-                        BufOrRemainder::Buf(buf) => buf,
-                        BufOrRemainder::Remainder(need) => return self.request(need),
+                    let (start, end) = match self.consume(chunk_header_len)? {
+                        Bounds(buf) => buf,
+                        Remainder(need) => return self.request(need),
                     };
-                    let mut cursor = std::io::Cursor::new(bringis);
+                    let mut cursor = std::io::Cursor::new(&self.uncompressed_data[start..end]);
                     let hdr: ChunkHeader = cursor.read_le()?;
                     let decompressor = self.get_decompressor(&hdr.compression)?;
                     let content_len = chunk_header_len as u64 + hdr.compressed_size;
-                    if record_length < content_len {
+                    if len < content_len {
                         return Err(McapError::RecordTooShort {
                             opcode: op::CHUNK,
-                            len: record_length,
+                            len,
                             expected: content_len,
                         });
                     }
-                    self.from = ReadingFrom::Chunk(ChunkState {
+                    self.from = Chunk(ChunkState {
                         next_read_size: std::cmp::min(
                             DEFAULT_CHUNK_DATA_READ_SIZE,
                             hdr.compressed_size as usize,
                         ),
                         decompressor,
                         compressed_remaining: hdr.compressed_size,
-                        uncompressed_remaining: hdr.uncompressed_size,
-                        padding_after_compressed_data: (content_len - record_length),
+                        padding_after_compressed_data: (content_len - len),
                     });
-                    self.currently_reading = CurrentlyReading::RecordOpcodeLength;
-                }
-                CurrentlyReading::PaddingAfterChunk { len } => match self.consume(len as usize)? {
-                    BufOrRemainder::Buf(_) => {
-                        self.currently_reading = CurrentlyReading::RecordOpcodeLength;
+                    self.compressed_data.clear();
+                    self.compressed_data_end = 0;
+                    self.compressed_data_start = 0;
+                    if self.options.validate_chunk_crcs && hdr.uncompressed_crc != 0 {
+                        self.currently_reading = ValidatingChunkCrc {
+                            len: hdr.uncompressed_size,
+                            crc: hdr.uncompressed_crc,
+                        };
+                    } else {
+                        self.currently_reading = RecordOpcodeLength;
                     }
-                    BufOrRemainder::Remainder(need) => return self.request(need),
+                }
+                ValidatingChunkCrc { len, crc } => {
+                    match self.load(len as usize)? {
+                        Bounds((start, end)) => {
+                            let calculated = crc32fast::hash(&self.uncompressed_data[start..end]);
+                            if calculated != crc {
+                                return Err(McapError::BadChunkCrc {
+                                    saved: crc,
+                                    calculated,
+                                });
+                            }
+                            self.currently_reading = RecordOpcodeLength;
+                        }
+                        Remainder(remainder) => return self.request(remainder),
+                    };
+                }
+                PaddingAfterChunk { len } => match self.consume(len as usize)? {
+                    Bounds(_) => {
+                        self.currently_reading = RecordOpcodeLength;
+                    }
+                    Remainder(need) => return self.request(need),
                 },
             }
         }
     }
 
-    fn decompress_if_compressed(&mut self, amount: usize) -> McapResult<()> {
+    // load `amount` bytes into the uncompressed data buffer, returning the remainder if more
+    // needs to be loaded.
+    fn load(&mut self, amount: usize) -> McapResult<BoundsOrRemainder> {
         let slice_end = self.uncompressed_data_start + amount;
-        if let ReadingFrom::Chunk(chunk_state) = &mut self.from {
+        if let Chunk(chunk_state) = &mut self.from {
             if self.compressed_data_end > self.compressed_data_start {
                 self.uncompressed_data.resize(slice_end, 0);
                 let src =
@@ -260,7 +326,6 @@ impl RecordReader {
                 self.compressed_data_start += res.consumed;
                 self.uncompressed_data_end += res.wrote;
                 chunk_state.compressed_remaining -= res.consumed as u64;
-                chunk_state.uncompressed_remaining -= res.wrote as u64;
                 let next_size_hint = if res.need == 0 {
                     DEFAULT_CHUNK_DATA_READ_SIZE
                 } else {
@@ -277,58 +342,61 @@ impl RecordReader {
                 }
             }
         }
-        Ok(())
+        if slice_end <= self.uncompressed_data_end {
+            return Ok(Bounds((self.uncompressed_data_start, slice_end)));
+        }
+        Ok(Remainder(slice_end - self.uncompressed_data_end))
     }
 
     // Consume `amount` bytes of the uncompressed input buffer if enough is available. On failure,
     // return the extra amount required as an error value.
-    fn consume(&mut self, amount: usize) -> McapResult<BufOrRemainder> {
-        let slice_start = self.uncompressed_data_start;
-        let slice_end = slice_start + amount;
-        if slice_end <= self.uncompressed_data_end {
-            self.uncompressed_data_start = slice_end;
-            return Ok(BufOrRemainder::Buf(
-                &self.uncompressed_data[slice_start..slice_end],
-            ));
+    fn consume(&mut self, amount: usize) -> McapResult<BoundsOrRemainder> {
+        match self.load(amount)? {
+            Bounds(bounds) => {
+                self.uncompressed_data_start += amount;
+                Ok(Bounds(bounds))
+            }
+            Remainder(remainder) => Ok(Remainder(remainder)),
         }
-        return Ok(BufOrRemainder::Remainder(
-            slice_end - self.uncompressed_data_end,
-        ));
     }
 
     // Return an InputBuf that requests `want` uncompressed bytes from the input file. If reading
     // from a chunk, requests the amount hinted by the decompressor on the previous iteration.
-    fn request(&mut self, want: usize) -> McapResult<ReadState> {
+    fn request(&mut self, want: usize) -> McapResult<ReadAction> {
         let desired_end = self.uncompressed_data_end + want;
         self.uncompressed_data
             .resize(std::cmp::max(self.uncompressed_data.len(), desired_end), 0);
+
         return match &self.from {
-            ReadingFrom::File => Ok(ReadState::Fill(InputBuf {
+            File => Ok(ReadAction::Fill(InputBuf {
                 buf: &mut self.uncompressed_data[self.uncompressed_data_end..desired_end],
-                written: &mut self.uncompressed_data_end,
+                total_filled: &mut self.uncompressed_data_end,
+                at_eof: &mut self.at_eof,
             })),
-            ReadingFrom::Chunk(chunk_state) => {
+            Chunk(chunk_state) => {
                 let desired_compressed_end = self.compressed_data_end + chunk_state.next_read_size;
                 self.compressed_data.resize(
                     std::cmp::max(self.compressed_data.len(), desired_compressed_end),
                     0,
                 );
-                Ok(ReadState::Fill(InputBuf {
+                Ok(ReadAction::Fill(InputBuf {
                     buf: &mut self.compressed_data
                         [self.compressed_data_end..desired_compressed_end],
-                    written: &mut self.compressed_data_end,
+                    total_filled: &mut self.compressed_data_end,
+                    at_eof: &mut self.at_eof,
                 }))
             }
         };
     }
 }
 
-enum BufOrRemainder<'a> {
-    Buf(&'a [u8]),
-    Remainder(usize),
+impl Default for RecordReader {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-pub enum ReadState<'a> {
+pub enum ReadAction<'a> {
     Fill(super::input_buf::InputBuf<'a>),
     GetRecord { data: &'a [u8], opcode: u8 },
     Finished,
@@ -342,8 +410,33 @@ mod tests {
     use std::collections::BTreeMap;
     use std::io::Read;
 
+    fn basic_chunked_file(compression: Option<Compression>) -> McapResult<Vec<u8>> {
+        let mut buf = std::io::Cursor::new(Vec::new());
+        {
+            let mut writer = crate::WriteOptions::new()
+                .compression(compression)
+                .create(&mut buf)?;
+            let channel = std::sync::Arc::new(crate::Channel {
+                topic: "chat".to_owned(),
+                schema: None,
+                message_encoding: "json".to_owned(),
+                metadata: BTreeMap::new(),
+            });
+            writer.add_channel(&channel)?;
+            writer.write(&crate::Message {
+                channel,
+                sequence: 0,
+                log_time: 0,
+                publish_time: 0,
+                data: (&[0, 1, 2]).into(),
+            })?;
+            writer.finish()?;
+        }
+        Ok(buf.into_inner())
+    }
+
     #[test]
-    fn test_un_chunked() -> Result<(), McapError> {
+    fn test_un_chunked() -> McapResult<()> {
         let mut buf = std::io::Cursor::new(Vec::new());
         {
             let mut writer = crate::WriteOptions::new()
@@ -370,13 +463,13 @@ mod tests {
         let mut opcodes: Vec<u8> = Vec::new();
         let mut iter_count = 0;
         loop {
-            match reader.next()? {
-                ReadState::Finished => break,
-                ReadState::Fill(mut into) => {
+            match reader.next_action()? {
+                ReadAction::Finished => break,
+                ReadAction::Fill(mut into) => {
                     let written = cursor.read(into.buf)?;
                     into.set_filled(written);
                 }
-                ReadState::GetRecord { data, opcode } => {
+                ReadAction::GetRecord { data, opcode } => {
                     opcodes.push(opcode);
                     parse_record(opcode, data)?;
                 }
@@ -403,41 +496,91 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn test_chunked() -> Result<(), McapError> {
-        for compression in [Some(Compression::Zstd), Some(Compression::Lz4), None] {
-            let mut buf = std::io::Cursor::new(Vec::new());
-            {
-                let mut writer = crate::WriteOptions::new()
-                    .compression(compression)
-                    .create(&mut buf)?;
-                let channel = std::sync::Arc::new(crate::Channel {
-                    topic: "chat".to_owned(),
-                    schema: None,
-                    message_encoding: "json".to_owned(),
-                    metadata: BTreeMap::new(),
+    fn test_chunked() -> McapResult<()> {
+        for validate_chunk_crcs in [true, false] {
+            for compression in [Some(Compression::Zstd), Some(Compression::Lz4), None] {
+                let mut reader = RecordReader::new_with_options(RecordReaderOptions {
+                    skip_end_magic: false,
+                    skip_start_magic: false,
+                    emit_chunks: false,
+                    validate_chunk_crcs,
                 });
-                writer.add_channel(&channel)?;
-                writer.write(&crate::Message {
-                    channel,
-                    sequence: 0,
-                    log_time: 0,
-                    publish_time: 0,
-                    data: (&[0, 1, 2]).into(),
-                })?;
-                writer.finish()?;
+                let mut cursor = std::io::Cursor::new(basic_chunked_file(compression)?);
+                let mut opcodes: Vec<u8> = Vec::new();
+                let mut iter_count = 0;
+                loop {
+                    match reader.next_action()? {
+                        ReadAction::Finished => break,
+                        ReadAction::Fill(mut into) => {
+                            let written = cursor.read(into.buf)?;
+                            into.set_filled(written);
+                        }
+                        ReadAction::GetRecord { data, opcode } => {
+                            opcodes.push(opcode);
+                            parse_record(opcode, data)?;
+                        }
+                    }
+                    iter_count += 1;
+                    // guard against infinite loop
+                    assert!(iter_count < 10000);
+                }
+                assert_eq!(
+                    opcodes,
+                    vec![
+                        op::HEADER,
+                        op::CHANNEL,
+                        op::MESSAGE,
+                        op::MESSAGE_INDEX,
+                        op::DATA_END,
+                        op::CHANNEL,
+                        op::CHUNK_INDEX,
+                        op::STATISTICS,
+                        op::SUMMARY_OFFSET,
+                        op::SUMMARY_OFFSET,
+                        op::SUMMARY_OFFSET,
+                        op::FOOTER
+                    ]
+                );
             }
-            let mut reader = RecordReader::new();
-            let mut cursor = std::io::Cursor::new(buf.into_inner());
+        }
+        Ok(())
+    }
+    #[test]
+    fn test_no_magic() -> McapResult<()> {
+        for options in [
+            RecordReaderOptions {
+                skip_start_magic: false,
+                skip_end_magic: true,
+                emit_chunks: false,
+                validate_chunk_crcs: false,
+            },
+            RecordReaderOptions {
+                skip_start_magic: true,
+                skip_end_magic: false,
+                emit_chunks: false,
+                validate_chunk_crcs: false,
+            },
+        ] {
+            let mcap = basic_chunked_file(None)?;
+            let input = if options.skip_start_magic {
+                &mcap[8..]
+            } else if options.skip_end_magic {
+                &mcap[..mcap.len() - 8]
+            } else {
+                panic!("options should either skip start or end magic")
+            };
+            let mut reader = RecordReader::new_with_options(options);
+            let mut cursor = std::io::Cursor::new(input);
             let mut opcodes: Vec<u8> = Vec::new();
             let mut iter_count = 0;
             loop {
-                match reader.next()? {
-                    ReadState::Finished => break,
-                    ReadState::Fill(mut into) => {
+                match reader.next_action()? {
+                    ReadAction::Finished => break,
+                    ReadAction::Fill(mut into) => {
                         let written = cursor.read(into.buf)?;
                         into.set_filled(written);
                     }
-                    ReadState::GetRecord { data, opcode } => {
+                    ReadAction::GetRecord { data, opcode } => {
                         opcodes.push(opcode);
                         parse_record(opcode, data)?;
                     }
@@ -464,7 +607,53 @@ mod tests {
                 ]
             );
         }
+        Ok(())
+    }
 
+    #[test]
+    fn test_emit_chunks() -> McapResult<()> {
+        let mcap = basic_chunked_file(None)?;
+        let mut reader = RecordReader::new_with_options(RecordReaderOptions {
+            skip_end_magic: false,
+            skip_start_magic: false,
+            emit_chunks: true,
+            validate_chunk_crcs: false,
+        });
+        let mut cursor = std::io::Cursor::new(mcap);
+        let mut opcodes: Vec<u8> = Vec::new();
+        let mut iter_count = 0;
+        loop {
+            match reader.next_action()? {
+                ReadAction::Finished => break,
+                ReadAction::Fill(mut into) => {
+                    let written = cursor.read(into.buf)?;
+                    into.set_filled(written);
+                }
+                ReadAction::GetRecord { data, opcode } => {
+                    opcodes.push(opcode);
+                    parse_record(opcode, data)?;
+                }
+            }
+            iter_count += 1;
+            // guard against infinite loop
+            assert!(iter_count < 10000);
+        }
+        assert_eq!(
+            opcodes,
+            vec![
+                op::HEADER,
+                op::CHUNK,
+                op::MESSAGE_INDEX,
+                op::DATA_END,
+                op::CHANNEL,
+                op::CHUNK_INDEX,
+                op::STATISTICS,
+                op::SUMMARY_OFFSET,
+                op::SUMMARY_OFFSET,
+                op::SUMMARY_OFFSET,
+                op::FOOTER
+            ]
+        );
         Ok(())
     }
 }

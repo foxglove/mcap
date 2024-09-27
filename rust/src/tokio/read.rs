@@ -1,8 +1,8 @@
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 pub use crate::sans_io::read::RecordReaderOptions;
-use crate::sans_io::read::{ReadState, RecordReader as SansIoReader};
-use crate::{McapError, McapResult};
+use crate::sans_io::read::{ReadAction, RecordReader as SansIoReader};
+use crate::McapResult;
 
 /// Reads an MCAP file record-by-record, writing the raw record data into a caller-provided Vec.
 /// ```no_run
@@ -49,19 +49,18 @@ where
     /// Returns the record's opcode as a result.
     pub async fn next_record(&mut self, data: &mut Vec<u8>) -> Option<McapResult<u8>> {
         loop {
-            match self.reader.next() {
-                Ok(ReadState::Fill(mut into_buf)) => {
+            match self.reader.next_action() {
+                Ok(ReadAction::Fill(mut into_buf)) => {
                     let written = match self.source.read(into_buf.buf).await {
-                        Ok(0) => return Some(Err(McapError::UnexpectedEof)),
                         Ok(n) => n,
                         Err(err) => return Some(Err(err.into())),
                     };
                     into_buf.set_filled(written);
                 }
-                Ok(ReadState::Finished) => {
+                Ok(ReadAction::Finished) => {
                     return None;
                 }
-                Ok(ReadState::GetRecord {
+                Ok(ReadAction::GetRecord {
                     data: content,
                     opcode,
                 }) => {
@@ -85,7 +84,7 @@ mod tests {
 
     use super::*;
     #[tokio::test]
-    async fn test_record_reader() -> Result<(), McapError> {
+    async fn test_record_reader() -> McapResult<()> {
         for compression in [
             None,
             #[cfg(feature = "zstd")]
@@ -146,7 +145,7 @@ mod tests {
     }
     #[cfg(feature = "lz4")]
     #[tokio::test]
-    async fn test_lz4_decompression() -> Result<(), McapError> {
+    async fn test_lz4_decompression() -> McapResult<()> {
         let mut buf = std::io::Cursor::new(Vec::new());
         {
             let mut writer = crate::WriteOptions::new()

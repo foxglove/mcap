@@ -40,11 +40,11 @@ impl Decompressor for Lz4Decoder {
                 ptr::null(),
             )
         })?;
-        return Ok(DecompressResult {
+        Ok(DecompressResult {
             consumed: src_size,
             wrote: dst_size,
             need,
-        });
+        })
     }
 
     fn reset(&mut self) -> McapResult<()> {
