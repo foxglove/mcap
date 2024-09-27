@@ -10,7 +10,12 @@ use crate::{
 };
 use binrw::BinReaderExt;
 
-use super::{lz4, zstd};
+#[cfg(feature = "lz4")]
+use super::lz4;
+
+#[cfg(feature = "zstd")]
+use super::zstd;
+
 enum CurrentlyReading {
     StartMagic,
     RecordOpcodeLength,
