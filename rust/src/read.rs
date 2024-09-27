@@ -25,7 +25,7 @@ use log::*;
 use crate::{
     io_utils::CountingCrcReader,
     records::{self, op, Record},
-    sans_io::read::ReadAction,
+    sans_io::read::{ReadAction, RecordReaderOptions},
     Attachment, Channel, McapError, McapResult, Message, Schema, MAGIC,
 };
 
@@ -463,7 +463,12 @@ impl<'a> ChunkFlattener<'a> {
         Ok(Self {
             buf,
             pos: 0,
-            reader: crate::sans_io::read::RecordReader::new(),
+            reader: crate::sans_io::read::RecordReader::new_with_options(RecordReaderOptions {
+                skip_start_magic: false,
+                skip_end_magic: options.contains(Options::IgnoreEndMagic),
+                emit_chunks: false,
+                validate_chunk_crcs: true,
+            }),
         })
     }
 

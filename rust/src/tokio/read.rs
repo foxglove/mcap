@@ -37,7 +37,7 @@ where
     pub fn new_with_options(source: R, options: &RecordReaderOptions) -> Self {
         Self {
             reader: SansIoReader::new_with_options(options.clone()),
-            source: source,
+            source,
         }
     }
 
