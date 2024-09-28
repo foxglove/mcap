@@ -450,7 +450,6 @@ fn read_record_from_chunk_stream<'a, R: Read>(r: &mut R) -> McapResult<records::
 /// Like [`LinearReader`], but unpacks chunks' records into its stream
 pub struct ChunkFlattener<'a> {
     buf: &'a [u8],
-    pos: usize,
     reader: crate::sans_io::read::RecordReader,
 }
 
@@ -462,18 +461,14 @@ impl<'a> ChunkFlattener<'a> {
     pub fn new_with_options(buf: &'a [u8], options: EnumSet<Options>) -> McapResult<Self> {
         Ok(Self {
             buf,
-            pos: 0,
             reader: crate::sans_io::read::RecordReader::new_with_options(RecordReaderOptions {
                 skip_start_magic: false,
                 skip_end_magic: options.contains(Options::IgnoreEndMagic),
                 emit_chunks: false,
                 validate_chunk_crcs: true,
+                validate_data_section_crc: true,
             }),
         })
-    }
-
-    fn bytes_remaining(&self) -> usize {
-        self.buf.len() - self.pos - MAGIC.len()
     }
 }
 
@@ -490,15 +485,12 @@ impl<'a> Iterator for ChunkFlattener<'a> {
                     };
                 }
                 Ok(ReadAction::Fill(mut into_buf)) => {
-                    let end = std::cmp::min(self.pos + into_buf.buf.len(), self.buf.len());
-                    let src = &self.buf[self.pos..std::cmp::min(end, self.buf.len())];
-                    let dst = &mut into_buf.buf[..src.len()];
-                    let n = src.len();
-                    if n > 0 {
-                        dst.copy_from_slice(src);
-                    }
-                    into_buf.set_filled(n);
-                    self.pos += n;
+                    let len = std::cmp::min(into_buf.buf.len(), self.buf.len());
+                    let src = &self.buf[..len];
+                    let dst = &mut into_buf.buf[..len];
+                    dst.copy_from_slice(src);
+                    into_buf.set_filled(len);
+                    self.buf = &self.buf[len..];
                 }
                 Ok(ReadAction::Finished) => {
                     return None;
@@ -584,7 +576,6 @@ impl<'a> ChannelAccumulator<'a> {
 ///
 /// This stops at the end of the data section and does not read the summary.
 pub struct RawMessageStream<'a> {
-    full_file: &'a [u8],
     records: ChunkFlattener<'a>,
     done: bool,
     channeler: ChannelAccumulator<'static>,
@@ -596,11 +587,9 @@ impl<'a> RawMessageStream<'a> {
     }
 
     pub fn new_with_options(buf: &'a [u8], options: EnumSet<Options>) -> McapResult<Self> {
-        let full_file = buf;
         let records = ChunkFlattener::new_with_options(buf, options)?;
 
         Ok(Self {
-            full_file,
             records,
             done: false,
             channeler: ChannelAccumulator::default(),
@@ -652,33 +641,6 @@ impl<'a> Iterator for RawMessageStream<'a> {
 
                 Record::Message { header, data } => {
                     break Some(Ok(RawMessage { header, data }));
-                }
-
-                // If it's EOD, do unholy things to calculate the CRC.
-                // This would be much easier reading from a seekable Read instead of a buffer.
-                // (But that would also force us to make copies of schema, message, and attachment
-                // data! Should we have two APIs?)
-                Record::DataEnd(end) => {
-                    if end.data_section_crc != 0 {
-                        //  op, length, CRC
-                        const DATA_END_SIZE: usize =
-                            size_of::<u8>() + size_of::<u64>() + size_of::<u32>();
-
-                        let start_of_data_end = self.full_file.len()
-                            - self.records.bytes_remaining() // sans MAGIC!
-                            - MAGIC.len() // MORE MAGIC
-                            - DATA_END_SIZE;
-                        let data_section = &self.full_file[..start_of_data_end];
-
-                        let calculated = crc32(data_section);
-                        if end.data_section_crc != calculated {
-                            break Some(Err(McapError::BadDataCrc {
-                                saved: end.data_section_crc,
-                                calculated,
-                            }));
-                        }
-                    }
-                    break None; // We're done at any rate.
                 }
                 _skip => {}
             };
