@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hasher};
+use std::collections::HashMap;
 
 use super::{
     decompressor::{Decompressor, NoneDecompressor},
