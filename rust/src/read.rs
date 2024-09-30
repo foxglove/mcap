@@ -24,7 +24,7 @@ use log::*;
 use crate::{
     io_utils::CountingCrcReader,
     records::{self, op, Record},
-    sans_io::read::{ReadAction, RecordReader, RecordReaderOptions},
+    sans_io::read::{CRCValidationStrategy, ReadAction, RecordReader, RecordReaderOptions},
     Attachment, Channel, McapError, McapResult, Message, Schema, MAGIC,
 };
 
@@ -63,8 +63,8 @@ impl<'a> LinearReader<'a> {
                 skip_start_magic: false,
                 skip_end_magic: options.contains(Options::IgnoreEndMagic),
                 emit_chunks: true,
-                validate_chunk_crcs: false,
-                validate_data_section_crc: true,
+                chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
+                data_section_crc_validation_strategy: CRCValidationStrategy::None,
             }),
         })
     }
@@ -79,8 +79,8 @@ impl<'a> LinearReader<'a> {
                 skip_start_magic: true,
                 skip_end_magic: true,
                 emit_chunks: true,
-                validate_chunk_crcs: false,
-                validate_data_section_crc: true,
+                chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
+                data_section_crc_validation_strategy: CRCValidationStrategy::None,
             }),
         }
     }
@@ -440,8 +440,8 @@ impl<'a> ChunkFlattener<'a> {
                 skip_start_magic: false,
                 skip_end_magic: options.contains(Options::IgnoreEndMagic),
                 emit_chunks: false,
-                validate_chunk_crcs: true,
-                validate_data_section_crc: true,
+                data_section_crc_validation_strategy: CRCValidationStrategy::None,
+                chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
             }),
         })
     }

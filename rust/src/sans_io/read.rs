@@ -31,6 +31,8 @@ const DEFAULT_CHUNK_DATA_READ_SIZE: usize = 32 * 1024;
 
 struct ChunkState {
     decompressor: Box<dyn Decompressor>,
+    hasher: Option<crc32fast::Hasher>,
+    crc: u32,
     next_read_size: usize,
     compressed_remaining: u64,
     padding_after_compressed_data: u64,
@@ -48,7 +50,7 @@ enum BoundsOrRemainder {
 }
 use BoundsOrRemainder::*;
 
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct RecordReaderOptions {
     /// If true, the reader will not expect the MCAP magic at the start of the stream.
     pub skip_start_magic: bool,
@@ -57,13 +59,22 @@ pub struct RecordReaderOptions {
     /// If true, the reader will yield entire chunk records. Otherwise, the reader will decompress
     /// and read into the chunk, yielding the records inside.
     pub emit_chunks: bool,
-    /// If true, the reader will read all content from a chunk and validate its CRC
-    /// before yielding any messages from it. By default, this reader does not validate CRCs and
-    /// performs streaming decompression of chunks.
-    pub validate_chunk_crcs: bool,
-    // if true, the reader will validate the CRC of the data section _after_ yielding all records
-    // from it. Not compatible with `skip_start_magic`.
-    pub validate_data_section_crc: bool,
+    pub chunk_crc_validation_strategy: CRCValidationStrategy,
+    pub data_section_crc_validation_strategy: CRCValidationStrategy,
+}
+
+#[derive(Debug, Default, Clone)]
+pub enum CRCValidationStrategy {
+    #[default]
+    None,
+    // Validate CRC of region (data section, chunk or attachment data) before yielding any records.
+    // This requires scanning the entire region before yielding the first record, which can be
+    // prohibitive in I/O or memory cost.
+    BeforeReading,
+    // Validate CRC of region (data section, chunk or attachment) after yielding all data from it.
+    // If the CRC check fails in this mode, the previously-yielded records may be corrupt, and
+    // should be discarded.
+    AfterReading,
 }
 
 pub struct RecordReader {
@@ -97,10 +108,12 @@ impl RecordReader {
             compressed_data: Vec::new(),
             compressed_data_start: 0,
             compressed_data_end: 0,
-            data_section_hasher: if options.validate_data_section_crc {
-                Some(crc32fast::Hasher::new())
-            } else {
-                None
+            data_section_hasher: match options.data_section_crc_validation_strategy {
+                CRCValidationStrategy::None => None,
+                CRCValidationStrategy::BeforeReading => {
+                    panic!("data section pre-validation not supported in linear reader")
+                }
+                CRCValidationStrategy::AfterReading => Some(crc32fast::Hasher::new()),
             },
             calculated_data_section_crc: None,
             decompressors: HashMap::new(),
@@ -231,13 +244,22 @@ impl RecordReader {
                     if let Some(padding) = padding {
                         let mut from = File;
                         std::mem::swap(&mut from, &mut self.from);
-                        let decompressor = match from {
-                            Chunk(state) => state.decompressor,
+                        let state = match from {
+                            Chunk(state) => state,
                             File => panic!(
                                 "invariant: padding should only be Some if reading from chunk"
                             ),
                         };
-                        self.return_decompressor(decompressor)?;
+                        self.return_decompressor(state.decompressor)?;
+                        if let Some(hasher) = state.hasher {
+                            let calculated = hasher.finalize();
+                            if state.crc != 0 && calculated != state.crc {
+                                return Err(McapError::BadChunkCrc {
+                                    saved: state.crc,
+                                    calculated,
+                                });
+                            }
+                        }
                         self.currently_reading = PaddingAfterChunk { len: padding }
                     }
                     if let (op::DATA_END, Some(calculated_crc)) =
@@ -310,13 +332,22 @@ impl RecordReader {
                             hdr.compressed_size as usize,
                         ),
                         decompressor,
+                        hasher: match self.options.chunk_crc_validation_strategy {
+                            CRCValidationStrategy::AfterReading => Some(crc32fast::Hasher::new()),
+                            _ => None,
+                        },
+                        crc: hdr.uncompressed_crc,
                         compressed_remaining: hdr.compressed_size,
                         padding_after_compressed_data: (content_len - len),
                     });
                     self.compressed_data.clear();
                     self.compressed_data_end = 0;
                     self.compressed_data_start = 0;
-                    if self.options.validate_chunk_crcs && hdr.uncompressed_crc != 0 {
+                    if matches!(
+                        self.options.chunk_crc_validation_strategy,
+                        CRCValidationStrategy::BeforeReading
+                    ) && hdr.uncompressed_crc != 0
+                    {
                         self.currently_reading = ValidatingChunkCrc {
                             len: hdr.uncompressed_size,
                             crc: hdr.uncompressed_crc,
@@ -365,6 +396,11 @@ impl RecordReader {
                 let dst = &mut self.uncompressed_data[self.uncompressed_data_end..slice_end];
                 let res = chunk_state.decompressor.decompress(src, dst)?;
                 self.compressed_data_start += res.consumed;
+                let newly_decompressed = &self.uncompressed_data
+                    [self.uncompressed_data_end..self.uncompressed_data_end + res.wrote];
+                if let Some(hasher) = &mut chunk_state.hasher {
+                    hasher.update(newly_decompressed);
+                }
                 self.uncompressed_data_end += res.wrote;
                 chunk_state.compressed_remaining -= res.consumed as u64;
                 let next_size_hint = if res.need == 0 {
@@ -540,14 +576,18 @@ mod tests {
     }
     #[test]
     fn test_chunked() -> McapResult<()> {
-        for validate_chunk_crcs in [true, false] {
+        for strategy in [
+            CRCValidationStrategy::None,
+            CRCValidationStrategy::BeforeReading,
+            CRCValidationStrategy::AfterReading,
+        ] {
             for compression in [Some(Compression::Zstd), Some(Compression::Lz4), None] {
                 let mut reader = RecordReader::new_with_options(RecordReaderOptions {
                     skip_end_magic: false,
                     skip_start_magic: false,
                     emit_chunks: false,
-                    validate_chunk_crcs,
-                    validate_data_section_crc: false,
+                    chunk_crc_validation_strategy: strategy.clone(),
+                    data_section_crc_validation_strategy: CRCValidationStrategy::None,
                 });
                 let mut cursor = std::io::Cursor::new(basic_chunked_file(compression)?);
                 let mut opcodes: Vec<u8> = Vec::new();
@@ -596,15 +636,15 @@ mod tests {
                 skip_start_magic: false,
                 skip_end_magic: true,
                 emit_chunks: false,
-                validate_chunk_crcs: false,
-                validate_data_section_crc: false,
+                chunk_crc_validation_strategy: CRCValidationStrategy::None,
+                data_section_crc_validation_strategy: CRCValidationStrategy::None,
             },
             RecordReaderOptions {
                 skip_start_magic: true,
                 skip_end_magic: false,
                 emit_chunks: false,
-                validate_chunk_crcs: false,
-                validate_data_section_crc: false,
+                chunk_crc_validation_strategy: CRCValidationStrategy::None,
+                data_section_crc_validation_strategy: CRCValidationStrategy::None,
             },
         ] {
             let mcap = basic_chunked_file(None)?;
@@ -663,8 +703,8 @@ mod tests {
             skip_end_magic: false,
             skip_start_magic: false,
             emit_chunks: true,
-            validate_chunk_crcs: false,
-            validate_data_section_crc: false,
+            chunk_crc_validation_strategy: CRCValidationStrategy::None,
+            data_section_crc_validation_strategy: CRCValidationStrategy::None,
         });
         let mut cursor = std::io::Cursor::new(mcap);
         let mut opcodes: Vec<u8> = Vec::new();
