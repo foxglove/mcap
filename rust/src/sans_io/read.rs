@@ -91,6 +91,7 @@ pub struct RecordReader {
     decompressors: HashMap<String, Box<dyn Decompressor>>,
     options: RecordReaderOptions,
     at_eof: bool,
+    failed: bool,
 }
 
 impl RecordReader {
@@ -119,8 +120,30 @@ impl RecordReader {
             decompressors: HashMap::new(),
             at_eof: false,
             options,
+            failed: false,
         }
     }
+
+    pub(crate) fn for_chunk(header: ChunkHeader) -> McapResult<Self> {
+        let mut result = Self::new_with_options(RecordReaderOptions {
+            skip_end_magic: true,
+            skip_start_magic: true,
+            chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
+            data_section_crc_validation_strategy: CRCValidationStrategy::None,
+            emit_chunks: false,
+        });
+        result.currently_reading = RecordOpcodeLength;
+        result.from = Chunk(ChunkState {
+            decompressor: result.get_decompressor(&header.compression)?,
+            hasher: Some(crc32fast::Hasher::new()),
+            crc: header.uncompressed_crc,
+            next_read_size: DEFAULT_CHUNK_DATA_READ_SIZE,
+            compressed_remaining: header.compressed_size,
+            padding_after_compressed_data: 0,
+        });
+        Ok(result)
+    }
+
     fn get_decompressor(&mut self, name: &str) -> McapResult<Box<dyn Decompressor>> {
         if let Some(decompressor) = self.decompressors.remove(name) {
             return Ok(decompressor);
@@ -142,6 +165,9 @@ impl RecordReader {
     }
 
     pub fn next_action(&mut self) -> McapResult<ReadAction> {
+        if self.failed {
+            return Ok(ReadAction::Finished);
+        }
         // keep processing through the file until we need more data or can yield a record.
         loop {
             // check if we have consumed all uncompressed data in the last iteration - if so,
@@ -159,6 +185,7 @@ impl RecordReader {
                 {
                     return Ok(ReadAction::Finished);
                 } else {
+                    self.failed = true;
                     return Err(McapError::UnexpectedEof);
                 }
             }
@@ -175,6 +202,7 @@ impl RecordReader {
                     };
                     let input = &self.uncompressed_data[start..end];
                     if input != MAGIC {
+                        self.failed = true;
                         return Err(McapError::BadMagic);
                     }
                     self.currently_reading = RecordOpcodeLength;
@@ -189,6 +217,7 @@ impl RecordReader {
                     };
                     let input = &self.uncompressed_data[start..end];
                     if input != MAGIC {
+                        self.failed = true;
                         return Err(McapError::BadMagic);
                     }
                     return Ok(ReadAction::Finished);
@@ -254,6 +283,7 @@ impl RecordReader {
                         if let Some(hasher) = state.hasher {
                             let calculated = hasher.finalize();
                             if state.crc != 0 && calculated != state.crc {
+                                self.failed = true;
                                 return Err(McapError::BadChunkCrc {
                                     saved: state.crc,
                                     calculated,
@@ -266,6 +296,7 @@ impl RecordReader {
                         (opcode, self.calculated_data_section_crc)
                     {
                         if len < 4 {
+                            self.failed = true;
                             return Err(McapError::RecordTooShort {
                                 opcode: op::FOOTER,
                                 len,
@@ -275,6 +306,7 @@ impl RecordReader {
                         let data = &self.uncompressed_data[start..end];
                         let crc = u32::from_le_bytes(data[..4].try_into().unwrap());
                         if crc != 0 && crc != calculated_crc {
+                            self.failed = true;
                             return Err(McapError::BadDataCrc {
                                 saved: crc,
                                 calculated: calculated_crc,
@@ -289,6 +321,7 @@ impl RecordReader {
                 CurrentlyReading::ChunkHeader { len } => {
                     let min_chunk_header_len: usize = 8 + 8 + 8 + 4 + 4 + 8;
                     if len < min_chunk_header_len as u64 {
+                        self.failed = true;
                         return Err(McapError::RecordTooShort {
                             opcode: op::CHUNK,
                             len,
@@ -305,6 +338,7 @@ impl RecordReader {
                     let chunk_header_len =
                         min_chunk_header_len + compression_string_length as usize;
                     if len < chunk_header_len as u64 {
+                        self.failed = true;
                         return Err(McapError::RecordTooShort {
                             opcode: op::CHUNK,
                             len,
@@ -320,6 +354,7 @@ impl RecordReader {
                     let decompressor = self.get_decompressor(&hdr.compression)?;
                     let content_len = chunk_header_len as u64 + hdr.compressed_size;
                     if len < content_len {
+                        self.failed = true;
                         return Err(McapError::RecordTooShort {
                             opcode: op::CHUNK,
                             len,
@@ -361,6 +396,7 @@ impl RecordReader {
                         Bounds((start, end)) => {
                             let calculated = crc32fast::hash(&self.uncompressed_data[start..end]);
                             if calculated != crc {
+                                self.failed = true;
                                 return Err(McapError::BadChunkCrc {
                                     saved: crc,
                                     calculated,

@@ -11,7 +11,7 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
     fmt,
-    io::{self, prelude::*, Cursor},
+    io::Cursor,
     sync::Arc,
 };
 
@@ -22,7 +22,6 @@ use enumset::{enum_set, EnumSet, EnumSetType};
 use log::*;
 
 use crate::{
-    io_utils::CountingCrcReader,
     records::{self, op, Record},
     sans_io::read::{CRCValidationStrategy, ReadAction, RecordReader, RecordReaderOptions},
     Attachment, Channel, McapError, McapResult, Message, Schema, MAGIC,
@@ -83,14 +82,6 @@ impl<'a> LinearReader<'a> {
                 data_section_crc_validation_strategy: CRCValidationStrategy::None,
             }),
         }
-    }
-
-    /// Returns the number of unprocessed bytes
-    /// (sans the file's starting and ending magic)
-    ///
-    /// Used to calculate offsets for the data section et al.
-    fn bytes_remaining(&self) -> usize {
-        self.buf.len()
     }
 }
 
@@ -229,63 +220,17 @@ pub fn parse_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
     })
 }
 
-enum ChunkDecompressor<'a> {
-    Null(LinearReader<'a>),
-    /// This is not used when both `zstd` and `lz4` features are disabled.
-    #[allow(dead_code)]
-    Compressed(Option<CountingCrcReader<Box<dyn Read + Send + 'a>>>),
-}
-
 /// Streams records out of a [Chunk](Record::Chunk), decompressing as needed.
 pub struct ChunkReader<'a> {
-    header: records::ChunkHeader,
-    decompressor: ChunkDecompressor<'a>,
+    reader: RecordReader,
+    data: &'a [u8],
 }
 
 impl<'a> ChunkReader<'a> {
     pub fn new(header: records::ChunkHeader, data: &'a [u8]) -> McapResult<Self> {
-        let decompressor = match header.compression.as_str() {
-            #[cfg(feature = "zstd")]
-            "zstd" => ChunkDecompressor::Compressed(Some(CountingCrcReader::new(Box::new(
-                zstd::Decoder::new(data)?,
-            )))),
-
-            #[cfg(not(feature = "zstd"))]
-            "zstd" => panic!("Unsupported compression format: zstd"),
-
-            #[cfg(feature = "lz4")]
-            "lz4" => ChunkDecompressor::Compressed(Some(CountingCrcReader::new(Box::new(
-                lz4::Decoder::new(data)?,
-            )))),
-
-            #[cfg(not(feature = "lz4"))]
-            "lz4" => panic!("Unsupported compression format: lz4"),
-
-            "" => {
-                if header.uncompressed_size != header.compressed_size {
-                    warn!(
-                        "Chunk is uncompressed, but claims different compress/uncompressed lengths"
-                    );
-                }
-
-                if header.uncompressed_crc != 0 {
-                    let calculated = crc32(data);
-                    if header.uncompressed_crc != calculated {
-                        return Err(McapError::BadChunkCrc {
-                            saved: header.uncompressed_crc,
-                            calculated,
-                        });
-                    }
-                }
-
-                ChunkDecompressor::Null(LinearReader::sans_magic(data))
-            }
-            wat => return Err(McapError::UnsupportedCompression(wat.to_string())),
-        };
-
         Ok(Self {
-            header,
-            decompressor,
+            reader: RecordReader::for_chunk(header)?,
+            data,
         })
     }
 }
@@ -294,132 +239,27 @@ impl<'a> Iterator for ChunkReader<'a> {
     type Item = McapResult<records::Record<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match &mut self.decompressor {
-            ChunkDecompressor::Null(r) => r.next(),
-            ChunkDecompressor::Compressed(stream) => {
-                // If we consumed the stream last time to get the CRC,
-                // or because of an error, we're done.
-                if stream.is_none() {
-                    return None;
+        loop {
+            match self.reader.next_action() {
+                Ok(ReadAction::Fill(mut into)) => {
+                    let len = std::cmp::min(into.buf.len(), self.data.len());
+                    let src = &self.data[..len];
+                    let dst = &mut into.buf[..len];
+                    dst.copy_from_slice(src);
+                    into.set_filled(len);
+                    self.data = &self.data[len..];
                 }
-
-                let s = stream.as_mut().unwrap();
-
-                let record = match read_record_from_chunk_stream(s) {
-                    Ok(k) => k,
-                    Err(e) => {
-                        *stream = None; // Don't try to recover.
-                        return Some(Err(e));
+                Ok(ReadAction::GetRecord { data, opcode }) => {
+                    return match parse_record(opcode, data) {
+                        Ok(record) => Some(Ok(record.into_owned())),
+                        Err(err) => Some(Err(err)),
                     }
-                };
-
-                // If we've read all there is to read...
-                if s.position() >= self.header.uncompressed_size {
-                    // Get the CRC.
-                    let calculated = stream.take().unwrap().finalize();
-
-                    // If the header stored a CRC
-                    // and it doesn't match what we have, complain.
-                    if self.header.uncompressed_crc != 0
-                        && self.header.uncompressed_crc != calculated
-                    {
-                        return Some(Err(McapError::BadChunkCrc {
-                            saved: self.header.uncompressed_crc,
-                            calculated,
-                        }));
-                    }
-                    // All good!
                 }
-
-                Some(Ok(record))
+                Ok(ReadAction::Finished) => return None,
+                Err(err) => return Some(Err(err)),
             }
         }
     }
-}
-
-/// Like [read_record_from_slice], but for a decompression stream
-fn read_record_from_chunk_stream<'a, R: Read>(r: &mut R) -> McapResult<records::Record<'a>> {
-    let op = r.read_u8()?;
-    let len = r.read_u64::<LE>()?;
-
-    debug!("chunk: opcode {op:02X}, length {len}");
-    let record = match op {
-        op::SCHEMA => {
-            let mut record = Vec::with_capacity(len as usize);
-            r.take(len).read_to_end(&mut record)?;
-            if len as usize != record.len() {
-                return Err(McapError::UnexpectedEoc);
-            }
-
-            let mut c = Cursor::new(&record);
-            let header: records::SchemaHeader = c.read_le()?;
-            let data_len = c.read_u32::<LE>()?;
-
-            let header_end = c.position();
-
-            // Should we rotate and shrink instead?
-            let mut data = record.split_off(header_end as usize);
-
-            if data_len > data.len() as u32 {
-                return Err(McapError::BadSchemaLength {
-                    header: data_len,
-                    available: data.len() as u32,
-                });
-            }
-            data.truncate(data_len as usize);
-            Record::Schema {
-                header,
-                data: Cow::Owned(data),
-            }
-        }
-        op::CHANNEL => {
-            let mut record = Vec::with_capacity(len as usize);
-            r.take(len).read_to_end(&mut record)?;
-            if len as usize != record.len() {
-                return Err(McapError::UnexpectedEoc);
-            }
-
-            let mut c = Cursor::new(&record);
-            let channel: records::Channel = c.read_le()?;
-
-            if c.position() != record.len() as u64 {
-                warn!(
-                    "Channel {}'s length doesn't match its record length",
-                    channel.topic
-                );
-            }
-
-            Record::Channel(channel)
-        }
-        op::MESSAGE => {
-            // Optimization: messages are the mainstay of the file,
-            // so allocate the header and the data separately to avoid having
-            // to split them up or move them around later.
-            // Fortunately, message headers are fixed length.
-            const HEADER_LEN: u64 = 22;
-
-            let mut header_buf = Vec::with_capacity(HEADER_LEN as usize);
-            r.take(HEADER_LEN).read_to_end(&mut header_buf)?;
-            if header_buf.len() as u64 != HEADER_LEN {
-                return Err(McapError::UnexpectedEoc);
-            }
-            let header: records::MessageHeader = Cursor::new(header_buf).read_le()?;
-
-            let mut data = Vec::with_capacity((len - HEADER_LEN) as usize);
-            r.take(len - HEADER_LEN).read_to_end(&mut data)?;
-            if data.len() as u64 != len - HEADER_LEN {
-                return Err(McapError::UnexpectedEoc);
-            }
-
-            Record::Message {
-                header,
-                data: Cow::Owned(data),
-            }
-        }
-        wut => return Err(McapError::UnexpectedChunkRecord(wut)),
-    };
-    trace!("       {:?}", record);
-    Ok(record)
 }
 
 /// Like [`LinearReader`], but unpacks chunks' records into its stream
@@ -951,59 +791,52 @@ impl<'a> Summary<'a> {
             Cow::Owned(_) => unreachable!(),
         };
 
-        let mut chunk_reader = ChunkReader::new(h, d)?;
-
-        // Do unspeakable things to seek to the message.
-        match &mut chunk_reader.decompressor {
-            ChunkDecompressor::Null(reader) => {
-                // Skip messages until we're at the offset.
-                while reader.bytes_remaining() as u64 > index.uncompressed_size - message.offset {
-                    match reader.next() {
-                        Some(Ok(_)) => {}
-                        Some(Err(e)) => return Err(e),
-                        None => return Err(McapError::BadIndex),
-                    };
+        let mut reader = RecordReader::for_chunk(h)?;
+        let mut remaining = d;
+        let mut uncompressed_offset: usize = 0;
+        loop {
+            match reader.next_action() {
+                Ok(ReadAction::Fill(mut into)) => {
+                    let len = std::cmp::min(remaining.len(), into.buf.len());
+                    let src = &remaining[..len];
+                    let dst = &mut into.buf[..len];
+                    dst.copy_from_slice(src);
+                    into.set_filled(len);
+                    remaining = &remaining[len..];
                 }
-                // Be exact!
-                if reader.bytes_remaining() as u64 != index.uncompressed_size - message.offset {
-                    return Err(McapError::BadIndex);
-                }
-            }
-            ChunkDecompressor::Compressed(maybe_read) => {
-                let reader = maybe_read.as_mut().unwrap();
-                // Decompress offset bytes, which should put us at the message we want.
-                io::copy(&mut reader.take(message.offset), &mut io::sink())?;
-            }
-        }
-
-        // Now let's get our message.
-        match chunk_reader.next() {
-            Some(Ok(records::Record::Message { header, data })) => {
-                // Correlate the message to its channel from this summary.
-                let channel = match self.channels.get(&header.channel_id) {
-                    Some(c) => c.clone(),
-                    None => {
-                        return Err(McapError::UnknownChannel(
-                            header.sequence,
-                            header.channel_id,
-                        ));
+                Ok(ReadAction::GetRecord { data, opcode }) => {
+                    if (uncompressed_offset as u64) < message.offset {
+                        uncompressed_offset += 9 + data.len();
+                    } else {
+                        if uncompressed_offset as u64 != message.offset || opcode != op::MESSAGE {
+                            return Err(McapError::BadIndex);
+                        }
+                        match parse_record(opcode, data)? {
+                            Record::Message { header, data } => {
+                                let channel = match self.channels.get(&header.channel_id) {
+                                    Some(c) => c.clone(),
+                                    None => {
+                                        return Err(McapError::UnknownChannel(
+                                            header.sequence,
+                                            header.channel_id,
+                                        ));
+                                    }
+                                };
+                                return Ok(Message {
+                                    channel,
+                                    sequence: header.sequence,
+                                    log_time: header.log_time,
+                                    publish_time: header.publish_time,
+                                    data: Cow::Owned(data.into()),
+                                });
+                            }
+                            _ => return Err(McapError::BadIndex),
+                        }
                     }
-                };
-
-                let m = Message {
-                    channel,
-                    sequence: header.sequence,
-                    log_time: header.log_time,
-                    publish_time: header.publish_time,
-                    data,
-                };
-
-                Ok(m)
+                }
+                Ok(ReadAction::Finished) => return Err(McapError::BadIndex),
+                Err(err) => return Err(err),
             }
-            // The index told us this was a message...
-            Some(Ok(_other_record)) => Err(McapError::BadIndex),
-            Some(Err(e)) => Err(e),
-            None => Err(McapError::BadIndex),
         }
     }
 }
