@@ -44,7 +44,7 @@ pub enum Options {
 /// and is mostly meant as a building block for higher-level readers.
 pub struct LinearReader<'a> {
     buf: &'a [u8],
-    reader: crate::sans_io::read::RecordReader,
+    reader: RecordReader,
 }
 
 impl<'a> LinearReader<'a> {
@@ -257,7 +257,7 @@ impl<'a> Iterator for ChunkReader<'a> {
 /// Like [`LinearReader`], but unpacks chunks' records into its stream
 pub struct ChunkFlattener<'a> {
     buf: &'a [u8],
-    reader: crate::sans_io::read::RecordReader,
+    reader: RecordReader,
 }
 
 impl<'a> ChunkFlattener<'a> {
@@ -268,7 +268,7 @@ impl<'a> ChunkFlattener<'a> {
     pub fn new_with_options(buf: &'a [u8], options: EnumSet<Options>) -> McapResult<Self> {
         Ok(Self {
             buf,
-            reader: crate::sans_io::read::RecordReader::new_with_options(RecordReaderOptions {
+            reader: RecordReader::new_with_options(RecordReaderOptions {
                 skip_start_magic: false,
                 skip_end_magic: options.contains(Options::IgnoreEndMagic),
                 emit_chunks: false,
@@ -792,7 +792,7 @@ impl<'a> Summary<'a> {
                     if (uncompressed_offset as u64) < message.offset {
                         uncompressed_offset += 9 + data.len();
                     } else {
-                        if uncompressed_offset as u64 != message.offset || opcode != op::MESSAGE {
+                        if uncompressed_offset as u64 != message.offset {
                             return Err(McapError::BadIndex);
                         }
                         match parse_record(opcode, data)? {
