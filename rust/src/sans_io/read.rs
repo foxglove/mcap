@@ -112,7 +112,7 @@ impl RecordReader {
             data_section_hasher: match options.data_section_crc_validation_strategy {
                 CRCValidationStrategy::None => None,
                 CRCValidationStrategy::BeforeReading => {
-                    panic!("data section pre-validation not supported in linear reader")
+                    panic!("data section crc validation before reading not supported");
                 }
                 CRCValidationStrategy::AfterReading => Some(crc32fast::Hasher::new()),
             },
