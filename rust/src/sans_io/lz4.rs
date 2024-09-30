@@ -7,6 +7,7 @@ use lz4::liblz4::{
     LZ4F_freeDecompressionContext, LZ4F_resetDecompressionContext, LZ4F_VERSION,
 };
 
+/// A Decompressor wrapper for LZ4 streaming decompression.
 #[derive(Debug)]
 pub struct Lz4Decoder {
     c: LZ4FDecompressionContext,

@@ -8,6 +8,7 @@ pub struct ZstdDecoder {
     s: DStream<'static>,
 }
 
+/// A Decompressor wrapper for Zstd streaming decompression.
 impl ZstdDecoder {
     pub fn new() -> Self {
         ZstdDecoder {

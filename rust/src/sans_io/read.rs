@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 
-use super::{
-    decompressor::{Decompressor, NoneDecompressor},
-    input_buf::InputBuf,
-};
+use super::decompressor::{Decompressor, NoneDecompressor};
 use crate::{
     records::{op, ChunkHeader},
     McapError, McapResult, MAGIC,
@@ -51,7 +48,7 @@ enum BoundsOrRemainder {
 use BoundsOrRemainder::*;
 
 #[derive(Debug, Default, Clone)]
-pub struct RecordReaderOptions {
+pub struct LinearReaderOptions {
     /// If true, the reader will not expect the MCAP magic at the start of the stream.
     pub skip_start_magic: bool,
     /// If true, the reader will not expect the MCAP magic at the end of the stream.
@@ -59,7 +56,11 @@ pub struct RecordReaderOptions {
     /// If true, the reader will yield entire chunk records. Otherwise, the reader will decompress
     /// and read into the chunk, yielding the records inside.
     pub emit_chunks: bool,
+    // strategy for validating chunk CRCs.
     pub chunk_crc_validation_strategy: CRCValidationStrategy,
+    // strategy for validating the data section CRC. `CRCValidationStrategy::BeforeReading` is not
+    // supported for the data section, since it would require the entire data section to be loaded
+    // into memory before yielding the first message.
     pub data_section_crc_validation_strategy: CRCValidationStrategy,
 }
 
@@ -67,17 +68,101 @@ pub struct RecordReaderOptions {
 pub enum CRCValidationStrategy {
     #[default]
     None,
-    // Validate CRC of region (data section, chunk or attachment data) before yielding any records.
-    // This requires scanning the entire region before yielding the first record, which can be
-    // prohibitive in I/O or memory cost.
+    /// Validate CRC of region (data section, chunk or attachment data) before yielding any records.
+    /// This requires scanning the entire region before yielding the first record, which can be
+    /// prohibitive in I/O or memory cost.
     BeforeReading,
-    // Validate CRC of region (data section, chunk or attachment) after yielding all data from it.
-    // If the CRC check fails in this mode, the previously-yielded records may be corrupt, and
-    // should be discarded.
+    /// Validate CRC of region (data section, chunk or attachment) after yielding all data from it.
+    /// If the CRC check fails in this mode, the previously-yielded records may be corrupt, and
+    /// should be discarded.
     AfterReading,
 }
 
-pub struct RecordReader {
+/// A mutable view that allows the user to write new MCAP data into the [`LinearReader`]. The user
+/// is expected to copy up to `self.buf.len()` bytes into `self.buf`, then call `set_filled(usize)`
+/// to notify the reader of how many bytes were successfully read.
+pub struct InputBuf<'a> {
+    pub buf: &'a mut [u8],
+    total_filled: &'a mut usize,
+    at_eof: &'a mut bool,
+    data_section_hasher: &'a mut Option<crc32fast::Hasher>,
+}
+
+impl<'a> InputBuf<'a> {
+    /// Notify the reader that `written` new bytes are available. Only call this method after
+    /// copying data into [`self.buf`].
+    pub fn set_filled(&'a mut self, written: usize) {
+        if let Some(hasher) = self.data_section_hasher {
+            hasher.update(&self.buf[..written]);
+        }
+        *self.total_filled += written;
+        *self.at_eof = written == 0;
+    }
+    /// A convenience method to copy from the user's slice of MCAP data.
+    pub fn copy_from(&'a mut self, other: &[u8]) -> usize {
+        let len = std::cmp::min(self.buf.len(), other.len());
+        let src = &other[..len];
+        let dst = &mut self.buf[..len];
+        dst.copy_from_slice(src);
+        self.set_filled(len);
+        len
+    }
+}
+
+/// Reads an MCAP file from start to end, yielding raw records by opcode and data buffer. This struct
+/// does not perform any I/O on its own, instead it yields slices to the caller and allows them to
+/// use their own I/O primitives.
+/// ```no_run
+/// use std::fs;
+///
+/// use tokio::fs::File as AsyncFile;
+/// use tokio::io::AsyncReadExt;
+/// use std::io::Read;
+///
+/// use mcap::sans_io::read::ReadAction;
+/// use mcap::McapResult;
+///
+/// // Asynchronously...
+/// async fn read_async() -> McapResult<()> {
+///     let mut file = AsyncFile::open("in.mcap").await.expect("couldn't open file");
+///     let mut record_buf: Vec<u8> = Vec::new();
+///     let mut reader = mcap::sans_io::read::LinearReader::new();
+///     while let Some(action) = reader.next_action() {
+///         match action? {
+///             ReadAction::Fill(mut into) => {
+///                 let n = file.read(into.buf).await?;
+///                 into.set_filled(n);
+///             },
+///             ReadAction::GetRecord{ opcode, data } => {
+///                 let raw_record = mcap::parse_record(opcode, &record_buf[..])?;
+///                 // do something with the record...
+///             }
+///         }
+///     }
+///     Ok(())
+/// }
+///
+/// // Or synchronously.
+/// fn read_sync() -> McapResult<()> {
+///     let mut file = fs::File::open("in.mcap")?;
+///     let mut record_buf: Vec<u8> = Vec::new();
+///     let mut reader = mcap::sans_io::read::LinearReader::new();
+///     while let Some(action) = reader.next_action() {
+///         match action? {
+///             ReadAction::Fill(mut into) => {
+///                 let n = file.read(into.buf)?;
+///                 into.set_filled(n);
+///             },
+///             ReadAction::GetRecord{ opcode, data } => {
+///                 let raw_record = mcap::parse_record(opcode, &record_buf[..])?;
+///                 // do something with the record...
+///             }
+///         }
+///     }
+///     Ok(())
+/// }
+/// ```
+pub struct LinearReader {
     currently_reading: CurrentlyReading,
     from: ReadingFrom,
     uncompressed_data_start: usize,
@@ -89,19 +174,23 @@ pub struct RecordReader {
     data_section_hasher: Option<crc32fast::Hasher>,
     calculated_data_section_crc: Option<u32>,
     decompressors: HashMap<String, Box<dyn Decompressor>>,
-    options: RecordReaderOptions,
+    options: LinearReaderOptions,
     at_eof: bool,
     failed: bool,
 }
 
-impl RecordReader {
+impl LinearReader {
     pub fn new() -> Self {
-        Self::new_with_options(RecordReaderOptions::default())
+        Self::new_with_options(LinearReaderOptions::default())
     }
 
-    pub fn new_with_options(options: RecordReaderOptions) -> Self {
-        RecordReader {
-            currently_reading: StartMagic,
+    pub fn new_with_options(options: LinearReaderOptions) -> Self {
+        LinearReader {
+            currently_reading: if options.skip_start_magic {
+                RecordOpcodeLength
+            } else {
+                StartMagic
+            },
             from: File,
             uncompressed_data: Vec::new(),
             uncompressed_data_start: 0,
@@ -124,8 +213,9 @@ impl RecordReader {
         }
     }
 
+    /// Constructs a linear reader that will iterate through all records in a chunk.
     pub(crate) fn for_chunk(header: ChunkHeader) -> McapResult<Self> {
-        let mut result = Self::new_with_options(RecordReaderOptions {
+        let mut result = Self::new_with_options(LinearReaderOptions {
             skip_end_magic: true,
             skip_start_magic: true,
             chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
@@ -164,6 +254,7 @@ impl RecordReader {
         Ok(())
     }
 
+    /// Yields the next action the caller should take to progress through the file.
     pub fn next_action(&mut self) -> Option<McapResult<ReadAction>> {
         self.next_action_inner().transpose()
     }
@@ -172,7 +263,7 @@ impl RecordReader {
         if self.failed {
             return Ok(None);
         }
-        // keep processing through the file until we need more data or can yield a record.
+        // keep processing through the data we have until we need more data or can yield a record.
         loop {
             // check if we have consumed all uncompressed data in the last iteration - if so,
             // reset the buffer.
@@ -182,6 +273,7 @@ impl RecordReader {
                 self.uncompressed_data_start = 0;
                 self.uncompressed_data_end = 0;
             }
+            // If there's no more data available, stop iterating.
             if self.at_eof {
                 if matches!(&self.currently_reading, RecordOpcodeLength)
                     && self.uncompressed_data_start == self.uncompressed_data_end
@@ -196,10 +288,6 @@ impl RecordReader {
 
             match self.currently_reading {
                 StartMagic => {
-                    if self.options.skip_start_magic {
-                        self.currently_reading = RecordOpcodeLength;
-                        continue;
-                    }
                     let (start, end) = match self.consume(MAGIC.len())? {
                         Bounds(input) => input,
                         Remainder(want) => return self.request(want),
@@ -227,6 +315,7 @@ impl RecordReader {
                     return Ok(None);
                 }
                 RecordOpcodeLength => {
+                    // need one byte for opcode, then 8 bytes for record length.
                     let (start, end) = match self.consume(9)? {
                         Bounds(input) => input,
                         Remainder(want) => return self.request(want),
@@ -234,6 +323,10 @@ impl RecordReader {
                     let input = &self.uncompressed_data[start..end];
                     let opcode = input[0];
                     let record_length: u64 = u64::from_le_bytes(input[1..9].try_into().unwrap());
+                    // This is the start of the data end record, so stop loading new data into the
+                    // data section hasher. At this point, the data section hasher will already contain
+                    // the opcode and length bytes for the data end record, which is sad because
+                    // the data section ends at the end of the previous record. However,
                     if opcode == op::DATA_END {
                         self.data_section_hasher = None;
                     }
@@ -323,6 +416,10 @@ impl RecordReader {
                     }));
                 }
                 CurrentlyReading::ChunkHeader { len } => {
+                    // Need to read _only_ the chunk header, which is of variable size.
+                    // We load the minimum chunk header size, which is always enough to check
+                    // the length of the compression string. With the compression string length,
+                    // the true length of the chunk header is known, so we read that.
                     let min_chunk_header_len: usize = 8 + 8 + 8 + 4 + 4 + 8;
                     if len < min_chunk_header_len as u64 {
                         self.failed = true;
@@ -339,24 +436,25 @@ impl RecordReader {
                     let input = &self.uncompressed_data[start..end];
                     let compression_string_length =
                         u32::from_le_bytes(input[28..32].try_into().unwrap());
-                    let chunk_header_len =
+                    let true_chunk_header_len =
                         min_chunk_header_len + compression_string_length as usize;
-                    if len < chunk_header_len as u64 {
+                    if len < true_chunk_header_len as u64 {
                         self.failed = true;
                         return Err(McapError::RecordTooShort {
                             opcode: op::CHUNK,
                             len,
-                            expected: chunk_header_len as u64,
+                            expected: true_chunk_header_len as u64,
                         });
                     }
-                    let (start, end) = match self.consume(chunk_header_len)? {
+                    // now we can load the full chunk header bytes.
+                    let (start, end) = match self.consume(true_chunk_header_len)? {
                         Bounds(buf) => buf,
                         Remainder(need) => return self.request(need),
                     };
                     let mut cursor = std::io::Cursor::new(&self.uncompressed_data[start..end]);
                     let hdr: ChunkHeader = cursor.read_le()?;
-                    let decompressor = self.get_decompressor(&hdr.compression)?;
-                    let content_len = chunk_header_len as u64 + hdr.compressed_size;
+
+                    let content_len = true_chunk_header_len as u64 + hdr.compressed_size;
                     if len < content_len {
                         self.failed = true;
                         return Err(McapError::RecordTooShort {
@@ -365,12 +463,13 @@ impl RecordReader {
                             expected: content_len,
                         });
                     }
+                    // switch to reading from the chunk data.
                     self.from = Chunk(ChunkState {
                         next_read_size: std::cmp::min(
                             DEFAULT_CHUNK_DATA_READ_SIZE,
                             clamp_to_usize(hdr.compressed_size),
                         ),
-                        decompressor,
+                        decompressor: self.get_decompressor(&hdr.compression)?,
                         hasher: match self.options.chunk_crc_validation_strategy {
                             CRCValidationStrategy::AfterReading => Some(crc32fast::Hasher::new()),
                             _ => None,
@@ -382,6 +481,8 @@ impl RecordReader {
                     self.compressed_data.clear();
                     self.compressed_data_end = 0;
                     self.compressed_data_start = 0;
+                    // If we need to validate the CRC of all the chunk data before yielding
+                    // any records, do that first. Otherwise, go ahead and yield the first record.
                     if matches!(
                         self.options.chunk_crc_validation_strategy,
                         CRCValidationStrategy::BeforeReading
@@ -411,6 +512,8 @@ impl RecordReader {
                         Remainder(remainder) => return self.request(remainder),
                     };
                 }
+                // A chunk record can have more bytes after the `data` member, which we need
+                // to discard.
                 PaddingAfterChunk { len } => match self.consume(len)? {
                     Bounds(_) => {
                         if let Some(hasher) = &mut self.data_section_hasher {
@@ -429,6 +532,7 @@ impl RecordReader {
     fn load(&mut self, amount: usize) -> McapResult<BoundsOrRemainder> {
         let slice_end = self.uncompressed_data_start + amount;
         if let Chunk(chunk_state) = &mut self.from {
+            // decompress any compressed data that has been loaded since the last iteration.
             if self.compressed_data_end > self.compressed_data_start {
                 self.uncompressed_data.resize(slice_end, 0);
                 let src =
@@ -511,14 +615,14 @@ impl RecordReader {
     }
 }
 
-impl Default for RecordReader {
+impl Default for LinearReader {
     fn default() -> Self {
         Self::new()
     }
 }
 
 pub enum ReadAction<'a> {
-    Fill(super::input_buf::InputBuf<'a>),
+    Fill(InputBuf<'a>),
     GetRecord { data: &'a [u8], opcode: u8 },
 }
 
@@ -586,7 +690,7 @@ mod tests {
             })?;
             writer.finish()?;
         }
-        let mut reader = RecordReader::new();
+        let mut reader = LinearReader::new();
         let mut cursor = std::io::Cursor::new(buf.into_inner());
         let mut opcodes: Vec<u8> = Vec::new();
         let mut iter_count = 0;
@@ -629,7 +733,7 @@ mod tests {
             CRCValidationStrategy::AfterReading,
         ] {
             for compression in [Some(Compression::Zstd), Some(Compression::Lz4), None] {
-                let mut reader = RecordReader::new_with_options(RecordReaderOptions {
+                let mut reader = LinearReader::new_with_options(LinearReaderOptions {
                     skip_end_magic: false,
                     skip_start_magic: false,
                     emit_chunks: false,
@@ -678,14 +782,14 @@ mod tests {
     #[test]
     fn test_no_magic() -> McapResult<()> {
         for options in [
-            RecordReaderOptions {
+            LinearReaderOptions {
                 skip_start_magic: false,
                 skip_end_magic: true,
                 emit_chunks: false,
                 chunk_crc_validation_strategy: CRCValidationStrategy::None,
                 data_section_crc_validation_strategy: CRCValidationStrategy::None,
             },
-            RecordReaderOptions {
+            LinearReaderOptions {
                 skip_start_magic: true,
                 skip_end_magic: false,
                 emit_chunks: false,
@@ -701,7 +805,7 @@ mod tests {
             } else {
                 panic!("options should either skip start or end magic")
             };
-            let mut reader = RecordReader::new_with_options(options);
+            let mut reader = LinearReader::new_with_options(options);
             let mut cursor = std::io::Cursor::new(input);
             let mut opcodes: Vec<u8> = Vec::new();
             let mut iter_count = 0;
@@ -744,7 +848,7 @@ mod tests {
     #[test]
     fn test_emit_chunks() -> McapResult<()> {
         let mcap = basic_chunked_file(None)?;
-        let mut reader = RecordReader::new_with_options(RecordReaderOptions {
+        let mut reader = LinearReader::new_with_options(LinearReaderOptions {
             skip_end_magic: false,
             skip_start_magic: false,
             emit_chunks: true,

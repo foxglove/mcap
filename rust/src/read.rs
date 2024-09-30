@@ -1,6 +1,6 @@
 //! Read MCAP files
 //!
-//! MCAPs are read from a byte slice instead of a [`Read`] trait object.
+//! MCAPs are read from a byte slice instead of a [`std::io::Read`] trait object.
 //! Consider [memory-mapping](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
 //! the file - the OS will load (and cache!) it on-demand, without any
 //! further system calls.
@@ -20,7 +20,9 @@ use log::*;
 
 use crate::{
     records::{self, op, Record},
-    sans_io::read::{CRCValidationStrategy, ReadAction, RecordReader, RecordReaderOptions},
+    sans_io::read::{
+        CRCValidationStrategy, LinearReader as SansIoReader, LinearReaderOptions, ReadAction,
+    },
     Attachment, Channel, McapError, McapResult, Message, Schema, MAGIC,
 };
 
@@ -55,7 +57,7 @@ impl<'a> LinearReader<'a> {
         Ok(Self {
             inner: InnerReader {
                 buf,
-                reader: RecordReader::new_with_options(RecordReaderOptions {
+                reader: SansIoReader::new_with_options(LinearReaderOptions {
                     skip_start_magic: false,
                     skip_end_magic: options.contains(Options::IgnoreEndMagic),
                     emit_chunks: true,
@@ -73,7 +75,7 @@ impl<'a> LinearReader<'a> {
         Self {
             inner: InnerReader {
                 buf,
-                reader: RecordReader::new_with_options(RecordReaderOptions {
+                reader: SansIoReader::new_with_options(LinearReaderOptions {
                     skip_start_magic: true,
                     skip_end_magic: true,
                     emit_chunks: true,
@@ -212,7 +214,7 @@ impl<'a> ChunkReader<'a> {
     pub fn new(header: records::ChunkHeader, buf: &'a [u8]) -> McapResult<Self> {
         Ok(Self {
             inner: InnerReader {
-                reader: RecordReader::for_chunk(header)?,
+                reader: SansIoReader::for_chunk(header)?,
                 buf,
             },
         })
@@ -230,7 +232,7 @@ impl<'a> Iterator for ChunkReader<'a> {
 // common implementation for iterating over a range of owned records in a mapped buffer.
 struct InnerReader<'a> {
     buf: &'a [u8],
-    reader: RecordReader,
+    reader: SansIoReader,
 }
 
 impl<'a> Iterator for InnerReader<'a> {
@@ -268,7 +270,7 @@ impl<'a> ChunkFlattener<'a> {
         Ok(Self {
             inner: InnerReader {
                 buf,
-                reader: RecordReader::new_with_options(RecordReaderOptions {
+                reader: SansIoReader::new_with_options(LinearReaderOptions {
                     skip_start_magic: false,
                     skip_end_magic: options.contains(Options::IgnoreEndMagic),
                     emit_chunks: false,
@@ -763,7 +765,7 @@ impl<'a> Summary<'a> {
             Cow::Owned(_) => unreachable!(),
         };
 
-        let mut reader = RecordReader::for_chunk(h)?;
+        let mut reader = SansIoReader::for_chunk(h)?;
         let mut remaining = d;
         let mut uncompressed_offset: usize = 0;
         while let Some(action) = reader.next_action() {

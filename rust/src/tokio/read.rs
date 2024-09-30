@@ -1,7 +1,7 @@
 use tokio::io::{AsyncRead, AsyncReadExt};
 
-pub use crate::sans_io::read::RecordReaderOptions;
-use crate::sans_io::read::{ReadAction, RecordReader as SansIoReader};
+pub use crate::sans_io::read::LinearReaderOptions;
+use crate::sans_io::read::{LinearReader as SansIoReader, ReadAction};
 use crate::McapResult;
 
 /// Reads an MCAP file record-by-record, writing the raw record data into a caller-provided Vec.
@@ -31,10 +31,10 @@ where
     R: AsyncRead + std::marker::Unpin,
 {
     pub fn new(reader: R) -> Self {
-        Self::new_with_options(reader, &RecordReaderOptions::default())
+        Self::new_with_options(reader, &LinearReaderOptions::default())
     }
 
-    pub fn new_with_options(source: R, options: &RecordReaderOptions) -> Self {
+    pub fn new_with_options(source: R, options: &LinearReaderOptions) -> Self {
         Self {
             reader: SansIoReader::new_with_options(options.clone()),
             source,

@@ -1,5 +1,4 @@
 pub mod decompressor;
-pub mod input_buf;
 pub mod read;
 
 #[cfg(feature = "lz4")]
