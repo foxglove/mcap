@@ -222,7 +222,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
 
     /// Adds a channel (and its provided schema, if any), returning its ID.
     ///
-    /// Useful with subequent calls to [`write_to_known_channel()`](Self::write_to_known_channel)
+    /// Useful with subsequent calls to [`write_to_known_channel()`](Self::write_to_known_channel)
     pub fn add_channel(&mut self, chan: &Channel<'a>) -> McapResult<u16> {
         let schema_id = match &chan.schema {
             Some(s) => self.add_schema(s)?,

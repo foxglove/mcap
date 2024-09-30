@@ -40,6 +40,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                 let message_encoding = record.get_field_str("message_encoding");
                 let schema = schemas.get(&schema_id).expect("Missing schema");
                 let channel = mcap::Channel {
+                    id: 0,
                     schema: Some(Arc::new(schema.to_owned())),
                     topic: topic.to_string(),
                     message_encoding: message_encoding.to_string(),
@@ -107,6 +108,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                 let id = record.get_field_u64("id");
                 let data: Vec<u8> = record.get_field_data(&"data");
                 let schema = mcap::Schema {
+                    id: 0,
                     name: name.to_owned(),
                     encoding: encoding.to_owned(),
                     data: Cow::from(data),

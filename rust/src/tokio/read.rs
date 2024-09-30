@@ -350,6 +350,7 @@ mod tests {
                     .compression(compression)
                     .create(&mut buf)?;
                 let channel = std::sync::Arc::new(crate::Channel {
+                    id: 1,
                     topic: "chat".to_owned(),
                     schema: None,
                     message_encoding: "json".to_owned(),
@@ -404,6 +405,7 @@ mod tests {
                 .compression(Some(crate::Compression::Lz4))
                 .create(&mut buf)?;
             let channel = std::sync::Arc::new(crate::Channel {
+                id: 1,
                 topic: "chat".to_owned(),
                 schema: None,
                 message_encoding: "json".to_owned(),
