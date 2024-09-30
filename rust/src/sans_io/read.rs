@@ -164,9 +164,13 @@ impl RecordReader {
         Ok(())
     }
 
-    pub fn next_action(&mut self) -> McapResult<ReadAction> {
+    pub fn next_action(&mut self) -> Option<McapResult<ReadAction>> {
+        self.next_action_inner().transpose()
+    }
+
+    fn next_action_inner(&mut self) -> McapResult<Option<ReadAction>> {
         if self.failed {
-            return Ok(ReadAction::Finished);
+            return Ok(None);
         }
         // keep processing through the file until we need more data or can yield a record.
         loop {
@@ -183,7 +187,7 @@ impl RecordReader {
                     && self.uncompressed_data_start == self.uncompressed_data_end
                     && self.options.skip_end_magic
                 {
-                    return Ok(ReadAction::Finished);
+                    return Ok(None);
                 } else {
                     self.failed = true;
                     return Err(McapError::UnexpectedEof);
@@ -209,7 +213,7 @@ impl RecordReader {
                 }
                 EndMagic => {
                     if self.options.skip_end_magic {
-                        return Ok(ReadAction::Finished);
+                        return Ok(None);
                     }
                     let (start, end) = match self.consume(MAGIC.len())? {
                         Bounds(input) => input,
@@ -220,7 +224,7 @@ impl RecordReader {
                         self.failed = true;
                         return Err(McapError::BadMagic);
                     }
-                    return Ok(ReadAction::Finished);
+                    return Ok(None);
                 }
                 RecordOpcodeLength => {
                     let (start, end) = match self.consume(9)? {
@@ -313,10 +317,10 @@ impl RecordReader {
                             });
                         }
                     }
-                    return Ok(ReadAction::GetRecord {
+                    return Ok(Some(ReadAction::GetRecord {
                         data: &self.uncompressed_data[start..end],
                         opcode,
-                    });
+                    }));
                 }
                 CurrentlyReading::ChunkHeader { len } => {
                     let min_chunk_header_len: usize = 8 + 8 + 8 + 4 + 4 + 8;
@@ -477,31 +481,31 @@ impl RecordReader {
 
     // Return an InputBuf that requests `want` uncompressed bytes from the input file. If reading
     // from a chunk, requests the amount hinted by the decompressor on the previous iteration.
-    fn request(&mut self, want: usize) -> McapResult<ReadAction> {
+    fn request(&mut self, want: usize) -> McapResult<Option<ReadAction>> {
         let desired_end = self.uncompressed_data_end + want;
         self.uncompressed_data
             .resize(std::cmp::max(self.uncompressed_data.len(), desired_end), 0);
 
         return match &self.from {
-            File => Ok(ReadAction::Fill(InputBuf {
+            File => Ok(Some(ReadAction::Fill(InputBuf {
                 buf: &mut self.uncompressed_data[self.uncompressed_data_end..desired_end],
                 total_filled: &mut self.uncompressed_data_end,
                 at_eof: &mut self.at_eof,
                 data_section_hasher: &mut self.data_section_hasher,
-            })),
+            }))),
             Chunk(chunk_state) => {
                 let desired_compressed_end = self.compressed_data_end + chunk_state.next_read_size;
                 self.compressed_data.resize(
                     std::cmp::max(self.compressed_data.len(), desired_compressed_end),
                     0,
                 );
-                Ok(ReadAction::Fill(InputBuf {
+                Ok(Some(ReadAction::Fill(InputBuf {
                     buf: &mut self.compressed_data
                         [self.compressed_data_end..desired_compressed_end],
                     total_filled: &mut self.compressed_data_end,
                     at_eof: &mut self.at_eof,
                     data_section_hasher: &mut self.data_section_hasher,
-                }))
+                })))
             }
         };
     }
@@ -516,7 +520,6 @@ impl Default for RecordReader {
 pub enum ReadAction<'a> {
     Fill(super::input_buf::InputBuf<'a>),
     GetRecord { data: &'a [u8], opcode: u8 },
-    Finished,
 }
 
 fn len_as_usize(len: u64) -> McapResult<usize> {
@@ -587,9 +590,8 @@ mod tests {
         let mut cursor = std::io::Cursor::new(buf.into_inner());
         let mut opcodes: Vec<u8> = Vec::new();
         let mut iter_count = 0;
-        loop {
-            match reader.next_action()? {
-                ReadAction::Finished => break,
+        while let Some(action) = reader.next_action() {
+            match action? {
                 ReadAction::Fill(mut into) => {
                     let written = cursor.read(into.buf)?;
                     into.set_filled(written);
@@ -599,9 +601,8 @@ mod tests {
                     parse_record(opcode, data)?;
                 }
             }
-            iter_count += 1;
-            // guard against infinite loop
             assert!(iter_count < 10000);
+            iter_count += 1;
         }
         assert_eq!(
             opcodes,
@@ -638,9 +639,8 @@ mod tests {
                 let mut cursor = std::io::Cursor::new(basic_chunked_file(compression)?);
                 let mut opcodes: Vec<u8> = Vec::new();
                 let mut iter_count = 0;
-                loop {
-                    match reader.next_action()? {
-                        ReadAction::Finished => break,
+                while let Some(action) = reader.next_action() {
+                    match action? {
                         ReadAction::Fill(mut into) => {
                             let written = cursor.read(into.buf)?;
                             into.set_filled(written);
@@ -705,9 +705,8 @@ mod tests {
             let mut cursor = std::io::Cursor::new(input);
             let mut opcodes: Vec<u8> = Vec::new();
             let mut iter_count = 0;
-            loop {
-                match reader.next_action()? {
-                    ReadAction::Finished => break,
+            while let Some(action) = reader.next_action() {
+                match action? {
                     ReadAction::Fill(mut into) => {
                         let written = cursor.read(into.buf)?;
                         into.set_filled(written);
@@ -755,9 +754,8 @@ mod tests {
         let mut cursor = std::io::Cursor::new(mcap);
         let mut opcodes: Vec<u8> = Vec::new();
         let mut iter_count = 0;
-        loop {
-            match reader.next_action()? {
-                ReadAction::Finished => break,
+        while let Some(action) = reader.next_action() {
+            match action? {
                 ReadAction::Fill(mut into) => {
                     let written = cursor.read(into.buf)?;
                     into.set_filled(written);

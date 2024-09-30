@@ -48,17 +48,14 @@ where
     /// Reads the next record from the input stream and copies the raw content into `data`.
     /// Returns the record's opcode as a result.
     pub async fn next_record(&mut self, data: &mut Vec<u8>) -> Option<McapResult<u8>> {
-        loop {
-            match self.reader.next_action() {
+        while let Some(action) = self.reader.next_action() {
+            match action {
                 Ok(ReadAction::Fill(mut into_buf)) => {
                     let written = match self.source.read(into_buf.buf).await {
                         Ok(n) => n,
                         Err(err) => return Some(Err(err.into())),
                     };
                     into_buf.set_filled(written);
-                }
-                Ok(ReadAction::Finished) => {
-                    return None;
                 }
                 Ok(ReadAction::GetRecord {
                     data: content,
@@ -73,6 +70,7 @@ where
                 }
             }
         }
+        None
     }
 }
 

@@ -1,9 +1,6 @@
 //! Read MCAP files
 //!
 //! MCAPs are read from a byte slice instead of a [`Read`] trait object.
-//! This helps us avoid unnecessary copies, since [`Schema`]s and [`Message`]s
-//! can refer directly to their data.
-//!
 //! Consider [memory-mapping](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
 //! the file - the OS will load (and cache!) it on-demand, without any
 //! further system calls.
@@ -43,8 +40,7 @@ pub enum Options {
 /// from the file without any postprocessing (decompressing chunks, etc.)
 /// and is mostly meant as a building block for higher-level readers.
 pub struct LinearReader<'a> {
-    buf: &'a [u8],
-    reader: RecordReader,
+    inner: InnerReader<'a>,
 }
 
 impl<'a> LinearReader<'a> {
@@ -57,14 +53,16 @@ impl<'a> LinearReader<'a> {
     /// Create a reader for the given file with special options.
     pub fn new_with_options(buf: &'a [u8], options: EnumSet<Options>) -> McapResult<Self> {
         Ok(Self {
-            buf,
-            reader: RecordReader::new_with_options(RecordReaderOptions {
-                skip_start_magic: false,
-                skip_end_magic: options.contains(Options::IgnoreEndMagic),
-                emit_chunks: true,
-                chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
-                data_section_crc_validation_strategy: CRCValidationStrategy::None,
-            }),
+            inner: InnerReader {
+                buf,
+                reader: RecordReader::new_with_options(RecordReaderOptions {
+                    skip_start_magic: false,
+                    skip_end_magic: options.contains(Options::IgnoreEndMagic),
+                    emit_chunks: true,
+                    chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
+                    data_section_crc_validation_strategy: CRCValidationStrategy::None,
+                }),
+            },
         })
     }
 
@@ -73,14 +71,16 @@ impl<'a> LinearReader<'a> {
     /// Useful for iterating through slices of an MCAP file instead of the whole thing.
     pub fn sans_magic(buf: &'a [u8]) -> Self {
         Self {
-            buf,
-            reader: RecordReader::new_with_options(RecordReaderOptions {
-                skip_start_magic: true,
-                skip_end_magic: true,
-                emit_chunks: true,
-                chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
-                data_section_crc_validation_strategy: CRCValidationStrategy::None,
-            }),
+            inner: InnerReader {
+                buf,
+                reader: RecordReader::new_with_options(RecordReaderOptions {
+                    skip_start_magic: true,
+                    skip_end_magic: true,
+                    emit_chunks: true,
+                    chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
+                    data_section_crc_validation_strategy: CRCValidationStrategy::None,
+                }),
+            },
         }
     }
 }
@@ -89,20 +89,7 @@ impl<'a> Iterator for LinearReader<'a> {
     type Item = McapResult<records::Record<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.reader.next_action() {
-                Ok(ReadAction::Fill(mut into)) => {
-                    let len = into.copy_from(self.buf);
-                    self.buf = &self.buf[len..];
-                }
-                Ok(ReadAction::Finished) => return None,
-                Ok(ReadAction::GetRecord { data, opcode }) => match parse_record(opcode, data) {
-                    Ok(record) => return Some(Ok(record.into_owned())),
-                    Err(err) => return Some(Err(err)),
-                },
-                Err(err) => return Some(Err(err)),
-            }
-        }
+        self.inner.next()
     }
 }
 
@@ -218,15 +205,16 @@ pub fn parse_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
 
 /// Streams records out of a [Chunk](Record::Chunk), decompressing as needed.
 pub struct ChunkReader<'a> {
-    reader: RecordReader,
-    data: &'a [u8],
+    inner: InnerReader<'a>,
 }
 
 impl<'a> ChunkReader<'a> {
-    pub fn new(header: records::ChunkHeader, data: &'a [u8]) -> McapResult<Self> {
+    pub fn new(header: records::ChunkHeader, buf: &'a [u8]) -> McapResult<Self> {
         Ok(Self {
-            reader: RecordReader::for_chunk(header)?,
-            data,
+            inner: InnerReader {
+                reader: RecordReader::for_chunk(header)?,
+                buf,
+            },
         })
     }
 }
@@ -235,29 +223,40 @@ impl<'a> Iterator for ChunkReader<'a> {
     type Item = McapResult<records::Record<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.reader.next_action() {
+        self.inner.next()
+    }
+}
+
+// common implementation for iterating over a range of owned records in a mapped buffer.
+struct InnerReader<'a> {
+    buf: &'a [u8],
+    reader: RecordReader,
+}
+
+impl<'a> Iterator for InnerReader<'a> {
+    type Item = McapResult<records::Record<'a>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(action) = self.reader.next_action() {
+            match action {
                 Ok(ReadAction::Fill(mut into)) => {
-                    let len = into.copy_from(self.data);
-                    self.data = &self.data[len..];
+                    let len = into.copy_from(self.buf);
+                    self.buf = &self.buf[len..];
                 }
-                Ok(ReadAction::GetRecord { data, opcode }) => {
-                    return match parse_record(opcode, data) {
-                        Ok(record) => Some(Ok(record.into_owned())),
-                        Err(err) => Some(Err(err)),
-                    }
-                }
-                Ok(ReadAction::Finished) => return None,
+                Ok(ReadAction::GetRecord { data, opcode }) => match parse_record(opcode, data) {
+                    Ok(record) => return Some(Ok(record.into_owned())),
+                    Err(err) => return Some(Err(err)),
+                },
                 Err(err) => return Some(Err(err)),
             }
         }
+        None
     }
 }
 
 /// Like [`LinearReader`], but unpacks chunks' records into its stream
 pub struct ChunkFlattener<'a> {
-    buf: &'a [u8],
-    reader: RecordReader,
+    inner: InnerReader<'a>,
 }
 
 impl<'a> ChunkFlattener<'a> {
@@ -267,14 +266,16 @@ impl<'a> ChunkFlattener<'a> {
 
     pub fn new_with_options(buf: &'a [u8], options: EnumSet<Options>) -> McapResult<Self> {
         Ok(Self {
-            buf,
-            reader: RecordReader::new_with_options(RecordReaderOptions {
-                skip_start_magic: false,
-                skip_end_magic: options.contains(Options::IgnoreEndMagic),
-                emit_chunks: false,
-                data_section_crc_validation_strategy: CRCValidationStrategy::None,
-                chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
-            }),
+            inner: InnerReader {
+                buf,
+                reader: RecordReader::new_with_options(RecordReaderOptions {
+                    skip_start_magic: false,
+                    skip_end_magic: options.contains(Options::IgnoreEndMagic),
+                    emit_chunks: false,
+                    data_section_crc_validation_strategy: CRCValidationStrategy::None,
+                    chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
+                }),
+            },
         })
     }
 }
@@ -283,24 +284,7 @@ impl<'a> Iterator for ChunkFlattener<'a> {
     type Item = McapResult<records::Record<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.reader.next_action() {
-                Ok(ReadAction::GetRecord { data, opcode }) => {
-                    match parse_record(opcode, data) {
-                        Ok(rec) => return Some(Ok(rec.into_owned())),
-                        Err(err) => return Some(Err(err)),
-                    };
-                }
-                Ok(ReadAction::Fill(mut into)) => {
-                    let len = into.copy_from(self.buf);
-                    self.buf = &self.buf[len..];
-                }
-                Ok(ReadAction::Finished) => {
-                    return None;
-                }
-                Err(err) => return Some(Err(err)),
-            }
-        }
+        self.inner.next()
     }
 }
 
@@ -782,8 +766,8 @@ impl<'a> Summary<'a> {
         let mut reader = RecordReader::for_chunk(h)?;
         let mut remaining = d;
         let mut uncompressed_offset: usize = 0;
-        loop {
-            match reader.next_action() {
+        while let Some(action) = reader.next_action() {
+            match action {
                 Ok(ReadAction::Fill(mut into)) => {
                     let len = into.copy_from(remaining);
                     remaining = &remaining[len..];
@@ -818,10 +802,10 @@ impl<'a> Summary<'a> {
                         }
                     }
                 }
-                Ok(ReadAction::Finished) => return Err(McapError::BadIndex),
                 Err(err) => return Err(err),
             }
         }
+        Err(McapError::BadIndex)
     }
 }
 
