@@ -534,6 +534,7 @@ impl<'a> ChannelAccumulator<'a> {
         }
 
         let schema = Arc::new(Schema {
+            id: header.id,
             name: header.name.clone(),
             encoding: header.encoding,
             data,
@@ -541,7 +542,7 @@ impl<'a> ChannelAccumulator<'a> {
 
         if let Some(preexisting) = self.schemas.insert(header.id, schema.clone()) {
             // Oh boy, we have this schema already.
-            // It had better be identital.
+            // It had better be identical.
             if schema != preexisting {
                 return Err(McapError::ConflictingSchemas(header.name));
             }
@@ -564,6 +565,7 @@ impl<'a> ChannelAccumulator<'a> {
         };
 
         let channel = Arc::new(Channel {
+            id: chan.id,
             topic: chan.topic.clone(),
             schema,
             message_encoding: chan.message_encoding,
@@ -571,7 +573,7 @@ impl<'a> ChannelAccumulator<'a> {
         });
         if let Some(preexisting) = self.channels.insert(chan.id, channel.clone()) {
             // Oh boy, we have this channel already.
-            // It had better be identital.
+            // It had better be identical.
             if preexisting != channel {
                 return Err(McapError::ConflictingChannels(chan.topic));
             }
@@ -936,7 +938,7 @@ impl<'a> Summary<'a> {
         Ok(messages)
     }
 
-    /// Read the mesage indexes for the given indexed chunk.
+    /// Read the message indexes for the given indexed chunk.
     ///
     /// Channels and their schemas are pulled from this summary.
     /// The offsets in each [`MessageIndexEntry`](records::MessageIndexEntry)
@@ -1142,7 +1144,7 @@ pub fn metadata(mcap: &[u8], index: &records::MetadataIndex) -> McapResult<recor
 }
 
 // All of the following panic if they walk off the back of the data block;
-// callers are assumed to have made sure they got enoug bytes back with
+// callers are assumed to have made sure they got enough bytes back with
 // `validate_response()`
 
 /// Builds a `read_<type>(&mut buf)` function that reads a given type
