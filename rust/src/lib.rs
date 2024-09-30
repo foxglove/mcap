@@ -134,6 +134,8 @@ pub enum McapError {
     UnsupportedCompression(String),
     #[error("Error during decompression: `{0}`")]
     DecompressionError(String),
+    #[error("length exceeds usize max: `{0}`")]
+    TooLong(u64),
 }
 
 pub type McapResult<T> = Result<T, McapError>;

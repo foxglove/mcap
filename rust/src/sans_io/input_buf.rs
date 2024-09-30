@@ -13,4 +13,12 @@ impl<'a> InputBuf<'a> {
         *self.total_filled += written;
         *self.at_eof = written == 0;
     }
+    pub fn copy_from(&'a mut self, other: &[u8]) -> usize {
+        let len = std::cmp::min(self.buf.len(), other.len());
+        let src = &other[..len];
+        let dst = &mut self.buf[..len];
+        dst.copy_from_slice(src);
+        self.set_filled(len);
+        len
+    }
 }

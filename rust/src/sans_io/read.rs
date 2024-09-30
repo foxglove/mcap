@@ -22,7 +22,7 @@ enum CurrentlyReading {
     RecordContent { opcode: u8, len: u64 },
     ChunkHeader { len: u64 },
     ValidatingChunkCrc { len: u64, crc: u32 },
-    PaddingAfterChunk { len: u64 },
+    PaddingAfterChunk { len: usize },
     EndMagic,
 }
 use CurrentlyReading::*;
@@ -31,11 +31,11 @@ const DEFAULT_CHUNK_DATA_READ_SIZE: usize = 32 * 1024;
 
 struct ChunkState {
     decompressor: Box<dyn Decompressor>,
-    hasher: Option<crc32fast::Hasher>,
-    crc: u32,
     next_read_size: usize,
     compressed_remaining: u64,
-    padding_after_compressed_data: u64,
+    padding_after_compressed_data: usize,
+    hasher: Option<crc32fast::Hasher>,
+    crc: u32,
 }
 
 enum ReadingFrom {
@@ -244,7 +244,7 @@ impl RecordReader {
                     }
                 }
                 RecordContent { opcode, len } => {
-                    let (start, end) = match self.consume(len as usize)? {
+                    let (start, end) = match self.consume(len_as_usize(len)?)? {
                         Bounds(bounds) => bounds,
                         Remainder(remainder) => return self.request(remainder),
                     };
@@ -364,7 +364,7 @@ impl RecordReader {
                     self.from = Chunk(ChunkState {
                         next_read_size: std::cmp::min(
                             DEFAULT_CHUNK_DATA_READ_SIZE,
-                            hdr.compressed_size as usize,
+                            clamp_to_usize(hdr.compressed_size),
                         ),
                         decompressor,
                         hasher: match self.options.chunk_crc_validation_strategy {
@@ -373,7 +373,7 @@ impl RecordReader {
                         },
                         crc: hdr.uncompressed_crc,
                         compressed_remaining: hdr.compressed_size,
-                        padding_after_compressed_data: (content_len - len),
+                        padding_after_compressed_data: len_as_usize(content_len - len)?,
                     });
                     self.compressed_data.clear();
                     self.compressed_data_end = 0;
@@ -392,7 +392,7 @@ impl RecordReader {
                     }
                 }
                 ValidatingChunkCrc { len, crc } => {
-                    match self.load(len as usize)? {
+                    match self.load(len_as_usize(len)?)? {
                         Bounds((start, end)) => {
                             let calculated = crc32fast::hash(&self.uncompressed_data[start..end]);
                             if calculated != crc {
@@ -407,7 +407,7 @@ impl RecordReader {
                         Remainder(remainder) => return self.request(remainder),
                     };
                 }
-                PaddingAfterChunk { len } => match self.consume(len as usize)? {
+                PaddingAfterChunk { len } => match self.consume(len)? {
                     Bounds(_) => {
                         if let Some(hasher) = &mut self.data_section_hasher {
                             self.calculated_data_section_crc = Some(hasher.clone().finalize());
@@ -444,8 +444,10 @@ impl RecordReader {
                 } else {
                     res.need
                 };
-                chunk_state.next_read_size =
-                    std::cmp::min(next_size_hint, chunk_state.compressed_remaining as usize);
+                chunk_state.next_read_size = std::cmp::min(
+                    next_size_hint,
+                    clamp_to_usize(chunk_state.compressed_remaining),
+                );
                 // if we have cleared the compressed data buffer, reset it to 0 instead of infinitely growing
                 if self.compressed_data_start == self.compressed_data_end {
                     let empty_bytes = self.compressed_data.len() - self.compressed_data_end;
@@ -515,6 +517,14 @@ pub enum ReadAction<'a> {
     Fill(super::input_buf::InputBuf<'a>),
     GetRecord { data: &'a [u8], opcode: u8 },
     Finished,
+}
+
+fn len_as_usize(len: u64) -> McapResult<usize> {
+    len.try_into().map_err(|_| McapError::TooLong(len))
+}
+
+fn clamp_to_usize(len: u64) -> usize {
+    len.try_into().unwrap_or(usize::MAX)
 }
 
 #[cfg(test)]

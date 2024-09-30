@@ -91,12 +91,8 @@ impl<'a> Iterator for LinearReader<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.reader.next_action() {
-                Ok(ReadAction::Fill(mut into_buf)) => {
-                    let len = std::cmp::min(self.buf.len(), into_buf.buf.len());
-                    let src = &self.buf[..len];
-                    let dst = &mut into_buf.buf[..len];
-                    dst.copy_from_slice(src);
-                    into_buf.set_filled(len);
+                Ok(ReadAction::Fill(mut into)) => {
+                    let len = into.copy_from(self.buf);
                     self.buf = &self.buf[len..];
                 }
                 Ok(ReadAction::Finished) => return None,
@@ -242,11 +238,7 @@ impl<'a> Iterator for ChunkReader<'a> {
         loop {
             match self.reader.next_action() {
                 Ok(ReadAction::Fill(mut into)) => {
-                    let len = std::cmp::min(into.buf.len(), self.data.len());
-                    let src = &self.data[..len];
-                    let dst = &mut into.buf[..len];
-                    dst.copy_from_slice(src);
-                    into.set_filled(len);
+                    let len = into.copy_from(self.data);
                     self.data = &self.data[len..];
                 }
                 Ok(ReadAction::GetRecord { data, opcode }) => {
@@ -299,12 +291,8 @@ impl<'a> Iterator for ChunkFlattener<'a> {
                         Err(err) => return Some(Err(err)),
                     };
                 }
-                Ok(ReadAction::Fill(mut into_buf)) => {
-                    let len = std::cmp::min(into_buf.buf.len(), self.buf.len());
-                    let src = &self.buf[..len];
-                    let dst = &mut into_buf.buf[..len];
-                    dst.copy_from_slice(src);
-                    into_buf.set_filled(len);
+                Ok(ReadAction::Fill(mut into)) => {
+                    let len = into.copy_from(self.buf);
                     self.buf = &self.buf[len..];
                 }
                 Ok(ReadAction::Finished) => {
@@ -797,11 +785,7 @@ impl<'a> Summary<'a> {
         loop {
             match reader.next_action() {
                 Ok(ReadAction::Fill(mut into)) => {
-                    let len = std::cmp::min(remaining.len(), into.buf.len());
-                    let src = &remaining[..len];
-                    let dst = &mut into.buf[..len];
-                    dst.copy_from_slice(src);
-                    into.set_filled(len);
+                    let len = into.copy_from(remaining);
                     remaining = &remaining[len..];
                 }
                 Ok(ReadAction::GetRecord { data, opcode }) => {
