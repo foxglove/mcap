@@ -134,7 +134,7 @@ impl<'a> InputBuf<'a> {
 ///                 into.set_filled(n);
 ///             },
 ///             ReadAction::GetRecord{ opcode, data } => {
-///                 let raw_record = mcap::parse_record(opcode, &record_buf[..])?;
+///                 let raw_record = mcap::parse_record(opcode, data)?;
 ///                 // do something with the record...
 ///             }
 ///         }
@@ -154,7 +154,7 @@ impl<'a> InputBuf<'a> {
 ///                 into.set_filled(n);
 ///             },
 ///             ReadAction::GetRecord{ opcode, data } => {
-///                 let raw_record = mcap::parse_record(opcode, &record_buf[..])?;
+///                 let raw_record = mcap::parse_record(opcode, data)?;
 ///                 // do something with the record...
 ///             }
 ///         }
@@ -326,7 +326,9 @@ impl LinearReader {
                     // This is the start of the data end record, so stop loading new data into the
                     // data section hasher. At this point, the data section hasher will already contain
                     // the opcode and length bytes for the data end record, which is sad because
-                    // the data section ends at the end of the previous record. However,
+                    // the data section ends at the end of the previous record. However, we copy
+                    // the CRC to `self.calculated_data_section_crc` at the end of every record, so
+                    // that will contain the correct data section CRC.
                     if opcode == op::DATA_END {
                         self.data_section_hasher = None;
                     }
