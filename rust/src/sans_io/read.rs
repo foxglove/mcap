@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use super::decompressor::{Decompressor, NoneDecompressor};
 use crate::{
+    parse_record,
     records::{op, ChunkHeader},
     McapError, McapResult, MAGIC,
 };
@@ -15,8 +16,7 @@ use super::zstd;
 
 enum CurrentlyReading {
     StartMagic,
-    RecordOpcodeLength,
-    RecordContent { opcode: u8, len: u64 },
+    Record,
     ChunkHeader { len: u64 },
     ValidatingChunkCrc { len: u64, crc: u32 },
     PaddingAfterChunk { len: usize },
@@ -187,7 +187,7 @@ impl LinearReader {
     pub fn new_with_options(options: LinearReaderOptions) -> Self {
         LinearReader {
             currently_reading: if options.skip_start_magic {
-                RecordOpcodeLength
+                Record
             } else {
                 StartMagic
             },
@@ -222,7 +222,7 @@ impl LinearReader {
             data_section_crc_validation_strategy: CRCValidationStrategy::None,
             emit_chunks: false,
         });
-        result.currently_reading = RecordOpcodeLength;
+        result.currently_reading = Record;
         result.from = Chunk(ChunkState {
             decompressor: result.get_decompressor(&header.compression)?,
             hasher: Some(crc32fast::Hasher::new()),
@@ -275,7 +275,7 @@ impl LinearReader {
             }
             // If there's no more data available, stop iterating.
             if self.at_eof {
-                if matches!(&self.currently_reading, RecordOpcodeLength)
+                if matches!(&self.currently_reading, Record)
                     && self.uncompressed_data_start == self.uncompressed_data_end
                     && self.options.skip_end_magic
                 {
@@ -297,7 +297,7 @@ impl LinearReader {
                         self.failed = true;
                         return Err(McapError::BadMagic);
                     }
-                    self.currently_reading = RecordOpcodeLength;
+                    self.currently_reading = Record;
                 }
                 EndMagic => {
                     if self.options.skip_end_magic {
@@ -314,49 +314,62 @@ impl LinearReader {
                     }
                     return Ok(None);
                 }
-                RecordOpcodeLength => {
+                Record => {
                     // need one byte for opcode, then 8 bytes for record length.
-                    let (start, end) = match self.consume(9)? {
+                    let (start, end) = match self.load(9)? {
                         Bounds(input) => input,
                         Remainder(want) => return self.request(want),
                     };
                     let input = &self.uncompressed_data[start..end];
                     let opcode = input[0];
                     let record_length: u64 = u64::from_le_bytes(input[1..9].try_into().unwrap());
-                    // This is the start of the data end record, so stop loading new data into the
-                    // data section hasher. At this point, the data section hasher will already contain
-                    // the opcode and length bytes for the data end record, which is sad because
-                    // the data section ends at the end of the previous record. However, we copy
-                    // the CRC to `self.calculated_data_section_crc` at the end of every record, so
-                    // that will contain the correct data section CRC.
-                    if opcode == op::DATA_END {
-                        self.data_section_hasher = None;
-                    }
                     if opcode == op::CHUNK && !self.options.emit_chunks {
+                        match self.consume(9)? {
+                            Bounds(_) => {}
+                            Remainder(_) => panic!("there should be 9 bytes available"),
+                        };
                         self.currently_reading =
                             CurrentlyReading::ChunkHeader { len: record_length };
-                    } else {
-                        self.currently_reading = RecordContent {
-                            opcode,
-                            len: record_length,
-                        }
+                        continue;
                     }
-                }
-                RecordContent { opcode, len } => {
-                    let (start, end) = match self.consume(len_as_usize(len)?)? {
-                        Bounds(bounds) => bounds,
-                        Remainder(remainder) => return self.request(remainder),
+                    // get the rest of the record now.
+                    let (start, end) = match self.consume(9 + len_as_usize(record_length)?)? {
+                        Bounds(input) => input,
+                        Remainder(want) => return self.request(want),
                     };
-                    if opcode == op::FOOTER {
-                        self.currently_reading = EndMagic;
-                    } else {
-                        if let Some(hasher) = &mut self.data_section_hasher {
-                            self.calculated_data_section_crc = Some(hasher.clone().finalize());
+                    // some opcodes trigger state changes.
+                    match opcode {
+                        // A footer implies no more records in the MCAP.
+                        op::FOOTER => self.currently_reading = EndMagic,
+                        // Data end implies end of data section - validate the CRC if present.
+                        op::DATA_END => {
+                            if let Some(calculated) = self.calculated_data_section_crc {
+                                let record_data = &self.uncompressed_data[start + 9..end];
+                                match parse_record(opcode, record_data)? {
+                                    crate::records::Record::DataEnd(end) => {
+                                        if end.data_section_crc != 0
+                                            && end.data_section_crc != calculated
+                                        {
+                                            return Err(McapError::BadDataCrc {
+                                                saved: end.data_section_crc,
+                                                calculated,
+                                            });
+                                        }
+                                    }
+                                    _ => unreachable!("should not recieve any other record type"),
+                                }
+                            }
+                            self.data_section_hasher = None;
                         }
-                        self.currently_reading = RecordOpcodeLength;
+                        _ => {}
+                    };
+                    if let Some(hasher) = &mut self.data_section_hasher {
+                        self.calculated_data_section_crc = Some(hasher.clone().finalize());
                     }
-                    // need to borrow to check for end of chunk and mutate self after dropping that
-                    // borrow.
+
+                    // If this is the last record in the chunk, we need to do a little work before
+                    // moving on to the next record. We immutably borrow self.from to check, then
+                    // make sure to drop the borrow before taking action.
                     let padding = match &self.from {
                         Chunk(state) => {
                             if state.compressed_remaining == 0
@@ -391,29 +404,8 @@ impl LinearReader {
                         }
                         self.currently_reading = PaddingAfterChunk { len: padding }
                     }
-                    if let (op::DATA_END, Some(calculated_crc)) =
-                        (opcode, self.calculated_data_section_crc)
-                    {
-                        if len < 4 {
-                            self.failed = true;
-                            return Err(McapError::RecordTooShort {
-                                opcode: op::FOOTER,
-                                len,
-                                expected: 4,
-                            });
-                        }
-                        let data = &self.uncompressed_data[start..end];
-                        let crc = u32::from_le_bytes(data[..4].try_into().unwrap());
-                        if crc != 0 && crc != calculated_crc {
-                            self.failed = true;
-                            return Err(McapError::BadDataCrc {
-                                saved: crc,
-                                calculated: calculated_crc,
-                            });
-                        }
-                    }
                     return Ok(Some(ReadAction::GetRecord {
-                        data: &self.uncompressed_data[start..end],
+                        data: &self.uncompressed_data[start + 9..end],
                         opcode,
                     }));
                 }
@@ -495,7 +487,7 @@ impl LinearReader {
                             crc: hdr.uncompressed_crc,
                         };
                     } else {
-                        self.currently_reading = RecordOpcodeLength;
+                        self.currently_reading = Record;
                     }
                 }
                 ValidatingChunkCrc { len, crc } => {
@@ -509,7 +501,7 @@ impl LinearReader {
                                     calculated,
                                 });
                             }
-                            self.currently_reading = RecordOpcodeLength;
+                            self.currently_reading = Record;
                         }
                         Remainder(remainder) => return self.request(remainder),
                     };
@@ -521,7 +513,7 @@ impl LinearReader {
                         if let Some(hasher) = &mut self.data_section_hasher {
                             self.calculated_data_section_crc = Some(hasher.clone().finalize());
                         }
-                        self.currently_reading = RecordOpcodeLength;
+                        self.currently_reading = Record;
                     }
                     Remainder(need) => return self.request(need),
                 },
@@ -536,10 +528,16 @@ impl LinearReader {
         if let Chunk(chunk_state) = &mut self.from {
             // decompress any compressed data that has been loaded since the last iteration.
             if self.compressed_data_end > self.compressed_data_start {
-                self.uncompressed_data.resize(slice_end, 0);
+                self.uncompressed_data.resize(
+                    std::cmp::max(
+                        self.uncompressed_data.len(),
+                        self.uncompressed_data_start + slice_end,
+                    ),
+                    0,
+                );
                 let src =
                     &self.compressed_data[self.compressed_data_start..self.compressed_data_end];
-                let dst = &mut self.uncompressed_data[self.uncompressed_data_end..slice_end];
+                let dst = &mut self.uncompressed_data[self.uncompressed_data_end..];
                 let res = chunk_state.decompressor.decompress(src, dst)?;
                 self.compressed_data_start += res.consumed;
                 let newly_decompressed = &self.uncompressed_data
