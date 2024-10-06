@@ -525,9 +525,13 @@ impl LinearReader {
     // needs to be loaded.
     fn load(&mut self, amount: usize) -> McapResult<BoundsOrRemainder> {
         let slice_end = self.uncompressed_data_start + amount;
-        if let Chunk(chunk_state) = &mut self.from {
-            // decompress any compressed data that has been loaded since the last iteration.
-            if self.compressed_data_end > self.compressed_data_start {
+        if self.uncompressed_data_end >= slice_end {
+            return Ok(Bounds((self.uncompressed_data_start, slice_end)));
+        }
+        match &mut self.from {
+            File => return Ok(Remainder(slice_end - self.uncompressed_data_end)),
+            Chunk(chunk_state) => {
+                // allow enough data to fit into the slice.
                 self.uncompressed_data.resize(
                     std::cmp::max(
                         self.uncompressed_data.len(),
@@ -539,23 +543,18 @@ impl LinearReader {
                     &self.compressed_data[self.compressed_data_start..self.compressed_data_end];
                 let dst = &mut self.uncompressed_data[self.uncompressed_data_end..];
                 let res = chunk_state.decompressor.decompress(src, dst)?;
-                self.compressed_data_start += res.consumed;
                 let newly_decompressed = &self.uncompressed_data
                     [self.uncompressed_data_end..self.uncompressed_data_end + res.wrote];
                 if let Some(hasher) = &mut chunk_state.hasher {
                     hasher.update(newly_decompressed);
                 }
                 self.uncompressed_data_end += res.wrote;
-                chunk_state.compressed_remaining -= res.consumed as u64;
-                let next_size_hint = if res.need == 0 {
-                    DEFAULT_CHUNK_DATA_READ_SIZE
-                } else {
-                    res.need
-                };
-                chunk_state.next_read_size = std::cmp::min(
-                    next_size_hint,
-                    clamp_to_usize(chunk_state.compressed_remaining),
-                );
+                if self.uncompressed_data_end < slice_end {
+                    return Ok(Remainder(std::cmp::min(
+                        clamp_to_usize(chunk_state.compressed_remaining),
+                        res.need,
+                    )));
+                }
                 // if we have cleared the compressed data buffer, reset it to 0 instead of infinitely growing
                 if self.compressed_data_start == self.compressed_data_end {
                     let empty_bytes = self.compressed_data.len() - self.compressed_data_end;
@@ -563,12 +562,9 @@ impl LinearReader {
                     self.compressed_data_start = 0;
                     self.compressed_data_end = 0;
                 }
+                return Ok(Bounds((self.uncompressed_data_start, slice_end)));
             }
-        }
-        if slice_end <= self.uncompressed_data_end {
-            return Ok(Bounds((self.uncompressed_data_start, slice_end)));
-        }
-        Ok(Remainder(slice_end - self.uncompressed_data_end))
+        };
     }
 
     // Consume `amount` bytes of the uncompressed input buffer if enough is available. On failure,
@@ -583,29 +579,25 @@ impl LinearReader {
         }
     }
 
-    // Return an InputBuf that requests `want` uncompressed bytes from the input file. If reading
-    // from a chunk, requests the amount hinted by the decompressor on the previous iteration.
+    // Return an InputBuf that requests `want` bytes from the input file. If reading
+    // from a chunk, reads into the compressed buffer, otherwise reads into the uncompressed buffer.
     fn request(&mut self, want: usize) -> McapResult<Option<ReadAction>> {
-        let desired_end = self.uncompressed_data_end + want;
-        self.uncompressed_data
-            .resize(std::cmp::max(self.uncompressed_data.len(), desired_end), 0);
-
         return match &self.from {
-            File => Ok(Some(ReadAction::Fill(InputBuf {
-                buf: &mut self.uncompressed_data[self.uncompressed_data_end..desired_end],
-                total_filled: &mut self.uncompressed_data_end,
-                at_eof: &mut self.at_eof,
-                data_section_hasher: &mut self.data_section_hasher,
-            }))),
-            Chunk(chunk_state) => {
-                let desired_compressed_end = self.compressed_data_end + chunk_state.next_read_size;
-                self.compressed_data.resize(
-                    std::cmp::max(self.compressed_data.len(), desired_compressed_end),
-                    0,
-                );
+            File => {
+                let desired_end = self.uncompressed_data_end + want;
+                self.uncompressed_data.resize(desired_end, 0);
                 Ok(Some(ReadAction::Fill(InputBuf {
-                    buf: &mut self.compressed_data
-                        [self.compressed_data_end..desired_compressed_end],
+                    buf: &mut self.uncompressed_data[self.uncompressed_data_end..desired_end],
+                    total_filled: &mut self.uncompressed_data_end,
+                    at_eof: &mut self.at_eof,
+                    data_section_hasher: &mut self.data_section_hasher,
+                })))
+            }
+            Chunk(_) => {
+                let desired_end = self.compressed_data_end + want;
+                self.compressed_data.resize(desired_end, 0);
+                Ok(Some(ReadAction::Fill(InputBuf {
+                    buf: &mut self.compressed_data[self.compressed_data_end..],
                     total_filled: &mut self.compressed_data_end,
                     at_eof: &mut self.at_eof,
                     data_section_hasher: &mut self.data_section_hasher,
