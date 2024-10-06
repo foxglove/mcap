@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::decompressor::{Decompressor, NoneDecompressor};
+use super::decompressor::Decompressor;
 use crate::{
     parse_record,
     records::{op, ChunkHeader},
@@ -27,7 +27,7 @@ use CurrentlyReading::*;
 const DEFAULT_CHUNK_DATA_READ_SIZE: usize = 32 * 1024;
 
 struct ChunkState {
-    decompressor: Box<dyn Decompressor>,
+    decompressor: Option<Box<dyn Decompressor>>,
     compressed_remaining: u64,
     padding_after_compressed_data: usize,
     hasher: Option<crc32fast::Hasher>,
@@ -82,14 +82,14 @@ pub enum CRCValidationStrategy {
 /// to notify the reader of how many bytes were successfully read.
 pub struct InputBuf<'a> {
     pub buf: &'a mut [u8],
-    last_write_size: &'a mut Option<usize>,
+    last_write: &'a mut Option<usize>,
 }
 
 impl<'a> InputBuf<'a> {
     /// Notify the reader that `written` new bytes are available. Only call this method after
     /// copying data into [`self.buf`].
     pub fn set_filled(&'a mut self, written: usize) {
-        *self.last_write_size = Some(written);
+        *self.last_write = Some(written);
     }
     /// A convenience method to copy from the user's slice of MCAP data.
     pub fn copy_from(&'a mut self, other: &[u8]) -> usize {
@@ -169,7 +169,7 @@ pub struct LinearReader {
     decompressors: HashMap<String, Box<dyn Decompressor>>,
     options: LinearReaderOptions,
     at_eof: bool,
-    last_write_size: Option<usize>,
+    last_write: Option<usize>,
     failed: bool,
 }
 
@@ -201,7 +201,7 @@ impl LinearReader {
             },
             calculated_data_section_crc: None,
             decompressors: HashMap::new(),
-            last_write_size: None,
+            last_write: None,
             at_eof: false,
             options,
             failed: false,
@@ -228,16 +228,16 @@ impl LinearReader {
         Ok(result)
     }
 
-    fn get_decompressor(&mut self, name: &str) -> McapResult<Box<dyn Decompressor>> {
+    fn get_decompressor(&mut self, name: &str) -> McapResult<Option<Box<dyn Decompressor>>> {
         if let Some(decompressor) = self.decompressors.remove(name) {
-            return Ok(decompressor);
+            return Ok(Some(decompressor));
         }
         match name {
             #[cfg(feature = "zstd")]
-            "zstd" => Ok(Box::new(zstd::ZstdDecoder::new())),
+            "zstd" => Ok(Some(Box::new(zstd::ZstdDecoder::new()))),
             #[cfg(feature = "lz4")]
-            "lz4" => Ok(Box::new(lz4::Lz4Decoder::new()?)),
-            "" => Ok(Box::new(NoneDecompressor {})),
+            "lz4" => Ok(Some(Box::new(lz4::Lz4Decoder::new()?))),
+            "" => Ok(None),
             _ => Err(McapError::UnsupportedCompression(name.into())),
         }
     }
@@ -258,21 +258,33 @@ impl LinearReader {
             return Ok(None);
         }
 
-        if let Some(written) = self.last_write_size.take() {
+        if let Some(written) = self.last_write.take() {
             if written == 0 {
                 self.at_eof = true;
             }
             let empty_region = match &self.from {
                 File => &self.uncompressed_data[self.uncompressed_data_end..],
-                Chunk(_) => &self.compressed_data[self.compressed_data_end..],
+                Chunk(state) => match &state.decompressor {
+                    Some(_) => &self.compressed_data[self.compressed_data_end..],
+                    None => &self.uncompressed_data[self.uncompressed_data_end..],
+                },
             };
             let written_region = &empty_region[..written];
             if let Some(hasher) = self.data_section_hasher.as_mut() {
                 hasher.update(written_region);
             }
-            match self.from {
+            match &mut self.from {
                 File => self.uncompressed_data_end += written,
-                Chunk(_) => self.compressed_data_end += written,
+                Chunk(state) => match state.decompressor {
+                    Some(_) => self.compressed_data_end += written,
+                    None => {
+                        if let Some(hasher) = state.hasher.as_mut() {
+                            hasher.update(written_region);
+                        }
+                        self.uncompressed_data_end += written;
+                        state.compressed_remaining -= written as u64;
+                    }
+                },
             }
         }
         // keep processing through the data we have until we need more data or can yield a record.
@@ -397,14 +409,16 @@ impl LinearReader {
                     if let Some(padding) = padding {
                         let mut from = File;
                         std::mem::swap(&mut from, &mut self.from);
-                        let state = match from {
+                        let state = match &mut from {
                             Chunk(state) => state,
                             File => panic!(
                                 "invariant: padding should only be Some if reading from chunk"
                             ),
                         };
-                        self.return_decompressor(state.decompressor)?;
-                        if let Some(hasher) = state.hasher {
+                        if let Some(decompressor) = state.decompressor.take() {
+                            self.return_decompressor(decompressor)?
+                        }
+                        if let Some(hasher) = state.hasher.take() {
                             let calculated = hasher.finalize();
                             if state.crc != 0 && calculated != state.crc {
                                 self.failed = true;
@@ -539,6 +553,10 @@ impl LinearReader {
         match &mut self.from {
             File => return Ok(Remainder(slice_end - self.uncompressed_data_end)),
             Chunk(chunk_state) => {
+                let decompressor = match &mut chunk_state.decompressor {
+                    None => return Ok(Remainder(slice_end - self.uncompressed_data_end)),
+                    Some(dec) => dec,
+                };
                 // allow enough data to fit into the slice.
                 self.uncompressed_data.resize(
                     std::cmp::max(
@@ -556,7 +574,7 @@ impl LinearReader {
                     )));
                 }
                 let dst = &mut self.uncompressed_data[self.uncompressed_data_end..];
-                let res = chunk_state.decompressor.decompress(src, dst)?;
+                let res = decompressor.decompress(src, dst)?;
                 let newly_decompressed = &self.uncompressed_data
                     [self.uncompressed_data_end..self.uncompressed_data_end + res.wrote];
                 if let Some(hasher) = &mut chunk_state.hasher {
@@ -604,16 +622,25 @@ impl LinearReader {
                 self.uncompressed_data.resize(desired_end, 0);
                 Ok(Some(ReadAction::Fill(InputBuf {
                     buf: &mut self.uncompressed_data[self.uncompressed_data_end..],
-                    last_write_size: &mut self.last_write_size,
+                    last_write: &mut self.last_write,
                 })))
             }
-            Chunk(_) => {
-                let desired_end = self.compressed_data_end + want;
-                self.compressed_data.resize(desired_end, 0);
-                Ok(Some(ReadAction::Fill(InputBuf {
-                    buf: &mut self.compressed_data[self.compressed_data_end..],
-                    last_write_size: &mut self.last_write_size,
-                })))
+            Chunk(state) => {
+                if let None = state.decompressor {
+                    let desired_end = self.uncompressed_data_end + want;
+                    self.uncompressed_data.resize(desired_end, 0);
+                    Ok(Some(ReadAction::Fill(InputBuf {
+                        buf: &mut self.uncompressed_data[self.uncompressed_data_end..],
+                        last_write: &mut self.last_write,
+                    })))
+                } else {
+                    let desired_end = self.compressed_data_end + want;
+                    self.compressed_data.resize(desired_end, 0);
+                    Ok(Some(ReadAction::Fill(InputBuf {
+                        buf: &mut self.compressed_data[self.compressed_data_end..],
+                        last_write: &mut self.last_write,
+                    })))
+                }
             }
         };
     }

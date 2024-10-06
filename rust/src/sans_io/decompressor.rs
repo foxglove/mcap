@@ -18,25 +18,3 @@ pub trait Decompressor {
     /// Returns the MCAP chunk compression string for the format that this Decompressor handles.
     fn name(&self) -> &'static str;
 }
-
-/// A trivial Decompressor for un-compressed chunk data.
-pub struct NoneDecompressor {}
-
-impl Decompressor for NoneDecompressor {
-    fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<DecompressResult> {
-        let len = std::cmp::min(src.len(), dst.len());
-        dst[..len].copy_from_slice(&src[..len]);
-        Ok(DecompressResult {
-            consumed: len,
-            wrote: len,
-            need: (dst.len() - len),
-        })
-    }
-    fn reset(&mut self) -> McapResult<()> {
-        Ok(())
-    }
-
-    fn name(&self) -> &'static str {
-        ""
-    }
-}
