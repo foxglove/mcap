@@ -258,26 +258,32 @@ impl LinearReader {
             return Ok(None);
         }
 
+        // process any newly-written data since the last next_action() call.
         if let Some(written) = self.last_write.take() {
             if written == 0 {
                 self.at_eof = true;
             }
-            let empty_region = match &self.from {
+
+            let tail = match &self.from {
                 File => &self.uncompressed_data[self.uncompressed_data_end..],
                 Chunk(state) => match &state.decompressor {
                     Some(_) => &self.compressed_data[self.compressed_data_end..],
                     None => &self.uncompressed_data[self.uncompressed_data_end..],
                 },
             };
-            let written_region = &empty_region[..written];
+            let written_region = &tail[..written];
             if let Some(hasher) = self.data_section_hasher.as_mut() {
                 hasher.update(written_region);
             }
+            // update end pointer, and update
             match &mut self.from {
                 File => self.uncompressed_data_end += written,
                 Chunk(state) => match state.decompressor {
                     Some(_) => self.compressed_data_end += written,
                     None => {
+                        // for the special case of reading from an uncompressed chunk, we update
+                        // the chunk CRC and compressed remaining here instead of after
+                        // decompression.
                         if let Some(hasher) = state.hasher.as_mut() {
                             hasher.update(written_region);
                         }
