@@ -28,7 +28,6 @@ const DEFAULT_CHUNK_DATA_READ_SIZE: usize = 32 * 1024;
 
 struct ChunkState {
     decompressor: Box<dyn Decompressor>,
-    next_read_size: usize,
     compressed_remaining: u64,
     padding_after_compressed_data: usize,
     hasher: Option<crc32fast::Hasher>,
@@ -227,7 +226,6 @@ impl LinearReader {
             decompressor: result.get_decompressor(&header.compression)?,
             hasher: Some(crc32fast::Hasher::new()),
             crc: header.uncompressed_crc,
-            next_read_size: DEFAULT_CHUNK_DATA_READ_SIZE,
             compressed_remaining: header.compressed_size,
             padding_after_compressed_data: 0,
         });
@@ -265,7 +263,7 @@ impl LinearReader {
         }
         // keep processing through the data we have until we need more data or can yield a record.
         loop {
-            // check if we have consumed all uncompressed data in the last iteration - if so,
+            // check if we have consume all uncompressed data in the last iteration - if so,
             // reset the buffer.
             if self.uncompressed_data_start == self.uncompressed_data_end {
                 let empty_bytes = self.uncompressed_data.len() - self.uncompressed_data_end;
@@ -459,10 +457,6 @@ impl LinearReader {
                     }
                     // switch to reading from the chunk data.
                     self.from = Chunk(ChunkState {
-                        next_read_size: std::cmp::min(
-                            DEFAULT_CHUNK_DATA_READ_SIZE,
-                            clamp_to_usize(hdr.compressed_size),
-                        ),
                         decompressor: self.get_decompressor(&hdr.compression)?,
                         hasher: match self.options.chunk_crc_validation_strategy {
                             CRCValidationStrategy::AfterReading => Some(crc32fast::Hasher::new()),
@@ -541,6 +535,12 @@ impl LinearReader {
                 );
                 let src =
                     &self.compressed_data[self.compressed_data_start..self.compressed_data_end];
+                if src.len() == 0 {
+                    return Ok(Remainder(std::cmp::min(
+                        clamp_to_usize(chunk_state.compressed_remaining),
+                        DEFAULT_CHUNK_DATA_READ_SIZE,
+                    )));
+                }
                 let dst = &mut self.uncompressed_data[self.uncompressed_data_end..];
                 let res = chunk_state.decompressor.decompress(src, dst)?;
                 let newly_decompressed = &self.uncompressed_data
@@ -549,6 +549,8 @@ impl LinearReader {
                     hasher.update(newly_decompressed);
                 }
                 self.uncompressed_data_end += res.wrote;
+                self.compressed_data_start += res.consumed;
+                chunk_state.compressed_remaining -= res.consumed as u64;
                 if self.uncompressed_data_end < slice_end {
                     return Ok(Remainder(std::cmp::min(
                         clamp_to_usize(chunk_state.compressed_remaining),
@@ -597,7 +599,7 @@ impl LinearReader {
                 let desired_end = self.compressed_data_end + want;
                 self.compressed_data.resize(desired_end, 0);
                 Ok(Some(ReadAction::Fill(InputBuf {
-                    buf: &mut self.compressed_data[self.compressed_data_end..],
+                    buf: &mut self.compressed_data[self.compressed_data_end..desired_end],
                     total_filled: &mut self.compressed_data_end,
                     at_eof: &mut self.at_eof,
                     data_section_hasher: &mut self.data_section_hasher,
@@ -717,58 +719,95 @@ mod tests {
 
         Ok(())
     }
+
     #[test]
-    fn test_chunked() -> McapResult<()> {
-        for strategy in [
-            CRCValidationStrategy::None,
+    fn test_chunked_none_none() -> McapResult<()> {
+        test_chunked(None, CRCValidationStrategy::None)
+    }
+    #[test]
+    fn test_chunked_none_after_reading() -> McapResult<()> {
+        test_chunked(None, CRCValidationStrategy::AfterReading)
+    }
+    #[test]
+    fn test_chunked_none_before_reading() -> McapResult<()> {
+        test_chunked(None, CRCValidationStrategy::BeforeReading)
+    }
+
+    #[test]
+    fn test_chunked_zstd_none() -> McapResult<()> {
+        test_chunked(Some(Compression::Zstd), CRCValidationStrategy::None)
+    }
+    #[test]
+    fn test_chunked_zstd_after_reading() -> McapResult<()> {
+        test_chunked(Some(Compression::Zstd), CRCValidationStrategy::AfterReading)
+    }
+    #[test]
+    fn test_chunked_zstd_before_reading() -> McapResult<()> {
+        test_chunked(
+            Some(Compression::Zstd),
             CRCValidationStrategy::BeforeReading,
-            CRCValidationStrategy::AfterReading,
-        ] {
-            for compression in [Some(Compression::Zstd), Some(Compression::Lz4), None] {
-                let mut reader = LinearReader::new_with_options(LinearReaderOptions {
-                    skip_end_magic: false,
-                    skip_start_magic: false,
-                    emit_chunks: false,
-                    chunk_crc_validation_strategy: strategy.clone(),
-                    data_section_crc_validation_strategy: CRCValidationStrategy::None,
-                });
-                let mut cursor = std::io::Cursor::new(basic_chunked_file(compression)?);
-                let mut opcodes: Vec<u8> = Vec::new();
-                let mut iter_count = 0;
-                while let Some(action) = reader.next_action() {
-                    match action? {
-                        ReadAction::Fill(mut into) => {
-                            let written = cursor.read(into.buf)?;
-                            into.set_filled(written);
-                        }
-                        ReadAction::GetRecord { data, opcode } => {
-                            opcodes.push(opcode);
-                            parse_record(opcode, data)?;
-                        }
-                    }
-                    iter_count += 1;
-                    // guard against infinite loop
-                    assert!(iter_count < 10000);
+        )
+    }
+
+    #[test]
+    fn test_chunked_lz4_none() -> McapResult<()> {
+        test_chunked(Some(Compression::Lz4), CRCValidationStrategy::None)
+    }
+    #[test]
+    fn test_chunked_lz4_after_reading() -> McapResult<()> {
+        test_chunked(Some(Compression::Lz4), CRCValidationStrategy::AfterReading)
+    }
+    #[test]
+    fn test_chunked_lz4_before_reading() -> McapResult<()> {
+        test_chunked(Some(Compression::Lz4), CRCValidationStrategy::BeforeReading)
+    }
+
+    fn test_chunked(
+        compression: Option<Compression>,
+        strategy: CRCValidationStrategy,
+    ) -> McapResult<()> {
+        let mut reader = LinearReader::new_with_options(LinearReaderOptions {
+            skip_end_magic: false,
+            skip_start_magic: false,
+            emit_chunks: false,
+            chunk_crc_validation_strategy: strategy.clone(),
+            data_section_crc_validation_strategy: CRCValidationStrategy::None,
+        });
+        let mut cursor = std::io::Cursor::new(basic_chunked_file(compression)?);
+        let mut opcodes: Vec<u8> = Vec::new();
+        let mut iter_count = 0;
+        while let Some(action) = reader.next_action() {
+            match action? {
+                ReadAction::Fill(mut into) => {
+                    let written = cursor.read(into.buf)?;
+                    into.set_filled(written);
                 }
-                assert_eq!(
-                    opcodes,
-                    vec![
-                        op::HEADER,
-                        op::CHANNEL,
-                        op::MESSAGE,
-                        op::MESSAGE_INDEX,
-                        op::DATA_END,
-                        op::CHANNEL,
-                        op::CHUNK_INDEX,
-                        op::STATISTICS,
-                        op::SUMMARY_OFFSET,
-                        op::SUMMARY_OFFSET,
-                        op::SUMMARY_OFFSET,
-                        op::FOOTER
-                    ]
-                );
+                ReadAction::GetRecord { data, opcode } => {
+                    opcodes.push(opcode);
+                    parse_record(opcode, data)?;
+                }
             }
+            iter_count += 1;
+            // guard against infinite loop
+            assert!(iter_count < 10000);
         }
+        assert_eq!(
+            opcodes,
+            vec![
+                op::HEADER,
+                op::CHANNEL,
+                op::MESSAGE,
+                op::MESSAGE_INDEX,
+                op::DATA_END,
+                op::CHANNEL,
+                op::CHUNK_INDEX,
+                op::STATISTICS,
+                op::SUMMARY_OFFSET,
+                op::SUMMARY_OFFSET,
+                op::SUMMARY_OFFSET,
+                op::FOOTER
+            ]
+        );
         Ok(())
     }
     #[test]
