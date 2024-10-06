@@ -82,20 +82,14 @@ pub enum CRCValidationStrategy {
 /// to notify the reader of how many bytes were successfully read.
 pub struct InputBuf<'a> {
     pub buf: &'a mut [u8],
-    total_filled: &'a mut usize,
-    at_eof: &'a mut bool,
-    data_section_hasher: &'a mut Option<crc32fast::Hasher>,
+    last_write_size: &'a mut Option<usize>,
 }
 
 impl<'a> InputBuf<'a> {
     /// Notify the reader that `written` new bytes are available. Only call this method after
     /// copying data into [`self.buf`].
     pub fn set_filled(&'a mut self, written: usize) {
-        if let Some(hasher) = self.data_section_hasher {
-            hasher.update(&self.buf[..written]);
-        }
-        *self.total_filled += written;
-        *self.at_eof = written == 0;
+        *self.last_write_size = Some(written);
     }
     /// A convenience method to copy from the user's slice of MCAP data.
     pub fn copy_from(&'a mut self, other: &[u8]) -> usize {
@@ -175,6 +169,7 @@ pub struct LinearReader {
     decompressors: HashMap<String, Box<dyn Decompressor>>,
     options: LinearReaderOptions,
     at_eof: bool,
+    last_write_size: Option<usize>,
     failed: bool,
 }
 
@@ -206,6 +201,7 @@ impl LinearReader {
             },
             calculated_data_section_crc: None,
             decompressors: HashMap::new(),
+            last_write_size: None,
             at_eof: false,
             options,
             failed: false,
@@ -260,6 +256,24 @@ impl LinearReader {
     fn next_action_inner(&mut self) -> McapResult<Option<ReadAction>> {
         if self.failed {
             return Ok(None);
+        }
+
+        if let Some(written) = self.last_write_size.take() {
+            if written == 0 {
+                self.at_eof = true;
+            }
+            let empty_region = match &self.from {
+                File => &self.uncompressed_data[self.uncompressed_data_end..],
+                Chunk(_) => &self.compressed_data[self.compressed_data_end..],
+            };
+            let written_region = &empty_region[..written];
+            if let Some(hasher) = self.data_section_hasher.as_mut() {
+                hasher.update(written_region);
+            }
+            match self.from {
+                File => self.uncompressed_data_end += written,
+                Chunk(_) => self.compressed_data_end += written,
+            }
         }
         // keep processing through the data we have until we need more data or can yield a record.
         loop {
@@ -589,20 +603,16 @@ impl LinearReader {
                 let desired_end = self.uncompressed_data_end + want;
                 self.uncompressed_data.resize(desired_end, 0);
                 Ok(Some(ReadAction::Fill(InputBuf {
-                    buf: &mut self.uncompressed_data[self.uncompressed_data_end..desired_end],
-                    total_filled: &mut self.uncompressed_data_end,
-                    at_eof: &mut self.at_eof,
-                    data_section_hasher: &mut self.data_section_hasher,
+                    buf: &mut self.uncompressed_data[self.uncompressed_data_end..],
+                    last_write_size: &mut self.last_write_size,
                 })))
             }
             Chunk(_) => {
                 let desired_end = self.compressed_data_end + want;
                 self.compressed_data.resize(desired_end, 0);
                 Ok(Some(ReadAction::Fill(InputBuf {
-                    buf: &mut self.compressed_data[self.compressed_data_end..desired_end],
-                    total_filled: &mut self.compressed_data_end,
-                    at_eof: &mut self.at_eof,
-                    data_section_hasher: &mut self.data_section_hasher,
+                    buf: &mut self.compressed_data[self.compressed_data_end..],
+                    last_write_size: &mut self.last_write_size,
                 })))
             }
         };
