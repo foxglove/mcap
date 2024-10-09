@@ -59,7 +59,7 @@ class ReadDataStream:
 
 
 class RecordBuilder:
-    def __init__(self):
+    def __init__(self) -> None:
         self._buffer = BytesIO()
 
     @property
