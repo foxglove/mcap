@@ -26,7 +26,7 @@ class DecoderFactory(McapDecoderFactory):
     Requires a valid `ros1msg` schema to decode messages.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._types: Dict[int, Type[Any]] = {}
 
     def decoder_for(
