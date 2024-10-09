@@ -11,7 +11,7 @@ from .records import (
 
 
 class Summary:
-    def __init__(self):
+    def __init__(self) -> None:
         """contains information from the summary section of an MCAP.
         :ivar schemas: a dict of schema ID to schema record.
         :ivar channels: a dict of channel ID to channel record.

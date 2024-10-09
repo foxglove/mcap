@@ -23,7 +23,7 @@ class DecoderFactory(McapDecoderFactory):
     messages. Requires valid `protobuf` schemas to decode messages.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._types: Dict[int, Type[Any]] = {}
 
     def decoder_for(
