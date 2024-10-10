@@ -17,7 +17,9 @@ fn smoke() -> Result<()> {
 
     let expected = mcap::Message {
         channel: Arc::new(mcap::Channel {
+            id: 1,
             schema: Some(Arc::new(mcap::Schema {
+                id: 1,
                 name: String::from("Example"),
                 encoding: String::from("c"),
                 data: Cow::Borrowed(&[4, 5, 6]),
@@ -65,12 +67,14 @@ fn run_round_trip(use_chunks: bool) -> Result<()> {
     let summary = mcap::Summary::read(&ours)?.unwrap();
 
     let schema = Arc::new(mcap::Schema {
+        id: 1,
         name: String::from("Example"),
         encoding: String::from("c"),
         data: Cow::Borrowed(&[4, 5, 6]),
     });
 
     let channel = Arc::new(mcap::Channel {
+        id: 0,
         schema: Some(schema.clone()),
         topic: String::from("example"),
         message_encoding: String::from("a"),
