@@ -43,7 +43,7 @@ struct RWBuf {
 
 impl RWBuf {
     // returns a mutable view of the un-written part of the buffer.
-    fn tail<'a>(&'a mut self) -> &'a mut [u8] {
+    fn tail(&mut self) -> &mut [u8] {
         &mut self.data[self.end..]
     }
 
@@ -63,7 +63,7 @@ impl RWBuf {
     }
 
     // returns an immutable view of the entire unread section.
-    fn unread<'a>(&'a self) -> &'a [u8] {
+    fn unread(&self) -> &[u8] {
         &self.data[self.start..self.end]
     }
 
@@ -79,14 +79,14 @@ impl RWBuf {
     }
 
     // returns an immutable view into the buffer for the given span.
-    fn view<'a>(&'a self, span: (usize, usize)) -> &'a [u8] {
+    fn view(&self, span: (usize, usize)) -> &[u8] {
         let (start, end) = span;
         &self.data[start..end]
     }
 
     // returns a mutable view of the un-written part of the buffer, resizing as needed to ensure
     // N bytes are available to write into.
-    fn tail_with_size<'a>(&'a mut self, n: usize) -> &'a mut [u8] {
+    fn tail_with_size(&mut self, n: usize) -> &mut [u8] {
         let desired_end = self.end + n;
         self.data.resize(desired_end, 0);
         self.tail()
@@ -186,7 +186,8 @@ impl<'a> InputBuf<'a> {
     pub fn set_filled(&'a mut self, written: usize) {
         *self.last_write = Some(written);
     }
-    /// A convenience method to copy from the user's slice of MCAP data.
+    /// A convenience method to copy from the user's slice of MCAP data. up to `self.buf.len()`
+    /// bytes from `other`, calling `self.set_filled()` with the number of bytes copied.
     pub fn copy_from(&'a mut self, other: &[u8]) -> usize {
         let len = std::cmp::min(self.buf.len(), other.len());
         let src = &other[..len];
@@ -359,7 +360,7 @@ impl LinearReader {
             if let Some(hasher) = self.data_section_hasher.as_mut() {
                 hasher.update(written_region);
             }
-            // update end pointer, and update
+            // update end pointer and chunk state if reading from a chunk.
             match &mut self.from {
                 File => self.uncompressed.mark_written(written),
                 Chunk(state) => match state.decompressor {
@@ -597,7 +598,7 @@ impl LinearReader {
                 ValidatingChunkCrc { len, crc } => {
                     match self.load(len_as_usize(len)?)? {
                         Span(span) => {
-                            let calculated = crc32fast::hash(&self.uncompressed.view(span));
+                            let calculated = crc32fast::hash(self.uncompressed.view(span));
                             if calculated != crc {
                                 self.failed = true;
                                 return Err(McapError::BadChunkCrc {
@@ -633,7 +634,7 @@ impl LinearReader {
             Remainder(want) => want,
         };
         match &mut self.from {
-            File => return Ok(Remainder(want)),
+            File => Ok(Remainder(want)),
             Chunk(chunk_state) => {
                 let decompressor = match &mut chunk_state.decompressor {
                     None => return Ok(Remainder(want)),
@@ -644,7 +645,7 @@ impl LinearReader {
                     0,
                 );
                 let src = self.compressed.unread();
-                if src.len() == 0 {
+                if src.is_empty() {
                     return Ok(Remainder(std::cmp::min(
                         clamp_to_usize(chunk_state.compressed_remaining),
                         DEFAULT_CHUNK_DATA_READ_SIZE,
@@ -662,15 +663,15 @@ impl LinearReader {
                 if self.compressed.len() == 0 {
                     self.compressed.reset();
                 }
-                return match self.uncompressed.span(amount) {
+                match self.uncompressed.span(amount) {
                     Span(b) => Ok(Span(b)),
                     Remainder(_) => Ok(Remainder(std::cmp::min(
                         clamp_to_usize(chunk_state.compressed_remaining),
                         res.need,
                     ))),
-                };
+                }
             }
-        };
+        }
     }
 
     // Consume `amount` bytes of the uncompressed input buffer if enough is available. On failure,
@@ -694,7 +695,7 @@ impl LinearReader {
                 last_write: &mut self.last_write,
             }))),
             Chunk(state) => {
-                if let None = state.decompressor {
+                if state.decompressor.is_none() {
                     Ok(Some(ReadAction::Fill(InputBuf {
                         buf: self.uncompressed.tail_with_size(want),
                         last_write: &mut self.last_write,
@@ -821,34 +822,6 @@ mod tests {
         Ok(())
     }
 
-    use paste::paste;
-
-    macro_rules! test_chunk_parametrized {
-        ($($name:ident, $compression:expr, $options:expr),*) => {
-            $(
-                paste! {
-                    #[test]
-                    fn [ <test_chunked_ $name> ]() -> McapResult<()> {
-                        test_chunked($compression, $options)
-                    }
-                }
-            )*
-
-        };
-    }
-
-    test_chunk_parametrized! {
-        none_none, None, LinearReaderOptions::default(),
-        none_after, None, LinearReaderOptions::default().with_validate_chunk_crcs(true),
-        none_before, None, LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
-        zstd_none, Some(Compression::Zstd), LinearReaderOptions::default(),
-        zstd_after, Some(Compression::Zstd), LinearReaderOptions::default().with_validate_chunk_crcs(true),
-        zstd_before, Some(Compression::Zstd), LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
-        lz4_none, Some(Compression::Lz4), LinearReaderOptions::default(),
-        lz4_after, Some(Compression::Lz4), LinearReaderOptions::default().with_validate_chunk_crcs(true),
-        lz4_before, Some(Compression::Lz4), LinearReaderOptions::default().with_prevalidate_chunk_crcs(true)
-    }
-
     fn test_chunked(
         compression: Option<Compression>,
         options: LinearReaderOptions,
@@ -891,6 +864,34 @@ mod tests {
         );
         Ok(())
     }
+    use paste::paste;
+
+    macro_rules! test_chunked_parametrized {
+        ($($name:ident, $compression:expr, $options:expr),*) => {
+            $(
+                paste! {
+                    #[test]
+                    fn [ <test_chunked_ $name> ]() -> McapResult<()> {
+                        test_chunked($compression, $options)
+                    }
+                }
+            )*
+
+        };
+    }
+
+    test_chunked_parametrized! {
+        none_none, None, LinearReaderOptions::default(),
+        none_after, None, LinearReaderOptions::default().with_validate_chunk_crcs(true),
+        none_before, None, LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
+        zstd_none, Some(Compression::Zstd), LinearReaderOptions::default(),
+        zstd_after, Some(Compression::Zstd), LinearReaderOptions::default().with_validate_chunk_crcs(true),
+        zstd_before, Some(Compression::Zstd), LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
+        lz4_none, Some(Compression::Lz4), LinearReaderOptions::default(),
+        lz4_after, Some(Compression::Lz4), LinearReaderOptions::default().with_validate_chunk_crcs(true),
+        lz4_before, Some(Compression::Lz4), LinearReaderOptions::default().with_prevalidate_chunk_crcs(true)
+    }
+
     #[test]
     fn test_no_magic() -> McapResult<()> {
         for options in [
