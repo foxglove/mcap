@@ -46,12 +46,12 @@ impl RWBuf {
         &mut self.data[self.end..]
     }
 
-    fn add_new(&mut self, n: usize) {
-        self.end += n;
+    fn mark_written(&mut self, written: usize) {
+        self.end += written;
     }
 
-    fn consume(&mut self, n: usize) {
-        self.start += n;
+    fn mark_read(&mut self, read: usize) {
+        self.start += read;
     }
 
     fn len(&self) -> usize {
@@ -61,13 +61,18 @@ impl RWBuf {
     fn unread<'a>(&'a self) -> &'a [u8] {
         &self.data[self.start..self.end]
     }
-    fn view<'a>(&'a self, start: usize, end: usize) -> &'a [u8] {
-        if end > self.end {
-            panic!(
-                "view out of bounds: start: {0}, self.start: {1}, end: {2}, self.end: {3}, len: {4}",
-                start, self.start, end, self.end, self.data.len()
-            );
+
+    fn span(&self, want: usize) -> SpanOrRemainder {
+        let desired_end = self.start + want;
+        if desired_end <= self.end {
+            Span((self.start, desired_end))
+        } else {
+            Remainder(desired_end - self.end)
         }
+    }
+
+    fn view<'a>(&'a self, span: (usize, usize)) -> &'a [u8] {
+        let (start, end) = span;
         &self.data[start..end]
     }
 
@@ -78,8 +83,7 @@ impl RWBuf {
     }
 
     fn reset(&mut self) {
-        let tail_len = self.tail().len();
-        self.data.resize(tail_len, 0);
+        self.data.clear();
         self.start = 0;
         self.end = 0;
     }
@@ -91,11 +95,11 @@ enum ReadingFrom {
 }
 use ReadingFrom::*;
 
-enum BoundsOrRemainder {
-    Bounds((usize, usize)),
+enum SpanOrRemainder {
+    Span((usize, usize)),
     Remainder(usize),
 }
-use BoundsOrRemainder::*;
+use SpanOrRemainder::*;
 
 #[derive(Debug, Default, Clone)]
 pub struct LinearReaderOptions {
@@ -320,9 +324,9 @@ impl LinearReader {
             }
             // update end pointer, and update
             match &mut self.from {
-                File => self.uncompressed.add_new(written),
+                File => self.uncompressed.mark_written(written),
                 Chunk(state) => match state.decompressor {
-                    Some(_) => self.compressed.add_new(written),
+                    Some(_) => self.compressed.mark_written(written),
                     None => {
                         // for the special case of reading from an uncompressed chunk, we update
                         // the chunk CRC and compressed remaining here instead of after
@@ -330,7 +334,7 @@ impl LinearReader {
                         if let Some(hasher) = state.hasher.as_mut() {
                             hasher.update(written_region);
                         }
-                        self.uncompressed.add_new(written);
+                        self.uncompressed.mark_written(written);
                         state.compressed_remaining -= written as u64;
                     }
                 },
@@ -358,11 +362,11 @@ impl LinearReader {
 
             match self.currently_reading {
                 StartMagic => {
-                    let (start, end) = match self.consume(MAGIC.len())? {
-                        Bounds(input) => input,
+                    let span = match self.consume(MAGIC.len())? {
+                        Span(span) => span,
                         Remainder(want) => return self.request(want),
                     };
-                    let input = self.uncompressed.view(start, end);
+                    let input = self.uncompressed.view(span);
                     if input != MAGIC {
                         self.failed = true;
                         return Err(McapError::BadMagic);
@@ -373,11 +377,11 @@ impl LinearReader {
                     if self.options.skip_end_magic {
                         return Ok(None);
                     }
-                    let (start, end) = match self.consume(MAGIC.len())? {
-                        Bounds(input) => input,
+                    let span = match self.consume(MAGIC.len())? {
+                        Span(span) => span,
                         Remainder(want) => return self.request(want),
                     };
-                    let input = self.uncompressed.view(start, end);
+                    let input = self.uncompressed.view(span);
                     if input != MAGIC {
                         self.failed = true;
                         return Err(McapError::BadMagic);
@@ -386,16 +390,16 @@ impl LinearReader {
                 }
                 Record => {
                     // need one byte for opcode, then 8 bytes for record length.
-                    let (start, end) = match self.load(9)? {
-                        Bounds(input) => input,
+                    let span = match self.load(9)? {
+                        Span(span) => span,
                         Remainder(want) => return self.request(want),
                     };
-                    let input = self.uncompressed.view(start, end);
+                    let input = self.uncompressed.view(span);
                     let opcode = input[0];
-                    let record_length: u64 = u64::from_le_bytes(input[1..9].try_into().unwrap());
+                    let record_length: u64 = u64::from_le_bytes(input[1..].try_into().unwrap());
                     if opcode == op::CHUNK && !self.options.emit_chunks {
                         match self.consume(9)? {
-                            Bounds(_) => {}
+                            Span(_) => {}
                             Remainder(_) => panic!("there should be 9 bytes available"),
                         };
                         self.currently_reading =
@@ -403,8 +407,8 @@ impl LinearReader {
                         continue;
                     }
                     // get the rest of the record now.
-                    let (start, end) = match self.consume(9 + len_as_usize(record_length)?)? {
-                        Bounds(input) => input,
+                    let span = match self.consume(9 + len_as_usize(record_length)?)? {
+                        Span(span) => span,
                         Remainder(want) => return self.request(want),
                     };
                     // some opcodes trigger state changes.
@@ -414,7 +418,7 @@ impl LinearReader {
                         // Data end implies end of data section - validate the CRC if present.
                         op::DATA_END => {
                             if let Some(calculated) = self.calculated_data_section_crc {
-                                let record_data = self.uncompressed.view(start + 9, end);
+                                let record_data = &self.uncompressed.view(span)[9..];
                                 match parse_record(opcode, record_data)? {
                                     crate::records::Record::DataEnd(end) => {
                                         if end.data_section_crc != 0
@@ -475,7 +479,7 @@ impl LinearReader {
                         self.currently_reading = PaddingAfterChunk { len: padding }
                     }
                     return Ok(Some(ReadAction::GetRecord {
-                        data: &self.uncompressed.view(start + 9, end),
+                        data: &self.uncompressed.view(span)[9..],
                         opcode,
                     }));
                 }
@@ -493,11 +497,11 @@ impl LinearReader {
                             expected: min_chunk_header_len as u64,
                         });
                     }
-                    let (start, end) = match self.load(min_chunk_header_len)? {
-                        Bounds(bounds) => bounds,
+                    let span = match self.load(min_chunk_header_len)? {
+                        Span(span) => span,
                         Remainder(remainder) => return self.request(remainder),
                     };
-                    let input = self.uncompressed.view(start, end);
+                    let input = self.uncompressed.view(span);
                     let compression_string_length =
                         u32::from_le_bytes(input[28..32].try_into().unwrap());
                     let true_chunk_header_len =
@@ -511,11 +515,11 @@ impl LinearReader {
                         });
                     }
                     // now we can load the full chunk header bytes.
-                    let (start, end) = match self.consume(true_chunk_header_len)? {
-                        Bounds(buf) => buf,
+                    let span = match self.consume(true_chunk_header_len)? {
+                        Span(span) => span,
                         Remainder(need) => return self.request(need),
                     };
-                    let mut cursor = std::io::Cursor::new(self.uncompressed.view(start, end));
+                    let mut cursor = std::io::Cursor::new(self.uncompressed.view(span));
                     let hdr: ChunkHeader = cursor.read_le()?;
 
                     let content_len = true_chunk_header_len as u64 + hdr.compressed_size;
@@ -556,8 +560,8 @@ impl LinearReader {
                 }
                 ValidatingChunkCrc { len, crc } => {
                     match self.load(len_as_usize(len)?)? {
-                        Bounds((start, end)) => {
-                            let calculated = crc32fast::hash(&self.uncompressed.view(start, end));
+                        Span(span) => {
+                            let calculated = crc32fast::hash(&self.uncompressed.view(span));
                             if calculated != crc {
                                 self.failed = true;
                                 return Err(McapError::BadChunkCrc {
@@ -573,7 +577,7 @@ impl LinearReader {
                 // A chunk record can have more bytes after the `data` member, which we need
                 // to discard.
                 PaddingAfterChunk { len } => match self.consume(len)? {
-                    Bounds(_) => {
+                    Span(_) => {
                         if let Some(hasher) = &mut self.data_section_hasher {
                             self.calculated_data_section_crc = Some(hasher.clone().finalize());
                         }
@@ -587,12 +591,11 @@ impl LinearReader {
 
     // load `amount` bytes into the uncompressed data buffer, returning the remainder if more
     // needs to be loaded.
-    fn load(&mut self, amount: usize) -> McapResult<BoundsOrRemainder> {
-        let slice_end = self.uncompressed.start + amount;
-        if self.uncompressed.end >= slice_end {
-            return Ok(Bounds((self.uncompressed.start, slice_end)));
-        }
-        let want = slice_end - self.uncompressed.end;
+    fn load(&mut self, amount: usize) -> McapResult<SpanOrRemainder> {
+        let want = match self.uncompressed.span(amount) {
+            Span(b) => return Ok(Span(b)),
+            Remainder(want) => want,
+        };
         match &mut self.from {
             File => return Ok(Remainder(want)),
             Chunk(chunk_state) => {
@@ -601,10 +604,7 @@ impl LinearReader {
                     Some(dec) => dec,
                 };
                 self.uncompressed.data.resize(
-                    std::cmp::max(
-                        self.uncompressed.data.len(),
-                        self.uncompressed.start + slice_end,
-                    ),
+                    std::cmp::max(self.uncompressed.data.len(), self.uncompressed.end + want),
                     0,
                 );
                 let src = self.compressed.unread();
@@ -620,30 +620,30 @@ impl LinearReader {
                 if let Some(hasher) = &mut chunk_state.hasher {
                     hasher.update(newly_decompressed);
                 }
-                self.uncompressed.add_new(res.wrote);
-                self.compressed.consume(res.consumed);
+                self.uncompressed.mark_written(res.wrote);
+                self.compressed.mark_read(res.consumed);
                 chunk_state.compressed_remaining -= res.consumed as u64;
-                if self.uncompressed.end < slice_end {
-                    return Ok(Remainder(std::cmp::min(
-                        clamp_to_usize(chunk_state.compressed_remaining),
-                        res.need,
-                    )));
-                }
                 if self.compressed.len() == 0 {
                     self.compressed.reset();
                 }
-                return Ok(Bounds((self.uncompressed.start, slice_end)));
+                return match self.uncompressed.span(amount) {
+                    Span(b) => Ok(Span(b)),
+                    Remainder(_) => Ok(Remainder(std::cmp::min(
+                        clamp_to_usize(chunk_state.compressed_remaining),
+                        res.need,
+                    ))),
+                };
             }
         };
     }
 
     // Consume `amount` bytes of the uncompressed input buffer if enough is available. On failure,
     // return the extra amount required as an error value.
-    fn consume(&mut self, amount: usize) -> McapResult<BoundsOrRemainder> {
+    fn consume(&mut self, amount: usize) -> McapResult<SpanOrRemainder> {
         match self.load(amount)? {
-            Bounds(bounds) => {
-                self.uncompressed.consume(amount);
-                Ok(Bounds(bounds))
+            Span(span) => {
+                self.uncompressed.mark_read(amount);
+                Ok(Span(span))
             }
             Remainder(remainder) => Ok(Remainder(remainder)),
         }
