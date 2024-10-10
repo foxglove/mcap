@@ -57,13 +57,12 @@ impl<'a> LinearReader<'a> {
         Ok(Self {
             inner: InnerReader {
                 buf,
-                reader: SansIoReader::new_with_options(LinearReaderOptions {
-                    skip_start_magic: false,
-                    skip_end_magic: options.contains(Options::IgnoreEndMagic),
-                    emit_chunks: true,
-                    chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
-                    data_section_crc_validation_strategy: CRCValidationStrategy::None,
-                }),
+                reader: SansIoReader::new_with_options(
+                    LinearReaderOptions::default()
+                        .with_skip_end_magic(options.contains(Options::IgnoreEndMagic))
+                        .with_chunk_crc_validation_strategy(CRCValidationStrategy::AfterReading)
+                        .with_emit_chunks(true),
+                ),
             },
         })
     }
@@ -75,13 +74,11 @@ impl<'a> LinearReader<'a> {
         Self {
             inner: InnerReader {
                 buf,
-                reader: SansIoReader::new_with_options(LinearReaderOptions {
-                    skip_start_magic: true,
-                    skip_end_magic: true,
-                    emit_chunks: true,
-                    chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
-                    data_section_crc_validation_strategy: CRCValidationStrategy::None,
-                }),
+                reader: SansIoReader::new_with_options(
+                    LinearReaderOptions::default()
+                        .with_skip_end_magic(true)
+                        .with_skip_start_magic(true),
+                ),
             },
         }
     }
@@ -270,13 +267,11 @@ impl<'a> ChunkFlattener<'a> {
         Ok(Self {
             inner: InnerReader {
                 buf,
-                reader: SansIoReader::new_with_options(LinearReaderOptions {
-                    skip_start_magic: false,
-                    skip_end_magic: options.contains(Options::IgnoreEndMagic),
-                    emit_chunks: false,
-                    data_section_crc_validation_strategy: CRCValidationStrategy::None,
-                    chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
-                }),
+                reader: SansIoReader::new_with_options(
+                    LinearReaderOptions::default()
+                        .with_skip_end_magic(options.contains(Options::IgnoreEndMagic))
+                        .with_chunk_crc_validation_strategy(CRCValidationStrategy::AfterReading),
+                ),
             },
         })
     }

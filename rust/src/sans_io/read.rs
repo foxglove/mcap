@@ -129,6 +129,51 @@ pub struct LinearReaderOptions {
     pub data_section_crc_validation_strategy: CRCValidationStrategy,
 }
 
+impl LinearReaderOptions {
+    pub fn with_skip_start_magic(self, skip_start_magic: bool) -> Self {
+        Self {
+            skip_start_magic,
+            ..self
+        }
+    }
+    pub fn with_skip_end_magic(self, skip_end_magic: bool) -> Self {
+        Self {
+            skip_end_magic,
+            ..self
+        }
+    }
+    pub fn with_emit_chunks(self, emit_chunks: bool) -> Self {
+        Self {
+            emit_chunks,
+            ..self
+        }
+    }
+    pub fn with_chunk_crc_validation_strategy(
+        self,
+        chunk_crc_validation_strategy: CRCValidationStrategy,
+    ) -> Self {
+        Self {
+            chunk_crc_validation_strategy,
+            ..self
+        }
+    }
+    pub fn with_data_section_crc_validation_strategy(
+        self,
+        data_section_crc_validation_strategy: CRCValidationStrategy,
+    ) -> Self {
+        if matches!(
+            data_section_crc_validation_strategy,
+            CRCValidationStrategy::BeforeReading
+        ) {
+            panic!("data section crc validation before reading not supported");
+        }
+        Self {
+            data_section_crc_validation_strategy,
+            ..self
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub enum CRCValidationStrategy {
     #[default]
@@ -268,13 +313,12 @@ impl LinearReader {
 
     /// Constructs a linear reader that will iterate through all records in a chunk.
     pub(crate) fn for_chunk(header: ChunkHeader) -> McapResult<Self> {
-        let mut result = Self::new_with_options(LinearReaderOptions {
-            skip_end_magic: true,
-            skip_start_magic: true,
-            chunk_crc_validation_strategy: CRCValidationStrategy::AfterReading,
-            data_section_crc_validation_strategy: CRCValidationStrategy::None,
-            emit_chunks: false,
-        });
+        let mut result = Self::new_with_options(
+            LinearReaderOptions::default()
+                .with_skip_end_magic(true)
+                .with_skip_start_magic(true)
+                .with_chunk_crc_validation_strategy(CRCValidationStrategy::AfterReading),
+        );
         result.currently_reading = Record;
         result.from = Chunk(ChunkState {
             decompressor: result.get_decompressor(&header.compression)?,
@@ -796,59 +840,13 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_chunked_none_none() -> McapResult<()> {
-        test_chunked(None, CRCValidationStrategy::None)
-    }
-    #[test]
-    fn test_chunked_none_after_reading() -> McapResult<()> {
-        test_chunked(None, CRCValidationStrategy::AfterReading)
-    }
-    #[test]
-    fn test_chunked_none_before_reading() -> McapResult<()> {
-        test_chunked(None, CRCValidationStrategy::BeforeReading)
-    }
-
-    #[test]
-    fn test_chunked_zstd_none() -> McapResult<()> {
-        test_chunked(Some(Compression::Zstd), CRCValidationStrategy::None)
-    }
-    #[test]
-    fn test_chunked_zstd_after_reading() -> McapResult<()> {
-        test_chunked(Some(Compression::Zstd), CRCValidationStrategy::AfterReading)
-    }
-    #[test]
-    fn test_chunked_zstd_before_reading() -> McapResult<()> {
-        test_chunked(
-            Some(Compression::Zstd),
-            CRCValidationStrategy::BeforeReading,
-        )
-    }
-
-    #[test]
-    fn test_chunked_lz4_none() -> McapResult<()> {
-        test_chunked(Some(Compression::Lz4), CRCValidationStrategy::None)
-    }
-    #[test]
-    fn test_chunked_lz4_after_reading() -> McapResult<()> {
-        test_chunked(Some(Compression::Lz4), CRCValidationStrategy::AfterReading)
-    }
-    #[test]
-    fn test_chunked_lz4_before_reading() -> McapResult<()> {
-        test_chunked(Some(Compression::Lz4), CRCValidationStrategy::BeforeReading)
-    }
-
     fn test_chunked(
         compression: Option<Compression>,
         strategy: CRCValidationStrategy,
     ) -> McapResult<()> {
-        let mut reader = LinearReader::new_with_options(LinearReaderOptions {
-            skip_end_magic: false,
-            skip_start_magic: false,
-            emit_chunks: false,
-            chunk_crc_validation_strategy: strategy.clone(),
-            data_section_crc_validation_strategy: CRCValidationStrategy::None,
-        });
+        let mut reader = LinearReader::new_with_options(
+            LinearReaderOptions::default().with_chunk_crc_validation_strategy(strategy.clone()),
+        );
         let mut cursor = std::io::Cursor::new(basic_chunked_file(compression)?);
         let mut opcodes: Vec<u8> = Vec::new();
         let mut iter_count = 0;
@@ -889,20 +887,8 @@ mod tests {
     #[test]
     fn test_no_magic() -> McapResult<()> {
         for options in [
-            LinearReaderOptions {
-                skip_start_magic: false,
-                skip_end_magic: true,
-                emit_chunks: false,
-                chunk_crc_validation_strategy: CRCValidationStrategy::None,
-                data_section_crc_validation_strategy: CRCValidationStrategy::None,
-            },
-            LinearReaderOptions {
-                skip_start_magic: true,
-                skip_end_magic: false,
-                emit_chunks: false,
-                chunk_crc_validation_strategy: CRCValidationStrategy::None,
-                data_section_crc_validation_strategy: CRCValidationStrategy::None,
-            },
+            LinearReaderOptions::default().with_skip_start_magic(true),
+            LinearReaderOptions::default().with_skip_end_magic(true),
         ] {
             let mcap = basic_chunked_file(None)?;
             let input = if options.skip_start_magic {
@@ -955,13 +941,8 @@ mod tests {
     #[test]
     fn test_emit_chunks() -> McapResult<()> {
         let mcap = basic_chunked_file(None)?;
-        let mut reader = LinearReader::new_with_options(LinearReaderOptions {
-            skip_end_magic: false,
-            skip_start_magic: false,
-            emit_chunks: true,
-            chunk_crc_validation_strategy: CRCValidationStrategy::None,
-            data_section_crc_validation_strategy: CRCValidationStrategy::None,
-        });
+        let mut reader =
+            LinearReader::new_with_options(LinearReaderOptions::default().with_emit_chunks(true));
         let mut cursor = std::io::Cursor::new(mcap);
         let mut opcodes: Vec<u8> = Vec::new();
         let mut iter_count = 0;
