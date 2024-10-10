@@ -2,7 +2,7 @@ package mcap
 
 import "errors"
 
-// Error used to specify when an unexpected token was found in an MCAP file
+// Error used to specify when an unexpected token was found in an MCAP file.
 type UnexpectedTokenError struct {
 	err error
 }
