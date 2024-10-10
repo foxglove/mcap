@@ -20,9 +20,7 @@ use log::*;
 
 use crate::{
     records::{self, op, Record},
-    sans_io::read::{
-        CRCValidationStrategy, LinearReader as SansIoReader, LinearReaderOptions, ReadAction,
-    },
+    sans_io::read::{LinearReader as SansIoReader, LinearReaderOptions, ReadAction},
     Attachment, Channel, McapError, McapResult, Message, Schema, MAGIC,
 };
 
@@ -60,7 +58,7 @@ impl<'a> LinearReader<'a> {
                 reader: SansIoReader::new_with_options(
                     LinearReaderOptions::default()
                         .with_skip_end_magic(options.contains(Options::IgnoreEndMagic))
-                        .with_chunk_crc_validation_strategy(CRCValidationStrategy::AfterReading)
+                        .with_validate_chunk_crcs(true)
                         .with_emit_chunks(true),
                 ),
             },
@@ -270,7 +268,7 @@ impl<'a> ChunkFlattener<'a> {
                 reader: SansIoReader::new_with_options(
                     LinearReaderOptions::default()
                         .with_skip_end_magic(options.contains(Options::IgnoreEndMagic))
-                        .with_chunk_crc_validation_strategy(CRCValidationStrategy::AfterReading),
+                        .with_validate_chunk_crcs(true),
                 ),
             },
         })

@@ -121,12 +121,12 @@ pub struct LinearReaderOptions {
     /// If true, the reader will yield entire chunk records. Otherwise, the reader will decompress
     /// and read into the chunk, yielding the records inside.
     pub emit_chunks: bool,
-    // strategy for validating chunk CRCs.
-    pub chunk_crc_validation_strategy: CRCValidationStrategy,
-    // strategy for validating the data section CRC. `CRCValidationStrategy::BeforeReading` is not
-    // supported for the data section, since it would require the entire data section to be loaded
-    // into memory before yielding the first message.
-    pub data_section_crc_validation_strategy: CRCValidationStrategy,
+    // whether to validate chunk CRCs. Ignored if `prevalidate_chunk_crcs` is true.
+    pub validate_chunk_crcs: bool,
+    // whether to validate the chunk CRC before yielding any records from the chunk.
+    pub prevalidate_chunk_crcs: bool,
+    // Whether to validate the data section CRC.
+    pub validate_data_section_crc: bool,
 }
 
 impl LinearReaderOptions {
@@ -148,44 +148,28 @@ impl LinearReaderOptions {
             ..self
         }
     }
-    pub fn with_chunk_crc_validation_strategy(
-        self,
-        chunk_crc_validation_strategy: CRCValidationStrategy,
-    ) -> Self {
+    pub fn with_validate_chunk_crcs(self, validate_chunk_crcs: bool) -> Self {
         Self {
-            chunk_crc_validation_strategy,
+            validate_chunk_crcs,
             ..self
         }
     }
-    pub fn with_data_section_crc_validation_strategy(
-        self,
-        data_section_crc_validation_strategy: CRCValidationStrategy,
-    ) -> Self {
-        if matches!(
-            data_section_crc_validation_strategy,
-            CRCValidationStrategy::BeforeReading
-        ) {
-            panic!("data section crc validation before reading not supported");
+    pub fn with_prevalidate_chunk_crcs(self, prevalidate_chunk_crcs: bool) -> Self {
+        let mut res = Self {
+            prevalidate_chunk_crcs,
+            ..self
+        };
+        if res.prevalidate_chunk_crcs {
+            res.validate_chunk_crcs = true;
         }
+        res
+    }
+    pub fn with_validate_data_section_crc(self, validate_data_section_crc: bool) -> Self {
         Self {
-            data_section_crc_validation_strategy,
+            validate_data_section_crc,
             ..self
         }
     }
-}
-
-#[derive(Debug, Default, Clone)]
-pub enum CRCValidationStrategy {
-    #[default]
-    None,
-    /// Validate CRC of region (data section, chunk or attachment data) before yielding any records.
-    /// This requires scanning the entire region before yielding the first record, which can be
-    /// prohibitive in I/O or memory cost.
-    BeforeReading,
-    /// Validate CRC of region (data section, chunk or attachment) after yielding all data from it.
-    /// If the CRC check fails in this mode, the previously-yielded records may be corrupt, and
-    /// should be discarded.
-    AfterReading,
 }
 
 /// A mutable view that allows the user to write new MCAP data into the [`LinearReader`]. The user
@@ -295,12 +279,10 @@ impl LinearReader {
             from: File,
             uncompressed: RWBuf::default(),
             compressed: RWBuf::default(),
-            data_section_hasher: match options.data_section_crc_validation_strategy {
-                CRCValidationStrategy::None => None,
-                CRCValidationStrategy::BeforeReading => {
-                    panic!("data section crc validation before reading not supported");
-                }
-                CRCValidationStrategy::AfterReading => Some(crc32fast::Hasher::new()),
+            data_section_hasher: if options.validate_data_section_crc {
+                None
+            } else {
+                Some(crc32fast::Hasher::new())
             },
             calculated_data_section_crc: None,
             decompressors: HashMap::new(),
@@ -317,7 +299,7 @@ impl LinearReader {
             LinearReaderOptions::default()
                 .with_skip_end_magic(true)
                 .with_skip_start_magic(true)
-                .with_chunk_crc_validation_strategy(CRCValidationStrategy::AfterReading),
+                .with_validate_chunk_crcs(true),
         );
         result.currently_reading = Record;
         result.from = Chunk(ChunkState {
@@ -589,9 +571,12 @@ impl LinearReader {
                     // switch to reading from the chunk data.
                     self.from = Chunk(ChunkState {
                         decompressor: self.get_decompressor(&hdr.compression)?,
-                        hasher: match self.options.chunk_crc_validation_strategy {
-                            CRCValidationStrategy::AfterReading => Some(crc32fast::Hasher::new()),
-                            _ => None,
+                        hasher: if self.options.validate_chunk_crcs
+                            && !self.options.prevalidate_chunk_crcs
+                        {
+                            Some(crc32fast::Hasher::new())
+                        } else {
+                            None
                         },
                         crc: hdr.uncompressed_crc,
                         compressed_remaining: hdr.compressed_size,
@@ -600,11 +585,7 @@ impl LinearReader {
                     self.compressed.reset();
                     // If we need to validate the CRC of all the chunk data before yielding
                     // any records, do that first. Otherwise, go ahead and yield the first record.
-                    if matches!(
-                        self.options.chunk_crc_validation_strategy,
-                        CRCValidationStrategy::BeforeReading
-                    ) && hdr.uncompressed_crc != 0
-                    {
+                    if self.options.prevalidate_chunk_crcs && hdr.uncompressed_crc != 0 {
                         self.currently_reading = ValidatingChunkCrc {
                             len: hdr.uncompressed_size,
                             crc: hdr.uncompressed_crc,
@@ -840,13 +821,39 @@ mod tests {
         Ok(())
     }
 
+    use paste::paste;
+
+    macro_rules! test_chunk_parametrized {
+        ($($name:ident, $compression:expr, $options:expr),*) => {
+            $(
+                paste! {
+                    #[test]
+                    fn [ <test_chunked_ $name> ]() -> McapResult<()> {
+                        test_chunked($compression, $options)
+                    }
+                }
+            )*
+
+        };
+    }
+
+    test_chunk_parametrized! {
+        none_none, None, LinearReaderOptions::default(),
+        none_after, None, LinearReaderOptions::default().with_validate_chunk_crcs(true),
+        none_before, None, LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
+        zstd_none, Some(Compression::Zstd), LinearReaderOptions::default(),
+        zstd_after, Some(Compression::Zstd), LinearReaderOptions::default().with_validate_chunk_crcs(true),
+        zstd_before, Some(Compression::Zstd), LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
+        lz4_none, Some(Compression::Lz4), LinearReaderOptions::default(),
+        lz4_after, Some(Compression::Lz4), LinearReaderOptions::default().with_validate_chunk_crcs(true),
+        lz4_before, Some(Compression::Lz4), LinearReaderOptions::default().with_prevalidate_chunk_crcs(true)
+    }
+
     fn test_chunked(
         compression: Option<Compression>,
-        strategy: CRCValidationStrategy,
+        options: LinearReaderOptions,
     ) -> McapResult<()> {
-        let mut reader = LinearReader::new_with_options(
-            LinearReaderOptions::default().with_chunk_crc_validation_strategy(strategy.clone()),
-        );
+        let mut reader = LinearReader::new_with_options(options);
         let mut cursor = std::io::Cursor::new(basic_chunked_file(compression)?);
         let mut opcodes: Vec<u8> = Vec::new();
         let mut iter_count = 0;
