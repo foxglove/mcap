@@ -42,26 +42,33 @@ struct RWBuf {
 }
 
 impl RWBuf {
+    // returns a mutable view of the un-written part of the buffer.
     fn tail<'a>(&'a mut self) -> &'a mut [u8] {
         &mut self.data[self.end..]
     }
 
+    // Marks some bytes of the un-written part as written.
     fn mark_written(&mut self, written: usize) {
         self.end += written;
     }
 
+    // Marks some bytes of the un-read part as read.
     fn mark_read(&mut self, read: usize) {
         self.start += read;
     }
 
+    // returns the length of the unread section.
     fn len(&self) -> usize {
         self.end - self.start
     }
 
+    // returns an immutable view of the entire unread section.
     fn unread<'a>(&'a self) -> &'a [u8] {
         &self.data[self.start..self.end]
     }
 
+    // returns a span of un-read data if enough is available, otherwise returning the remainder
+    // needed.
     fn span(&self, want: usize) -> SpanOrRemainder {
         let desired_end = self.start + want;
         if desired_end <= self.end {
@@ -71,17 +78,21 @@ impl RWBuf {
         }
     }
 
+    // returns an immutable view into the buffer for the given span.
     fn view<'a>(&'a self, span: (usize, usize)) -> &'a [u8] {
         let (start, end) = span;
         &self.data[start..end]
     }
 
+    // returns a mutable view of the un-written part of the buffer, resizing as needed to ensure
+    // N bytes are available to write into.
     fn tail_with_size<'a>(&'a mut self, n: usize) -> &'a mut [u8] {
         let desired_end = self.end + n;
         self.data.resize(desired_end, 0);
         self.tail()
     }
 
+    // resets the RWBuf.
     fn reset(&mut self) {
         self.data.clear();
         self.start = 0;
