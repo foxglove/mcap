@@ -2,7 +2,6 @@ package mcap
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -10,8 +9,6 @@ import (
 
 // Magic is the magic number for an MCAP file.
 var Magic = []byte{0x89, 'M', 'C', 'A', 'P', 0x30, '\r', '\n'}
-
-var ErrLengthOutOfRange = errors.New("length out of int32 range")
 
 const (
 	// CompressionZSTD represents zstd compression.

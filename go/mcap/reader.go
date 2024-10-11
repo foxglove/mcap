@@ -8,8 +8,6 @@ import (
 	"math"
 )
 
-var ErrMetadataNotFound = errors.New("metadata not found")
-
 func getPrefixedString(data []byte, offset int) (s string, newoffset int, err error) {
 	if len(data[offset:]) < 4 {
 		return "", 0, io.ErrShortBuffer
@@ -231,7 +229,7 @@ func (r *Reader) GetMetadata(offset uint64) (*Metadata, error) {
 		return nil, err
 	}
 	if token != TokenMetadata {
-		return nil, NewUnexpectedTokenError(fmt.Errorf("expected metadata record, found %v", data))
+		return nil, NewErrUnexpectedToken(fmt.Errorf("expected metadata record, found %v", data))
 	}
 	metadata, err := ParseMetadata(data)
 	if err != nil {
@@ -262,7 +260,7 @@ func NewReader(r io.Reader) (*Reader, error) {
 		return nil, fmt.Errorf("could not read MCAP header when opening reader: %w", err)
 	}
 	if token != TokenHeader {
-		return nil, NewUnexpectedTokenError(fmt.Errorf("expected first record in MCAP to be a Header, found %v", headerData))
+		return nil, NewErrUnexpectedToken(fmt.Errorf("expected first record in MCAP to be a Header, found %v", headerData))
 	}
 	header, err := ParseHeader(headerData)
 	if err != nil {

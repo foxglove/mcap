@@ -12,12 +12,6 @@ import (
 	"github.com/pierrec/lz4/v4"
 )
 
-// ErrNestedChunk indicates the lexer has detected a nested chunk.
-var ErrNestedChunk = errors.New("detected nested chunk")
-var ErrChunkTooLarge = errors.New("chunk exceeds configured maximum size")
-var ErrRecordTooLarge = errors.New("record exceeds configured maximum size")
-var ErrInvalidZeroOpcode = errors.New("invalid zero opcode")
-
 type errInvalidChunkCrc struct {
 	expected uint32
 	actual   uint32
@@ -25,34 +19,6 @@ type errInvalidChunkCrc struct {
 
 func (e *errInvalidChunkCrc) Error() string {
 	return fmt.Sprintf("invalid chunk CRC: %x != %x", e.actual, e.expected)
-}
-
-type ErrTruncatedRecord struct {
-	opcode      OpCode
-	actualLen   int
-	expectedLen uint64
-}
-
-func (e *ErrTruncatedRecord) Error() string {
-	if e.expectedLen == 0 {
-		return fmt.Sprintf(
-			"MCAP truncated in record length field after %s opcode (%x), received %d bytes",
-			e.opcode.String(),
-			byte(e.opcode),
-			e.actualLen,
-		)
-	}
-	return fmt.Sprintf(
-		"MCAP truncated in %s (0x%x) record content with expected length %d, data ended after %d bytes",
-		e.opcode.String(),
-		byte(e.opcode),
-		e.expectedLen,
-		e.actualLen,
-	)
-}
-
-func (e *ErrTruncatedRecord) Unwrap() error {
-	return io.ErrUnexpectedEOF
 }
 
 type magicLocation int
@@ -71,21 +37,6 @@ func (m magicLocation) String() string {
 	default:
 		return "unknown"
 	}
-}
-
-// ErrBadMagic indicates invalid magic bytes were detected.
-type ErrBadMagic struct {
-	location magicLocation
-	actual   []byte
-}
-
-func (e *ErrBadMagic) Error() string {
-	return fmt.Sprintf("Invalid magic at %s of file, found: %v", e.location, e.actual)
-}
-
-func (e *ErrBadMagic) Is(err error) bool {
-	_, ok := err.(*ErrBadMagic)
-	return ok
 }
 
 const (
