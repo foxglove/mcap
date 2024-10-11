@@ -1,4 +1,4 @@
-//! Read MCAP files
+//! Read MCAP data from a memory-mapped file.
 //!
 //! MCAPs are read from a byte slice instead of a [`std::io::Read`] trait object.
 //! Consider [memory-mapping](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)

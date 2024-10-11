@@ -1,3 +1,4 @@
+//! Implement decompression algorithms for MCAP chunk data
 use crate::McapResult;
 pub struct DecompressResult {
     /// The number of bytes consumed from the input buffer.

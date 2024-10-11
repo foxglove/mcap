@@ -1,3 +1,4 @@
+//! Read MCAP files from any source of bytes
 pub mod decompressor;
 pub mod read;
 

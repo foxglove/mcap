@@ -1,3 +1,5 @@
+//! Contains a [sans-io](https://sans-io.readthedocs.io/) MCAP reader struct, [`LinearReader`].
+//! This can be used to read MCAP data from any source of bytes.
 use std::collections::HashMap;
 
 use super::decompressor::Decompressor;
@@ -112,6 +114,7 @@ enum SpanOrRemainder {
 }
 use SpanOrRemainder::*;
 
+/// Options for initializing [`LinearReader`].
 #[derive(Debug, Default, Clone)]
 pub struct LinearReaderOptions {
     /// If true, the reader will not expect the MCAP magic at the start of the stream.
@@ -119,13 +122,14 @@ pub struct LinearReaderOptions {
     /// If true, the reader will not expect the MCAP magic at the end of the stream.
     pub skip_end_magic: bool,
     /// If true, the reader will yield entire chunk records. Otherwise, the reader will decompress
-    /// and read into the chunk, yielding the records inside.
+    /// and read into chunks, yielding the records inside.
     pub emit_chunks: bool,
-    // whether to validate chunk CRCs. Ignored if `prevalidate_chunk_crcs` is true.
+    // Enables chunk CRC validation. Ignored if `prevalidate_chunk_crcs: true`.
     pub validate_chunk_crcs: bool,
-    // whether to validate the chunk CRC before yielding any records from the chunk.
+    // Enables chunk CRC validation before yielding any messages from the chunk. Implies
+    // `validate_chunk_crcs: true`.
     pub prevalidate_chunk_crcs: bool,
-    // Whether to validate the data section CRC.
+    // Enables data section CRC validation.
     pub validate_data_section_crc: bool,
 }
 
@@ -155,14 +159,10 @@ impl LinearReaderOptions {
         }
     }
     pub fn with_prevalidate_chunk_crcs(self, prevalidate_chunk_crcs: bool) -> Self {
-        let mut res = Self {
+        Self {
             prevalidate_chunk_crcs,
             ..self
-        };
-        if res.prevalidate_chunk_crcs {
-            res.validate_chunk_crcs = true;
         }
-        res
     }
     pub fn with_validate_data_section_crc(self, validate_data_section_crc: bool) -> Self {
         Self {
@@ -172,9 +172,10 @@ impl LinearReaderOptions {
     }
 }
 
-/// A mutable view that allows the user to write new MCAP data into the [`LinearReader`]. The user
-/// is expected to copy up to `self.buf.len()` bytes into `self.buf`, then call `set_filled(usize)`
-/// to notify the reader of how many bytes were successfully read.
+/// A mutable view that allows the user to write new MCAP data into the [`LinearReader`].
+///
+/// The user is expected to copy up to `self.buf.len()` bytes into `self.buf`, then call
+/// `set_filled(usize)` to notify the reader of how many bytes were successfully read.
 pub struct InputBuf<'a> {
     pub buf: &'a mut [u8],
     last_write: &'a mut Option<usize>,
@@ -186,8 +187,9 @@ impl<'a> InputBuf<'a> {
     pub fn set_filled(&'a mut self, written: usize) {
         *self.last_write = Some(written);
     }
-    /// A convenience method to copy from the user's slice of MCAP data. up to `self.buf.len()`
-    /// bytes from `other`, calling `self.set_filled()` with the number of bytes copied.
+    /// A convenience method to copy from the user's slice of MCAP data. Copies up to
+    /// `self.buf.len()` bytes from `other`, calling `self.set_filled()` with the number of bytes
+    /// copied.
     pub fn copy_from(&'a mut self, other: &[u8]) -> usize {
         let len = std::cmp::min(self.buf.len(), other.len());
         let src = &other[..len];
@@ -198,9 +200,10 @@ impl<'a> InputBuf<'a> {
     }
 }
 
-/// Reads an MCAP file from start to end, yielding raw records by opcode and data buffer. This struct
-/// does not perform any I/O on its own, instead it yields slices to the caller and allows them to
-/// use their own I/O primitives.
+/// Reads an MCAP file from start to end, yielding raw records by opcode and data buffer.
+///
+/// This struct does not perform any I/O on its own, instead it yields slices to the caller and
+/// allows them to use their own I/O primitives.
 /// ```no_run
 /// use std::fs;
 ///
@@ -214,7 +217,6 @@ impl<'a> InputBuf<'a> {
 /// // Asynchronously...
 /// async fn read_async() -> McapResult<()> {
 ///     let mut file = AsyncFile::open("in.mcap").await.expect("couldn't open file");
-///     let mut record_buf: Vec<u8> = Vec::new();
 ///     let mut reader = mcap::sans_io::read::LinearReader::new();
 ///     while let Some(action) = reader.next_action() {
 ///         match action? {
@@ -234,7 +236,6 @@ impl<'a> InputBuf<'a> {
 /// // Or synchronously.
 /// fn read_sync() -> McapResult<()> {
 ///     let mut file = fs::File::open("in.mcap")?;
-///     let mut record_buf: Vec<u8> = Vec::new();
 ///     let mut reader = mcap::sans_io::read::LinearReader::new();
 ///     while let Some(action) = reader.next_action() {
 ///         match action? {
@@ -717,8 +718,31 @@ impl Default for LinearReader {
     }
 }
 
+/// Encapsulates the action the user should take next when reading an MCAP file.
+///
+/// ```no_run
+/// use mcap::sans_io::read::ReadAction;
+/// use mcap::McapResult;
+/// use mcap::read::parse_record;
+/// fn use_action(file: &mut Box<dyn std::io::Read>, action: ReadAction) -> McapResult<()> {
+///   match action {
+///     ReadAction::Fill(mut into) => {
+///       let n = file.read(into.buf)?;
+///       into.set_filled(n);
+///     },
+///     ReadAction::GetRecord{ opcode, data } => {
+///       let record = mcap::parse_record(opcode, data)?;
+///       // do something with the record...
+///     }
+///   }
+///   Ok(())
+/// }
+/// ```
 pub enum ReadAction<'a> {
+    /// Fill the input buffer with raw bytes from the MCAP file. call `set_filled()` with the number
+    /// of new bytes after the read operation.
     Fill(InputBuf<'a>),
+    /// Read a record out of the MCAP file. Use [`parse_record`] to parse the record.
     GetRecord { data: &'a [u8], opcode: u8 },
 }
 
