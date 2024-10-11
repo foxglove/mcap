@@ -12,13 +12,6 @@ import (
 	"github.com/pierrec/lz4/v4"
 )
 
-// ErrUnknownSchema is returned when a schema ID is not known to the writer.
-var ErrUnknownSchema = errors.New("unknown schema")
-
-// ErrAttachmentDataSizeIncorrect is returned when the length of a written
-// attachment does not match the length supplied.
-var ErrAttachmentDataSizeIncorrect = errors.New("attachment content length incorrect")
-
 // Writer is a writer for the MCAP format.
 type Writer struct {
 	// Statistics collected over the course of the recording.

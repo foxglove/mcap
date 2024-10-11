@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"math/bits"
@@ -16,8 +15,6 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
 )
-
-var ErrBadOffset = errors.New("invalid offset")
 
 const (
 	chunkBufferGrowthMultiple = 1.2
