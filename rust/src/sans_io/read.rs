@@ -381,7 +381,7 @@ impl LinearReader {
         }
         // keep processing through the data we have until we need more data or can yield a record.
         loop {
-            // check if we have consume all uncompressed data in the last iteration - if so,
+            // check if we have consumed all uncompressed data in the last iteration - if so,
             // reset the buffer.
             if self.uncompressed.len() == 0 {
                 self.uncompressed.reset();
