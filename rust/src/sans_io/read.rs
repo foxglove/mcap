@@ -327,7 +327,8 @@ impl LinearReader {
             _ => Err(McapError::UnsupportedCompression(name.into())),
         }
     }
-    fn return_decompressor(&mut self, mut decompressor: Box<dyn Decompressor>) -> McapResult<()> {
+
+    fn release_decompressor(&mut self, mut decompressor: Box<dyn Decompressor>) -> McapResult<()> {
         decompressor.reset()?;
         self.decompressors
             .insert(decompressor.name().into(), decompressor);
@@ -503,7 +504,7 @@ impl LinearReader {
                             ),
                         };
                         if let Some(decompressor) = state.decompressor.take() {
-                            self.return_decompressor(decompressor)?
+                            self.release_decompressor(decompressor)?
                         }
                         if let Some(hasher) = state.hasher.take() {
                             let calculated = hasher.finalize();
