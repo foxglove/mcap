@@ -1,17 +1,21 @@
 #pragma once
 
 #if defined _WIN32 || defined __CYGWIN__
-#  ifdef __GNUC__
-#    define MCAP_EXPORT __attribute__((dllexport))
-#    define MCAP_IMPORT __attribute__((dllimport))
+#  ifndef MCAP_STATIC_DEFINE
+#    ifdef __GNUC__
+#      define MCAP_EXPORT __attribute__((dllexport))
+#      define MCAP_IMPORT __attribute__((dllimport))
+#    else
+#      define MCAP_EXPORT __declspec(dllexport)
+#      define MCAP_IMPORT __declspec(dllimport)
+#    endif
+#    ifdef MCAP_IMPLEMENTATION
+#      define MCAP_PUBLIC MCAP_EXPORT
+#    else
+#      define MCAP_PUBLIC MCAP_IMPORT
+#    endif
 #  else
-#    define MCAP_EXPORT __declspec(dllexport)
-#    define MCAP_IMPORT __declspec(dllimport)
-#  endif
-#  ifdef MCAP_IMPLEMENTATION
-#    define MCAP_PUBLIC MCAP_EXPORT
-#  else
-#    define MCAP_PUBLIC MCAP_IMPORT
+#    define MCAP_PUBLIC
 #  endif
 #else
 #  define MCAP_EXPORT __attribute__((visibility("default")))
