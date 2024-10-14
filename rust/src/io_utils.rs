@@ -2,45 +2,6 @@ use std::io::{self, prelude::*};
 
 use crc32fast::Hasher;
 
-/// Counts how many bytes have been read and calculates a running CRC32
-pub struct CountingCrcReader<R> {
-    inner: R,
-    hasher: Hasher,
-    count: u64,
-}
-
-impl<R: Read> CountingCrcReader<R> {
-    /// Creates a new `CountingCrcReader` with the given reader.
-    ///
-    /// This is not used when both `lz4` and `zstd` features are disabled.
-    #[allow(dead_code)]
-    pub fn new(inner: R) -> Self {
-        Self {
-            inner,
-            hasher: Hasher::new(),
-            count: 0,
-        }
-    }
-
-    pub fn position(&self) -> u64 {
-        self.count
-    }
-
-    /// Consumes the reader and returns the checksum
-    pub fn finalize(self) -> u32 {
-        self.hasher.finalize()
-    }
-}
-
-impl<R: Read> Read for CountingCrcReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let res = self.inner.read(buf)?;
-        self.count += res as u64;
-        self.hasher.update(&buf[..res]);
-        Ok(res)
-    }
-}
-
 pub struct CountingCrcWriter<W> {
     inner: W,
     hasher: Hasher,

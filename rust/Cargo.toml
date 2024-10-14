@@ -23,7 +23,6 @@ num_cpus = "1.13"
 paste = "1.0"
 thiserror = "1.0"
 lz4 = { version = "1.27", optional = true }
-async-compression = { version = "*", features = ["tokio"], optional = true }
 tokio = { version = "1", features = ["io-util"] , optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -34,9 +33,9 @@ zstd = { version = "0.11", features = ["zstdmt"], optional = true }
 
 [features]
 default = ["zstd", "lz4"]
-zstd = ["dep:zstd", "async-compression/zstd"]
+zstd = ["dep:zstd"]
 lz4 = ["dep:lz4"]
-tokio = ["dep:async-compression", "dep:tokio"]
+tokio = [ "dep:tokio"]
 
 [dev-dependencies]
 anyhow = "1"
