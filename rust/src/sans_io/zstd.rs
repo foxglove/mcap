@@ -6,13 +6,16 @@ use zstd::zstd_safe::{get_error_name, DStream, InBuffer, OutBuffer, SafeResult};
 
 pub struct ZstdDecoder {
     s: DStream<'static>,
+    need: usize,
 }
 
 /// A Decompressor wrapper for Zstd streaming decompression.
 impl ZstdDecoder {
     pub fn new() -> Self {
+        let mut stream = DStream::create();
         ZstdDecoder {
-            s: DStream::create(),
+            need: stream.init(),
+            s: stream,
         }
     }
 }
@@ -25,14 +28,17 @@ fn handle_error(res: SafeResult) -> McapResult<usize> {
 }
 
 impl Decompressor for ZstdDecoder {
+    fn next_read_size(&self) -> usize {
+        self.need
+    }
     fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> crate::McapResult<DecompressResult> {
         let mut in_buffer = InBuffer::around(src);
         let mut out_buffer = OutBuffer::around(dst);
         let need = handle_error(self.s.decompress_stream(&mut out_buffer, &mut in_buffer))?;
+        self.need = need;
         Ok(DecompressResult {
             consumed: in_buffer.pos,
             wrote: out_buffer.pos(),
-            need,
         })
     }
     fn reset(&mut self) -> McapResult<()> {

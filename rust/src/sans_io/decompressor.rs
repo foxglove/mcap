@@ -5,13 +5,12 @@ pub struct DecompressResult {
     pub consumed: usize,
     /// The number of bytes written to the output buffer.
     pub wrote: usize,
-    /// A hint indicating how many bytes should be provided for the next call to completely fill
-    /// the output buffer.
-    pub need: usize,
 }
 
 /// A trait for streaming decompression.
 pub trait Decompressor {
+    /// Returns the recommended size of input to pass into `decompress()`.
+    fn next_read_size(&self) -> usize;
     /// Decompresses up to `dst.len()` bytes, consuming up to `src.len()` bytes from `src`.
     fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<DecompressResult>;
     /// Resets the internal state of the decompressor.
