@@ -1,6 +1,6 @@
 // Example code for writing Protobuf messages to an MCAP file. This executable
 // writes a sequence of foxglove.PointCloud messages to an MCAP which should
-// show an expanding sphere when viewed in Foxglove Studio.
+// show an expanding sphere when viewed in Foxglove.
 #define MCAP_IMPLEMENTATION
 #include "mcap/writer.hpp"
 
@@ -156,7 +156,6 @@ int main(int argc, char** argv) {
     if (!res.ok()) {
       std::cerr << "Failed to write message: " << res.message << "\n";
       writer.terminate();
-      writer.close();
       std::ignore = std::remove(outputFilename);
       return 1;
     }

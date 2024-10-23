@@ -1,6 +1,8 @@
 // -*- jsonc -*-
 {
-  "editor.codeActionsOnSave": { "source.fixAll.eslint": true },
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
 
@@ -42,5 +44,11 @@
 
   // https://github.com/microsoft/vscode-cpptools/issues/722
   "C_Cpp.autoAddFileAssociations": false,
-  "C_Cpp.default.cppStandard": "c++17"
+  "C_Cpp.default.cppStandard": "c++17",
+  "[go]": {
+    "editor.defaultFormatter": "golang.go"
+  },
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  }
 }

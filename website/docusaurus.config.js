@@ -7,6 +7,8 @@ const darkCodeTheme = require("prism-react-renderer/themes/dracula");
 const lightCodeTheme = require("prism-react-renderer/themes/github");
 const webpack = require("webpack");
 
+const modifySvgoConfigInPlace = require("./modifySvgoConfigInPlace");
+
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "MCAP",
@@ -32,6 +34,7 @@ const config = {
     (_context, _options) => ({
       name: "MCAP website custom webpack config",
       configureWebpack(config, _isServer, _utils, _content) {
+        modifySvgoConfigInPlace(config);
         return {
           mergeStrategy: {
             "resolve.extensions": "replace",
@@ -112,6 +115,11 @@ const config = {
             label: "Specification",
           },
           {
+            href: "https://foxglove.dev/chat",
+            label: "Discord",
+            position: "right",
+          },
+          {
             href: "https://github.com/foxglove/mcap",
             label: "GitHub",
             position: "right",
@@ -146,8 +154,8 @@ const config = {
                 href: "https://github.com/foxglove/mcap",
               },
               {
-                label: "Slack",
-                href: "https://foxglove.dev/slack",
+                label: "Discord",
+                href: "https://foxglove.dev/chat",
               },
               {
                 label: "Stack Overflow",
@@ -163,8 +171,8 @@ const config = {
             title: "Enterprise",
             items: [
               {
-                label: "Foxglove Data Platform",
-                href: "https://foxglove.dev/data-platform",
+                label: "Foxglove",
+                href: "https://foxglove.dev/",
               },
             ],
           },

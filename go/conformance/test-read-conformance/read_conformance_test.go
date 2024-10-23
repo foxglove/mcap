@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLexerConformance(t *testing.T) {
@@ -23,28 +24,28 @@ func TestLexerConformance(t *testing.T) {
 		}
 		return nil
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	for _, input := range inputs {
 		t.Run(input, func(t *testing.T) {
 			output := bytes.Buffer{}
 			err := readStreamed(&output, input)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			expectedBytes, err := os.ReadFile(strings.TrimSuffix(input, ".mcap") + ".json")
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			expectedOutput := TextOutput{}
 			err = json.Unmarshal(expectedBytes, &expectedOutput)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			receivedOutput := TextOutput{}
 			err = json.Unmarshal(output.Bytes(), &receivedOutput)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			expectedRecords, err := json.Marshal(expectedOutput.Records)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			receivedRecords, err := json.Marshal(receivedOutput.Records)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			expectedPretty, err := prettifyJSON(expectedRecords)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			receivedPretty, err := prettifyJSON(receivedRecords)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, string(expectedPretty), string(receivedPretty))
 		})
 	}

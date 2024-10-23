@@ -59,7 +59,7 @@
       "fields": [
         ["group_length", "37"],
         ["group_opcode", "3"],
-        ["group_start", "208"]
+        ["group_start", "205"]
       ]
     },
     {
@@ -67,15 +67,15 @@
       "fields": [
         ["group_length", "76"],
         ["group_opcode", "8"],
-        ["group_start", "245"]
+        ["group_start", "242"]
       ]
     },
     {
       "type": "Footer",
       "fields": [
-        ["summary_crc", "2228641887"],
-        ["summary_offset_start", "321"],
-        ["summary_start", "208"]
+        ["summary_crc", "4187364323"],
+        ["summary_offset_start", "318"],
+        ["summary_start", "205"]
       ]
     }
   ],

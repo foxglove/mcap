@@ -28,7 +28,7 @@ We provide MCAP readers and writers in the following languages:
 
 Once you have MCAP data to work with, you may want to [**use the mcap CLI to inspect and interact with your MCAP files**](https://github.com/foxglove/mcap/tree/main/go/cli/mcap#examples).
 
-You can also start visualizing your MCAP data with third-party tools like [Foxglove Studio](https://foxglove.dev/studio). To start leveraging all the visualizations Studio has to offer, you must write messages that adhere to a pre-defined set of Foxglove schemas.
+You can also start visualizing your MCAP data with third-party tools like [Foxglove](https://app.foxglove.dev/). To start leveraging all the visualizations Foxglove has to offer, you must write messages that adhere to a pre-defined set of Foxglove schemas.
 
 The [@foxglove/schemas](https://github.com/foxglove/schemas) repo provides pre-defined schemas in the following data serialization formats:
 
@@ -39,17 +39,17 @@ The [@foxglove/schemas](https://github.com/foxglove/schemas) repo provides pre-d
 - [FlatBuffers](https://github.com/foxglove/schemas/tree/main/schemas/flatbuffer)
 - [TypeScript](https://github.com/foxglove/schemas/tree/main/schemas/typescript)
 
-Next, download Foxglove Studio as a [desktop app](https://foxglove.dev/download), or navigate to [studio.foxglove.dev](https://studio.foxglove.dev) in your web browser.
+Next, download Foxglove as a [desktop app](https://foxglove.dev/download), or navigate to [app.foxglove.dev](https://app.foxglove.dev) in your web browser.
 
-**For local MCAP files**, simply drag and drop the file into the Studio app to start playing back your data.
+**For local MCAP files**, simply drag and drop the file into the Foxglove app to start playing back your data.
 
-**For remote MCAP files**, select "Open file from URL" when you first load the Studio app, and specify the URL to your remote MCAP file. Open the connection to start playing back your data.
+**For remote MCAP files**, select "Open file from URL" when you first load the Foxglove app, and specify the URL to your remote MCAP file. Open the connection to start playing back your data.
 
-Add and configure different [panels](https://foxglove.dev/docs/studio/panels/introduction) to your [layout](https://foxglove.dev/docs/studio/layouts) to visualize different aspects of your data.
+Add and configure different [panels](https://docs.foxglove.dev/docs/visualization/panels/introduction/) to your [layout](https://docs.foxglove.dev/docs/visualization/layouts/) to visualize different aspects of your data.
 
 ## Store MCAP
 
-[Sign up for a Foxglove account ](https://console.foxglove.dev) to access the data management features of [Foxglove Data Platform](https://foxglove.dev/data-platform) .
+[Sign up for a Foxglove account](https://app.foxglove.dev/signup) to access the data management features of Foxglove.
 
 Instead of having to pass around hard drives every time you want to share data, you can start importing your MCAP data into a central repository for all your teammates to access and collaborate on.
 

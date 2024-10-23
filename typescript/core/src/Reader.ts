@@ -1,13 +1,31 @@
 import { getBigUint64 } from "./getBigUint64";
 
+// For performance reasons we use a single TextDecoder instance whose internal state is merely
+// the encoding (defaults to UTF-8). This means that a TextDecoder.decode() call is not affected
+// be previous calls.
+const textDecoder = new TextDecoder();
+
 export default class Reader {
   #view: DataView;
+  #viewU8: Uint8Array;
   offset: number;
-  #textDecoder = new TextDecoder();
 
   constructor(view: DataView, offset = 0) {
     this.#view = view;
+    this.#viewU8 = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
     this.offset = offset;
+  }
+
+  // Should be ~identical to the constructor, it allows us to reinitialize the reader when
+  // the view changes,  without creating a new instance, avoiding allocation / GC overhead
+  reset(view: DataView, offset = 0): void {
+    this.#view = view;
+    this.#viewU8 = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+    this.offset = offset;
+  }
+
+  bytesRemaining(): number {
+    return this.#viewU8.length - this.offset;
   }
 
   uint8(): number {
@@ -36,14 +54,12 @@ export default class Reader {
 
   string(): string {
     const length = this.uint32();
-    if (this.offset + length > this.#view.byteLength) {
+    if (length === 0) {
+      return "";
+    } else if (length > this.bytesRemaining()) {
       throw new Error(`String length ${length} exceeds bounds of buffer`);
     }
-    const value = this.#textDecoder.decode(
-      new Uint8Array(this.#view.buffer, this.#view.byteOffset + this.offset, length),
-    );
-    this.offset += length;
-    return value;
+    return textDecoder.decode(this.u8ArrayBorrow(length));
   }
 
   keyValuePairs<K, V>(readKey: (reader: Reader) => K, readValue: (reader: Reader) => V): [K, V][] {
@@ -97,6 +113,20 @@ export default class Reader {
         `Map length (${this.offset - endOffset + length}) greater than expected (${length})`,
       );
     }
+    return result;
+  }
+
+  // Read a borrowed Uint8Array, useful temp references or borrow semantics
+  u8ArrayBorrow(length: number): Uint8Array {
+    const result = this.#viewU8.subarray(this.offset, this.offset + length);
+    this.offset += length;
+    return result;
+  }
+
+  // Read a copied Uint8Array from the underlying buffer, use when you need to keep the data around
+  u8ArrayCopy(length: number): Uint8Array {
+    const result = this.#viewU8.slice(this.offset, this.offset + length);
+    this.offset += length;
     return result;
   }
 }

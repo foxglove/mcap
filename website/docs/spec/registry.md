@@ -60,7 +60,7 @@ Schema `encoding` may only be omitted for self-describing message encodings such
 
 - `name`: Fully qualified name to the message within the descriptor set. For example, in a proto file containing `package foo.bar; message Baz {}` the fully qualified message name is `foo.bar.Baz`.
 - `encoding`: `protobuf`
-- `data`: A binary [FileDescriptorSet](https://github.com/protocolbuffers/protobuf/blob/master/src/google/protobuf/descriptor.proto) as produced by `protoc --descriptor_set_out`.
+- `data`: A binary [FileDescriptorSet](https://github.com/protocolbuffers/protobuf/blob/master/src/google/protobuf/descriptor.proto) as produced by `protoc --include_imports --descriptor_set_out`.
 
 ### flatbuffer
 
@@ -219,7 +219,26 @@ The `ros2` profile describes how to create MCAP files for [ROS 2](https://docs.r
 
 - `message_encoding`: MUST be `cdr`
 - `metadata`:
-  - `offered_qos_profiles` (required, string)
+
+  - `offered_qos_profiles` (required, string) YAML formatted sequence of QoS policy values. See [ROS QoS Policies for Recording docs](https://docs.ros.org/en/rolling/How-To-Guides/Overriding-QoS-Policies-For-Recording-And-Playback.html#using-qos-overrides) for more details. The policy value may change depending on the ROS distro. Below is an example for a single policy schema value.
+
+  ```
+  history: [keep_all, keep_last]
+  depth: int
+  reliability: [system_default, reliable, best_effort, unknown]
+  durability: [system_default, transient_local, volatile, unknown]
+  deadline:
+    sec: int
+    nsec: int
+  lifespan:
+    sec: int
+    nsec: int
+  liveliness: [system_default, automatic, manual_by_topic, unknown]
+  liveliness_lease_duration:
+    sec: int
+    nsec: int
+  avoid_ros_namespace_conventions: [true, false]
+  ```
 
 #### Schema
 

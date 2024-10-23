@@ -86,9 +86,18 @@ following dependencies:
 If your project does not need `lz4` or `zstd` support, you can optionally disable these by defining
 `MCAP_COMPRESSION_NO_LZ4` or `MCAP_COMPRESSION_NO_ZSTD` respectively.
 
+### Conan
+
 To simplify installation of dependencies, the [Conan](https://conan.io/) package
 manager can be used with the included
 [conanfile.py](https://github.com/foxglove/mcap/blob/main/cpp/mcap/conanfile.py).
+
+### CMake
+
+For using MCAP with CMake, the third-party [olympus-robotics/mcap_builder](https://github.com/olympus-robotics/mcap_builder) repository provides a helpful wrapper.
+
+### Alternatives
+
 If you use an alternative approach, such as CMake's FetchContent or directly
 vendoring the dependencies, make sure you use versions equal or greater than the
 versions listed above.

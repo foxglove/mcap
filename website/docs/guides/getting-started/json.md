@@ -25,4 +25,4 @@ For an exhaustive list of ways to interact with your MCAP data, check out the [`
 
 ## Visualize MCAP
 
-[Foxglove Studio](https://foxglove.dev/studio) supports playing back local and remote MCAP files containing JSON data.
+[Foxglove](https://foxglove.dev/) supports playing back local and remote MCAP files containing JSON data.

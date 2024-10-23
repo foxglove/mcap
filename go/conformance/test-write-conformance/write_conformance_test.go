@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWriterConformance(t *testing.T) {
@@ -22,14 +23,14 @@ func TestWriterConformance(t *testing.T) {
 		}
 		return nil
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	for _, input := range inputs {
 		t.Run(input, func(t *testing.T) {
 			output := bytes.Buffer{}
 			err := jsonToMCAP(&output, input)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			expectedBytes, err := os.ReadFile(strings.TrimSuffix(input, ".json") + ".mcap")
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, expectedBytes, output.Bytes())
 		})
 	}

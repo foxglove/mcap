@@ -8,8 +8,6 @@ import (
 	"math"
 )
 
-var ErrMetadataNotFound = errors.New("metadata not found")
-
 func getPrefixedString(data []byte, offset int) (s string, newoffset int, err error) {
 	if len(data[offset:]) < 4 {
 		return "", 0, io.ErrShortBuffer
@@ -65,7 +63,14 @@ type Reader struct {
 }
 
 type MessageIterator interface {
+	// Deprecated: use NextInto to avoid repeatedly heap-allocating Message structs while iterating.
 	Next([]byte) (*Schema, *Channel, *Message, error)
+	// NextInto returns the next message from the MCAP. If the returned error is io.EOF,
+	// this signals the end of the MCAP.
+	// If `msg` is not nil, NextInto will populate it with new data and
+	// return the same pointer, re-using or resizing `msg.Data` as needed.
+	// If `msg` is nil, NextInto will allocate and return a new Message on the heap.
+	NextInto(msg *Message) (*Schema, *Channel, *Message, error)
 }
 
 func Range(it MessageIterator, f func(*Schema, *Channel, *Message) error) error {
@@ -84,7 +89,8 @@ func Range(it MessageIterator, f func(*Schema, *Channel, *Message) error) error 
 	}
 }
 
-func (r *Reader) unindexedIterator(opts ReadOptions) *unindexedMessageIterator {
+func (r *Reader) unindexedIterator(opts *ReadOptions) *unindexedMessageIterator {
+	opts.Finalize()
 	topicMap := make(map[string]bool)
 	for _, topic := range opts.Topics {
 		topicMap[topic] = true
@@ -92,18 +98,17 @@ func (r *Reader) unindexedIterator(opts ReadOptions) *unindexedMessageIterator {
 	r.l.emitChunks = false
 	return &unindexedMessageIterator{
 		lexer:            r.l,
-		channels:         make(map[uint16]*Channel),
-		schemas:          make(map[uint16]*Schema),
 		topics:           topicMap,
-		start:            uint64(opts.Start),
-		end:              uint64(opts.End),
+		start:            opts.StartNanos,
+		end:              opts.EndNanos,
 		metadataCallback: opts.MetadataCallback,
 	}
 }
 
 func (r *Reader) indexedMessageIterator(
-	opts ReadOptions,
+	opts *ReadOptions,
 ) *indexedMessageIterator {
+	opts.Finalize()
 	topicMap := make(map[string]bool)
 	for _, topic := range opts.Topics {
 		topicMap[topic] = true
@@ -112,12 +117,10 @@ func (r *Reader) indexedMessageIterator(
 	return &indexedMessageIterator{
 		lexer:            r.l,
 		rs:               r.rs,
-		channels:         make(map[uint16]*Channel),
-		schemas:          make(map[uint16]*Schema),
 		topics:           topicMap,
-		start:            uint64(opts.Start),
-		end:              uint64(opts.End),
-		indexHeap:        rangeIndexHeap{order: opts.Order},
+		start:            opts.StartNanos,
+		end:              opts.EndNanos,
+		order:            opts.Order,
 		metadataCallback: opts.MetadataCallback,
 	}
 }
@@ -126,11 +129,11 @@ func (r *Reader) Messages(
 	opts ...ReadOpt,
 ) (MessageIterator, error) {
 	options := ReadOptions{
-		Start:    0,
-		End:      math.MaxInt64,
-		Topics:   nil,
-		UseIndex: true,
-		Order:    FileOrder,
+		StartNanos: 0,
+		EndNanos:   math.MaxUint64,
+		Topics:     nil,
+		UseIndex:   true,
+		Order:      FileOrder,
 	}
 	for _, opt := range opts {
 		err := opt(&options)
@@ -138,15 +141,33 @@ func (r *Reader) Messages(
 			return nil, err
 		}
 	}
+	options.Finalize()
 	if options.UseIndex {
 		if rs, ok := r.r.(io.ReadSeeker); ok {
 			r.rs = rs
 		} else {
 			return nil, fmt.Errorf("indexed reader requires a seekable reader")
 		}
-		return r.indexedMessageIterator(options), nil
+		startPos, err := r.rs.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current stream position: %w", err)
+		}
+		info, err := r.Info()
+		if err != nil {
+			return nil, fmt.Errorf("could not get info: %w", err)
+		}
+		// if there are no chunk index records present, but there are messages, we need to
+		// scan the file linearly to find them.
+		if len(info.ChunkIndexes) == 0 && info.Statistics != nil && info.Statistics.MessageCount > 0 {
+			_, err = r.rs.Seek(startPos, io.SeekStart)
+			if err != nil {
+				return nil, fmt.Errorf("failed to seek to start: %w", err)
+			}
+			return r.unindexedIterator(&options), nil
+		}
+		return r.indexedMessageIterator(&options), nil
 	}
-	return r.unindexedIterator(options), nil
+	return r.unindexedIterator(&options), nil
 }
 
 // Get the Header record from this MCAP.
@@ -163,7 +184,7 @@ func (r *Reader) Info() (*Info, error) {
 	if r.rs == nil {
 		return nil, fmt.Errorf("cannot get info from non-seekable reader")
 	}
-	it := r.indexedMessageIterator(ReadOptions{
+	it := r.indexedMessageIterator(&ReadOptions{
 		UseIndex: true,
 	})
 	err := it.parseSummarySection()
@@ -172,11 +193,11 @@ func (r *Reader) Info() (*Info, error) {
 	}
 	info := &Info{
 		Statistics:        it.statistics,
-		Channels:          it.channels,
+		Channels:          it.channels.ToMap(),
 		ChunkIndexes:      it.chunkIndexes,
 		AttachmentIndexes: it.attachmentIndexes,
 		MetadataIndexes:   it.metadataIndexes,
-		Schemas:           it.schemas,
+		Schemas:           it.schemas.ToMap(),
 		Footer:            it.footer,
 		Header:            r.header,
 	}
@@ -208,7 +229,7 @@ func (r *Reader) GetMetadata(offset uint64) (*Metadata, error) {
 		return nil, err
 	}
 	if token != TokenMetadata {
-		return nil, fmt.Errorf("expected metadata record, found %v", data)
+		return nil, NewErrUnexpectedToken(fmt.Errorf("expected metadata record, found %v", data))
 	}
 	metadata, err := ParseMetadata(data)
 	if err != nil {
@@ -239,7 +260,7 @@ func NewReader(r io.Reader) (*Reader, error) {
 		return nil, fmt.Errorf("could not read MCAP header when opening reader: %w", err)
 	}
 	if token != TokenHeader {
-		return nil, fmt.Errorf("expected first record in MCAP to be a Header, found %v", headerData)
+		return nil, NewErrUnexpectedToken(fmt.Errorf("expected first record in MCAP to be a Header, found %v", headerData))
 	}
 	header, err := ParseHeader(headerData)
 	if err != nil {

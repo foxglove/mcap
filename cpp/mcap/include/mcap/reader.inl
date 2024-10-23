@@ -363,8 +363,6 @@ void McapReader::reset_() {
   channels_.clear();
   dataStart_ = 0;
   dataEnd_ = EndOffset;
-  startTime_ = 0;
-  endTime_ = 0;
   parsedSummary_ = false;
 }
 
@@ -647,6 +645,10 @@ const std::vector<ChunkIndex>& McapReader::chunkIndexes() const {
 
 const std::multimap<std::string, MetadataIndex>& McapReader::metadataIndexes() const {
   return metadataIndexes_;
+}
+
+const std::multimap<std::string, AttachmentIndex>& McapReader::attachmentIndexes() const {
+  return attachmentIndexes_;
 }
 
 Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record* record) {

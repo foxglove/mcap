@@ -63,10 +63,10 @@ The following records are allowed to appear in the data section:
 - [Attachment](#attachment-op0x09)
 - [Chunk](#chunk-op0x06)
 - [Message Index](#message-index-op0x07)
-- [Metadata](#metadata-op0x0C)
-- [Data End](#data-end-op0x0F)
+- [Metadata](#metadata-op0x0c)
+- [Data End](#data-end-op0x0f)
 
-The last record in the data section MUST be the [Data End](#data-end-op0x0F) record.
+The last record in the data section MUST be the [Data End](#data-end-op0x0f) record.
 
 #### Use of chunk records
 
@@ -83,9 +83,9 @@ The following records are allowed to appear in the summary section:
 - [Schema](#schema-op0x03)
 - [Channel](#channel-op0x04)
 - [Chunk Index](#chunk-index-op0x08)
-- [Attachment Index](#attachment-index-op0x0A)
-- [Metadata Index](#metadata-index-op0x0D)
-- [Statistics](#statistics-op0x0B)
+- [Attachment Index](#attachment-index-op0x0a)
+- [Metadata Index](#metadata-index-op0x0d)
+- [Statistics](#statistics-op0x0b)
 
 All records in the summary section MUST be grouped by opcode.
 
@@ -97,7 +97,7 @@ Schema records in the summary are duplicates of Schema records throughout the Da
 
 ### Summary Offset Section
 
-The optional summary offset section contains [Summary Offset](#summary-offset-op0x0E) records for fast lookup of summary section records.
+The optional summary offset section contains [Summary Offset](#summary-offset-op0x0e) records for fast lookup of summary section records.
 
 The summary offset section aids random access reading.
 
@@ -113,7 +113,7 @@ Record type is a single byte opcode, and record content length is a uint64 value
 
 Records may be extended by adding new fields at the end of existing fields. Readers should ignore any unknown fields.
 
-> The Footer and Message records will not be extended, since their formats do not allow for backward-compatible size changes.
+> The Message, DataEnd, and Footer records will not be extended, since their formats do not allow for backward-compatible size changes.
 
 Each record definition below contains a `Type` column. See the [Serialization](#serialization) section on how to serialize each type.
 
@@ -181,7 +181,7 @@ The message encoding and schema must match that of the Channel record correspond
 
 ### Chunk (op=0x06)
 
-A Chunk contains a batch of Schema, Channel, and Message records. The batch of records contained in a chunk may be compressed or uncompressed.
+A Chunk contains a batch of records. Readers should expect Schema, Channel, and Message records to be present in chunks, but future spec changes or user extensions may include others. The batch of records contained in a chunk may be compressed or uncompressed.
 
 All messages in the chunk must reference channels recorded earlier in the file (in a previous chunk, earlier in the current chunk, or earlier in the data section).
 
@@ -225,7 +225,7 @@ A Chunk Index record exists for every Chunk in the file.
 | 8     | compressed_size       | uint64                | The size of the chunk `records` field.                                                                                                                                                   |
 | 8     | uncompressed_size     | uint64                | The uncompressed size of the chunk `records` field. This field should match the value in the corresponding Chunk record.                                                                 |
 
-A Schema and Channel record MUST exist in the summary section for all channels referenced by chunk index records.
+A Schema and Channel record MUST exist in the summary section for all messages in chunks that are indexed by Chunk Index records.
 
 > Why? The typical use case for file readers using an index is fast random access to a specific message timestamp. Channel is a prerequisite for decoding Message record data. Without an easy-to-access copy of the Channel records, readers would need to search for Channel records from the start of the file, degrading random access read performance.
 

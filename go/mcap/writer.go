@@ -12,13 +12,6 @@ import (
 	"github.com/pierrec/lz4/v4"
 )
 
-// ErrUnknownSchema is returned when a schema ID is not known to the writer.
-var ErrUnknownSchema = errors.New("unknown schema")
-
-// ErrAttachmentDataSizeIncorrect is returned when the length of a written
-// attachment does not match the length supplied.
-var ErrAttachmentDataSizeIncorrect = errors.New("attachment content length incorrect")
-
 // Writer is a writer for the MCAP format.
 type Writer struct {
 	// Statistics collected over the course of the recording.
@@ -38,7 +31,6 @@ type Writer struct {
 	w                *writeSizer
 	buf              []byte
 	msg              []byte
-	chunk            []byte
 	uncompressed     *bytes.Buffer
 	compressed       *bytes.Buffer
 	compressedWriter *countingCRCWriter
@@ -103,7 +95,14 @@ func (w *Writer) WriteFooter(f *Footer) error {
 // WriteSchema writes a schema record to the output. Schema records are uniquely
 // identified within a file by their schema ID. A Schema record must occur at
 // least once in the file prior to any Channel Info referring to its ID.
+// A unique identifier for this schema within the file. Must not be zero.
 func (w *Writer) WriteSchema(s *Schema) (err error) {
+	if s == nil {
+		return errors.New("schema struct can not be nil")
+	}
+	if s.ID == 0 {
+		return errors.New("schemaID must not be zero")
+	}
 	msglen := 2 + 4 + len(s.Name) + 4 + len(s.Encoding) + 4 + len(s.Data)
 	w.ensureSized(msglen)
 	offset := putUint16(w.msg, s.ID)
@@ -427,7 +426,9 @@ func (w *Writer) flushActiveChunk() error {
 	crc := w.compressedWriter.CRC()
 	compressedlen := w.compressed.Len()
 	uncompressedlen := w.compressedWriter.Size()
-	msglen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8 + compressedlen
+	// the "top fields" are all fields of the chunk record except for the compressed records.
+	topFieldsLen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8
+	msglen := topFieldsLen + compressedlen
 	chunkStartOffset := w.w.Size()
 	var start, end uint64
 	if w.currentChunkMessageCount != 0 {
@@ -438,24 +439,25 @@ func (w *Writer) flushActiveChunk() error {
 	// when writing a chunk, we don't go through writerecord to avoid needing to
 	// materialize the compressed data again. Instead, write the leading bytes
 	// then copy from the compressed data buffer.
-	recordlen := 1 + 8 + msglen
-	if len(w.chunk) < recordlen {
-		w.chunk = make([]byte, recordlen*2)
-	}
-	offset, err := putByte(w.chunk, byte(OpChunk))
+	recordHeaderLen := 1 + 8 + topFieldsLen
+	w.ensureSized(recordHeaderLen)
+	offset, err := putByte(w.msg, byte(OpChunk))
 	if err != nil {
 		return err
 	}
 
-	offset += putUint64(w.chunk[offset:], uint64(msglen))
-	offset += putUint64(w.chunk[offset:], start)
-	offset += putUint64(w.chunk[offset:], end)
-	offset += putUint64(w.chunk[offset:], uint64(uncompressedlen))
-	offset += putUint32(w.chunk[offset:], crc)
-	offset += putPrefixedString(w.chunk[offset:], string(w.opts.Compression))
-	offset += putUint64(w.chunk[offset:], uint64(w.compressed.Len()))
-	offset += copy(w.chunk[offset:recordlen], w.compressed.Bytes())
-	_, err = w.w.Write(w.chunk[:offset])
+	offset += putUint64(w.msg[offset:], uint64(msglen))
+	offset += putUint64(w.msg[offset:], start)
+	offset += putUint64(w.msg[offset:], end)
+	offset += putUint64(w.msg[offset:], uint64(uncompressedlen))
+	offset += putUint32(w.msg[offset:], crc)
+	offset += putPrefixedString(w.msg[offset:], string(w.opts.Compression))
+	offset += putUint64(w.msg[offset:], uint64(w.compressed.Len()))
+	_, err = w.w.Write(w.msg[:offset])
+	if err != nil {
+		return err
+	}
+	_, err = w.w.Write(w.compressed.Bytes())
 	if err != nil {
 		return err
 	}

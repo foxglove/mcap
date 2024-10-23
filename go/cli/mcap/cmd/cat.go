@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/foxglove/go-rosbag/ros1msg"
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
-	"github.com/foxglove/mcap/go/cli/mcap/utils/ros"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -27,8 +27,10 @@ import (
 
 var (
 	catTopics     string
-	catStart      int64
-	catEnd        int64
+	catStartSec   uint64
+	catEndSec     uint64
+	catStartNano  uint64
+	catEndNano    uint64
 	catFormatJSON bool
 )
 
@@ -166,12 +168,28 @@ func (w *jsonOutputWriter) writeMessage(
 
 func getReadOpts(useIndex bool) []mcap.ReadOpt {
 	topics := strings.FieldsFunc(catTopics, func(c rune) bool { return c == ',' })
-	opts := []mcap.ReadOpt{mcap.UsingIndex(useIndex), mcap.WithTopics(topics)}
+
+	opts := []mcap.ReadOpt{mcap.WithTopics(topics)}
+
+	if useIndex {
+		opts = append(opts, mcap.UsingIndex(true), mcap.InOrder(mcap.LogTimeOrder))
+	}
+	catStart := catStartNano
+	if catStartSec > 0 {
+		catStart = catStartSec * 1e9
+	}
+	catEnd := catEndNano
+	if catEndSec > 0 {
+		catEnd = catEndSec * 1e9
+	}
 	if catStart != 0 {
-		opts = append(opts, mcap.After(catStart*1e9))
+		opts = append(opts, mcap.AfterNanos(catStart))
+	}
+	if catEnd == 0 {
+		catEnd = math.MaxInt64
 	}
 	if catEnd != math.MaxInt64 {
-		opts = append(opts, mcap.Before(catEnd*1e9))
+		opts = append(opts, mcap.BeforeNanos(catEnd))
 	}
 	return opts
 }
@@ -183,12 +201,12 @@ func printMessages(
 ) error {
 	msg := &bytes.Buffer{}
 	msgReader := &bytes.Reader{}
-	buf := make([]byte, 1024*1024)
-	transcoders := make(map[uint16]*ros.JSONTranscoder)
+	message := mcap.Message{Data: make([]byte, 0, 1024*1024)}
+	transcoders := make(map[uint16]*ros1msg.JSONTranscoder)
 	descriptors := make(map[uint16]protoreflect.MessageDescriptor)
 	jsonWriter := newJSONOutputWriter(w)
 	for {
-		schema, channel, message, err := it.Next(buf)
+		schema, channel, _, err := it.NextInto(&message)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -225,7 +243,7 @@ func printMessages(
 				transcoder, ok := transcoders[channel.SchemaID]
 				if !ok {
 					packageName := strings.Split(schema.Name, "/")[0]
-					transcoder, err = ros.NewJSONTranscoder(packageName, schema.Data)
+					transcoder, err = ros1msg.NewJSONTranscoder(packageName, schema.Data)
 					if err != nil {
 						return fmt.Errorf("failed to build transcoder for %s: %w", channel.Topic, err)
 					}
@@ -294,7 +312,7 @@ func printMessages(
 var catCmd = &cobra.Command{
 	Use:   "cat [file]",
 	Short: "Cat the messages in an MCAP file to stdout",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		stat, err := os.Stdin.Stat()
 		if err != nil {
@@ -329,7 +347,7 @@ var catCmd = &cobra.Command{
 			die("supply a file")
 		}
 		filename := args[0]
-		err = utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
+		err = utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
 			reader, err := mcap.NewReader(rs)
 			if err != nil {
 				return fmt.Errorf("failed to create reader: %w", err)
@@ -353,10 +371,13 @@ var catCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(catCmd)
-
-	catCmd.PersistentFlags().Int64VarP(&catStart, "start-secs", "", 0, "start time")
-	catCmd.PersistentFlags().Int64VarP(&catEnd, "end-secs", "", math.MaxInt64, "end time")
+	catCmd.PersistentFlags().Uint64VarP(&catStartSec, "start-secs", "", 0, "start time")
+	catCmd.PersistentFlags().Uint64VarP(&catEndSec, "end-secs", "", 0, "end time")
+	catCmd.PersistentFlags().Uint64VarP(&catStartNano, "start-nsecs", "", 0, "start time in nanoseconds")
+	catCmd.PersistentFlags().Uint64VarP(&catEndNano, "end-nsecs", "", 0, "end time in nanoseconds")
 	catCmd.PersistentFlags().StringVarP(&catTopics, "topics", "", "", "comma-separated list of topics")
 	catCmd.PersistentFlags().BoolVarP(&catFormatJSON, "json", "", false,
 		`print messages as JSON. Supported message encodings: ros1, protobuf, and json.`)
+	catCmd.MarkFlagsMutuallyExclusive("start-secs", "start-nsecs")
+	catCmd.MarkFlagsMutuallyExclusive("end-secs", "end-nsecs")
 }

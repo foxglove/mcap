@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
+	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 )
 
@@ -28,12 +30,16 @@ func decimalTime(t time.Time) string {
 
 func humanBytes(numBytes uint64) string {
 	prefixes := []string{"B", "KiB", "MiB", "GiB"}
-	displayedValue := float64(numBytes)
-	prefixIndex := 0
-	for ; displayedValue > 1024 && prefixIndex < len(prefixes); prefixIndex++ {
-		displayedValue /= 1024
+
+	for index, p := range prefixes {
+		displayedValue := float64(numBytes) / (math.Pow(1024, float64(index)))
+		if displayedValue <= 1024 {
+			return fmt.Sprintf("%.2f %s", displayedValue, p)
+		}
 	}
-	return fmt.Sprintf("%.2f %s", displayedValue, prefixes[prefixIndex])
+	lastIndex := len(prefixes) - 1
+	displayedValue := float64(numBytes) / (math.Pow(1024, float64(lastIndex)))
+	return fmt.Sprintf("%.2f %s", displayedValue, prefixes[lastIndex])
 }
 
 func getDurationNs(start uint64, end uint64) float64 {
@@ -85,7 +91,9 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			header = addRow(header, "end:", "%s", decimalTime(endtime))
 		}
 	}
-	utils.FormatTable(buf, header)
+	if err := printSummaryRows(buf, header); err != nil {
+		return err
+	}
 	if len(info.ChunkIndexes) > 0 {
 		compressionFormatStats := make(map[mcap.CompressionFormat]struct {
 			count            int
@@ -162,11 +170,15 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		}
 		rows = append(rows, row)
 	}
-	utils.FormatTable(buf, rows)
+	if err := printSummaryRows(buf, rows); err != nil {
+		return err
+	}
 	if info.Statistics != nil {
+		fmt.Fprintf(buf, "channels: %d\n", info.Statistics.ChannelCount)
 		fmt.Fprintf(buf, "attachments: %d\n", info.Statistics.AttachmentCount)
 		fmt.Fprintf(buf, "metadata: %d\n", info.Statistics.MetadataCount)
 	} else {
+		fmt.Fprintf(buf, "channels: unknown\n")
 		fmt.Fprintf(buf, "attachments: unknown\n")
 		fmt.Fprintf(buf, "metadata: unknown\n")
 	}
@@ -174,17 +186,37 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 	return err
 }
 
+// Similar to utils.FormatTable, but optimized for 'expanded' display of nested data.
+func printSummaryRows(w io.Writer, rows [][]string) error {
+	buf := &bytes.Buffer{}
+	tw := tablewriter.NewWriter(buf)
+	tw.SetBorder(false)
+	tw.SetAutoWrapText(false)
+	tw.SetAlignment(tablewriter.ALIGN_LEFT)
+	tw.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
+	tw.SetColumnSeparator("")
+	tw.AppendBulk(rows)
+	tw.Render()
+	// This tablewriter puts a leading space on the lines for some reason, so
+	// remove it.
+	scanner := bufio.NewScanner(buf)
+	for scanner.Scan() {
+		fmt.Fprintln(w, strings.TrimLeft(scanner.Text(), " "))
+	}
+	return scanner.Err()
+}
+
 var infoCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Report statistics about an MCAP file",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
 			die("Unexpected number of args")
 		}
 		// check if it's a remote file
 		filename := args[0]
-		err := utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
+		err := utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
 			reader, err := mcap.NewReader(rs)
 			if err != nil {
 				return fmt.Errorf("failed to get reader: %w", err)

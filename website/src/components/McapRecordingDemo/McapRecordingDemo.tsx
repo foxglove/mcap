@@ -397,7 +397,7 @@ export function McapRecordingDemo(): JSX.Element {
             </button>
             Try inspecting the file with the{" "}
             <Link to="/guides/cli">MCAP CLI</Link>, or open it in{" "}
-            <Link to="https://studio.foxglove.dev/">Foxglove Studio</Link>.
+            <Link to="https://app.foxglove.dev/">Foxglove</Link>.
           </div>
         )}
 

@@ -1,5 +1,6 @@
 import { crc32 } from "@foxglove/crc";
 
+import { McapRecordBuilder } from "./McapRecordBuilder";
 import McapStreamReader from "./McapStreamReader";
 import { MCAP_MAGIC, Opcode } from "./constants";
 import {
@@ -653,5 +654,65 @@ describe("McapStreamReader", () => {
       summaryCrc: 0,
     });
     expect(reader.done()).toBe(true);
+  });
+
+  it("correctly appends new data to internal buffer", () => {
+    const streamReader = new McapStreamReader({ includeChunks: true, noMagicPrefix: true });
+    const recordBuilder = new McapRecordBuilder();
+
+    const channel = {
+      id: 0,
+      messageEncoding: "json",
+      schemaId: 0,
+      topic: "foo",
+      metadata: new Map(),
+    };
+    const messageSize = 1_000;
+    const messageRecordBytes = 1 + 8 + 2 + 4 + 8 + 8 + messageSize;
+
+    const makeMessage = (fillNumber: number) => ({
+      channelId: 0,
+      data: new Uint8Array(messageSize).fill(fillNumber),
+      logTime: 0n,
+      publishTime: 0n,
+      sequence: 0,
+    });
+
+    const channelByteSize = recordBuilder.writeChannel(channel);
+    streamReader.append(recordBuilder.buffer);
+    expect(streamReader.bytesRemaining()).toBe(Number(channelByteSize));
+    expect(streamReader.nextRecord()).toEqual({ ...channel, type: "Channel" });
+    expect(streamReader.bytesRemaining()).toBe(0);
+
+    // Add some messages and append them to the reader.
+    recordBuilder.reset();
+    recordBuilder.writeMessage(makeMessage(1));
+    recordBuilder.writeMessage(makeMessage(2));
+    streamReader.append(recordBuilder.buffer);
+    expect(streamReader.bytesRemaining()).toBe(2 * messageRecordBytes);
+
+    // Add one more message. Nothing has been consumed yet, but the internal buffer should be
+    // large enough to simply append the new data.
+    recordBuilder.reset();
+    recordBuilder.writeMessage(makeMessage(3));
+    streamReader.append(recordBuilder.buffer);
+    expect(streamReader.bytesRemaining()).toBe(3 * messageRecordBytes);
+
+    // Read some (but not all) messages to forward the reader's internal offset
+    expect(streamReader.nextRecord()).toEqual({ ...makeMessage(1), type: "Message" });
+    expect(streamReader.nextRecord()).toEqual({ ...makeMessage(2), type: "Message" });
+    expect(streamReader.bytesRemaining()).toBe(1 * messageRecordBytes);
+
+    // Add more messages. This will cause existing data to be shifted to the beginning of the buffer.
+    recordBuilder.reset();
+    recordBuilder.writeMessage(makeMessage(4));
+    recordBuilder.writeMessage(makeMessage(5));
+    streamReader.append(recordBuilder.buffer);
+    expect(streamReader.bytesRemaining()).toBe(3 * messageRecordBytes);
+
+    expect(streamReader.nextRecord()).toEqual({ ...makeMessage(3), type: "Message" });
+    expect(streamReader.nextRecord()).toEqual({ ...makeMessage(4), type: "Message" });
+    expect(streamReader.nextRecord()).toEqual({ ...makeMessage(5), type: "Message" });
+    expect(streamReader.bytesRemaining()).toBe(0);
   });
 });

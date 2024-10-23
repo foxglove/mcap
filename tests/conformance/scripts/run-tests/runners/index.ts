@@ -8,6 +8,7 @@ import KaitaiStructReaderTestRunner from "./KaitaiStructReaderTestRunner";
 import PythonIndexedReaderTestRunner from "./PythonIndexedReaderTestRunner";
 import PythonStreamedReaderTestRunner from "./PythonStreamedReaderTestRunner";
 import PythonWriterTestRunner from "./PythonWriterTestRunner";
+import RustAsyncReaderTestRunner from "./RustAsyncReaderTestRunner";
 import RustReaderTestRunner from "./RustReaderTestRunner";
 import RustWriterTestRunner from "./RustWriterTestRunner";
 import SwiftIndexedReaderTestRunner from "./SwiftIndexedReaderTestRunner";
@@ -31,6 +32,7 @@ const runners: readonly (IndexedReadTestRunner | StreamedReadTestRunner | WriteT
   new TypescriptIndexedReaderTestRunner(),
   new TypescriptStreamedReaderTestRunner(),
   new TypescriptWriterTestRunner(),
+  new RustAsyncReaderTestRunner(),
   new RustReaderTestRunner(),
   new RustWriterTestRunner(),
   new SwiftWriterTestRunner(),

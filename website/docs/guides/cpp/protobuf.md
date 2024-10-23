@@ -14,7 +14,7 @@ To read Protobuf messages from an MCAP file using C++, we have two options:
 
 - **Dynamic** – Dynamically read fields using the schema definitions in the MCAP file
 
-  Preferred for inspecting and debugging message content. For example, when building a [visualization tool](https://studio.foxglove.dev), we want to provide a full view of all fields in a message as it was originally recorded. We can use Protobuf's [`DynamicMessage`](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.dynamic_message) class to enumerate and inspect message fields in this way.
+  Preferred for inspecting and debugging message content. For example, when building a [visualization tool](https://app.foxglove.dev), we want to provide a full view of all fields in a message as it was originally recorded. We can use Protobuf's [`DynamicMessage`](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.dynamic_message) class to enumerate and inspect message fields in this way.
 
 ### Statically generated class definitions
 
@@ -29,6 +29,12 @@ We also include the MCAP reader implementation:
 ```cpp
 #define MCAP_IMPLEMENTATION
 #include "mcap/reader.hpp"
+```
+
+And standard library dependencies:
+
+```cpp
+#include <memory>
 ```
 
 Use the `mcap::McapReader::open()` method to open an MCAP file for reading:
@@ -103,7 +109,7 @@ auto messageView = reader.readMessages();
 
 #### Load schema definitions
 
-We build a `DynamicMessageFactory`, using a `google::Protobuf::SimpleDescriptorDatabase` as the underlying descriptor database. By constructing this ourselves and retaining a reference to the database, we can more easily load that database with definitions from the MCAP file.
+We build a `DynamicMessageFactory`, using a `google::protobuf::SimpleDescriptorDatabase` as the underlying descriptor database. By constructing this ourselves and retaining a reference to the database, we can more easily load that database with definitions from the MCAP file.
 
 ```cpp
 gp::SimpleDescriptorDatabase protoDb;
@@ -157,7 +163,7 @@ descriptor = protoPool.FindMessageTypeByName(it->schema->name);
 We can use this descriptor to parse our message:
 
 ```cpp
-gp::Message* message = protoFactory.GetPrototype(descriptor)->New();
+auto message = std::unique_ptr<gp::Message>(protoFactory.GetPrototype(descriptor)->New());
 if (!message->ParseFromArray(static_cast<const void*>(it->message.data),
                               it->message.dataSize)) {
   std::cerr << "failed to parse message using included schema" << std::endl;
@@ -282,9 +288,9 @@ writer.close();
 
 ### Inspect MCAP file
 
-Now, we can inspect our output MCAP file's messages. Use the _Data source_ dialog in [Foxglove Studio](https://studio.foxglove.dev) to “Open local file”.
+Now, we can inspect our output MCAP file's messages. Use the “Open local file” button in [Foxglove](https://app.foxglove.dev).
 
-Add a few relevant panels ([Plot](https://foxglove.dev/docs/studio/panels/plot), [Image](https://foxglove.dev/docs/studio/panels/image), [Raw Messages](https://foxglove.dev/docs/studio/panels/raw-messages), [3D](https://foxglove.dev/docs/studio/panels/3d)) to visualize the robot's performance.
+Add a few relevant panels ([Plot](https://docs.foxglove.dev/docs/visualization/panels/plot), [Image](https://docs.foxglove.dev/docs/visualization/panels/image), [Raw Messages](https://docs.foxglove.dev/docs/visualization/panels/raw-messages), [3D](https://docs.foxglove.dev/docs/visualization/panels/3d)) to visualize the robot's performance.
 
 ## Important links
 

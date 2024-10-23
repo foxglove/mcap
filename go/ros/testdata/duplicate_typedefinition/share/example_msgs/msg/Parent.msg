@@ -1,0 +1,2 @@
+example_msgs/Descriptor descriptor
+example_msgs/OtherDescriptor other_msg_with_descriptor

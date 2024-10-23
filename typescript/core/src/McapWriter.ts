@@ -1,7 +1,9 @@
 import { crc32Init, crc32Update, crc32Final, crc32 } from "@foxglove/crc";
 
 import { ChunkBuilder } from "./ChunkBuilder";
+import { ISeekableWriter } from "./ISeekableWriter";
 import { IWritable } from "./IWritable";
+import { McapIndexedReader } from "./McapIndexedReader";
 import { McapRecordBuilder } from "./McapRecordBuilder";
 import { Opcode } from "./constants";
 import {
@@ -18,6 +20,7 @@ import {
   SummaryOffset,
   Metadata,
   Statistics,
+  IReadable,
 } from "./types";
 
 export type McapWriterOptions = {
@@ -57,12 +60,18 @@ export class McapWriter {
     | ((chunkData: Uint8Array) => { compression: string; compressedData: Uint8Array })
     | undefined;
   #chunkSize: number;
-  #dataSectionCrc = crc32Init();
+  /**
+   * undefined means the CRC is not calculated, e.g. when using InitializeForAppending if the
+   * original file did not have a dataSectionCrc.
+   */
+  #dataSectionCrc: number | undefined;
 
   public statistics: Statistics | undefined;
   #useSummaryOffsets: boolean;
   #repeatSchemas: boolean;
   #repeatChannels: boolean;
+
+  #appendMode = false;
 
   // indices
   #chunkIndices: ChunkIndex[] | undefined;
@@ -120,7 +129,64 @@ export class McapWriter {
     this.#compressChunk = compressChunk;
   }
 
+  /**
+   * Initializes a new McapWriter for appending to an existing MCAP file. The same `readWrite` will
+   * be used to load indexes out of the existing file, remove the DataEnd and subsequent records,
+   * and then rewrite them when the writer is closed. The existing file must be indexed, since
+   * existing indexes, channel and schema IDs, etc. are reused when appending to the file.
+   *
+   * A writer initialized with this method is already "opened" and does not require a `start()`
+   * call, however it does require an eventual call to `end()` to produce a properly indexed MCAP
+   * file.
+   */
+  static async InitializeForAppending(
+    readWrite: IReadable & ISeekableWriter,
+    options: Omit<McapWriterOptions, "writable" | "startChannelId">,
+  ): Promise<McapWriter> {
+    const reader = await McapIndexedReader.Initialize({ readable: readWrite });
+    await readWrite.seek(reader.dataEndOffset);
+    await readWrite.truncate();
+
+    const writer = new McapWriter({ ...options, writable: readWrite });
+    writer.#appendMode = true;
+    writer.#dataSectionCrc =
+      // Invert the CRC value so we can continue updating it with new data; it will be inverted
+      // again in end()
+      reader.dataSectionCrc != undefined ? crc32Final(reader.dataSectionCrc) : undefined;
+    writer.#chunkIndices = [...reader.chunkIndexes];
+    writer.#attachmentIndices = [...reader.attachmentIndexes];
+    writer.#metadataIndices = [...reader.metadataIndexes];
+
+    if (writer.statistics) {
+      if (reader.statistics) {
+        writer.statistics = reader.statistics;
+      } else {
+        // If statistics calculation was requested, but the input file does not have statistics,
+        // then we can't write them because we don't know the correct initial values
+        writer.statistics = undefined;
+      }
+    }
+
+    writer.#schemas = new Map(reader.schemasById);
+    writer.#writtenSchemaIds = new Set(reader.schemasById.keys());
+    for (const schema of reader.schemasById.values()) {
+      writer.#nextSchemaId = Math.max(writer.#nextSchemaId, schema.id + 1);
+    }
+
+    writer.#channels = new Map(reader.channelsById);
+    writer.#writtenChannelIds = new Set(reader.channelsById.keys());
+    for (const channel of reader.channelsById.values()) {
+      writer.#nextChannelId = Math.max(writer.#nextChannelId, channel.id + 1);
+    }
+
+    return writer;
+  }
+
   async start(header: Header): Promise<void> {
+    if (this.#appendMode) {
+      throw new Error(`Cannot call start() when writer is in append mode`);
+    }
+    this.#dataSectionCrc = crc32Init();
     this.#recordWriter.writeMagic();
     this.#recordWriter.writeHeader(header);
 
@@ -132,11 +198,15 @@ export class McapWriter {
   async end(): Promise<void> {
     await this.#finalizeChunk();
 
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    if (this.#dataSectionCrc != undefined) {
+      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    }
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
 
-    this.#recordWriter.writeDataEnd({ dataSectionCrc: crc32Final(this.#dataSectionCrc) });
+    this.#recordWriter.writeDataEnd({
+      dataSectionCrc: this.#dataSectionCrc == undefined ? 0 : crc32Final(this.#dataSectionCrc),
+    });
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
 
@@ -320,6 +390,7 @@ export class McapWriter {
       );
       ++this.statistics.messageCount;
     }
+
     // write out channel and schema if we have not yet done so
     if (!this.#writtenChannelIds.has(message.channelId)) {
       const channel = this.#channels.get(message.channelId);
@@ -382,7 +453,9 @@ export class McapWriter {
       });
     }
 
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    if (this.#dataSectionCrc != undefined) {
+      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    }
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
   }
@@ -402,7 +475,9 @@ export class McapWriter {
       });
     }
 
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    if (this.#dataSectionCrc != undefined) {
+      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    }
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
   }
@@ -439,7 +514,9 @@ export class McapWriter {
 
     const messageIndexOffsets = this.#chunkIndices ? new Map<number, bigint>() : undefined;
 
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    if (this.#dataSectionCrc != undefined) {
+      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    }
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
 
@@ -465,7 +542,9 @@ export class McapWriter {
     }
     this.#chunkBuilder.reset();
 
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    if (this.#dataSectionCrc != undefined) {
+      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    }
     await this.#writable.write(this.#recordWriter.buffer);
     this.#recordWriter.reset();
   }

@@ -4,7 +4,10 @@ from mcap_protobuf.decoder import DecoderFactory
 
 from mcap.reader import make_reader
 
-from .generate import generate_sample_data
+from .generate import (
+    generate_sample_data,
+    generate_sample_data_with_disordered_proto_fds,
+)
 
 
 def test_protobuf_decoder():
@@ -26,6 +29,19 @@ def test_protobuf_decoder():
             raise AssertionError(f"unrecognized topic {channel.topic}")
 
     assert count == 20
+
+
+def test_with_disordered_file_descriptors():
+    output = BytesIO()
+    generate_sample_data_with_disordered_proto_fds(output)
+    decoder = DecoderFactory()
+    reader = make_reader(output, decoder_factories=[decoder])
+    for schema, channel, msg, decoded_msg in reader.iter_decoded_messages():
+        assert schema is not None and schema.name == "test_proto.ComplexMessage"
+        assert channel.topic == "/complex_msgs"
+        assert msg.log_time == 0
+        assert decoded_msg.intermediate1.simple.data == "a"
+        assert decoded_msg.intermediate2.simple.data == "b"
 
 
 def test_decode_twice():

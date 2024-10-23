@@ -108,6 +108,7 @@ pub struct WriteOptions {
     compression: Option<Compression>,
     profile: String,
     chunk_size: Option<u64>,
+    use_chunks: bool,
 }
 
 impl Default for WriteOptions {
@@ -119,6 +120,7 @@ impl Default for WriteOptions {
             compression: None,
             profile: String::new(),
             chunk_size: Some(1024 * 768),
+            use_chunks: true,
         }
     }
 }
@@ -151,10 +153,19 @@ impl WriteOptions {
     /// If `None`, chunks will not be automatically closed and the user must call `flush()` to
     /// begin a new chunk.
     pub fn chunk_size(self, chunk_size: Option<u64>) -> Self {
-        Self {
-            chunk_size: chunk_size,
-            ..self
-        }
+        Self { chunk_size, ..self }
+    }
+
+    /// specifies whether to use chunks for storing messages.
+    ///
+    /// If `false`, messages will be written directly to the data section of the file.
+    /// This prevents using compression or indexing, but may be useful on small embedded systems
+    /// that cannot afford the memory overhead of storing chunk metadata for the entire recording.
+    ///
+    /// Note that it's often useful to post-process a non-chunked file using `mcap recover` to add
+    /// indexes for efficient processing.
+    pub fn use_chunks(self, use_chunks: bool) -> Self {
+        Self { use_chunks, ..self }
     }
 
     /// Creates a [`Writer`] whch writes to `w` using the given options
@@ -227,8 +238,21 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             .channels
             .insert(chan.clone(), next_channel_id)
             .is_none());
-        self.chunkin_time()?
-            .write_channel(next_channel_id, schema_id, chan)?;
+        if self.options.use_chunks {
+            self.chunkin_time()?
+                .write_channel(next_channel_id, schema_id, chan)?;
+        } else {
+            write_record(
+                self.finish_chunk()?,
+                &Record::Channel(records::Channel {
+                    id: next_channel_id,
+                    schema_id,
+                    topic: chan.topic.clone(),
+                    message_encoding: chan.message_encoding.clone(),
+                    metadata: chan.metadata.clone(),
+                }),
+            )?;
+        }
         Ok(next_channel_id)
     }
 
@@ -244,7 +268,21 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             .schemas
             .insert(schema.clone(), next_schema_id)
             .is_none());
-        self.chunkin_time()?.write_schema(next_schema_id, schema)?;
+        if self.options.use_chunks {
+            self.chunkin_time()?.write_schema(next_schema_id, schema)?;
+        } else {
+            write_record(
+                self.finish_chunk()?,
+                &Record::Schema {
+                    header: records::SchemaHeader {
+                        id: next_schema_id,
+                        name: schema.name.clone(),
+                        encoding: schema.encoding.clone(),
+                    },
+                    data: Cow::Borrowed(&schema.data),
+                },
+            )?;
+        }
         Ok(next_schema_id)
     }
 
@@ -301,7 +339,17 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             }
         }
 
-        self.chunkin_time()?.write_message(header, data)?;
+        if self.options.use_chunks {
+            self.chunkin_time()?.write_message(header, data)?;
+        } else {
+            write_record(
+                self.finish_chunk()?,
+                &Record::Message {
+                    header: *header,
+                    data: Cow::Borrowed(data),
+                },
+            )?;
+        }
         Ok(())
     }
 
@@ -389,6 +437,11 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         // (That would leave it in an unspecified state if we bailed here!)
         // Instead briefly swap it out for a null writer while we set up the chunker
         // The writer will only be None if finish() was called.
+        assert!(
+            self.options.use_chunks,
+            "Trying to write to a chunk when chunking is disabled"
+        );
+
         let prev_writer = self.writer.take().expect(Self::WHERE_WRITER);
 
         self.writer = Some(match prev_writer {
@@ -566,18 +619,23 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             });
         }
 
-        // Write all chunk indexes.
-        let chunk_indexes_start = channels_end;
-        for index in chunk_indexes {
-            write_record(&mut ccw, &Record::ChunkIndex(index))?;
-        }
-        let chunk_indexes_end = posit(&mut ccw)?;
-        if chunk_indexes_end - chunk_indexes_start > 0 {
-            offsets.push(records::SummaryOffset {
-                group_opcode: op::CHUNK_INDEX,
-                group_start: chunk_indexes_start,
-                group_length: chunk_indexes_end - chunk_indexes_start,
-            });
+        let chunk_indexes_end;
+        if self.options.use_chunks {
+            // Write all chunk indexes.
+            let chunk_indexes_start = channels_end;
+            for index in chunk_indexes {
+                write_record(&mut ccw, &Record::ChunkIndex(index))?;
+            }
+            chunk_indexes_end = posit(&mut ccw)?;
+            if chunk_indexes_end - chunk_indexes_start > 0 {
+                offsets.push(records::SummaryOffset {
+                    group_opcode: op::CHUNK_INDEX,
+                    group_start: chunk_indexes_start,
+                    group_length: chunk_indexes_end - chunk_indexes_start,
+                });
+            }
+        } else {
+            chunk_indexes_end = channels_end;
         }
 
         // ...and attachment indexes
@@ -650,7 +708,7 @@ enum Compressor<W: Write> {
     #[cfg(feature = "zstd")]
     Zstd(zstd::Encoder<'static, W>),
     #[cfg(feature = "lz4")]
-    Lz4(lz4_flex::frame::FrameEncoder<W>),
+    Lz4(lz4::Encoder<W>),
 }
 
 impl<W: Write> Compressor<W> {
@@ -660,7 +718,11 @@ impl<W: Write> Compressor<W> {
             #[cfg(feature = "zstd")]
             Compressor::Zstd(w) => w.finish()?,
             #[cfg(feature = "lz4")]
-            Compressor::Lz4(w) => w.finish()?,
+            Compressor::Lz4(w) => {
+                let (output, result) = w.finish();
+                result?;
+                output
+            }
         })
     }
 }
@@ -736,7 +798,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
                 Compressor::Zstd(enc)
             }
             #[cfg(feature = "lz4")]
-            Some(Compression::Lz4) => Compressor::Lz4(lz4_flex::frame::FrameEncoder::new(writer)),
+            Some(Compression::Lz4) => Compressor::Lz4(lz4::EncoderBuilder::new().build(writer)?),
             #[cfg(not(any(feature = "zstd", feature = "lz4")))]
             Some(_) => unreachable!("`Compression` is an empty enum that cannot be instantiated"),
             None => Compressor::Null(writer),
