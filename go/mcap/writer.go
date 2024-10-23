@@ -426,11 +426,18 @@ func (w *Writer) flushActiveChunk() error {
 	}
 
 	err := w.compressedWriter.Close()
-	if err != nil {
-		return err
-	}
-	crc := w.compressedWriter.CRC()
-	compressedLen := w.compressed.Len()
+	panicif.Err(err)
+
+	var c1 bytes.Buffer
+	cw, err := w.newCompressedWriter(&c1)
+	panicif.Err(err)
+	cw.Write(w.uncompressed.Bytes())
+	crc := cw.CRC()
+	panicif.NotEq(cw.CRC(), w.compressedWriter.CRC())
+	cw.Close()
+	panicif.NotEq(c1.Len(), w.compressed.Len())
+	compressedLen := c1.Len()
+
 	uncompressedLen := w.uncompressedSize()
 	// the "top fields" are all fields of the chunk record except for the compressed records.
 	topFieldsLen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8
@@ -458,12 +465,12 @@ func (w *Writer) flushActiveChunk() error {
 	offset += putUint64(w.msg[offset:], uint64(uncompressedLen))
 	offset += putUint32(w.msg[offset:], crc)
 	offset += putPrefixedString(w.msg[offset:], string(w.opts.Compression))
-	offset += putUint64(w.msg[offset:], uint64(w.compressed.Len()))
+	offset += putUint64(w.msg[offset:], uint64(c1.Len()))
 	_, err = w.w.Write(w.msg[:offset])
 	if err != nil {
 		return err
 	}
-	_, err = w.w.Write(w.compressed.Bytes())
+	_, err = w.w.Write(c1.Bytes())
 	if err != nil {
 		return err
 	}
@@ -863,16 +870,8 @@ func encoderLevelFromZstd(level CompressionLevel) zstd.EncoderLevel {
 	}
 }
 
-// NewWriter returns a new MCAP writer.
-func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
-	writer := newWriteSizer(w, opts.IncludeCRC)
-	if !opts.SkipMagic {
-		if _, err := writer.Write(Magic); err != nil {
-			return nil, err
-		}
-	}
-	compressed := bytes.Buffer{}
-	var compressedWriter *countingCRCWriter
+func (w *Writer) newCompressedWriter(compressed *bytes.Buffer) (compressedWriter *countingCRCWriter, err error) {
+	opts := w.opts
 	if opts.Chunked {
 		switch {
 		case opts.Compressor != nil: // must be top
@@ -882,22 +881,22 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 			if opts.Compressor.Compression() == "" {
 				return nil, fmt.Errorf("custom compressor requires compression format")
 			}
-			opts.Compressor.Compressor().Reset(&compressed)
+			opts.Compressor.Compressor().Reset(compressed)
 			compressedWriter = newCountingCRCWriter(opts.Compressor.Compressor(), opts.IncludeCRC)
 		case opts.Compression == CompressionZSTD:
 			level := encoderLevelFromZstd(opts.CompressionLevel)
-			zw, err := zstd.NewWriter(&compressed, zstd.WithEncoderLevel(level))
+			zw, err := zstd.NewWriter(compressed, zstd.WithEncoderLevel(level))
 			if err != nil {
 				return nil, err
 			}
 			compressedWriter = newCountingCRCWriter(zw, opts.IncludeCRC)
 		case opts.Compression == CompressionLZ4:
 			level := encoderLevelFromLZ4(opts.CompressionLevel)
-			lzw := lz4.NewWriter(&compressed)
+			lzw := lz4.NewWriter(compressed)
 			_ = lzw.Apply(lz4.CompressionLevelOption(level))
 			compressedWriter = newCountingCRCWriter(lzw, opts.IncludeCRC)
 		case opts.Compression == CompressionNone:
-			compressedWriter = newCountingCRCWriter(bufCloser{&compressed}, opts.IncludeCRC)
+			compressedWriter = newCountingCRCWriter(bufCloser{compressed}, opts.IncludeCRC)
 		default:
 			return nil, fmt.Errorf("unsupported compression")
 		}
@@ -905,14 +904,25 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 			opts.ChunkSize = 1024 * 1024
 		}
 	}
-	return &Writer{
+	return
+}
+
+// NewWriter returns a new MCAP writer.
+func NewWriter(w io.Writer, opts *WriterOptions) (ret *Writer, err error) {
+	writer := newWriteSizer(w, opts.IncludeCRC)
+	if !opts.SkipMagic {
+		if _, err := writer.Write(Magic); err != nil {
+			return nil, err
+		}
+	}
+	// TODO: Check here that compression options are valid?
+	ret = &Writer{
 		w:                        writer,
 		buf:                      make([]byte, 32),
 		channels:                 make(map[uint16]*Channel),
 		schemas:                  make(map[uint16]*Schema),
 		messageIndexes:           make(map[uint16]*MessageIndex),
-		compressed:               &compressed,
-		compressedWriter:         compressedWriter,
+		compressed:               new(bytes.Buffer),
 		currentChunkStartTime:    math.MaxUint64,
 		currentChunkEndTime:      0,
 		currentChunkMessageCount: 0,
@@ -922,22 +932,12 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 			MessageEndTime:       0,
 		},
 		opts: opts,
-	}, nil
-}
-
-func (w *Writer) assertUncompressedSize() {
-	panicif.NotEq(w.compressedWriter.Size(), int64(w.uncompressed.Len()))
+	}
+	ret.compressedWriter, err = ret.newCompressedWriter(ret.compressed)
+	panicif.Err(err)
+	return ret, nil
 }
 
 func (w *Writer) uncompressedWriter() io.Writer {
 	return io.MultiWriter(&w.uncompressed, w.compressedWriter)
-}
-
-func (w *Writer) writeUncompressed(b []byte) (int, error) {
-	n1, err := w.uncompressed.Write(b)
-	panicif.Err(err)
-	n2, err := w.compressedWriter.Write(b)
-	panicif.Err(err)
-	panicif.NotEq(n1, n2)
-	return n1, nil
 }
