@@ -33,7 +33,6 @@ type Writer struct {
 	buf              []byte
 	msg              []byte
 	uncompressed     bytes.Buffer
-	compressed       *bytes.Buffer
 	compressedWriter *countingCRCWriter
 
 	currentChunkStartTime    uint64
@@ -416,7 +415,7 @@ func (w *Writer) WriteDataEnd(e *DataEnd) error {
 }
 
 func (w *Writer) uncompressedSize() int {
-	panicif.NotEq(w.compressedWriter.Size(), int64(w.uncompressed.Len()))
+	//panicif.NotEq(w.compressedWriter.Size(), int64(w.uncompressed.Len()))
 	return w.uncompressed.Len()
 }
 
@@ -425,17 +424,12 @@ func (w *Writer) flushActiveChunk() error {
 		return nil
 	}
 
-	err := w.compressedWriter.Close()
-	panicif.Err(err)
-
 	var c1 bytes.Buffer
 	cw, err := w.newCompressedWriter(&c1)
 	panicif.Err(err)
 	cw.Write(w.uncompressed.Bytes())
 	crc := cw.CRC()
-	panicif.NotEq(cw.CRC(), w.compressedWriter.CRC())
 	cw.Close()
-	panicif.NotEq(c1.Len(), w.compressed.Len())
 	compressedLen := c1.Len()
 
 	uncompressedLen := w.uncompressedSize()
@@ -474,10 +468,7 @@ func (w *Writer) flushActiveChunk() error {
 	if err != nil {
 		return err
 	}
-	w.compressed.Reset()
-	w.compressedWriter.Reset(w.compressed)
-	w.compressedWriter.ResetSize()
-	w.compressedWriter.ResetCRC()
+	cw.Reset(io.Discard)
 	w.uncompressed.Reset()
 	chunkEndOffset := w.w.Size()
 
@@ -922,7 +913,6 @@ func NewWriter(w io.Writer, opts *WriterOptions) (ret *Writer, err error) {
 		channels:                 make(map[uint16]*Channel),
 		schemas:                  make(map[uint16]*Schema),
 		messageIndexes:           make(map[uint16]*MessageIndex),
-		compressed:               new(bytes.Buffer),
 		currentChunkStartTime:    math.MaxUint64,
 		currentChunkEndTime:      0,
 		currentChunkMessageCount: 0,
@@ -933,11 +923,14 @@ func NewWriter(w io.Writer, opts *WriterOptions) (ret *Writer, err error) {
 		},
 		opts: opts,
 	}
-	ret.compressedWriter, err = ret.newCompressedWriter(ret.compressed)
+	ret.compressedWriter, err = ret.newCompressedWriter(nil)
 	panicif.Err(err)
 	return ret, nil
 }
 
 func (w *Writer) uncompressedWriter() io.Writer {
-	return io.MultiWriter(&w.uncompressed, w.compressedWriter)
+	return &w.uncompressed
+	//return io.MultiWriter(&w.uncompressed, w.compressedWriter)
 }
+
+const checkWriter = false
