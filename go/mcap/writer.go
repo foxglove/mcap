@@ -8,6 +8,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/anacrolix/missinggo/v2/panicif"
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
 )
@@ -31,7 +32,7 @@ type Writer struct {
 	w                *writeSizer
 	buf              []byte
 	msg              []byte
-	uncompressed     *bytes.Buffer
+	uncompressed     bytes.Buffer
 	compressed       *bytes.Buffer
 	compressedWriter *countingCRCWriter
 
@@ -110,7 +111,7 @@ func (w *Writer) WriteSchema(s *Schema) (err error) {
 	offset += putPrefixedString(w.msg[offset:], s.Encoding)
 	offset += putPrefixedBytes(w.msg[offset:], s.Data)
 	if w.opts.Chunked && !w.closed {
-		_, err = w.writeRecord(w.compressedWriter, OpSchema, w.msg[:offset])
+		_, err = w.writeRecord(w.uncompressedWriter(), OpSchema, w.msg[:offset])
 	} else {
 		_, err = w.writeRecord(w.w, OpSchema, w.msg[:offset])
 	}
@@ -149,7 +150,7 @@ func (w *Writer) WriteChannel(c *Channel) error {
 	offset += copy(w.msg[offset:], userdata)
 	var err error
 	if w.opts.Chunked && !w.closed {
-		_, err = w.writeRecord(w.compressedWriter, OpChannel, w.msg[:offset])
+		_, err = w.writeRecord(w.uncompressedWriter(), OpChannel, w.msg[:offset])
 		if err != nil {
 			return err
 		}
@@ -193,8 +194,8 @@ func (w *Writer) WriteMessage(m *Message) error {
 			}
 			w.messageIndexes[m.ChannelID] = idx
 		}
-		idx.Add(m.LogTime, uint64(w.compressedWriter.Size()))
-		_, err := w.writeRecord(w.compressedWriter, OpMessage, w.msg[:offset])
+		idx.Add(m.LogTime, uint64(w.uncompressedSize()))
+		_, err := w.writeRecord(w.uncompressedWriter(), OpMessage, w.msg[:offset])
 		if err != nil {
 			return err
 		}
@@ -205,7 +206,7 @@ func (w *Writer) WriteMessage(m *Message) error {
 		if m.LogTime < w.currentChunkStartTime {
 			w.currentChunkStartTime = m.LogTime
 		}
-		if w.compressedWriter.Size() > w.opts.ChunkSize {
+		if int64(w.uncompressedSize()) > w.opts.ChunkSize {
 			err := w.flushActiveChunk()
 			if err != nil {
 				return err
@@ -414,8 +415,13 @@ func (w *Writer) WriteDataEnd(e *DataEnd) error {
 	return err
 }
 
+func (w *Writer) uncompressedSize() int {
+	panicif.NotEq(w.compressedWriter.Size(), int64(w.uncompressed.Len()))
+	return w.uncompressed.Len()
+}
+
 func (w *Writer) flushActiveChunk() error {
-	if w.compressedWriter.Size() == 0 {
+	if w.uncompressedSize() == 0 {
 		return nil
 	}
 
@@ -424,11 +430,11 @@ func (w *Writer) flushActiveChunk() error {
 		return err
 	}
 	crc := w.compressedWriter.CRC()
-	compressedlen := w.compressed.Len()
-	uncompressedlen := w.compressedWriter.Size()
+	compressedLen := w.compressed.Len()
+	uncompressedLen := w.uncompressedSize()
 	// the "top fields" are all fields of the chunk record except for the compressed records.
 	topFieldsLen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8
-	msglen := topFieldsLen + compressedlen
+	msgLen := topFieldsLen + compressedLen
 	chunkStartOffset := w.w.Size()
 	var start, end uint64
 	if w.currentChunkMessageCount != 0 {
@@ -446,10 +452,10 @@ func (w *Writer) flushActiveChunk() error {
 		return err
 	}
 
-	offset += putUint64(w.msg[offset:], uint64(msglen))
+	offset += putUint64(w.msg[offset:], uint64(msgLen))
 	offset += putUint64(w.msg[offset:], start)
 	offset += putUint64(w.msg[offset:], end)
-	offset += putUint64(w.msg[offset:], uint64(uncompressedlen))
+	offset += putUint64(w.msg[offset:], uint64(uncompressedLen))
 	offset += putUint32(w.msg[offset:], crc)
 	offset += putPrefixedString(w.msg[offset:], string(w.opts.Compression))
 	offset += putUint64(w.msg[offset:], uint64(w.compressed.Len()))
@@ -465,6 +471,7 @@ func (w *Writer) flushActiveChunk() error {
 	w.compressedWriter.Reset(w.compressed)
 	w.compressedWriter.ResetSize()
 	w.compressedWriter.ResetCRC()
+	w.uncompressed.Reset()
 	chunkEndOffset := w.w.Size()
 
 	// message indexes
@@ -492,8 +499,8 @@ func (w *Writer) flushActiveChunk() error {
 		MessageIndexOffsets: messageIndexOffsets,
 		MessageIndexLength:  messageIndexLength,
 		Compression:         w.opts.Compression,
-		CompressedSize:      uint64(compressedlen),
-		UncompressedSize:    uint64(uncompressedlen),
+		CompressedSize:      uint64(compressedLen),
+		UncompressedSize:    uint64(uncompressedLen),
 	})
 	for _, idx := range w.messageIndexes {
 		idx.Reset()
@@ -904,7 +911,6 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 		channels:                 make(map[uint16]*Channel),
 		schemas:                  make(map[uint16]*Schema),
 		messageIndexes:           make(map[uint16]*MessageIndex),
-		uncompressed:             &bytes.Buffer{},
 		compressed:               &compressed,
 		compressedWriter:         compressedWriter,
 		currentChunkStartTime:    math.MaxUint64,
@@ -917,4 +923,21 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 		},
 		opts: opts,
 	}, nil
+}
+
+func (w *Writer) assertUncompressedSize() {
+	panicif.NotEq(w.compressedWriter.Size(), int64(w.uncompressed.Len()))
+}
+
+func (w *Writer) uncompressedWriter() io.Writer {
+	return io.MultiWriter(&w.uncompressed, w.compressedWriter)
+}
+
+func (w *Writer) writeUncompressed(b []byte) (int, error) {
+	n1, err := w.uncompressed.Write(b)
+	panicif.Err(err)
+	n2, err := w.compressedWriter.Write(b)
+	panicif.Err(err)
+	panicif.NotEq(n1, n2)
+	return n1, nil
 }
