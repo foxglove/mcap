@@ -1,6 +1,6 @@
 module github.com/foxglove/mcap/go/mcap
 
-go 1.23
+go 1.18
 
 require (
 	github.com/klauspost/compress v1.16.7
