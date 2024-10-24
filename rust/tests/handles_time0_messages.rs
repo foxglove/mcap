@@ -10,6 +10,7 @@ fn handles_time0_messages() -> Result<()> {
     let mut out = mcap::Writer::new(Cursor::new(&mut buf))?;
 
     let my_channel = mcap::Channel {
+        id: 0, // ignored
         topic: String::from("time"),
         message_encoding: String::from("text/plain"),
         metadata: Default::default(),
@@ -34,7 +35,7 @@ fn handles_time0_messages() -> Result<()> {
             log_time: 42,
             publish_time: 42,
         },
-        b"Is it really that time agian?",
+        b"Is it really that time again?",
     )?;
 
     out.finish()?;
