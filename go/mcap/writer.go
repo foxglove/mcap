@@ -752,13 +752,16 @@ const (
 )
 
 type CustomCompressor interface {
-	Compressor() ResettableWriteCloser
+	NewCompressor() ResettableWriteCloser
 	Compression() CompressionFormat
 }
 
 // NewCustomCompressor returns a structure that may be supplied to writer
 // options as a custom chunk compressor.
-func NewCustomCompressor(compression CompressionFormat, compressor ResettableWriteCloser) CustomCompressor {
+func NewCustomCompressor(
+	compression CompressionFormat,
+	compressor func() (ResettableWriteCloser, error),
+) CustomCompressor {
 	return &customCompressor{
 		compression: compression,
 		compressor:  compressor,
@@ -767,7 +770,7 @@ func NewCustomCompressor(compression CompressionFormat, compressor ResettableWri
 
 type customCompressor struct {
 	compression CompressionFormat
-	compressor  ResettableWriteCloser
+	compressor  func() (ResettableWriteCloser, error)
 }
 
 func (c *customCompressor) Compressor() ResettableWriteCloser {
