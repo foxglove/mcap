@@ -419,8 +419,6 @@ func (w *Writer) uncompressedSize() int {
 }
 
 func (w *Writer) flushActiveChunk() error {
-	opts := w.opts
-	fmt.Printf("chunked: %v, compressor: %v, compression: %v\n", opts.Chunked, opts.Compressor != nil, opts.Compression)
 	if w.uncompressedSize() == 0 {
 		return nil
 	}
