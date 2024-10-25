@@ -395,6 +395,18 @@ public:
   Status write(const Metadata& metadata);
 
   /**
+   * @brief Returns the timestamp of the earliest message in the current chunk,
+   * or MaxTime if no chunk is in progress.
+   */
+  Timestamp currentChunkStart() const;
+
+  /**
+   * @brief Returns the timestamp of the latest message in the current chunk, or
+   * zero if no chunk is in progress.
+   */
+  Timestamp currentChunkEnd() const;
+
+  /**
    * @brief Current MCAP file-level statistics. This is written as a Statistics
    * record in the Summary section of the MCAP file.
    */
