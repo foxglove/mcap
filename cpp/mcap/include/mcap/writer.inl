@@ -653,11 +653,11 @@ Status McapWriter::write(const Metadata& metadata) {
   return StatusCode::Success;
 }
 
-Timestamp currentChunkStart() const {
+Timestamp McapWriter::currentChunkStart() const {
   return currentChunkStart_;
 }
 
-Timestamp currentChunkEnd() const {
+Timestamp McapWriter::currentChunkEnd() const {
   return currentChunkEnd_;
 }
 
