@@ -41,9 +41,9 @@ struct MCAP_PUBLIC McapWriterOptions {
    */
   bool noChunking = false;
   /**
-   * @brief Do not write Message Index records to the file. If `noSummary=true`
-   * and `noChunkIndex=false`, Chunk Index records will still be written to the
-   * Summary section, providing a coarse message index.
+   * @brief Do not write Message Index records to the file. If
+   * `noMessageIndex=true` and `noChunkIndex=false`, Chunk Index records will
+   * still be written to the Summary section, providing a coarse message index.
    */
   bool noMessageIndex = false;
   /**
