@@ -36,6 +36,7 @@ ignorePaths:
   - cpp/examples/protobuf/proto
 
 words:
+  - Aescape
   - Anduril
   - bagfile
   - bfbs
@@ -87,6 +88,7 @@ words:
   - rosbag
   - rosmsg
   - rostime
+  - Saronic
   - schemaless
   - serde
   - sfixed
@@ -102,6 +104,7 @@ words:
   - unindexed
   - velodyne
   - waabi
+  - Wayve
   - webp
   - xcdr
   - zstandard
