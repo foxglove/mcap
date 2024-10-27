@@ -8,6 +8,8 @@ import CocoLight from "./companies/coco-color.svg";
 import CocoDark from "./companies/coco-white.svg";
 import DexterityLight from "./companies/dexterity-color.svg";
 import DexterityDark from "./companies/dexterity-white.svg";
+import WayveLight from "./companies/wayve-light.svg";
+import WayveDark from "./companies/wayve-dark.svg";
 import NorLabLight from "./companies/norlab-color.svg";
 import NorlabDark from "./companies/norlab-white.svg";
 import ROSLight from "./companies/ros-color.svg";
@@ -16,6 +18,10 @@ import TangramLight from "./companies/tangram-color.svg";
 import TangramDark from "./companies/tangram-white.svg";
 import WaabiLight from "./companies/waabi-color.svg";
 import WaabiDark from "./companies/waabi-white.svg";
+import SaronicLight from "./companies/saronic-light.svg";
+import SaronicDark from "./companies/saronic-dark.svg";
+import AescapeLight from "./companies/aescape-light.svg";
+import AescapeDark from "./companies/aescape-dark.svg";
 import DrawerEnvelope from "./drawer-envelope.svg";
 import Robot from "./robot.svg";
 import ShipmentPackage from "./shipment-package.svg";
@@ -46,6 +52,11 @@ const Logos = [
     DarkModeLogo: DexterityDark,
   },
   {
+    href: "https://wayve.ai/",
+    LightModeLogo: WayveLight,
+    DarkModeLogo: WayveDark,
+  },
+  {
     href: "https://norlab.ulaval.ca/",
     LightModeLogo: NorLabLight,
     DarkModeLogo: NorlabDark,
@@ -64,6 +75,16 @@ const Logos = [
     href: "https://waabi.ai/",
     LightModeLogo: WaabiLight,
     DarkModeLogo: WaabiDark,
+  },
+  {
+    href: "https://www.saronic.com/",
+    LightModeLogo: SaronicLight,
+    DarkModeLogo: SaronicDark,
+  },
+  {
+    href: "https://www.aescape.com/",
+    LightModeLogo: AescapeLight,
+    DarkModeLogo: AescapeDark,
   },
 ];
 
