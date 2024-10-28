@@ -320,10 +320,12 @@ impl LinearReader {
         if let Some(n) = self.last_write.take() {
             if n == 0 {
                 // at EOF.
-                if self.options.skip_end_magic {
-                    if matches!(self.currently_reading, FileRecord) && self.file_data.len() == 0 {
-                        return Ok(None);
-                    }
+                if self.options.skip_end_magic
+                    && self.file_data.len() == 0
+                    && self.uncompressed_content.len() == 0
+                    && matches!(self.chunk_state, None)
+                {
+                    return Ok(None);
                 }
                 if matches!(self.chunk_state, Some(_)) {
                     return Err(McapError::UnexpectedEoc);
@@ -619,14 +621,20 @@ impl LinearReader {
                     }
                 }
                 PaddingAfterChunk => {
-                    let mut state = self.chunk_state.take().expect("chunk state should be set");
-                    match self.file_data.consume(state.padding_after_compressed_data) {
-                        Span(_) => {}
-                        Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
+                    {
+                        let state = self
+                            .chunk_state
+                            .as_mut()
+                            .expect("chunk state should be set");
+                        match self.file_data.consume(state.padding_after_compressed_data) {
+                            Span(_) => {}
+                            Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
+                        }
+                        if let Some(decompressor) = state.decompressor.take() {
+                            release_decompressor(&mut self.decompressors, decompressor)?;
+                        }
                     }
-                    if let Some(decompressor) = state.decompressor.take() {
-                        release_decompressor(&mut self.decompressors, decompressor)?;
-                    }
+                    self.chunk_state = None;
                     self.currently_reading = FileRecord;
                 }
             }
