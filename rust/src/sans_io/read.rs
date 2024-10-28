@@ -66,16 +66,6 @@ impl RWBuf {
         }
     }
 
-    // returns a mutable view of the un-written part of the buffer.
-    fn tail(&mut self) -> &mut [u8] {
-        &mut self.data[self.end..]
-    }
-
-    // Marks some bytes of the un-written part as written.
-    fn mark_written(&mut self, written: usize) {
-        self.end += written;
-    }
-
     // Marks some bytes of the un-read part as read.
     fn mark_read(&mut self, read: usize) {
         if let Some(hasher) = self.hasher.as_mut() {
@@ -94,29 +84,12 @@ impl RWBuf {
         &self.data[self.start..self.end]
     }
 
-    // returns a span of un-read data if enough is available, otherwise returning the remainder
-    // needed.
-    fn span(&self, want: usize) -> SpanOrRemainder {
-        let desired_end = self.start + want;
-        if desired_end <= self.end {
-            Span((self.start, desired_end))
-        } else {
-            Remainder(desired_end - self.end)
-        }
-    }
-
-    // returns an immutable view into the buffer for the given span.
-    fn view(&self, span: (usize, usize)) -> &[u8] {
-        let (start, end) = span;
-        &self.data[start..end]
-    }
-
     // returns a mutable view of the un-written part of the buffer, resizing as needed to ensure
     // N bytes are available to write into.
     fn tail_with_size(&mut self, n: usize) -> &mut [u8] {
         let desired_end = self.end + n;
         self.data.resize(desired_end, 0);
-        self.tail()
+        &mut self.data[self.end..]
     }
 
     // clears the RWBuf. Does not affect hasher state.
@@ -126,12 +99,6 @@ impl RWBuf {
         self.end = 0;
     }
 }
-
-enum SpanOrRemainder {
-    Span((usize, usize)),
-    Remainder(usize),
-}
-use SpanOrRemainder::*;
 
 /// Options for initializing [`LinearReader`].
 #[derive(Debug, Default, Clone)]
@@ -321,6 +288,8 @@ impl LinearReader {
 
     /// Yields the next action the caller should take to progress through the file.
     pub fn next_action(&mut self) -> Option<McapResult<ReadAction>> {
+        // It's more convenient to write code that uses `?` to return early on error, but this only
+        // works in functions that return Results.
         self.next_action_inner().transpose()
     }
 
@@ -341,13 +310,17 @@ impl LinearReader {
                 }
                 return Err(McapError::UnexpectedEof);
             }
-            self.file_data.mark_written(n);
+            self.file_data.end += n;
         }
 
         if self.file_data.len() == 0 {
             self.file_data.clear();
         }
 
+        /// Macros for loading data into the reader. These return early with NeedMore(n) if
+        /// more data is needed.
+        ///
+        /// load ensures that $n bytes are available unread in $buf.
         macro_rules! load {
             ($buf:expr, $n:expr) => {{
                 if $buf.len() < $n {
@@ -357,6 +330,8 @@ impl LinearReader {
             }};
         }
 
+        // consume ensures that $n bytes are available in $buf, and marks them as read before
+        // returning a slice containing those bytes.
         macro_rules! consume {
             ($buf:expr, $n:expr) => {{
                 if $buf.len() < $n {
@@ -365,6 +340,25 @@ impl LinearReader {
                 let start = $buf.start;
                 $buf.mark_read($n);
                 &$buf.data[start..start + $n]
+            }};
+        }
+
+        // decompress ensures that $n bytes are available in the uncompressed_content buffer.
+        macro_rules! decompress {
+            ($n: expr, $remaining: expr, $decompressor:expr) => {{
+                match decompress_inner(
+                    $decompressor,
+                    $n,
+                    &mut self.file_data,
+                    &mut self.uncompressed_content,
+                    $remaining,
+                )? {
+                    None => {
+                        &self.uncompressed_content.data
+                            [self.uncompressed_content.start..self.uncompressed_content.start + $n]
+                    }
+                    Some(n) => return Ok(Some(ReadAction::NeedMore(n))),
+                }
             }};
         }
 
@@ -530,16 +524,11 @@ impl LinearReader {
                                 self.currently_reading = ChunkRecord;
                                 continue;
                             }
-                            match decompress_n(
-                                decompressor,
+                            let _ = decompress!(
                                 len_as_usize(state.uncompressed_len)?,
-                                &mut self.file_data,
-                                &mut self.uncompressed_content,
                                 &mut state.compressed_remaining,
-                            )? {
-                                Span(_) => {}
-                                Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                            };
+                                decompressor
+                            );
                         }
                     }
                 }
@@ -550,6 +539,9 @@ impl LinearReader {
                         .expect("chunk state should be set");
                     match &mut state.decompressor {
                         None => {
+                            if self.uncompressed_content.len() == 0 {
+                                self.uncompressed_content.clear();
+                            }
                             if state.compressed_remaining == 0 {
                                 if let Some(hasher) = state.uncompressed_data_hasher.take() {
                                     let calculated = hasher.finalize();
@@ -595,32 +587,21 @@ impl LinearReader {
                                 self.currently_reading = PaddingAfterChunk;
                                 continue;
                             }
-                            let opcode_len_buf = match decompress_n(
-                                decompressor,
-                                9,
-                                &mut self.file_data,
-                                &mut self.uncompressed_content,
-                                &mut state.compressed_remaining,
-                            )? {
-                                Span(span) => self.uncompressed_content.view(span),
-                                Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                            };
+                            let opcode_len_buf =
+                                decompress!(9, &mut state.compressed_remaining, decompressor);
                             let opcode = opcode_len_buf[0];
                             let len = len_as_usize(u64::from_le_bytes(
                                 opcode_len_buf[1..9].try_into().unwrap(),
                             ))?;
-                            let (start, end) = match decompress_n(
-                                decompressor,
-                                9 + len,
-                                &mut self.file_data,
-                                &mut self.uncompressed_content,
-                                &mut state.compressed_remaining,
-                            )? {
-                                Span(span) => span,
-                                Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                            };
-                            self.uncompressed_content.mark_read(9 + len);
-                            let data = &self.uncompressed_content.data[start + 9..end];
+                            let _ =
+                                decompress!(9 + len, &mut state.compressed_remaining, decompressor);
+                            self.uncompressed_content.mark_read(9);
+                            let (start, end) = (
+                                self.uncompressed_content.start,
+                                self.uncompressed_content.start + len,
+                            );
+                            self.uncompressed_content.mark_read(len);
+                            let data = &self.uncompressed_content.data[start..end];
                             return Ok(Some(ReadAction::GetRecord { data, opcode }));
                         }
                     }
@@ -633,7 +614,8 @@ impl LinearReader {
                             .expect("chunk state should be set");
                         let _ = consume!(self.file_data, state.padding_after_compressed_data);
                         if let Some(decompressor) = state.decompressor.take() {
-                            release_decompressor(&mut self.decompressors, decompressor)?;
+                            decompressor.reset()?;
+                            decompressors.insert(decompressor.name().into(), decompressor);
                         }
                     }
                     self.chunk_state = None;
@@ -685,41 +667,32 @@ fn get_decompressor(
     }
 }
 
-fn release_decompressor(
-    decompressors: &mut HashMap<String, Box<dyn Decompressor>>,
-    mut decompressor: Box<dyn Decompressor>,
-) -> McapResult<()> {
-    decompressor.reset()?;
-    decompressors.insert(decompressor.name().into(), decompressor);
-    Ok(())
-}
-
-fn decompress_n(
+fn decompress_inner(
     decompressor: &mut Box<dyn Decompressor>,
     n: usize,
     from: &mut RWBuf,
     to: &mut RWBuf,
     compressed_remaining: &mut u64,
-) -> McapResult<SpanOrRemainder> {
+) -> McapResult<Option<usize>> {
     if to.len() > n {
-        return Ok(to.span(n));
+        return Ok(None);
     }
     to.data.resize(to.start + n, 0);
     loop {
         let need = decompressor.next_read_size();
         let have = from.len();
         if need > have {
-            return Ok(Remainder(need - have));
+            return Ok(Some(need - have));
         }
-        let dst = to.tail();
+        let dst = &mut to.data[to.end..];
         if dst.is_empty() {
-            return Ok(Span((to.start, to.end)));
+            return Ok(None);
         }
         let src_len = std::cmp::min(have, clamp_to_usize(*compressed_remaining));
         let src = &from.data[from.start..from.start + src_len];
         let res = decompressor.decompress(src, dst)?;
         from.mark_read(res.consumed);
-        to.mark_written(res.wrote);
+        to.end += res.wrote;
         *compressed_remaining -= res.consumed as u64;
     }
 }
