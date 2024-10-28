@@ -115,14 +115,6 @@ impl RWBuf {
         self.start = 0;
         self.end = 0;
     }
-
-    fn consume(&mut self, n: usize) -> SpanOrRemainder {
-        let res = self.span(n);
-        if let Span(_) = &res {
-            self.mark_read(n);
-        }
-        res
-    }
 }
 
 enum SpanOrRemainder {
@@ -346,6 +338,26 @@ impl LinearReader {
             self.file_data.clear();
         }
 
+        macro_rules! load {
+            ($buf:expr, $n:expr) => {{
+                if $buf.len() < $n {
+                    return Ok(Some(ReadAction::NeedMore($n - $buf.len())));
+                }
+                &$buf.data[$buf.start..$buf.start + $n]
+            }};
+        }
+
+        macro_rules! consume {
+            ($buf:expr, $n:expr) => {{
+                if $buf.len() < $n {
+                    return Ok(Some(ReadAction::NeedMore($n - $buf.len())));
+                }
+                let start = $buf.start;
+                $buf.mark_read($n);
+                &$buf.data[start..start + $n]
+            }};
+        }
+
         loop {
             match self.currently_reading.clone() {
                 StartMagic => {
@@ -353,10 +365,7 @@ impl LinearReader {
                         self.currently_reading = CurrentlyReading::FileRecord;
                         continue;
                     }
-                    let data = match self.file_data.consume(MAGIC.len()) {
-                        Span(span) => self.file_data.view(span),
-                        Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                    };
+                    let data = consume!(self.file_data, MAGIC.len());
                     if *data != *MAGIC {
                         return Err(McapError::BadMagic);
                     }
@@ -366,20 +375,15 @@ impl LinearReader {
                     if self.options.skip_end_magic {
                         return Ok(None);
                     }
-                    let data = match self.file_data.consume(MAGIC.len()) {
-                        Span(span) => self.file_data.view(span),
-                        Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                    };
+                    let data = consume!(self.file_data, MAGIC.len());
                     if *data != *MAGIC {
                         return Err(McapError::BadMagic);
                     }
+                    self.file_data.mark_read(MAGIC.len());
                     return Ok(None);
                 }
                 FileRecord => {
-                    let opcode_length_buf = match self.file_data.span(9) {
-                        Span(span) => self.file_data.view(span),
-                        Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                    };
+                    let opcode_length_buf = load!(self.file_data, 9);
                     let opcode = opcode_length_buf[0];
                     let len = u64::from_le_bytes(opcode_length_buf[1..].try_into().unwrap());
                     if opcode == op::CHUNK && !self.options.emit_chunks {
@@ -398,14 +402,13 @@ impl LinearReader {
                                 expected: 4,
                             });
                         }
-                        let span = match self.file_data.consume(len_as_usize(len)? + 9) {
-                            Span(span) => span,
-                            Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                        };
+                        let len = len_as_usize(len)?;
+                        let opcode_len_data = consume!(self.file_data, 9 + len);
+                        let data = &opcode_len_data[9..];
                         if self.options.validate_summary_section_crc {
                             self.file_data.hasher = Some(crc32fast::Hasher::new());
                         }
-                        let data = &self.file_data.view(span)[9..];
+
                         let saved = u32::from_le_bytes(data[..4].try_into().unwrap());
                         if let Some(calculated) = calculated {
                             if saved != 0 && calculated != saved {
@@ -421,47 +424,32 @@ impl LinearReader {
                                 expected: 20,
                             });
                         }
-                        let (start, end) = match self.file_data.span(len_as_usize(len)? + 9) {
-                            Span(span) => span,
-                            Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                        };
+                        let len = len_as_usize(len)?;
+                        let opcode_len_data = load!(self.file_data, 9 + len);
+                        let data = &opcode_len_data[9..];
                         if let Some(mut hasher) = self.file_data.hasher.take() {
-                            hasher.update(&self.file_data.data[start..9 + 16]);
+                            hasher.update(&opcode_len_data[..9 + 16]);
                             let calculated = hasher.finalize();
-                            let saved = u32::from_le_bytes(
-                                self.file_data.data[start + 9 + 16..start + 9 + 20]
-                                    .try_into()
-                                    .unwrap(),
-                            );
+                            let saved = u32::from_le_bytes(data[16..20].try_into().unwrap());
                             if saved != 0 && saved != calculated {
                                 return Err(McapError::BadSummaryCrc { saved, calculated });
                             }
                         }
-                        self.file_data.mark_read(len_as_usize(len)? + 9);
-                        let data = &self.file_data.data[start + 9..end];
+                        let data = &consume!(self.file_data, 9 + len)[9..];
                         self.currently_reading = EndMagic;
                         return Ok(Some(ReadAction::GetRecord { data, opcode }));
                     }
-                    let data = match self.file_data.consume(len_as_usize(len)? + 9) {
-                        Span(span) => self.file_data.view(span),
-                        Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                    };
-                    let data = &data[9..];
+                    let opcode_len_data = consume!(self.file_data, 9 + len_as_usize(len)?);
+                    let data = &opcode_len_data[9..];
                     return Ok(Some(ReadAction::GetRecord { data, opcode }));
                 }
                 CurrentlyReading::ChunkHeader { len } => {
                     const MIN_CHUNK_HEADER_SIZE: usize = 8 + 8 + 8 + 4 + 4 + 8;
-                    let min_header_buf = match self.file_data.span(MIN_CHUNK_HEADER_SIZE) {
-                        Span(span) => self.file_data.view(span),
-                        Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                    };
+                    let min_header_buf = load!(self.file_data, MIN_CHUNK_HEADER_SIZE);
                     let compression_len =
                         u32::from_le_bytes(min_header_buf[28..32].try_into().unwrap());
                     let header_len = MIN_CHUNK_HEADER_SIZE + compression_len as usize;
-                    let header_buf = match self.file_data.consume(header_len) {
-                        Span(span) => self.file_data.view(span),
-                        Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                    };
+                    let header_buf = consume!(self.file_data, header_len);
                     let header: ChunkHeader = std::io::Cursor::new(header_buf).read_le()?;
                     let state = ChunkState {
                         decompressor: get_decompressor(
@@ -498,13 +486,8 @@ impl LinearReader {
                         .expect("chunk state should be set");
                     match &mut state.decompressor {
                         None => {
-                            let records = match self
-                                .file_data
-                                .span(len_as_usize(state.compressed_remaining)?)
-                            {
-                                Span(span) => self.file_data.view(span),
-                                Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                            };
+                            let records =
+                                load!(self.file_data, len_as_usize(state.compressed_remaining)?);
                             let calculated = crc32fast::hash(records);
                             let saved = state.crc;
                             if calculated != saved {
@@ -556,28 +539,20 @@ impl LinearReader {
                                 self.currently_reading = PaddingAfterChunk;
                                 continue;
                             }
-                            let opcode_len_buf = match self.file_data.span(9) {
-                                Span(span) => self.file_data.view(span),
-                                Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                            };
+
+                            let opcode_len_buf = load!(self.file_data, 9);
                             let opcode = opcode_len_buf[0];
                             let len = len_as_usize(u64::from_le_bytes(
                                 opcode_len_buf[1..9].try_into().unwrap(),
                             ))?;
-                            let (start, end) = match self.file_data.span(9 + len) {
-                                Span(span) => span,
-                                Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                            };
+
+                            let opcode_len_data = consume!(self.file_data, 9 + len);
+                            let data = &opcode_len_data[9..];
                             if let Some(hasher) = state.uncompressed_data_hasher.as_mut() {
-                                hasher.update(&self.file_data.data[start..end]);
+                                hasher.update(opcode_len_data);
                             }
-                            self.file_data.mark_read(9 + len);
-                            let data_span = (start + 9, end);
                             state.compressed_remaining -= (9 + len) as u64;
-                            return Ok(Some(ReadAction::GetRecord {
-                                data: self.file_data.view(data_span),
-                                opcode,
-                            }));
+                            return Ok(Some(ReadAction::GetRecord { data, opcode }));
                         }
                         Some(decompressor) => {
                             if state.compressed_remaining == 0
@@ -632,10 +607,7 @@ impl LinearReader {
                             .chunk_state
                             .as_mut()
                             .expect("chunk state should be set");
-                        match self.file_data.consume(state.padding_after_compressed_data) {
-                            Span(_) => {}
-                            Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                        }
+                        let _ = consume!(self.file_data, state.padding_after_compressed_data);
                         if let Some(decompressor) = state.decompressor.take() {
                             release_decompressor(&mut self.decompressors, decompressor)?;
                         }
