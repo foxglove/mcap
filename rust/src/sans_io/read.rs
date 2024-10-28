@@ -1,6 +1,6 @@
 //! Contains a [sans-io](https://sans-io.readthedocs.io/) MCAP reader struct, [`LinearReader`].
 //! This can be used to read MCAP data from any source of bytes.
-use std::{collections::HashMap, ops::Rem};
+use std::collections::HashMap;
 
 use super::decompressor::Decompressor;
 use crate::{
@@ -408,14 +408,14 @@ impl LinearReader {
                                 expected: 4,
                             });
                         }
+                        let span = match self.file_data.consume(len_as_usize(len)? + 9) {
+                            Span(span) => span,
+                            Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
+                        };
                         if self.options.validate_summary_section_crc {
                             self.file_data.hasher = Some(crc32fast::Hasher::new());
                         }
-                        let data = match self.file_data.consume(len_as_usize(len)? + 9) {
-                            Span(span) => self.file_data.view(span),
-                            Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
-                        };
-                        let data = &data[9..];
+                        let data = &self.file_data.view(span)[9..];
                         let saved = u32::from_le_bytes(data[..4].try_into().unwrap());
                         if let Some(calculated) = calculated {
                             if saved != 0 && calculated != saved {
@@ -428,24 +428,27 @@ impl LinearReader {
                             return Err(McapError::RecordTooShort {
                                 opcode: op::DATA_END,
                                 len,
-                                expected: 12,
+                                expected: 20,
                             });
                         }
-                        let (start, end) = match self.file_data.consume(len_as_usize(len)? + 9) {
+                        let (start, end) = match self.file_data.span(len_as_usize(len)? + 9) {
                             Span(span) => span,
                             Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
                         };
-                        let calculated_crc =
-                            self.file_data.hasher.take().map(|hasher| hasher.finalize());
-                        let data = &self.file_data.data[start + 9..end];
-                        let saved = u32::from_le_bytes(data[8..12].try_into().unwrap());
-                        if let Some(calculated) = calculated_crc {
-                            if saved != 0 {
-                                if saved != calculated {
-                                    return Err(McapError::BadSummaryCrc { saved, calculated });
-                                }
+                        if let Some(mut hasher) = self.file_data.hasher.take() {
+                            hasher.update(&self.file_data.data[start..9 + 16]);
+                            let calculated = hasher.finalize();
+                            let saved = u32::from_le_bytes(
+                                self.file_data.data[start + 9 + 16..start + 9 + 20]
+                                    .try_into()
+                                    .unwrap(),
+                            );
+                            if saved != 0 && saved != calculated {
+                                return Err(McapError::BadSummaryCrc { saved, calculated });
                             }
                         }
+                        self.file_data.mark_read(len_as_usize(len)? + 9);
+                        let data = &self.file_data.data[start + 9..end];
                         self.currently_reading = EndMagic;
                         return Ok(Some(ReadAction::GetRecord { data, opcode }));
                     }
@@ -517,6 +520,7 @@ impl LinearReader {
                             if calculated != saved {
                                 return Err(McapError::BadChunkCrc { saved, calculated });
                             }
+                            self.currently_reading = ChunkRecord;
                         }
                         Some(decompressor) => {
                             if state.compressed_remaining == 0 {
@@ -574,6 +578,10 @@ impl LinearReader {
                                 Span(span) => span,
                                 Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
                             };
+                            state
+                                .uncompressed_data_hasher
+                                .as_mut()
+                                .map(|hasher| hasher.update(&self.file_data.data[start..end]));
                             self.file_data.mark_read(9 + len);
                             let data_span = (start + 9, end);
                             state.compressed_remaining -= (9 + len) as u64;
@@ -836,6 +844,35 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn test_all_validations() -> McapResult<()> {
+        let mut reader = LinearReader::new_with_options(
+            LinearReaderOptions::default()
+                .with_validate_data_section_crc(true)
+                .with_validate_summary_section_crc(true),
+        );
+        let mut cursor = std::io::Cursor::new(basic_chunked_file(None)?);
+        let mut opcodes: Vec<u8> = Vec::new();
+        let mut iter_count = 0;
+        while let Some(action) = reader.next_action() {
+            match action? {
+                ReadAction::NeedMore(n) => {
+                    let mut into = reader.insert(n);
+                    let written = cursor.read(into.buf)?;
+                    into.set_filled(written);
+                }
+                ReadAction::GetRecord { data, opcode } => {
+                    opcodes.push(opcode);
+                    parse_record(opcode, data)?;
+                }
+            }
+            iter_count += 1;
+            // guard against infinite loop
+            assert!(iter_count < 10000);
+        }
+        Ok(())
+    }
+
     fn test_chunked(
         compression: Option<Compression>,
         options: LinearReaderOptions,
@@ -905,6 +942,7 @@ mod tests {
         lz4_none, Some(Compression::Lz4), LinearReaderOptions::default(),
         lz4_after, Some(Compression::Lz4), LinearReaderOptions::default().with_validate_chunk_crcs(true),
         lz4_before, Some(Compression::Lz4), LinearReaderOptions::default().with_prevalidate_chunk_crcs(true)
+
     }
 
     #[test]
