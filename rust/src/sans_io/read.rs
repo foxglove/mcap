@@ -19,7 +19,17 @@ use super::zstd;
 enum CurrentlyReading {
     StartMagic,
     FileRecord,
-    ChunkHeader { len: u64 },
+    ChunkHeader {
+        len: u64,
+    },
+    Footer {
+        len: u64,
+        hasher: Option<crc32fast::Hasher>,
+    },
+    DataEnd {
+        len: u64,
+        calculated: Option<u32>,
+    },
     ValidatingChunkCrc,
     ChunkRecord,
     PaddingAfterChunk,
@@ -391,57 +401,71 @@ impl LinearReader {
                         self.currently_reading = CurrentlyReading::ChunkHeader { len };
                         continue;
                     } else if opcode == op::DATA_END {
-                        // treat this opcode specially as we need to check the data section CRC
                         let calculated =
                             self.file_data.hasher.take().map(|hasher| hasher.finalize());
-
-                        if len < 4 {
-                            return Err(McapError::RecordTooShort {
-                                opcode: op::DATA_END,
-                                len,
-                                expected: 4,
-                            });
-                        }
-                        let len = len_as_usize(len)?;
-                        let opcode_len_data = consume!(self.file_data, 9 + len);
-                        let data = &opcode_len_data[9..];
-                        if self.options.validate_summary_section_crc {
-                            self.file_data.hasher = Some(crc32fast::Hasher::new());
-                        }
-
-                        let saved = u32::from_le_bytes(data[..4].try_into().unwrap());
-                        if let Some(calculated) = calculated {
-                            if saved != 0 && calculated != saved {
-                                return Err(McapError::BadDataCrc { saved, calculated });
-                            }
-                        }
-                        return Ok(Some(ReadAction::GetRecord { data, opcode }));
+                        self.file_data.mark_read(9);
+                        self.currently_reading = DataEnd { len, calculated };
+                        continue;
                     } else if opcode == op::FOOTER {
-                        if len < 20 {
-                            return Err(McapError::RecordTooShort {
-                                opcode: op::DATA_END,
-                                len,
-                                expected: 20,
-                            });
-                        }
-                        let len = len_as_usize(len)?;
-                        let opcode_len_data = load!(self.file_data, 9 + len);
-                        let data = &opcode_len_data[9..];
-                        if let Some(mut hasher) = self.file_data.hasher.take() {
-                            hasher.update(&opcode_len_data[..9 + 16]);
-                            let calculated = hasher.finalize();
-                            let saved = u32::from_le_bytes(data[16..20].try_into().unwrap());
-                            if saved != 0 && saved != calculated {
-                                return Err(McapError::BadSummaryCrc { saved, calculated });
-                            }
-                        }
-                        let data = &consume!(self.file_data, 9 + len)[9..];
-                        self.currently_reading = EndMagic;
-                        return Ok(Some(ReadAction::GetRecord { data, opcode }));
+                        self.file_data.mark_read(9);
+                        self.currently_reading = Footer {
+                            len,
+                            hasher: self.file_data.hasher.take(),
+                        };
+                        continue;
                     }
-                    let opcode_len_data = consume!(self.file_data, 9 + len_as_usize(len)?);
-                    let data = &opcode_len_data[9..];
+                    let data = &consume!(self.file_data, 9 + len_as_usize(len)?)[9..];
                     return Ok(Some(ReadAction::GetRecord { data, opcode }));
+                }
+                CurrentlyReading::DataEnd { len, calculated } => {
+                    if len < 4 {
+                        return Err(McapError::RecordTooShort {
+                            opcode: op::DATA_END,
+                            len,
+                            expected: 4,
+                        });
+                    }
+                    let len = len_as_usize(len)?;
+                    let data = consume!(self.file_data, len);
+
+                    let saved = u32::from_le_bytes(data[..4].try_into().unwrap());
+                    if let Some(calculated) = calculated {
+                        if saved != 0 && calculated != saved {
+                            return Err(McapError::BadDataCrc { saved, calculated });
+                        }
+                    }
+                    self.currently_reading = FileRecord;
+                    if self.options.validate_summary_section_crc {
+                        self.file_data.hasher = Some(crc32fast::Hasher::new());
+                    }
+                    return Ok(Some(ReadAction::GetRecord {
+                        data,
+                        opcode: op::DATA_END,
+                    }));
+                }
+                CurrentlyReading::Footer { len, hasher } => {
+                    if len < 20 {
+                        return Err(McapError::RecordTooShort {
+                            opcode: op::DATA_END,
+                            len,
+                            expected: 20,
+                        });
+                    }
+                    let len = len_as_usize(len)?;
+                    let data = consume!(self.file_data, len);
+                    if let Some(mut hasher) = hasher {
+                        hasher.update(&data[..16]);
+                        let calculated = hasher.finalize();
+                        let saved = u32::from_le_bytes(data[16..20].try_into().unwrap());
+                        if saved != 0 && saved != calculated {
+                            return Err(McapError::BadSummaryCrc { saved, calculated });
+                        }
+                    }
+                    self.currently_reading = EndMagic;
+                    return Ok(Some(ReadAction::GetRecord {
+                        data,
+                        opcode: op::FOOTER,
+                    }));
                 }
                 CurrentlyReading::ChunkHeader { len } => {
                     const MIN_CHUNK_HEADER_SIZE: usize = 8 + 8 + 8 + 4 + 4 + 8;
