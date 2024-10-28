@@ -51,12 +51,11 @@ where
         while let Some(action) = self.reader.next_action() {
             match action {
                 Ok(ReadAction::NeedMore(n)) => {
-                    let mut into_buf = self.reader.insert(n);
-                    let written = match self.source.read(into_buf.buf).await {
+                    let written = match self.source.read(self.reader.insert(n)).await {
                         Ok(n) => n,
                         Err(err) => return Some(Err(err.into())),
                     };
-                    into_buf.set_filled(written);
+                    self.reader.set_filled(written);
                 }
                 Ok(ReadAction::GetRecord {
                     data: content,

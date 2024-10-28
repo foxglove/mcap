@@ -197,34 +197,6 @@ impl LinearReaderOptions {
     }
 }
 
-/// A mutable view that allows the user to write new MCAP data into the [`LinearReader`].
-///
-/// The user is expected to copy up to `self.buf.len()` bytes into `self.buf`, then call
-/// `set_filled(usize)` to notify the reader of how many bytes were successfully read.
-pub struct InputBuf<'a> {
-    pub buf: &'a mut [u8],
-    last_write: &'a mut Option<usize>,
-}
-
-impl<'a> InputBuf<'a> {
-    /// Notify the reader that `written` new bytes are available. Only call this method after
-    /// copying data into [`self.buf`].
-    pub fn set_filled(&'a mut self, written: usize) {
-        *self.last_write = Some(written);
-    }
-    /// A convenience method to copy from the user's slice of MCAP data. Copies up to
-    /// `self.buf.len()` bytes from `other`, calling `self.set_filled()` with the number of bytes
-    /// copied.
-    pub fn copy_from(&'a mut self, other: &[u8]) -> usize {
-        let len = std::cmp::min(self.buf.len(), other.len());
-        let src = &other[..len];
-        let dst = &mut self.buf[..len];
-        dst.copy_from_slice(src);
-        self.set_filled(len);
-        len
-    }
-}
-
 /// Reads an MCAP file from start to end, yielding raw records by opcode and data buffer.
 ///
 /// This struct does not perform any I/O on its own, instead it yields slices to the caller and
@@ -245,9 +217,9 @@ impl<'a> InputBuf<'a> {
 ///     let mut reader = mcap::sans_io::read::LinearReader::new();
 ///     while let Some(action) = reader.next_action() {
 ///         match action? {
-///             ReadAction::Fill(mut into) => {
-///                 let n = file.read(into.buf).await?;
-///                 into.set_filled(n);
+///             ReadAction::NeedMore(n) => {
+///                 let written = file.read(reader.insert(n)).await?;
+///                 reader.set_filled(written);
 ///             },
 ///             ReadAction::GetRecord{ opcode, data } => {
 ///                 let raw_record = mcap::parse_record(opcode, data)?;
@@ -264,9 +236,9 @@ impl<'a> InputBuf<'a> {
 ///     let mut reader = mcap::sans_io::read::LinearReader::new();
 ///     while let Some(action) = reader.next_action() {
 ///         match action? {
-///             ReadAction::Fill(mut into) => {
-///                 let n = file.read(into.buf)?;
-///                 into.set_filled(n);
+///             ReadAction::NeedMore(n) => {
+///                 let written = file.read(reader.insert(n))?;
+///                 reader.set_filled(written);
 ///             },
 ///             ReadAction::GetRecord{ opcode, data } => {
 ///                 let raw_record = mcap::parse_record(opcode, data)?;
@@ -284,7 +256,6 @@ pub struct LinearReader {
     uncompressed_content: RWBuf,
     decompressors: HashMap<String, Box<dyn Decompressor>>,
     options: LinearReaderOptions,
-    at_eof: bool,
     last_write: Option<usize>,
 }
 
@@ -307,7 +278,6 @@ impl LinearReader {
             options,
             chunk_state: None,
             decompressors: Default::default(),
-            at_eof: false,
             last_write: None,
         }
     }
@@ -332,11 +302,13 @@ impl LinearReader {
         Ok(result)
     }
 
-    pub fn insert(&mut self, n: usize) -> InputBuf {
-        InputBuf {
-            buf: self.file_data.tail_with_size(n),
-            last_write: &mut self.last_write,
-        }
+    /// Read new data into this reader.
+    pub fn insert(&mut self, n: usize) -> &mut [u8] {
+        self.file_data.tail_with_size(n)
+    }
+
+    pub fn set_filled(&mut self, n: usize) {
+        self.last_write = Some(n);
     }
 
     /// Yields the next action the caller should take to progress through the file.
@@ -345,11 +317,20 @@ impl LinearReader {
     }
 
     fn next_action_inner(&mut self) -> McapResult<Option<ReadAction>> {
-        if let Some(written) = self.last_write.take() {
-            if written == 0 {
-                self.at_eof = true;
+        if let Some(n) = self.last_write.take() {
+            if n == 0 {
+                // at EOF.
+                if self.options.skip_end_magic {
+                    if matches!(self.currently_reading, FileRecord) && self.file_data.len() == 0 {
+                        return Ok(None);
+                    }
+                }
+                if matches!(self.chunk_state, Some(_)) {
+                    return Err(McapError::UnexpectedEoc);
+                }
+                return Err(McapError::UnexpectedEof);
             }
-            self.file_data.mark_written(written);
+            self.file_data.mark_written(n);
         }
 
         if self.file_data.len() == 0 {
@@ -424,7 +405,7 @@ impl LinearReader {
                         }
                         return Ok(Some(ReadAction::GetRecord { data, opcode }));
                     } else if opcode == op::FOOTER {
-                        if len < 12 {
+                        if len < 20 {
                             return Err(McapError::RecordTooShort {
                                 opcode: op::DATA_END,
                                 len,
@@ -814,9 +795,8 @@ mod tests {
         while let Some(action) = reader.next_action() {
             match action? {
                 ReadAction::NeedMore(n) => {
-                    let mut into = reader.insert(n);
-                    let written = cursor.read(into.buf)?;
-                    into.set_filled(written);
+                    let written = cursor.read(reader.insert(n))?;
+                    reader.set_filled(written);
                 }
                 ReadAction::GetRecord { data, opcode } => {
                     opcodes.push(opcode);
@@ -857,9 +837,8 @@ mod tests {
         while let Some(action) = reader.next_action() {
             match action? {
                 ReadAction::NeedMore(n) => {
-                    let mut into = reader.insert(n);
-                    let written = cursor.read(into.buf)?;
-                    into.set_filled(written);
+                    let written = cursor.read(reader.insert(n))?;
+                    reader.set_filled(written);
                 }
                 ReadAction::GetRecord { data, opcode } => {
                     opcodes.push(opcode);
@@ -884,9 +863,8 @@ mod tests {
         while let Some(action) = reader.next_action() {
             match action? {
                 ReadAction::NeedMore(n) => {
-                    let mut into = reader.insert(n);
-                    let written = cursor.read(into.buf)?;
-                    into.set_filled(written);
+                    let written = cursor.read(reader.insert(n))?;
+                    reader.set_filled(written);
                 }
                 ReadAction::GetRecord { data, opcode } => {
                     opcodes.push(opcode);
@@ -942,7 +920,6 @@ mod tests {
         lz4_none, Some(Compression::Lz4), LinearReaderOptions::default(),
         lz4_after, Some(Compression::Lz4), LinearReaderOptions::default().with_validate_chunk_crcs(true),
         lz4_before, Some(Compression::Lz4), LinearReaderOptions::default().with_prevalidate_chunk_crcs(true)
-
     }
 
     #[test]
@@ -966,9 +943,8 @@ mod tests {
             while let Some(action) = reader.next_action() {
                 match action? {
                     ReadAction::NeedMore(n) => {
-                        let mut into = reader.insert(n);
-                        let written = cursor.read(into.buf)?;
-                        into.set_filled(written);
+                        let written = cursor.read(reader.insert(n))?;
+                        reader.set_filled(written);
                     }
                     ReadAction::GetRecord { data, opcode } => {
                         opcodes.push(opcode);
@@ -1011,9 +987,8 @@ mod tests {
         while let Some(action) = reader.next_action() {
             match action? {
                 ReadAction::NeedMore(n) => {
-                    let mut into = reader.insert(n);
-                    let written = cursor.read(into.buf)?;
-                    into.set_filled(written);
+                    let written = cursor.read(reader.insert(n))?;
+                    reader.set_filled(written);
                 }
                 ReadAction::GetRecord { data, opcode } => {
                     opcodes.push(opcode);

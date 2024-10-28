@@ -145,7 +145,6 @@ fn demo_random_chunk_access() -> Result<()> {
     {
         assert_eq!(whole?, random?);
     }
-
     // Let's poke around the message indexes
     let mut index_entries = summary
         .read_message_indexes(&mapped, &summary.chunk_indexes[1])?
