@@ -1,6 +1,6 @@
 //! Contains a [sans-io](https://sans-io.readthedocs.io/) MCAP reader struct, [`LinearReader`].
 //! This can be used to read MCAP data from any source of bytes.
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Rem};
 
 use super::decompressor::Decompressor;
 use crate::{
@@ -301,9 +301,11 @@ impl LinearReader {
                 StartMagic
             },
             file_data: RWBuf::new(options.validate_data_section_crc),
+            uncompressed_content: RWBuf::new(
+                options.validate_chunk_crcs && !options.prevalidate_chunk_crcs,
+            ),
             options,
             chunk_state: None,
-            uncompressed_content: RWBuf::new(false),
             decompressors: Default::default(),
             at_eof: false,
             last_write: None,
@@ -548,6 +550,15 @@ impl LinearReader {
                     match &mut state.decompressor {
                         None => {
                             if state.compressed_remaining == 0 {
+                                if let Some(hasher) = state.uncompressed_data_hasher.take() {
+                                    let calculated = hasher.finalize();
+                                    if state.crc != 0 && state.crc != calculated {
+                                        return Err(McapError::BadChunkCrc {
+                                            saved: state.crc,
+                                            calculated,
+                                        });
+                                    }
+                                }
                                 self.currently_reading = PaddingAfterChunk;
                                 continue;
                             }
@@ -575,12 +586,14 @@ impl LinearReader {
                             if state.compressed_remaining == 0
                                 && self.uncompressed_content.len() == 0
                             {
-                                if let Some(hasher) = state.uncompressed_data_hasher.take() {
+                                if let Some(hasher) = self.uncompressed_content.hasher.take() {
                                     let calculated = hasher.finalize();
                                     let saved = state.crc;
                                     if saved != 0 && saved != calculated {
                                         return Err(McapError::BadChunkCrc { saved, calculated });
                                     }
+                                    self.uncompressed_content.hasher =
+                                        Some(crc32fast::Hasher::new());
                                 }
                                 self.uncompressed_content.clear();
                                 self.currently_reading = PaddingAfterChunk;
@@ -618,7 +631,10 @@ impl LinearReader {
                 }
                 PaddingAfterChunk => {
                     let mut state = self.chunk_state.take().expect("chunk state should be set");
-                    self.file_data.consume(state.padding_after_compressed_data);
+                    match self.file_data.consume(state.padding_after_compressed_data) {
+                        Span(_) => {}
+                        Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
+                    }
                     if let Some(decompressor) = state.decompressor.take() {
                         release_decompressor(&mut self.decompressors, decompressor)?;
                     }
