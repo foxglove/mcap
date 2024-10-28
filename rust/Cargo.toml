@@ -27,10 +27,10 @@ async-compression = { version = "*", features = ["tokio"], optional = true }
 tokio = { version = "1", features = ["io-util"] , optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-zstd = { version = "0.11", features = ["wasm"], optional = true }
+zstd = { version = "0.13", features = ["wasm"], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-zstd = { version = "0.11", features = ["zstdmt"], optional = true }
+zstd = { version = "0.13", features = ["zstdmt"], optional = true }
 
 [features]
 default = ["zstd", "lz4"]
