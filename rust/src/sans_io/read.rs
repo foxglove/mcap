@@ -259,9 +259,15 @@ pub struct LinearReader {
     last_write: Option<usize>,
 }
 
+impl Default for LinearReader {
+    fn default() -> Self {
+        Self::new_with_options(Default::default())
+    }
+}
+
 impl LinearReader {
     pub fn new() -> Self {
-        Self::new_with_options(LinearReaderOptions::default())
+        Default::default()
     }
 
     pub fn new_with_options(options: LinearReaderOptions) -> Self {
@@ -290,7 +296,7 @@ impl LinearReader {
                 .with_skip_start_magic(true)
                 .with_validate_chunk_crcs(true),
         );
-        result.currently_reading = FileRecord;
+        result.currently_reading = ChunkRecord;
         result.chunk_state = Some(ChunkState {
             decompressor: get_decompressor(&mut HashMap::new(), &header.compression)?,
             crc: header.uncompressed_crc,
@@ -319,15 +325,16 @@ impl LinearReader {
     fn next_action_inner(&mut self) -> McapResult<Option<ReadAction>> {
         if let Some(n) = self.last_write.take() {
             if n == 0 {
-                // at EOF.
+                // at EOF. If the reader is not expecting end magic, and it isn't in the middle of a
+                // record or chunk, this is OK.
                 if self.options.skip_end_magic
                     && self.file_data.len() == 0
                     && self.uncompressed_content.len() == 0
-                    && matches!(self.chunk_state, None)
+                    && self.chunk_state.is_none()
                 {
                     return Ok(None);
                 }
-                if matches!(self.chunk_state, Some(_)) {
+                if self.chunk_state.is_some() {
                     return Err(McapError::UnexpectedEoc);
                 }
                 return Err(McapError::UnexpectedEof);
@@ -561,10 +568,9 @@ impl LinearReader {
                                 Span(span) => span,
                                 Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
                             };
-                            state
-                                .uncompressed_data_hasher
-                                .as_mut()
-                                .map(|hasher| hasher.update(&self.file_data.data[start..end]));
+                            if let Some(hasher) = state.uncompressed_data_hasher.as_mut() {
+                                hasher.update(&self.file_data.data[start..end]);
+                            }
                             self.file_data.mark_read(9 + len);
                             let data_span = (start + 9, end);
                             state.compressed_remaining -= (9 + len) as u64;
@@ -650,24 +656,6 @@ impl LinearReader {
 
 /// Encapsulates the action the user should take next when reading an MCAP file.
 ///
-/// ```no_run
-/// use mcap::sans_io::read::ReadAction;
-/// use mcap::McapResult;
-/// use mcap::read::parse_record;
-/// fn use_action(file: &mut Box<dyn std::io::Read>, action: ReadAction) -> McapResult<()> {
-///   match action {
-///     ReadAction::Fill(mut into) => {
-///       let n = file.read(into.buf)?;
-///       into.set_filled(n);
-///     },
-///     ReadAction::GetRecord{ opcode, data } => {
-///       let record = mcap::parse_record(opcode, data)?;
-///       // do something with the record...
-///     }
-///   }
-///   Ok(())
-/// }
-/// ```
 pub enum ReadAction<'a> {
     /// The reader needs more data to continue - call [`LinearReader::insert`] to load more data.
     /// the value provided here is a hint for how much data to insert.
@@ -728,7 +716,7 @@ fn decompress_n(
             return Ok(Remainder(need - have));
         }
         let dst = to.tail();
-        if dst.len() == 0 {
+        if dst.is_empty() {
             return Ok(Span((to.start, to.end)));
         }
         let src_len = std::cmp::min(have, clamp_to_usize(*compressed_remaining));

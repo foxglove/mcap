@@ -33,8 +33,9 @@ impl Drop for Lz4Decoder {
 
 impl Decompressor for Lz4Decoder {
     fn next_read_size(&self) -> usize {
-        return self.next_read_size;
+        self.next_read_size
     }
+
     fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<DecompressResult> {
         let mut dst_size = dst.len();
         let mut src_size = src.len();
