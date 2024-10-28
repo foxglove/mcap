@@ -1,6 +1,6 @@
 //! Contains a [sans-io](https://sans-io.readthedocs.io/) MCAP reader struct, [`LinearReader`].
 //! This can be used to read MCAP data from any source of bytes.
-use std::{collections::HashMap, ops::Rem};
+use std::collections::HashMap;
 
 use super::decompressor::Decompressor;
 use crate::{
@@ -27,11 +27,8 @@ enum CurrentlyReading {
 }
 use CurrentlyReading::*;
 
-const DEFAULT_CHUNK_DATA_READ_SIZE: usize = 32 * 1024;
-
 struct ChunkState {
     decompressor: Option<Box<dyn Decompressor>>,
-    last_decompressor_need_value: Option<usize>,
     uncompressed_data_hasher: Option<crc32fast::Hasher>,
     compressed_remaining: u64,
     uncompressed_len: u64,
@@ -44,9 +41,21 @@ struct RWBuf {
     data: Vec<u8>,
     start: usize,
     end: usize,
+    hasher: Option<crc32fast::Hasher>,
 }
 
 impl RWBuf {
+    fn new(instantiate_hasher: bool) -> Self {
+        Self {
+            hasher: if instantiate_hasher {
+                Some(crc32fast::Hasher::new())
+            } else {
+                None
+            },
+            ..Default::default()
+        }
+    }
+
     // returns a mutable view of the un-written part of the buffer.
     fn tail(&mut self) -> &mut [u8] {
         &mut self.data[self.end..]
@@ -59,6 +68,9 @@ impl RWBuf {
 
     // Marks some bytes of the un-read part as read.
     fn mark_read(&mut self, read: usize) {
+        if let Some(hasher) = self.hasher.as_mut() {
+            hasher.update(&self.data[self.start..self.start + read]);
+        }
         self.start += read;
     }
 
@@ -269,15 +281,11 @@ pub struct LinearReader {
     currently_reading: CurrentlyReading,
     chunk_state: Option<ChunkState>,
     file_data: RWBuf,
-    data_section_hasher: Option<crc32fast::Hasher>,
-    summary_section_hasher: Option<crc32fast::Hasher>,
     uncompressed_content: RWBuf,
-    calculated_data_section_crc: Option<u32>,
     decompressors: HashMap<String, Box<dyn Decompressor>>,
     options: LinearReaderOptions,
     at_eof: bool,
     last_write: Option<usize>,
-    failed: bool,
 }
 
 impl LinearReader {
@@ -292,8 +300,13 @@ impl LinearReader {
             } else {
                 StartMagic
             },
+            file_data: RWBuf::new(options.validate_data_section_crc),
             options,
-            ..Default::default()
+            chunk_state: None,
+            uncompressed_content: RWBuf::new(false),
+            decompressors: Default::default(),
+            at_eof: false,
+            last_write: None,
         }
     }
 
@@ -311,7 +324,6 @@ impl LinearReader {
             crc: header.uncompressed_crc,
             uncompressed_data_hasher: Some(crc32fast::Hasher::new()),
             uncompressed_len: header.uncompressed_size,
-            last_decompressor_need_value: None,
             compressed_remaining: header.compressed_size,
             padding_after_compressed_data: 0,
         });
@@ -356,7 +368,6 @@ impl LinearReader {
                     if *data != *MAGIC {
                         return Err(McapError::BadMagic);
                     }
-                    update_hasher(data, &mut self.data_section_hasher);
                     self.currently_reading = CurrentlyReading::FileRecord;
                 }
                 EndMagic => {
@@ -381,16 +392,12 @@ impl LinearReader {
                     let len = u64::from_le_bytes(opcode_length_buf[1..].try_into().unwrap());
                     if opcode == op::CHUNK && !self.options.emit_chunks {
                         self.file_data.mark_read(9);
-                        update_hasher(opcode_length_buf, &mut self.data_section_hasher);
                         self.currently_reading = CurrentlyReading::ChunkHeader { len };
                         continue;
                     } else if opcode == op::DATA_END {
                         // treat this opcode specially as we need to check the data section CRC
-                        let calculated = self
-                            .data_section_hasher
-                            .take()
-                            .map(|hasher| hasher.finalize());
-                        self.file_data.mark_read(9);
+                        let calculated =
+                            self.file_data.hasher.take().map(|hasher| hasher.finalize());
 
                         if len < 4 {
                             return Err(McapError::RecordTooShort {
@@ -399,20 +406,19 @@ impl LinearReader {
                                 expected: 4,
                             });
                         }
-                        let data = match self.file_data.consume(len_as_usize(len)?) {
+                        if self.options.validate_summary_section_crc {
+                            self.file_data.hasher = Some(crc32fast::Hasher::new());
+                        }
+                        let data = match self.file_data.consume(len_as_usize(len)? + 9) {
                             Span(span) => self.file_data.view(span),
                             Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
                         };
-                        update_hasher(opcode_length_buf, &mut self.summary_section_hasher);
-                        update_hasher(data, &mut self.summary_section_hasher);
+                        let data = &data[9..];
                         let saved = u32::from_le_bytes(data[..4].try_into().unwrap());
                         if let Some(calculated) = calculated {
                             if saved != 0 && calculated != saved {
                                 return Err(McapError::BadDataCrc { saved, calculated });
                             }
-                        }
-                        if self.options.validate_summary_section_crc {
-                            self.summary_section_hasher = Some(crc32fast::Hasher::new());
                         }
                         return Ok(Some(ReadAction::GetRecord { data, opcode }));
                     } else if opcode == op::FOOTER {
@@ -423,15 +429,15 @@ impl LinearReader {
                                 expected: 12,
                             });
                         }
-                        let data = match self.file_data.consume(len_as_usize(len)?) {
-                            Span(span) => self.file_data.view(span),
+                        let (start, end) = match self.file_data.consume(len_as_usize(len)? + 9) {
+                            Span(span) => span,
                             Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
                         };
-                        update_hasher(opcode_length_buf, &mut self.summary_section_hasher);
-                        update_hasher(&data[..8], &mut self.summary_section_hasher);
+                        let calculated_crc =
+                            self.file_data.hasher.take().map(|hasher| hasher.finalize());
+                        let data = &self.file_data.data[start + 9..end];
                         let saved = u32::from_le_bytes(data[8..12].try_into().unwrap());
-                        if let Some(hasher) = self.summary_section_hasher.take() {
-                            let calculated = hasher.finalize();
+                        if let Some(calculated) = calculated_crc {
                             if saved != 0 {
                                 if saved != calculated {
                                     return Err(McapError::BadSummaryCrc { saved, calculated });
@@ -439,15 +445,13 @@ impl LinearReader {
                             }
                         }
                         self.currently_reading = EndMagic;
+                        return Ok(Some(ReadAction::GetRecord { data, opcode }));
                     }
-                    let data = match self.file_data.consume(len_as_usize(len)?) {
+                    let data = match self.file_data.consume(len_as_usize(len)? + 9) {
                         Span(span) => self.file_data.view(span),
                         Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
                     };
-                    update_hasher(opcode_length_buf, &mut self.data_section_hasher);
-                    update_hasher(opcode_length_buf, &mut self.summary_section_hasher);
-                    update_hasher(data, &mut self.data_section_hasher);
-                    update_hasher(data, &mut self.summary_section_hasher);
+                    let data = &data[9..];
                     return Ok(Some(ReadAction::GetRecord { data, opcode }));
                 }
                 CurrentlyReading::ChunkHeader { len } => {
@@ -463,7 +467,6 @@ impl LinearReader {
                         Span(span) => self.file_data.view(span),
                         Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
                     };
-                    update_hasher(header_buf, &mut self.data_section_hasher);
                     let header: ChunkHeader = std::io::Cursor::new(header_buf).read_le()?;
                     let state = ChunkState {
                         decompressor: get_decompressor(
@@ -483,7 +486,6 @@ impl LinearReader {
                         padding_after_compressed_data: len_as_usize(
                             len - header_len as u64 - header.compressed_size,
                         )?,
-                        last_decompressor_need_value: None,
                         crc: header.uncompressed_crc,
                     };
                     self.uncompressed_content.clear();
@@ -508,7 +510,6 @@ impl LinearReader {
                                 Span(span) => self.file_data.view(span),
                                 Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
                             };
-                            update_hasher(records, &mut self.data_section_hasher);
                             let calculated = crc32fast::hash(records);
                             let saved = state.crc;
                             if calculated != saved {
@@ -616,17 +617,11 @@ impl LinearReader {
                     }
                 }
                 PaddingAfterChunk => {
-                    let state = self
-                        .chunk_state
-                        .as_ref()
-                        .expect("chunk state should be set");
-                    match self.file_data.consume(state.padding_after_compressed_data) {
-                        Span(s) => {
-                            update_hasher(self.file_data.view(s), &mut self.data_section_hasher)
-                        }
-                        Remainder(n) => return Ok(Some(ReadAction::NeedMore(n))),
+                    let mut state = self.chunk_state.take().expect("chunk state should be set");
+                    self.file_data.consume(state.padding_after_compressed_data);
+                    if let Some(decompressor) = state.decompressor.take() {
+                        release_decompressor(&mut self.decompressors, decompressor)?;
                     }
-                    self.chunk_state = None;
                     self.currently_reading = FileRecord;
                 }
             }
@@ -634,11 +629,11 @@ impl LinearReader {
     }
 }
 
-impl Default for LinearReader {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// impl Default for LinearReader {
+//     fn default() -> Self {
+//         Self::new()
+//     }
+// }
 
 /// Encapsulates the action the user should take next when reading an MCAP file.
 ///
@@ -729,12 +724,6 @@ fn decompress_n(
         from.mark_read(res.consumed);
         to.mark_written(res.wrote);
         *compressed_remaining -= res.consumed as u64;
-    }
-}
-
-fn update_hasher(data: &[u8], hasher: &mut Option<crc32fast::Hasher>) {
-    if let Some(hasher) = hasher {
-        hasher.update(data)
     }
 }
 

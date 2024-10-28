@@ -236,8 +236,8 @@ impl<'a> Iterator for InnerReader<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(action) = self.reader.next_action() {
             match action {
-                Ok(ReadAction::Fill(mut into)) => {
-                    let len = into.copy_from(self.buf);
+                Ok(ReadAction::NeedMore(n)) => {
+                    let len = self.reader.insert(n).copy_from(self.buf);
                     self.buf = &self.buf[len..];
                 }
                 Ok(ReadAction::GetRecord { data, opcode }) => match parse_record(opcode, data) {
@@ -763,8 +763,8 @@ impl<'a> Summary<'a> {
         let mut uncompressed_offset: usize = 0;
         while let Some(action) = reader.next_action() {
             match action {
-                Ok(ReadAction::Fill(mut into)) => {
-                    let len = into.copy_from(remaining);
+                Ok(ReadAction::NeedMore(n)) => {
+                    let len = reader.insert(n).copy_from(&remaining);
                     remaining = &remaining[len..];
                 }
                 Ok(ReadAction::GetRecord { data, opcode }) => {
