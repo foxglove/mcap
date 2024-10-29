@@ -4,7 +4,6 @@ use std::collections::HashMap;
 
 use super::decompressor::Decompressor;
 use crate::{
-    parse_record,
     records::{op, ChunkHeader},
     McapError, McapResult, MAGIC,
 };
@@ -57,14 +56,14 @@ struct ChunkState {
 
 /// A private struct that encapsulates a buffer with start and end cursors.
 #[derive(Default)]
-struct RWBuf {
+struct RwBuf {
     data: Vec<u8>,
     start: usize,
     end: usize,
     hasher: Option<crc32fast::Hasher>,
 }
 
-impl RWBuf {
+impl RwBuf {
     fn new(instantiate_hasher: bool) -> Self {
         Self {
             hasher: if instantiate_hasher {
@@ -182,9 +181,9 @@ impl LinearReaderOptions {
 ///     let mut reader = mcap::sans_io::read::LinearReader::new();
 ///     while let Some(action) = reader.next_action() {
 ///         match action? {
-///             ReadAction::NeedMore(n) => {
-///                 let written = file.read(reader.insert(n)).await?;
-///                 reader.set_filled(written);
+///             ReadAction::NeedMore(need) => {
+///                 let written = file.read(reader.insert(need)).await?;
+///                 reader.set_written(written);
 ///             },
 ///             ReadAction::GetRecord{ opcode, data } => {
 ///                 let raw_record = mcap::parse_record(opcode, data)?;
@@ -201,9 +200,9 @@ impl LinearReaderOptions {
 ///     let mut reader = mcap::sans_io::read::LinearReader::new();
 ///     while let Some(action) = reader.next_action() {
 ///         match action? {
-///             ReadAction::NeedMore(n) => {
-///                 let written = file.read(reader.insert(n))?;
-///                 reader.set_filled(written);
+///             ReadAction::NeedMore(need) => {
+///                 let written = file.read(reader.insert(need))?;
+///                 reader.set_written(written);
 ///             },
 ///             ReadAction::GetRecord{ opcode, data } => {
 ///                 let raw_record = mcap::parse_record(opcode, data)?;
@@ -215,13 +214,21 @@ impl LinearReaderOptions {
 /// }
 /// ```
 pub struct LinearReader {
+    // The core state of the LinearReader state machine. Describes the part of the MCAP
+    // file currently being read.
     currently_reading: CurrentlyReading,
+    // Auxilliary state specific to reading records out of chunks. This is stored outside of
+    // CurrentlyReading to avoid needing to clone() it on every iteration.
     chunk_state: Option<ChunkState>,
-    file_data: RWBuf,
-    uncompressed_content: RWBuf,
+    // MCAP data loaded from the file
+    file_data: RwBuf,
+    // data decompressed from compressed chunks
+    uncompressed_content: RwBuf,
+    // decompressor that can be re-used between chunks.
     decompressors: HashMap<String, Box<dyn Decompressor>>,
-    options: LinearReaderOptions,
+    // Stores the number of bytes written into this reader since the last `next_action()` call.
     last_write: Option<usize>,
+    options: LinearReaderOptions,
 }
 
 impl Default for LinearReader {
@@ -242,8 +249,8 @@ impl LinearReader {
             } else {
                 StartMagic
             },
-            file_data: RWBuf::new(options.validate_data_section_crc),
-            uncompressed_content: RWBuf::new(
+            file_data: RwBuf::new(options.validate_data_section_crc),
+            uncompressed_content: RwBuf::new(
                 options.validate_chunk_crcs && !options.prevalidate_chunk_crcs,
             ),
             options,
@@ -273,22 +280,25 @@ impl LinearReader {
         Ok(result)
     }
 
-    /// Get a mutable slice to copy new MCAP data into. Make sure to call [`Self::set_filled`] after
-    /// writing into this slice with the number of bytes successfully written.
+    /// Get a mutable slice to write new MCAP data into. Make sure to call [`Self::set_written`]
+    /// afterwards with the number of bytes successfully written.
     pub fn insert(&mut self, n: usize) -> &mut [u8] {
         self.file_data.tail_with_size(n)
     }
 
-    /// Set the number of bytes successfully written into the buffer returned from [`Self::insert`] since
-    /// the last [`Self::next_action`] call.
-    pub fn set_filled(&mut self, n: usize) {
+    /// Set the number of bytes successfully written into the buffer returned from [`Self::insert`]
+    /// since the last [`Self::next_action`] call.
+    pub fn set_written(&mut self, n: usize) {
+        if (self.file_data.data.len() - self.file_data.end) < n {
+            panic!("set_written called with n > last insert length");
+        }
         self.last_write = Some(n);
     }
 
     /// Yields the next action the caller should take to progress through the file.
     pub fn next_action(&mut self) -> Option<McapResult<ReadAction>> {
-        if let Some(n) = self.last_write.take() {
-            if n == 0 {
+        if let Some(written) = self.last_write.take() {
+            if written == 0 {
                 // at EOF. If the reader is not expecting end magic, and it isn't in the middle of a
                 // record or chunk, this is OK.
                 if self.options.skip_end_magic
@@ -303,7 +313,7 @@ impl LinearReader {
                 }
                 return Some(Err(McapError::UnexpectedEof));
             }
-            self.file_data.end += n;
+            self.file_data.end += written;
         }
 
         if self.file_data.len() == 0 {
@@ -684,8 +694,8 @@ fn get_decompressor(
 fn decompress_inner(
     decompressor: &mut Box<dyn Decompressor>,
     n: usize,
-    from: &mut RWBuf,
-    to: &mut RWBuf,
+    from: &mut RwBuf,
+    to: &mut RwBuf,
     compressed_remaining: &mut u64,
 ) -> McapResult<Option<usize>> {
     if to.len() >= n {
@@ -781,7 +791,7 @@ mod tests {
             match action? {
                 ReadAction::NeedMore(n) => {
                     let written = cursor.read(reader.insert(n))?;
-                    reader.set_filled(written);
+                    reader.set_written(written);
                 }
                 ReadAction::GetRecord { data, opcode } => {
                     opcodes.push(opcode);
@@ -823,7 +833,7 @@ mod tests {
             match action? {
                 ReadAction::NeedMore(n) => {
                     let written = cursor.read(reader.insert(n))?;
-                    reader.set_filled(written);
+                    reader.set_written(written);
                 }
                 ReadAction::GetRecord { data, opcode } => {
                     opcodes.push(opcode);
@@ -849,7 +859,7 @@ mod tests {
             match action? {
                 ReadAction::NeedMore(n) => {
                     let written = cursor.read(reader.insert(n))?;
-                    reader.set_filled(written);
+                    reader.set_written(written);
                 }
                 ReadAction::GetRecord { data, opcode } => {
                     opcodes.push(opcode);
@@ -933,7 +943,7 @@ mod tests {
                 match action? {
                     ReadAction::NeedMore(n) => {
                         let written = cursor.read(reader.insert(n))?;
-                        reader.set_filled(written);
+                        reader.set_written(written);
                     }
                     ReadAction::GetRecord { data, opcode } => {
                         opcodes.push(opcode);
@@ -981,7 +991,7 @@ mod tests {
             match action? {
                 ReadAction::NeedMore(n) => {
                     let written = cursor.read(reader.insert(n))?;
-                    reader.set_filled(written);
+                    reader.set_written(written);
                 }
                 ReadAction::GetRecord { data, opcode } => {
                     opcodes.push(opcode);

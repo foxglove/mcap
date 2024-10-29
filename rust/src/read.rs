@@ -239,7 +239,7 @@ impl<'a> Iterator for InnerReader<'a> {
                 Ok(ReadAction::NeedMore(n)) => {
                     let len = std::cmp::min(self.buf.len(), n);
                     self.reader.insert(len).copy_from_slice(&self.buf[..len]);
-                    self.reader.set_filled(len);
+                    self.reader.set_written(len);
                     self.buf = &self.buf[len..];
                 }
                 Ok(ReadAction::GetRecord { data, opcode }) => match parse_record(opcode, data) {
@@ -768,7 +768,7 @@ impl<'a> Summary<'a> {
                 Ok(ReadAction::NeedMore(n)) => {
                     let len = std::cmp::min(remaining.len(), n);
                     reader.insert(len).copy_from_slice(&remaining[..len]);
-                    reader.set_filled(len);
+                    reader.set_written(len);
                     remaining = &remaining[len..];
                 }
                 Ok(ReadAction::GetRecord { data, opcode }) => {

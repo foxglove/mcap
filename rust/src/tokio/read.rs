@@ -55,7 +55,7 @@ where
                         Ok(n) => n,
                         Err(err) => return Some(Err(err.into())),
                     };
-                    self.reader.set_filled(written);
+                    self.reader.set_written(written);
                 }
                 Ok(ReadAction::GetRecord {
                     data: content,
