@@ -323,26 +323,26 @@ impl LinearReader {
         /// Macros for loading data into the reader. These return early with NeedMore(n) if
         /// more data is needed.
         ///
-        /// load ensures that $n bytes are available unread in $buf.
+        /// load ensures that $n bytes are available unread in self.file_data.
         macro_rules! load {
-            ($buf:expr, $n:expr) => {{
-                if $buf.len() < $n {
-                    return Some(Ok(ReadAction::NeedMore($n - $buf.len())));
+            ($n:expr) => {{
+                if self.file_data.len() < $n {
+                    return Some(Ok(ReadAction::NeedMore($n - self.file_data.len())));
                 }
-                &$buf.data[$buf.start..$buf.start + $n]
+                &self.file_data.data[self.file_data.start..self.file_data.start + $n]
             }};
         }
 
-        // consume ensures that $n bytes are available in $buf, and marks them as read before
+        // consume ensures that $n bytes are available in file_data, and marks them as read before
         // returning a slice containing those bytes.
         macro_rules! consume {
-            ($buf:expr, $n:expr) => {{
-                if $buf.len() < $n {
-                    return Some(Ok(ReadAction::NeedMore($n - $buf.len())));
+            ($n:expr) => {{
+                if self.file_data.len() < $n {
+                    return Some(Ok(ReadAction::NeedMore($n - self.file_data.len())));
                 }
-                let start = $buf.start;
-                $buf.mark_read($n);
-                &$buf.data[start..start + $n]
+                let start = self.file_data.start;
+                self.file_data.mark_read($n);
+                &self.file_data.data[start..start + $n]
             }};
         }
 
@@ -380,18 +380,16 @@ impl LinearReader {
         loop {
             match self.currently_reading.clone() {
                 StartMagic => {
-                    if self.options.skip_start_magic {
-                        self.currently_reading = CurrentlyReading::FileRecord;
-                        continue;
-                    }
-                    let data = consume!(self.file_data, MAGIC.len());
-                    if *data != *MAGIC {
-                        return Some(Err(McapError::BadMagic));
+                    if !self.options.skip_start_magic {
+                        let data = consume!(MAGIC.len());
+                        if *data != *MAGIC {
+                            return Some(Err(McapError::BadMagic));
+                        }
                     }
                     self.currently_reading = CurrentlyReading::FileRecord;
                 }
                 FileRecord => {
-                    let opcode_length_buf = load!(self.file_data, 9);
+                    let opcode_length_buf = load!(9);
                     let opcode = opcode_length_buf[0];
                     let len = u64::from_le_bytes(opcode_length_buf[1..].try_into().unwrap());
                     // Some record types are handled specially.
@@ -422,12 +420,12 @@ impl LinearReader {
                     // For all other records, load the entire record into memory and yield to the
                     // caller.
                     let len = check!(len_as_usize(len));
-                    let data = &consume!(self.file_data, 9 + len)[9..];
+                    let data = &consume!(9 + len)[9..];
                     return Some(Ok(ReadAction::GetRecord { data, opcode }));
                 }
                 CurrentlyReading::DataEnd { len, calculated } => {
                     let len = check!(len_as_usize(len));
-                    let data = consume!(self.file_data, len);
+                    let data = consume!(len);
                     let rec: crate::records::DataEnd = check!(std::io::Cursor::new(data).read_le());
                     let saved = rec.data_section_crc;
                     if let Some(calculated) = calculated {
@@ -446,7 +444,7 @@ impl LinearReader {
                 }
                 CurrentlyReading::Footer { len, hasher } => {
                     let len = check!(len_as_usize(len));
-                    let data = consume!(self.file_data, len);
+                    let data = consume!(len);
                     let footer: crate::records::Footer =
                         check!(std::io::Cursor::new(data).read_le());
                     if let Some(mut hasher) = hasher {
@@ -470,11 +468,11 @@ impl LinearReader {
                     // depending on the length of the compression string field, so we load
                     // enough bytes to read that length, then load more if neccessary.
                     const MIN_CHUNK_HEADER_SIZE: usize = 8 + 8 + 8 + 4 + 4 + 8;
-                    let min_header_buf = load!(self.file_data, MIN_CHUNK_HEADER_SIZE);
+                    let min_header_buf = load!(MIN_CHUNK_HEADER_SIZE);
                     let compression_len =
                         u32::from_le_bytes(min_header_buf[28..32].try_into().unwrap());
                     let header_len = MIN_CHUNK_HEADER_SIZE + compression_len as usize;
-                    let header_buf = consume!(self.file_data, header_len);
+                    let header_buf = consume!(header_len);
                     let header: ChunkHeader = check!(std::io::Cursor::new(header_buf).read_le());
                     // Re-use or construct a compressor
                     let decompressor = check!(get_decompressor(
@@ -519,7 +517,7 @@ impl LinearReader {
                     match &mut state.decompressor {
                         None => {
                             let to_load = check!(len_as_usize(state.compressed_remaining));
-                            let records = load!(self.file_data, to_load);
+                            let records = load!(to_load);
                             let calculated = crc32fast::hash(records);
                             let saved = state.crc;
                             if calculated != saved {
@@ -561,12 +559,12 @@ impl LinearReader {
                                 self.currently_reading = PaddingAfterChunk;
                                 continue;
                             }
-                            let opcode_len_buf = load!(self.file_data, 9);
+                            let opcode_len_buf = load!(9);
                             let opcode = opcode_len_buf[0];
                             let len = check!(len_as_usize(u64::from_le_bytes(
                                 opcode_len_buf[1..].try_into().unwrap(),
                             )));
-                            let opcode_len_data = consume!(self.file_data, 9 + len);
+                            let opcode_len_data = consume!(9 + len);
                             let data = &opcode_len_data[9..];
                             if let Some(hasher) = state.uncompressed_data_hasher.as_mut() {
                                 hasher.update(opcode_len_data);
@@ -610,7 +608,7 @@ impl LinearReader {
                         .chunk_state
                         .as_mut()
                         .expect("chunk state should be set");
-                    let _ = consume!(self.file_data, state.padding_after_compressed_data);
+                    let _ = consume!(state.padding_after_compressed_data);
                     if let Some(mut decompressor) = state.decompressor.take() {
                         check!(decompressor.reset());
                         self.decompressors
@@ -636,14 +634,13 @@ impl LinearReader {
                     self.currently_reading = FileRecord;
                 }
                 EndMagic => {
-                    if self.options.skip_end_magic {
-                        return None;
+                    if !self.options.skip_end_magic {
+                        let data = consume!(MAGIC.len());
+                        if *data != *MAGIC {
+                            return Some(Err(McapError::BadMagic));
+                        }
+                        self.file_data.mark_read(MAGIC.len());
                     }
-                    let data = consume!(self.file_data, MAGIC.len());
-                    if *data != *MAGIC {
-                        return Some(Err(McapError::BadMagic));
-                    }
-                    self.file_data.mark_read(MAGIC.len());
                     return None;
                 }
             }
