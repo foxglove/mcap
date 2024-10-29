@@ -671,7 +671,7 @@ fn len_as_usize(len: u64) -> McapResult<usize> {
     len.try_into().map_err(|_| McapError::TooLong(len))
 }
 
-/// casts a 64-bit length from an MCAP into a [`usize`], truncating to [`usize::MAX`] if too large.
+/// casts a 64-bit length from an MCAP into a [`usize`], saturating to [`usize::MAX`] if too large.
 fn clamp_to_usize(len: u64) -> usize {
     len.try_into().unwrap_or(usize::MAX)
 }
@@ -699,29 +699,29 @@ fn get_decompressor(
 fn decompress_inner(
     decompressor: &mut Box<dyn Decompressor>,
     n: usize,
-    from: &mut RwBuf,
-    to: &mut RwBuf,
+    src_buf: &mut RwBuf,
+    dest_buf: &mut RwBuf,
     compressed_remaining: &mut u64,
 ) -> McapResult<Option<usize>> {
-    if to.len() >= n {
+    if dest_buf.len() >= n {
         return Ok(None);
     }
-    to.data.resize(to.start + n, 0);
+    dest_buf.data.resize(dest_buf.start + n, 0);
     loop {
         let need = decompressor.next_read_size();
-        let have = from.len();
+        let have = src_buf.len();
         if need > have {
             return Ok(Some(need - have));
         }
-        let dst = &mut to.data[to.end..];
+        let dst = &mut dest_buf.data[dest_buf.end..];
         if dst.is_empty() {
             return Ok(None);
         }
         let src_len = std::cmp::min(have, clamp_to_usize(*compressed_remaining));
-        let src = &from.data[from.start..from.start + src_len];
+        let src = &src_buf.data[src_buf.start..src_buf.start + src_len];
         let res = decompressor.decompress(src, dst)?;
-        from.mark_read(res.consumed);
-        to.end += res.wrote;
+        src_buf.mark_read(res.consumed);
+        dest_buf.end += res.wrote;
         *compressed_remaining -= res.consumed as u64;
     }
 }
