@@ -132,47 +132,33 @@ pub struct LinearReaderOptions {
 }
 
 impl LinearReaderOptions {
-    pub fn with_skip_start_magic(self, skip_start_magic: bool) -> Self {
-        Self {
-            skip_start_magic,
-            ..self
-        }
+    pub fn with_skip_start_magic(mut self, skip_start_magic: bool) -> Self {
+        self.skip_start_magic = skip_start_magic;
+        self
     }
-    pub fn with_skip_end_magic(self, skip_end_magic: bool) -> Self {
-        Self {
-            skip_end_magic,
-            ..self
-        }
+    pub fn with_skip_end_magic(mut self, skip_end_magic: bool) -> Self {
+        self.skip_end_magic = skip_end_magic;
+        self
     }
-    pub fn with_emit_chunks(self, emit_chunks: bool) -> Self {
-        Self {
-            emit_chunks,
-            ..self
-        }
+    pub fn with_emit_chunks(mut self, emit_chunks: bool) -> Self {
+        self.emit_chunks = emit_chunks;
+        self
     }
-    pub fn with_validate_chunk_crcs(self, validate_chunk_crcs: bool) -> Self {
-        Self {
-            validate_chunk_crcs,
-            ..self
-        }
+    pub fn with_validate_chunk_crcs(mut self, validate_chunk_crcs: bool) -> Self {
+        self.validate_chunk_crcs = validate_chunk_crcs;
+        self
     }
-    pub fn with_prevalidate_chunk_crcs(self, prevalidate_chunk_crcs: bool) -> Self {
-        Self {
-            prevalidate_chunk_crcs,
-            ..self
-        }
+    pub fn with_prevalidate_chunk_crcs(mut self, prevalidate_chunk_crcs: bool) -> Self {
+        self.prevalidate_chunk_crcs = prevalidate_chunk_crcs;
+        self
     }
-    pub fn with_validate_data_section_crc(self, validate_data_section_crc: bool) -> Self {
-        Self {
-            validate_data_section_crc,
-            ..self
-        }
+    pub fn with_validate_data_section_crc(mut self, validate_data_section_crc: bool) -> Self {
+        self.validate_data_section_crc = validate_data_section_crc;
+        self
     }
-    pub fn with_validate_summary_section_crc(self, validate_summary_section_crc: bool) -> Self {
-        Self {
-            validate_summary_section_crc,
-            ..self
-        }
+    pub fn with_validate_summary_section_crc(mut self, validate_summary_section_crc: bool) -> Self {
+        self.validate_summary_section_crc = validate_summary_section_crc;
+        self
     }
 }
 
