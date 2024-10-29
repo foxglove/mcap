@@ -238,7 +238,7 @@ impl<'a> Iterator for InnerReader<'a> {
             match action {
                 Ok(ReadAction::NeedMore(n)) => {
                     let len = std::cmp::min(self.buf.len(), n);
-                    self.reader.insert(len).copy_from_slice(&self.buf[..len]);
+                    self.reader.append(len).copy_from_slice(&self.buf[..len]);
                     self.reader.set_written(len);
                     self.buf = &self.buf[len..];
                 }
@@ -767,7 +767,7 @@ impl<'a> Summary<'a> {
             match action {
                 Ok(ReadAction::NeedMore(n)) => {
                     let len = std::cmp::min(remaining.len(), n);
-                    reader.insert(len).copy_from_slice(&remaining[..len]);
+                    reader.append(len).copy_from_slice(&remaining[..len]);
                     reader.set_written(len);
                     remaining = &remaining[len..];
                 }
