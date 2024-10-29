@@ -336,6 +336,17 @@ impl LinearReader {
             }};
         }
 
+        // returns early on error. This is similar to the ? operator, but it returns an
+        // Option<Result> instead of a Result.
+        macro_rules! check {
+            ($t:expr) => {
+                match $t {
+                    Ok(t) => t,
+                    Err(err) => return Some(Err(err.into())),
+                }
+            };
+        }
+
         // decompress ensures that $n bytes are available in the uncompressed_content buffer.
         macro_rules! decompress {
             ($n: expr, $remaining: expr, $decompressor:expr) => {{
@@ -400,23 +411,17 @@ impl LinearReader {
                     }
                     // For all other records, load the entire record into memory and yield to the
                     // caller.
-                    let len = match len_as_usize(len) {
-                        Ok(n) => n,
-                        Err(err) => return Some(Err(err)),
-                    };
+                    let len = check!(len_as_usize(len));
                     let data = &consume!(self.file_data, 9 + len)[9..];
                     return Some(Ok(ReadAction::GetRecord { data, opcode }));
                 }
                 CurrentlyReading::DataEnd { len, calculated } => {
-                    let len = match len_as_usize(len) {
-                        Ok(n) => n,
-                        Err(err) => return Some(Err(err)),
-                    };
+                    let len = check!(len_as_usize(len));
                     let data = consume!(self.file_data, len);
-                    let rec = match parse_record(op::DATA_END, data) {
-                        Ok(crate::records::Record::DataEnd(rec)) => rec,
-                        Err(err) => return Some(Err(err)),
-                        _ => unreachable!("should not result in another record type"),
+                    let crate::records::Record::DataEnd(rec) =
+                        check!(parse_record(op::DATA_END, data))
+                    else {
+                        unreachable!("should not result in other record type");
                     };
                     let saved = rec.data_section_crc;
                     if let Some(calculated) = calculated {
@@ -434,15 +439,12 @@ impl LinearReader {
                     }));
                 }
                 CurrentlyReading::Footer { len, hasher } => {
-                    let len = match len_as_usize(len) {
-                        Ok(n) => n,
-                        Err(err) => return Some(Err(err)),
-                    };
+                    let len = check!(len_as_usize(len));
                     let data = consume!(self.file_data, len);
-                    let footer = match parse_record(op::FOOTER, data) {
-                        Ok(crate::records::Record::Footer(footer)) => footer,
-                        Err(err) => return Some(Err(err)),
-                        _ => unreachable!("should not result in another record type"),
+                    let crate::records::Record::Footer(footer) =
+                        check!(parse_record(op::FOOTER, data))
+                    else {
+                        unreachable!("should not result in another record type");
                     };
                     if let Some(mut hasher) = hasher {
                         // Check the CRC of all bytes up to the CRC bytes in the footer
@@ -470,21 +472,15 @@ impl LinearReader {
                         u32::from_le_bytes(min_header_buf[28..32].try_into().unwrap());
                     let header_len = MIN_CHUNK_HEADER_SIZE + compression_len as usize;
                     let header_buf = consume!(self.file_data, header_len);
-                    let header: ChunkHeader = match std::io::Cursor::new(header_buf).read_le() {
-                        Ok(header) => header,
-                        Err(err) => return Some(Err(err.into())),
-                    };
+                    let header: ChunkHeader = check!(std::io::Cursor::new(header_buf).read_le());
                     // Re-use or construct a compressor
-                    let decompressor =
-                        match get_decompressor(&mut self.decompressors, &header.compression) {
-                            Ok(decompressor) => decompressor,
-                            Err(err) => return Some(Err(err)),
-                        };
-                    let padding_after_compressed_data =
-                        match len_as_usize(len - (header_len as u64) - header.compressed_size) {
-                            Ok(n) => n,
-                            Err(err) => return Some(Err(err)),
-                        };
+                    let decompressor = check!(get_decompressor(
+                        &mut self.decompressors,
+                        &header.compression
+                    ));
+                    let padding_after_compressed_data = check!(len_as_usize(
+                        len - (header_len as u64) - header.compressed_size
+                    ));
 
                     let state = ChunkState {
                         decompressor,
@@ -519,10 +515,7 @@ impl LinearReader {
                         .expect("chunk state should be set");
                     match &mut state.decompressor {
                         None => {
-                            let to_load = match len_as_usize(state.compressed_remaining) {
-                                Ok(n) => n,
-                                Err(err) => return Some(Err(err)),
-                            };
+                            let to_load = check!(len_as_usize(state.compressed_remaining));
                             let records = load!(self.file_data, to_load);
                             let calculated = crc32fast::hash(records);
                             let saved = state.crc;
@@ -535,10 +528,7 @@ impl LinearReader {
                             // decompress all available compressed data until there are no compressed
                             // bytes remaining. If not all of the compressed bytes are available in
                             // file_data, decompress! will return a NeedMore action for more data.
-                            let uncompressed_len = match len_as_usize(state.uncompressed_len) {
-                                Ok(n) => n,
-                                Err(err) => return Some(Err(err)),
-                            };
+                            let uncompressed_len = check!(len_as_usize(state.uncompressed_len));
                             if self.uncompressed_content.len() >= uncompressed_len {
                                 let calculated =
                                     crc32fast::hash(self.uncompressed_content.unread());
@@ -570,12 +560,9 @@ impl LinearReader {
                             }
                             let opcode_len_buf = load!(self.file_data, 9);
                             let opcode = opcode_len_buf[0];
-                            let len = match len_as_usize(u64::from_le_bytes(
+                            let len = check!(len_as_usize(u64::from_le_bytes(
                                 opcode_len_buf[1..].try_into().unwrap(),
-                            )) {
-                                Ok(n) => n,
-                                Err(err) => return Some(Err(err)),
-                            };
+                            )));
                             let opcode_len_data = consume!(self.file_data, 9 + len);
                             let data = &opcode_len_data[9..];
                             if let Some(hasher) = state.uncompressed_data_hasher.as_mut() {
@@ -597,12 +584,9 @@ impl LinearReader {
                             let opcode_len_buf =
                                 decompress!(9, &mut state.compressed_remaining, decompressor);
                             let opcode = opcode_len_buf[0];
-                            let len = match len_as_usize(u64::from_le_bytes(
+                            let len = check!(len_as_usize(u64::from_le_bytes(
                                 opcode_len_buf[1..9].try_into().unwrap(),
-                            )) {
-                                Ok(n) => n,
-                                Err(err) => return Some(Err(err)),
-                            };
+                            )));
                             let _ =
                                 decompress!(9 + len, &mut state.compressed_remaining, decompressor);
                             self.uncompressed_content.mark_read(9);
@@ -625,12 +609,9 @@ impl LinearReader {
                         .expect("chunk state should be set");
                     let _ = consume!(self.file_data, state.padding_after_compressed_data);
                     if let Some(mut decompressor) = state.decompressor.take() {
-                        if let Err(err) = decompressor.reset() {
-                            return Some(Err(err));
-                        }
+                        check!(decompressor.reset());
                         self.decompressors
                             .insert(decompressor.name().into(), decompressor);
-                        //
                         if let Some(hasher) = self.uncompressed_content.hasher.take() {
                             let calculated = hasher.finalize();
                             let saved = state.crc;
