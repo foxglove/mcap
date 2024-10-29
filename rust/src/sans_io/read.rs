@@ -336,17 +336,6 @@ impl LinearReader {
             }};
         }
 
-        // returns early on error. This is similar to the ? operator, but it returns an
-        // Option<Result> instead of a Result.
-        macro_rules! check {
-            ($t:expr) => {
-                match $t {
-                    Ok(t) => t,
-                    Err(err) => return Some(Err(err.into())),
-                }
-            };
-        }
-
         // decompress ensures that $n bytes are available in the uncompressed_content buffer.
         macro_rules! decompress {
             ($n: expr, $remaining: expr, $decompressor:expr) => {{
@@ -365,6 +354,17 @@ impl LinearReader {
                     Err(err) => return Some(Err(err)),
                 }
             }};
+        }
+
+        // returns early on error. This is similar to the ? operator, but it returns an
+        // Option<Result> instead of a Result.
+        macro_rules! check {
+            ($t:expr) => {
+                match $t {
+                    Ok(t) => t,
+                    Err(err) => return Some(Err(err.into())),
+                }
+            };
         }
 
         loop {
@@ -392,8 +392,8 @@ impl LinearReader {
                     } else if opcode == op::DATA_END {
                         // The data end CRC needs to be checked against the CRC of the entire file
                         // up to the end of the previous record. We `take()` the data section hasher
-                        // here before calling `mark_read()`, which would otherwise update the
-                        // hasher too early.
+                        // here before calling `mark_read()`, which would otherwise include too
+                        // much data in the CRC.
                         let calculated =
                             self.file_data.hasher.take().map(|hasher| hasher.finalize());
                         self.file_data.mark_read(9);
@@ -418,11 +418,7 @@ impl LinearReader {
                 CurrentlyReading::DataEnd { len, calculated } => {
                     let len = check!(len_as_usize(len));
                     let data = consume!(self.file_data, len);
-                    let crate::records::Record::DataEnd(rec) =
-                        check!(parse_record(op::DATA_END, data))
-                    else {
-                        unreachable!("should not result in other record type");
-                    };
+                    let rec: crate::records::DataEnd = check!(std::io::Cursor::new(data).read_le());
                     let saved = rec.data_section_crc;
                     if let Some(calculated) = calculated {
                         if saved != 0 && calculated != saved {
@@ -441,11 +437,8 @@ impl LinearReader {
                 CurrentlyReading::Footer { len, hasher } => {
                     let len = check!(len_as_usize(len));
                     let data = consume!(self.file_data, len);
-                    let crate::records::Record::Footer(footer) =
-                        check!(parse_record(op::FOOTER, data))
-                    else {
-                        unreachable!("should not result in another record type");
-                    };
+                    let footer: crate::records::Footer =
+                        check!(std::io::Cursor::new(data).read_le());
                     if let Some(mut hasher) = hasher {
                         // Check the CRC of all bytes up to the CRC bytes in the footer
                         // record.
