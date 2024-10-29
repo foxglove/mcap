@@ -40,9 +40,9 @@ use CurrentlyReading::*;
 struct ChunkState {
     // The decompressor to use for loading records for this chunk. None if not compressed.
     decompressor: Option<Box<dyn Decompressor>>,
-    // For uncompressed chunks, records skip the `uncompressed_content` buffer and are sliced
-    // directly out of `file_data`.  In this case we can't use `uncompressed_content.hasher` to
-    // calculate a CRC, so we maintain a separate hasher for this purpose.
+    // For uncompressed chunks, records are sliced directly out of `file_data`.  Therefore we can't
+    // use `decompressed_content.hasher` to calculate a CRC, so we maintain a separate hasher for
+    // this purpose.
     uncompressed_data_hasher: Option<crc32fast::Hasher>,
     // The number of compressed bytes left in the chunk that have not been read out of `file_data`.
     compressed_remaining: u64,
@@ -223,7 +223,7 @@ pub struct LinearReader {
     // MCAP data loaded from the file
     file_data: RwBuf,
     // data decompressed from compressed chunks
-    uncompressed_content: RwBuf,
+    decompressed_content: RwBuf,
     // decompressor that can be re-used between chunks.
     decompressors: HashMap<String, Box<dyn Decompressor>>,
     // Stores the number of bytes written into this reader since the last `next_action()` call.
@@ -250,7 +250,7 @@ impl LinearReader {
                 StartMagic
             },
             file_data: RwBuf::new(options.validate_data_section_crc),
-            uncompressed_content: RwBuf::new(
+            decompressed_content: RwBuf::new(
                 options.validate_chunk_crcs && !options.prevalidate_chunk_crcs,
             ),
             options,
@@ -303,7 +303,7 @@ impl LinearReader {
                 // record or chunk, this is OK.
                 if self.options.skip_end_magic
                     && self.file_data.len() == 0
-                    && self.uncompressed_content.len() == 0
+                    && self.decompressed_content.len() == 0
                     && self.chunk_state.is_none()
                 {
                     return None;
@@ -353,12 +353,12 @@ impl LinearReader {
                     $decompressor,
                     $n,
                     &mut self.file_data,
-                    &mut self.uncompressed_content,
+                    &mut self.decompressed_content,
                     $remaining,
                 ) {
                     Ok(None) => {
-                        &self.uncompressed_content.data
-                            [self.uncompressed_content.start..self.uncompressed_content.start + $n]
+                        &self.decompressed_content.data
+                            [self.decompressed_content.start..self.decompressed_content.start + $n]
                     }
                     Ok(Some(n)) => return Some(Ok(ReadAction::NeedMore(n))),
                     Err(err) => return Some(Err(err)),
@@ -499,7 +499,16 @@ impl LinearReader {
                         padding_after_compressed_data,
                         crc: header.uncompressed_crc,
                     };
-                    self.uncompressed_content.clear();
+                    self.decompressed_content.clear();
+                    self.decompressed_content.hasher = if self.options.validate_chunk_crcs
+                        && !self.options.prevalidate_chunk_crcs
+                        && state.crc != 0
+                        && !header.compression.is_empty()
+                    {
+                        Some(crc32fast::Hasher::new())
+                    } else {
+                        None
+                    };
                     if self.options.prevalidate_chunk_crcs && state.crc != 0 {
                         self.currently_reading = ValidatingChunkCrc;
                     } else {
@@ -530,9 +539,9 @@ impl LinearReader {
                             // bytes remaining. If not all of the compressed bytes are available in
                             // file_data, decompress! will return a NeedMore action for more data.
                             let uncompressed_len = check!(len_as_usize(state.uncompressed_len));
-                            if self.uncompressed_content.len() >= uncompressed_len {
+                            if self.decompressed_content.len() >= uncompressed_len {
                                 let calculated =
-                                    crc32fast::hash(self.uncompressed_content.unread());
+                                    crc32fast::hash(self.decompressed_content.unread());
                                 let saved = state.crc;
                                 if calculated != saved {
                                     return Some(Err(McapError::BadChunkCrc { saved, calculated }));
@@ -573,11 +582,11 @@ impl LinearReader {
                             return Some(Ok(ReadAction::GetRecord { data, opcode }));
                         }
                         Some(decompressor) => {
-                            if self.uncompressed_content.len() == 0 {
-                                self.uncompressed_content.clear();
+                            if self.decompressed_content.len() == 0 {
+                                self.decompressed_content.clear();
                             }
                             if state.compressed_remaining == 0
-                                && self.uncompressed_content.len() == 0
+                                && self.decompressed_content.len() == 0
                             {
                                 self.currently_reading = PaddingAfterChunk;
                                 continue;
@@ -590,13 +599,13 @@ impl LinearReader {
                             )));
                             let _ =
                                 decompress!(9 + len, &mut state.compressed_remaining, decompressor);
-                            self.uncompressed_content.mark_read(9);
+                            self.decompressed_content.mark_read(9);
                             let (start, end) = (
-                                self.uncompressed_content.start,
-                                self.uncompressed_content.start + len,
+                                self.decompressed_content.start,
+                                self.decompressed_content.start + len,
                             );
-                            self.uncompressed_content.mark_read(len);
-                            let data = &self.uncompressed_content.data[start..end];
+                            self.decompressed_content.mark_read(len);
+                            let data = &self.decompressed_content.data[start..end];
                             return Some(Ok(ReadAction::GetRecord { data, opcode }));
                         }
                     }
@@ -613,21 +622,18 @@ impl LinearReader {
                         check!(decompressor.reset());
                         self.decompressors
                             .insert(decompressor.name().into(), decompressor);
-                        if let Some(hasher) = self.uncompressed_content.hasher.take() {
+                        if let Some(hasher) = self.decompressed_content.hasher.take() {
                             let calculated = hasher.finalize();
                             let saved = state.crc;
                             if saved != 0 && saved != calculated {
                                 return Some(Err(McapError::BadChunkCrc { saved, calculated }));
                             }
-                            self.uncompressed_content.hasher = Some(crc32fast::Hasher::new());
                         }
                     } else if let Some(hasher) = state.uncompressed_data_hasher.take() {
                         let calculated = hasher.finalize();
-                        if state.crc != 0 && state.crc != calculated {
-                            return Some(Err(McapError::BadChunkCrc {
-                                saved: state.crc,
-                                calculated,
-                            }));
+                        let saved = state.crc;
+                        if saved != 0 && saved != calculated {
+                            return Some(Err(McapError::BadChunkCrc { saved, calculated }));
                         }
                     }
                     self.chunk_state = None;
