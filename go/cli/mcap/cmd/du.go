@@ -92,7 +92,7 @@ func (instance *usage) processChunk(chunk *mcap.Chunk) error {
 		EmitChunks:        true,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to make lexer for chunk bytes: %s", err)
+		return fmt.Errorf("failed to make lexer for chunk bytes: %w", err)
 	}
 	defer lexer.Close()
 
@@ -103,7 +103,7 @@ func (instance *usage) processChunk(chunk *mcap.Chunk) error {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return fmt.Errorf("failed to read next token: %s", err)
+			return fmt.Errorf("failed to read next token: %w", err)
 		}
 		if len(data) > len(msg) {
 			msg = data
@@ -113,7 +113,7 @@ func (instance *usage) processChunk(chunk *mcap.Chunk) error {
 		case mcap.TokenChannel:
 			channel, err := mcap.ParseChannel(data)
 			if err != nil {
-				return fmt.Errorf("Error parsing Channel: %s", err)
+				return fmt.Errorf("Error parsing Channel: %w", err)
 			}
 
 			instance.channels[channel.ID] = channel
@@ -209,8 +209,7 @@ func (instance *usage) RunDu() error {
 			"record",
 			"sum bytes",
 			"% of total file bytes",
-		})
-		rows = append(rows, []string{
+		}, []string{
 			"------",
 			"---------",
 			"---------------------",
@@ -238,8 +237,7 @@ func (instance *usage) RunDu() error {
 			"topic",
 			"sum bytes (uncompressed)",
 			"% of total message bytes (uncompressed)",
-		})
-		rows = append(rows, []string{
+		}, []string{
 			"-----",
 			"------------------------",
 			"---------------------------------------",
@@ -278,13 +276,13 @@ func (instance *usage) RunDu() error {
 var duCmd = &cobra.Command{
 	Use:   "du <file>",
 	Short: "Report space usage within an MCAP file",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
 			die("An MCAP file argument is required.")
 		}
 		filename := args[0]
-		err := utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
+		err := utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
 			usage := newUsage(rs)
 			return usage.RunDu()
 		})
