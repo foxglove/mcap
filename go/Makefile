@@ -8,6 +8,7 @@ lint:
 	make -C mcap lint
 	make -C ros lint
 	make -C cli/mcap lint
+	make -C conformance lint
 
 build-conformance-binaries:
 	make -C conformance build

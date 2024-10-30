@@ -75,9 +75,12 @@
 
 pub mod read;
 pub mod records;
+#[cfg(feature = "tokio")]
+pub mod tokio;
 pub mod write;
 
 mod io_utils;
+pub mod sans_io;
 
 use std::{borrow::Cow, collections::BTreeMap, fmt, sync::Arc};
 
@@ -119,6 +122,8 @@ pub enum McapError {
     UnexpectedEof,
     #[error("Chunk ended in the middle of a record")]
     UnexpectedEoc,
+    #[error("Record with opcode {opcode:02X} has length {len}, need at least {expected} to parse")]
+    RecordTooShort { opcode: u8, len: u64, expected: u64 },
     #[error("Message {0} referenced unknown channel {1}")]
     UnknownChannel(u32, u16),
     #[error("Channel `{0}` referenced unknown schema {1}")]
@@ -127,6 +132,10 @@ pub enum McapError {
     UnexpectedChunkRecord(u8),
     #[error("Unsupported compression format `{0}`")]
     UnsupportedCompression(String),
+    #[error("Error during decompression: `{0}`")]
+    DecompressionError(String),
+    #[error("length exceeds usize max: `{0}`")]
+    TooLong(u64),
 }
 
 pub type McapResult<T> = Result<T, McapError>;
@@ -196,5 +205,5 @@ pub struct Attachment<'a> {
     pub data: Cow<'a, [u8]>,
 }
 
-pub use read::{MessageStream, Summary};
+pub use read::{parse_record, MessageStream, Summary};
 pub use write::{WriteOptions, Writer};

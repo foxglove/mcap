@@ -6,20 +6,33 @@ import (
 
 type unindexedMessageIterator struct {
 	lexer    *Lexer
-	schemas  map[uint16]*Schema
-	channels map[uint16]*Channel
+	schemas  slicemap[Schema]
+	channels slicemap[Channel]
 	topics   map[string]bool
 	start    uint64
 	end      uint64
+
+	recordBuf []byte
 
 	metadataCallback func(*Metadata) error
 }
 
 func (it *unindexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message, error) {
+	msg := &Message{Data: p}
+	return it.NextInto(msg)
+}
+
+func (it *unindexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Message, error) {
+	if msg == nil {
+		msg = &Message{}
+	}
 	for {
-		tokenType, record, err := it.lexer.Next(p)
+		tokenType, record, err := it.lexer.Next(it.recordBuf)
 		if err != nil {
 			return nil, nil, nil, err
+		}
+		if cap(record) > cap(it.recordBuf) {
+			it.recordBuf = record
 		}
 		switch tokenType {
 		case TokenSchema:
@@ -27,35 +40,33 @@ func (it *unindexedMessageIterator) Next(p []byte) (*Schema, *Channel, *Message,
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("failed to parse schema: %w", err)
 			}
-			if _, ok := it.schemas[schema.ID]; !ok {
-				it.schemas[schema.ID] = schema
-			}
+			it.schemas.Set(schema.ID, schema)
 		case TokenChannel:
 			channelInfo, err := ParseChannel(record)
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("failed to parse channel info: %w", err)
 			}
-			if _, ok := it.channels[channelInfo.ID]; !ok {
-				if len(it.topics) == 0 || it.topics[channelInfo.Topic] {
-					it.channels[channelInfo.ID] = channelInfo
-				}
+			if len(it.topics) == 0 || it.topics[channelInfo.Topic] {
+				it.channels.Set(channelInfo.ID, channelInfo)
 			}
 		case TokenMessage:
-			message, err := ParseMessage(record)
-			if err != nil {
+			if err := msg.PopulateFrom(record, true); err != nil {
 				return nil, nil, nil, err
 			}
-			if _, ok := it.channels[message.ChannelID]; !ok {
+			channel := it.channels.Get(msg.ChannelID)
+			if channel == nil {
 				// skip messages on channels we don't know about. Note that if
 				// an unindexed reader encounters a message it would be
 				// interested in, but has not yet encountered the corresponding
 				// channel ID, it has no option but to skip.
 				continue
 			}
-			if message.LogTime >= it.start && message.LogTime < it.end {
-				channel := it.channels[message.ChannelID]
-				schema := it.schemas[channel.SchemaID]
-				return schema, channel, message, nil
+			if msg.LogTime >= it.start && msg.LogTime < it.end {
+				schema := it.schemas.Get(channel.SchemaID)
+				if schema == nil && channel.SchemaID != 0 {
+					return nil, nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
+				}
+				return schema, channel, msg, nil
 			}
 		case TokenMetadata:
 			if it.metadataCallback != nil {

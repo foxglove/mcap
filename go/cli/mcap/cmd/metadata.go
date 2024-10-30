@@ -68,13 +68,13 @@ func printMetadata(w io.Writer, r io.ReadSeeker, info *mcap.Info) error {
 var listMetadataCmd = &cobra.Command{
 	Use:   "metadata",
 	Short: "List metadata in an MCAP file",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
 			die("Unexpected number of args")
 		}
 		filename := args[0]
-		err := utils.WithReader(ctx, filename, func(matched bool, rs io.ReadSeeker) error {
+		err := utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
 			reader, err := mcap.NewReader(rs)
 			if err != nil {
 				return fmt.Errorf("failed to build mcap reader: %w", err)
@@ -95,7 +95,7 @@ var listMetadataCmd = &cobra.Command{
 var addMetadataCmd = &cobra.Command{
 	Use:   "metadata",
 	Short: "Add metadata to an MCAP file",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		if len(args) != 1 {
 			die("Unexpected number of args")
 		}
@@ -134,8 +134,8 @@ var addMetadataCmd = &cobra.Command{
 
 var getMetadataCmd = &cobra.Command{
 	Use:   "metadata",
-	Short: "get metadata by name",
-	Run: func(cmd *cobra.Command, args []string) {
+	Short: "Get metadata by name",
+	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
 			die("Unexpected number of args")
@@ -214,7 +214,7 @@ func init() {
 	}
 
 	getCmd.AddCommand(getMetadataCmd)
-	getMetadataCmd.PersistentFlags().StringVarP(&getMetadataName, "name", "n", "", "name of metadata record to create")
+	getMetadataCmd.PersistentFlags().StringVarP(&getMetadataName, "name", "n", "", "name of metadata record to get")
 	err = getMetadataCmd.MarkPersistentFlagRequired("name")
 	if err != nil {
 		die("failed to mark --name flag as required: %s", err)

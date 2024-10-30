@@ -17,13 +17,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
-    "main": "ts-node --files --project tsconfig.cjs.json scripts/main.ts"
+    "main": "yarn typescript:build && ts-node --files --project tsconfig.cjs.json scripts/main.ts"
   },
   "devDependencies": {
-    "@foxglove/eslint-plugin": "1.0.0",
-    "@mcap/core": "*",
+    "@foxglove/eslint-plugin": "1.0.1",
+    "@mcap/core": "workspace:*",
+    "@mcap/nodejs": "workspace:*",
+    "@mcap/support": "workspace:*",
     "@types/node": "18.13.0",
-    "eslint": "8.53.0",
+    "eslint": "8.54.0",
     "eslint-config-prettier": "9.0.0",
     "eslint-plugin-es": "4.1.0",
     "eslint-plugin-filenames": "1.3.2",

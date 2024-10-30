@@ -4,7 +4,7 @@ from conans import ConanFile, CMake
 class McapBenchmarksConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     generators = "cmake"
-    requires = "benchmark/1.7.0", "mcap/1.3.0"
+    requires = "benchmark/1.7.0", "mcap/1.4.1"
 
     def build(self):
         cmake = CMake(self)

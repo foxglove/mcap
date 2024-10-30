@@ -11,7 +11,7 @@ name = "ros"
 [packages]
 lz4 = "*"
 zstandard = "*"
-protobuf = "*"
+protobuf = ">=4.25"
 foxglove-schemas-protobuf = "*"
 mcap = { editable = true, path = "mcap" }
 mcap-protobuf-support = { editable = true, path = "mcap-protobuf-support" }
@@ -32,6 +32,7 @@ std_msgs = {version = "*", index = "ros"}
 genpy = { version = "*", index = "ros"}
 genmsg = { version = "*", index = "ros"}
 typing_extensions = "*"
+types-protobuf = "*"
 isort = "*"
 
 [requires]

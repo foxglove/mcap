@@ -14,6 +14,7 @@ ignorePaths:
   - bin
   - dist
   - yarn-error.log
+  - "*.bfbs"
   - "*.csv"
   - "*.Dockerfile"
   - Dockerfile
@@ -35,6 +36,7 @@ ignorePaths:
   - cpp/examples/protobuf/proto
 
 words:
+  - Aescape
   - Anduril
   - bagfile
   - bfbs
@@ -86,8 +88,10 @@ words:
   - rosbag
   - rosmsg
   - rostime
+  - Saronic
   - schemaless
   - serde
+  - sfixed
   - srgb
   - stoull
   - struct
@@ -100,7 +104,9 @@ words:
   - unindexed
   - velodyne
   - waabi
+  - Wayve
   - webp
+  - xcdr
   - zstandard
   - zstd
   - zustand

@@ -473,11 +473,11 @@ void McapWriter::terminate() {
   zstdChunk_.reset();
 #endif
 
-  channels_.clear();
   attachmentIndex_.clear();
   metadataIndex_.clear();
   chunkIndex_.clear();
   statistics_ = {};
+  writtenSchemas_.clear();
   currentMessageIndex_.clear();
   currentChunkStart_ = MaxTime;
   currentChunkEnd_ = 0;

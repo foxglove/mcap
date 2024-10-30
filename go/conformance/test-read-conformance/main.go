@@ -45,13 +45,13 @@ func (x Field) MarshalJSON() ([]byte, error) {
 	var v any
 	switch t.Name() {
 	case "string":
-		v = fmt.Sprintf("\"%s\"", x.Value)
+		v = fmt.Sprintf("%q", x.Value)
 	case "uint8", "uint16", "uint32", "uint64":
 		v = fmt.Sprintf("\"%d\"", x.Value)
 	case "OpCode":
 		v = fmt.Sprintf("\"%d\"", x.Value)
 	case "CompressionFormat":
-		v = fmt.Sprintf("\"%s\"", x.Value)
+		v = fmt.Sprintf("%q", x.Value)
 	default:
 		switch t.Kind() {
 		case reflect.Map:
@@ -354,7 +354,7 @@ func readIndexed(w io.Writer, filepath string) error {
 	knownChannelIDs := make(map[uint16]bool)
 
 	for {
-		schema, channel, message, err := it.Next(nil)
+		schema, channel, message, err := it.NextInto(nil)
 		if errors.Is(err, io.EOF) {
 			break
 		}
@@ -384,9 +384,8 @@ func readIndexed(w io.Writer, filepath string) error {
 
 func main() {
 	filepath := os.Args[1]
-	mode := os.Args[2]
 	var err error
-	if mode == "streamed" {
+	if mode := os.Args[2]; mode == "streamed" {
 		err = readStreamed(os.Stdout, filepath)
 	} else {
 		err = readIndexed(os.Stdout, filepath)

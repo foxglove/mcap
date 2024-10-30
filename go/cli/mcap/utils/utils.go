@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,7 +8,6 @@ import (
 	"io"
 	"os"
 	"regexp"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -107,21 +105,17 @@ func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.
 }
 
 func FormatTable(w io.Writer, rows [][]string) {
-	buf := &bytes.Buffer{}
-	tw := tablewriter.NewWriter(buf)
+	tw := tablewriter.NewWriter(w)
 	tw.SetBorder(false)
 	tw.SetAutoWrapText(false)
 	tw.SetAlignment(tablewriter.ALIGN_LEFT)
 	tw.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
 	tw.SetColumnSeparator("")
+	tw.SetTablePadding("\t")
+	tw.SetNoWhiteSpace(true)
+
 	tw.AppendBulk(rows)
 	tw.Render()
-	// This tablewriter puts a leading space on the lines for some reason, so
-	// remove it.
-	scanner := bufio.NewScanner(buf)
-	for scanner.Scan() {
-		fmt.Fprintln(w, strings.TrimLeft(scanner.Text(), " "))
-	}
 }
 
 func Keys[T any](m map[string]T) []string {

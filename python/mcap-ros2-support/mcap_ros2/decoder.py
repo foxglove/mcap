@@ -23,7 +23,7 @@ class DecoderFactory(McapDecoderFactory):
     currently supported.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._decoders: Dict[int, DecoderFunction] = {}
 
     def decoder_for(

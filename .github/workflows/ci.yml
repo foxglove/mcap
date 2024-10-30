@@ -11,138 +11,147 @@ jobs:
   spellcheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: echo '::add-matcher::.github/cspell-problem-matcher.json'
       - run: yarn spellcheck --no-progress
 
   conformance-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn workspace @foxglove/mcap-conformance lint:ci
-      - run: yarn workspace @foxglove/mcap-conformance typecheck
+      - run: yarn workspace @foxglove/mcap-conformance build
 
   conformance-cpp:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
       - run: cd cpp && make ci
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner cpp-
 
   conformance-go:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go/go.work
       - run: cd go && make build-conformance-binaries
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner go-
 
   conformance-python:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.7
       - run: cd python && pip install -e mcap
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner py-
 
   conformance-typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner ts-
 
   conformance-kaitai-struct:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner ksy-
 
   conformance-swift:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - uses: swift-actions/setup-swift@v1
+      - uses: swift-actions/setup-swift@v2
         with:
           swift-version: "5.7"
       - run: swift build
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner swift-
 
   conformance-rust:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
@@ -151,8 +160,9 @@ jobs:
         with:
           toolchain: stable
           default: true
-      - run: cd rust && cargo build --example=conformance_reader
-      - run: corepack enable && yarn install --immutable
+      - run: cargo build --example=conformance_reader --example=conformance_reader_async --features=tokio
+        working-directory: rust
+      - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner rust-
 
@@ -162,10 +172,10 @@ jobs:
       run:
         working-directory: cpp
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
@@ -181,14 +191,14 @@ jobs:
       run:
         working-directory: cpp
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.7
       - run: pip install conan~=1.0
@@ -197,39 +207,78 @@ jobs:
 
   typescript:
     runs-on: ubuntu-latest
+
+    permissions:
+      # https://docs.npmjs.com/generating-provenance-statements#publishing-packages-with-provenance-via-github-actions
+      id-token: write
+
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
           registry-url: https://registry.npmjs.org
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn dedupe --check
       - run: yarn prettier:check
       - run: yarn workspace @mcap/core lint:ci
-      - run: yarn workspace @mcap/core typecheck
-      - run: yarn workspace @mcap/core test
+      - run: yarn workspace @mcap/core build
+      - run: yarn workspace @mcap/support lint:ci
+      - run: yarn workspace @mcap/support build
+      - run: yarn workspace @mcap/nodejs lint:ci
+      - run: yarn workspace @mcap/nodejs build
+      - run: yarn workspace @mcap/browser lint:ci
+      - run: yarn workspace @mcap/browser build
+      - run: yarn typescript:test
 
-      - name: Publish to NPM
+      - run: yarn workspace @mcap/core pack
+      - name: Publish @mcap/core to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/core/v') }}
-        run: yarn workspace @mcap/core npm publish --access public
+        # `yarn npm publish` does not currently support --provenance: https://github.com/yarnpkg/berry/issues/5430
+        run: npm publish typescript/core/package.tgz --provenance --access public
         env:
-          YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+
+      - run: yarn workspace @mcap/support pack
+      - name: Publish @mcap/support to NPM
+        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/support/v') }}
+        # `yarn npm publish` does not currently support --provenance: https://github.com/yarnpkg/berry/issues/5430
+        run: npm publish typescript/support/package.tgz --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+
+      - run: yarn workspace @mcap/nodejs pack
+      - name: Publish @mcap/nodejs to NPM
+        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/nodejs/v') }}
+        # `yarn npm publish` does not currently support --provenance: https://github.com/yarnpkg/berry/issues/5430
+        run: npm publish typescript/nodejs/package.tgz --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+
+      - run: yarn workspace @mcap/browser pack
+      - name: Publish @mcap/browser to NPM
+        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/browser/v') }}
+        # `yarn npm publish` does not currently support --provenance: https://github.com/yarnpkg/berry/issues/5430
+        run: npm publish typescript/browser/package.tgz --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
   typescript-examples:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: yarn
-      - run: corepack enable && yarn install --immutable
+      - run: yarn install --immutable
       - run: yarn workspace @foxglove/mcap-benchmarks lint:ci
       - run: yarn workspace @foxglove/mcap-benchmarks typecheck
       - run: yarn workspace @foxglove/mcap-example-validate lint:ci
@@ -248,11 +297,13 @@ jobs:
     defaults:
       run:
         working-directory: python
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.8
       - run: pip install pipenv==2023.2.4
@@ -264,8 +315,6 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
         with:
-          user: __token__
-          password: ${{ secrets.TESTPYPI_API_TOKEN }}
           packages_dir: python/mcap/dist
           repository_url: https://test.pypi.org/legacy/
           skip_existing: true
@@ -274,8 +323,6 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
         with:
-          user: __token__
-          password: ${{ secrets.TESTPYPI_API_TOKEN }}
           repository_url: https://test.pypi.org/legacy/
           skip_existing: true
           packages_dir: python/mcap-protobuf-support/dist
@@ -284,8 +331,6 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
         with:
-          user: __token__
-          password: ${{ secrets.TESTPYPI_API_TOKEN }}
           repository_url: https://test.pypi.org/legacy/
           skip_existing: true
           packages_dir: python/mcap-ros1-support/dist
@@ -294,8 +339,6 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
         with:
-          user: __token__
-          password: ${{ secrets.TESTPYPI_API_TOKEN }}
           repository_url: https://test.pypi.org/legacy/
           skip_existing: true
           packages_dir: python/mcap-ros2-support/dist
@@ -306,8 +349,6 @@ jobs:
           startsWith(github.ref, 'refs/tags/releases/python/mcap/v')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
           packages_dir: python/mcap/dist
 
       - name: Publish mcap-protobuf-support to PyPI
@@ -316,8 +357,6 @@ jobs:
           startsWith(github.ref, 'refs/tags/releases/python/mcap-protobuf-support/v')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
           packages_dir: python/mcap-protobuf-support/dist
 
       - name: Publish mcap-ros1-support to PyPI
@@ -326,8 +365,6 @@ jobs:
           startsWith(github.ref, 'refs/tags/releases/python/mcap-ros1-support/v')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
           packages_dir: python/mcap-ros1-support/dist
 
       - name: Publish mcap-ros2-support to PyPI
@@ -336,8 +373,6 @@ jobs:
           startsWith(github.ref, 'refs/tags/releases/python/mcap-ros2-support/v')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
           packages_dir: python/mcap-ros2-support/dist
 
   go:
@@ -346,14 +381,14 @@ jobs:
       run:
         working-directory: go
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go/go.work
       - name: install golangci-lint
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.2
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.1
       - run: make lint
       - run: make test
       - name: Check library version
@@ -404,11 +439,11 @@ jobs:
     env: ${{ matrix.env }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: "0"
       - run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go/go.work
       - name: Setup environment
@@ -422,42 +457,19 @@ jobs:
         run: |
           git log --oneline --no-merges --first-parent --grep CLI --decorate-refs=refs $(git describe --tags $(git rev-list --tags=releases/mcap-cli --max-count=1))..HEAD > ${{ github.workspace }}-CHANGELOG.txt
       - name: Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: ./go/cli/mcap/bin/*
           body_path: ${{ github.workspace }}-CHANGELOG.txt
           draft: false
 
-  update-homebrew-formula:
-    needs:
-      - go-release-cli
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Extract version
-        id: extract-version
-        run: |
-          printf "::set-output name=%s::%s\n" version-number "${GITHUB_REF#refs/tags/releases/mcap-cli/v}"
-      - uses: mislav/bump-homebrew-formula-action@b3327118b2153c82da63fd9cbf58942146ee99f0
-        with:
-          formula-name: mcap
-          push-to: foxglove/homebrew-core
-          commit-message: |
-            {{formulaName}} ${{ steps.extract-version.outputs.version-number }}
-
-            Created by https://github.com/mislav/bump-homebrew-formula-action
-
-            cc @foxglove/mcap-cli-maintainers
-        env:
-          COMMITTER_TOKEN: ${{ secrets.HOMEBREW_GITHUB_TOKEN }}
-
   swift:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
-      - uses: swift-actions/setup-swift@v1
+      - uses: swift-actions/setup-swift@v2
         with:
           swift-version: "5.7"
       - run: docker run -t --rm -v $(pwd):/work -w /work ghcr.io/realm/swiftlint:0.49.1
@@ -471,7 +483,7 @@ jobs:
       run:
         working-directory: rust
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
       - uses: actions-rs/toolchain@v1
@@ -479,13 +491,20 @@ jobs:
           toolchain: stable
           default: true
           components: "rustfmt, clippy"
+      - run: rustup target add wasm32-unknown-unknown
       - run: cargo fmt --all -- --check
       - run: cargo clippy -- --no-deps
       - run: cargo clippy --no-default-features -- --no-deps
       - run: cargo clippy --no-default-features --features lz4 -- --no-deps
       - run: cargo clippy --no-default-features --features zstd -- --no-deps
-      - run: cargo build
-      - run: cargo test
+      - run: cargo clippy --no-default-features --features tokio -- --no-deps
+      - run: cargo clippy --no-default-features --features tokio,lz4 -- --no-deps
+      - run: cargo clippy --no-default-features --features tokio,zstd -- --no-deps
+      - run: cargo build --all-features
+      - run: cargo test --all-features
+      - run: cargo build --all-features --target wasm32-unknown-unknown
+      - run: cargo check --all-features --target wasm32-unknown-unknown
+      - run: cargo publish --dry-run
       - name: "publish to crates.io"
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/rust/v')
         run: cargo publish --token ${{ secrets.RUST_CRATES_IO_TOKEN }}

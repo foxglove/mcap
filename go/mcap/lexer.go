@@ -12,12 +12,6 @@ import (
 	"github.com/pierrec/lz4/v4"
 )
 
-// ErrNestedChunk indicates the lexer has detected a nested chunk.
-var ErrNestedChunk = errors.New("detected nested chunk")
-var ErrChunkTooLarge = errors.New("chunk exceeds configured maximum size")
-var ErrRecordTooLarge = errors.New("record exceeds configured maximum size")
-var ErrInvalidZeroOpcode = errors.New("invalid zero opcode")
-
 type errInvalidChunkCrc struct {
 	expected uint32
 	actual   uint32
@@ -27,41 +21,22 @@ func (e *errInvalidChunkCrc) Error() string {
 	return fmt.Sprintf("invalid chunk CRC: %x != %x", e.actual, e.expected)
 }
 
-type ErrTruncatedRecord struct {
-	opcode      OpCode
-	actualLen   int
-	expectedLen uint64
-}
+type magicLocation int
 
-func (e *ErrTruncatedRecord) Error() string {
-	if e.expectedLen == 0 {
-		return fmt.Sprintf(
-			"MCAP truncated in record length field after %s opcode (%x), received %d bytes",
-			e.opcode.String(),
-			byte(e.opcode),
-			e.actualLen,
-		)
+const (
+	magicLocationStart magicLocation = iota
+	magicLocationEnd
+)
+
+func (m magicLocation) String() string {
+	switch m {
+	case magicLocationStart:
+		return "start"
+	case magicLocationEnd:
+		return "end"
+	default:
+		return "unknown"
 	}
-	return fmt.Sprintf(
-		"MCAP truncated in %s (0x%x) record content with expected length %d, data ended after %d bytes",
-		e.opcode.String(),
-		byte(e.opcode),
-		e.expectedLen,
-		e.actualLen,
-	)
-}
-
-func (e *ErrTruncatedRecord) Unwrap() error {
-	return io.ErrUnexpectedEOF
-}
-
-// ErrBadMagic indicates the lexer has detected invalid magic bytes.
-type ErrBadMagic struct {
-	actual []byte
-}
-
-func (e *ErrBadMagic) Error() string {
-	return fmt.Sprintf("Invalid magic at start of file, found: %v", e.actual)
 }
 
 const (
@@ -241,7 +216,7 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			continue
 		}
 
-		if recordLen > uint64(len(p)) {
+		if recordLen > uint64(cap(p)) {
 			p, err = makeSafe(recordLen)
 			if err != nil {
 				return TokenError, nil, fmt.Errorf("failed to allocate %d bytes for %s token: %w", recordLen, opcode, err)
@@ -303,11 +278,6 @@ func (l *Lexer) Close() {
 	if l.decoders.zstd != nil {
 		l.decoders.zstd.Close()
 	}
-	for _, decompressor := range l.decompressors {
-		if closer, ok := decompressor.(io.Closer); ok {
-			closer.Close()
-		}
-	}
 }
 
 type decoders struct {
@@ -316,13 +286,13 @@ type decoders struct {
 	none *bytes.Reader
 }
 
-func validateMagic(r io.Reader) error {
+func validateMagic(r io.Reader, location magicLocation) error {
 	magic := make([]byte, len(Magic))
 	if readLen, err := io.ReadFull(r, magic); err != nil {
-		return &ErrBadMagic{actual: magic[:readLen]}
+		return &ErrBadMagic{actual: magic[:readLen], location: location}
 	}
 	if !bytes.Equal(magic, Magic) {
-		return &ErrBadMagic{actual: magic}
+		return &ErrBadMagic{actual: magic, location: location}
 	}
 	return nil
 }
@@ -513,9 +483,7 @@ type LexerOptions struct {
 	AttachmentCallback func(*AttachmentReader) error
 	// Decompressors are custom decompressors. Chunks matching the supplied
 	// compression format will be decompressed with the provided
-	// ResettableReader instead of the default implementation. If the
-	// ResettableReader also implements io.Closer, Close will be called on close
-	// of the reader.
+	// ResettableReader instead of the default implementation.
 	Decompressors map[CompressionFormat]ResettableReader
 }
 
@@ -537,7 +505,7 @@ func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 		decompressors = opts[0].Decompressors
 	}
 	if !skipMagic {
-		err := validateMagic(r)
+		err := validateMagic(r, magicLocationStart)
 		if err != nil {
 			return nil, err
 		}

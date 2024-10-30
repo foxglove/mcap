@@ -10,9 +10,7 @@ The MCAP command line tool is useful for working with MCAP files.
 
 ### Release binaries
 
-Use the asset links on https://github.com/foxglove/mcap/releases to download a release-specific binary for your platform (v0.0.34 for Linux AMD64 in the example below):
-
-    $ wget https://github.com/foxglove/mcap/releases/download/releases%2Fmcap-cli%2Fv0.0.34/mcap-linux-amd64 -O mcap
+Download binaries for your platform from [the latest Github release](https://github.com/foxglove/mcap/releases/latest).
 
 Then, mark it executable:
 
@@ -26,17 +24,16 @@ To install using [Homebrew](https://brew.sh) on macOS or Linux, run:
 
     $ brew install mcap
 
-### Using Go
+### From Source
 
 :::caution
-Installing via 'go install' is not recommended, and is not guaranteed to work.
+Installing via `go install` is not supported. To build from source you must clone the repository.
 :::
 
-To install from the latest commit, use
-
-    $ go install github.com/foxglove/mcap/go/cli/mcap@latest
-
-Ensure that the go installation directory is in your path (e.g. `$HOME/go/bin` by default on Ubuntu).
+1. Clone the [mcap repository](https://github.com/foxglove/mcap).
+2. `$ cd go/cli/mcap`
+3. `$ make build`
+4. The binary will be built into the a newly created `bin` folder.
 
 ## Usage
 

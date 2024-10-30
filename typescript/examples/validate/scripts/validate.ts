@@ -1,8 +1,6 @@
 import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import { LazyMessageReader as ROS1LazyMessageReader } from "@foxglove/rosmsg-serialization";
 import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
-import decompressLZ4 from "@foxglove/wasm-lz4";
-import zstd from "@foxglove/wasm-zstd";
 import {
   hasMcapPrefix,
   McapConstants,
@@ -10,6 +8,8 @@ import {
   McapStreamReader,
   McapTypes,
 } from "@mcap/core";
+import { FileHandleReadable } from "@mcap/nodejs";
+import { loadDecompressHandlers } from "@mcap/support";
 import { program } from "commander";
 import { createReadStream } from "fs";
 import fs from "fs/promises";
@@ -19,7 +19,6 @@ import protobufjs from "protobufjs";
 import { FileDescriptorSet } from "protobufjs/ext/descriptor";
 
 type Channel = McapTypes.Channel;
-type DecompressHandlers = McapTypes.DecompressHandlers;
 type TypedMcapRecord = McapTypes.TypedMcapRecord;
 
 function log(...data: unknown[]) {
@@ -91,13 +90,7 @@ async function validate(
   filePath: string,
   { deserialize, dump, stream }: { deserialize: boolean; dump: boolean; stream: boolean },
 ) {
-  await decompressLZ4.isLoaded;
-  await zstd.isLoaded;
-
-  const decompressHandlers: DecompressHandlers = {
-    lz4: (buffer, decompressedSize) => decompressLZ4(buffer, Number(decompressedSize)),
-    zstd: (buffer, decompressedSize) => zstd.decompress(buffer, Number(decompressedSize)),
-  };
+  const decompressHandlers = await loadDecompressHandlers();
 
   const recordCounts = new Map<TypedMcapRecord["type"], number>();
   const schemasById = new Map<number, McapTypes.TypedMcapRecords["Schema"]>();
@@ -146,7 +139,7 @@ async function validate(
           throw new Error(`Missing schema ${record.schemaId} for channel ${record.id}`);
         }
         let messageDeserializer: (data: ArrayBufferView) => unknown;
-        if (record.messageEncoding === "ros1") {
+        if (schema.encoding === "ros1msg" && record.messageEncoding === "ros1") {
           const reader = new ROS1LazyMessageReader(
             parseMessageDefinition(new TextDecoder().decode(schema.data)),
           );
@@ -157,14 +150,14 @@ async function validate(
             }
             return reader.readMessage(data).toJSON();
           };
-        } else if (record.messageEncoding === "ros2") {
+        } else if (schema.encoding === "ros2msg" && record.messageEncoding === "cdr") {
           const reader = new ROS2MessageReader(
             parseMessageDefinition(new TextDecoder().decode(schema.data), {
               ros2: true,
             }),
           );
           messageDeserializer = (data) => reader.readMessage(data);
-        } else if (record.messageEncoding === "protobuf") {
+        } else if (schema.encoding === "protobuf" && record.messageEncoding === "protobuf") {
           const root = protobufjs.Root.fromDescriptor(FileDescriptorSet.decode(schema.data));
           const type = root.lookupType(schema.name);
 
@@ -174,7 +167,9 @@ async function validate(
           const textDecoder = new TextDecoder();
           messageDeserializer = (data) => JSON.parse(textDecoder.decode(data));
         } else {
-          throw new Error(`unsupported encoding ${record.messageEncoding}`);
+          throw new Error(
+            `unsupported message encoding ${record.messageEncoding} with schema encoding ${schema.encoding}`,
+          );
         }
         channelInfoById.set(record.id, { info: record, messageDeserializer });
         break;
@@ -230,29 +225,8 @@ async function validate(
   if (!stream) {
     const handle = await fs.open(filePath, "r");
     try {
-      let buffer = new ArrayBuffer(4096);
       const reader = await McapIndexedReader.Initialize({
-        readable: {
-          size: async () => BigInt((await handle.stat()).size),
-          read: async (offset, length) => {
-            if (offset > Number.MAX_SAFE_INTEGER || length > Number.MAX_SAFE_INTEGER) {
-              throw new Error(`Read too large: offset ${offset}, length ${length}`);
-            }
-            if (length > buffer.byteLength) {
-              buffer = new ArrayBuffer(Number(length * 2n));
-            }
-            const result = await handle.read({
-              buffer: new DataView(buffer, 0, Number(length)),
-              position: Number(offset),
-            });
-            if (result.bytesRead !== Number(length)) {
-              throw new Error(
-                `Read only ${result.bytesRead} bytes from offset ${offset}, expected ${length}`,
-              );
-            }
-            return new Uint8Array(result.buffer.buffer, result.buffer.byteOffset, result.bytesRead);
-          },
-        },
+        readable: new FileHandleReadable(handle),
         decompressHandlers,
       });
       for (const record of reader.schemasById.values()) {
