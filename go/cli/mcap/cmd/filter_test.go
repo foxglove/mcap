@@ -368,3 +368,12 @@ func TestCompileMatchers(t *testing.T) {
 	assert.True(t, matchers[0].MatchString("camera"))
 	assert.True(t, matchers[1].MatchString("lights"))
 }
+
+func TestParseDate(t *testing.T) {
+	expected := uint64(1690298850132545471)
+	zulu, err := parseDate("2023-07-25T15:27:30.132545471Z")
+	assert.Equal(t, expected, zulu)
+	withTimezone, err := parseDate("2023-07-26T01:27:30.132545471+10:00")
+	require.NoError(t, err)
+	assert.Equal(t, expected, withTimezone)
+}

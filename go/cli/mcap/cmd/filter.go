@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"time"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
@@ -22,6 +23,8 @@ type filterFlags struct {
 	endSec             uint64
 	startNano          uint64
 	endNano            uint64
+	startDate          string
+	endDate            string
 	includeMetadata    bool
 	includeAttachments bool
 	outputCompression  string
@@ -41,6 +44,14 @@ type filterOpts struct {
 	chunkSize          int64
 }
 
+func parseDate(date string) (uint64, error) {
+	stamp, err := time.Parse(time.RFC3339, date)
+	if err != nil {
+		return 0, err
+	}
+	return uint64(stamp.UnixNano()), nil
+}
+
 func buildFilterOptions(flags *filterFlags) (*filterOpts, error) {
 	opts := &filterOpts{
 		output:             flags.output,
@@ -51,9 +62,23 @@ func buildFilterOptions(flags *filterFlags) (*filterOpts, error) {
 	if flags.startSec > 0 {
 		opts.start = flags.startSec * 1e9
 	}
+	if flags.startDate != "" {
+		start, err := parseDate(flags.startDate)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start date: %w", err)
+		}
+		opts.start = start
+	}
 	opts.end = flags.endNano
 	if flags.endSec > 0 {
-		opts.end = flags.endSec * 1e9
+		opts.end = flags.startSec * 1e9
+	}
+	if flags.endDate != "" {
+		end, err := parseDate(flags.endDate)
+		if err != nil {
+			return nil, fmt.Errorf("invalid end date: %w", err)
+		}
+		opts.end = end
 	}
 	if opts.end == 0 {
 		opts.end = math.MaxUint64
@@ -416,6 +441,18 @@ usage:
 			0,
 			"messages with log times before nanosecond-precision timestamp will be included.",
 		)
+		startDate := filterCmd.PersistentFlags().String(
+			"start-date",
+			"",
+			"messages with log times after or equal to this RFC3339-formatted date will be included."+
+				" Assumes log times are relative to Jan 1 1970 UTC.",
+		)
+		endDate := filterCmd.PersistentFlags().String(
+			"end-date",
+			"",
+			"messages with log times before this RFC3339-formatted date will be included. Assumes"+
+				" log times are relative to Jan 1 1970 UTC.",
+		)
 		filterCmd.MarkFlagsMutuallyExclusive("start-secs", "start-nsecs")
 		filterCmd.MarkFlagsMutuallyExclusive("end-secs", "end-nsecs")
 		chunkSize := filterCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
@@ -443,6 +480,8 @@ usage:
 				endSec:             *endSec,
 				startNano:          *startNano,
 				endNano:            *endNano,
+				startDate:          *startDate,
+				endDate:            *endDate,
 				chunkSize:          *chunkSize,
 				includeMetadata:    *includeMetadata,
 				includeAttachments: *includeAttachments,
