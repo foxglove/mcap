@@ -120,7 +120,7 @@ func (instance *usage) processChunk(chunk *mcap.Chunk) error {
 		case mcap.TokenMessage:
 			message, err := mcap.ParseMessage(data)
 			if err != nil {
-				return fmt.Errorf("Error parsing Message: %s", err)
+				return fmt.Errorf("Error parsing Message: %w", err)
 			}
 
 			channel := instance.channels[message.ChannelID]
@@ -157,7 +157,7 @@ func (instance *usage) RunDu() error {
 				break
 			}
 
-			return fmt.Errorf("failed to read next token: %s", err)
+			return fmt.Errorf("failed to read next token: %w", err)
 		}
 		if len(data) > len(msg) {
 			msg = data
@@ -170,14 +170,14 @@ func (instance *usage) RunDu() error {
 		case mcap.TokenChannel:
 			channel, err := mcap.ParseChannel(data)
 			if err != nil {
-				return fmt.Errorf("error parsing Channel: %s", err)
+				return fmt.Errorf("error parsing Channel: %w", err)
 			}
 
 			instance.channels[channel.ID] = channel
 		case mcap.TokenMessage:
 			message, err := mcap.ParseMessage(data)
 			if err != nil {
-				return fmt.Errorf("error parsing Message: %s", err)
+				return fmt.Errorf("error parsing Message: %w", err)
 			}
 			channel := instance.channels[message.ChannelID]
 			if channel == nil {
@@ -191,7 +191,7 @@ func (instance *usage) RunDu() error {
 		case mcap.TokenChunk:
 			chunk, err := mcap.ParseChunk(data)
 			if err != nil {
-				return fmt.Errorf("error parsing Message: %s", err)
+				return fmt.Errorf("error parsing Message: %w", err)
 			}
 			err = instance.processChunk(chunk)
 			if err != nil {
@@ -279,7 +279,7 @@ var duCmd = &cobra.Command{
 	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
-			die("An MCAP file argument is required.")
+			die("Unexpected number of args")
 		}
 		filename := args[0]
 		err := utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
@@ -287,7 +287,7 @@ var duCmd = &cobra.Command{
 			return usage.RunDu()
 		})
 		if err != nil {
-			die("du command failed: %s", err)
+			die("Failed to read file %s: %v", filename, err)
 		}
 	},
 }
