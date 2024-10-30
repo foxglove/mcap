@@ -42,6 +42,7 @@ func newUsage(reader io.ReadSeeker) *usage {
 		channels:         make(map[uint16]*mcap.Channel),
 		topicMessageSize: make(map[string]uint64),
 		recordKindSize:   make(map[string]uint64),
+		totalSize:        16, /* 8 bytes for leading magic and 8 bytes for trailing magic */
 	}
 }
 
