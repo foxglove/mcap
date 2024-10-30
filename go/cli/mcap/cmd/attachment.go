@@ -14,8 +14,10 @@ import (
 
 var (
 	addAttachmentLogTime      uint64
+	addAttachmentLogDate      string
 	addAttachmentName         string
 	addAttachmentCreationTime uint64
+	addAttachmentCreationDate string
 	addAttachmentFilename     string
 	addAttachmentMediaType    string
 )
@@ -158,9 +160,23 @@ var addAttachmentCmd = &cobra.Command{
 		if addAttachmentCreationTime > 0 {
 			createTime = addAttachmentCreationTime
 		}
+		if addAttachmentCreationDate != "" {
+			date, err := parseDate(addAttachmentCreationDate)
+			if err != nil {
+				die("failed to parse creation date: %s", err)
+			}
+			createTime = date
+		}
 		logTime := uint64(time.Now().UTC().UnixNano())
 		if addAttachmentLogTime > 0 {
 			logTime = addAttachmentLogTime
+		}
+		if addAttachmentLogDate != "" {
+			date, err := parseDate(addAttachmentLogDate)
+			if err != nil {
+				die("failed to parse log date: %s", err)
+			}
+			logTime = date
 		}
 		err = utils.AmendMCAP(f, []*mcap.Attachment{
 			{
@@ -190,8 +206,14 @@ func init() {
 	addAttachmentCmd.PersistentFlags().Uint64VarP(
 		&addAttachmentLogTime, "log-time", "", 0, "attachment log time in nanoseconds (defaults to current timestamp)",
 	)
+	addAttachmentCmd.PersistentFlags().StringVarP(
+		&addAttachmentLogDate, "log-date", "", "", "RFC3339-formatted log date",
+	)
 	addAttachmentCmd.PersistentFlags().Uint64VarP(
 		&addAttachmentLogTime, "creation-time", "", 0, "attachment creation time in nanoseconds (defaults to ctime)",
+	)
+	addAttachmentCmd.PersistentFlags().StringVarP(
+		&addAttachmentCreationDate, "creation-date", "", "", "RFC3339-formatted creation date",
 	)
 	err := addAttachmentCmd.MarkPersistentFlagRequired("file")
 	if err != nil {
