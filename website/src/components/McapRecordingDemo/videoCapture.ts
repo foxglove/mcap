@@ -133,7 +133,8 @@ async function selectSupportedVideoEncoderConfig({
     width,
     height,
     latencyMode: "realtime",
-    hevc: { format: "annexb" },
+    avc: { format: "annexb" }, // https://bugs.webkit.org/show_bug.cgi?id=281945
+    // hevc: { format: "annexb" },
     // Note that Safari 17 does not support latencyMode: "realtime", and in newer versions of the
     // Safari Technical Preview, realtime mode only works if framerate and bitrate are set.
     framerate: 1 / frameDurationSec,
@@ -141,13 +142,15 @@ async function selectSupportedVideoEncoderConfig({
   };
   try {
     if (typeof VideoEncoder !== "function") {
-      console.log(
+      debugger;
+      console.error(
         "VideoEncoder is not supported, falling back to JPEG encoding",
       );
       return undefined;
     }
 
     let status = await isEncoderConfigActuallySupported(config);
+    console.log("actually", status);
     if (status.supported) {
       return {
         config,
@@ -159,21 +162,27 @@ async function selectSupportedVideoEncoderConfig({
     // (https://bugs.webkit.org/show_bug.cgi?id=264894). Try again with "quality".
     //
     // See also: https://bugs.webkit.org/show_bug.cgi?id=264893
-    console.log(
+    debugger;
+    console.error(
       "latencyMode realtime encoding not supported, attempting fallback to quality",
     );
     config.latencyMode = "quality";
     status = await isEncoderConfigActuallySupported(config);
     if (status.supported) {
+      debugger;
+      console.error("Found supported config", config);
       return { config, mayUseLotsOfKeyframes: status.mayUseLotsOfKeyframes };
     }
   } catch (err) {
-    console.log(
+    debugger;
+    console.error(
       "VideoEncoder error during compatibility detection:",
       config,
       err,
     );
   }
+  debugger;
+  console.error("No supported config found");
   return undefined;
 }
 
@@ -184,9 +193,13 @@ async function selectSupportedVideoEncoderConfig({
  */
 async function isEncoderConfigActuallySupported(config: VideoEncoderConfig) {
   try {
-    if ((await VideoEncoder.isConfigSupported(config)).supported !== true) {
+    console.log("test", config);
+    const supportedConfig = await VideoEncoder.isConfigSupported(config);
+    if (supportedConfig.supported !== true) {
+      console.log("tested false");
       return { supported: false };
     }
+    console.log("tested true", supportedConfig);
     let keyFrameCount = 0;
     let totalFrameCount = 0;
     let hadErrors = false as boolean;
@@ -199,7 +212,7 @@ async function isEncoderConfigActuallySupported(config: VideoEncoderConfig) {
       },
       error(err) {
         hadErrors = true;
-        console.log(
+        console.error(
           "VideoEncoder error during compatibility detection:",
           config,
           err,
@@ -207,6 +220,7 @@ async function isEncoderConfigActuallySupported(config: VideoEncoderConfig) {
       },
     });
     encoder.configure(config);
+    console.log("create bitmap");
     const bitmap = await createImageBitmap(
       new ImageData(config.width, config.height),
     );
@@ -221,15 +235,18 @@ async function isEncoderConfigActuallySupported(config: VideoEncoderConfig) {
       frame.close();
     }
     bitmap.close();
+    console.log("flushing");
     await encoder.flush();
     encoder.close();
+    console.log("flushed and closed");
 
     return {
       supported: totalFrameCount === 2 && !hadErrors,
       mayUseLotsOfKeyframes: keyFrameCount > 1,
     };
   } catch (err) {
-    console.log(
+    debugger;
+    console.error(
       "VideoEncoder error during compatibility detection:",
       config,
       err,
