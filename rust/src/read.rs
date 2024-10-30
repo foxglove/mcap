@@ -236,9 +236,9 @@ impl<'a> Iterator for InnerReader<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(action) = self.reader.next_action() {
             match action {
-                Ok(ReadAction::NeedMore(n)) => {
-                    let len = std::cmp::min(self.buf.len(), n);
-                    self.reader.append(len).copy_from_slice(&self.buf[..len]);
+                Ok(ReadAction::NeedMore(need)) => {
+                    let len = std::cmp::min(self.buf.len(), need);
+                    self.reader.insert(len).copy_from_slice(&self.buf[..len]);
                     self.reader.set_written(len);
                     self.buf = &self.buf[len..];
                 }
@@ -765,9 +765,9 @@ impl<'a> Summary<'a> {
         let mut uncompressed_offset: usize = 0;
         while let Some(action) = reader.next_action() {
             match action {
-                Ok(ReadAction::NeedMore(n)) => {
-                    let len = std::cmp::min(remaining.len(), n);
-                    reader.append(len).copy_from_slice(&remaining[..len]);
+                Ok(ReadAction::NeedMore(need)) => {
+                    let len = std::cmp::min(remaining.len(), need);
+                    reader.insert(len).copy_from_slice(&remaining[..len]);
                     reader.set_written(len);
                     remaining = &remaining[len..];
                 }

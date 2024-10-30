@@ -182,7 +182,7 @@ impl LinearReaderOptions {
 ///     while let Some(action) = reader.next_action() {
 ///         match action? {
 ///             ReadAction::NeedMore(need) => {
-///                 let written = file.read(reader.append(need)).await?;
+///                 let written = file.read(reader.insert(need)).await?;
 ///                 reader.set_written(written);
 ///             },
 ///             ReadAction::GetRecord{ opcode, data } => {
@@ -201,7 +201,7 @@ impl LinearReaderOptions {
 ///     while let Some(action) = reader.next_action() {
 ///         match action? {
 ///             ReadAction::NeedMore(need) => {
-///                 let written = file.read(reader.append(need))?;
+///                 let written = file.read(reader.insert(need))?;
 ///                 reader.set_written(written);
 ///             },
 ///             ReadAction::GetRecord{ opcode, data } => {
@@ -280,19 +280,19 @@ impl LinearReader {
         Ok(result)
     }
 
-    /// Get a mutable slice to write new MCAP data into. Make sure to call [`Self::set_written`]
-    /// afterwards with the number of bytes successfully written.
-    pub fn append(&mut self, to_write: usize) -> &mut [u8] {
+    /// Get a mutable slice to write new MCAP data into. Call [`Self::set_written`] afterwards with
+    /// the number of bytes successfully written.
+    pub fn insert(&mut self, to_write: usize) -> &mut [u8] {
         self.file_data.tail_with_size(to_write)
     }
 
-    /// Set the number of bytes successfully written into the buffer returned from [`Self::append`]
-    /// since the last [`Self::next_action`] call.
+    /// Set the number of bytes successfully written into the buffer returned from [`Self::insert`]
+    /// since the last [`Self::next_action`] call. Providing 0 indicates EOF to the reader.
     ///
-    /// Panics if `written` is greater than the last `to_write` provided to [`Self::append`].
+    /// Panics if `written` is greater than the last `to_write` provided to [`Self::insert`].
     pub fn set_written(&mut self, written: usize) {
         if (self.file_data.data.len() - self.file_data.end) < written {
-            panic!("set_written called with written > last appended length");
+            panic!("set_written called with written > last inserted length");
         }
         self.last_write = Some(written);
     }
@@ -659,10 +659,11 @@ impl LinearReader {
 /// Encapsulates the action the user should take next when reading an MCAP file.
 ///
 pub enum ReadAction<'a> {
-    /// The reader needs more data to continue - call [`LinearReader::insert`] to load more data.
-    /// the value provided here is a hint for how much data to insert.
+    /// The reader needs more data to provide the next record. Call [`LinearReader::insert`] then
+    /// [`LinearReader::set_written`] to load more data. The value provided here is a hint for how
+    /// much data to insert.
     NeedMore(usize),
-    /// Read a record out of the MCAP file. Use [`parse_record`] to parse the record.
+    /// Read a record out of the MCAP file. Use [`crate::parse_record`] to parse the record.
     GetRecord { data: &'a [u8], opcode: u8 },
 }
 
@@ -795,7 +796,7 @@ mod tests {
         while let Some(action) = reader.next_action() {
             match action? {
                 ReadAction::NeedMore(n) => {
-                    let written = cursor.read(reader.append(n))?;
+                    let written = cursor.read(reader.insert(n))?;
                     reader.set_written(written);
                 }
                 ReadAction::GetRecord { data, opcode } => {
@@ -837,7 +838,7 @@ mod tests {
         while let Some(action) = reader.next_action() {
             match action? {
                 ReadAction::NeedMore(n) => {
-                    let written = cursor.read(reader.append(n))?;
+                    let written = cursor.read(reader.insert(n))?;
                     reader.set_written(written);
                 }
                 ReadAction::GetRecord { data, opcode } => {
@@ -863,7 +864,7 @@ mod tests {
         while let Some(action) = reader.next_action() {
             match action? {
                 ReadAction::NeedMore(n) => {
-                    let written = cursor.read(reader.append(n))?;
+                    let written = cursor.read(reader.insert(n))?;
                     reader.set_written(written);
                 }
                 ReadAction::GetRecord { data, opcode } => {
@@ -947,7 +948,7 @@ mod tests {
             while let Some(action) = reader.next_action() {
                 match action? {
                     ReadAction::NeedMore(n) => {
-                        let written = cursor.read(reader.append(n))?;
+                        let written = cursor.read(reader.insert(n))?;
                         reader.set_written(written);
                     }
                     ReadAction::GetRecord { data, opcode } => {
@@ -995,7 +996,7 @@ mod tests {
         while let Some(action) = reader.next_action() {
             match action? {
                 ReadAction::NeedMore(n) => {
-                    let written = cursor.read(reader.append(n))?;
+                    let written = cursor.read(reader.insert(n))?;
                     reader.set_written(written);
                 }
                 ReadAction::GetRecord { data, opcode } => {

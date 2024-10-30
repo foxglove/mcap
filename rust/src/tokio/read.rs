@@ -51,7 +51,7 @@ where
         while let Some(action) = self.reader.next_action() {
             match action {
                 Ok(ReadAction::NeedMore(n)) => {
-                    let written = match self.source.read(self.reader.append(n)).await {
+                    let written = match self.source.read(self.reader.insert(n)).await {
                         Ok(n) => n,
                         Err(err) => return Some(Err(err.into())),
                     };
