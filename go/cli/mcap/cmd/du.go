@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -9,12 +8,11 @@ import (
 	"hash/crc32"
 	"io"
 	"os"
-	"strings"
+	"sort"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
 	"github.com/klauspost/compress/zstd"
-	"github.com/olekukonko/tablewriter"
 	"github.com/pierrec/lz4/v4"
 	"github.com/spf13/cobra"
 )
@@ -202,8 +200,21 @@ func (instance *usage) RunDu() error {
 		}
 	}
 
+	fmt.Println("Top level record stats:")
+	fmt.Println()
+
 	{
 		rows := [][]string{}
+		rows = append(rows, []string{
+			"record",
+			"sum bytes",
+			"% of total file bytes",
+		})
+		rows = append(rows, []string{
+			"------",
+			"---------",
+			"---------------------",
+		})
 
 		for recordKind, size := range instance.recordKindSize {
 			row := []string{
@@ -214,49 +225,54 @@ func (instance *usage) RunDu() error {
 			rows = append(rows, row)
 		}
 
-		printTable(os.Stdout, rows, []string{
-			"record kind", "sum bytes", "% of total file bytes",
-		})
+		utils.FormatTable(os.Stdout, rows)
 	}
 
+	fmt.Println()
+	fmt.Println("Message size stats:")
 	fmt.Println()
 
 	{
 		rows := [][]string{}
+		rows = append(rows, []string{
+			"topic",
+			"sum bytes (uncompressed)",
+			"% of total message bytes (uncompressed)",
+		})
+		rows = append(rows, []string{
+			"-----",
+			"------------------------",
+			"---------------------------------------",
+		})
 
-		for topic, topicSize := range instance.topicMessageSize {
+		type topicInfo struct {
+			name string
+			size uint64
+		}
+		topicInfos := make([]topicInfo, 0, len(instance.topicMessageSize))
+		for topic, size := range instance.topicMessageSize {
+			topicInfos = append(topicInfos, topicInfo{topic, size})
+		}
+
+		// Sort for largest topics first
+		sort.Slice(topicInfos, func(i, j int) bool {
+			return topicInfos[i].size > topicInfos[j].size
+		})
+
+		for _, info := range topicInfos {
 			row := []string{
-				topic, fmt.Sprintf("%d", topicSize),
-				fmt.Sprintf("%f", float32(topicSize)/float32(instance.totalMessageSize)*100.0),
+				info.name,
+				humanBytes(info.size),
+				fmt.Sprintf("%f", float32(info.size)/float32(instance.totalMessageSize)*100.0),
 			}
 
 			rows = append(rows, row)
 		}
 
-		printTable(os.Stdout, rows, []string{
-			"topic", "sum bytes", "% of total message bytes",
-		})
+		utils.FormatTable(os.Stdout, rows)
 	}
 
 	return nil
-}
-
-func printTable(w io.Writer, rows [][]string, header []string) {
-	buf := &bytes.Buffer{}
-	tw := tablewriter.NewWriter(buf)
-	tw.SetBorder(false)
-	tw.SetAutoWrapText(false)
-	tw.SetAlignment(tablewriter.ALIGN_DEFAULT)
-	tw.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-	tw.SetHeader(header)
-	tw.AppendBulk(rows)
-	tw.Render()
-	// This tablewriter puts a leading space on the lines for some reason, so
-	// remove it.
-	scanner := bufio.NewScanner(buf)
-	for scanner.Scan() {
-		fmt.Fprintln(w, strings.TrimLeft(scanner.Text(), " "))
-	}
 }
 
 var duCmd = &cobra.Command{
