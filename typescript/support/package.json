@@ -1,6 +1,6 @@
 {
   "name": "@mcap/support",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Common decompression for use with MCAP files",
   "license": "MIT",
   "repository": {
@@ -57,6 +57,7 @@
     "@foxglove/wasm-bz2": "^0.1.1",
     "@foxglove/wasm-lz4": "^1.0.2",
     "@foxglove/wasm-zstd": "^1.0.1",
-    "protobufjs": "^7.2.5"
+    "protobufjs": "^7.2.5",
+    "tslib": "^2.5.0"
   }
 }

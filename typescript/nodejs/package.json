@@ -1,6 +1,6 @@
 {
   "name": "@mcap/nodejs",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Support library for using MCAP in Node.js",
   "license": "MIT",
   "repository": {
@@ -54,5 +54,8 @@
     "prettier": "3.1.0",
     "ts-jest": "29.1.1",
     "typescript": "5.2.2"
+  },
+  "dependencies": {
+    "tslib": "^2.5.0"
   }
 }
