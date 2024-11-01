@@ -437,7 +437,8 @@ usage:
 			"start-secs",
 			"s",
 			0,
-			"only include messages logged at or after this time. Accepts integer seconds. Ignored if `--startk` or `--start-nsecs` are used.",
+			"only include messages logged at or after this time. Accepts integer seconds."+
+				"Ignored if `--startk` or `--start-nsecs` are used.",
 		)
 		startNano := filterCmd.PersistentFlags().Uint64(
 			"start-nsecs",
@@ -454,7 +455,8 @@ usage:
 			"end-secs",
 			"e",
 			0,
-			"only include messages logged before this time. Accepts integer seconds. Ignored if `--end` or `--end-nsecs` are used.",
+			"only include messages logged before this time. Accepts integer seconds."+
+				"Ignored if `--end` or `--end-nsecs` are used.",
 		)
 		endNano := filterCmd.PersistentFlags().Uint64(
 			"end-nsecs",

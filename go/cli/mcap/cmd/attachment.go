@@ -196,10 +196,18 @@ func init() {
 		&addAttachmentMediaType, "content-type", "", "application/octet-stream", "content type of attachment",
 	)
 	addAttachmentCmd.PersistentFlags().StringVarP(
-		&addAttachmentLogTime, "log-time", "", "", "attachment log time in nanoseconds or RFC3339 format (defaults to current timestamp)",
+		&addAttachmentLogTime,
+		"log-time",
+		"",
+		"",
+		"attachment log time in nanoseconds or RFC3339 format (defaults to current timestamp)",
 	)
 	addAttachmentCmd.PersistentFlags().StringVarP(
-		&addAttachmentLogTime, "creation-time", "", "", "attachment creation time in nanoseconds or RFC3339 format (defaults to ctime)",
+		&addAttachmentLogTime,
+		"creation-time",
+		"",
+		"",
+		"attachment creation time in nanoseconds or RFC3339 format (defaults to ctime)",
 	)
 	err := addAttachmentCmd.MarkPersistentFlagRequired("file")
 	if err != nil {
