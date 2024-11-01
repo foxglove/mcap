@@ -276,7 +276,10 @@ func (instance *usage) RunDu() error {
 var duCmd = &cobra.Command{
 	Use:   "du <file>",
 	Short: "Report space usage within an MCAP file",
-	Long:  "This command reports space usage within an mcap file. Space usage for messages is calculated using the uncompressed size.\n\nNote: This command will scan and uncompress the entire file.",
+	Long: `This command reports space usage within an mcap file. Space usage for messages is
+calculated using the uncompressed size.
+
+Note: This command will scan and uncompress the entire file.`,
 	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
