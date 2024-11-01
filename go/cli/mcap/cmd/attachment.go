@@ -13,11 +13,9 @@ import (
 )
 
 var (
-	addAttachmentLogTime      uint64
-	addAttachmentLogDate      string
+	addAttachmentLogTime      string
 	addAttachmentName         string
-	addAttachmentCreationTime uint64
-	addAttachmentCreationDate string
+	addAttachmentCreationTime string
 	addAttachmentFilename     string
 	addAttachmentMediaType    string
 )
@@ -157,22 +155,16 @@ var addAttachmentCmd = &cobra.Command{
 			die("failed to stat file %s", addAttachmentFilename)
 		}
 		createTime := uint64(fi.ModTime().UTC().UnixNano())
-		if addAttachmentCreationTime > 0 {
-			createTime = addAttachmentCreationTime
-		}
-		if addAttachmentCreationDate != "" {
-			date, err := parseDate(addAttachmentCreationDate)
+		if addAttachmentCreationTime != "" {
+			date, err := parseTimestampArgs(addAttachmentCreationTime, 0, 0)
 			if err != nil {
 				die("failed to parse creation date: %s", err)
 			}
 			createTime = date
 		}
 		logTime := uint64(time.Now().UTC().UnixNano())
-		if addAttachmentLogTime > 0 {
-			logTime = addAttachmentLogTime
-		}
-		if addAttachmentLogDate != "" {
-			date, err := parseDate(addAttachmentLogDate)
+		if addAttachmentLogTime != "" {
+			date, err := parseTimestampArgs(addAttachmentCreationTime, 0, 0)
 			if err != nil {
 				die("failed to parse log date: %s", err)
 			}
@@ -203,17 +195,11 @@ func init() {
 	addAttachmentCmd.PersistentFlags().StringVarP(
 		&addAttachmentMediaType, "content-type", "", "application/octet-stream", "content type of attachment",
 	)
-	addAttachmentCmd.PersistentFlags().Uint64VarP(
-		&addAttachmentLogTime, "log-time", "", 0, "attachment log time in nanoseconds (defaults to current timestamp)",
+	addAttachmentCmd.PersistentFlags().StringVarP(
+		&addAttachmentLogTime, "log-time", "", "", "attachment log time in nanoseconds or RFC3339 format (defaults to current timestamp)",
 	)
 	addAttachmentCmd.PersistentFlags().StringVarP(
-		&addAttachmentLogDate, "log-date", "", "", "RFC3339-formatted log date",
-	)
-	addAttachmentCmd.PersistentFlags().Uint64VarP(
-		&addAttachmentLogTime, "creation-time", "", 0, "attachment creation time in nanoseconds (defaults to ctime)",
-	)
-	addAttachmentCmd.PersistentFlags().StringVarP(
-		&addAttachmentCreationDate, "creation-date", "", "", "RFC3339-formatted creation date",
+		&addAttachmentLogTime, "creation-time", "", "", "attachment creation time in nanoseconds or RFC3339 format (defaults to ctime)",
 	)
 	err := addAttachmentCmd.MarkPersistentFlagRequired("file")
 	if err != nil {

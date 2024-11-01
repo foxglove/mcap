@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
@@ -23,8 +24,8 @@ type filterFlags struct {
 	endSec             uint64
 	startNano          uint64
 	endNano            uint64
-	startDate          string
-	endDate            string
+	start              string
+	end                string
 	includeMetadata    bool
 	includeAttachments bool
 	outputCompression  string
@@ -44,12 +45,24 @@ type filterOpts struct {
 	chunkSize          int64
 }
 
-func parseDate(date string) (uint64, error) {
-	stamp, err := time.Parse(time.RFC3339, date)
-	if err != nil {
-		return 0, err
+// parseTimestampArgs implements the semantics for setting start and end times in the CLI.
+// a non-default value in `dateOrNanos` overrides `nanoseconds`, which overrides `seconds`.
+func parseTimestampArgs(dateOrNanos string, nanoseconds uint64, seconds uint64) (uint64, error) {
+	if dateOrNanos != "" {
+		intNanos, err := strconv.ParseUint(dateOrNanos, 10, 64)
+		if err == nil {
+			return intNanos, nil
+		}
+		date, err := time.Parse(time.RFC3339, dateOrNanos)
+		if err != nil {
+			return 0, err
+		}
+		return uint64(date.UnixNano()), nil
 	}
-	return uint64(stamp.UnixNano()), nil
+	if nanoseconds != 0 {
+		return nanoseconds, nil
+	}
+	return seconds * 1e9, nil
 }
 
 func buildFilterOptions(flags *filterFlags) (*filterOpts, error) {
@@ -58,28 +71,19 @@ func buildFilterOptions(flags *filterFlags) (*filterOpts, error) {
 		includeMetadata:    flags.includeMetadata,
 		includeAttachments: flags.includeAttachments,
 	}
-	opts.start = flags.startNano
 	if flags.startSec > 0 {
 		opts.start = flags.startSec * 1e9
 	}
-	if flags.startDate != "" {
-		start, err := parseDate(flags.startDate)
-		if err != nil {
-			return nil, fmt.Errorf("invalid start date: %w", err)
-		}
-		opts.start = start
+	start, err := parseTimestampArgs(flags.start, flags.startNano, flags.startSec)
+	if err != nil {
+		return nil, fmt.Errorf("invalid start: %w", err)
 	}
-	opts.end = flags.endNano
-	if flags.endSec > 0 {
-		opts.end = flags.startSec * 1e9
+	opts.start = start
+	end, err := parseTimestampArgs(flags.end, flags.endSec, flags.endNano)
+	if err != nil {
+		return nil, fmt.Errorf("invalid end: %w", err)
 	}
-	if flags.endDate != "" {
-		end, err := parseDate(flags.endDate)
-		if err != nil {
-			return nil, fmt.Errorf("invalid end date: %w", err)
-		}
-		opts.end = end
-	}
+	opts.end = end
 	if opts.end == 0 {
 		opts.end = math.MaxUint64
 	}
@@ -417,42 +421,41 @@ usage:
 			[]string{},
 			"messages with topic names matching this regex will be excluded, can be supplied multiple times",
 		)
+		start := filterCmd.PersistentFlags().StringP(
+			"start",
+			"S",
+			"",
+			"only include messages logged at or after this time. Accepts integer nanoseconds or RFC3339-formatted date.",
+		)
 		startSec := filterCmd.PersistentFlags().Uint64P(
 			"start-secs",
 			"s",
 			0,
-			"messages with log times after or equal to this timestamp will be included.",
+			"only include messages logged at or after this time. Accepts integer seconds. Ignored if `--startk` or `--start-nsecs` are used.",
+		)
+		startNano := filterCmd.PersistentFlags().Uint64(
+			"start-nsecs",
+			0,
+			"(deprecated, use --start) only include messages logged at or after this time. Accepts integer nanoseconds.",
+		)
+		end := filterCmd.PersistentFlags().StringP(
+			"end",
+			"E",
+			"",
+			"Only include messages logged before this time. Accepts integer nanoseconds or RFC3339-formatted date.",
 		)
 		endSec := filterCmd.PersistentFlags().Uint64P(
 			"end-secs",
 			"e",
 			0,
-			"messages with log times before timestamp will be included.",
+			"only include messages logged before this time. Accepts integer seconds. Ignored if `--end` or `--end-nsecs` are used.",
 		)
-		startNano := filterCmd.PersistentFlags().Uint64P(
-			"start-nsecs",
-			"S",
-			0,
-			"messages with log times after or equal to this nanosecond-precision timestamp will be included.",
-		)
-		endNano := filterCmd.PersistentFlags().Uint64P(
+		endNano := filterCmd.PersistentFlags().Uint64(
 			"end-nsecs",
-			"E",
 			0,
-			"messages with log times before nanosecond-precision timestamp will be included.",
+			"(Deprecated, use --end) Only include messages logged before this time. Accepts integer nanosconds.",
 		)
-		startDate := filterCmd.PersistentFlags().String(
-			"start-date",
-			"",
-			"messages with log times after or equal to this RFC3339-formatted date will be included."+
-				" Assumes log times are relative to Jan 1 1970 UTC.",
-		)
-		endDate := filterCmd.PersistentFlags().String(
-			"end-date",
-			"",
-			"messages with log times before this RFC3339-formatted date will be included. Assumes"+
-				" log times are relative to Jan 1 1970 UTC.",
-		)
+
 		filterCmd.MarkFlagsMutuallyExclusive("start-secs", "start-nsecs")
 		filterCmd.MarkFlagsMutuallyExclusive("end-secs", "end-nsecs")
 		chunkSize := filterCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
@@ -476,12 +479,12 @@ usage:
 				output:             *output,
 				includeTopics:      *includeTopics,
 				excludeTopics:      *excludeTopics,
+				start:              *start,
 				startSec:           *startSec,
-				endSec:             *endSec,
 				startNano:          *startNano,
+				end:                *end,
+				endSec:             *endSec,
 				endNano:            *endNano,
-				startDate:          *startDate,
-				endDate:            *endDate,
 				chunkSize:          *chunkSize,
 				includeMetadata:    *includeMetadata,
 				includeAttachments: *includeAttachments,
