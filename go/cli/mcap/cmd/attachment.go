@@ -156,7 +156,7 @@ var addAttachmentCmd = &cobra.Command{
 		}
 		createTime := uint64(fi.ModTime().UTC().UnixNano())
 		if addAttachmentCreationTime != "" {
-			date, err := parseTimestampArgs(addAttachmentCreationTime, 0, 0)
+			date, err := parseDateOrNanos(addAttachmentCreationTime)
 			if err != nil {
 				die("failed to parse creation date: %s", err)
 			}
@@ -164,7 +164,7 @@ var addAttachmentCmd = &cobra.Command{
 		}
 		logTime := uint64(time.Now().UTC().UnixNano())
 		if addAttachmentLogTime != "" {
-			date, err := parseTimestampArgs(addAttachmentCreationTime, 0, 0)
+			date, err := parseDateOrNanos(addAttachmentCreationTime)
 			if err != nil {
 				die("failed to parse log date: %s", err)
 			}

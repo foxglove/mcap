@@ -45,19 +45,25 @@ type filterOpts struct {
 	chunkSize          int64
 }
 
+// parseDateOrNanos parses a string containing either an RFC3339-formatted date with timezone
+// or a decimal number of nanoseconds. It returns a uint64 timestamp in nanoseconds.
+func parseDateOrNanos(dateOrNanos string) (uint64, error) {
+	intNanos, err := strconv.ParseUint(dateOrNanos, 10, 64)
+	if err == nil {
+		return intNanos, nil
+	}
+	date, err := time.Parse(time.RFC3339, dateOrNanos)
+	if err != nil {
+		return 0, err
+	}
+	return uint64(date.UnixNano()), nil
+}
+
 // parseTimestampArgs implements the semantics for setting start and end times in the CLI.
 // a non-default value in `dateOrNanos` overrides `nanoseconds`, which overrides `seconds`.
 func parseTimestampArgs(dateOrNanos string, nanoseconds uint64, seconds uint64) (uint64, error) {
 	if dateOrNanos != "" {
-		intNanos, err := strconv.ParseUint(dateOrNanos, 10, 64)
-		if err == nil {
-			return intNanos, nil
-		}
-		date, err := time.Parse(time.RFC3339, dateOrNanos)
-		if err != nil {
-			return 0, err
-		}
-		return uint64(date.UnixNano()), nil
+		return parseDateOrNanos(dateOrNanos)
 	}
 	if nanoseconds != 0 {
 		return nanoseconds, nil
@@ -436,7 +442,7 @@ usage:
 		startNano := filterCmd.PersistentFlags().Uint64(
 			"start-nsecs",
 			0,
-			"(deprecated, use --start) only include messages logged at or after this time. Accepts integer nanoseconds.",
+			"deprecated, use --start. Only include messages logged at or after this time. Accepts integer nanoseconds.",
 		)
 		end := filterCmd.PersistentFlags().StringP(
 			"end",
