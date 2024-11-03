@@ -438,7 +438,7 @@ usage:
 			"s",
 			0,
 			"only include messages logged at or after this time. Accepts integer seconds."+
-				"Ignored if `--startk` or `--start-nsecs` are used.",
+				"Ignored if `--start` or `--start-nsecs` are used.",
 		)
 		startNano := filterCmd.PersistentFlags().Uint64(
 			"start-nsecs",
