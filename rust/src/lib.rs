@@ -79,6 +79,7 @@ pub mod records;
 pub mod tokio;
 pub mod write;
 
+mod chunk_sink;
 mod io_utils;
 pub mod sans_io;
 

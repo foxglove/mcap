@@ -1,7 +1,7 @@
-use std::{env, io::BufWriter};
-
 #[path = "common/conformance_writer.rs"]
 mod conformance_writer;
+
+use std::env;
 
 use conformance_writer::write_spec;
 
@@ -12,19 +12,12 @@ pub fn main() {
 
     let spec = serde_json::from_str(&input_text).expect("Invalid json");
 
-    let mut tmp = tempfile::NamedTempFile::new().expect("Couldn't open file");
-
     let writer = mcap::WriteOptions::new()
+        .use_buffered_chunks(true)
         .compression(None)
         .profile("")
-        .create(BufWriter::new(&mut tmp))
+        .create(mcap::write::NoSeek::new(std::io::stdout()))
         .expect("Couldn't create writer");
 
     write_spec(writer, &spec);
-
-    std::io::copy(
-        &mut std::fs::File::open(tmp.path()).expect("failed to open tmp file"),
-        &mut std::io::stdout(),
-    )
-    .expect("failed to copy to stdout");
 }
