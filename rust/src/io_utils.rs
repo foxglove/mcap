@@ -82,3 +82,45 @@ impl<W: Write> Write for CountingCrcWriter<W> {
         self.inner.flush()
     }
 }
+
+pub struct CountingWriter<W> {
+    writer: W,
+    bytes_written: usize,
+}
+
+impl<W> CountingWriter<W> {
+    pub fn new(writer: W) -> Self {
+        Self {
+            writer,
+            bytes_written: 0,
+        }
+    }
+
+    pub fn bytes_written(&self) -> usize {
+        self.bytes_written
+    }
+}
+
+impl<W: Write> Write for CountingWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let res = self.writer.write(buf)?;
+        self.bytes_written += res;
+        Ok(res)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.writer.flush()
+    }
+}
+
+impl<W: Seek> Seek for CountingWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let res = self.writer.write(buf)?;
+        self.bytes_written += res;
+        Ok(res)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.writer.flush()
+    }
+}

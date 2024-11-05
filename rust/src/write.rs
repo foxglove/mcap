@@ -4,6 +4,7 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
     io::{self, prelude::*, Cursor, SeekFrom},
+    marker::PhantomData,
     mem::size_of,
 };
 
@@ -11,16 +12,17 @@ use binrw::prelude::*;
 use byteorder::{WriteBytesExt, LE};
 
 use crate::{
-    io_utils::CountingCrcWriter,
+    chunk_sink::{BufferedChunkSink, ChunkSink, PassthroughChunkSink},
+    io_utils::{CountingCrcWriter, CountingWriter},
     records::{self, op, MessageHeader, Record},
     Attachment, Channel, Compression, McapError, McapResult, Message, Schema, MAGIC,
 };
 
 pub use records::Metadata;
 
-enum WriteMode<W: Write + Seek> {
-    Raw(W),
-    Chunk(ChunkWriter<W>),
+enum WriteMode<W, S: ChunkSink<CountingWriter<W>>> {
+    Raw(CountingWriter<W>),
+    Chunk(ChunkWriter<CountingWriter<W>, S>),
 }
 
 fn op_and_len<W: Write>(w: &mut W, op: u8, len: usize) -> io::Result<()> {
@@ -169,7 +171,10 @@ impl WriteOptions {
     }
 
     /// Creates a [`Writer`] whch writes to `w` using the given options
-    pub fn create<'a, W: Write + Seek>(self, w: W) -> McapResult<Writer<'a, W>> {
+    pub fn create<'a, W: Write + Seek>(
+        self,
+        w: W,
+    ) -> McapResult<Writer<'a, W, PassthroughChunkSink<W>>> {
         Writer::with_options(w, self)
     }
 }
@@ -178,8 +183,8 @@ impl WriteOptions {
 ///
 /// Users should call [`finish()`](Self::finish) to flush the stream
 /// and check for errors when done; otherwise the result will be unwrapped on drop.
-pub struct Writer<'a, W: Write + Seek> {
-    writer: Option<WriteMode<W>>,
+pub struct Writer<'a, W, S: ChunkSink<W>> {
+    writer: Option<WriteMode<W, S>>,
     options: WriteOptions,
     schemas: HashMap<Schema<'a>, u16>,
     channels: HashMap<Channel<'a>, u16>,
@@ -189,9 +194,11 @@ pub struct Writer<'a, W: Write + Seek> {
     /// Message start and end time, or None if there are no messages yet.
     message_bounds: Option<(u64, u64)>,
     channel_message_counts: BTreeMap<u16, u64>,
+
+    __chunk_sink: PhantomData<S>,
 }
 
-impl<'a, W: Write + Seek> Writer<'a, W> {
+impl<'a, W: Write, S: ChunkSink<W>> Writer<'a, W, S> {
     pub fn new(writer: W) -> McapResult<Self> {
         Self::with_options(writer, WriteOptions::default())
     }
@@ -217,6 +224,8 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             metadata_indexes: Vec::new(),
             message_bounds: None,
             channel_message_counts: BTreeMap::new(),
+
+            __chunk_sink: Default::default(),
         })
     }
 
@@ -431,7 +440,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
     const WHERE_WRITER: &'static str = "Trying to write a record on a finished MCAP";
 
     /// Starts a new chunk if we haven't done so already.
-    fn chunkin_time(&mut self) -> McapResult<&mut ChunkWriter<W>> {
+    fn chunkin_time(&mut self) -> McapResult<&mut ChunkWriter<W, S>> {
         // Some Rust tricky: we can't move the writer out of self.writer,
         // leave that empty for a bit, and then replace it with a ChunkWriter.
         // (That would leave it in an unspecified state if we bailed here!)
@@ -447,7 +456,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         self.writer = Some(match prev_writer {
             WriteMode::Raw(w) => {
                 // It's chunkin time.
-                WriteMode::Chunk(ChunkWriter::new(w, self.options.compression)?)
+                WriteMode::Chunk(ChunkWriter::new(S::wrap(w), self.options.compression)?)
             }
             chunk => chunk,
         });
@@ -568,14 +577,8 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
 
         let mut offsets = Vec::new();
 
-        let summary_start = writer.stream_position()?;
-
         // Let's get a CRC of the summary section.
         let mut ccw = CountingCrcWriter::new(writer);
-
-        fn posit<W: Write + Seek>(ccw: &mut CountingCrcWriter<W>) -> io::Result<u64> {
-            ccw.get_mut().stream_position()
-        }
 
         // Write all schemas.
         let schemas_start = summary_start;
@@ -697,7 +700,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
     }
 }
 
-impl<'a, W: Write + Seek> Drop for Writer<'a, W> {
+impl<'a, W: Write, S: ChunkSink<W>> Drop for Writer<'a, W, S> {
     fn drop(&mut self) {
         self.finish().unwrap()
     }
@@ -749,21 +752,23 @@ impl<W: Write> Write for Compressor<W> {
     }
 }
 
-struct ChunkWriter<W: Write> {
+struct ChunkWriter<W, S: ChunkSink<W>> {
     header_start: u64,
     stream_start: u64,
     /// Message start and end time, or None if there are no messages yet.
     message_bounds: Option<(u64, u64)>,
     compression_name: &'static str,
-    compressor: CountingCrcWriter<Compressor<W>>,
+    compressor: CountingCrcWriter<Compressor<S>>,
     indexes: BTreeMap<u16, Vec<records::MessageIndexEntry>>,
+
+    __parent_writer: PhantomData<W>,
 }
 
-impl<W: Write + Seek> ChunkWriter<W> {
-    fn new(mut writer: W, compression: Option<Compression>) -> McapResult<Self> {
-        let header_start = writer.stream_position()?;
+impl<W, S: ChunkSink<W>> ChunkWriter<W, S> {
+    fn new(mut sink: S, compression: Option<Compression>) -> McapResult<Self> {
+        let header_start = sink.stream_position()?;
 
-        op_and_len(&mut writer, op::CHUNK, !0)?;
+        op_and_len(&mut sink, op::CHUNK, !0)?;
 
         let compression_name = match compression {
             #[cfg(feature = "zstd")]
@@ -785,23 +790,23 @@ impl<W: Write + Seek> ChunkWriter<W> {
             compression: String::from(compression_name),
             compressed_size: !0,
         };
-        writer.write_le(&header)?;
-        let stream_start = writer.stream_position()?;
+        sink.write_le(&header)?;
+        let stream_start = sink.stream_position()?;
 
         let compressor = match compression {
             #[cfg(feature = "zstd")]
             Some(Compression::Zstd) => {
                 #[allow(unused_mut)]
-                let mut enc = zstd::Encoder::new(writer, 0)?;
+                let mut enc = zstd::Encoder::new(sink, 0)?;
                 #[cfg(not(target_arch = "wasm32"))]
                 enc.multithread(num_cpus::get_physical() as u32)?;
                 Compressor::Zstd(enc)
             }
             #[cfg(feature = "lz4")]
-            Some(Compression::Lz4) => Compressor::Lz4(lz4::EncoderBuilder::new().build(writer)?),
+            Some(Compression::Lz4) => Compressor::Lz4(lz4::EncoderBuilder::new().build(sink)?),
             #[cfg(not(any(feature = "zstd", feature = "lz4")))]
             Some(_) => unreachable!("`Compression` is an empty enum that cannot be instantiated"),
-            None => Compressor::Null(writer),
+            None => Compressor::Null(sink),
         };
         let compressor = CountingCrcWriter::new(compressor);
         Ok(Self {
@@ -811,6 +816,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
             compression_name,
             message_bounds: None,
             indexes: BTreeMap::new(),
+            __parent_writer: Default::default(),
         })
     }
 
@@ -932,6 +938,6 @@ impl<W: Write + Seek> ChunkWriter<W> {
             uncompressed_size: header.uncompressed_size,
         };
 
-        Ok((writer, index))
+        Ok((writer.finish()?, index))
     }
 }

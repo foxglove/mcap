@@ -80,6 +80,7 @@ pub mod tokio;
 pub mod write;
 
 mod io_utils;
+mod chunk_sink;
 
 use std::{borrow::Cow, collections::BTreeMap, fmt, sync::Arc};
 
