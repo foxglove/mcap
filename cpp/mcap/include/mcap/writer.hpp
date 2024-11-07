@@ -240,10 +240,6 @@ public:
    */
   virtual const std::byte* compressedData() const = 0;
 
-  // No-op IWritable::flush() implementation. Chunk writers have no concept of an "underlying
-  // stream" to flush to.
-  void flush() override {}
-
 protected:
   virtual void handleClear() = 0;
 };
