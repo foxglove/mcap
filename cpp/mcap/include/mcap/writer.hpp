@@ -148,7 +148,7 @@ public:
    * completed chunk. Callers may also retain a reference to the writer and call flush() at their
    * own cadence. Defaults to a no-op.
    */
-  virtual void flush(){};
+  virtual void flush() {}
 
 protected:
   virtual void handleWrite(const std::byte* data, uint64_t size) = 0;
