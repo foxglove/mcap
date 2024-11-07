@@ -144,9 +144,11 @@ public:
   void resetCrc();
 
   /**
-   * @brief flushes any buffered data to the output. Defaults to a no-op.
+   * @brief flushes any buffered data to the output. This is called by McapWriter after every
+   * completed chunk. Callers may also retain a reference to the writer and call flush() at their
+   * own cadence. Defaults to a no-op.
    */
-  virtual void flush() = 0;
+  virtual void flush() {};
 
 protected:
   virtual void handleWrite(const std::byte* data, uint64_t size) = 0;
