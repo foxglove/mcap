@@ -143,6 +143,11 @@ public:
    */
   void resetCrc();
 
+  /**
+   * @brief flushes any buffered data to the output. Defaults to a no-op.
+   */
+  virtual void flush() = 0;
+
 protected:
   virtual void handleWrite(const std::byte* data, uint64_t size) = 0;
 
@@ -162,6 +167,7 @@ public:
 
   void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
+  void flush() override;
   uint64_t size() const override;
 
 private:
@@ -179,6 +185,7 @@ public:
 
   void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
+  void flush() override;
   uint64_t size() const override;
 
 private:
@@ -205,6 +212,7 @@ public:
    * @brief Returns the size in bytes of the uncompressed data.
    */
   virtual uint64_t size() const override = 0;
+
   /**
    * @brief Returns the size in bytes of the compressed data. This will only be
    * called after `end()`.
@@ -229,6 +237,10 @@ public:
    * after `end()`.
    */
   virtual const std::byte* compressedData() const = 0;
+
+  // No-op IWritable::flush() implementation. Chunk writers have no concept of an "underlying
+  // stream" to flush to.
+  void flush() override {}
 
 protected:
   virtual void handleClear() = 0;
