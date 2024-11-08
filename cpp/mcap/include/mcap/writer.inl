@@ -61,6 +61,12 @@ void FileWriter::handleWrite(const std::byte* data, uint64_t size) {
   size_ += size;
 }
 
+void FileWriter::flush() {
+  if (file_) {
+    std::fflush(file_);
+  }
+}
+
 void FileWriter::end() {
   if (file_) {
     std::fclose(file_);
@@ -84,8 +90,12 @@ void StreamWriter::handleWrite(const std::byte* data, uint64_t size) {
   size_ += size;
 }
 
-void StreamWriter::end() {
+void StreamWriter::flush() {
   stream_.flush();
+}
+
+void StreamWriter::end() {
+  flush();
 }
 
 uint64_t StreamWriter::size() const {
@@ -921,6 +931,7 @@ uint64_t McapWriter::write(IWritable& output, const Chunk& chunk) {
   write(output, chunk.compression);
   write(output, chunk.compressedSize);
   write(output, chunk.records, chunk.compressedSize);
+  output.flush();
 
   return 9 + recordSize;
 }
