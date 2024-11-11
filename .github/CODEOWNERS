@@ -17,11 +17,11 @@
 # Sanity check changes to the owners file for syntax and ordering
 /.github/CODEOWNERS @defunctzombie @jtbandes @james-rms
 
-/cpp @jtbandes @james-rms
+/cpp @jtbandes @james-rms @indirectlylit
 
 /go @james-rms
 
-/python @jtbandes @james-rms
+/python @jtbandes @james-rms @indirectlylit
 
 /rust @james-rms @bennetthardwick
 
