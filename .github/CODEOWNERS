@@ -1,0 +1,30 @@
+# With a monorepo, it can be hard to know who should review your change. This file defines responsible
+# individuals for various packages and files to aid finding reviewers or those with appropriate context.
+#
+# Updating this file:
+# There is no formal policy to update this file. If you feel like you want to "stay updated" on changes to specific
+# folders, packages, or glob patterns, make a PR and get a review from someone on the team to add yourself.
+#
+# NOTE: the file format uses "later match takes precedence" structure so be mindful that glob patterns and other paths you
+# add later in the file don't accidentally remove ownership.
+#
+# File syntax:
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Any file(s) or path(s) not assigned to someone specific falls back to these owners
+* @jtbandes @james-rms
+
+# Sanity check changes to the owners file for syntax and ordering
+/.github/CODEOWNERS @defunctzombie @jtbandes @james-rms
+
+/cpp @jtbandes @james-rms
+
+/go @james-rms
+
+/python @jtbandes @james-rms
+
+/rust @james-rms @bennetthardwick
+
+/swift @jtbandes
+
+/typescript @jtbandes @achim-k
