@@ -77,15 +77,12 @@ func buildFilterOptions(flags *filterFlags) (*filterOpts, error) {
 		includeMetadata:    flags.includeMetadata,
 		includeAttachments: flags.includeAttachments,
 	}
-	if flags.startSec > 0 {
-		opts.start = flags.startSec * 1e9
-	}
 	start, err := parseTimestampArgs(flags.start, flags.startNano, flags.startSec)
 	if err != nil {
 		return nil, fmt.Errorf("invalid start: %w", err)
 	}
 	opts.start = start
-	end, err := parseTimestampArgs(flags.end, flags.endSec, flags.endNano)
+	end, err := parseTimestampArgs(flags.end, flags.endNano, flags.endSec)
 	if err != nil {
 		return nil, fmt.Errorf("invalid end: %w", err)
 	}
