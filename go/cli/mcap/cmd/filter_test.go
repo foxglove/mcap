@@ -378,3 +378,40 @@ func TestParseDateOrNanos(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, expected, withTimezone)
 }
+
+func TestBuildFilterOptions(t *testing.T) {
+	cases := []struct {
+		name  string
+		flags *filterFlags
+		opts  *filterOpts
+	}{
+		{
+			name:  "start and end by seconds",
+			flags: &filterFlags{startSec: 100, endSec: 1000},
+			opts:  &filterOpts{start: 100_000_000_000, end: 1_000_000_000_000},
+		},
+		{
+			name:  "start and end by nanoseconds",
+			flags: &filterFlags{startNano: 100, endNano: 1000},
+			opts:  &filterOpts{start: 100, end: 1000},
+		},
+		{
+			name:  "start and end by string nanos",
+			flags: &filterFlags{start: "100", end: "1000"},
+			opts:  &filterOpts{start: 100, end: 1000},
+		},
+		{
+			name:  "start and end by RFC3339 date",
+			flags: &filterFlags{start: "2024-11-13T05:12:20.958Z", end: "2024-11-13T05:12:30Z"},
+			opts:  &filterOpts{start: 1731474740958000000, end: 1731474750000000000},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			actual, err := buildFilterOptions(c.flags)
+			require.NoError(t, err)
+			assert.Equal(t, c.opts.start, actual.start)
+			assert.Equal(t, c.opts.end, actual.end)
+		})
+	}
+}
