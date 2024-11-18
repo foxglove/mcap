@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:
@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:
@@ -174,7 +174,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - uses: actions/cache@v4
         with:
           path: ~/.conan/data
@@ -193,7 +193,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - uses: actions/cache@v4
         with:
           path: ~/.conan/data
@@ -215,7 +215,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:
@@ -272,7 +272,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:
@@ -468,7 +468,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - uses: swift-actions/setup-swift@v2
         with:
           swift-version: "5.7"
