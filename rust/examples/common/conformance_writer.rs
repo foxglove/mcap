@@ -53,9 +53,7 @@ pub fn write_spec(
             }
             "DataEnd" => {
                 let data_section_crc = record.get_field_u32("data_section_crc");
-                let _data_end = mcap::records::DataEnd {
-                    data_section_crc,
-                };
+                let _data_end = mcap::records::DataEnd { data_section_crc };
                 // write data end
             }
             "Footer" => {
