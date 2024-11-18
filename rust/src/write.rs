@@ -17,7 +17,9 @@ use crate::{
     Attachment, Channel, Compression, McapError, McapResult, Message, Schema, MAGIC,
 };
 
+// re-export to help with linear writing
 pub use binrw::io::NoSeek;
+
 pub use records::Metadata;
 
 enum WriteMode<W: Write + Seek> {
