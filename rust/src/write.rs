@@ -952,8 +952,14 @@ impl<W: Write + Seek> ChunkWriter<W> {
         let mut index_buf = Vec::new();
         for (channel_id, records) in self.indexes {
             // since the chunk sink position might be relative to a buffer, calculate the absolute
-            // position based on the `chunk_offset`
-            let absolute_position = self.chunk_offset + sink.stream_position()?;
+            // position based on the `chunk_offset` and `header_start`.
+            //
+            // When the chunk is buffered and stream position is "relative" then `header_start`
+            // will be zero so the position will be relative to the chunk offset. When the stream
+            // position is "absolute" then `header_start` and `chunk_offset` will be equal and the
+            // position will be absolute.
+            let absolute_position =
+                (self.chunk_offset - self.header_start) + sink.stream_position()?;
 
             let existing_offset = message_index_offsets.insert(channel_id, absolute_position);
 
