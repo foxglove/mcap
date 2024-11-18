@@ -1,7 +1,6 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
-    env,
     io::{Seek, Write},
     sync::Arc,
 };
@@ -55,7 +54,7 @@ pub fn write_spec(
             "DataEnd" => {
                 let data_section_crc = record.get_field_u32("data_section_crc");
                 let _data_end = mcap::records::DataEnd {
-                    data_section_crc: data_section_crc,
+                    data_section_crc,
                 };
                 // write data end
             }
@@ -104,7 +103,7 @@ pub fn write_spec(
                 let name = record.get_field_str("name");
                 let encoding = record.get_field_str("encoding");
                 let id = record.get_field_u64("id");
-                let data: Vec<u8> = record.get_field_data(&"data");
+                let data: Vec<u8> = record.get_field_data("data");
                 let schema = mcap::Schema {
                     name: name.to_owned(),
                     encoding: encoding.to_owned(),

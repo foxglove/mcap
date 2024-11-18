@@ -35,7 +35,7 @@ fn create_test_mcap(n: usize, compression: Option<mcap::Compression>) -> Vec<u8>
                 sequence: i as u32,
                 log_time: i as u64,
                 publish_time: i as u64,
-                data: Cow::Borrowed(&MESSAGE_DATA),
+                data: Cow::Borrowed(MESSAGE_DATA),
             };
             writer.write(&message).unwrap();
         }
