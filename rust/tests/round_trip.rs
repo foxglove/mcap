@@ -128,7 +128,7 @@ fn demo_round_trip() -> Result<()> {
 
 #[test]
 fn demo_round_trip_buffered() -> Result<()> {
-    demo_round_trip_for_opts(WriteOptions::default().use_buffered_chunks(true))
+    demo_round_trip_for_opts(WriteOptions::default().disable_seeking(true))
 }
 
 #[test]

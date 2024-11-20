@@ -113,7 +113,7 @@ pub struct WriteOptions {
     profile: String,
     chunk_size: Option<u64>,
     use_chunks: bool,
-    use_buffered_chunks: bool,
+    disable_seeking: bool,
 }
 
 impl Default for WriteOptions {
@@ -126,7 +126,7 @@ impl Default for WriteOptions {
             profile: String::new(),
             chunk_size: Some(1024 * 768),
             use_chunks: true,
-            use_buffered_chunks: false,
+            disable_seeking: false,
         }
     }
 }
@@ -174,14 +174,12 @@ impl WriteOptions {
         Self { use_chunks, ..self }
     }
 
-    /// Specifies whether to buffer chunks before writing them out.
+    /// Specifies whether the writer should seek or not.
     ///
     /// Enabling this option will allow you to use [`NoSeek`] on the destination writer to support
     /// writing to a stream that does not support [`Seek`].
-    ///
-    /// This option will do nothing unless `use_chunks` is enabled.
-    pub fn use_buffered_chunks(mut self, use_buffered_chunks: bool) -> Self {
-        self.use_buffered_chunks = use_buffered_chunks;
+    pub fn disable_seeking(mut self, disable_seeking: bool) -> Self {
+        self.disable_seeking = disable_seeking;
         self
     }
 
@@ -224,10 +222,10 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             }),
         )?;
 
-        // If both the `use_chunks` and `use_buffered_chunks` options are enabled set the chunk
+        // If both the `use_chunks` and `disable_seeking` options are enabled set the chunk
         // mode and pre-allocate the buffer. Checking both avoids allocating the temporary buffer
-        // if buffered chunks was enabled but chunks were not.
-        let chunk_mode = if opts.use_chunks && opts.use_buffered_chunks {
+        // if seeking is disabled but chunking is not.
+        let chunk_mode = if opts.use_chunks && opts.disable_seeking {
             let buffer_size = opts.chunk_size.unwrap_or_default();
 
             let buffer = Vec::with_capacity(
