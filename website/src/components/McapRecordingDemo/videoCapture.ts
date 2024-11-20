@@ -113,13 +113,12 @@ const BASE_CONFIG_H264: Omit<VideoEncoderConfig, "width" | "height"> = {
 };
 const BASE_CONFIG_H265: Omit<VideoEncoderConfig, "width" | "height"> = {
   // https://chromium.googlesource.com/chromium/src/+/d3acf22f7d91ad262a07075848fad13b94d15226/media/base/video_codecs.cc#189
-  // https://dvb.org/wp-content/uploads/2019/10/a168_DVB_MPEG-DASH_Nov_2017.pdf page 23
-  // Main profile (general_profile_idc = 1, general_profile_compatibility_flag = 6 = 0b110, )
+  // https://dvb.org/wp-content/uploads/2019/10/a168_DVB_MPEG-DASH_Nov_2017.pdf page 23 & 24
   // 1 = general_profile_idc (Main profile)
   // 6 = 0b110 = general_profile_compatibility_flag (Main profile)
   // L = general_tier_flag 0 (Main tier)
   // 93 = general_level_idc (level 3.1)
-  // B0 = constraint flags
+  // B0 = constraint flags (progressive_source, frame_only, non_packed)
   codec: "hvc1.1.6.L93.B0",
   avc: { format: "annexb" }, // https://bugs.webkit.org/show_bug.cgi?id=281945
   hevc: { format: "annexb" },
@@ -241,6 +240,10 @@ async function isEncoderConfigActuallySupported(config: VideoEncoderConfig) {
     if (supportedConfig.supported !== true) {
       return { supported: false };
     }
+    console.info(
+      `Found supported config for ${config.codec}:`,
+      supportedConfig.config,
+    );
     let keyFrameCount = 0;
     let totalFrameCount = 0;
     let hadErrors = false as boolean;
