@@ -176,8 +176,11 @@ impl WriteOptions {
 
     /// Specifies whether the writer should seek or not.
     ///
-    /// Enabling this option will allow you to use [`NoSeek`] on the destination writer to support
+    /// Setting `true` will allow you to use [`NoSeek`] on the destination writer to support
     /// writing to a stream that does not support [`Seek`].
+    ///
+    /// By default the writer will seek the output to avoid buffering in memory. Seeking is an
+    /// optimization and should only be disabled if the output is using [`NoSeek`].
     pub fn disable_seeking(mut self, disable_seeking: bool) -> Self {
         self.disable_seeking = disable_seeking;
         self
