@@ -10,9 +10,6 @@ site/
 .cache
 .pnp.*
 .yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/sdks
 *.tgz
 
 *.db3-shm

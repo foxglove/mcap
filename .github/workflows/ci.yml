@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:
@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:
@@ -174,7 +174,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - uses: actions/cache@v4
         with:
           path: ~/.conan/data
@@ -193,7 +193,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - uses: actions/cache@v4
         with:
           path: ~/.conan/data
@@ -215,7 +215,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:
@@ -272,7 +272,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - run: corepack enable
       - uses: actions/setup-node@v4
         with:
@@ -468,7 +468,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
       - uses: swift-actions/setup-swift@v2
         with:
           swift-version: "5.7"
@@ -504,6 +504,7 @@ jobs:
       - run: cargo test --all-features
       - run: cargo build --all-features --target wasm32-unknown-unknown
       - run: cargo check --all-features --target wasm32-unknown-unknown
+      - run: cargo publish --dry-run
       - name: "publish to crates.io"
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/rust/v')
         run: cargo publish --token ${{ secrets.RUST_CRATES_IO_TOKEN }}
