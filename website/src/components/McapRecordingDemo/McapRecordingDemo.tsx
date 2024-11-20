@@ -525,7 +525,9 @@ export function McapRecordingDemo(): JSX.Element {
                 <span
                   className={styles.videoPlaceholderText}
                   onClick={() => {
-                    if (h264Support?.supported === true) {
+                    if (h265Support?.supported === true) {
+                      setRecordH265(true);
+                    } else if (h264Support?.supported === true) {
                       setRecordH264(true);
                     } else {
                       setRecordJpeg(true);
