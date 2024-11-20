@@ -16,10 +16,11 @@ import {
   toProtobufTime,
 } from "./Recorder";
 import {
-  H264Frame,
+  CompressedVideoFrame,
   startVideoCapture,
   startVideoStream,
   supportsH264Encoding,
+  supportsH265Encoding,
 } from "./videoCapture";
 
 type State = {
@@ -33,7 +34,7 @@ type State = {
   addMouseEventMessage: (msg: MouseEventMessage) => void;
   addPoseMessage: (msg: DeviceOrientationEvent) => void;
   addJpegFrame: (blob: Blob) => void;
-  addH264Frame: (frame: H264Frame) => void;
+  addVideoFrame: (frame: CompressedVideoFrame) => void;
   closeAndRestart: () => Promise<Blob>;
 };
 
@@ -64,8 +65,8 @@ const useStore = create<State>((set) => {
     addJpegFrame(blob: Blob) {
       void recorder.addJpegFrame(blob);
     },
-    addH264Frame(frame: H264Frame) {
-      void recorder.addH264Frame(frame);
+    addVideoFrame(frame: CompressedVideoFrame) {
+      void recorder.addVideoFrame(frame);
     },
     async closeAndRestart() {
       return await recorder.closeAndRestart();
@@ -127,20 +128,23 @@ export function McapRecordingDemo(): JSX.Element {
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const [recordJpeg, setRecordJpeg] = useState(false);
   const [recordH264, setRecordH264] = useState(false);
+  const [recordH265, setRecordH265] = useState(false);
   const [recordMouse, setRecordMouse] = useState(true);
   const [recordOrientation, setRecordOrientation] = useState(true);
   const [videoStarted, setVideoStarted] = useState(false);
   const [videoError, setVideoError] = useState<Error | undefined>();
   const [showDownloadInfo, setShowDownloadInfo] = useState(false);
 
-  const { addJpegFrame, addH264Frame, addMouseEventMessage, addPoseMessage } =
+  const { addJpegFrame, addVideoFrame, addMouseEventMessage, addPoseMessage } =
     state;
 
   const { data: h264Support } = useAsync(supportsH264Encoding);
+  const { data: h265Support } = useAsync(supportsH265Encoding);
 
   const canStartRecording =
     recordMouse ||
     (!hasMouse && recordOrientation) ||
+    (recordH265 && !videoError) ||
     (recordH264 && !videoError) ||
     (recordJpeg && !videoError);
 
@@ -188,7 +192,7 @@ export function McapRecordingDemo(): JSX.Element {
     };
   }, [addPoseMessage, recording, recordOrientation]);
 
-  const enableCamera = recordH264 || recordJpeg;
+  const enableCamera = recordH265 || recordH264 || recordJpeg;
   useEffect(() => {
     const videoContainer = videoContainerRef.current;
     if (!videoContainer || !enableCamera) {
@@ -228,20 +232,21 @@ export function McapRecordingDemo(): JSX.Element {
     if (!recording || !video || !videoStarted) {
       return;
     }
-    if (!recordH264 && !recordJpeg) {
+    if (!recordH265 && !recordH264 && !recordJpeg) {
       return;
     }
 
     const stopCapture = startVideoCapture({
       video,
+      enableH265: recordH265,
       enableH264: recordH264,
       enableJpeg: recordJpeg,
       frameDurationSec: 1 / 30,
       onJpegFrame: (blob) => {
         addJpegFrame(blob);
       },
-      onH264Frame: (frame) => {
-        addH264Frame(frame);
+      onVideoFrame: (frame) => {
+        addVideoFrame(frame);
       },
       onError: (err) => {
         setVideoError(err);
@@ -253,8 +258,9 @@ export function McapRecordingDemo(): JSX.Element {
     };
   }, [
     addJpegFrame,
-    addH264Frame,
+    addVideoFrame,
     recordH264,
+    recordH265,
     recording,
     videoStarted,
     recordJpeg,
@@ -330,6 +336,28 @@ export function McapRecordingDemo(): JSX.Element {
           </p>
         </header>
         <div className={styles.sensors}>
+          <label>
+            <input
+              type="checkbox"
+              checked={recordMouse}
+              onChange={(event) => {
+                setRecordMouse(event.target.checked);
+              }}
+            />
+            Mouse position
+          </label>
+          {h265Support?.supported === true && (
+            <label>
+              <input
+                type="checkbox"
+                checked={recordH265}
+                onChange={(event) => {
+                  setRecordH265(event.target.checked);
+                }}
+              />
+              Camera (H.265)
+            </label>
+          )}
           {h264Support?.supported === true && (
             <label>
               <input
@@ -351,16 +379,6 @@ export function McapRecordingDemo(): JSX.Element {
               }}
             />
             Camera (JPEG)
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={recordMouse}
-              onChange={(event) => {
-                setRecordMouse(event.target.checked);
-              }}
-            />
-            Mouse position
           </label>
           {!hasMouse && (
             <label>

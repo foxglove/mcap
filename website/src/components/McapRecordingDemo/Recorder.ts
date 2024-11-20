@@ -11,7 +11,7 @@ import { EventEmitter } from "eventemitter3";
 import Queue from "promise-queue";
 
 import { ProtobufChannelInfo, addProtobufChannel } from "./addProtobufChannel";
-import { H264Frame } from "./videoCapture";
+import { CompressedVideoFrame } from "./videoCapture";
 
 export type ProtobufObject<Message> = {
   [K in keyof Message]: Message[K] extends { sec: number; nsec: number }
@@ -54,6 +54,8 @@ export class Recorder extends EventEmitter<RecorderEvents> {
   #jpegChannelSeq = 0;
   #h264Channel?: ProtobufChannelInfo;
   #h264ChannelSeq = 0;
+  #h265Channel?: ProtobufChannelInfo;
+  #h265ChannelSeq = 0;
 
   #blobParts: Uint8Array[] = [];
   bytesWritten = 0n;
@@ -102,6 +104,8 @@ export class Recorder extends EventEmitter<RecorderEvents> {
     this.#jpegChannelSeq = 0;
     this.#h264Channel = undefined;
     this.#h264ChannelSeq = 0;
+    this.#h265Channel = undefined;
+    this.#h265ChannelSeq = 0;
   }
 
   #time(): bigint {
@@ -204,30 +208,43 @@ export class Recorder extends EventEmitter<RecorderEvents> {
     });
   }
 
-  async addH264Frame(frame: H264Frame): Promise<void> {
+  async addVideoFrame(frame: CompressedVideoFrame): Promise<void> {
     void this.#queue.add(async () => {
       if (!this.#writer) {
         return;
       }
-      if (!this.#h264Channel) {
-        this.#h264Channel = await addProtobufChannel(
-          this.#writer,
-          "camera_h265",
-          foxgloveMessageSchemas.CompressedVideo,
-        );
+      let channel: ProtobufChannelInfo;
+      let sequence: number;
+      switch (frame.format) {
+        case "h264":
+          channel = this.#h264Channel ??= await addProtobufChannel(
+            this.#writer,
+            "camera_h264",
+            foxgloveMessageSchemas.CompressedVideo,
+          );
+          sequence = this.#h264ChannelSeq++;
+          break;
+        case "h265":
+          channel = this.#h265Channel ??= await addProtobufChannel(
+            this.#writer,
+            "camera_h265",
+            foxgloveMessageSchemas.CompressedVideo,
+          );
+          sequence = this.#h265ChannelSeq++;
+          break;
       }
-      const { id, rootType } = this.#h264Channel;
+      const { id, rootType } = channel;
       const now = this.#time();
       const msg: ProtobufObject<CompressedVideo> = {
         timestamp: toProtobufTime(fromNanoSec(now)),
         frame_id: "camera",
         data: frame.data,
-        format: "h265",
+        format: frame.format,
       };
       const data = rootType.encode(msg).finish();
       frame.release();
       await this.#writer.addMessage({
-        sequence: this.#h264ChannelSeq++,
+        sequence,
         channelId: id,
         logTime: now,
         publishTime: now,
