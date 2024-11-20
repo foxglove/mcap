@@ -174,7 +174,7 @@ impl WriteOptions {
         Self { use_chunks, ..self }
     }
 
-    /// specifies whether to buffer chunks before writing them out
+    /// Specifies whether to buffer chunks before writing them out.
     ///
     /// Enabling this option will allow you to use [`NoSeek`] on the destination writer to support
     /// writing to a stream that does not support [`Seek`].
