@@ -79,6 +79,7 @@ pub mod records;
 pub mod tokio;
 pub mod write;
 
+mod chunk_sink;
 mod io_utils;
 pub mod sans_io;
 
@@ -134,6 +135,8 @@ pub enum McapError {
     UnsupportedCompression(String),
     #[error("Error during decompression: `{0}`")]
     DecompressionError(String),
+    #[error("chunk buffer exceeds usize max: `{0}`")]
+    ChunkBufferTooLarge(u64),
     #[error("length exceeds usize max: `{0}`")]
     TooLong(u64),
 }
