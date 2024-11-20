@@ -253,6 +253,7 @@ async function isEncoderConfigActuallySupported(config: VideoEncoderConfig) {
         totalFrameCount++;
         const buf = new Uint8Array(chunk.byteLength);
         chunk.copyTo(buf);
+        // Double-check that we actually got AnnexB output - https://bugs.webkit.org/show_bug.cgi?id=281945
         const isAnnexB =
           buf[0] === 0 &&
           buf[1] === 0 &&
