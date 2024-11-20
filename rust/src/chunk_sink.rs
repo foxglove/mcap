@@ -22,34 +22,40 @@ pub(crate) enum ChunkSink<W> {
     Buffered(W, Cursor<Vec<u8>>),
 }
 
+impl<W: Write> ChunkSink<W> {
+    fn as_mut_write(&mut self) -> &mut dyn Write {
+        match self {
+            Self::Direct(w) => w,
+            Self::Buffered(_, w) => w,
+        }
+    }
+}
+
+impl<W: Seek> ChunkSink<W> {
+    fn as_mut_seek(&mut self) -> &mut dyn Seek {
+        match self {
+            Self::Direct(w) => w,
+            Self::Buffered(_, w) => w,
+        }
+    }
+}
+
 impl<W: Seek> Seek for ChunkSink<W> {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
-        match self {
-            Self::Direct(w) => w.seek(pos),
-            Self::Buffered(_, w) => w.seek(pos),
-        }
+        self.as_mut_seek().seek(pos)
     }
 
     fn stream_position(&mut self) -> std::io::Result<u64> {
-        match self {
-            Self::Direct(w) => w.stream_position(),
-            Self::Buffered(_, w) => w.stream_position(),
-        }
+        self.as_mut_seek().stream_position()
     }
 }
 
 impl<W: Write> Write for ChunkSink<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            Self::Direct(w) => w.write(buf),
-            Self::Buffered(_, w) => w.write(buf),
-        }
+        self.as_mut_write().write(buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            Self::Direct(w) => w.flush(),
-            Self::Buffered(_, w) => w.flush(),
-        }
+        self.as_mut_write().flush()
     }
 }

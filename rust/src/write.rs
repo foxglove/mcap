@@ -228,10 +228,13 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         // mode and pre-allocate the buffer. Checking both avoids allocating the temporary buffer
         // if buffered chunks was enabled but chunks were not.
         let chunk_mode = if opts.use_chunks && opts.use_buffered_chunks {
-            let buffer = opts
-                .chunk_size
-                .map(|size| Vec::with_capacity(size.try_into().unwrap_or(usize::MAX)))
-                .unwrap_or_default();
+            let buffer_size = opts.chunk_size.unwrap_or_default();
+
+            let buffer = Vec::with_capacity(
+                buffer_size
+                    .try_into()
+                    .map_err(|_| McapError::ChunkBufferTooLarge(buffer_size))?,
+            );
 
             ChunkMode::Buffered { buffer }
         } else {
