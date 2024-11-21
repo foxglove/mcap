@@ -73,6 +73,7 @@
 //! }
 //! ```
 
+pub mod channels;
 pub mod read;
 pub mod records;
 #[cfg(feature = "tokio")]

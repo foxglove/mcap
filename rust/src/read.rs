@@ -19,6 +19,7 @@ use enumset::{enum_set, EnumSet, EnumSetType};
 use log::*;
 
 use crate::{
+    channels::ChannelAccumulator,
     records::{self, op, Record},
     sans_io::read::{LinearReader as SansIoReader, LinearReaderOptions, ReadAction},
     Attachment, Channel, McapError, McapResult, Message, Schema, MAGIC,
@@ -282,70 +283,6 @@ impl<'a> Iterator for ChunkFlattener<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next()
-    }
-}
-
-/// Parses schemas and channels and wires them together
-#[derive(Debug, Default)]
-struct ChannelAccumulator<'a> {
-    schemas: HashMap<u16, Arc<Schema<'a>>>,
-    channels: HashMap<u16, Arc<Channel<'a>>>,
-}
-
-impl<'a> ChannelAccumulator<'a> {
-    fn add_schema(&mut self, header: records::SchemaHeader, data: Cow<'a, [u8]>) -> McapResult<()> {
-        if header.id == 0 {
-            return Err(McapError::InvalidSchemaId);
-        }
-
-        let schema = Arc::new(Schema {
-            name: header.name.clone(),
-            encoding: header.encoding,
-            data,
-        });
-
-        if let Some(preexisting) = self.schemas.insert(header.id, schema.clone()) {
-            // Oh boy, we have this schema already.
-            // It had better be identital.
-            if schema != preexisting {
-                return Err(McapError::ConflictingSchemas(header.name));
-            }
-        }
-        Ok(())
-    }
-
-    fn add_channel(&mut self, chan: records::Channel) -> McapResult<()> {
-        // The schema ID can be 0 for "no schema",
-        // Or must reference some previously-read schema.
-        let schema = if chan.schema_id == 0 {
-            None
-        } else {
-            match self.schemas.get(&chan.schema_id) {
-                Some(s) => Some(s.clone()),
-                None => {
-                    return Err(McapError::UnknownSchema(chan.topic, chan.schema_id));
-                }
-            }
-        };
-
-        let channel = Arc::new(Channel {
-            topic: chan.topic.clone(),
-            schema,
-            message_encoding: chan.message_encoding,
-            metadata: chan.metadata,
-        });
-        if let Some(preexisting) = self.channels.insert(chan.id, channel.clone()) {
-            // Oh boy, we have this channel already.
-            // It had better be identital.
-            if preexisting != channel {
-                return Err(McapError::ConflictingChannels(chan.topic));
-            }
-        }
-        Ok(())
-    }
-
-    fn get(&self, chan_id: u16) -> Option<Arc<Channel<'a>>> {
-        self.channels.get(&chan_id).cloned()
     }
 }
 
