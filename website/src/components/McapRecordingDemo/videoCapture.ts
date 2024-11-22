@@ -71,7 +71,7 @@ export function startVideoStream(params: VideoStreamParams): () => void {
   };
 }
 
-type CompressedVideoFormat = "h264" | "h265";
+type CompressedVideoFormat = "h264" | "h265" | "av1";
 export type CompressedVideoFrame = {
   format: CompressedVideoFormat;
   data: Uint8Array;
@@ -82,6 +82,7 @@ export type CompressedVideoFrame = {
 type VideoCaptureParams = {
   enableH265: boolean;
   enableH264: boolean;
+  enableAV1: boolean;
   enableJpeg: boolean;
   /** Video element to capture */
   video: HTMLVideoElement;
@@ -123,6 +124,12 @@ const BASE_CONFIG_H265: Omit<VideoEncoderConfig, "width" | "height"> = {
   avc: { format: "annexb" }, // https://bugs.webkit.org/show_bug.cgi?id=281945
   hevc: { format: "annexb" },
 };
+const BASE_CONFIG_AV1: Omit<VideoEncoderConfig, "width" | "height"> = {
+  // https://aomediacodec.github.io/av1-isobmff/
+  // https://jakearchibald.com/2022/html-codecs-parameter-for-av1/
+  // Main Profile, level 3.1, Main tier, 8 bits
+  codec: "av01.0.05M.08",
+};
 
 /**
  * Determine whether VideoEncoder can (probably) be used to encode video with H.264.
@@ -160,6 +167,31 @@ export async function supportsH265Encoding(): Promise<{
   const result = await selectSupportedVideoEncoderConfig({
     baseConfig: {
       ...BASE_CONFIG_H265,
+      // Notes about fake width/height:
+      // - Some platforms require them to be even numbers
+      // - Too small or too large return false from isConfigSupported in Chrome
+      width: 640,
+      height: 480,
+    },
+    frameDurationSec: 1 / 30,
+  });
+  return {
+    supported: result != undefined,
+    mayUseLotsOfKeyframes: result?.mayUseLotsOfKeyframes ?? false,
+  };
+}
+
+/**
+ * Determine whether VideoEncoder can (probably) be used to encode video with AV1.
+ */
+export async function supportsAV1Encoding(): Promise<{
+  supported: boolean;
+  /** True if too many keyframes may be produced (e.g. https://bugs.webkit.org/show_bug.cgi?id=264893) */
+  mayUseLotsOfKeyframes: boolean;
+}> {
+  const result = await selectSupportedVideoEncoderConfig({
+    baseConfig: {
+      ...BASE_CONFIG_AV1,
       // Notes about fake width/height:
       // - Some platforms require them to be even numbers
       // - Too small or too large return false from isConfigSupported in Chrome
@@ -256,13 +288,20 @@ async function isEncoderConfigActuallySupported(config: VideoEncoderConfig) {
         totalFrameCount++;
         const buf = new Uint8Array(chunk.byteLength);
         chunk.copyTo(buf);
-        // Double-check that we actually got AnnexB output - https://bugs.webkit.org/show_bug.cgi?id=281945
-        const isAnnexB =
-          buf[0] === 0 &&
-          buf[1] === 0 &&
-          (buf[2] === 1 || (buf[2] === 0 && buf[3] === 1));
-        if (!isAnnexB) {
-          allFramesWereAnnexB = false;
+
+        // Double-check that we actually got AnnexB output -- only relevant for H.264 and H.265
+        // https://bugs.webkit.org/show_bug.cgi?id=281945
+        if (
+          config.avc?.format === "annexb" ||
+          config.hevc?.format === "annexb"
+        ) {
+          const isAnnexB =
+            buf[0] === 0 &&
+            buf[1] === 0 &&
+            (buf[2] === 1 || (buf[2] === 0 && buf[3] === 1));
+          if (!isAnnexB) {
+            allFramesWereAnnexB = false;
+          }
         }
       },
       error(err) {
@@ -389,14 +428,15 @@ async function startVideoCaptureAsync(
     enableH265,
     enableH264,
     enableJpeg,
+    enableAV1,
     onJpegFrame,
     onVideoFrame,
     onError,
     frameDurationSec,
   } = params;
-  if (!enableH265 && !enableH264 && !enableJpeg) {
+  if (!enableAV1 && !enableH265 && !enableH264 && !enableJpeg) {
     throw new Error(
-      "At least one of H.265, H.264, or JPEG encoding must be enabled",
+      "At least one of AV1, H.265, H.264, or JPEG encoding must be enabled",
     );
   }
   const canvas = document.createElement("canvas");
@@ -425,6 +465,21 @@ async function startVideoCaptureAsync(
     const encoder = await tryToConfigureEncoder({
       outputFormat: "h265",
       baseConfig: BASE_CONFIG_H265,
+      frameDurationSec,
+      framePool,
+      onError,
+      onVideoFrame,
+      signal,
+      video,
+    });
+    if (encoder) {
+      encoders.push(encoder);
+    }
+  }
+  if (enableAV1) {
+    const encoder = await tryToConfigureEncoder({
+      outputFormat: "av1",
+      baseConfig: BASE_CONFIG_AV1,
       frameDurationSec,
       framePool,
       onError,

@@ -56,6 +56,8 @@ export class Recorder extends EventEmitter<RecorderEvents> {
   #h264ChannelSeq = 0;
   #h265Channel?: ProtobufChannelInfo;
   #h265ChannelSeq = 0;
+  #av1Channel?: ProtobufChannelInfo;
+  #av1ChannelSeq = 0;
 
   #blobParts: Uint8Array[] = [];
   bytesWritten = 0n;
@@ -106,6 +108,8 @@ export class Recorder extends EventEmitter<RecorderEvents> {
     this.#h264ChannelSeq = 0;
     this.#h265Channel = undefined;
     this.#h265ChannelSeq = 0;
+    this.#av1Channel = undefined;
+    this.#av1ChannelSeq = 0;
   }
 
   #time(): bigint {
@@ -231,6 +235,14 @@ export class Recorder extends EventEmitter<RecorderEvents> {
             foxgloveMessageSchemas.CompressedVideo,
           );
           sequence = this.#h265ChannelSeq++;
+          break;
+        case "av1":
+          channel = this.#av1Channel ??= await addProtobufChannel(
+            this.#writer,
+            "camera_av1",
+            foxgloveMessageSchemas.CompressedVideo,
+          );
+          sequence = this.#av1ChannelSeq++;
           break;
       }
       const { id, rootType } = channel;
