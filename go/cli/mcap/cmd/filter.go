@@ -140,12 +140,12 @@ func run(filterOptions *filterOpts, args []string) {
 			die("please supply a file. see --help for usage details.")
 		}
 	} else {
-		closeFile, newReader, err := utils.GetReader(context.Background(), args[0])
+		newReader, _, err := utils.GetReader(context.Background(), args[0])
 		if err != nil {
 			die("failed to open source for reading: %s", err)
 		}
 		defer func() {
-			if closeErr := closeFile(); closeErr != nil {
+			if closeErr := newReader.Close(); closeErr != nil {
 				die("error closing read source: %s", closeErr)
 			}
 		}()
