@@ -67,7 +67,7 @@ def test_all_messages(reader_cls: AnyReaderSubclass):
             assert isinstance(message, Message)
             count += 1
 
-        assert count == 1606
+        assert count == 3
 
 
 @pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
@@ -76,8 +76,8 @@ def test_time_range(reader_cls: AnyReaderSubclass):
     with open(DEMO_MCAP, "rb") as f:
         reader: McapReader = reader_cls(f)
         count = 0
-        start = int(1490149582 * 1e9)
-        end = int(1490149586 * 1e9)
+        start = int(40)
+        end = int(43)
         for schema, channel, message in reader.iter_messages(
             start_time=start, end_time=end
         ):
@@ -88,7 +88,7 @@ def test_time_range(reader_cls: AnyReaderSubclass):
             assert message.log_time >= start
             count += 1
 
-        assert count == 825
+        assert count == 1
 
 
 @pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
@@ -104,7 +104,7 @@ def test_only_diagnostics(reader_cls: AnyReaderSubclass):
             assert isinstance(message, Message)
             count += 1
 
-        assert count == 52
+        assert count == 1
 
 
 def write_json_mcap(filepath: Path):
