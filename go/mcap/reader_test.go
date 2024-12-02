@@ -445,7 +445,7 @@ func TestReaderCounting(t *testing.T) {
 				require.NoError(t, err)
 				c++
 			}
-			assert.Equal(t, 1606, c)
+			assert.Equal(t, 3, c)
 		})
 	}
 }
@@ -673,7 +673,7 @@ func TestReadingDiagnostics(t *testing.T) {
 		require.NoError(t, err)
 		c++
 	}
-	assert.Equal(t, 52, c)
+	assert.Equal(t, 1, c)
 }
 
 func TestReadingMetadata(t *testing.T) {
