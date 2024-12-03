@@ -210,3 +210,16 @@ pub struct Attachment<'a> {
 
 pub use read::{parse_record, MessageStream, Summary};
 pub use write::{WriteOptions, Writer};
+
+// The following assertions ensure that the MCAP components can be sent between threads.
+mod assertions {
+    use super::*;
+    use static_assertions::assert_impl_all;
+    use std::io::Cursor;
+
+    assert_impl_all!(Writer<Cursor<Vec<u8>>>: Send);
+    assert_impl_all!(MessageStream: Send);
+    assert_impl_all!(sans_io::read::LinearReader: Send);
+    #[cfg(feature = "tokio")]
+    assert_impl_all!(tokio::read::RecordReader<Cursor<Vec<u8>>>: Send);
+}

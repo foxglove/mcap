@@ -8,7 +8,7 @@ pub struct DecompressResult {
 }
 
 /// A trait for streaming decompression.
-pub trait Decompressor {
+pub trait Decompressor: Send {
     /// Returns the recommended size of input to pass into `decompress()`.
     fn next_read_size(&self) -> usize;
     /// Decompresses up to `dst.len()` bytes, consuming up to `src.len()` bytes from `src`.
