@@ -89,6 +89,14 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum McapError {
+    #[error("tried to write to output while attachment is in progress")]
+    AttachmentInProgress,
+    #[error("tried to write bytes to an attachment but no attachment was in progress")]
+    AttachmentNotInProgress,
+    #[error("tried to write {excess} more bytes to attachment than the requested attachment length {attachment_length}")]
+    AttachmentTooLarge { excess: u64, attachment_length: u64 },
+    #[error("tried to finish writing attachment but current length {current} was not expected length {expected}")]
+    AttachmentIncomplete { current: u64, expected: u64 },
     #[error("Bad magic number")]
     BadMagic,
     #[error("Footer record couldn't be found at the end of the file, before the magic bytes")]
