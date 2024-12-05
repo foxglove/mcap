@@ -138,8 +138,8 @@ class McapReader(ABC):
         :param topics: if not None, only messages from these topics will be returned.
         :param start_time: an integer nanosecond timestamp. if provided, messages logged before this
             timestamp are not included.
-        :param end_time: an integer nanosecond timestamp. if provided, messages logged at or after this
-            timestamp are not included.
+        :param end_time: an integer nanosecond timestamp. if provided, messages logged at or after
+            this timestamp are not included.
         :param log_time_order: if True, messages will be yielded in ascending log time order. If
             False, messages will be yielded in the order they appear in the MCAP file.
         :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
@@ -160,8 +160,8 @@ class McapReader(ABC):
         :param topics: if not None, only messages from these topics will be returned.
         :param start_time: an integer nanosecond timestamp. if provided, messages logged before this
             timestamp are not included.
-        :param end_time: an integer nanosecond timestamp. if provided, messages logged at or after this
-            timestamp are not included.
+        :param end_time: an integer nanosecond timestamp. if provided, messages logged at or after
+            this timestamp are not included.
         :param log_time_order: if True, messages will be yielded in ascending log time order. If
             False, messages will be yielded in the order they appear in the MCAP file.
         :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
@@ -274,8 +274,8 @@ class SeekingReader(McapReader):
         :param topics: if not None, only messages from these topics will be returned.
         :param start_time: an integer nanosecond timestamp. if provided, messages logged before this
             timestamp are not included.
-        :param end_time: an integer nanosecond timestamp. if provided, messages logged at or after this
-            timestamp are not included.
+        :param end_time: an integer nanosecond timestamp. if provided, messages logged at or after
+            this timestamp are not included.
         :param log_time_order: if True, messages will be yielded in ascending log time order. If
             False, messages will be yielded in the order they appear in the MCAP file.
         :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
@@ -476,8 +476,8 @@ class NonSeekingReader(McapReader):
         :param topics: if not None, only messages from these topics will be returned.
         :param start_time: an integer nanosecond timestamp. if provided, messages logged before this
             timestamp are not included.
-        :param end_time: an integer nanosecond timestamp. if provided, messages logged at or after this
-            timestamp are not included.
+        :param end_time: an integer nanosecond timestamp. if provided, messages logged at or after
+            this timestamp are not included.
         :param log_time_order: if True, messages will be yielded in ascending log time order. If
             False, messages will be yielded in the order they appear in the MCAP file.
         :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
