@@ -389,6 +389,37 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
     /// Once all attachment bytes have been written the attachment must be completed with a call to
     /// [`Self::finish_attachment`]. Failing to finish the attachment will leave the write in an
     /// error state.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use mcap::write::Writer;
+    /// # use mcap::records::AttachmentHeader;
+    /// #
+    /// # fn run() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let mut output = vec![];
+    /// # let mut writer = Writer::new(std::io::Cursor::new(&mut output))?;
+    /// let attachment_length = 6;
+    ///
+    /// // Start the attachment
+    /// writer.start_attachment(attachment_length, AttachmentHeader {
+    ///     log_time: 100,
+    ///     create_time: 200,
+    ///     name: "my-attachment".into(),
+    ///     media_type: "application/octet-stream".into()
+    /// })?;
+    ///
+    /// // Write all the bytes for the attachment. The amount of bytes written must
+    /// // match the length specified when the attachment was started.
+    /// writer.put_attachment_bytes(&[ 1, 2, 3, 4 ])?;
+    /// writer.put_attachment_bytes(&[ 5, 6 ])?;
+    ///
+    /// // Finsh writing the attachment.
+    /// writer.finish_attachment()?;
+    /// #
+    /// # Ok(())
+    /// # }
+    /// # run().expect("should succeed");
+    /// ```
     pub fn start_attachment(
         &mut self,
         attachment_length: u64,
