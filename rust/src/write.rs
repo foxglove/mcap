@@ -445,7 +445,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
 
     /// Write bytes to the current attachment.
     ///
-    /// This is a low level API. It is recommended to use [`Self::attach`] instead.
+    /// This is a low level API. For small attachments, use [`Self::attach`].
     ///
     /// Before calling this method call [`Self::start_attachment`].
     pub fn put_attachment_bytes(&mut self, bytes: &[u8]) -> McapResult<()> {
@@ -460,7 +460,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
 
     /// Finish the current attachment.
     ///
-    /// This is a low level API. It is recommended to use [`Self::attach`] instead.
+    /// This is a low level API. For small attachments, use [`Self::attach`].
     ///
     /// Before calling this method call [`Self::start_attachment`] and write bytes to the
     /// attachment using [`Self::put_attachment_bytes`].
