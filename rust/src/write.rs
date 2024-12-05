@@ -378,7 +378,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
 
     /// Start writing an attachment.
     ///
-    /// This is a low level API. It is recommended to use [`Self::attach`] instead.
+    /// This is a low level API. For small attachments, use [`Self::attach`].
     ///
     /// To start writing an attachment call this method with the [`AttachmentHeader`] as well as
     /// the length of the attachment in bytes. It is important this length is exact otherwise the
