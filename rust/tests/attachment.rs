@@ -1,6 +1,7 @@
 mod common;
 
 use common::*;
+use mcap::records::AttachmentHeader;
 
 use std::{borrow::Cow, io::BufWriter};
 
@@ -29,6 +30,69 @@ fn smoke() -> Result<()> {
 
     assert_eq!(attachments[0].0, expected_header);
     assert_eq!(&*attachments[0].1, &[1, 2, 3]);
+
+    Ok(())
+}
+
+#[test]
+fn test_attach_in_multiple_parts() -> Result<()> {
+    let mut tmp = tempfile()?;
+    let mut writer = mcap::Writer::new(BufWriter::new(&mut tmp))?;
+
+    let data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let (left, right) = data.split_at(5);
+
+    writer.start_attachment(
+        10,
+        AttachmentHeader {
+            log_time: 100,
+            create_time: 200,
+            name: "great-attachment".into(),
+            media_type: "application/octet-stream".into(),
+        },
+    )?;
+
+    writer.put_attachment_bytes(left)?;
+    writer.put_attachment_bytes(right)?;
+
+    writer.finish_attachment()?;
+
+    drop(writer);
+
+    let ours = unsafe { Mmap::map(&tmp) }?;
+    let summary = mcap::Summary::read(&ours)?;
+
+    let expected_summary = Some(mcap::Summary {
+        stats: Some(mcap::records::Statistics {
+            attachment_count: 1,
+            ..Default::default()
+        }),
+        attachment_indexes: vec![mcap::records::AttachmentIndex {
+            // offset depends on the length of the embedded library string, which includes the crate version
+            offset: 33 + (env!("CARGO_PKG_VERSION").len() as u64),
+            length: 95,
+            log_time: 100,
+            create_time: 200,
+            data_size: 10,
+            name: "great-attachment".into(),
+            media_type: "application/octet-stream".into(),
+        }],
+        ..Default::default()
+    });
+    assert_eq!(summary, expected_summary);
+
+    let expected_attachment = mcap::Attachment {
+        log_time: 100,
+        create_time: 200,
+        name: "great-attachment".into(),
+        media_type: "application/octet-stream".into(),
+        data: Cow::Borrowed(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+    };
+
+    assert_eq!(
+        mcap::read::attachment(&ours, &summary.unwrap().attachment_indexes[0])?,
+        expected_attachment
+    );
 
     Ok(())
 }
