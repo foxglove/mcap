@@ -48,6 +48,5 @@ class ChunkBuilder:
         self.message_end_time = 0
         self.message_indices.clear()
         self.message_start_time = 0
-        self.buffer = BytesIO()
         self.record_writer.end()
         self.num_messages = 0
