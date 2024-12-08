@@ -1,4 +1,3 @@
-from io import BytesIO
 from typing import Dict
 
 from .data_stream import RecordBuilder
