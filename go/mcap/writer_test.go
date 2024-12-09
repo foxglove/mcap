@@ -703,16 +703,18 @@ func assertReadable(t *testing.T, rs io.ReadSeeker) {
 func TestBYOCompressor(t *testing.T) {
 	buf := &bytes.Buffer{}
 	// example - custom lz4 settings
-	lzw := lz4.NewWriter(nil)
 	blockCount := 0
-	require.NoError(t, lzw.Apply(lz4.OnBlockDoneOption(func(int) {
-		blockCount++
-	})))
 
 	writer, err := NewWriter(buf, &WriterOptions{
-		Chunked:    true,
-		ChunkSize:  1024,
-		Compressor: NewCustomCompressor("lz4", lzw),
+		Chunked:   true,
+		ChunkSize: 1024,
+		Compressor: NewCustomCompressor("lz4", func() (ResettableWriteCloser, error) {
+			lzw := lz4.NewWriter(nil)
+			require.NoError(t, lzw.Apply(lz4.OnBlockDoneOption(func(int) {
+				blockCount++
+			})))
+			return lzw, nil
+		}),
 	})
 	require.NoError(t, err)
 
