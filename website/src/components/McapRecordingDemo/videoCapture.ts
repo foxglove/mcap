@@ -71,7 +71,7 @@ export function startVideoStream(params: VideoStreamParams): () => void {
   };
 }
 
-type CompressedVideoFormat = "h264" | "h265" | "av1";
+type CompressedVideoFormat = "h264" | "h265" | "vp9" | "av1";
 export type CompressedVideoFrame = {
   format: CompressedVideoFormat;
   data: Uint8Array;
@@ -82,6 +82,7 @@ export type CompressedVideoFrame = {
 type VideoCaptureParams = {
   enableH265: boolean;
   enableH264: boolean;
+  enableVP9: boolean;
   enableAV1: boolean;
   enableJpeg: boolean;
   /** Video element to capture */
@@ -123,6 +124,11 @@ const BASE_CONFIG_H265: Omit<VideoEncoderConfig, "width" | "height"> = {
   codec: "hvc1.1.6.L93.B0",
   avc: { format: "annexb" }, // https://bugs.webkit.org/show_bug.cgi?id=281945
   hevc: { format: "annexb" },
+};
+const BASE_CONFIG_VP9: Omit<VideoEncoderConfig, "width" | "height"> = {
+  // https://github.com/webmproject/vp9-dash/blob/main/VPCodecISOMediaFileFormatBinding.md
+  // Profile 0, level 3.1, 8 bits
+  codec: "vp09.00.31.08",
 };
 const BASE_CONFIG_AV1: Omit<VideoEncoderConfig, "width" | "height"> = {
   // https://aomediacodec.github.io/av1-isobmff/
@@ -167,6 +173,31 @@ export async function supportsH265Encoding(): Promise<{
   const result = await selectSupportedVideoEncoderConfig({
     baseConfig: {
       ...BASE_CONFIG_H265,
+      // Notes about fake width/height:
+      // - Some platforms require them to be even numbers
+      // - Too small or too large return false from isConfigSupported in Chrome
+      width: 640,
+      height: 480,
+    },
+    frameDurationSec: 1 / 30,
+  });
+  return {
+    supported: result != undefined,
+    mayUseLotsOfKeyframes: result?.mayUseLotsOfKeyframes ?? false,
+  };
+}
+
+/**
+ * Determine whether VideoEncoder can (probably) be used to encode video with VP9.
+ */
+export async function supportsVP9Encoding(): Promise<{
+  supported: boolean;
+  /** True if too many keyframes may be produced (e.g. https://bugs.webkit.org/show_bug.cgi?id=264893) */
+  mayUseLotsOfKeyframes: boolean;
+}> {
+  const result = await selectSupportedVideoEncoderConfig({
+    baseConfig: {
+      ...BASE_CONFIG_VP9,
       // Notes about fake width/height:
       // - Some platforms require them to be even numbers
       // - Too small or too large return false from isConfigSupported in Chrome
@@ -425,18 +456,19 @@ async function startVideoCaptureAsync(
 ) {
   const {
     video,
-    enableH265,
     enableH264,
-    enableJpeg,
+    enableH265,
+    enableVP9,
     enableAV1,
+    enableJpeg,
     onJpegFrame,
     onVideoFrame,
     onError,
     frameDurationSec,
   } = params;
-  if (!enableAV1 && !enableH265 && !enableH264 && !enableJpeg) {
+  if (!enableAV1 && !enableVP9 && !enableH265 && !enableH264 && !enableJpeg) {
     throw new Error(
-      "At least one of AV1, H.265, H.264, or JPEG encoding must be enabled",
+      "At least one of AV1, VP9, H.265, H.264, or JPEG encoding must be enabled",
     );
   }
   const canvas = document.createElement("canvas");
@@ -465,6 +497,21 @@ async function startVideoCaptureAsync(
     const encoder = await tryToConfigureEncoder({
       outputFormat: "h265",
       baseConfig: BASE_CONFIG_H265,
+      frameDurationSec,
+      framePool,
+      onError,
+      onVideoFrame,
+      signal,
+      video,
+    });
+    if (encoder) {
+      encoders.push(encoder);
+    }
+  }
+  if (enableVP9) {
+    const encoder = await tryToConfigureEncoder({
+      outputFormat: "vp9",
+      baseConfig: BASE_CONFIG_VP9,
       frameDurationSec,
       framePool,
       onError,

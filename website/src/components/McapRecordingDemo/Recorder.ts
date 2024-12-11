@@ -56,6 +56,8 @@ export class Recorder extends EventEmitter<RecorderEvents> {
   #h264ChannelSeq = 0;
   #h265Channel?: ProtobufChannelInfo;
   #h265ChannelSeq = 0;
+  #vp9Channel?: ProtobufChannelInfo;
+  #vp9ChannelSeq = 0;
   #av1Channel?: ProtobufChannelInfo;
   #av1ChannelSeq = 0;
 
@@ -235,6 +237,14 @@ export class Recorder extends EventEmitter<RecorderEvents> {
             foxgloveMessageSchemas.CompressedVideo,
           );
           sequence = this.#h265ChannelSeq++;
+          break;
+        case "vp9":
+          channel = this.#vp9Channel ??= await addProtobufChannel(
+            this.#writer,
+            "camera_vp9",
+            foxgloveMessageSchemas.CompressedVideo,
+          );
+          sequence = this.#vp9ChannelSeq++;
           break;
         case "av1":
           channel = this.#av1Channel ??= await addProtobufChannel(
