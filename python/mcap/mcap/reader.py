@@ -84,7 +84,7 @@ def _chunks_matching_topics(
     :param summary: the summary of this MCAP.
     :param topics: topics to match. If None, all chunk indices in the summary are returned.
     :param start_time: if not None, messages from before this unix timestamp are not included.
-    :param end_time: if not None, messages from this unix timestamp or after are not included.
+    :param end_time: if not None, messages at or after this unix timestamp are not included.
     """
     out: List[ChunkIndex] = []
     for chunk_index in summary.chunk_indexes:
