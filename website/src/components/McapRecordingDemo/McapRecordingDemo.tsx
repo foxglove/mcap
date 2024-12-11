@@ -22,6 +22,7 @@ import {
   supportsAV1Encoding,
   supportsH264Encoding,
   supportsH265Encoding,
+  supportsVP9Encoding,
 } from "./videoCapture";
 
 type State = {
@@ -130,6 +131,7 @@ export function McapRecordingDemo(): JSX.Element {
   const [recordJpeg, setRecordJpeg] = useState(false);
   const [recordH264, setRecordH264] = useState(false);
   const [recordH265, setRecordH265] = useState(false);
+  const [recordVP9, setRecordVP9] = useState(false);
   const [recordAV1, setRecordAV1] = useState(false);
   const [recordMouse, setRecordMouse] = useState(true);
   const [recordOrientation, setRecordOrientation] = useState(true);
@@ -142,12 +144,14 @@ export function McapRecordingDemo(): JSX.Element {
 
   const { data: h264Support } = useAsync(supportsH264Encoding);
   const { data: h265Support } = useAsync(supportsH265Encoding);
+  const { data: vp9Support } = useAsync(supportsVP9Encoding);
   const { data: av1Support } = useAsync(supportsAV1Encoding);
 
   const canStartRecording =
     recordMouse ||
     (!hasMouse && recordOrientation) ||
     (recordAV1 && !videoError) ||
+    (recordVP9 && !videoError) ||
     (recordH265 && !videoError) ||
     (recordH264 && !videoError) ||
     (recordJpeg && !videoError);
@@ -196,7 +200,8 @@ export function McapRecordingDemo(): JSX.Element {
     };
   }, [addPoseMessage, recording, recordOrientation]);
 
-  const enableCamera = recordAV1 || recordH265 || recordH264 || recordJpeg;
+  const enableCamera =
+    recordAV1 || recordVP9 || recordH265 || recordH264 || recordJpeg;
   useEffect(() => {
     const videoContainer = videoContainerRef.current;
     if (!videoContainer || !enableCamera) {
@@ -243,6 +248,7 @@ export function McapRecordingDemo(): JSX.Element {
     const stopCapture = startVideoCapture({
       video,
       enableAV1: recordAV1,
+      enableVP9: recordVP9,
       enableH265: recordH265,
       enableH264: recordH264,
       enableJpeg: recordJpeg,
@@ -363,6 +369,18 @@ export function McapRecordingDemo(): JSX.Element {
                 }}
               />
               Camera (AV1)
+            </label>
+          )}
+          {vp9Support?.supported === true && (
+            <label>
+              <input
+                type="checkbox"
+                checked={recordVP9}
+                onChange={(event) => {
+                  setRecordVP9(event.target.checked);
+                }}
+              />
+              Camera (VP9)
             </label>
           )}
           {h265Support?.supported === true && (
