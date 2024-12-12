@@ -257,11 +257,12 @@ func filter(
 	defer func() {
 		err := mcapWriter.Close()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "failed to close mcap writer: %w", err)
+			fmt.Fprintf(os.Stderr, "failed to close mcap writer: %w\n", err)
 			return
 		}
 		if opts.recover {
-			fmt.Printf(
+			fmt.Fprintf(
+				os.Stderr,
 				"Recovered %d messages, %d attachments, and %d metadata records.\n",
 				numMessages,
 				numAttachments,
