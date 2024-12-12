@@ -547,6 +547,16 @@ Status McapWriter::write(const Message& message) {
     ++statistics_.channelCount;
   }
 
+  // Before writing a large message (bigger than chunk size), close current chunk.
+  auto* chunkWriter = getChunkWriter();
+  if (chunkWriter != nullptr && /* Chunked? */
+      uncompressedSize_ != 0 && /* Current chunk is not empty/new? */
+      message.dataSize >= chunkSize_ /* Big message? */ ) {
+      auto& fileOutput = *output_;
+      writeChunk(fileOutput, *chunkWriter);
+  }
+
+  // For the chunk-local message index.
   const uint64_t messageOffset = uncompressedSize_;
 
   // Write the message
@@ -565,8 +575,7 @@ Status McapWriter::write(const Message& message) {
     channelMessageCounts[message.channelId] += 1;
   }
 
-  auto* chunkWriter = getChunkWriter();
-  if (chunkWriter) {
+  if (chunkWriter != nullptr) {
     if (!options_.noMessageIndex) {
       // Update the message index
       auto& messageIndex = currentMessageIndex_[message.channelId];
