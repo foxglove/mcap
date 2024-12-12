@@ -257,7 +257,7 @@ func filter(
 	defer func() {
 		err := mcapWriter.Close()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close mcap writer: %w\n", err)
+			fmt.Fprintf(os.Stderr, "failed to close mcap writer: %v\n", err)
 			return
 		}
 		if opts.recover {
