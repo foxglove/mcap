@@ -78,7 +78,7 @@ jobs:
       - run: yarn test:conformance --runner go-
 
   conformance-python:
-    runs-on: ubuntu-22.04 # required for python 3.7
+    runs-on: ubuntu-22.04 # required for python 3.8
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,7 +90,7 @@ jobs:
           cache: yarn
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.7
+          python-version: 3.8
       - run: cd python && pip install -e mcap
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
@@ -200,7 +200,7 @@ jobs:
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.7
+          python-version: 3.8
       - run: pip install conan~=1.0
       - run: bash build.sh --build-tests-only
       - run: ./test/build/Debug/bin/unit-tests
@@ -293,7 +293,7 @@ jobs:
       - run: yarn workspace @foxglove/mcap-example-text-annotation-demo typecheck
 
   python:
-    runs-on: ubuntu-22.04 # required for python 3.7
+    runs-on: ubuntu-22.04 # required for python 3.8
     defaults:
       run:
         working-directory: python
@@ -305,7 +305,7 @@ jobs:
           lfs: true
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.7
+          python-version: 3.8
       - run: pip install pipenv==2023.2.4
       - run: make lint
       - run: make test
