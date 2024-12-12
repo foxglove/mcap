@@ -273,6 +273,7 @@ export function McapRecordingDemo(): JSX.Element {
     enableCamera,
     recordH264,
     recordH265,
+    recordVP9,
     recordAV1,
     recording,
     videoStarted,
