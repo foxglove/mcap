@@ -78,7 +78,7 @@ jobs:
       - run: yarn test:conformance --runner go-
 
   conformance-python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # required for python 3.7
     steps:
       - uses: actions/checkout@v4
         with:
@@ -293,7 +293,7 @@ jobs:
       - run: yarn workspace @foxglove/mcap-example-text-annotation-demo typecheck
 
   python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # required for python 3.7
     defaults:
       run:
         working-directory: python
@@ -305,7 +305,7 @@ jobs:
           lfs: true
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.8
+          python-version: 3.7
       - run: pip install pipenv==2023.2.4
       - run: make lint
       - run: make test
