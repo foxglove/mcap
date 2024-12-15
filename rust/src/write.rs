@@ -935,7 +935,11 @@ impl<W: Write + Seek> ChunkWriter<W> {
                 Compressor::Zstd(enc)
             }
             #[cfg(feature = "lz4")]
-            Some(Compression::Lz4) => Compressor::Lz4(lz4::EncoderBuilder::new().build(sink)?),
+            Some(Compression::Lz4) => Compressor::Lz4(
+                lz4::EncoderBuilder::new()
+                    .block_checksum(lz4::liblz4::BlockChecksum::NoBlockChecksum)
+                    .build(sink)?,
+            ),
             #[cfg(not(any(feature = "zstd", feature = "lz4")))]
             Some(_) => unreachable!("`Compression` is an empty enum that cannot be instantiated"),
             None => Compressor::Null(sink),
