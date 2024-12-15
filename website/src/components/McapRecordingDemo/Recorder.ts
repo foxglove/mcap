@@ -1,8 +1,9 @@
-import { Time, fromNanoSec } from "@foxglove/rostime";
+import { Time, fromMillis, fromNanoSec } from "@foxglove/rostime";
 import {
   PoseInFrame,
   CompressedImage,
   CompressedVideo,
+  CompressedAudio,
 } from "@foxglove/schemas";
 import { foxgloveMessageSchemas } from "@foxglove/schemas/internal";
 import zstd from "@foxglove/wasm-zstd";
@@ -11,6 +12,7 @@ import { EventEmitter } from "eventemitter3";
 import Queue from "promise-queue";
 
 import { ProtobufChannelInfo, addProtobufChannel } from "./addProtobufChannel";
+import { CompressedAudioData } from "./audioCapture";
 import { CompressedVideoFrame } from "./videoCapture";
 
 export type ProtobufObject<Message> = {
@@ -60,6 +62,8 @@ export class Recorder extends EventEmitter<RecorderEvents> {
   #vp9ChannelSeq = 0;
   #av1Channel?: ProtobufChannelInfo;
   #av1ChannelSeq = 0;
+  #opusChannel?: ProtobufChannelInfo;
+  #opusChannelSeq = 0;
 
   #blobParts: Uint8Array[] = [];
   bytesWritten = 0n;
@@ -112,6 +116,8 @@ export class Recorder extends EventEmitter<RecorderEvents> {
     this.#h265ChannelSeq = 0;
     this.#av1Channel = undefined;
     this.#av1ChannelSeq = 0;
+    this.#opusChannel = undefined;
+    this.#opusChannelSeq = 0;
   }
 
   #time(): bigint {
@@ -271,6 +277,45 @@ export class Recorder extends EventEmitter<RecorderEvents> {
         logTime: now,
         publishTime: now,
         data,
+      });
+      this.messageCount++;
+      this.#emit();
+    });
+  }
+
+  async addAudioData(data: CompressedAudioData): Promise<void> {
+    void this.#queue.add(async () => {
+      if (!this.#writer) {
+        return;
+      }
+      let channel: ProtobufChannelInfo;
+      let sequence: number;
+      switch (data.format) {
+        case "opus":
+          channel = this.#opusChannel ??= await addProtobufChannel(
+            this.#writer,
+            "microphone_opus",
+            foxgloveMessageSchemas.CompressedAudio,
+          );
+          sequence = this.#opusChannelSeq++;
+          break;
+      }
+      const { id, rootType } = channel;
+      const msg: ProtobufObject<CompressedAudio> = {
+        timestamp: toProtobufTime(fromMillis(data.timestamp)),
+        data: data.data,
+        format: data.format,
+        type: data.type,
+        sample_rate: data.sampleRate,
+        number_of_channels: data.numberOfChannels,
+      };
+      const now = this.#time();
+      await this.#writer.addMessage({
+        sequence,
+        channelId: id,
+        logTime: now,
+        publishTime: now,
+        data: rootType.encode(msg).finish(),
       });
       this.messageCount++;
       this.#emit();

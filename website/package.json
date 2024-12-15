@@ -22,7 +22,7 @@
     "@docusaurus/preset-classic": "2.4.1",
     "@foxglove/eslint-plugin": "1.0.1",
     "@foxglove/rostime": "1.1.2",
-    "@foxglove/schemas": "1.6.2",
+    "@foxglove/schemas": "github:foxglove/schemas#e2cd86e48762e9396737a00c56e1d45ebfae24e3",
     "@foxglove/tsconfig": "2.0.0",
     "@mcap/core": "workspace:*",
     "@mdx-js/react": "1.6.22",
