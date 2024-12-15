@@ -84,6 +84,39 @@ export function startAudioStream({
   };
 }
 
+/**
+ * Determine whether required Web Audio APIs are supported.
+ *
+ * Capture uses MediaStreamTrackProcessor and AudioEncoder to
+ * read and encode audio frames.
+ *
+ * MediaStreamTrackProcessor: https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamTrackProcessor#browser_compatibility
+ * AudioEncoder: https://developer.mozilla.org/en-US/docs/Web/API/AudioEncoder#browser_compatibility
+ *
+ * As of 2024-12-15, Chrome and Edge have support
+ */
+const supportsMediaCaptureTransformAndWebCodecs = (): boolean => {
+  return "MediaStreamTrackProcessor" in window && "AudioEncoder" in window;
+};
+
+const DEFAULT_OPUS_CONFIG: AudioEncoderConfig = {
+  codec: "opus",
+  sampleRate: 48000,
+  numberOfChannels: 1,
+};
+
+/**
+ * Determine whether AudioEncoder can be used to encode audio with Opus.
+ */
+export const supportsOpusEncoding = async (): Promise<boolean> => {
+  if (!supportsMediaCaptureTransformAndWebCodecs()) {
+    return false;
+  }
+
+  const support = await AudioEncoder.isConfigSupported(DEFAULT_OPUS_CONFIG);
+  return support.supported === true;
+};
+
 type CompressedAudioFormat = "opus";
 type CompressedAudioType = "key" | "delta";
 export type CompressedAudioData = {
@@ -112,27 +145,36 @@ export function startAudioCapture({
   stream,
   onAudioData,
   onError,
-}: AudioCaptureParams): () => void {
-  const framePool: ArrayBuffer[] = [];
+}: AudioCaptureParams): (() => void) | undefined {
+  if (!enableOpus) {
+    onError(new Error("Invariant: expected Opus encoding to be enabled"));
+    return undefined;
+  }
+
+  if (!supportsMediaCaptureTransformAndWebCodecs()) {
+    onError(
+      new Error(
+        "Audio capture not supported: MediaStreamTrackProcessor and AudioEncoder not supported in browser",
+      ),
+    );
+    return undefined;
+  }
 
   const track = stream.getAudioTracks()[0];
   if (!track) {
-    onError(new Error("Invariant: expected audio track"));
-    return () => {
-      // no op
-    };
+    onError(new Error("Invariant: expected audio track from stream"));
+    return undefined;
   }
 
-  const settings = track.getSettings();
-
   const trackProcessor = new MediaStreamTrackProcessor({
-    // TODO: Don't assert
-    track: stream.getAudioTracks()[0]!,
+    track,
   });
+
+  const settings = track.getSettings();
+  const framePool: ArrayBuffer[] = [];
 
   const encoder = new AudioEncoder({
     output: (chunk) => {
-      console.log(chunk);
       let buffer = framePool.pop();
       if (!buffer || buffer.byteLength < chunk.byteLength) {
         buffer = new ArrayBuffer(chunk.byteLength);
@@ -146,8 +188,9 @@ export function startAudioCapture({
         sampleRate: settings.sampleRate ?? 0,
         numberOfChannels: settings.channelCount ?? 0,
         release() {
-          // TODO: Don't assert
-          framePool.push(buffer!);
+          if (buffer) {
+            framePool.push(buffer);
+          }
         },
       });
     },
