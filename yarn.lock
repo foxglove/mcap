@@ -3056,13 +3056,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/schemas@github:foxglove/schemas#e2cd86e48762e9396737a00c56e1d45ebfae24e3":
+"@foxglove/schemas@github:foxglove/schemas#fbb9ccfd8d31ac6c3aa18ce7b9959eb0be9bed7c":
   version: 1.6.7
-  resolution: "@foxglove/schemas@https://github.com/foxglove/schemas.git#commit=e2cd86e48762e9396737a00c56e1d45ebfae24e3"
+  resolution: "@foxglove/schemas@https://github.com/foxglove/schemas.git#commit=fbb9ccfd8d31ac6c3aa18ce7b9959eb0be9bed7c"
   dependencies:
     "@foxglove/rosmsg-msgs-common": "npm:^3.0.0"
     tslib: "npm:^2.5.0"
-  checksum: 10c0/67b13339aa3f485e786c93ef22f45f67598db1c77c0fa062b30c22a85f3be8a655ae5c351279bccd98751dce64ba7c95ddbd0cc7ca77b3281795e195faaa042d
+  checksum: 10c0/5153e9973b5d16ae92bdd6d4c1837518adc425f78a33985cf3f364027895c792d136aa6ac9f7233d44670b4be72bd4c3946aec3c7099514054af88eaf8ffde1b
   languageName: node
   linkType: hard
 
@@ -15620,7 +15620,7 @@ __metadata:
     "@docusaurus/preset-classic": "npm:2.4.1"
     "@foxglove/eslint-plugin": "npm:1.0.1"
     "@foxglove/rostime": "npm:1.1.2"
-    "@foxglove/schemas": "github:foxglove/schemas#e2cd86e48762e9396737a00c56e1d45ebfae24e3"
+    "@foxglove/schemas": "github:foxglove/schemas#fbb9ccfd8d31ac6c3aa18ce7b9959eb0be9bed7c"
     "@foxglove/tsconfig": "npm:2.0.0"
     "@mcap/core": "workspace:*"
     "@mdx-js/react": "npm:1.6.22"
