@@ -1,3 +1,5 @@
+// cspell:word millis
+
 import { Time, fromMillis, fromNanoSec } from "@foxglove/rostime";
 import {
   PoseInFrame,
