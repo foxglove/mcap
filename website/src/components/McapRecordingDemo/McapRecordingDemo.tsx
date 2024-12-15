@@ -16,10 +16,10 @@ import {
   toProtobufTime,
 } from "./Recorder";
 import {
-  recordAudioStream,
   startAudioStream,
   CompressedAudioData,
   startAudioCapture,
+  supportsOpusEncoding,
 } from "./audioCapture";
 import {
   CompressedVideoFrame,
@@ -164,6 +164,7 @@ export function McapRecordingDemo(): JSX.Element {
   const { data: h265Support } = useAsync(supportsH265Encoding);
   const { data: vp9Support } = useAsync(supportsVP9Encoding);
   const { data: av1Support } = useAsync(supportsAV1Encoding);
+  const { data: opusSupport } = useAsync(supportsOpusEncoding);
 
   const canStartRecording =
     recordMouse ||
@@ -294,7 +295,6 @@ export function McapRecordingDemo(): JSX.Element {
     recordH265,
     recordVP9,
     recordAV1,
-    recordVP9,
     recording,
     videoStarted,
     recordJpeg,
@@ -346,7 +346,7 @@ export function McapRecordingDemo(): JSX.Element {
     });
 
     return () => {
-      cleanup();
+      cleanup?.();
     };
   }, [addAudioData, enableMicrophone, recordOpus, audioStream, recording]);
 
@@ -488,16 +488,18 @@ export function McapRecordingDemo(): JSX.Element {
             />
             Camera (JPEG)
           </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={recordOpus}
-              onChange={(event) => {
-                setRecordOpus(event.target.checked);
-              }}
-            />
-            Microphone (Opus)
-          </label>
+          {opusSupport === true && (
+            <label>
+              <input
+                type="checkbox"
+                checked={recordOpus}
+                onChange={(event) => {
+                  setRecordOpus(event.target.checked);
+                }}
+              />
+              Microphone (Opus)
+            </label>
+          )}
           {!hasMouse && (
             <label>
               <input
