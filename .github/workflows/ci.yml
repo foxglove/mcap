@@ -5,7 +5,7 @@ on:
     branches: [main]
     tags: ["releases/**", "go/mcap/*"]
   pull_request:
-    branches: ["*"]
+    branches: ["**"]
 
 jobs:
   spellcheck:
