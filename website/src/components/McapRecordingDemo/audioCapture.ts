@@ -35,7 +35,7 @@ export function startAudioStream({
         const fbcArray = new Uint8Array(analyzer.frequencyBinCount);
         analyzer.getByteFrequencyData(fbcArray);
         const level =
-          fbcArray.reduce((accum, val) => accum + val, 0) / fbcArray.length;
+          fbcArray.reduce((acc, val) => acc + val, 0) / fbcArray.length;
         progress.value = level / 100;
 
         update(analyzer);
