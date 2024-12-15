@@ -190,3 +190,8 @@ overrides:
   - filename: "docs/**"
     words:
       - plex
+
+  - filename: "tsconfig.json"
+    words:
+      - webcodecs
+      - mediacapture
