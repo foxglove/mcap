@@ -309,13 +309,15 @@ export class Recorder extends EventEmitter<RecorderEvents> {
         sample_rate: data.sampleRate,
         number_of_channels: data.numberOfChannels,
       };
+      const encodedMsg = rootType.encode(msg).finish();
+      data.release();
       const now = this.#time();
       await this.#writer.addMessage({
         sequence,
         channelId: id,
         logTime: now,
         publishTime: now,
-        data: rootType.encode(msg).finish(),
+        data: encodedMsg,
       });
       this.messageCount++;
       this.#emit();
