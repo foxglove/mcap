@@ -27,6 +27,8 @@
     "@mcap/core": "workspace:*",
     "@mdx-js/react": "1.6.22",
     "@tsconfig/docusaurus": "1.0.7",
+    "@types/dom-mediacapture-transform": "0.1.10",
+    "@types/dom-webcodecs": "0.1.13",
     "@types/promise-queue": "2.2.0",
     "buffer": "6.0.3",
     "classnames": "2.3.2",

@@ -16,6 +16,12 @@ import {
   toProtobufTime,
 } from "./Recorder";
 import {
+  recordAudioStream,
+  startAudioStream,
+  CompressedAudioData,
+  startAudioCapture,
+} from "./audioCapture";
+import {
   CompressedVideoFrame,
   startVideoCapture,
   startVideoStream,
@@ -37,6 +43,7 @@ type State = {
   addPoseMessage: (msg: DeviceOrientationEvent) => void;
   addJpegFrame: (blob: Blob) => void;
   addVideoFrame: (frame: CompressedVideoFrame) => void;
+  addAudioData: (data: CompressedAudioData) => void;
   closeAndRestart: () => Promise<Blob>;
 };
 
@@ -69,6 +76,9 @@ const useStore = create<State>((set) => {
     },
     addVideoFrame(frame: CompressedVideoFrame) {
       void recorder.addVideoFrame(frame);
+    },
+    addAudioData(data: CompressedAudioData) {
+      void recorder.addAudioData(data);
     },
     async closeAndRestart() {
       return await recorder.closeAndRestart();
@@ -128,19 +138,27 @@ export function McapRecordingDemo(): JSX.Element {
 
   const videoRef = useRef<HTMLVideoElement | undefined>();
   const videoContainerRef = useRef<HTMLDivElement>(null);
+  const audioProgressRef = useRef<HTMLProgressElement>(null);
   const [recordJpeg, setRecordJpeg] = useState(false);
   const [recordH264, setRecordH264] = useState(false);
   const [recordH265, setRecordH265] = useState(false);
   const [recordVP9, setRecordVP9] = useState(false);
   const [recordAV1, setRecordAV1] = useState(false);
+  const [recordOpus, setRecordOpus] = useState(false);
   const [recordMouse, setRecordMouse] = useState(true);
   const [recordOrientation, setRecordOrientation] = useState(true);
   const [videoStarted, setVideoStarted] = useState(false);
   const [videoError, setVideoError] = useState<Error | undefined>();
+  const [audioError, setAudioError] = useState<Error | undefined>();
   const [showDownloadInfo, setShowDownloadInfo] = useState(false);
 
-  const { addJpegFrame, addVideoFrame, addMouseEventMessage, addPoseMessage } =
-    state;
+  const {
+    addJpegFrame,
+    addVideoFrame,
+    addMouseEventMessage,
+    addPoseMessage,
+    addAudioData,
+  } = state;
 
   const { data: h264Support } = useAsync(supportsH264Encoding);
   const { data: h265Support } = useAsync(supportsH265Encoding);
@@ -154,7 +172,8 @@ export function McapRecordingDemo(): JSX.Element {
     (recordVP9 && !videoError) ||
     (recordH265 && !videoError) ||
     (recordH264 && !videoError) ||
-    (recordJpeg && !videoError);
+    (recordJpeg && !videoError) ||
+    (recordOpus && !audioError);
 
   // Automatically pause recording after 30 seconds to avoid unbounded growth
   useEffect(() => {
@@ -275,10 +294,61 @@ export function McapRecordingDemo(): JSX.Element {
     recordH265,
     recordVP9,
     recordAV1,
+    recordVP9,
     recording,
     videoStarted,
     recordJpeg,
   ]);
+
+  const [audioStream, setAudioStream] = useState<MediaStream | undefined>(
+    undefined,
+  );
+
+  const enableMicrophone = recordOpus;
+  useEffect(() => {
+    const progress = audioProgressRef.current;
+    if (!progress || !enableMicrophone) {
+      return;
+    }
+
+    const cleanup = startAudioStream({
+      progress,
+      onAudioStream: (stream) => {
+        setAudioStream(stream);
+      },
+      onError: (err) => {
+        setAudioError(err);
+        console.error(err);
+      },
+    });
+
+    return () => {
+      cleanup();
+      setAudioStream(undefined);
+      setAudioError(undefined);
+    };
+  }, [enableMicrophone, recordOpus]);
+
+  useEffect(() => {
+    if (!enableMicrophone || !recording || !audioStream) {
+      return;
+    }
+
+    const cleanup = startAudioCapture({
+      enableOpus: recordOpus,
+      stream: audioStream,
+      onAudioData: (data) => {
+        addAudioData(data);
+      },
+      onError: (error) => {
+        setAudioError(error);
+      },
+    });
+
+    return () => {
+      cleanup();
+    };
+  }, [addAudioData, enableMicrophone, recordOpus, audioStream, recording]);
 
   const onRecordClick = useCallback(
     (event: React.MouseEvent) => {
@@ -418,6 +488,16 @@ export function McapRecordingDemo(): JSX.Element {
             />
             Camera (JPEG)
           </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={recordOpus}
+              onChange={(event) => {
+                setRecordOpus(event.target.checked);
+              }}
+            />
+            Microphone (Opus)
+          </label>
           {!hasMouse && (
             <label>
               <input
@@ -546,22 +626,24 @@ export function McapRecordingDemo(): JSX.Element {
               </div>
             </div>
           </div>
+        </div>
 
+        <div className={styles.recordingControls}>
           <div className={styles.recordingControlsColumn}>
-            <div className={styles.videoContainer} ref={videoContainerRef}>
+            <div className={styles.mediaContainer} ref={videoContainerRef}>
               {videoError ? (
-                <div className={cx(styles.error, styles.videoErrorContainer)}>
+                <div className={cx(styles.error, styles.mediaErrorContainer)}>
                   {videoError.toString()}
                 </div>
-              ) : recordH264 || recordJpeg ? (
+              ) : enableCamera ? (
                 <>
                   {!videoStarted && (
-                    <progress className={styles.videoLoadingIndicator} />
+                    <progress className={styles.mediaLoadingIndicator} />
                   )}
                 </>
               ) : (
                 <span
-                  className={styles.videoPlaceholderText}
+                  className={styles.mediaPlaceholderText}
                   onClick={() => {
                     if (av1Support?.supported === true) {
                       setRecordAV1(true);
@@ -575,6 +657,25 @@ export function McapRecordingDemo(): JSX.Element {
                   }}
                 >
                   Enable “Camera” to record video
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className={styles.recordingControlsColumn}>
+            <div className={styles.mediaContainer}>
+              {audioError ? (
+                <div className={cx(styles.error, styles.mediaErrorContainer)}>
+                  {audioError.toString()}
+                </div>
+              ) : enableMicrophone ? (
+                <progress
+                  className={styles.mediaLoadingIndicator}
+                  ref={audioProgressRef}
+                />
+              ) : (
+                <span className={styles.mediaPlaceholderText}>
+                  Enable “Microphone” to record audio
                 </span>
               )}
             </div>
