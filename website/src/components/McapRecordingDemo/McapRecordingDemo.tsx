@@ -20,6 +20,7 @@ import {
   CompressedAudioData,
   startAudioCapture,
   supportsOpusEncoding,
+  supportsMP4AEncoding,
 } from "./audioCapture";
 import {
   CompressedVideoFrame,
@@ -144,6 +145,7 @@ export function McapRecordingDemo(): JSX.Element {
   const [recordH265, setRecordH265] = useState(false);
   const [recordVP9, setRecordVP9] = useState(false);
   const [recordAV1, setRecordAV1] = useState(false);
+  const [recordMP4A, setRecordMP4A] = useState(false);
   const [recordOpus, setRecordOpus] = useState(false);
   const [recordMouse, setRecordMouse] = useState(true);
   const [recordOrientation, setRecordOrientation] = useState(true);
@@ -164,6 +166,7 @@ export function McapRecordingDemo(): JSX.Element {
   const { data: h265Support } = useAsync(supportsH265Encoding);
   const { data: vp9Support } = useAsync(supportsVP9Encoding);
   const { data: av1Support } = useAsync(supportsAV1Encoding);
+  const { data: mp4aSupport } = useAsync(supportsMP4AEncoding);
   const { data: opusSupport } = useAsync(supportsOpusEncoding);
 
   const canStartRecording =
@@ -174,6 +177,7 @@ export function McapRecordingDemo(): JSX.Element {
     (recordH265 && !videoError) ||
     (recordH264 && !videoError) ||
     (recordJpeg && !videoError) ||
+    (recordMP4A && !audioError) ||
     (recordOpus && !audioError);
 
   // Automatically pause recording after 30 seconds to avoid unbounded growth
@@ -304,7 +308,7 @@ export function McapRecordingDemo(): JSX.Element {
     undefined,
   );
 
-  const enableMicrophone = recordOpus;
+  const enableMicrophone = recordMP4A || recordOpus;
   useEffect(() => {
     const progress = audioProgressRef.current;
     if (!progress || !enableMicrophone) {
@@ -327,7 +331,7 @@ export function McapRecordingDemo(): JSX.Element {
       setAudioStream(undefined);
       setAudioError(undefined);
     };
-  }, [enableMicrophone, recordOpus]);
+  }, [enableMicrophone]);
 
   useEffect(() => {
     if (!enableMicrophone || !recording || !audioStream) {
@@ -335,6 +339,7 @@ export function McapRecordingDemo(): JSX.Element {
     }
 
     const cleanup = startAudioCapture({
+      enableMP4A: recordMP4A,
       enableOpus: recordOpus,
       stream: audioStream,
       onAudioData: (data) => {
@@ -348,7 +353,14 @@ export function McapRecordingDemo(): JSX.Element {
     return () => {
       cleanup?.();
     };
-  }, [addAudioData, enableMicrophone, recordOpus, audioStream, recording]);
+  }, [
+    addAudioData,
+    enableMicrophone,
+    recordMP4A,
+    recordOpus,
+    audioStream,
+    recording,
+  ]);
 
   const onRecordClick = useCallback(
     (event: React.MouseEvent) => {
@@ -488,6 +500,18 @@ export function McapRecordingDemo(): JSX.Element {
             />
             Camera (JPEG)
           </label>
+          {mp4aSupport === true && (
+            <label>
+              <input
+                type="checkbox"
+                checked={recordMP4A}
+                onChange={(event) => {
+                  setRecordMP4A(event.target.checked);
+                }}
+              />
+              Microphone (mp4a.40.2)
+            </label>
+          )}
           {opusSupport === true && (
             <label>
               <input
