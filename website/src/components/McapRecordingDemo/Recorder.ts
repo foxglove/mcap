@@ -64,6 +64,8 @@ export class Recorder extends EventEmitter<RecorderEvents> {
   #vp9ChannelSeq = 0;
   #av1Channel?: ProtobufChannelInfo;
   #av1ChannelSeq = 0;
+  #mp4aChannel?: ProtobufChannelInfo;
+  #mp4aChannelSeq = 0;
   #opusChannel?: ProtobufChannelInfo;
   #opusChannelSeq = 0;
 
@@ -118,6 +120,8 @@ export class Recorder extends EventEmitter<RecorderEvents> {
     this.#h265ChannelSeq = 0;
     this.#av1Channel = undefined;
     this.#av1ChannelSeq = 0;
+    this.#mp4aChannel = undefined;
+    this.#mp4aChannelSeq = 0;
     this.#opusChannel = undefined;
     this.#opusChannelSeq = 0;
   }
@@ -293,6 +297,14 @@ export class Recorder extends EventEmitter<RecorderEvents> {
       let channel: ProtobufChannelInfo;
       let sequence: number;
       switch (data.format) {
+        case "mp4a.40.2":
+          channel = this.#mp4aChannel ??= await addProtobufChannel(
+            this.#writer,
+            "microphone_mp4a",
+            foxgloveMessageSchemas.CompressedAudio,
+          );
+          sequence = this.#mp4aChannelSeq++;
+          break;
         case "opus":
           channel = this.#opusChannel ??= await addProtobufChannel(
             this.#writer,

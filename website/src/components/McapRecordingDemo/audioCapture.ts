@@ -117,7 +117,66 @@ export const supportsOpusEncoding = async (): Promise<boolean> => {
   return support.supported === true;
 };
 
-type CompressedAudioFormat = "opus";
+const DEFAULT_MP4A_CONFIG: AudioEncoderConfig = {
+  codec: "mp4a.40.2",
+  numberOfChannels: 1,
+  sampleRate: 48000,
+};
+
+/**
+ * Determine whether AudioEncoder can be used to encode audio with mp4a.40.2.
+ */
+export const supportsMP4AEncoding = async (): Promise<boolean> => {
+  if (!supportsMediaCaptureTransformAndWebCodecs()) {
+    return false;
+  }
+
+  const support = await AudioEncoder.isConfigSupported(DEFAULT_MP4A_CONFIG);
+  return support.supported === true;
+};
+
+const configureEncoder = ({
+  config,
+  framePool,
+  onAudioData,
+  onError,
+}: {
+  config: AudioEncoderConfig;
+  framePool: ArrayBuffer[];
+  onAudioData: (data: CompressedAudioData) => void;
+  onError: (error: Error) => void;
+}): AudioEncoder => {
+  const encoder = new AudioEncoder({
+    output: (chunk) => {
+      let buffer = framePool.pop();
+      if (!buffer || buffer.byteLength < chunk.byteLength) {
+        buffer = new ArrayBuffer(chunk.byteLength);
+      }
+      chunk.copyTo(buffer);
+      onAudioData({
+        format: config.codec as CompressedAudioFormat,
+        type: chunk.type as CompressedAudioType,
+        timestamp: chunk.timestamp,
+        data: new Uint8Array(buffer, 0, chunk.byteLength),
+        sampleRate: config.sampleRate,
+        numberOfChannels: config.numberOfChannels,
+        release() {
+          if (buffer) {
+            framePool.push(buffer);
+          }
+        },
+      });
+    },
+    error: (error) => {
+      onError(error);
+    },
+  });
+  encoder.configure(config);
+
+  return encoder;
+};
+
+type CompressedAudioFormat = "opus" | "mp4a.40.2";
 type CompressedAudioType = "key" | "delta";
 export type CompressedAudioData = {
   format: CompressedAudioFormat;
@@ -132,6 +191,7 @@ export type CompressedAudioData = {
 };
 
 interface AudioCaptureParams {
+  enableMP4A: boolean;
   enableOpus: boolean;
   /** MediaStream from startAudioStream */
   stream: MediaStream;
@@ -141,12 +201,13 @@ interface AudioCaptureParams {
 }
 
 export function startAudioCapture({
+  enableMP4A,
   enableOpus,
   stream,
   onAudioData,
   onError,
 }: AudioCaptureParams): (() => void) | undefined {
-  if (!enableOpus) {
+  if (!enableMP4A && !enableOpus) {
     onError(new Error("Invariant: expected Opus encoding to be enabled"));
     return undefined;
   }
@@ -170,44 +231,39 @@ export function startAudioCapture({
     track,
   });
 
-  const settings = track.getSettings();
   const framePool: ArrayBuffer[] = [];
 
-  const encoder = new AudioEncoder({
-    output: (chunk) => {
-      let buffer = framePool.pop();
-      if (!buffer || buffer.byteLength < chunk.byteLength) {
-        buffer = new ArrayBuffer(chunk.byteLength);
-      }
-      chunk.copyTo(buffer);
-      onAudioData({
-        format: "opus",
-        type: chunk.type as CompressedAudioType,
-        timestamp: chunk.timestamp,
-        data: new Uint8Array(buffer, 0, chunk.byteLength),
-        sampleRate: settings.sampleRate ?? 0,
-        numberOfChannels: settings.channelCount ?? 0,
-        release() {
-          if (buffer) {
-            framePool.push(buffer);
-          }
-        },
-      });
-    },
-    error: (error) => {
-      onError(error);
-    },
-  });
-  encoder.configure({
-    codec: "opus",
-    sampleRate: settings.sampleRate ?? 0,
-    numberOfChannels: settings.channelCount ?? 0,
-  });
+  const encoders = [
+    ...(enableMP4A
+      ? [
+          configureEncoder({
+            config: DEFAULT_MP4A_CONFIG,
+            framePool,
+            onAudioData,
+            onError,
+          }),
+        ]
+      : []),
+    ...(enableOpus
+      ? [
+          configureEncoder({
+            config: DEFAULT_OPUS_CONFIG,
+            framePool,
+            onAudioData,
+            onError,
+          }),
+        ]
+      : []),
+  ];
 
   const reader = trackProcessor.readable.getReader();
   let canceled = false;
 
   const readAndEncode = () => {
+    if (canceled) {
+      return;
+    }
+
     reader
       .read()
       .then((result) => {
@@ -215,7 +271,9 @@ export function startAudioCapture({
           return;
         }
 
-        encoder.encode(result.value);
+        for (const encoder of encoders) {
+          encoder.encode(result.value);
+        }
 
         readAndEncode();
       })
@@ -228,6 +286,8 @@ export function startAudioCapture({
 
   return () => {
     canceled = true;
-    encoder.close();
+    for (const encoder of encoders) {
+      encoder.close();
+    }
   };
 }
