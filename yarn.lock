@@ -4163,6 +4163,22 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/dom-mediacapture-transform@npm:0.1.10":
+  version: 0.1.10
+  resolution: "@types/dom-mediacapture-transform@npm:0.1.10"
+  dependencies:
+    "@types/dom-webcodecs": "npm:*"
+  checksum: 10c0/cbad14e0b78bdd36dad7780d06526ab27cdc14c90035826dec0d2a1e71d5b77cc3f58feb0d9e0c08c9f6ebdb4d5a60cc507c7126115e0829d5987acc49e4dd30
+  languageName: node
+  linkType: hard
+
+"@types/dom-webcodecs@npm:*, @types/dom-webcodecs@npm:0.1.13":
+  version: 0.1.13
+  resolution: "@types/dom-webcodecs@npm:0.1.13"
+  checksum: 10c0/16683fd0330fdfbb867affec1c18fd493d88433a4ec66257579adc5d07b07e9492268b4401e9017b7388b13750722365b0392b375e39c84e74f564d5b4f634a4
+  languageName: node
+  linkType: hard
+
 "@types/eslint-scope@npm:^3.7.3":
   version: 3.7.4
   resolution: "@types/eslint-scope@npm:3.7.4"
@@ -15625,6 +15641,8 @@ __metadata:
     "@mcap/core": "workspace:*"
     "@mdx-js/react": "npm:1.6.22"
     "@tsconfig/docusaurus": "npm:1.0.7"
+    "@types/dom-mediacapture-transform": "npm:0.1.10"
+    "@types/dom-webcodecs": "npm:0.1.13"
     "@types/promise-queue": "npm:2.2.0"
     buffer: "npm:6.0.3"
     classnames: "npm:2.3.2"
