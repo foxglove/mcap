@@ -935,7 +935,14 @@ impl<W: Write + Seek> ChunkWriter<W> {
                 Compressor::Zstd(enc)
             }
             #[cfg(feature = "lz4")]
-            Some(Compression::Lz4) => Compressor::Lz4(lz4::EncoderBuilder::new().build(sink)?),
+            Some(Compression::Lz4) => Compressor::Lz4(
+                lz4::EncoderBuilder::new()
+                    // Disable the block checksum for wider compatibility with MCAP tooling that
+                    // includes a fault block checksum calculation. Since the MCAP spec includes a
+                    // CRC for the compressed chunk this would be a superfluous check anyway.
+                    .block_checksum(lz4::liblz4::BlockChecksum::NoBlockChecksum)
+                    .build(sink)?,
+            ),
             #[cfg(not(any(feature = "zstd", feature = "lz4")))]
             Some(_) => unreachable!("`Compression` is an empty enum that cannot be instantiated"),
             None => Compressor::Null(sink),
