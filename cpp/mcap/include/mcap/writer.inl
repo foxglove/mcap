@@ -549,7 +549,8 @@ Status McapWriter::write(const Message& message) {
 
   // Before writing a large message (bigger than chunk size), close current chunk.
   auto* chunkWriter = getChunkWriter();
-  if (chunkWriter != nullptr && /* Chunked? */
+  if (!options_.noHugeMessageChunk && /* Not disabled by user? */
+      chunkWriter != nullptr && /* Chunked? */
       uncompressedSize_ != 0 && /* Current chunk is not empty/new? */
       message.dataSize >= chunkSize_ /* Big message? */ ) {
       auto& fileOutput = *output_;
