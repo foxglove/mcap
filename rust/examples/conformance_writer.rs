@@ -2,7 +2,6 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap},
     env,
-    io::Write,
 };
 
 #[path = "common/conformance_writer_spec.rs"]
@@ -12,7 +11,8 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
     let mut writer = mcap::WriteOptions::new()
         .compression(None)
         .profile("")
-        .create(out_buffer)
+        .disable_seeking(true)
+        .create(binrw::io::NoSeek::new(std::io::stdout()))
         .expect("Couldn't create writer");
 
     let mut channel_ids = HashMap::new();
@@ -50,9 +50,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
             }
             "DataEnd" => {
                 let data_section_crc = record.get_field_u32("data_section_crc");
-                let _data_end = mcap::records::DataEnd {
-                    data_section_crc: data_section_crc,
-                };
+                let _data_end = mcap::records::DataEnd { data_section_crc };
                 // write data end
             }
             "Footer" => {
@@ -126,11 +124,6 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
     }
 
     writer.finish().expect("Couldn't finish");
-
-    let contents = std::fs::read(tmp_path).expect("Couldn't read output");
-    std::io::stdout()
-        .write_all(&contents)
-        .expect("Couldn't write output");
 }
 
 pub fn main() {
