@@ -299,6 +299,7 @@ impl<'a> ChannelAccumulator<'a> {
         }
 
         let schema = Arc::new(Schema {
+            id: header.id,
             name: header.name.clone(),
             encoding: header.encoding,
             data,
@@ -329,6 +330,7 @@ impl<'a> ChannelAccumulator<'a> {
         };
 
         let channel = Arc::new(Channel {
+            id: chan.id,
             topic: chan.topic.clone(),
             schema,
             message_encoding: chan.message_encoding,

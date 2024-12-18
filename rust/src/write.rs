@@ -2,7 +2,7 @@
 
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     io::{self, prelude::*, Cursor, SeekFrom},
     mem::size_of,
 };
@@ -14,7 +14,7 @@ use crate::{
     chunk_sink::{ChunkMode, ChunkSink},
     io_utils::CountingCrcWriter,
     records::{self, op, AttachmentHeader, AttachmentIndex, MessageHeader, Record},
-    Attachment, Channel, Compression, McapError, McapResult, Message, Schema, MAGIC,
+    Attachment, Compression, McapError, McapResult, Message, Schema, MAGIC,
 };
 
 // re-export to help with linear writing
@@ -187,8 +187,8 @@ impl WriteOptions {
 pub struct Writer<'a, W: Write + Seek> {
     writer: Option<WriteMode<W>>,
     options: WriteOptions,
-    schemas: HashMap<Schema<'a>, u16>,
-    channels: HashMap<Channel<'a>, u16>,
+    schemas: Vec<Schema<'a>>,
+    channels: Vec<crate::records::Channel>,
     chunk_indexes: Vec<records::ChunkIndex>,
     attachment_indexes: Vec<records::AttachmentIndex>,
     metadata_indexes: Vec<records::MetadataIndex>,
@@ -233,8 +233,8 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         Ok(Self {
             writer: Some(WriteMode::Raw(writer, chunk_mode)),
             options: opts,
-            schemas: HashMap::new(),
-            channels: HashMap::new(),
+            schemas: Vec::new(),
+            channels: Vec::new(),
             chunk_indexes: Vec::new(),
             attachment_indexes: Vec::new(),
             metadata_indexes: Vec::new(),
@@ -243,75 +243,102 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         })
     }
 
-    /// Adds a channel (and its provided schema, if any), returning its ID.
-    ///
-    /// Useful with subequent calls to [`write_to_known_channel()`](Self::write_to_known_channel)
-    pub fn add_channel(&mut self, chan: &Channel<'a>) -> McapResult<u16> {
-        let schema_id = match &chan.schema {
-            Some(s) => self.add_schema(s)?,
-            None => 0,
-        };
-
-        if let Some(id) = self.channels.get(chan) {
-            return Ok(*id);
+    // adds a schema, returning its ID. If a schema with the same content has been added already,
+    // its ID is returned.
+    pub fn add_schema(&mut self, name: &str, encoding: &str, data: &[u8]) -> McapResult<u16> {
+        let mut max_schema_id: u16 = 0;
+        for schema in &self.schemas {
+            max_schema_id = std::cmp::max(schema.id, max_schema_id);
+            if schema.name == name && schema.encoding == encoding && schema.data == data {
+                return Ok(schema.id);
+            }
         }
+        let next_schema_id = max_schema_id + 1;
 
-        let next_channel_id = self.channels.len() as u16;
-        assert!(self
-            .channels
-            .insert(chan.clone(), next_channel_id)
-            .is_none());
         if self.options.use_chunks {
-            self.chunkin_time()?
-                .write_channel(next_channel_id, schema_id, chan)?;
+            let schema = Schema {
+                id: next_schema_id,
+                name: name.into(),
+                encoding: encoding.into(),
+                data: data.into(),
+            };
+            self.chunkin_time()?.write_schema(schema)?;
         } else {
+            let header = records::SchemaHeader {
+                id: next_schema_id,
+                name: name.into(),
+                encoding: encoding.into(),
+            };
             write_record(
-                self.finish_chunk()?,
-                &Record::Channel(records::Channel {
-                    id: next_channel_id,
-                    schema_id,
-                    topic: chan.topic.clone(),
-                    message_encoding: chan.message_encoding.clone(),
-                    metadata: chan.metadata.clone(),
-                }),
-            )?;
-        }
-        Ok(next_channel_id)
-    }
-
-    fn add_schema(&mut self, schema: &Schema<'a>) -> McapResult<u16> {
-        if let Some(id) = self.schemas.get(schema) {
-            return Ok(*id);
-        }
-
-        // Schema IDs cannot be zero, that's the sentinel value in a channel
-        // for "no schema"
-        let next_schema_id = self.schemas.len() as u16 + 1;
-        assert!(self
-            .schemas
-            .insert(schema.clone(), next_schema_id)
-            .is_none());
-        if self.options.use_chunks {
-            self.chunkin_time()?.write_schema(next_schema_id, schema)?;
-        } else {
-            write_record(
-                self.finish_chunk()?,
+                &mut self.finish_chunk()?,
                 &Record::Schema {
-                    header: records::SchemaHeader {
-                        id: next_schema_id,
-                        name: schema.name.clone(),
-                        encoding: schema.encoding.clone(),
-                    },
-                    data: Cow::Borrowed(&schema.data),
+                    header,
+                    data: Cow::Borrowed(data),
                 },
             )?;
         }
         Ok(next_schema_id)
     }
 
+    /// Adds a channel, returning its ID. If a channel with equivalent content was added previously,
+    /// its ID i sreturned.
+    ///
+    /// Provide a schema_id returned from [`Self::add_schema`], or 0 if the channel is schemaless.
+    ///
+    /// Useful with subequent calls to [`write_to_known_channel()`](Self::write_to_known_channel)
+    pub fn add_channel(
+        &mut self,
+        schema_id: u16,
+        topic: &str,
+        message_encoding: &str,
+        metadata: &BTreeMap<String, String>,
+    ) -> McapResult<u16> {
+        let mut max_channel_id: u16 = 0;
+        for channel in &self.channels {
+            max_channel_id = std::cmp::max(channel.id, max_channel_id);
+            if channel.schema_id == schema_id
+                && channel.topic == topic
+                && channel.message_encoding == message_encoding
+                && channel.metadata == *metadata
+            {
+                return Ok(channel.id);
+            }
+        }
+        let next_channel_id = max_channel_id + 1;
+        if schema_id != 0 && !self.schemas.iter().any(|schema| schema.id == schema_id) {
+            return Err(McapError::UnknownSchema(topic.into(), schema_id));
+        }
+
+        let rec = records::Channel {
+            id: next_channel_id,
+            schema_id,
+            topic: topic.into(),
+            message_encoding: message_encoding.into(),
+            metadata: metadata.clone(),
+        };
+
+        if self.options.use_chunks {
+            self.chunkin_time()?.write_channel(rec)?
+        } else {
+            write_record(self.finish_chunk()?, &Record::Channel(rec))?;
+        }
+        Ok(next_channel_id)
+    }
+
     /// Write the given message (and its provided channel, if needed).
+    /// The provided channel ID and schema ID are ignored and new ones will be assigned in the
+    /// resulting MCAP records.
     pub fn write(&mut self, message: &Message<'a>) -> McapResult<()> {
-        let channel_id = self.add_channel(&message.channel)?;
+        let schema_id: u16 = match message.channel.schema.as_ref() {
+            None => 0,
+            Some(schema) => self.add_schema(&schema.name, &schema.encoding, &schema.data)?,
+        };
+        let channel_id = self.add_channel(
+            schema_id,
+            &message.channel.topic,
+            &message.channel.message_encoding,
+            &message.channel.metadata,
+        )?;
         let header = MessageHeader {
             channel_id,
             sequence: message.sequence,
@@ -332,7 +359,11 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
     ) -> McapResult<()> {
         // The number of channels should be relatively small,
         // do a quick linear search to make sure we're not being given a bogus ID
-        if !self.channels.values().any(|id| *id == header.channel_id) {
+        if !self
+            .channels
+            .iter()
+            .any(|channel| channel.id == header.channel_id)
+        {
             return Err(McapError::UnknownChannel(
                 header.sequence,
                 header.channel_id,
@@ -661,34 +692,9 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         let mut metadata_indexes = Vec::new();
         std::mem::swap(&mut metadata_indexes, &mut self.metadata_indexes);
 
-        // Make some Schema and Channel lists for the summary section.
-        // Be sure to grab schema IDs for the channels from the schema hash map before we drain it!
-        struct ChannelSummary<'a> {
-            channel: Channel<'a>,
-            channel_id: u16,
-            schema_id: u16,
-        }
+        self.channels.sort_by_key(|c| c.id);
 
-        let mut all_channels: Vec<ChannelSummary<'_>> = self
-            .channels
-            .drain()
-            .map(|(channel, channel_id)| {
-                let schema_id = match &channel.schema {
-                    Some(s) => *self.schemas.get(s).unwrap(),
-                    None => 0,
-                };
-
-                ChannelSummary {
-                    channel,
-                    channel_id,
-                    schema_id,
-                }
-            })
-            .collect();
-        all_channels.sort_unstable_by_key(|cs| cs.channel_id);
-
-        let mut all_schemas: Vec<(Schema<'_>, u16)> = self.schemas.drain().collect();
-        all_schemas.sort_unstable_by_key(|(_, v)| *v);
+        self.schemas.sort_by_key(|s| s.id);
 
         let mut offsets = Vec::new();
 
@@ -703,13 +709,13 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
 
         // Write all schemas.
         let schemas_start = summary_start;
-        for (schema, id) in all_schemas {
+        for schema in self.schemas.iter() {
             let header = records::SchemaHeader {
-                id,
-                name: schema.name,
-                encoding: schema.encoding,
+                id: schema.id,
+                name: schema.name.clone(),
+                encoding: schema.encoding.clone(),
             };
-            let data = schema.data;
+            let data = schema.data.clone();
 
             write_record(&mut ccw, &Record::Schema { header, data })?;
         }
@@ -724,15 +730,8 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
 
         // Write all channels.
         let channels_start = schemas_end;
-        for cs in all_channels {
-            let rec = records::Channel {
-                id: cs.channel_id,
-                schema_id: cs.schema_id,
-                topic: cs.channel.topic,
-                message_encoding: cs.channel.message_encoding,
-                metadata: cs.channel.metadata,
-            };
-            write_record(&mut ccw, &Record::Channel(rec))?;
+        for channel in self.channels.iter() {
+            write_record(&mut ccw, &Record::Channel(channel.clone()))?;
         }
         let channels_end = posit(&mut ccw)?;
         if channels_end - channels_start > 0 {
@@ -960,34 +959,24 @@ impl<W: Write + Seek> ChunkWriter<W> {
         })
     }
 
-    fn write_schema(&mut self, id: u16, schema: &Schema) -> McapResult<()> {
+    fn write_schema(&mut self, schema: Schema) -> McapResult<()> {
         let header = records::SchemaHeader {
-            id,
-            name: schema.name.clone(),
-            encoding: schema.encoding.clone(),
+            id: schema.id,
+            name: schema.name,
+            encoding: schema.encoding,
         };
         write_record(
             &mut self.compressor,
             &Record::Schema {
                 header,
-                data: Cow::Borrowed(&schema.data),
+                data: schema.data,
             },
         )?;
         Ok(())
     }
 
-    fn write_channel(&mut self, id: u16, schema_id: u16, chan: &Channel) -> McapResult<()> {
-        assert_eq!(schema_id == 0, chan.schema.is_none());
-
-        let rec = records::Channel {
-            id,
-            schema_id,
-            topic: chan.topic.clone(),
-            message_encoding: chan.message_encoding.clone(),
-            metadata: chan.metadata.clone(),
-        };
-
-        write_record(&mut self.compressor, &Record::Channel(rec))?;
+    fn write_channel(&mut self, chan: records::Channel) -> McapResult<()> {
+        write_record(&mut self.compressor, &Record::Channel(chan))?;
         Ok(())
     }
 

@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::{collections::BTreeMap, io::Cursor};
 
 use anyhow::Result;
 
@@ -9,14 +9,7 @@ fn handles_time0_messages() -> Result<()> {
     let mut buf = Vec::new();
     let mut out = mcap::Writer::new(Cursor::new(&mut buf))?;
 
-    let my_channel = mcap::Channel {
-        topic: String::from("time"),
-        message_encoding: String::from("text/plain"),
-        metadata: Default::default(),
-        schema: None,
-    };
-
-    let channel_id = out.add_channel(&my_channel)?;
+    let channel_id = out.add_channel(0, "time", "text/plain", &BTreeMap::new())?;
 
     out.write_to_known_channel(
         &mcap::records::MessageHeader {
