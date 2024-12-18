@@ -169,6 +169,7 @@ pub enum Compression {
 /// or hold its own buffer if it was decompressed from a chunk.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Schema<'a> {
+    pub id: u16,
     pub name: String,
     pub encoding: String,
     pub data: Cow<'a, [u8]>,
@@ -186,6 +187,7 @@ impl fmt::Debug for Schema<'_> {
 /// Describes a channel which [Message]s are published to in an MCAP file
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Channel<'a> {
+    pub id: u16,
     pub topic: String,
     pub schema: Option<Arc<Schema<'a>>>,
 

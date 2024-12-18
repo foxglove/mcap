@@ -1,20 +1,22 @@
-use std::{borrow::Cow, collections::HashMap, env, io::Write, sync::Arc};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap},
+    env,
+    io::Write,
+};
 
 #[path = "common/conformance_writer_spec.rs"]
 mod conformance_writer_spec;
 
 fn write_file(spec: &conformance_writer_spec::WriterSpec) {
-    let mut tmp = tempfile::NamedTempFile::new().expect("Couldn't open file");
-    let tmp_path = tmp.path().to_owned();
-    let out_buffer = std::io::BufWriter::new(&mut tmp);
     let mut writer = mcap::WriteOptions::new()
         .compression(None)
         .profile("")
         .create(out_buffer)
         .expect("Couldn't create writer");
 
-    let mut channels = HashMap::<u16, mcap::Channel>::new();
-    let mut schemas = HashMap::<u64, mcap::Schema>::new();
+    let mut channel_ids = HashMap::new();
+    let mut schema_ids = HashMap::new();
 
     for record in &spec.records {
         match record.record_type.as_str() {
@@ -38,17 +40,10 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                 let schema_id = record.get_field_u64("schema_id");
                 let topic = record.get_field_str("topic");
                 let message_encoding = record.get_field_str("message_encoding");
-                let schema = schemas.get(&schema_id).expect("Missing schema");
-                let channel = mcap::Channel {
-                    schema: Some(Arc::new(schema.to_owned())),
-                    topic: topic.to_string(),
-                    message_encoding: message_encoding.to_string(),
-                    metadata: std::collections::BTreeMap::new(),
-                };
-                writer
-                    .add_channel(&channel)
+                let returned_id = writer
+                    .add_channel(schema_id as u16, topic, message_encoding, &BTreeMap::new())
                     .expect("Couldn't write channel");
-                channels.insert(id, channel);
+                channel_ids.insert(returned_id, id);
             }
             "ChunkIndex" => {
                 // written automatically
@@ -82,15 +77,23 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
             }
             "Message" => {
                 let channel_id = record.get_field_u16("channel_id");
-                let channel = channels.get(&channel_id).expect("Unknown channel");
-                let message = mcap::Message {
-                    channel: Arc::new(channel.to_owned()),
-                    data: Cow::from(record.get_field_data("data")),
-                    log_time: record.get_field_u64("log_time"),
-                    publish_time: record.get_field_u64("publish_time"),
-                    sequence: record.get_field_u32("sequence"),
-                };
-                writer.write(&message).expect("Write message failed");
+                let data = record.get_field_data("data");
+                let log_time = record.get_field_u64("log_time");
+                let publish_time = record.get_field_u64("publish_time");
+                let sequence = record.get_field_u32("sequence");
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id: *channel_ids
+                                .get(&channel_id)
+                                .expect("message on unexpected channel ID"),
+                            log_time,
+                            publish_time,
+                            sequence,
+                        },
+                        &data,
+                    )
+                    .expect("Write message failed");
             }
             "Metadata" => {
                 let name = record.get_field_str("name");
@@ -104,14 +107,12 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
             "Schema" => {
                 let name = record.get_field_str("name");
                 let encoding = record.get_field_str("encoding");
-                let id = record.get_field_u64("id");
-                let data: Vec<u8> = record.get_field_data(&"data");
-                let schema = mcap::Schema {
-                    name: name.to_owned(),
-                    encoding: encoding.to_owned(),
-                    data: Cow::from(data),
-                };
-                schemas.insert(id, schema);
+                let id = record.get_field_u16("id");
+                let data: Vec<u8> = record.get_field_data("data");
+                let returned_id = writer
+                    .add_schema(name, encoding, &data)
+                    .expect("cannot write schema");
+                schema_ids.insert(returned_id, id);
             }
             "Statistics" => {
                 // written automatically
@@ -128,7 +129,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
 
     let contents = std::fs::read(tmp_path).expect("Couldn't read output");
     std::io::stdout()
-        .write(&contents)
+        .write_all(&contents)
         .expect("Couldn't write output");
 }
 
