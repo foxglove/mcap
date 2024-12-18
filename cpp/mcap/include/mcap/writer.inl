@@ -547,12 +547,11 @@ Status McapWriter::write(const Message& message) {
     ++statistics_.channelCount;
   }
 
-  // Before writing a large message (bigger than chunk size), close current chunk.
+  // Before writing a message that would overflow the current chunk, close it.
   auto* chunkWriter = getChunkWriter();
-  if (!options_.noHugeMessageChunk && /* Not disabled by user? */
-      chunkWriter != nullptr && /* Chunked? */
+  if (chunkWriter != nullptr && /* Chunked? */
       uncompressedSize_ != 0 && /* Current chunk is not empty/new? */
-      message.dataSize >= chunkSize_ /* Big message? */ ) {
+      message.dataSize + uncompressedSize_ >= chunkSize_ /* Overflowing? */) {
       auto& fileOutput = *output_;
       writeChunk(fileOutput, *chunkWriter);
   }
