@@ -259,7 +259,7 @@ impl<W: Write + Seek> Writer<W> {
         })
     }
 
-    // adds a schema, returning its ID. If a schema with the same content has been added already,
+    // Adds a schema, returning its ID. If a schema with the same content has been added already,
     // its ID is returned.
     pub fn add_schema(&mut self, name: &str, encoding: &str, data: &[u8]) -> McapResult<u16> {
         if let Some(&id) = self.schemas.get_by_left(&SchemaContent {
@@ -307,9 +307,9 @@ impl<W: Write + Seek> Writer<W> {
     }
 
     /// Adds a channel, returning its ID. If a channel with equivalent content was added previously,
-    /// its ID i sreturned.
+    /// its ID is returned.
     ///
-    /// Provide a schema_id returned from [`Self::add_schema`], or 0 if the channel is schemaless.
+    /// Provide a schema_id returned from [`Self::add_schema`], or 0 if the channel has no schema.
     ///
     /// Useful with subequent calls to [`write_to_known_channel()`](Self::write_to_known_channel)
     pub fn add_channel(
@@ -373,13 +373,14 @@ impl<W: Write + Seek> Writer<W> {
     pub fn write(&mut self, message: &Message) -> McapResult<()> {
         if let Some(schema) = message.channel.schema.as_ref() {
             match self.schemas.get_by_right(&schema.id) {
-                Some(expected) => {
-                    let actual = SchemaContent {
+                Some(previous) => {
+                    // ensure that this message schema does not conflict with the existing one's content
+                    let current = SchemaContent {
                         name: Cow::Borrowed(&schema.name),
                         encoding: Cow::Borrowed(&schema.encoding),
                         data: Cow::Borrowed(&schema.data),
                     };
-                    if *expected != actual {
+                    if *previous != current {
                         return Err(McapError::ConflictingSchemas(schema.name.clone()));
                     }
                 }
@@ -388,15 +389,19 @@ impl<W: Write + Seek> Writer<W> {
                 }
             }
         }
+        let schema_id = match message.channel.schema.as_ref() {
+            None => 0,
+            Some(schema) => schema.id,
+        };
         match self.channels.get_by_right(&message.channel.id) {
-            Some(expected) => {
-                let actual = ChannelContent {
+            Some(previous) => {
+                let current = ChannelContent {
                     topic: Cow::Borrowed(&message.channel.topic),
-                    schema_id: message.channel.schema.as_ref().map(|s| s.id).unwrap_or(0),
+                    schema_id,
                     message_encoding: Cow::Borrowed(&message.channel.message_encoding),
                     metadata: Cow::Borrowed(&message.channel.metadata),
                 };
-                if *expected != actual {
+                if *previous != current {
                     return Err(McapError::ConflictingChannels(
                         message.channel.topic.clone(),
                     ));
