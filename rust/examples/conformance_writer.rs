@@ -29,7 +29,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                     media_type: record.get_field_str("media_type").to_owned(),
                 };
                 writer
-                    .attach(&attachment)
+                .attach(&attachment)
                     .expect("Couldn't write attachment");
             }
             "AttachmentIndex" => {

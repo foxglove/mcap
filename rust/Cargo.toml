@@ -25,6 +25,7 @@ thiserror = "1.0"
 lz4 = { version = "1.27", optional = true }
 tokio = { version = "1", features = ["io-util"] , optional = true }
 static_assertions = "1.1.0"
+bimap = "0.6.3"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 zstd = { version = "0.11", features = ["wasm"], optional = true }
