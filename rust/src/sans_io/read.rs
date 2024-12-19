@@ -1033,4 +1033,72 @@ mod tests {
         );
         Ok(())
     }
+
+    // Ensures that the internal buffer for the linear reader gets compacted regularly and does not
+    // expand unbounded.
+    #[test]
+    fn test_buffer_compaction() -> McapResult<()> {
+        let mut buf = Vec::new();
+        {
+            let mut cursor = std::io::Cursor::new(buf);
+            let data = Vec::from_iter(std::iter::repeat(0x20u8).take(1024 * 1024 * 4));
+            let mut writer = crate::WriteOptions::new()
+                .compression(None)
+                .chunk_size(None)
+                .create(&mut cursor)?;
+            let channel = std::sync::Arc::new(crate::Channel {
+                topic: "chat".to_owned(),
+                schema: None,
+                message_encoding: "json".to_owned(),
+                metadata: BTreeMap::new(),
+            });
+            writer.add_channel(&channel)?;
+            for n in 0..3 {
+                writer.write(&crate::Message {
+                    channel: channel.clone(),
+                    sequence: n,
+                    log_time: n as u64,
+                    publish_time: n as u64,
+                    data: std::borrow::Cow::Borrowed(&data[..]),
+                })?;
+                if n == 1 {
+                    writer.flush()?;
+                }
+            }
+            writer.finish()?;
+            drop(writer);
+            buf = cursor.into_inner();
+        }
+        let mut reader = LinearReader::new();
+        let mut cursor = std::io::Cursor::new(buf);
+        let mut opcodes: Vec<u8> = Vec::new();
+        let mut iter_count = 0;
+        let mut max_needed: usize = 0;
+        while let Some(action) = reader.next_action() {
+            match action? {
+                ReadAction::NeedMore(n) => {
+                    max_needed = std::cmp::max(max_needed, n);
+                    // read slightly more than requested, such that the data in the buffer does not
+                    // hit zero after the next action.
+                    let written = cursor.read(reader.insert(n + 1))?;
+                    reader.set_written(written);
+                    let buffer_size = reader.file_data.data.len();
+                    assert!(
+                        buffer_size < std::cmp::max(max_needed * 2, 4096),
+                        "max needed: {0}, buffer size: {1}",
+                        max_needed,
+                        buffer_size
+                    );
+                }
+                ReadAction::GetRecord { data, opcode } => {
+                    opcodes.push(opcode);
+                    parse_record(opcode, data)?;
+                }
+            }
+            iter_count += 1;
+            // guard against infinite loop
+            assert!(iter_count < 10000);
+        }
+        Ok(())
+    }
 }
