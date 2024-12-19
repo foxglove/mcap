@@ -176,7 +176,7 @@ impl WriteOptions {
     }
 
     /// Creates a [`Writer`] whch writes to `w` using the given options
-    pub fn create<'a, W: Write + Seek>(self, w: W) -> McapResult<Writer<W>> {
+    pub fn create<W: Write + Seek>(self, w: W) -> McapResult<Writer<W>> {
         Writer::with_options(w, self)
     }
 }
@@ -270,37 +270,40 @@ impl<W: Write + Seek> Writer<W> {
             return Ok(id);
         }
         let next_schema_id = self.schemas.right_values().max().unwrap_or(&0) + 1;
-        let schema = Schema {
+        self.write_schema(Schema {
             id: next_schema_id,
             name: name.into(),
             encoding: encoding.into(),
             data: Cow::Owned(data.into()),
-        };
+        })?;
+        Ok(next_schema_id)
+    }
+
+    fn write_schema(&mut self, schema: Schema) -> McapResult<()> {
         self.schemas.insert(
             SchemaContent {
-                name: Cow::Owned(name.into()),
-                encoding: Cow::Owned(encoding.into()),
-                data: Cow::Owned(data.into()),
+                name: Cow::Owned(schema.name.clone()),
+                encoding: Cow::Owned(schema.encoding.clone()),
+                data: Cow::Owned(schema.data.clone().into_owned()),
             },
-            next_schema_id,
+            schema.id,
         );
         if self.options.use_chunks {
-            self.chunkin_time()?.write_schema(schema)?;
+            self.chunkin_time()?.write_schema(schema)
         } else {
             let header = records::SchemaHeader {
                 id: schema.id,
                 name: schema.name,
                 encoding: schema.encoding,
             };
-            write_record(
+            Ok(write_record(
                 &mut self.finish_chunk()?,
                 &Record::Schema {
                     header,
                     data: schema.data,
                 },
-            )?;
+            )?)
         }
-        Ok(next_schema_id)
     }
 
     /// Adds a channel, returning its ID. If a channel with equivalent content was added previously,
@@ -318,7 +321,7 @@ impl<W: Write + Seek> Writer<W> {
     ) -> McapResult<u16> {
         if let Some(&id) = self.channels.get_by_left(&ChannelContent {
             topic: Cow::Borrowed(topic),
-            schema_id: schema_id,
+            schema_id,
             message_encoding: Cow::Borrowed(message_encoding),
             metadata: Cow::Borrowed(metadata),
         }) {
@@ -334,47 +337,83 @@ impl<W: Write + Seek> Writer<W> {
             return Err(McapError::UnknownSchema(topic.into(), schema_id));
         }
 
-        let rec = records::Channel {
+        self.write_channel(records::Channel {
             id: next_channel_id,
             schema_id,
             topic: topic.into(),
             message_encoding: message_encoding.into(),
             metadata: metadata.clone(),
-        };
-        self.channels.insert(
-            ChannelContent {
-                topic: Cow::Owned(topic.into()),
-                schema_id: schema_id,
-                message_encoding: Cow::Owned(message_encoding.into()),
-                metadata: Cow::Owned(metadata.clone()),
-            },
-            next_channel_id,
-        );
-
-        if self.options.use_chunks {
-            self.chunkin_time()?.write_channel(rec)?
-        } else {
-            write_record(self.finish_chunk()?, &Record::Channel(rec))?;
-        }
+        })?;
         Ok(next_channel_id)
     }
 
-    /// Write the given message (and its provided channel, if needed).
-    /// The provided channel ID and schema ID are ignored and new ones will be assigned in the
-    /// resulting MCAP records.
+    fn write_channel(&mut self, channel: records::Channel) -> McapResult<()> {
+        self.channels.insert(
+            ChannelContent {
+                topic: Cow::Owned(channel.topic.clone()),
+                schema_id: channel.schema_id,
+                message_encoding: Cow::Owned(channel.message_encoding.clone()),
+                metadata: Cow::Owned(channel.metadata.clone()),
+            },
+            channel.id,
+        );
+
+        if self.options.use_chunks {
+            self.chunkin_time()?.write_channel(channel)
+        } else {
+            Ok(write_record(
+                self.finish_chunk()?,
+                &Record::Channel(channel),
+            )?)
+        }
+    }
+
+    /// Write the given message (and its provided channel, if not already added).
+    /// The provided channel ID and schema ID will be used as IDs in the resulting MCAP.
     pub fn write(&mut self, message: &Message) -> McapResult<()> {
-        let schema_id: u16 = match message.channel.schema.as_ref() {
-            None => 0,
-            Some(schema) => self.add_schema(&schema.name, &schema.encoding, &schema.data)?,
-        };
-        let channel_id = self.add_channel(
-            schema_id,
-            &message.channel.topic,
-            &message.channel.message_encoding,
-            &message.channel.metadata,
-        )?;
+        if let Some(schema) = message.channel.schema.as_ref() {
+            match self.schemas.get_by_right(&schema.id) {
+                Some(expected) => {
+                    let actual = SchemaContent {
+                        name: Cow::Borrowed(&schema.name),
+                        encoding: Cow::Borrowed(&schema.encoding),
+                        data: Cow::Borrowed(&schema.data),
+                    };
+                    if *expected != actual {
+                        return Err(McapError::ConflictingSchemas(schema.name.clone()));
+                    }
+                }
+                None => {
+                    self.write_schema(schema.as_ref().clone())?;
+                }
+            }
+        }
+        match self.channels.get_by_right(&message.channel.id) {
+            Some(expected) => {
+                let actual = ChannelContent {
+                    topic: Cow::Borrowed(&message.channel.topic),
+                    schema_id: message.channel.schema.as_ref().map(|s| s.id).unwrap_or(0),
+                    message_encoding: Cow::Borrowed(&message.channel.message_encoding),
+                    metadata: Cow::Borrowed(&message.channel.metadata),
+                };
+                if *expected != actual {
+                    return Err(McapError::ConflictingChannels(
+                        message.channel.topic.clone(),
+                    ));
+                }
+            }
+            None => {
+                self.write_channel(records::Channel {
+                    id: message.channel.id,
+                    schema_id: message.channel.schema.as_ref().map(|s| s.id).unwrap_or(0),
+                    topic: message.channel.topic.clone(),
+                    message_encoding: message.channel.message_encoding.clone(),
+                    metadata: message.channel.metadata.clone(),
+                })?;
+            }
+        }
         let header = MessageHeader {
-            channel_id,
+            channel_id: message.channel.id,
             sequence: message.sequence,
             log_time: message.log_time,
             publish_time: message.publish_time,
@@ -740,7 +779,7 @@ impl<W: Write + Seek> Writer<W> {
                     name: content.name.clone().into(),
                     encoding: content.encoding.clone().into(),
                 },
-                data: content.data.clone().into(),
+                data: content.data.clone(),
             })
             .collect();
 
@@ -861,7 +900,7 @@ impl<W: Write + Seek> Writer<W> {
     }
 }
 
-impl<'a, W: Write + Seek> Drop for Writer<W> {
+impl<W: Write + Seek> Drop for Writer<W> {
     fn drop(&mut self) {
         self.finish().unwrap()
     }
