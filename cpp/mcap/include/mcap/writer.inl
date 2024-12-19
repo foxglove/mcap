@@ -551,7 +551,7 @@ Status McapWriter::write(const Message& message) {
   auto* chunkWriter = getChunkWriter();
   if (chunkWriter != nullptr && /* Chunked? */
       uncompressedSize_ != 0 && /* Current chunk is not empty/new? */
-      message.dataSize + uncompressedSize_ >= chunkSize_ /* Overflowing? */) {
+      9 + getRecordSize(message) + uncompressedSize_ >= chunkSize_ /* Overflowing? */) {
       auto& fileOutput = *output_;
       writeChunk(fileOutput, *chunkWriter);
   }
@@ -884,8 +884,12 @@ uint64_t McapWriter::write(IWritable& output, const Channel& channel) {
   return 9 + recordSize;
 }
 
+uint64_t McapWriter::getRecordSize(const Message& message) {
+  return 2 + 4 + 8 + 8 + message.dataSize;
+}
+
 uint64_t McapWriter::write(IWritable& output, const Message& message) {
-  const uint64_t recordSize = 2 + 4 + 8 + 8 + message.dataSize;
+  const uint64_t recordSize = getRecordSize(message);
 
   write(output, OpCode::Message);
   write(output, recordSize);

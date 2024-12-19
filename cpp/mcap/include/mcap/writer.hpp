@@ -434,6 +434,7 @@ public:
   static uint64_t write(IWritable& output, const Footer& footer, bool crcEnabled);
   static uint64_t write(IWritable& output, const Schema& schema);
   static uint64_t write(IWritable& output, const Channel& channel);
+  static uint64_t getRecordSize(const Message& message);
   static uint64_t write(IWritable& output, const Message& message);
   static uint64_t write(IWritable& output, const Attachment& attachment);
   static uint64_t write(IWritable& output, const Metadata& metadata);
