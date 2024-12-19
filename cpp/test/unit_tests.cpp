@@ -530,7 +530,8 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
 
 /**
  * @brief ensures that message index records are only written for the channels present in the
- * previous chunk. This test writes two chunks with one message each in separate channels.
+ * previous chunk. This test writes two chunks with one message each in separate channels, with
+ * the second message being large enough to guarantee the current chunk will be written out.
  * If the writer is working correctly, there will be one message index record after each chunk,
  * one for each message.
  */
@@ -539,7 +540,7 @@ TEST_CASE("Message index records", "[writer]") {
 
   mcap::McapWriter writer;
   mcap::McapWriterOptions opts("test");
-  opts.chunkSize = 100;
+  opts.chunkSize = 200;
   opts.compression = mcap::Compression::None;
 
   writer.open(buffer, opts);
@@ -552,9 +553,10 @@ TEST_CASE("Message index records", "[writer]") {
   writer.addChannel(channel2);
 
   mcap::Message msg;
-  std::vector<std::byte> data(150);
-  WriteMsg(writer, channel1.id, 0, 100, 100, data);
-  WriteMsg(writer, channel2.id, 0, 200, 200, data);
+  // First message should not fill first chunk.
+  WriteMsg(writer, channel1.id, 0, 100, 100, std::vector<std::byte>{20});
+  // Second message fills current chunk and triggers a new one.
+  WriteMsg(writer, channel2.id, 0, 200, 200, std::vector<std::byte>{400});
 
   writer.close();
 

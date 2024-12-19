@@ -56,10 +56,12 @@ struct MCAP_PUBLIC McapWriterOptions {
   bool noSummary = false;
   /**
    * @brief Target uncompressed Chunk payload size in bytes. Once a Chunk's
-   * uncompressed data meets or exceeds this size, the Chunk will be compressed
-   * (if compression is enabled) and written to disk. Note that smaller Chunks
-   * may be written, such as the last Chunk in the Data section. This option is
-   * ignored if `noChunking=true`.
+   * uncompressed data is about to exceed this size, the Chunk will be
+   * compressed (if enabled) and written to disk. Note that this is a 'soft'
+   * ceiling as some Chunks could exceed this size due to either indexing
+   * data or when a single message is larger than `chunkSize`, in which case,
+   * the Chunk will contain only this one large message.
+   * This option is ignored if `noChunking=true`.
    */
   uint64_t chunkSize = DefaultChunkSize;
   /**
