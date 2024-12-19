@@ -39,14 +39,7 @@
 //!
 //!     // Channels and schemas are automatically assigned ID as they're serialized,
 //!     // and automatically deduplicated with `Arc` when deserialized.
-//!     let my_channel = Channel {
-//!         topic: String::from("cool stuff"),
-//!         schema: None,
-//!         message_encoding: String::from("application/octet-stream"),
-//!         metadata: BTreeMap::default()
-//!     };
-//!
-//!     let channel_id = out.add_channel(&my_channel)?;
+//!     let channel_id = out.add_channel(0, "cool stuff", "application/octet-stream", &BTreeMap::new())?;
 //!
 //!     out.write_to_known_channel(
 //!         &MessageHeader {

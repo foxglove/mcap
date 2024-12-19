@@ -17,7 +17,7 @@ fn smoke() -> Result<()> {
 
     let expected = mcap::Message {
         channel: Arc::new(mcap::Channel {
-            id: 0,
+            id: 1,
             schema: Some(Arc::new(mcap::Schema {
                 id: 1,
                 name: String::from("Example"),
@@ -74,7 +74,7 @@ fn run_round_trip(use_chunks: bool) -> Result<()> {
     });
 
     let channel = Arc::new(mcap::Channel {
-        id: 0,
+        id: 1,
         schema: Some(schema.clone()),
         topic: String::from("example"),
         message_encoding: String::from("a"),
@@ -89,10 +89,10 @@ fn run_round_trip(use_chunks: bool) -> Result<()> {
             chunk_count: if use_chunks { 1 } else { 0 },
             message_start_time: 2,
             message_end_time: 2,
-            channel_message_counts: [(0, 1)].into(),
+            channel_message_counts: [(1, 1)].into(),
             ..Default::default()
         }),
-        channels: [(0, channel.clone())].into(),
+        channels: [(1, channel.clone())].into(),
         schemas: [(1, schema.clone())].into(),
         ..Default::default()
     };
