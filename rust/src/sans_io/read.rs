@@ -326,10 +326,6 @@ impl LinearReader {
             self.file_data.end += written;
         }
 
-        if self.file_data.len() == 0 {
-            self.file_data.clear();
-        }
-
         /// Macros for loading data into the reader. These return early with NeedMore(n) if
         /// more data is needed.
         ///
