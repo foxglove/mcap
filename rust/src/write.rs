@@ -7,6 +7,7 @@ use std::{
     mem::size_of,
 };
 
+use bimap::BiHashMap;
 use binrw::prelude::*;
 use byteorder::{WriteBytesExt, LE};
 
@@ -175,20 +176,35 @@ impl WriteOptions {
     }
 
     /// Creates a [`Writer`] whch writes to `w` using the given options
-    pub fn create<'a, W: Write + Seek>(self, w: W) -> McapResult<Writer<'a, W>> {
+    pub fn create<'a, W: Write + Seek>(self, w: W) -> McapResult<Writer<W>> {
         Writer::with_options(w, self)
     }
+}
+
+#[derive(Hash, PartialEq, Eq)]
+struct ChannelContent<'a> {
+    topic: Cow<'a, str>,
+    schema_id: u16,
+    message_encoding: Cow<'a, str>,
+    metadata: Cow<'a, BTreeMap<String, String>>,
+}
+
+#[derive(Hash, PartialEq, Eq)]
+struct SchemaContent<'a> {
+    name: Cow<'a, str>,
+    encoding: Cow<'a, str>,
+    data: Cow<'a, [u8]>,
 }
 
 /// Writes an MCAP file to the given [writer](Write).
 ///
 /// Users should call [`finish()`](Self::finish) to flush the stream
 /// and check for errors when done; otherwise the result will be unwrapped on drop.
-pub struct Writer<'a, W: Write + Seek> {
+pub struct Writer<W: Write + Seek> {
     writer: Option<WriteMode<W>>,
     options: WriteOptions,
-    schemas: Vec<Schema<'a>>,
-    channels: Vec<crate::records::Channel>,
+    schemas: BiHashMap<SchemaContent<'static>, u16>,
+    channels: BiHashMap<ChannelContent<'static>, u16>,
     chunk_indexes: Vec<records::ChunkIndex>,
     attachment_indexes: Vec<records::AttachmentIndex>,
     metadata_indexes: Vec<records::MetadataIndex>,
@@ -197,7 +213,7 @@ pub struct Writer<'a, W: Write + Seek> {
     channel_message_counts: BTreeMap<u16, u64>,
 }
 
-impl<'a, W: Write + Seek> Writer<'a, W> {
+impl<W: Write + Seek> Writer<W> {
     pub fn new(writer: W) -> McapResult<Self> {
         Self::with_options(writer, WriteOptions::default())
     }
@@ -233,11 +249,11 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         Ok(Self {
             writer: Some(WriteMode::Raw(writer, chunk_mode)),
             options: opts,
-            schemas: Vec::new(),
-            channels: Vec::new(),
-            chunk_indexes: Vec::new(),
-            attachment_indexes: Vec::new(),
-            metadata_indexes: Vec::new(),
+            schemas: Default::default(),
+            channels: Default::default(),
+            chunk_indexes: Default::default(),
+            attachment_indexes: Default::default(),
+            metadata_indexes: Default::default(),
             message_bounds: None,
             channel_message_counts: BTreeMap::new(),
         })
@@ -246,34 +262,41 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
     // adds a schema, returning its ID. If a schema with the same content has been added already,
     // its ID is returned.
     pub fn add_schema(&mut self, name: &str, encoding: &str, data: &[u8]) -> McapResult<u16> {
-        let mut max_schema_id: u16 = 0;
-        for schema in &self.schemas {
-            max_schema_id = std::cmp::max(schema.id, max_schema_id);
-            if schema.name == name && schema.encoding == encoding && schema.data == data {
-                return Ok(schema.id);
-            }
+        if let Some(&id) = self.schemas.get_by_left(&SchemaContent {
+            name: name.into(),
+            encoding: encoding.into(),
+            data: data.into(),
+        }) {
+            return Ok(id);
         }
-        let next_schema_id = max_schema_id + 1;
-
+        let next_schema_id = self.schemas.right_values().max().unwrap_or(&0) + 1;
+        let schema = Schema {
+            id: next_schema_id,
+            name: name.into(),
+            encoding: encoding.into(),
+            data: Cow::Owned(data.into()),
+        };
+        self.schemas.insert(
+            SchemaContent {
+                name: Cow::Owned(name.into()),
+                encoding: Cow::Owned(encoding.into()),
+                data: Cow::Owned(data.into()),
+            },
+            next_schema_id,
+        );
         if self.options.use_chunks {
-            let schema = Schema {
-                id: next_schema_id,
-                name: name.into(),
-                encoding: encoding.into(),
-                data: data.into(),
-            };
             self.chunkin_time()?.write_schema(schema)?;
         } else {
             let header = records::SchemaHeader {
-                id: next_schema_id,
-                name: name.into(),
-                encoding: encoding.into(),
+                id: schema.id,
+                name: schema.name,
+                encoding: schema.encoding,
             };
             write_record(
                 &mut self.finish_chunk()?,
                 &Record::Schema {
                     header,
-                    data: Cow::Borrowed(data),
+                    data: schema.data,
                 },
             )?;
         }
@@ -293,19 +316,21 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         message_encoding: &str,
         metadata: &BTreeMap<String, String>,
     ) -> McapResult<u16> {
-        let mut max_channel_id: u16 = 0;
-        for channel in &self.channels {
-            max_channel_id = std::cmp::max(channel.id, max_channel_id);
-            if channel.schema_id == schema_id
-                && channel.topic == topic
-                && channel.message_encoding == message_encoding
-                && channel.metadata == *metadata
-            {
-                return Ok(channel.id);
-            }
+        if let Some(&id) = self.channels.get_by_left(&ChannelContent {
+            topic: Cow::Borrowed(topic),
+            schema_id: schema_id,
+            message_encoding: Cow::Borrowed(message_encoding),
+            metadata: Cow::Borrowed(metadata),
+        }) {
+            return Ok(id);
         }
-        let next_channel_id = max_channel_id + 1;
-        if schema_id != 0 && !self.schemas.iter().any(|schema| schema.id == schema_id) {
+        let next_channel_id = self
+            .channels
+            .right_values()
+            .max()
+            .map(|n| n + 1)
+            .unwrap_or(0);
+        if schema_id != 0 && self.schemas.get_by_right(&schema_id).is_none() {
             return Err(McapError::UnknownSchema(topic.into(), schema_id));
         }
 
@@ -316,6 +341,15 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
             message_encoding: message_encoding.into(),
             metadata: metadata.clone(),
         };
+        self.channels.insert(
+            ChannelContent {
+                topic: Cow::Owned(topic.into()),
+                schema_id: schema_id,
+                message_encoding: Cow::Owned(message_encoding.into()),
+                metadata: Cow::Owned(metadata.clone()),
+            },
+            next_channel_id,
+        );
 
         if self.options.use_chunks {
             self.chunkin_time()?.write_channel(rec)?
@@ -328,7 +362,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
     /// Write the given message (and its provided channel, if needed).
     /// The provided channel ID and schema ID are ignored and new ones will be assigned in the
     /// resulting MCAP records.
-    pub fn write(&mut self, message: &Message<'a>) -> McapResult<()> {
+    pub fn write(&mut self, message: &Message) -> McapResult<()> {
         let schema_id: u16 = match message.channel.schema.as_ref() {
             None => 0,
             Some(schema) => self.add_schema(&schema.name, &schema.encoding, &schema.data)?,
@@ -357,13 +391,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         header: &MessageHeader,
         data: &[u8],
     ) -> McapResult<()> {
-        // The number of channels should be relatively small,
-        // do a quick linear search to make sure we're not being given a bogus ID
-        if !self
-            .channels
-            .iter()
-            .any(|channel| channel.id == header.channel_id)
-        {
+        if self.channels.get_by_right(&header.channel_id).is_none() {
             return Err(McapError::UnknownChannel(
                 header.sequence,
                 header.channel_id,
@@ -692,9 +720,29 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
         let mut metadata_indexes = Vec::new();
         std::mem::swap(&mut metadata_indexes, &mut self.metadata_indexes);
 
-        self.channels.sort_by_key(|c| c.id);
-
-        self.schemas.sort_by_key(|s| s.id);
+        let all_channels: Vec<_> = self
+            .channels
+            .iter()
+            .map(|(content, &id)| records::Channel {
+                id,
+                schema_id: content.schema_id,
+                topic: content.topic.clone().into(),
+                message_encoding: content.message_encoding.clone().into(),
+                metadata: content.metadata.clone().into_owned(),
+            })
+            .collect();
+        let all_schemas: Vec<_> = self
+            .schemas
+            .iter()
+            .map(|(content, &id)| Record::Schema {
+                header: records::SchemaHeader {
+                    id,
+                    name: content.name.clone().into(),
+                    encoding: content.encoding.clone().into(),
+                },
+                data: content.data.clone().into(),
+            })
+            .collect();
 
         let mut offsets = Vec::new();
 
@@ -709,15 +757,8 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
 
         // Write all schemas.
         let schemas_start = summary_start;
-        for schema in self.schemas.iter() {
-            let header = records::SchemaHeader {
-                id: schema.id,
-                name: schema.name.clone(),
-                encoding: schema.encoding.clone(),
-            };
-            let data = schema.data.clone();
-
-            write_record(&mut ccw, &Record::Schema { header, data })?;
+        for schema in all_schemas.iter() {
+            write_record(&mut ccw, schema)?;
         }
         let schemas_end = posit(&mut ccw)?;
         if schemas_end - schemas_start > 0 {
@@ -730,8 +771,8 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
 
         // Write all channels.
         let channels_start = schemas_end;
-        for channel in self.channels.iter() {
-            write_record(&mut ccw, &Record::Channel(channel.clone()))?;
+        for channel in all_channels {
+            write_record(&mut ccw, &Record::Channel(channel))?;
         }
         let channels_end = posit(&mut ccw)?;
         if channels_end - channels_start > 0 {
@@ -820,7 +861,7 @@ impl<'a, W: Write + Seek> Writer<'a, W> {
     }
 }
 
-impl<'a, W: Write + Seek> Drop for Writer<'a, W> {
+impl<'a, W: Write + Seek> Drop for Writer<W> {
     fn drop(&mut self) {
         self.finish().unwrap()
     }
