@@ -96,6 +96,14 @@ impl RwBuf {
     // returns a mutable view of the un-written part of the buffer, resizing as needed to ensure
     // N bytes are available to write into.
     fn tail_with_size(&mut self, n: usize) -> &mut [u8] {
+        let unread_len = self.unread().len();
+        if self.start > unread_len {
+            let (before, after) = self.data.split_at_mut(unread_len);
+            before.copy_from_slice(&mut after[self.start - unread_len..self.end - unread_len]);
+            self.data.truncate(unread_len);
+            self.start = 0;
+            self.end = unread_len;
+        }
         let desired_end = self.end + n;
         self.data.resize(desired_end, 0);
         &mut self.data[self.end..]
