@@ -547,6 +547,16 @@ Status McapWriter::write(const Message& message) {
     ++statistics_.channelCount;
   }
 
+  // Before writing a message that would overflow the current chunk, close it.
+  auto* chunkWriter = getChunkWriter();
+  if (chunkWriter != nullptr && /* Chunked? */
+      uncompressedSize_ != 0 && /* Current chunk is not empty/new? */
+      9 + getRecordSize(message) + uncompressedSize_ >= chunkSize_ /* Overflowing? */) {
+      auto& fileOutput = *output_;
+      writeChunk(fileOutput, *chunkWriter);
+  }
+
+  // For the chunk-local message index.
   const uint64_t messageOffset = uncompressedSize_;
 
   // Write the message
@@ -565,8 +575,7 @@ Status McapWriter::write(const Message& message) {
     channelMessageCounts[message.channelId] += 1;
   }
 
-  auto* chunkWriter = getChunkWriter();
-  if (chunkWriter) {
+  if (chunkWriter != nullptr) {
     if (!options_.noMessageIndex) {
       // Update the message index
       auto& messageIndex = currentMessageIndex_[message.channelId];
@@ -875,8 +884,12 @@ uint64_t McapWriter::write(IWritable& output, const Channel& channel) {
   return 9 + recordSize;
 }
 
+uint64_t McapWriter::getRecordSize(const Message& message) {
+  return 2 + 4 + 8 + 8 + message.dataSize;
+}
+
 uint64_t McapWriter::write(IWritable& output, const Message& message) {
-  const uint64_t recordSize = 2 + 4 + 8 + 8 + message.dataSize;
+  const uint64_t recordSize = getRecordSize(message);
 
   write(output, OpCode::Message);
   write(output, recordSize);
