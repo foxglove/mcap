@@ -39,14 +39,7 @@
 //!
 //!     // Channels and schemas are automatically assigned ID as they're serialized,
 //!     // and automatically deduplicated with `Arc` when deserialized.
-//!     let my_channel = Channel {
-//!         topic: String::from("cool stuff"),
-//!         schema: None,
-//!         message_encoding: String::from("application/octet-stream"),
-//!         metadata: BTreeMap::default()
-//!     };
-//!
-//!     let channel_id = out.add_channel(&my_channel)?;
+//!     let channel_id = out.add_channel(0, "cool stuff", "application/octet-stream", &BTreeMap::new())?;
 //!
 //!     out.write_to_known_channel(
 //!         &MessageHeader {
@@ -169,6 +162,7 @@ pub enum Compression {
 /// or hold its own buffer if it was decompressed from a chunk.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Schema<'a> {
+    pub id: u16,
     pub name: String,
     pub encoding: String,
     pub data: Cow<'a, [u8]>,
@@ -186,6 +180,7 @@ impl fmt::Debug for Schema<'_> {
 /// Describes a channel which [Message]s are published to in an MCAP file
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Channel<'a> {
+    pub id: u16,
     pub topic: String,
     pub schema: Option<Arc<Schema<'a>>>,
 

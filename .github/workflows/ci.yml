@@ -493,7 +493,7 @@ jobs:
           components: "rustfmt, clippy"
       - run: rustup target add wasm32-unknown-unknown
       - run: cargo fmt --all -- --check
-      - run: cargo clippy -- --no-deps
+      - run: cargo clippy --all-targets -- --no-deps
       - run: cargo clippy --no-default-features -- --no-deps
       - run: cargo clippy --no-default-features --features lz4 -- --no-deps
       - run: cargo clippy --no-default-features --features zstd -- --no-deps
