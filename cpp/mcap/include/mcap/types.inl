@@ -39,12 +39,12 @@ constexpr std::string_view OpCodeString(OpCode opcode) {
   }
 }
 
-MetadataIndex::MetadataIndex(const Metadata& metadata, ByteOffset fileOffset)
+inline MetadataIndex::MetadataIndex(const Metadata& metadata, ByteOffset fileOffset)
     : offset(fileOffset)
     , length(9 + 4 + metadata.name.size() + 4 + internal::KeyValueMapSize(metadata.metadata))
     , name(metadata.name) {}
 
-bool RecordOffset::operator==(const RecordOffset& other) const {
+inline bool RecordOffset::operator==(const RecordOffset& other) const {
   if (chunkOffset != std::nullopt && other.chunkOffset != std::nullopt) {
     if (*chunkOffset != *other.chunkOffset) {
       // messages are in separate chunks, cannot be equal.
@@ -61,7 +61,7 @@ bool RecordOffset::operator==(const RecordOffset& other) const {
   return (offset == other.offset);
 }
 
-bool RecordOffset::operator>(const RecordOffset& other) const {
+inline bool RecordOffset::operator>(const RecordOffset& other) const {
   if (chunkOffset != std::nullopt) {
     if (other.chunkOffset != std::nullopt) {
       if (*chunkOffset == *other.chunkOffset) {
