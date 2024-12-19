@@ -37,13 +37,19 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
             }
             "Channel" => {
                 let id = record.get_field_u16("id");
-                let schema_id = record.get_field_u64("schema_id");
+                let schema_id = record.get_field_u16("schema_id");
+                let output_schema_id = match schema_id {
+                    0 => 0,
+                    input_schema_id => {
+                        *schema_ids.get(&input_schema_id).expect("unknown schema ID")
+                    }
+                };
                 let topic = record.get_field_str("topic");
                 let message_encoding = record.get_field_str("message_encoding");
                 let returned_id = writer
-                    .add_channel(schema_id as u16, topic, message_encoding, &BTreeMap::new())
+                    .add_channel(output_schema_id, topic, message_encoding, &BTreeMap::new())
                     .expect("Couldn't write channel");
-                channel_ids.insert(returned_id, id);
+                channel_ids.insert(id, returned_id);
             }
             "ChunkIndex" => {
                 // written automatically
@@ -110,7 +116,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                 let returned_id = writer
                     .add_schema(name, encoding, &data)
                     .expect("cannot write schema");
-                schema_ids.insert(returned_id, id);
+                schema_ids.insert(id, returned_id);
             }
             "Statistics" => {
                 // written automatically
