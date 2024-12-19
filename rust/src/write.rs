@@ -269,7 +269,7 @@ impl<W: Write + Seek> Writer<W> {
         }) {
             return Ok(id);
         }
-        let next_schema_id = self.schemas.right_values().max().unwrap_or(&0) + 1;
+        let next_schema_id = self.schemas.len() as u16 + 1;
         self.write_schema(Schema {
             id: next_schema_id,
             name: name.into(),
@@ -327,12 +327,7 @@ impl<W: Write + Seek> Writer<W> {
         }) {
             return Ok(id);
         }
-        let next_channel_id = self
-            .channels
-            .right_values()
-            .max()
-            .map(|n| n + 1)
-            .unwrap_or(0);
+        let next_channel_id = self.channels.len() as u16;
         if schema_id != 0 && self.schemas.get_by_right(&schema_id).is_none() {
             return Err(McapError::UnknownSchema(topic.into(), schema_id));
         }
