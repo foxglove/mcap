@@ -23,6 +23,7 @@
   "files": [
     "dist",
     "src",
+    "typings",
     "nodejs.d.ts",
     "nodejs.js"
   ],
