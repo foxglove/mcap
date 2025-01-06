@@ -205,6 +205,8 @@ pub struct Writer<W: Write + Seek> {
     options: WriteOptions,
     schemas: BiHashMap<SchemaContent<'static>, u16>,
     channels: BiHashMap<ChannelContent<'static>, u16>,
+    next_schema_id: u16,
+    next_channel_id: u16,
     chunk_indexes: Vec<records::ChunkIndex>,
     attachment_indexes: Vec<records::AttachmentIndex>,
     metadata_indexes: Vec<records::MetadataIndex>,
@@ -251,6 +253,8 @@ impl<W: Write + Seek> Writer<W> {
             options: opts,
             schemas: Default::default(),
             channels: Default::default(),
+            next_channel_id: 0,
+            next_schema_id: 1,
             chunk_indexes: Default::default(),
             attachment_indexes: Default::default(),
             metadata_indexes: Default::default(),
@@ -276,14 +280,15 @@ impl<W: Write + Seek> Writer<W> {
         }) {
             return Ok(id);
         }
-        let next_schema_id = self.schemas.len() as u16 + 1;
+        let id = self.next_schema_id;
         self.write_schema(Schema {
-            id: next_schema_id,
+            id,
             name: name.into(),
             encoding: encoding.into(),
             data: Cow::Owned(data.into()),
         })?;
-        Ok(next_schema_id)
+        self.next_schema_id += 1;
+        Ok(id)
     }
 
     fn write_schema(&mut self, schema: Schema) -> McapResult<()> {
@@ -295,6 +300,9 @@ impl<W: Write + Seek> Writer<W> {
             },
             schema.id,
         );
+        if schema.id >= self.next_schema_id {
+            self.next_schema_id = schema.id + 1;
+        }
         if self.options.use_chunks {
             self.chunkin_time()?.write_schema(schema)
         } else {
@@ -339,19 +347,20 @@ impl<W: Write + Seek> Writer<W> {
         }) {
             return Ok(id);
         }
-        let next_channel_id = self.channels.len() as u16;
+        let id = self.next_channel_id;
+        self.next_channel_id += 1;
         if schema_id != 0 && self.schemas.get_by_right(&schema_id).is_none() {
             return Err(McapError::UnknownSchema(topic.into(), schema_id));
         }
 
         self.write_channel(records::Channel {
-            id: next_channel_id,
+            id,
             schema_id,
             topic: topic.into(),
             message_encoding: message_encoding.into(),
             metadata: metadata.clone(),
         })?;
-        Ok(next_channel_id)
+        Ok(id)
     }
 
     fn write_channel(&mut self, channel: records::Channel) -> McapResult<()> {
@@ -364,7 +373,9 @@ impl<W: Write + Seek> Writer<W> {
             },
             channel.id,
         );
-
+        if channel.id >= self.next_channel_id {
+            self.next_channel_id = channel.id + 1;
+        }
         if self.options.use_chunks {
             self.chunkin_time()?.write_channel(channel)
         } else {
