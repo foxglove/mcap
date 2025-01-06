@@ -259,8 +259,15 @@ impl<W: Write + Seek> Writer<W> {
         })
     }
 
-    // Adds a schema, returning its ID. If a schema with the same content has been added already,
-    // its ID is returned.
+    /// Adds a schema, returning its ID. If a schema with the same content has been added already,
+    /// its ID is returned.
+    ///
+    /// * `name`: an identifier for the schema.
+    /// * `encoding`: Describes the schema format.  The [well-known schema
+    ///   encodings](https://mcap.dev/spec/registry#well-known-schema-encodings) are preferred. An
+    ///   empty string indicates no schema is available.
+    /// * `data`: The serialized schema content. If `encoding` is an empty string, `data` should
+    ///   have zero length.
     pub fn add_schema(&mut self, name: &str, encoding: &str, data: &[u8]) -> McapResult<u16> {
         if let Some(&id) = self.schemas.get_by_left(&SchemaContent {
             name: name.into(),
@@ -309,9 +316,14 @@ impl<W: Write + Seek> Writer<W> {
     /// Adds a channel, returning its ID. If a channel with equivalent content was added previously,
     /// its ID is returned.
     ///
-    /// Provide a schema_id returned from [`Self::add_schema`], or 0 if the channel has no schema.
+    /// Useful with subequent calls to [`write_to_known_channel()`](Self::write_to_known_channel).
     ///
-    /// Useful with subequent calls to [`write_to_known_channel()`](Self::write_to_known_channel)
+    /// * `schema_id`: a schema_id returned from [`Self::add_schema`], or 0 if the channel has no
+    ///    schema.
+    /// * `topic`: The topic name.
+    /// * `message_encoding`: Encoding for messages on this channel. The [well-known message
+    ///    encodings](https://mcap.dev/spec/registry#well-known-message-encodings) are preferred.
+    ///  * `metadata`: Metadata about this channel.
     pub fn add_channel(
         &mut self,
         schema_id: u16,
@@ -580,7 +592,8 @@ impl<W: Write + Seek> Writer<W> {
         Ok(())
     }
 
-    /// Write an attachment to the MCAP file
+    /// Write an attachment to the MCAP file. This finishes any current chunk before writing the
+    /// attachment.
     pub fn attach(&mut self, attachment: &Attachment) -> McapResult<()> {
         let header = records::AttachmentHeader {
             log_time: attachment.log_time,
@@ -596,6 +609,8 @@ impl<W: Write + Seek> Writer<W> {
         Ok(())
     }
 
+    /// Write a [Metadata](https://mcap.dev/spec#metadata-op0x0c) record to the MCAP file. This
+    /// finishes any current chunk before writing the metadata.
     pub fn write_metadata(&mut self, metadata: &Metadata) -> McapResult<()> {
         let w = self.finish_chunk()?;
         let offset = w.stream_position()?;
