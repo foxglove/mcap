@@ -595,8 +595,14 @@ impl LinearReader {
                             if state.uncompressed_remaining == 0
                                 && self.decompressed_content.len() == 0
                             {
+                                // We've consumed all compressed data. It's possible for there to
+                                // still be data left in the chunk that has not yet been read into
+                                // `self.file_data`. This can happen when a compressor adds extra
+                                // bytes after its last frame. We need to treat this as "padding
+                                // after the chunk" and skip over it before reading the next record.
                                 state.padding_after_compressed_data +=
-                                    clamp_to_usize(state.compressed_remaining);
+                                    check!(len_as_usize(state.compressed_remaining));
+                                state.compressed_remaining = 0;
                                 self.currently_reading = PaddingAfterChunk;
                                 continue;
                             }
@@ -1114,10 +1120,13 @@ mod tests {
             .expect("failed to open file");
         let blocksize: usize = 1024;
         let mut reader = LinearReader::new();
+        let mut message_count = 0;
         while let Some(action) = reader.next_action() {
             match action.expect("failed to get next action") {
-                ReadAction::GetRecord { data: _, opcode } => {
-                    print!("{},", opcode);
+                ReadAction::GetRecord { opcode, .. } => {
+                    if opcode == op::MESSAGE {
+                        message_count += 1;
+                    }
                 }
                 ReadAction::NeedMore(_) => {
                     let read = f
@@ -1127,5 +1136,6 @@ mod tests {
                 }
             }
         }
+        assert_eq!(message_count, 12);
     }
 }
