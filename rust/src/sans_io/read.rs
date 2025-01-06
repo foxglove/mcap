@@ -46,6 +46,8 @@ struct ChunkState {
     uncompressed_data_hasher: Option<crc32fast::Hasher>,
     // The number of compressed bytes left in the chunk that have not been read out of `file_data`.
     compressed_remaining: u64,
+    // The number of uncompressed bytes left in the chunk that have not been decompressed yet.
+    uncompressed_remaining: u64,
     // The total uncompressed length of the chunk records field.
     uncompressed_len: u64,
     // The number of bytes in the chunk record after the `records` field ends.
@@ -283,6 +285,7 @@ impl LinearReader {
             uncompressed_data_hasher: Some(crc32fast::Hasher::new()),
             uncompressed_len: header.uncompressed_size,
             compressed_remaining: header.compressed_size,
+            uncompressed_remaining: header.uncompressed_size,
             padding_after_compressed_data: 0,
         });
         Ok(result)
@@ -354,13 +357,14 @@ impl LinearReader {
 
         // decompress ensures that $n bytes are available in the uncompressed_content buffer.
         macro_rules! decompress {
-            ($n: expr, $remaining: expr, $decompressor:expr) => {{
+            ($n: expr, $chunk_state: expr, $decompressor:expr) => {{
                 match decompress_inner(
                     $decompressor,
                     $n,
                     &mut self.file_data,
                     &mut self.decompressed_content,
-                    $remaining,
+                    &mut $chunk_state.compressed_remaining,
+                    &mut $chunk_state.uncompressed_remaining,
                 ) {
                     Ok(None) => {
                         &self.decompressed_content.data
@@ -502,6 +506,7 @@ impl LinearReader {
                         },
                         compressed_remaining: header.compressed_size,
                         uncompressed_len: header.uncompressed_size,
+                        uncompressed_remaining: header.uncompressed_size,
                         padding_after_compressed_data,
                         crc: header.uncompressed_crc,
                     };
@@ -555,11 +560,7 @@ impl LinearReader {
                                 self.currently_reading = ChunkRecord;
                                 continue;
                             }
-                            let _ = decompress!(
-                                uncompressed_len,
-                                &mut state.compressed_remaining,
-                                decompressor
-                            );
+                            let _ = decompress!(uncompressed_len, state, decompressor);
                         }
                     }
                 }
@@ -591,20 +592,26 @@ impl LinearReader {
                             if self.decompressed_content.len() == 0 {
                                 self.decompressed_content.clear();
                             }
-                            if state.compressed_remaining == 0
+                            if state.uncompressed_remaining == 0
                                 && self.decompressed_content.len() == 0
                             {
+                                // We've consumed all compressed data. It's possible for there to
+                                // still be data left in the chunk that has not yet been read into
+                                // `self.file_data`. This can happen when a compressor adds extra
+                                // bytes after its last frame. We need to treat this as "padding
+                                // after the chunk" and skip over it before reading the next record.
+                                state.padding_after_compressed_data +=
+                                    check!(len_as_usize(state.compressed_remaining));
+                                state.compressed_remaining = 0;
                                 self.currently_reading = PaddingAfterChunk;
                                 continue;
                             }
-                            let opcode_len_buf =
-                                decompress!(9, &mut state.compressed_remaining, decompressor);
+                            let opcode_len_buf = decompress!(9, state, decompressor);
                             let opcode = opcode_len_buf[0];
                             let len = check!(len_as_usize(u64::from_le_bytes(
                                 opcode_len_buf[1..9].try_into().unwrap(),
                             )));
-                            let _ =
-                                decompress!(9 + len, &mut state.compressed_remaining, decompressor);
+                            let _ = decompress!(9 + len, state, decompressor);
                             self.decompressed_content.mark_read(9);
                             let (start, end) = (
                                 self.decompressed_content.start,
@@ -707,6 +714,7 @@ fn decompress_inner(
     src_buf: &mut RwBuf,
     dest_buf: &mut RwBuf,
     compressed_remaining: &mut u64,
+    uncompressed_remaining: &mut u64,
 ) -> McapResult<Option<usize>> {
     if dest_buf.len() >= n {
         return Ok(None);
@@ -722,12 +730,16 @@ fn decompress_inner(
         if dst.is_empty() {
             return Ok(None);
         }
+        if *uncompressed_remaining == 0 {
+            return Err(McapError::UnexpectedEoc);
+        }
         let src_len = std::cmp::min(have, clamp_to_usize(*compressed_remaining));
         let src = &src_buf.data[src_buf.start..src_buf.start + src_len];
         let res = decompressor.decompress(src, dst)?;
         src_buf.mark_read(res.consumed);
         dest_buf.end += res.wrote;
         *compressed_remaining -= res.consumed as u64;
+        *uncompressed_remaining -= res.wrote as u64;
     }
 }
 
@@ -1100,5 +1112,30 @@ mod tests {
             assert!(iter_count < 10000);
         }
         Ok(())
+    }
+
+    #[test]
+    fn test_decompression_does_not_fail() {
+        let mut f = std::fs::File::open("tests/data/zstd_chunk_with_padding.mcap")
+            .expect("failed to open file");
+        let blocksize: usize = 1024;
+        let mut reader = LinearReader::new();
+        let mut message_count = 0;
+        while let Some(action) = reader.next_action() {
+            match action.expect("failed to get next action") {
+                ReadAction::GetRecord { opcode, .. } => {
+                    if opcode == op::MESSAGE {
+                        message_count += 1;
+                    }
+                }
+                ReadAction::NeedMore(_) => {
+                    let read = f
+                        .read(reader.insert(blocksize))
+                        .expect("failed to read from file");
+                    reader.set_written(read);
+                }
+            }
+        }
+        assert_eq!(message_count, 12);
     }
 }
