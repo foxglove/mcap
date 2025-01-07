@@ -17,12 +17,14 @@ fn create_test_mcap(n: usize, compression: Option<mcap::Compression>) -> Vec<u8>
         const MESSAGE_DATA: &[u8] = &[42; 10];
 
         let schema = Arc::new(Schema {
+            id: 1,
             name: "TestSchema".to_string(),
             encoding: "raw".to_string(),
             data: Cow::Borrowed(b"{}"),
         });
 
         let channel = Arc::new(Channel {
+            id: 0,
             topic: "test_topic".to_string(),
             message_encoding: "raw".to_string(),
             metadata: Default::default(),
@@ -35,7 +37,7 @@ fn create_test_mcap(n: usize, compression: Option<mcap::Compression>) -> Vec<u8>
                 sequence: i as u32,
                 log_time: i as u64,
                 publish_time: i as u64,
-                data: Cow::Borrowed(&MESSAGE_DATA),
+                data: Cow::Borrowed(MESSAGE_DATA),
             };
             writer.write(&message).unwrap();
         }

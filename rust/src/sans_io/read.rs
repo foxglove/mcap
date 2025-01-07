@@ -759,12 +759,12 @@ mod tests {
                 .chunk_size(None)
                 .create(&mut buf)?;
             let channel = std::sync::Arc::new(crate::Channel {
+                id: 0,
                 topic: "chat".to_owned(),
                 schema: None,
                 message_encoding: "json".to_owned(),
                 metadata: BTreeMap::new(),
             });
-            writer.add_channel(&channel)?;
             for n in 0..3 {
                 writer.write(&crate::Message {
                     channel: channel.clone(),
@@ -790,12 +790,12 @@ mod tests {
                 .use_chunks(false)
                 .create(&mut buf)?;
             let channel = std::sync::Arc::new(crate::Channel {
+                id: 0,
                 topic: "chat".to_owned(),
                 schema: None,
                 message_encoding: "json".to_owned(),
                 metadata: BTreeMap::new(),
             });
-            writer.add_channel(&channel)?;
             writer.write(&crate::Message {
                 channel,
                 sequence: 0,
@@ -1059,12 +1059,12 @@ mod tests {
                 .chunk_size(None)
                 .create(&mut cursor)?;
             let channel = std::sync::Arc::new(crate::Channel {
+                id: 0,
                 topic: "chat".to_owned(),
                 schema: None,
                 message_encoding: "json".to_owned(),
                 metadata: BTreeMap::new(),
             });
-            writer.add_channel(&channel)?;
             for n in 0..3 {
                 writer.write(&crate::Message {
                     channel: channel.clone(),
