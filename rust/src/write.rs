@@ -280,14 +280,20 @@ impl<W: Write + Seek> Writer<W> {
         }) {
             return Ok(id);
         }
+        while self.schemas.contains_right(&self.next_schema_id) {
+            if self.next_schema_id == u16::MAX {
+                return Err(McapError::TooManySchemas);
+            }
+            self.next_schema_id += 1;
+        }
         let id = self.next_schema_id;
+        self.next_schema_id += 1;
         self.write_schema(Schema {
             id,
             name: name.into(),
             encoding: encoding.into(),
             data: Cow::Owned(data.into()),
         })?;
-        self.next_schema_id += 1;
         Ok(id)
     }
 
@@ -347,11 +353,18 @@ impl<W: Write + Seek> Writer<W> {
         }) {
             return Ok(id);
         }
-        let id = self.next_channel_id;
-        self.next_channel_id += 1;
         if schema_id != 0 && self.schemas.get_by_right(&schema_id).is_none() {
             return Err(McapError::UnknownSchema(topic.into(), schema_id));
         }
+
+        while self.channels.contains_right(&self.next_channel_id) {
+            if self.next_channel_id == u16::MAX {
+                return Err(McapError::TooManyChannels);
+            }
+            self.next_channel_id += 1;
+        }
+        let id = self.next_channel_id;
+        self.next_channel_id += 1;
 
         self.write_channel(records::Channel {
             id,

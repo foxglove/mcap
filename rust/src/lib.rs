@@ -140,6 +140,10 @@ pub enum McapError {
     ChunkBufferTooLarge(u64),
     #[error("length exceeds usize max: `{0}`")]
     TooLong(u64),
+    #[error("cannot write more than 65335 channels to one MCAP")]
+    TooManyChannels,
+    #[error("cannot write more than 65334 schemas to one MCAP")]
+    TooManySchemas,
 }
 
 pub type McapResult<T> = Result<T, McapError>;
