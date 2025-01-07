@@ -38,10 +38,6 @@ export class ChunkCursor {
     this.#startTime = params.startTime;
     this.#endTime = params.endTime;
     this.#reverse = params.reverse;
-
-    if (this.chunkIndex.messageIndexLength === 0n) {
-      throw new Error(`Chunks without message indexes are not currently supported`);
-    }
   }
 
   /**
