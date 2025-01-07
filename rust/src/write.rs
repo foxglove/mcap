@@ -306,9 +306,6 @@ impl<W: Write + Seek> Writer<W> {
             },
             schema.id,
         );
-        if schema.id >= self.next_schema_id {
-            self.next_schema_id = schema.id + 1;
-        }
         if self.options.use_chunks {
             self.chunkin_time()?.write_schema(schema)
         } else {
@@ -386,9 +383,6 @@ impl<W: Write + Seek> Writer<W> {
             },
             channel.id,
         );
-        if channel.id >= self.next_channel_id {
-            self.next_channel_id = channel.id + 1;
-        }
         if self.options.use_chunks {
             self.chunkin_time()?.write_channel(channel)
         } else {
@@ -1304,5 +1298,79 @@ impl<W: Write + Seek> AttachmentWriter<W> {
                 data_size: self.attachment_length,
             },
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::u16;
+
+    use super::*;
+    #[test]
+    fn writes_all_channel_ids() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let custom_channel = std::sync::Arc::new(crate::Channel {
+            id: u16::MAX,
+            topic: "chat".into(),
+            message_encoding: "json".into(),
+            metadata: BTreeMap::new(),
+            schema: None,
+        });
+        writer
+            .write(&crate::Message {
+                channel: custom_channel.clone(),
+                sequence: 0,
+                log_time: 0,
+                publish_time: 0,
+                data: Cow::Owned(Vec::new()),
+            })
+            .expect("could not write initial channel");
+        for i in 0..65535u16 {
+            let id = writer
+                .add_channel(0, &format!("{i}"), "json", &BTreeMap::new())
+                .expect("could not add channel");
+            assert_eq!(i, id);
+        }
+        let Err(too_many) = writer.add_channel(0, "last", "json", &BTreeMap::new()) else {
+            panic!("should not be able to add another channel");
+        };
+        assert!(matches!(too_many, McapError::TooManyChannels));
+    }
+    #[test]
+    fn writes_all_schema_ids() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let custom_channel = std::sync::Arc::new(crate::Channel {
+            id: 0,
+            topic: "chat".into(),
+            message_encoding: "json".into(),
+            metadata: BTreeMap::new(),
+            schema: Some(std::sync::Arc::new(crate::Schema {
+                id: u16::MAX,
+                name: "int".into(),
+                encoding: "jsonschema".into(),
+                data: Cow::Owned(Vec::new()),
+            })),
+        });
+        writer
+            .write(&crate::Message {
+                channel: custom_channel.clone(),
+                sequence: 0,
+                log_time: 0,
+                publish_time: 0,
+                data: Cow::Owned(Vec::new()),
+            })
+            .expect("could not write initial channel");
+        for i in 0..65534u16 {
+            let id = writer
+                .add_schema(&format!("{i}"), "jsonschema", &[])
+                .expect("could not add schema");
+            assert_eq!(id, i + 1);
+        }
+        let Err(too_many) = writer.add_schema("last", "jsonschema", &[]) else {
+            panic!("should not be able to add another channel");
+        };
+        assert!(matches!(too_many, McapError::TooManySchemas));
     }
 }
