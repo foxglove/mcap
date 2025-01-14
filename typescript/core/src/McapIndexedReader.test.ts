@@ -1124,4 +1124,60 @@ describe("McapIndexedReader", () => {
       },
     ]);
   });
+
+  it("supports chunk index where message index is empty", async () => {
+    const channel1: TypedMcapRecord = {
+      type: "Channel",
+      id: 1,
+      schemaId: 0,
+      topic: "a",
+      messageEncoding: "utf12",
+      metadata: new Map(),
+    };
+    const makeMessage = (idx: number): TypedMcapRecords["Message"] => {
+      return {
+        type: "Message",
+        channelId: channel1.id,
+        sequence: idx,
+        logTime: BigInt(idx),
+        publishTime: 0n,
+        data: new Uint8Array(),
+      };
+    };
+    const message1 = makeMessage(1);
+    const message2 = makeMessage(2);
+
+    const chunk1 = new ChunkBuilder({ useMessageIndex: true });
+    chunk1.addChannel(channel1);
+    chunk1.addMessage(message1);
+
+    const emptyChunk = new ChunkBuilder({ useMessageIndex: true });
+
+    const chunk2 = new ChunkBuilder({ useMessageIndex: true });
+    chunk2.addChannel(channel1);
+    chunk2.addMessage(message2);
+
+    const builder = new McapRecordBuilder();
+    builder.writeMagic();
+    builder.writeHeader({ profile: "", library: "" });
+
+    const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk1));
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, emptyChunk));
+    chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk2));
+
+    builder.writeDataEnd({ dataSectionCrc: 0 });
+
+    const summaryStart = BigInt(builder.length);
+
+    for (const index of chunkIndexes) {
+      builder.writeChunkIndex(index);
+    }
+
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeMagic();
+
+    const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
+    await expect(collect(reader.readMessages())).resolves.toEqual([message1, message2]);
+  });
 });

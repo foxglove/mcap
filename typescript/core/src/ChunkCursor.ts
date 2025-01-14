@@ -40,7 +40,13 @@ export class ChunkCursor {
     this.#reverse = params.reverse;
 
     if (this.chunkIndex.messageIndexLength === 0n) {
-      throw new Error(`Chunks without message indexes are not currently supported`);
+      // Chunk has no message indexes.
+      // We only allow that if the chunk has no messages and the start and end times are 0.
+      if (this.chunkIndex.messageStartTime !== 0n || this.chunkIndex.messageEndTime !== 0n) {
+        throw new Error(
+          `Encountered a chunk index without message indexes and non-zero start and end times`,
+        );
+      }
     }
   }
 
@@ -107,6 +113,7 @@ export class ChunkCursor {
     const reverse = this.#reverse;
     let messageIndexStartOffset: bigint | undefined;
     let relevantMessageIndexStartOffset: bigint | undefined;
+
     for (const [channelId, offset] of this.chunkIndex.messageIndexOffsets) {
       if (messageIndexStartOffset == undefined || offset < messageIndexStartOffset) {
         messageIndexStartOffset = offset;
