@@ -1,4 +1,5 @@
 """tests for the McapReader implementations."""
+
 # cspell:words getbuffer
 import json
 import os
@@ -22,6 +23,14 @@ from mcap.writer import IndexType, Writer
 DEMO_MCAP = (
     Path(__file__).parent.parent.parent.parent / "testdata" / "mcap" / "demo.mcap"
 )
+
+
+class StrictBytesIO(BytesIO):
+    """A subclass of BytesIO that throws for negative or unspecified-length reads."""
+
+    def read(self, size: Union[int, None] = -1):
+        assert size is not None and size > 0
+        return super().read(size)
 
 
 @pytest.fixture
@@ -263,21 +272,21 @@ def test_detect_invalid_initial_magic(tmpdir: Path):
 
 def test_record_size_limit():
     # create a simple small MCAP
-    write_stream = BytesIO()
+    write_stream = StrictBytesIO()
     writer = Writer(write_stream)
     writer.start("profile", "library")
     writer.finish()
 
     # default stream reader can read it
     stream_reader = StreamReader(
-        BytesIO(write_stream.getbuffer()), record_size_limit=100
+        StrictBytesIO(write_stream.getbuffer()), record_size_limit=100
     )
     records = [r for r in stream_reader.records]
     assert len(records) == 10
 
     # can cause "large" records to raise an error by setting a low limit
     stream_reader = StreamReader(
-        BytesIO(write_stream.getbuffer()), record_size_limit=10
+        StrictBytesIO(write_stream.getbuffer()), record_size_limit=10
     )
     with pytest.raises(
         RecordLengthLimitExceeded,
@@ -287,7 +296,7 @@ def test_record_size_limit():
 
     # default seeking reader can read it
     seeking_reader = SeekingReader(
-        BytesIO(write_stream.getbuffer()), record_size_limit=100
+        StrictBytesIO(write_stream.getbuffer()), record_size_limit=100
     )
     seeking_reader.get_header()
     seeking_reader.get_summary()
@@ -295,7 +304,7 @@ def test_record_size_limit():
 
     # can cause "large" records to raise an error by setting a low limit
     seeking_reader = SeekingReader(
-        BytesIO(write_stream.getbuffer()), record_size_limit=10
+        StrictBytesIO(write_stream.getbuffer()), record_size_limit=10
     )
     with pytest.raises(
         RecordLengthLimitExceeded,
@@ -311,16 +320,29 @@ def test_record_size_limit():
 
     # default non-seeking reader can read it
     non_seeking_reader = NonSeekingReader(
-        BytesIO(write_stream.getbuffer()), record_size_limit=100
+        StrictBytesIO(write_stream.getbuffer()), record_size_limit=100
     )
     non_seeking_reader.get_header()
 
     # can cause "large" records to raise an error by setting a low limit
     non_seeking_reader = NonSeekingReader(
-        BytesIO(write_stream.getbuffer()), record_size_limit=10
+        StrictBytesIO(write_stream.getbuffer()), record_size_limit=10
     )
     with pytest.raises(
         RecordLengthLimitExceeded,
         match="HEADER record has length 22 that exceeds limit 10",
     ):
         non_seeking_reader.get_header()
+
+
+def test_custom_record():
+    write_stream = StrictBytesIO()
+    writer = Writer(write_stream)
+    writer.start("profile", "library")
+    write_stream.write(b"\x80\x00\x00\x00\x00\x00\x00\x00\x00")
+    writer.finish()
+    stream_reader = StreamReader(
+        StrictBytesIO(write_stream.getbuffer()), record_size_limit=100
+    )
+    records = [r for r in stream_reader.records]
+    assert len(records) == 10
