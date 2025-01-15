@@ -464,7 +464,7 @@ impl<'a> MessageStream<'a> {
     }
 }
 
-impl<'a> Iterator for MessageStream<'a> {
+impl Iterator for MessageStream<'_> {
     type Item = McapResult<Message<'static>>;
 
     fn next(&mut self) -> Option<Self::Item> {

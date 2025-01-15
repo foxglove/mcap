@@ -1303,7 +1303,6 @@ impl<W: Write + Seek> AttachmentWriter<W> {
 
 #[cfg(test)]
 mod tests {
-    use std::u16;
 
     use super::*;
     #[test]
