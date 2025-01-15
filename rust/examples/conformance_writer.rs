@@ -7,11 +7,35 @@ use std::{
 #[path = "common/conformance_writer_spec.rs"]
 mod conformance_writer_spec;
 
+const USE_CHUNKS: &str = "ch";
+const USE_MESSAGE_INDEX: &str = "mx";
+const USE_STATISTICS: &str = "st";
+const USE_REPEATED_SCHEMAS: &str = "rsh";
+const USE_REPEATED_CHANNEL_INFOS: &str = "rch";
+const USE_ATTACHMENT_INDEX: &str = "ax";
+const USE_METADATA_INDEX: &str = "mdx";
+const USE_CHUNK_INDEX: &str = "chx";
+const USE_SUMMARY_OFFSET: &str = "sum";
+const ADD_EXTRA_DATA_TO_RECORDS: &str = "pad";
+
 fn write_file(spec: &conformance_writer_spec::WriterSpec) {
-    let mut writer = mcap::WriteOptions::new()
+    let mut write_options = mcap::WriteOptions::new()
         .compression(None)
         .profile("")
+        .library("")
         .disable_seeking(true)
+        .output_summary(false)
+        .use_chunks(false);
+
+    for feature in spec.meta.variant.features.iter() {
+        write_options = match feature.as_str() {
+            USE_CHUNKS => write_options.use_chunks(true),
+            USE_STATISTICS => write_options.output_summary(true).output_statistics(true),
+            _ => unimplemented!("unknown or unimplemented feature: {}", feature),
+        }
+    }
+
+    let mut writer = write_options
         .create(binrw::io::NoSeek::new(std::io::stdout()))
         .expect("Couldn't create writer");
 

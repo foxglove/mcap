@@ -103,6 +103,9 @@ pub struct WriteOptions {
     chunk_size: Option<u64>,
     use_chunks: bool,
     disable_seeking: bool,
+    output_statistics: bool,
+    output_summary: bool,
+    library: String,
 }
 
 impl Default for WriteOptions {
@@ -116,6 +119,9 @@ impl Default for WriteOptions {
             chunk_size: Some(1024 * 768),
             use_chunks: true,
             disable_seeking: false,
+            output_statistics: true,
+            output_summary: true,
+            library: String::from("mcap-rs-") + env!("CARGO_PKG_VERSION"),
         }
     }
 }
@@ -137,6 +143,16 @@ impl WriteOptions {
     pub fn profile<S: Into<String>>(self, profile: S) -> Self {
         Self {
             profile: profile.into(),
+            ..self
+        }
+    }
+
+    /// specifies the library that should be written to the MCAP Header record.
+    /// This is a free-form string that can be used to identify the library that wrote the file.
+    /// It is not used for any other purpose.
+    pub fn library<S: Into<String>>(self, library: S) -> Self {
+        Self {
+            library: library.into(),
             ..self
         }
     }
@@ -172,6 +188,24 @@ impl WriteOptions {
     /// optimization and should only be disabled if the output is using [`NoSeek`].
     pub fn disable_seeking(mut self, disable_seeking: bool) -> Self {
         self.disable_seeking = disable_seeking;
+        self
+    }
+
+    /// Specifies whether the writer should output statistics automatically.
+    ///
+    /// By default the writer will output a statistics record to the MCAP file when it is finished.
+    /// Set this to `false` to disable this behavior.
+    pub fn output_statistics(mut self, output_statistics: bool) -> Self {
+        self.output_statistics = output_statistics;
+        self
+    }
+
+    /// Specifies whether the writer should output a summary record automatically.
+    ///
+    /// By default the writer will output a summary record to the MCAP file when it is finished.
+    /// Set this to `false` to disable this behavior.
+    pub fn output_summary(mut self, output_summary: bool) -> Self {
+        self.output_summary = output_summary;
         self
     }
 
@@ -227,7 +261,7 @@ impl<W: Write + Seek> Writer<W> {
             &mut writer,
             &Record::Header(records::Header {
                 profile: opts.profile.clone(),
-                library: String::from("mcap-rs-") + env!("CARGO_PKG_VERSION"),
+                library: opts.library.clone(),
             }),
         )?;
 
@@ -816,106 +850,115 @@ impl<W: Write + Seek> Writer<W> {
             })
             .collect();
 
-        let mut offsets = Vec::new();
-
-        let summary_start = writer.stream_position()?;
-
+        let summary_start;
+        let summary_offset_start;
         // Let's get a CRC of the summary section.
-        let mut ccw = CountingCrcWriter::new(writer);
+        let mut ccw;
 
-        fn posit<W: Write + Seek>(ccw: &mut CountingCrcWriter<W>) -> io::Result<u64> {
-            ccw.get_mut().stream_position()
-        }
+        if self.options.output_summary {
+            let mut offsets = Vec::new();
 
-        // Write all schemas.
-        let schemas_start = summary_start;
-        for schema in all_schemas.iter() {
-            write_record(&mut ccw, schema)?;
-        }
-        let schemas_end = posit(&mut ccw)?;
-        if schemas_end - schemas_start > 0 {
-            offsets.push(records::SummaryOffset {
-                group_opcode: op::SCHEMA,
-                group_start: schemas_start,
-                group_length: schemas_end - schemas_start,
-            });
-        }
+            summary_start = writer.stream_position()?;
+            ccw = CountingCrcWriter::new(writer);
 
-        // Write all channels.
-        let channels_start = schemas_end;
-        for channel in all_channels {
-            write_record(&mut ccw, &Record::Channel(channel))?;
-        }
-        let channels_end = posit(&mut ccw)?;
-        if channels_end - channels_start > 0 {
-            offsets.push(records::SummaryOffset {
-                group_opcode: op::CHANNEL,
-                group_start: channels_start,
-                group_length: channels_end - channels_start,
-            });
-        }
-
-        let chunk_indexes_end;
-        if self.options.use_chunks {
-            // Write all chunk indexes.
-            let chunk_indexes_start = channels_end;
-            for index in chunk_indexes {
-                write_record(&mut ccw, &Record::ChunkIndex(index))?;
+            fn posit<W: Write + Seek>(ccw: &mut CountingCrcWriter<W>) -> io::Result<u64> {
+                ccw.get_mut().stream_position()
             }
-            chunk_indexes_end = posit(&mut ccw)?;
-            if chunk_indexes_end - chunk_indexes_start > 0 {
+
+            // Write all schemas.
+            let schemas_start = summary_start;
+            for schema in all_schemas.iter() {
+                write_record(&mut ccw, schema)?;
+            }
+            let schemas_end = posit(&mut ccw)?;
+            if schemas_end - schemas_start > 0 {
                 offsets.push(records::SummaryOffset {
-                    group_opcode: op::CHUNK_INDEX,
-                    group_start: chunk_indexes_start,
-                    group_length: chunk_indexes_end - chunk_indexes_start,
+                    group_opcode: op::SCHEMA,
+                    group_start: schemas_start,
+                    group_length: schemas_end - schemas_start,
                 });
             }
+
+            // Write all channels.
+            let channels_start = schemas_end;
+            for channel in all_channels {
+                write_record(&mut ccw, &Record::Channel(channel))?;
+            }
+            let channels_end = posit(&mut ccw)?;
+            if channels_end - channels_start > 0 {
+                offsets.push(records::SummaryOffset {
+                    group_opcode: op::CHANNEL,
+                    group_start: channels_start,
+                    group_length: channels_end - channels_start,
+                });
+            }
+
+            let chunk_indexes_end;
+            if self.options.use_chunks {
+                // Write all chunk indexes.
+                let chunk_indexes_start = channels_end;
+                for index in chunk_indexes {
+                    write_record(&mut ccw, &Record::ChunkIndex(index))?;
+                }
+                chunk_indexes_end = posit(&mut ccw)?;
+                if chunk_indexes_end - chunk_indexes_start > 0 {
+                    offsets.push(records::SummaryOffset {
+                        group_opcode: op::CHUNK_INDEX,
+                        group_start: chunk_indexes_start,
+                        group_length: chunk_indexes_end - chunk_indexes_start,
+                    });
+                }
+            } else {
+                chunk_indexes_end = channels_end;
+            }
+
+            // ...and attachment indexes
+            let attachment_indexes_start = chunk_indexes_end;
+            for index in attachment_indexes {
+                write_record(&mut ccw, &Record::AttachmentIndex(index))?;
+            }
+            let attachment_indexes_end = posit(&mut ccw)?;
+            if attachment_indexes_end - attachment_indexes_start > 0 {
+                offsets.push(records::SummaryOffset {
+                    group_opcode: op::ATTACHMENT_INDEX,
+                    group_start: attachment_indexes_start,
+                    group_length: attachment_indexes_end - attachment_indexes_start,
+                });
+            }
+
+            // ...and metadata indexes
+            let metadata_indexes_start = attachment_indexes_end;
+            for index in metadata_indexes {
+                write_record(&mut ccw, &Record::MetadataIndex(index))?;
+            }
+            let metadata_indexes_end = posit(&mut ccw)?;
+            if metadata_indexes_end - metadata_indexes_start > 0 {
+                offsets.push(records::SummaryOffset {
+                    group_opcode: op::METADATA_INDEX,
+                    group_start: metadata_indexes_start,
+                    group_length: metadata_indexes_end - metadata_indexes_start,
+                });
+            }
+
+            let stats_start = metadata_indexes_end;
+            write_record(&mut ccw, &Record::Statistics(stats))?;
+            let stats_end = posit(&mut ccw)?;
+            assert!(stats_end > stats_start);
+            offsets.push(records::SummaryOffset {
+                group_opcode: op::STATISTICS,
+                group_start: stats_start,
+                group_length: stats_end - stats_start,
+            });
+
+            // Write the summary offsets we've been accumulating
+            summary_offset_start = stats_end;
+            for offset in offsets {
+                write_record(&mut ccw, &Record::SummaryOffset(offset))?;
+            }
         } else {
-            chunk_indexes_end = channels_end;
-        }
-
-        // ...and attachment indexes
-        let attachment_indexes_start = chunk_indexes_end;
-        for index in attachment_indexes {
-            write_record(&mut ccw, &Record::AttachmentIndex(index))?;
-        }
-        let attachment_indexes_end = posit(&mut ccw)?;
-        if attachment_indexes_end - attachment_indexes_start > 0 {
-            offsets.push(records::SummaryOffset {
-                group_opcode: op::ATTACHMENT_INDEX,
-                group_start: attachment_indexes_start,
-                group_length: attachment_indexes_end - attachment_indexes_start,
-            });
-        }
-
-        // ...and metadata indexes
-        let metadata_indexes_start = attachment_indexes_end;
-        for index in metadata_indexes {
-            write_record(&mut ccw, &Record::MetadataIndex(index))?;
-        }
-        let metadata_indexes_end = posit(&mut ccw)?;
-        if metadata_indexes_end - metadata_indexes_start > 0 {
-            offsets.push(records::SummaryOffset {
-                group_opcode: op::METADATA_INDEX,
-                group_start: metadata_indexes_start,
-                group_length: metadata_indexes_end - metadata_indexes_start,
-            });
-        }
-
-        let stats_start = metadata_indexes_end;
-        write_record(&mut ccw, &Record::Statistics(stats))?;
-        let stats_end = posit(&mut ccw)?;
-        assert!(stats_end > stats_start);
-        offsets.push(records::SummaryOffset {
-            group_opcode: op::STATISTICS,
-            group_start: stats_start,
-            group_length: stats_end - stats_start,
-        });
-
-        // Write the summary offsets we've been accumulating
-        let summary_offset_start = stats_end;
-        for offset in offsets {
-            write_record(&mut ccw, &Record::SummaryOffset(offset))?;
+            summary_start = 0;
+            summary_offset_start = 0;
+            ccw = CountingCrcWriter::new(writer);
         }
 
         // Wat: the CRC in the footer _includes_ part of the footer.
