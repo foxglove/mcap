@@ -793,11 +793,7 @@ impl<W: Write + Seek> Writer<W> {
         // (&mut self).
         // (We could get around all this noise by having finish() take self,
         // but then it wouldn't be droppable _and_ finish...able.)
-        let mut channel_message_counts = BTreeMap::new();
-        std::mem::swap(
-            &mut channel_message_counts,
-            &mut self.channel_message_counts,
-        );
+        let channel_message_counts = std::mem::take(&mut self.channel_message_counts);
 
         // Grab stats before we munge all the self fields below.
         let message_bounds = self.message_bounds.unwrap_or((0, 0));
@@ -813,14 +809,9 @@ impl<W: Write + Seek> Writer<W> {
             channel_message_counts,
         };
 
-        let mut chunk_indexes = Vec::new();
-        std::mem::swap(&mut chunk_indexes, &mut self.chunk_indexes);
-
-        let mut attachment_indexes = Vec::new();
-        std::mem::swap(&mut attachment_indexes, &mut self.attachment_indexes);
-
-        let mut metadata_indexes = Vec::new();
-        std::mem::swap(&mut metadata_indexes, &mut self.metadata_indexes);
+        let chunk_indexes = std::mem::take(&mut self.chunk_indexes);
+        let attachment_indexes = std::mem::take(&mut self.attachment_indexes);
+        let metadata_indexes = std::mem::take(&mut self.metadata_indexes);
 
         let all_channels: Vec<_> = self
             .channels
