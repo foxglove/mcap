@@ -494,7 +494,7 @@ impl<W: Write + Seek> Writer<W> {
         header: &MessageHeader,
         data: &[u8],
     ) -> McapResult<()> {
-        if self.channels.get_by_right(&header.channel_id).is_none() {
+        if !self.channels.contains_right(&header.channel_id) {
             return Err(McapError::UnknownChannel(
                 header.sequence,
                 header.channel_id,
