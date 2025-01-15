@@ -24,9 +24,9 @@ pub use binrw::io::NoSeek;
 pub use records::Metadata;
 
 enum WriteMode<W: Write + Seek> {
-    Raw(W, ChunkMode),
+    Raw(W),
     Chunk(ChunkWriter<W>),
-    Attachment(AttachmentWriter<W>, ChunkMode),
+    Attachment(AttachmentWriter<W>),
 }
 
 fn op_and_len<W: Write>(w: &mut W, op: u8, len: u64) -> io::Result<()> {
@@ -236,6 +236,7 @@ struct SchemaContent<'a> {
 /// and check for errors when done; otherwise the result will be unwrapped on drop.
 pub struct Writer<W: Write + Seek> {
     writer: Option<WriteMode<W>>,
+    chunk_mode: ChunkMode,
     options: WriteOptions,
     schemas: BiHashMap<SchemaContent<'static>, u16>,
     channels: BiHashMap<ChannelContent<'static>, u16>,
@@ -283,8 +284,9 @@ impl<W: Write + Seek> Writer<W> {
         };
 
         Ok(Self {
-            writer: Some(WriteMode::Raw(writer, chunk_mode)),
+            writer: Some(WriteMode::Raw(writer)),
             options: opts,
+            chunk_mode,
             schemas: Default::default(),
             channels: Default::default(),
             next_channel_id: 0,
@@ -587,16 +589,17 @@ impl<W: Write + Seek> Writer<W> {
 
         let prev_writer = self.writer.take().expect(Self::WHERE_WRITER);
 
-        let WriteMode::Raw(w, chunk_mode) = prev_writer else {
+        let WriteMode::Raw(w) = prev_writer else {
             panic!(
                 "since finish_chunk was called, write mode is guaranteed to be raw at this point"
             );
         };
 
-        self.writer = Some(WriteMode::Attachment(
-            AttachmentWriter::new(w, attachment_length, header)?,
-            chunk_mode,
-        ));
+        self.writer = Some(WriteMode::Attachment(AttachmentWriter::new(
+            w,
+            attachment_length,
+            header,
+        )?));
 
         Ok(())
     }
@@ -607,7 +610,7 @@ impl<W: Write + Seek> Writer<W> {
     ///
     /// Before calling this method call [`Self::start_attachment`].
     pub fn put_attachment_bytes(&mut self, bytes: &[u8]) -> McapResult<()> {
-        let Some(WriteMode::Attachment(writer, _)) = &mut self.writer else {
+        let Some(WriteMode::Attachment(writer)) = &mut self.writer else {
             return Err(McapError::AttachmentNotInProgress);
         };
 
@@ -627,7 +630,7 @@ impl<W: Write + Seek> Writer<W> {
             return Err(McapError::AttachmentNotInProgress);
         };
 
-        let Some(WriteMode::Attachment(writer, chunk_mode)) = self.writer.take() else {
+        let Some(WriteMode::Attachment(writer)) = self.writer.take() else {
             panic!("WriteMode is guaranteed to be attachment by this point");
         };
 
@@ -635,7 +638,7 @@ impl<W: Write + Seek> Writer<W> {
 
         self.attachment_indexes.push(attachment_index);
 
-        self.writer = Some(WriteMode::Raw(writer, chunk_mode));
+        self.writer = Some(WriteMode::Raw(writer));
 
         Ok(())
     }
@@ -722,9 +725,13 @@ impl<W: Write + Seek> Writer<W> {
         let prev_writer = self.writer.take().expect(Self::WHERE_WRITER);
 
         self.writer = Some(match prev_writer {
-            WriteMode::Raw(w, chunk_mode) => {
+            WriteMode::Raw(w) => {
                 // It's chunkin time.
-                WriteMode::Chunk(ChunkWriter::new(w, self.options.compression, chunk_mode)?)
+                WriteMode::Chunk(ChunkWriter::new(
+                    w,
+                    self.options.compression,
+                    std::mem::take(&mut self.chunk_mode),
+                )?)
             }
             chunk => chunk,
         });
@@ -751,12 +758,13 @@ impl<W: Write + Seek> Writer<W> {
             WriteMode::Chunk(c) => {
                 let (w, mode, index) = c.finish()?;
                 self.chunk_indexes.push(index);
-                WriteMode::Raw(w, mode)
+                self.chunk_mode = mode;
+                WriteMode::Raw(w)
             }
             mode => mode,
         });
 
-        let Some(WriteMode::Raw(w, _)) = &mut self.writer else {
+        let Some(WriteMode::Raw(w)) = &mut self.writer else {
             unreachable!("we're not in an attachment and write mode raw was set above")
         };
 
@@ -780,7 +788,7 @@ impl<W: Write + Seek> Writer<W> {
         let mut writer = match self.writer.take() {
             // We called finish_chunk() above, so we're back to raw writes for
             // the summary section.
-            Some(WriteMode::Raw(w, _)) => w,
+            Some(WriteMode::Raw(w)) => w,
             _ => unreachable!(),
         };
         let writer = &mut writer;

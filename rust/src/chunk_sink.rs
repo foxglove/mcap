@@ -3,8 +3,10 @@ use std::io::{Cursor, Seek, Write};
 /// The kind of writer that should be used for writing chunks.
 ///
 /// This is used to select what [`ChunkSink`] should be used by the MCAP writer.
+#[derive(Default)]
 pub(crate) enum ChunkMode {
     /// Mode specifying that chunks should be written directly to the output
+    #[default]
     Direct,
     /// Mode specifying that chunks should be buffered before writing to the output
     Buffered {
