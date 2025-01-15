@@ -512,13 +512,9 @@ impl<W: Write + Seek> Writer<W> {
 
         // if the current chunk is larger than our target chunk size, finish it
         // and start a new one.
-        let current_chunk_size = match &self.writer {
-            Some(WriteMode::Chunk(cw)) => Some(cw.compressor.position()),
-            _ => None,
-        };
-        if let (Some(current_chunk_size), Some(target)) =
-            (current_chunk_size, self.options.chunk_size)
+        if let (Some(WriteMode::Chunk(cw)), Some(target)) = (&self.writer, self.options.chunk_size)
         {
+            let current_chunk_size = cw.compressor.position();
             if current_chunk_size > target {
                 self.finish_chunk()?;
             }
