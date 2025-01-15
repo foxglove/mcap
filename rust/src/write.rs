@@ -1043,7 +1043,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         let mut sink = match mode {
             ChunkMode::Buffered { mut buffer } => {
                 // ensure the buffer is empty before using it for the chunk
-                buffer.truncate(0);
+                buffer.clear();
                 ChunkSink::Buffered(writer, Cursor::new(buffer))
             }
             ChunkMode::Direct => ChunkSink::Direct(writer),
