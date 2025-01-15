@@ -192,8 +192,8 @@ impl LinearReaderOptions {
 ///     while let Some(action) = reader.next_action() {
 ///         match action? {
 ///             ReadAction::NeedMore(need) => {
-///                 let written = file.read(reader.insert(need)).await?;
-///                 reader.set_written(written);
+///                 let read = file.read(reader.insert(need)).await?;
+///                 reader.set_read(read);
 ///             },
 ///             ReadAction::GetRecord{ opcode, data } => {
 ///                 let raw_record = mcap::parse_record(opcode, data)?;
@@ -211,8 +211,8 @@ impl LinearReaderOptions {
 ///     while let Some(action) = reader.next_action() {
 ///         match action? {
 ///             ReadAction::NeedMore(need) => {
-///                 let written = file.read(reader.insert(need))?;
-///                 reader.set_written(written);
+///                 let read = file.read(reader.insert(need))?;
+///                 reader.set_read(read);
 ///             },
 ///             ReadAction::GetRecord{ opcode, data } => {
 ///                 let raw_record = mcap::parse_record(opcode, data)?;
@@ -236,8 +236,8 @@ pub struct LinearReader {
     decompressed_content: RwBuf,
     // decompressor that can be re-used between chunks.
     decompressors: HashMap<String, Box<dyn Decompressor>>,
-    // Stores the number of bytes written into this reader since the last `next_action()` call.
-    last_write: Option<usize>,
+    // Stores the number of bytes read into this reader since the last `next_action()` call.
+    last_read: Option<usize>,
     options: LinearReaderOptions,
 }
 
@@ -266,7 +266,7 @@ impl LinearReader {
             options,
             chunk_state: None,
             decompressors: Default::default(),
-            last_write: None,
+            last_read: None,
         }
     }
 
@@ -291,27 +291,27 @@ impl LinearReader {
         Ok(result)
     }
 
-    /// Get a mutable slice to write new MCAP data into. Call [`Self::set_written`] afterwards with
-    /// the number of bytes successfully written.
-    pub fn insert(&mut self, to_write: usize) -> &mut [u8] {
-        self.file_data.tail_with_size(to_write)
+    /// Get a mutable slice to read new MCAP data into. Call [`Self::set_read`] afterwards with
+    /// the number of bytes successfully read.
+    pub fn insert(&mut self, to_read: usize) -> &mut [u8] {
+        self.file_data.tail_with_size(to_read)
     }
 
-    /// Set the number of bytes successfully written into the buffer returned from [`Self::insert`]
+    /// Set the number of bytes successfully read into the buffer returned from [`Self::insert`]
     /// since the last [`Self::next_action`] call. Providing 0 indicates EOF to the reader.
     ///
-    /// Panics if `written` is greater than the last `to_write` provided to [`Self::insert`].
-    pub fn set_written(&mut self, written: usize) {
-        if (self.file_data.data.len() - self.file_data.end) < written {
-            panic!("set_written called with written > last inserted length");
+    /// Panics if `read` is greater than the last `to_write` provided to [`Self::insert`].
+    pub fn set_read(&mut self, read: usize) {
+        if (self.file_data.data.len() - self.file_data.end) < read {
+            panic!("set_read called with read > last inserted length");
         }
-        self.last_write = Some(written);
+        self.last_read = Some(read);
     }
 
     /// Yields the next action the caller should take to progress through the file.
     pub fn next_action(&mut self) -> Option<McapResult<ReadAction>> {
-        if let Some(written) = self.last_write.take() {
-            if written == 0 {
+        if let Some(read) = self.last_read.take() {
+            if read == 0 {
                 // at EOF. If the reader is not expecting end magic, and it isn't in the middle of a
                 // record or chunk, this is OK.
                 if self.options.skip_end_magic
@@ -326,7 +326,7 @@ impl LinearReader {
                 }
                 return Some(Err(McapError::UnexpectedEof));
             }
-            self.file_data.end += written;
+            self.file_data.end += read;
         }
 
         /// Macros for loading data into the reader. These return early with NeedMore(n) if
@@ -671,7 +671,7 @@ impl LinearReader {
 ///
 pub enum ReadAction<'a> {
     /// The reader needs more data to provide the next record. Call [`LinearReader::insert`] then
-    /// [`LinearReader::set_written`] to load more data. The value provided here is a hint for how
+    /// [`LinearReader::set_read`] to load more data. The value provided here is a hint for how
     /// much data to insert.
     NeedMore(usize),
     /// Read a record out of the MCAP file. Use [`crate::parse_record`] to parse the record.
@@ -812,8 +812,8 @@ mod tests {
         while let Some(action) = reader.next_action() {
             match action? {
                 ReadAction::NeedMore(n) => {
-                    let written = cursor.read(reader.insert(n))?;
-                    reader.set_written(written);
+                    let read = cursor.read(reader.insert(n))?;
+                    reader.set_read(read);
                 }
                 ReadAction::GetRecord { data, opcode } => {
                     opcodes.push(opcode);
@@ -854,8 +854,8 @@ mod tests {
         while let Some(action) = reader.next_action() {
             match action? {
                 ReadAction::NeedMore(n) => {
-                    let written = cursor.read(reader.insert(n))?;
-                    reader.set_written(written);
+                    let read = cursor.read(reader.insert(n))?;
+                    reader.set_read(read);
                 }
                 ReadAction::GetRecord { data, opcode } => {
                     opcodes.push(opcode);
@@ -880,8 +880,8 @@ mod tests {
         while let Some(action) = reader.next_action() {
             match action? {
                 ReadAction::NeedMore(n) => {
-                    let written = cursor.read(reader.insert(n))?;
-                    reader.set_written(written);
+                    let read = cursor.read(reader.insert(n))?;
+                    reader.set_read(read);
                 }
                 ReadAction::GetRecord { data, opcode } => {
                     opcodes.push(opcode);
@@ -964,8 +964,8 @@ mod tests {
             while let Some(action) = reader.next_action() {
                 match action? {
                     ReadAction::NeedMore(n) => {
-                        let written = cursor.read(reader.insert(n))?;
-                        reader.set_written(written);
+                        let read = cursor.read(reader.insert(n))?;
+                        reader.set_read(read);
                     }
                     ReadAction::GetRecord { data, opcode } => {
                         opcodes.push(opcode);
@@ -1012,8 +1012,8 @@ mod tests {
         while let Some(action) = reader.next_action() {
             match action? {
                 ReadAction::NeedMore(n) => {
-                    let written = cursor.read(reader.insert(n))?;
-                    reader.set_written(written);
+                    let read = cursor.read(reader.insert(n))?;
+                    reader.set_read(read);
                 }
                 ReadAction::GetRecord { data, opcode } => {
                     opcodes.push(opcode);
@@ -1092,8 +1092,8 @@ mod tests {
                     max_needed = std::cmp::max(max_needed, n);
                     // read slightly more than requested, such that the data in the buffer does not
                     // hit zero after the next action.
-                    let written = cursor.read(reader.insert(n + 1))?;
-                    reader.set_written(written);
+                    let read = cursor.read(reader.insert(n + 1))?;
+                    reader.set_read(read);
                     let buffer_size = reader.file_data.data.len();
                     assert!(
                         buffer_size < std::cmp::max(max_needed * 2, 4096),
@@ -1132,7 +1132,7 @@ mod tests {
                     let read = f
                         .read(reader.insert(blocksize))
                         .expect("failed to read from file");
-                    reader.set_written(read);
+                    reader.set_read(read);
                 }
             }
         }
