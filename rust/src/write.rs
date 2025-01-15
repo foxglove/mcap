@@ -341,7 +341,7 @@ impl<W: Write + Seek> Writer<W> {
             schema.id,
         );
         if self.options.use_chunks {
-            self.chunkin_time()?.write_schema(schema)
+            self.start_chunk()?.write_schema(schema)
         } else {
             let header = records::SchemaHeader {
                 id: schema.id,
@@ -418,7 +418,7 @@ impl<W: Write + Seek> Writer<W> {
             channel.id,
         );
         if self.options.use_chunks {
-            self.chunkin_time()?.write_channel(channel)
+            self.start_chunk()?.write_channel(channel)
         } else {
             Ok(write_record(
                 self.finish_chunk()?,
@@ -525,7 +525,7 @@ impl<W: Write + Seek> Writer<W> {
         }
 
         if self.options.use_chunks {
-            self.chunkin_time()?.write_message(header, data)?;
+            self.start_chunk()?.write_message(header, data)?;
         } else {
             write_record(
                 self.finish_chunk()?,
@@ -706,7 +706,7 @@ impl<W: Write + Seek> Writer<W> {
     const WHERE_WRITER: &'static str = "Trying to write a record on a finished MCAP";
 
     /// Starts a new chunk if we haven't done so already.
-    fn chunkin_time(&mut self) -> McapResult<&mut ChunkWriter<W>> {
+    fn start_chunk(&mut self) -> McapResult<&mut ChunkWriter<W>> {
         // It is not possible to start writing a chunk if we're still writing an attachment. Return
         // an error instead.
         if let Some(WriteMode::Attachment(..)) = self.writer {
