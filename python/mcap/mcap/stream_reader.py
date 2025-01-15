@@ -217,7 +217,7 @@ class StreamReader:
             return SummaryOffset.read(self._stream)
 
         # Skip unknown record types
-        self._stream.read(length - 9)
+        self._stream.read(length)
 
 
 __all__ = ["StreamReader"]
