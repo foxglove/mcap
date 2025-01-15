@@ -318,6 +318,7 @@ jobs:
           packages_dir: python/mcap/dist
           repository_url: https://test.pypi.org/legacy/
           skip_existing: true
+          attestations: false # https://github.com/pypa/gh-action-pypi-publish/issues/283#issuecomment-2499296440
 
       - name: Publish mcap-protobuf-support to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -326,6 +327,7 @@ jobs:
           repository_url: https://test.pypi.org/legacy/
           skip_existing: true
           packages_dir: python/mcap-protobuf-support/dist
+          attestations: false # https://github.com/pypa/gh-action-pypi-publish/issues/283#issuecomment-2499296440
 
       - name: Publish mcap-ros1-support to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -334,6 +336,7 @@ jobs:
           repository_url: https://test.pypi.org/legacy/
           skip_existing: true
           packages_dir: python/mcap-ros1-support/dist
+          attestations: false # https://github.com/pypa/gh-action-pypi-publish/issues/283#issuecomment-2499296440
 
       - name: Publish mcap-ros2-support to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -342,6 +345,7 @@ jobs:
           repository_url: https://test.pypi.org/legacy/
           skip_existing: true
           packages_dir: python/mcap-ros2-support/dist
+          attestations: false # https://github.com/pypa/gh-action-pypi-publish/issues/283#issuecomment-2499296440
 
       - name: Publish mcap to PyPI
         if: |
