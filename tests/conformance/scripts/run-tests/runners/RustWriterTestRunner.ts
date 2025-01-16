@@ -1,7 +1,7 @@
 import { exec } from "child_process";
 import { join } from "path";
 import { promisify } from "util";
-import { TestVariant } from "variants/types";
+import { TestFeatures, TestVariant } from "variants/types";
 
 import { WriteTestRunner } from "./TestRunner";
 
@@ -24,6 +24,16 @@ export default class RustWriterTestRunner extends WriteTestRunner {
   }
 
   supportsVariant(_variant: TestVariant): boolean {
-    return false;
+    const supported = [
+      TestFeatures.UseChunks,
+      TestFeatures.UseStatistics,
+      TestFeatures.UseSummaryOffset,
+    ];
+    for (const feature of _variant.features) {
+      if (!supported.includes(feature)) {
+        return false;
+      }
+    }
+    return true;
   }
 }
