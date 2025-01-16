@@ -25,12 +25,20 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
         .library("")
         .disable_seeking(true)
         .output_summary(false)
-        .use_chunks(false);
+        .output_summary_offsets(false)
+        .repeat_channels(false)
+        .repeat_schemas(false)
+        .output_message_indexes(false)
+        .use_chunks(false)
+        .output_chunk_indexes(false);
 
     for feature in spec.meta.variant.features.iter() {
         write_options = match feature.as_str() {
             USE_CHUNKS => write_options.use_chunks(true),
             USE_STATISTICS => write_options.output_summary(true).output_statistics(true),
+            USE_SUMMARY_OFFSET => write_options
+                .output_summary(true)
+                .output_summary_offsets(true),
             _ => unimplemented!("unknown or unimplemented feature: {}", feature),
         }
     }

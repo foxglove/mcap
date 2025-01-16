@@ -100,13 +100,17 @@ fn write_record<W: Write>(w: &mut W, r: &Record) -> io::Result<()> {
 pub struct WriteOptions {
     compression: Option<Compression>,
     profile: String,
+    library: String,
     chunk_size: Option<u64>,
     use_chunks: bool,
     disable_seeking: bool,
     output_statistics: bool,
     output_summary: bool,
     output_summary_offsets: bool,
-    library: String,
+    output_message_indexes: bool,
+    output_chunk_indexes: bool,
+    repeat_channels: bool,
+    repeat_schemas: bool,
 }
 
 impl Default for WriteOptions {
@@ -117,13 +121,17 @@ impl Default for WriteOptions {
             #[cfg(not(feature = "zstd"))]
             compression: None,
             profile: String::new(),
+            library: String::from("mcap-rs-") + env!("CARGO_PKG_VERSION"),
             chunk_size: Some(1024 * 768),
             use_chunks: true,
             disable_seeking: false,
             output_statistics: true,
             output_summary: true,
             output_summary_offsets: true,
-            library: String::from("mcap-rs-") + env!("CARGO_PKG_VERSION"),
+            output_message_indexes: true,
+            output_chunk_indexes: true,
+            repeat_channels: true,
+            repeat_schemas: true,
         }
     }
 }
@@ -217,6 +225,42 @@ impl WriteOptions {
     /// finished. Set this to `false` to disable this behavior.
     pub fn output_summary_offsets(mut self, output_summary_offsets: bool) -> Self {
         self.output_summary_offsets = output_summary_offsets;
+        self
+    }
+
+    /// Specifies whether the writer should output message indexes automatically.
+    ///
+    /// By default the writer will output message index records after each chunk. Set this to
+    /// `false` to disable this behavior.
+    pub fn output_message_indexes(mut self, output_message_indexes: bool) -> Self {
+        self.output_message_indexes = output_message_indexes;
+        self
+    }
+
+    /// Specifies whether the writer should output chunk indexes automatically.
+    ///
+    /// By default the writer will output chunk index records in the summary section. Set this to
+    /// `false` to disable this behavior.
+    pub fn output_chunk_indexes(mut self, output_chunk_indexes: bool) -> Self {
+        self.output_chunk_indexes = output_chunk_indexes;
+        self
+    }
+
+    /// Specifies whether the writer should repeat the channel records in the summary section.
+    ///
+    /// By default the writer will repeat the channel records in the summary section. Set this to
+    /// `false` to disable this behavior.
+    pub fn repeat_channels(mut self, repeat_channels: bool) -> Self {
+        self.repeat_channels = repeat_channels;
+        self
+    }
+
+    /// Specifies whether the writer should repeat the schema records in the summary section.
+    ///
+    /// By default the writer will repeat the schema records in the summary section. Set this to
+    /// `false` to disable this behavior.
+    pub fn repeat_schemas(mut self, repeat_schemas: bool) -> Self {
+        self.repeat_schemas = repeat_schemas;
         self
     }
 
@@ -743,6 +787,7 @@ impl<W: Write + Seek> Writer<W> {
                     w,
                     self.options.compression,
                     std::mem::take(&mut self.chunk_mode),
+                    self.options.output_message_indexes,
                 )?)
             }
             chunk => chunk,
@@ -878,8 +923,10 @@ impl<W: Write + Seek> Writer<W> {
 
             // Write all schemas.
             let schemas_start = summary_start;
-            for schema in all_schemas.iter() {
-                write_record(&mut ccw, schema)?;
+            if self.options.repeat_schemas {
+                for schema in all_schemas.iter() {
+                    write_record(&mut ccw, schema)?;
+                }
             }
             let schemas_end = posit(&mut ccw)?;
             if schemas_end - schemas_start > 0 {
@@ -892,8 +939,10 @@ impl<W: Write + Seek> Writer<W> {
 
             // Write all channels.
             let channels_start = schemas_end;
-            for channel in all_channels {
-                write_record(&mut ccw, &Record::Channel(channel))?;
+            if self.options.repeat_channels {
+                for channel in all_channels {
+                    write_record(&mut ccw, &Record::Channel(channel))?;
+                }
             }
             let channels_end = posit(&mut ccw)?;
             if channels_end - channels_start > 0 {
@@ -905,7 +954,7 @@ impl<W: Write + Seek> Writer<W> {
             }
 
             let chunk_indexes_end;
-            if self.options.use_chunks {
+            if self.options.use_chunks && self.options.output_chunk_indexes {
                 // Write all chunk indexes.
                 let chunk_indexes_start = channels_end;
                 for index in chunk_indexes {
@@ -1056,6 +1105,8 @@ struct ChunkWriter<W: Write> {
 
     // Hasher from data before the chunk.
     pre_chunk_crc: crc32fast::Hasher,
+
+    output_message_indexes: bool,
 }
 
 impl<W: Write + Seek> ChunkWriter<W> {
@@ -1063,6 +1114,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         mut writer: CountingCrcWriter<W>,
         compression: Option<Compression>,
         mode: ChunkMode,
+        output_message_indexes: bool,
     ) -> McapResult<Self> {
         // Relative to start of original stream.
         let chunk_offset = writer.stream_position()?;
@@ -1131,6 +1183,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
             message_bounds: None,
             indexes: BTreeMap::new(),
             pre_chunk_crc,
+            output_message_indexes,
         })
     }
 
@@ -1162,14 +1215,16 @@ impl<W: Write + Seek> ChunkWriter<W> {
             Some((start, end)) => (start.min(header.log_time), end.max(header.log_time)),
         });
 
-        // Add an index for this message
-        self.indexes
-            .entry(header.channel_id)
-            .or_default()
-            .push(records::MessageIndexEntry {
-                log_time: header.log_time,
-                offset: self.compressor.position(),
-            });
+        if self.output_message_indexes {
+            // Add an index for this message
+            self.indexes
+                .entry(header.channel_id)
+                .or_default()
+                .push(records::MessageIndexEntry {
+                    log_time: header.log_time,
+                    offset: self.compressor.position(),
+                });
+        }
 
         write_record(
             &mut self.compressor,
