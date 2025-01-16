@@ -34,8 +34,11 @@ impl Record {
             .as_array()
             .unwrap_or_else(|| panic!("Invalid: {}", name))
             .iter()
-            .filter_map(|v| v.as_u64())
-            .filter_map(|n| u8::try_from(n).ok())
+            .filter_map(|v| match v {
+                Value::String(s) => s.parse::<u8>().ok(),
+                Value::Number(n) => n.as_u64()?.try_into().ok(),
+                _ => None,
+            })
             .collect()
     }
 
