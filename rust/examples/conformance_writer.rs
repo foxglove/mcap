@@ -30,7 +30,9 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
         .repeat_schemas(false)
         .output_message_indexes(false)
         .use_chunks(false)
-        .output_chunk_indexes(false);
+        .output_chunk_indexes(false)
+        .output_attachment_indexes(false)
+        .output_metadata_indexes(false);
 
     for feature in spec.meta.variant.features.iter() {
         write_options = match feature.as_str() {

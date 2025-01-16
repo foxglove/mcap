@@ -109,6 +109,8 @@ pub struct WriteOptions {
     output_summary_offsets: bool,
     output_message_indexes: bool,
     output_chunk_indexes: bool,
+    output_attachment_indexes: bool,
+    output_metadata_indexes: bool,
     repeat_channels: bool,
     repeat_schemas: bool,
 }
@@ -130,6 +132,8 @@ impl Default for WriteOptions {
             output_summary_offsets: true,
             output_message_indexes: true,
             output_chunk_indexes: true,
+            output_attachment_indexes: true,
+            output_metadata_indexes: true,
             repeat_channels: true,
             repeat_schemas: true,
         }
@@ -246,6 +250,24 @@ impl WriteOptions {
         self
     }
 
+    /// Specifies whether the writer should output attachment indexes automatically.
+    ///
+    /// By default the writer will output attachment index records in the summary section. Set this to
+    /// `false` to disable this behavior.
+    pub fn output_attachment_indexes(mut self, output_attachment_indexes: bool) -> Self {
+        self.output_attachment_indexes = output_attachment_indexes;
+        self
+    }
+
+    /// Specifies whether the writer should output metadata indexes automatically.
+    ///
+    /// By default the writer will output metadata index records in the summary section. Set this to
+    /// `false` to disable this behavior.
+    pub fn output_metadata_indexes(mut self, output_metadata_indexes: bool) -> Self {
+        self.output_metadata_indexes = output_metadata_indexes;
+        self
+    }
+
     /// Specifies whether the writer should repeat the channel records in the summary section.
     ///
     /// By default the writer will repeat the channel records in the summary section. Set this to
@@ -298,7 +320,9 @@ pub struct Writer<W: Write + Seek> {
     next_schema_id: u16,
     next_channel_id: u16,
     chunk_indexes: Vec<records::ChunkIndex>,
+    attachment_count: u32,
     attachment_indexes: Vec<records::AttachmentIndex>,
+    metadata_count: u32,
     metadata_indexes: Vec<records::MetadataIndex>,
     /// Message start and end time, or None if there are no messages yet.
     message_bounds: Option<(u64, u64)>,
@@ -348,7 +372,9 @@ impl<W: Write + Seek> Writer<W> {
             next_channel_id: 1,
             next_schema_id: 1,
             chunk_indexes: Default::default(),
+            attachment_count: 0,
             attachment_indexes: Default::default(),
+            metadata_count: 0,
             metadata_indexes: Default::default(),
             message_bounds: None,
             channel_message_counts: BTreeMap::new(),
@@ -691,8 +717,11 @@ impl<W: Write + Seek> Writer<W> {
         };
 
         let (writer, attachment_index) = writer.finish()?;
+        self.attachment_count += 1;
 
-        self.attachment_indexes.push(attachment_index);
+        if self.options.output_attachment_indexes {
+            self.attachment_indexes.push(attachment_index);
+        }
 
         self.writer = Some(WriteMode::Raw(writer));
 
@@ -727,11 +756,14 @@ impl<W: Write + Seek> Writer<W> {
 
         let length = w.stream_position()? - offset;
 
-        self.metadata_indexes.push(records::MetadataIndex {
-            offset,
-            length,
-            name: metadata.name.clone(),
-        });
+        self.metadata_count += 1;
+        if self.options.output_metadata_indexes {
+            self.metadata_indexes.push(records::MetadataIndex {
+                offset,
+                length,
+                name: metadata.name.clone(),
+            });
+        }
 
         Ok(())
     }
@@ -870,8 +902,8 @@ impl<W: Write + Seek> Writer<W> {
             message_count: channel_message_counts.values().sum(),
             schema_count: self.schemas.len() as u16,
             channel_count: self.channels.len() as u32,
-            attachment_count: self.attachment_indexes.len() as u32,
-            metadata_count: self.metadata_indexes.len() as u32,
+            attachment_count: self.attachment_count,
+            metadata_count: self.metadata_count,
             chunk_count: self.chunk_indexes.len() as u32,
             message_start_time: message_bounds.0,
             message_end_time: message_bounds.1,
