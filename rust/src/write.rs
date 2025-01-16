@@ -24,9 +24,9 @@ pub use binrw::io::NoSeek;
 pub use records::Metadata;
 
 enum WriteMode<W: Write + Seek> {
-    Raw(W),
+    Raw(CountingCrcWriter<W>),
     Chunk(ChunkWriter<W>),
-    Attachment(AttachmentWriter<W>),
+    Attachment(AttachmentWriter<CountingCrcWriter<W>>),
 }
 
 fn op_and_len<W: Write>(w: &mut W, op: u8, len: u64) -> io::Result<()> {
@@ -255,7 +255,8 @@ impl<W: Write + Seek> Writer<W> {
         Self::with_options(writer, WriteOptions::default())
     }
 
-    fn with_options(mut writer: W, opts: WriteOptions) -> McapResult<Self> {
+    fn with_options(writer: W, opts: WriteOptions) -> McapResult<Self> {
+        let mut writer = CountingCrcWriter::new(writer);
         writer.write_all(MAGIC)?;
 
         write_record(
@@ -744,7 +745,7 @@ impl<W: Write + Seek> Writer<W> {
     }
 
     /// Finish the current chunk, if we have one.
-    fn finish_chunk(&mut self) -> McapResult<&mut W> {
+    fn finish_chunk(&mut self) -> McapResult<&mut CountingCrcWriter<W>> {
         // If we're currently writing an attachment then we're not writing a chunk. Return an
         // error instead.
         if let Some(WriteMode::Attachment(..)) = self.writer {
@@ -785,16 +786,20 @@ impl<W: Write + Seek> Writer<W> {
         self.finish_chunk()?;
 
         // Grab the writer - self.writer becoming None makes subsequent writes fail.
-        let mut writer = match self.writer.take() {
+        let writer = match self.writer.take() {
             // We called finish_chunk() above, so we're back to raw writes for
             // the summary section.
             Some(WriteMode::Raw(w)) => w,
             _ => unreachable!(),
         };
-        let writer = &mut writer;
+        let (mut writer, data_section_crc) = writer.finalize();
+        let data_section_crc = data_section_crc.finalize();
 
         // We're done with the data secton!
-        write_record(writer, &Record::DataEnd(records::DataEnd::default()))?;
+        write_record(
+            &mut writer,
+            &Record::DataEnd(records::DataEnd { data_section_crc }),
+        )?;
 
         // Take all the data we need, swapping in empty containers.
         // Without this, we get yelled at for moving things out of a mutable ref
@@ -961,9 +966,9 @@ impl<W: Write + Seek> Writer<W> {
         ccw.write_u64::<LE>(summary_start)?;
         ccw.write_u64::<LE>(summary_offset_start)?;
 
-        let (writer, summary_crc) = ccw.finalize();
+        let (mut writer, summary_crc) = ccw.finalize();
 
-        writer.write_u32::<LE>(summary_crc)?;
+        writer.write_u32::<LE>(summary_crc.finalize())?;
 
         writer.write_all(MAGIC)?;
         writer.flush()?;
@@ -1031,23 +1036,26 @@ struct ChunkWriter<W: Write> {
     /// Message start and end time, or None if there are no messages yet.
     message_bounds: Option<(u64, u64)>,
     compression_name: &'static str,
-    compressor: CountingCrcWriter<Compressor<ChunkSink<W>>>,
+    compressor: CountingCrcWriter<Compressor<CountingCrcWriter<ChunkSink<W>>>>,
     indexes: BTreeMap<u16, Vec<records::MessageIndexEntry>>,
+
+    // Hasher from data before the chunk.
+    pre_chunk_crc: crc32fast::Hasher,
 }
 
 impl<W: Write + Seek> ChunkWriter<W> {
-    fn new(mut writer: W, compression: Option<Compression>, mode: ChunkMode) -> McapResult<Self> {
+    fn new(
+        mut writer: CountingCrcWriter<W>,
+        compression: Option<Compression>,
+        mode: ChunkMode,
+    ) -> McapResult<Self> {
+        // Relative to start of original stream.
         let chunk_offset = writer.stream_position()?;
 
-        let mut sink = match mode {
-            ChunkMode::Buffered { mut buffer } => {
-                // ensure the buffer is empty before using it for the chunk
-                buffer.clear();
-                ChunkSink::Buffered(writer, Cursor::new(buffer))
-            }
-            ChunkMode::Direct => ChunkSink::Direct(writer),
-        };
+        let (writer, pre_chunk_crc) = writer.finalize();
+        let mut sink = ChunkSink::new(writer, mode);
 
+        // Relative to start of chunk sink stream.
         let header_start = sink.stream_position()?;
 
         op_and_len(&mut sink, op::CHUNK, !0)?;
@@ -1074,6 +1082,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         };
         sink.write_le(&header)?;
         let data_start = sink.stream_position()?;
+        let sink = CountingCrcWriter::new(sink);
 
         let compressor = match compression {
             #[cfg(feature = "zstd")]
@@ -1102,11 +1111,11 @@ impl<W: Write + Seek> ChunkWriter<W> {
             chunk_offset,
             data_start,
             header_start,
-
             compressor,
             compression_name,
             message_bounds: None,
             indexes: BTreeMap::new(),
+            pre_chunk_crc,
         })
     }
 
@@ -1157,52 +1166,58 @@ impl<W: Write + Seek> ChunkWriter<W> {
         Ok(())
     }
 
-    fn finish(self) -> McapResult<(W, ChunkMode, records::ChunkIndex)> {
+    fn finish(self) -> McapResult<(CountingCrcWriter<W>, ChunkMode, records::ChunkIndex)> {
         // Get the number of uncompressed bytes written and the CRC.
 
         let uncompressed_size = self.compressor.position();
-        let (stream, crc) = self.compressor.finalize();
-        let uncompressed_crc = crc;
+        let (stream, uncompressed_crc) = self.compressor.finalize();
 
         // Finalize the compression stream - it maintains an internal buffer.
-        let mut sink = stream.finish()?;
+        let writer = stream.finish()?;
+        let compressed_size = writer.position();
+        let (mut sink, compressed_crc) = writer.finalize();
+
         let data_end = sink.stream_position()?;
-        let compressed_size = data_end - self.data_start;
+        // let compressed_size =  data_end - self.data_start;
         let record_size = (data_end - self.header_start) - 9; // 1 byte op, 8 byte len
 
-        // Back up, write our finished header, then continue at the end of the stream.
+        // Now that we know the size of the chunk data and the CRC of the uncompressed data, we
+        // rewind the stream and overwrite the dummy chunk header with the true header.
         sink.seek(SeekFrom::Start(self.header_start))?;
-        op_and_len(&mut sink, op::CHUNK, record_size)?;
+        // Compute the CRC of the pre-chunk data concatenated with the chunk header.
+        let mut writer = CountingCrcWriter::with_hasher(sink, self.pre_chunk_crc);
+        op_and_len(&mut writer, op::CHUNK, record_size)?;
         let message_bounds = self.message_bounds.unwrap_or((0, 0));
         let header = records::ChunkHeader {
             message_start_time: message_bounds.0,
             message_end_time: message_bounds.1,
             uncompressed_size,
-            uncompressed_crc,
+            uncompressed_crc: uncompressed_crc.finalize(),
             compression: String::from(self.compression_name),
             compressed_size,
         };
-        sink.write_le(&header)?;
+        writer.write_le(&header)?;
+        let (mut sink, post_chunk_header_crc) = writer.finalize();
         assert_eq!(self.data_start, sink.stream_position()?);
+        // We're done with all the chunk data. Move the cursor past the end and go back to just
+        // appending records.
         assert_eq!(sink.seek(SeekFrom::End(0))?, data_end);
+        let (writer, mode) = sink.finish()?;
+
+        // Compute the CRC of the pre-chunk data + chunk header + compressed chunk data. That is,
+        // the CRC of the entire MCAP file up to the end of this chunk. This is necessary because
+        // we ultimately have to produce a correct CRC of the MCAP file until the DataEnd record.
+        let mut post_chunk_crc = post_chunk_header_crc;
+        post_chunk_crc.combine(&compressed_crc);
+        let mut writer = CountingCrcWriter::with_hasher(writer, post_chunk_crc);
 
         // Write our message indexes
         let mut message_index_offsets: BTreeMap<u16, u64> = BTreeMap::new();
 
         let mut index_buf = Vec::new();
         for (channel_id, records) in self.indexes {
-            // since the chunk sink position might be relative to a buffer, calculate the absolute
-            // position based on the `chunk_offset` and `header_start`.
-            //
-            // When the chunk is buffered and stream position is "relative" then `header_start`
-            // will be zero so the position will be relative to the chunk offset. When the stream
-            // position is "absolute" then `header_start` and `chunk_offset` will be equal and the
-            // position will be absolute.
-            let absolute_position =
-                (self.chunk_offset - self.header_start) + sink.stream_position()?;
-
-            let existing_offset = message_index_offsets.insert(channel_id, absolute_position);
-
+            let existing_offset =
+                message_index_offsets.insert(channel_id, writer.stream_position()?);
             assert!(existing_offset.is_none());
 
             index_buf.clear();
@@ -1210,12 +1225,11 @@ impl<W: Write + Seek> ChunkWriter<W> {
                 channel_id,
                 records,
             };
-
             Cursor::new(&mut index_buf).write_le(&index)?;
-            op_and_len(&mut sink, op::MESSAGE_INDEX, index_buf.len() as _)?;
-            sink.write_all(&index_buf)?;
+            op_and_len(&mut writer, op::MESSAGE_INDEX, index_buf.len() as _)?;
+            writer.write_all(&index_buf)?;
         }
-        let end_of_indexes = sink.stream_position()?;
+        let end_of_indexes = writer.stream_position()?;
 
         let index = records::ChunkIndex {
             message_start_time: header.message_start_time,
@@ -1227,15 +1241,6 @@ impl<W: Write + Seek> ChunkWriter<W> {
             compression: header.compression,
             compressed_size: header.compressed_size,
             uncompressed_size: header.uncompressed_size,
-        };
-
-        let (writer, mode) = match sink {
-            ChunkSink::Direct(w) => (w, ChunkMode::Direct),
-            ChunkSink::Buffered(mut w, data) => {
-                let buffer = data.into_inner();
-                w.write_all(&buffer)?;
-                (w, ChunkMode::Buffered { buffer })
-            }
         };
 
         Ok((writer, mode, index))
@@ -1319,7 +1324,7 @@ impl<W: Write + Seek> AttachmentWriter<W> {
         }
 
         let (mut writer, crc) = self.writer.finalize();
-        writer.write_u32::<LE>(crc)?;
+        writer.write_u32::<LE>(crc.finalize())?;
 
         let offset = self.record_offset;
         let length = writer.stream_position()? - offset;
