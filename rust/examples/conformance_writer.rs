@@ -78,8 +78,9 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                 };
                 let topic = record.get_field_str("topic");
                 let message_encoding = record.get_field_str("message_encoding");
+                let metadata = record.get_field_meta("metadata");
                 let returned_id = writer
-                    .add_channel(output_schema_id, topic, message_encoding, &BTreeMap::new())
+                    .add_channel(output_schema_id, topic, message_encoding, &metadata)
                     .expect("Couldn't write channel");
                 channel_ids.insert(id, returned_id);
             }
