@@ -301,7 +301,7 @@ impl<W: Write + Seek> Writer<W> {
             chunk_mode,
             schemas: Default::default(),
             channels: Default::default(),
-            next_channel_id: 0,
+            next_channel_id: 1,
             next_schema_id: 1,
             chunk_indexes: Default::default(),
             attachment_indexes: Default::default(),
@@ -1384,7 +1384,7 @@ mod tests {
                 data: Cow::Owned(Vec::new()),
             })
             .expect("could not write initial channel");
-        for i in 0..65535u16 {
+        for i in 1..65535u16 {
             let id = writer
                 .add_channel(0, &format!("{i}"), "json", &BTreeMap::new())
                 .expect("could not add channel");
