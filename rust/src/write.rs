@@ -105,6 +105,7 @@ pub struct WriteOptions {
     disable_seeking: bool,
     output_statistics: bool,
     output_summary: bool,
+    output_summary_offsets: bool,
     library: String,
 }
 
@@ -121,6 +122,7 @@ impl Default for WriteOptions {
             disable_seeking: false,
             output_statistics: true,
             output_summary: true,
+            output_summary_offsets: true,
             library: String::from("mcap-rs-") + env!("CARGO_PKG_VERSION"),
         }
     }
@@ -206,6 +208,15 @@ impl WriteOptions {
     /// Set this to `false` to disable this behavior.
     pub fn output_summary(mut self, output_summary: bool) -> Self {
         self.output_summary = output_summary;
+        self
+    }
+
+    /// Specifies whether the writer should output summary offsets automatically.
+    ///
+    /// By default the writer will output summary offset records to the MCAP file when it is
+    /// finished. Set this to `false` to disable this behavior.
+    pub fn output_summary_offsets(mut self, output_summary_offsets: bool) -> Self {
+        self.output_summary_offsets = output_summary_offsets;
         self
     }
 
@@ -951,9 +962,13 @@ impl<W: Write + Seek> Writer<W> {
             });
 
             // Write the summary offsets we've been accumulating
-            summary_offset_start = stats_end;
-            for offset in offsets {
-                write_record(&mut ccw, &Record::SummaryOffset(offset))?;
+            if self.options.output_summary_offsets {
+                summary_offset_start = stats_end;
+                for offset in offsets {
+                    write_record(&mut ccw, &Record::SummaryOffset(offset))?;
+                }
+            } else {
+                summary_offset_start = 0;
             }
         } else {
             summary_start = 0;
