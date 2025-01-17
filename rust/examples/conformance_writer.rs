@@ -26,6 +26,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
         .disable_seeking(true)
         .output_summary(false)
         .output_summary_offsets(false)
+        .output_statistics(false)
         .repeat_channels(false)
         .repeat_schemas(false)
         .output_message_indexes(false)

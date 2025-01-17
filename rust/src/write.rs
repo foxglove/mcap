@@ -1033,14 +1033,19 @@ impl<W: Write + Seek> Writer<W> {
             }
 
             let stats_start = metadata_indexes_end;
-            write_record(&mut ccw, &Record::Statistics(stats))?;
-            let stats_end = posit(&mut ccw)?;
-            assert!(stats_end > stats_start);
-            offsets.push(records::SummaryOffset {
-                group_opcode: op::STATISTICS,
-                group_start: stats_start,
-                group_length: stats_end - stats_start,
-            });
+            let stats_end;
+            if self.options.output_statistics {
+                write_record(&mut ccw, &Record::Statistics(stats))?;
+                stats_end = posit(&mut ccw)?;
+                assert!(stats_end > stats_start);
+                offsets.push(records::SummaryOffset {
+                    group_opcode: op::STATISTICS,
+                    group_start: stats_start,
+                    group_length: stats_end - stats_start,
+                });
+            } else {
+                stats_end = stats_start;
+            }
 
             // Write the summary offsets we've been accumulating
             if self.options.output_summary_offsets {
