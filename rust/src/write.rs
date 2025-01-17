@@ -104,12 +104,12 @@ pub struct WriteOptions {
     chunk_size: Option<u64>,
     use_chunks: bool,
     disable_seeking: bool,
-    output_statistics: bool,
-    output_summary_offsets: bool,
-    output_message_indexes: bool,
-    output_chunk_indexes: bool,
-    output_attachment_indexes: bool,
-    output_metadata_indexes: bool,
+    emit_statistics: bool,
+    emit_summary_offsets: bool,
+    emit_message_indexes: bool,
+    emit_chunk_indexes: bool,
+    emit_attachment_indexes: bool,
+    emit_metadata_indexes: bool,
     repeat_channels: bool,
     repeat_schemas: bool,
 }
@@ -126,12 +126,12 @@ impl Default for WriteOptions {
             chunk_size: Some(1024 * 768),
             use_chunks: true,
             disable_seeking: false,
-            output_statistics: true,
-            output_summary_offsets: true,
-            output_message_indexes: true,
-            output_chunk_indexes: true,
-            output_attachment_indexes: true,
-            output_metadata_indexes: true,
+            emit_statistics: true,
+            emit_summary_offsets: true,
+            emit_message_indexes: true,
+            emit_chunk_indexes: true,
+            emit_attachment_indexes: true,
+            emit_metadata_indexes: true,
             repeat_channels: true,
             repeat_schemas: true,
         }
@@ -213,11 +213,11 @@ impl WriteOptions {
     /// Note that this does *not* control whether [summary offset
     /// records](https://mcap.dev/spec#summary-offset-op0x0e) are written, because they
     /// are not part of the [summary section](https://mcap.dev/spec#summary-section).
-    pub fn output_summary_records(mut self, value: bool) -> Self {
-        self.output_statistics = value;
-        self.output_chunk_indexes = value;
-        self.output_attachment_indexes = value;
-        self.output_metadata_indexes = value;
+    pub fn emit_summary_records(mut self, value: bool) -> Self {
+        self.emit_statistics = value;
+        self.emit_chunk_indexes = value;
+        self.emit_attachment_indexes = value;
+        self.emit_metadata_indexes = value;
         self.repeat_channels = value;
         self.repeat_schemas = value;
         self
@@ -225,46 +225,46 @@ impl WriteOptions {
 
     /// Specifies whether to write [summary offset
     /// records](https://mcap.dev/spec#summary-offset-op0x0e). This is on by default.
-    pub fn output_summary_offsets(mut self, output_summary_offsets: bool) -> Self {
-        self.output_summary_offsets = output_summary_offsets;
+    pub fn emit_summary_offsets(mut self, emit_summary_offsets: bool) -> Self {
+        self.emit_summary_offsets = emit_summary_offsets;
         self
     }
 
     /// Specifies whether to write a [statistics record](https://mcap.dev/spec#statistics-op0x0b) in
     /// the [summary section](https://mcap.dev/spec#summary-section). This is on by default.
-    pub fn output_statistics(mut self, output_statistics: bool) -> Self {
-        self.output_statistics = output_statistics;
+    pub fn emit_statistics(mut self, emit_statistics: bool) -> Self {
+        self.emit_statistics = emit_statistics;
         self
     }
 
     /// Specifies whether to write [message index
     /// records](https://mcap.dev/spec#message-index-op0x07) after each chunk. This is on by
     /// default.
-    pub fn output_message_indexes(mut self, output_message_indexes: bool) -> Self {
-        self.output_message_indexes = output_message_indexes;
+    pub fn emit_message_indexes(mut self, emit_message_indexes: bool) -> Self {
+        self.emit_message_indexes = emit_message_indexes;
         self
     }
 
     /// Specifies whether to write [chunk index records](https://mcap.dev/spec#chunk-index-op0x08)
     /// in the [summary section](https://mcap.dev/spec#summary-section). This is on by default.
-    pub fn output_chunk_indexes(mut self, output_chunk_indexes: bool) -> Self {
-        self.output_chunk_indexes = output_chunk_indexes;
+    pub fn emit_chunk_indexes(mut self, emit_chunk_indexes: bool) -> Self {
+        self.emit_chunk_indexes = emit_chunk_indexes;
         self
     }
 
     /// Specifies whether to write [attachment index
     /// records](https://mcap.dev/spec#attachment-index-op0x0a) in the [summary
     /// section](https://mcap.dev/spec#summary-section). This is on by default.
-    pub fn output_attachment_indexes(mut self, output_attachment_indexes: bool) -> Self {
-        self.output_attachment_indexes = output_attachment_indexes;
+    pub fn emit_attachment_indexes(mut self, emit_attachment_indexes: bool) -> Self {
+        self.emit_attachment_indexes = emit_attachment_indexes;
         self
     }
 
     /// Specifies whether to write [metadata index
     /// records](https://mcap.dev/spec#metadata-index-op0x0d) in the [summary
     /// section](https://mcap.dev/spec#summary-section). This is on by default.
-    pub fn output_metadata_indexes(mut self, output_metadata_indexes: bool) -> Self {
-        self.output_metadata_indexes = output_metadata_indexes;
+    pub fn emit_metadata_indexes(mut self, emit_metadata_indexes: bool) -> Self {
+        self.emit_metadata_indexes = emit_metadata_indexes;
         self
     }
 
@@ -717,7 +717,7 @@ impl<W: Write + Seek> Writer<W> {
         let (writer, attachment_index) = writer.finish()?;
         self.attachment_count += 1;
 
-        if self.options.output_attachment_indexes {
+        if self.options.emit_attachment_indexes {
             self.attachment_indexes.push(attachment_index);
         }
 
@@ -755,7 +755,7 @@ impl<W: Write + Seek> Writer<W> {
         let length = w.stream_position()? - offset;
 
         self.metadata_count += 1;
-        if self.options.output_metadata_indexes {
+        if self.options.emit_metadata_indexes {
             self.metadata_indexes.push(records::MetadataIndex {
                 offset,
                 length,
@@ -817,7 +817,7 @@ impl<W: Write + Seek> Writer<W> {
                     w,
                     self.options.compression,
                     std::mem::take(&mut self.chunk_mode),
-                    self.options.output_message_indexes,
+                    self.options.emit_message_indexes,
                 )?)
             }
             chunk => chunk,
@@ -979,7 +979,7 @@ impl<W: Write + Seek> Writer<W> {
             });
         }
 
-        if self.options.output_statistics {
+        if self.options.emit_statistics {
             let statistics_start = summary_end;
             write_record(&mut ccw, &Record::Statistics(stats))?;
             summary_end = posit(&mut ccw)?;
@@ -990,7 +990,7 @@ impl<W: Write + Seek> Writer<W> {
             });
         }
 
-        if self.options.output_chunk_indexes && !chunk_indexes.is_empty() {
+        if self.options.emit_chunk_indexes && !chunk_indexes.is_empty() {
             // Write all chunk indexes.
             let chunk_indexes_start = summary_end;
             for index in chunk_indexes {
@@ -1005,7 +1005,7 @@ impl<W: Write + Seek> Writer<W> {
         }
 
         // ...and attachment indexes
-        if self.options.output_attachment_indexes && !attachment_indexes.is_empty() {
+        if self.options.emit_attachment_indexes && !attachment_indexes.is_empty() {
             let attachment_indexes_start = summary_end;
             for index in attachment_indexes {
                 write_record(&mut ccw, &Record::AttachmentIndex(index))?;
@@ -1019,7 +1019,7 @@ impl<W: Write + Seek> Writer<W> {
         }
 
         // ...and metadata indexes
-        if self.options.output_metadata_indexes && !metadata_indexes.is_empty() {
+        if self.options.emit_metadata_indexes && !metadata_indexes.is_empty() {
             let metadata_indexes_start = summary_end;
             for index in metadata_indexes {
                 write_record(&mut ccw, &Record::MetadataIndex(index))?;
@@ -1033,7 +1033,7 @@ impl<W: Write + Seek> Writer<W> {
         }
 
         // Write the summary offsets we've been accumulating
-        if self.options.output_summary_offsets {
+        if self.options.emit_summary_offsets {
             summary_offset_start = summary_end;
             for offset in offsets {
                 write_record(&mut ccw, &Record::SummaryOffset(offset))?;
@@ -1129,7 +1129,7 @@ struct ChunkWriter<W: Write> {
     // Hasher from data before the chunk.
     pre_chunk_crc: crc32fast::Hasher,
 
-    output_message_indexes: bool,
+    emit_message_indexes: bool,
 }
 
 impl<W: Write + Seek> ChunkWriter<W> {
@@ -1137,7 +1137,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         mut writer: CountingCrcWriter<W>,
         compression: Option<Compression>,
         mode: ChunkMode,
-        output_message_indexes: bool,
+        emit_message_indexes: bool,
     ) -> McapResult<Self> {
         // Relative to start of original stream.
         let chunk_offset = writer.stream_position()?;
@@ -1206,7 +1206,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
             message_bounds: None,
             indexes: BTreeMap::new(),
             pre_chunk_crc,
-            output_message_indexes,
+            emit_message_indexes,
         })
     }
 
@@ -1238,7 +1238,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
             Some((start, end)) => (start.min(header.log_time), end.max(header.log_time)),
         });
 
-        if self.output_message_indexes {
+        if self.emit_message_indexes {
             // Add an index for this message
             self.indexes
                 .entry(header.channel_id)

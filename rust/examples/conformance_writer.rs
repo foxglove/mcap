@@ -1,8 +1,4 @@
-use std::{
-    borrow::Cow,
-    collections::{BTreeMap, HashMap},
-    env,
-};
+use std::{borrow::Cow, collections::HashMap, env};
 
 #[path = "common/conformance_writer_spec.rs"]
 mod conformance_writer_spec;
@@ -24,36 +20,22 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
         .profile("")
         .library("")
         .disable_seeking(true)
-        .output_summary(false)
-        .output_summary_offsets(false)
-        .output_statistics(false)
-        .repeat_channels(false)
-        .repeat_schemas(false)
-        .output_message_indexes(false)
+        .emit_summary_records(false)
+        .emit_summary_offsets(false)
         .use_chunks(false)
-        .output_chunk_indexes(false)
-        .output_attachment_indexes(false)
-        .output_metadata_indexes(false);
+        .emit_message_indexes(false);
 
     for feature in spec.meta.variant.features.iter() {
         write_options = match feature.as_str() {
             USE_CHUNKS => write_options.use_chunks(true),
-            USE_STATISTICS => write_options.output_summary(true).output_statistics(true),
-            USE_SUMMARY_OFFSET => write_options
-                .output_summary(true)
-                .output_summary_offsets(true),
-            USE_REPEATED_CHANNEL_INFOS => write_options.output_summary(true).repeat_channels(true),
-            USE_REPEATED_SCHEMAS => write_options.output_summary(true).repeat_schemas(true),
-            USE_MESSAGE_INDEX => write_options.output_message_indexes(true),
-            USE_ATTACHMENT_INDEX => write_options
-                .output_summary(true)
-                .output_attachment_indexes(true),
-            USE_METADATA_INDEX => write_options
-                .output_summary(true)
-                .output_metadata_indexes(true),
-            USE_CHUNK_INDEX => write_options
-                .output_summary(true)
-                .output_chunk_indexes(true),
+            USE_STATISTICS => write_options.emit_statistics(true),
+            USE_SUMMARY_OFFSET => write_options.emit_summary_offsets(true),
+            USE_REPEATED_CHANNEL_INFOS => write_options.repeat_channels(true),
+            USE_REPEATED_SCHEMAS => write_options.repeat_schemas(true),
+            USE_MESSAGE_INDEX => write_options.emit_message_indexes(true),
+            USE_ATTACHMENT_INDEX => write_options.emit_attachment_indexes(true),
+            USE_METADATA_INDEX => write_options.emit_metadata_indexes(true),
+            USE_CHUNK_INDEX => write_options.emit_chunk_indexes(true),
             _ => unimplemented!("unknown or unimplemented feature: {}", feature),
         }
     }
