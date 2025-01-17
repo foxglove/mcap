@@ -23,17 +23,7 @@ export default class RustWriterTestRunner extends WriteTestRunner {
     return stdout as unknown as Uint8Array;
   }
 
-  supportsVariant(_variant: TestVariant): boolean {
-    const supported = [
-      TestFeatures.UseChunks,
-      TestFeatures.UseStatistics,
-      TestFeatures.UseSummaryOffset,
-    ];
-    for (const feature of _variant.features) {
-      if (!supported.includes(feature)) {
-        return false;
-      }
-    }
-    return true;
+  supportsVariant(variant: TestVariant): boolean {
+    return !variant.features.has(TestFeatures.AddExtraDataToRecords);
   }
 }

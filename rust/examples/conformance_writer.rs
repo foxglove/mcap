@@ -42,6 +42,18 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
             USE_SUMMARY_OFFSET => write_options
                 .output_summary(true)
                 .output_summary_offsets(true),
+            USE_REPEATED_CHANNEL_INFOS => write_options.output_summary(true).repeat_channels(true),
+            USE_REPEATED_SCHEMAS => write_options.output_summary(true).repeat_schemas(true),
+            USE_MESSAGE_INDEX => write_options.output_message_indexes(true),
+            USE_ATTACHMENT_INDEX => write_options
+                .output_summary(true)
+                .output_attachment_indexes(true),
+            USE_METADATA_INDEX => write_options
+                .output_summary(true)
+                .output_metadata_indexes(true),
+            USE_CHUNK_INDEX => write_options
+                .output_summary(true)
+                .output_chunk_indexes(true),
             _ => unimplemented!("unknown or unimplemented feature: {}", feature),
         }
     }
@@ -143,6 +155,9 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                     metadata: fields,
                 };
                 writer.write_metadata(&meta).expect("Can't write metadata");
+            }
+            "MetadataIndex" => {
+                // written automatically
             }
             "Schema" => {
                 let name = record.get_field_str("name");
