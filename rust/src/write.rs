@@ -105,7 +105,6 @@ pub struct WriteOptions {
     use_chunks: bool,
     disable_seeking: bool,
     output_statistics: bool,
-    output_summary: bool,
     output_summary_offsets: bool,
     output_message_indexes: bool,
     output_chunk_indexes: bool,
@@ -128,7 +127,6 @@ impl Default for WriteOptions {
             use_chunks: true,
             disable_seeking: false,
             output_statistics: true,
-            output_summary: true,
             output_summary_offsets: true,
             output_message_indexes: true,
             output_chunk_indexes: true,
@@ -205,82 +203,82 @@ impl WriteOptions {
         self
     }
 
-    /// Specifies whether the writer should output statistics automatically.
+    /// Specifies in whether to write any records to the [summary
+    /// section](https://mcap.dev/spec#summary-section).
     ///
-    /// By default the writer will output a statistics record to the MCAP file when it is finished.
-    /// Set this to `false` to disable this behavior.
-    pub fn output_statistics(mut self, output_statistics: bool) -> Self {
-        self.output_statistics = output_statistics;
+    /// If you want only want to include specific record types in the summary section, call this
+    /// method with `false` and then enable the records you want. This ensures that no unwanted
+    /// summary records will be written if the format changes in the future.
+    ///
+    /// Note that this does *not* control whether [summary offset
+    /// records](https://mcap.dev/spec#summary-offset-op0x0e) are written, because they
+    /// are not part of the [summary section](https://mcap.dev/spec#summary-section).
+    pub fn output_summary_records(mut self, value: bool) -> Self {
+        self.output_statistics = value;
+        self.output_chunk_indexes = value;
+        self.output_attachment_indexes = value;
+        self.output_metadata_indexes = value;
+        self.repeat_channels = value;
+        self.repeat_schemas = value;
         self
     }
 
-    /// Specifies whether the writer should output a summary record automatically.
-    ///
-    /// By default the writer will output a summary record to the MCAP file when it is finished.
-    /// Set this to `false` to disable this behavior.
-    pub fn output_summary(mut self, output_summary: bool) -> Self {
-        self.output_summary = output_summary;
-        self
-    }
-
-    /// Specifies whether the writer should output summary offsets automatically.
-    ///
-    /// By default the writer will output summary offset records to the MCAP file when it is
-    /// finished. Set this to `false` to disable this behavior.
+    /// Specifies whether to write [summary offset
+    /// records](https://mcap.dev/spec#summary-offset-op0x0e). This is on by default.
     pub fn output_summary_offsets(mut self, output_summary_offsets: bool) -> Self {
         self.output_summary_offsets = output_summary_offsets;
         self
     }
 
-    /// Specifies whether the writer should output message indexes automatically.
-    ///
-    /// By default the writer will output message index records after each chunk. Set this to
-    /// `false` to disable this behavior.
+    /// Specifies whether to write a [statistics record](https://mcap.dev/spec#statistics-op0x0b) in
+    /// the [summary section](https://mcap.dev/spec#summary-section). This is on by default.
+    pub fn output_statistics(mut self, output_statistics: bool) -> Self {
+        self.output_statistics = output_statistics;
+        self
+    }
+
+    /// Specifies whether to write [message index
+    /// records](https://mcap.dev/spec#message-index-op0x07) after each chunk. This is on by
+    /// default.
     pub fn output_message_indexes(mut self, output_message_indexes: bool) -> Self {
         self.output_message_indexes = output_message_indexes;
         self
     }
 
-    /// Specifies whether the writer should output chunk indexes automatically.
-    ///
-    /// By default the writer will output chunk index records in the summary section. Set this to
-    /// `false` to disable this behavior.
+    /// Specifies whether to write [chunk index records](https://mcap.dev/spec#chunk-index-op0x08)
+    /// in the [summary section](https://mcap.dev/spec#summary-section). This is on by default.
     pub fn output_chunk_indexes(mut self, output_chunk_indexes: bool) -> Self {
         self.output_chunk_indexes = output_chunk_indexes;
         self
     }
 
-    /// Specifies whether the writer should output attachment indexes automatically.
-    ///
-    /// By default the writer will output attachment index records in the summary section. Set this to
-    /// `false` to disable this behavior.
+    /// Specifies whether to write [attachment index
+    /// records](https://mcap.dev/spec#attachment-index-op0x0a) in the [summary
+    /// section](https://mcap.dev/spec#summary-section). This is on by default.
     pub fn output_attachment_indexes(mut self, output_attachment_indexes: bool) -> Self {
         self.output_attachment_indexes = output_attachment_indexes;
         self
     }
 
-    /// Specifies whether the writer should output metadata indexes automatically.
-    ///
-    /// By default the writer will output metadata index records in the summary section. Set this to
-    /// `false` to disable this behavior.
+    /// Specifies whether to write [metadata index
+    /// records](https://mcap.dev/spec#metadata-index-op0x0d) in the [summary
+    /// section](https://mcap.dev/spec#summary-section). This is on by default.
     pub fn output_metadata_indexes(mut self, output_metadata_indexes: bool) -> Self {
         self.output_metadata_indexes = output_metadata_indexes;
         self
     }
 
-    /// Specifies whether the writer should repeat the channel records in the summary section.
-    ///
-    /// By default the writer will repeat the channel records in the summary section. Set this to
-    /// `false` to disable this behavior.
+    /// Specifies whether to repeat each [channel record](https://mcap.dev/spec#channel-op0x04) from
+    /// the [data section](https://mcap.dev/spec#data-section) in the [summary
+    /// section](https://mcap.dev/spec#summary-section). This is on by default.
     pub fn repeat_channels(mut self, repeat_channels: bool) -> Self {
         self.repeat_channels = repeat_channels;
         self
     }
 
-    /// Specifies whether the writer should repeat the schema records in the summary section.
-    ///
-    /// By default the writer will repeat the schema records in the summary section. Set this to
-    /// `false` to disable this behavior.
+    /// Specifies whether to repeat each [schema record](https://mcap.dev/spec#schema-op0x03) from
+    /// the [data section](https://mcap.dev/spec#data-section) in the [summary
+    /// section](https://mcap.dev/spec#summary-section). This is on by default.
     pub fn repeat_schemas(mut self, repeat_schemas: bool) -> Self {
         self.repeat_schemas = repeat_schemas;
         self
@@ -943,112 +941,112 @@ impl<W: Write + Seek> Writer<W> {
         // Let's get a CRC of the summary section.
         let mut ccw;
 
-        if self.options.output_summary {
-            let mut offsets = Vec::new();
+        let mut offsets = Vec::new();
 
-            summary_start = writer.stream_position()?;
-            let mut summary_end = summary_start;
-            ccw = CountingCrcWriter::new(writer);
+        summary_start = writer.stream_position()?;
+        let mut summary_end = summary_start;
+        ccw = CountingCrcWriter::new(writer);
 
-            fn posit<W: Write + Seek>(ccw: &mut CountingCrcWriter<W>) -> io::Result<u64> {
-                ccw.get_mut().stream_position()
+        fn posit<W: Write + Seek>(ccw: &mut CountingCrcWriter<W>) -> io::Result<u64> {
+            ccw.get_mut().stream_position()
+        }
+
+        // Write all schemas.
+        let schemas_start = summary_start;
+        if self.options.repeat_schemas && !all_schemas.is_empty() {
+            for schema in all_schemas.iter() {
+                write_record(&mut ccw, schema)?;
             }
+            summary_end = posit(&mut ccw)?;
+            offsets.push(records::SummaryOffset {
+                group_opcode: op::SCHEMA,
+                group_start: schemas_start,
+                group_length: summary_end - schemas_start,
+            });
+        }
 
-            // Write all schemas.
-            let schemas_start = summary_start;
-            if self.options.repeat_schemas && !all_schemas.is_empty() {
-                for schema in all_schemas.iter() {
-                    write_record(&mut ccw, schema)?;
-                }
-                summary_end = posit(&mut ccw)?;
-                offsets.push(records::SummaryOffset {
-                    group_opcode: op::SCHEMA,
-                    group_start: schemas_start,
-                    group_length: summary_end - schemas_start,
-                });
+        // Write all channels.
+        if self.options.repeat_channels && !all_channels.is_empty() {
+            let channels_start = summary_end;
+            for channel in all_channels {
+                write_record(&mut ccw, &Record::Channel(channel))?;
             }
+            summary_end = posit(&mut ccw)?;
+            offsets.push(records::SummaryOffset {
+                group_opcode: op::CHANNEL,
+                group_start: channels_start,
+                group_length: summary_end - channels_start,
+            });
+        }
 
-            // Write all channels.
-            if self.options.repeat_channels && !all_channels.is_empty() {
-                let channels_start = summary_end;
-                for channel in all_channels {
-                    write_record(&mut ccw, &Record::Channel(channel))?;
-                }
-                summary_end = posit(&mut ccw)?;
-                offsets.push(records::SummaryOffset {
-                    group_opcode: op::CHANNEL,
-                    group_start: channels_start,
-                    group_length: summary_end - channels_start,
-                });
+        if self.options.output_statistics {
+            let statistics_start = summary_end;
+            write_record(&mut ccw, &Record::Statistics(stats))?;
+            summary_end = posit(&mut ccw)?;
+            offsets.push(records::SummaryOffset {
+                group_opcode: op::STATISTICS,
+                group_start: statistics_start,
+                group_length: summary_end - statistics_start,
+            });
+        }
+
+        if self.options.output_chunk_indexes && !chunk_indexes.is_empty() {
+            // Write all chunk indexes.
+            let chunk_indexes_start = summary_end;
+            for index in chunk_indexes {
+                write_record(&mut ccw, &Record::ChunkIndex(index))?;
             }
+            summary_end = posit(&mut ccw)?;
+            offsets.push(records::SummaryOffset {
+                group_opcode: op::CHUNK_INDEX,
+                group_start: chunk_indexes_start,
+                group_length: summary_end - chunk_indexes_start,
+            });
+        }
 
-            if self.options.output_statistics {
-                let statistics_start = summary_end;
-                write_record(&mut ccw, &Record::Statistics(stats))?;
-                summary_end = posit(&mut ccw)?;
-                offsets.push(records::SummaryOffset {
-                    group_opcode: op::STATISTICS,
-                    group_start: statistics_start,
-                    group_length: summary_end - statistics_start,
-                });
+        // ...and attachment indexes
+        if self.options.output_attachment_indexes && !attachment_indexes.is_empty() {
+            let attachment_indexes_start = summary_end;
+            for index in attachment_indexes {
+                write_record(&mut ccw, &Record::AttachmentIndex(index))?;
             }
+            summary_end = posit(&mut ccw)?;
+            offsets.push(records::SummaryOffset {
+                group_opcode: op::ATTACHMENT_INDEX,
+                group_start: attachment_indexes_start,
+                group_length: summary_end - attachment_indexes_start,
+            });
+        }
 
-            if self.options.output_chunk_indexes && !chunk_indexes.is_empty() {
-                // Write all chunk indexes.
-                let chunk_indexes_start = summary_end;
-                for index in chunk_indexes {
-                    write_record(&mut ccw, &Record::ChunkIndex(index))?;
-                }
-                summary_end = posit(&mut ccw)?;
-                offsets.push(records::SummaryOffset {
-                    group_opcode: op::CHUNK_INDEX,
-                    group_start: chunk_indexes_start,
-                    group_length: summary_end - chunk_indexes_start,
-                });
+        // ...and metadata indexes
+        if self.options.output_metadata_indexes && !metadata_indexes.is_empty() {
+            let metadata_indexes_start = summary_end;
+            for index in metadata_indexes {
+                write_record(&mut ccw, &Record::MetadataIndex(index))?;
             }
+            summary_end = posit(&mut ccw)?;
+            offsets.push(records::SummaryOffset {
+                group_opcode: op::METADATA_INDEX,
+                group_start: metadata_indexes_start,
+                group_length: summary_end - metadata_indexes_start,
+            });
+        }
 
-            // ...and attachment indexes
-            if self.options.output_attachment_indexes && !attachment_indexes.is_empty() {
-                let attachment_indexes_start = summary_end;
-                for index in attachment_indexes {
-                    write_record(&mut ccw, &Record::AttachmentIndex(index))?;
-                }
-                summary_end = posit(&mut ccw)?;
-                offsets.push(records::SummaryOffset {
-                    group_opcode: op::ATTACHMENT_INDEX,
-                    group_start: attachment_indexes_start,
-                    group_length: summary_end - attachment_indexes_start,
-                });
-            }
-
-            // ...and metadata indexes
-            if self.options.output_metadata_indexes && !metadata_indexes.is_empty() {
-                let metadata_indexes_start = summary_end;
-                for index in metadata_indexes {
-                    write_record(&mut ccw, &Record::MetadataIndex(index))?;
-                }
-                summary_end = posit(&mut ccw)?;
-                offsets.push(records::SummaryOffset {
-                    group_opcode: op::METADATA_INDEX,
-                    group_start: metadata_indexes_start,
-                    group_length: summary_end - metadata_indexes_start,
-                });
-            }
-
-            // Write the summary offsets we've been accumulating
-            if self.options.output_summary_offsets {
-                summary_offset_start = summary_end;
-                for offset in offsets {
-                    write_record(&mut ccw, &Record::SummaryOffset(offset))?;
-                }
-            } else {
-                summary_offset_start = 0;
+        // Write the summary offsets we've been accumulating
+        if self.options.output_summary_offsets {
+            summary_offset_start = summary_end;
+            for offset in offsets {
+                write_record(&mut ccw, &Record::SummaryOffset(offset))?;
             }
         } else {
-            summary_start = 0;
             summary_offset_start = 0;
-            ccw = CountingCrcWriter::new(writer);
         }
+
+        let summary_start = if summary_end > summary_start {
+            summary_start
+        } else {
+            0 // We didn't write anything to the summary section.
+        };
 
         // Wat: the CRC in the footer _includes_ part of the footer.
         op_and_len(&mut ccw, op::FOOTER, 20)?;
