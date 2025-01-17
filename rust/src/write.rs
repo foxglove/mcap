@@ -947,6 +947,7 @@ impl<W: Write + Seek> Writer<W> {
             let mut offsets = Vec::new();
 
             summary_start = writer.stream_position()?;
+            let mut summary_end = summary_start;
             ccw = CountingCrcWriter::new(writer);
 
             fn posit<W: Write + Seek>(ccw: &mut CountingCrcWriter<W>) -> io::Result<u64> {
@@ -955,101 +956,88 @@ impl<W: Write + Seek> Writer<W> {
 
             // Write all schemas.
             let schemas_start = summary_start;
-            if self.options.repeat_schemas {
+            if self.options.repeat_schemas && !all_schemas.is_empty() {
                 for schema in all_schemas.iter() {
                     write_record(&mut ccw, schema)?;
                 }
-            }
-            let schemas_end = posit(&mut ccw)?;
-            if schemas_end - schemas_start > 0 {
+                summary_end = posit(&mut ccw)?;
                 offsets.push(records::SummaryOffset {
                     group_opcode: op::SCHEMA,
                     group_start: schemas_start,
-                    group_length: schemas_end - schemas_start,
+                    group_length: summary_end - schemas_start,
                 });
             }
 
             // Write all channels.
-            let channels_start = schemas_end;
-            if self.options.repeat_channels {
+            if self.options.repeat_channels && !all_channels.is_empty() {
+                let channels_start = summary_end;
                 for channel in all_channels {
                     write_record(&mut ccw, &Record::Channel(channel))?;
                 }
-            }
-            let channels_end = posit(&mut ccw)?;
-            if channels_end - channels_start > 0 {
+                summary_end = posit(&mut ccw)?;
                 offsets.push(records::SummaryOffset {
                     group_opcode: op::CHANNEL,
                     group_start: channels_start,
-                    group_length: channels_end - channels_start,
+                    group_length: summary_end - channels_start,
                 });
             }
 
-            let chunk_indexes_end;
-            if self.options.use_chunks && self.options.output_chunk_indexes {
+            if self.options.output_chunk_indexes && !chunk_indexes.is_empty() {
                 // Write all chunk indexes.
-                let chunk_indexes_start = channels_end;
+                let chunk_indexes_start = summary_end;
                 for index in chunk_indexes {
                     write_record(&mut ccw, &Record::ChunkIndex(index))?;
                 }
-                chunk_indexes_end = posit(&mut ccw)?;
-                if chunk_indexes_end - chunk_indexes_start > 0 {
-                    offsets.push(records::SummaryOffset {
-                        group_opcode: op::CHUNK_INDEX,
-                        group_start: chunk_indexes_start,
-                        group_length: chunk_indexes_end - chunk_indexes_start,
-                    });
-                }
-            } else {
-                chunk_indexes_end = channels_end;
+                summary_end = posit(&mut ccw)?;
+                offsets.push(records::SummaryOffset {
+                    group_opcode: op::CHUNK_INDEX,
+                    group_start: chunk_indexes_start,
+                    group_length: summary_end - chunk_indexes_start,
+                });
             }
 
             // ...and attachment indexes
-            let attachment_indexes_start = chunk_indexes_end;
-            for index in attachment_indexes {
-                write_record(&mut ccw, &Record::AttachmentIndex(index))?;
-            }
-            let attachment_indexes_end = posit(&mut ccw)?;
-            if attachment_indexes_end - attachment_indexes_start > 0 {
+            if self.options.output_attachment_indexes && !attachment_indexes.is_empty() {
+                let attachment_indexes_start = summary_end;
+                for index in attachment_indexes {
+                    write_record(&mut ccw, &Record::AttachmentIndex(index))?;
+                }
+                summary_end = posit(&mut ccw)?;
                 offsets.push(records::SummaryOffset {
                     group_opcode: op::ATTACHMENT_INDEX,
                     group_start: attachment_indexes_start,
-                    group_length: attachment_indexes_end - attachment_indexes_start,
+                    group_length: summary_end - attachment_indexes_start,
                 });
             }
 
             // ...and metadata indexes
-            let metadata_indexes_start = attachment_indexes_end;
-            for index in metadata_indexes {
-                write_record(&mut ccw, &Record::MetadataIndex(index))?;
-            }
-            let metadata_indexes_end = posit(&mut ccw)?;
-            if metadata_indexes_end - metadata_indexes_start > 0 {
+            if self.options.output_metadata_indexes && !metadata_indexes.is_empty() {
+                let metadata_indexes_start = summary_end;
+                for index in metadata_indexes {
+                    write_record(&mut ccw, &Record::MetadataIndex(index))?;
+                }
+                summary_end = posit(&mut ccw)?;
                 offsets.push(records::SummaryOffset {
                     group_opcode: op::METADATA_INDEX,
                     group_start: metadata_indexes_start,
-                    group_length: metadata_indexes_end - metadata_indexes_start,
+                    group_length: summary_end - metadata_indexes_start,
                 });
             }
 
-            let stats_start = metadata_indexes_end;
-            let stats_end;
             if self.options.output_statistics {
+                let statistics_start = summary_end;
                 write_record(&mut ccw, &Record::Statistics(stats))?;
-                stats_end = posit(&mut ccw)?;
-                assert!(stats_end > stats_start);
+                summary_end = posit(&mut ccw)?;
                 offsets.push(records::SummaryOffset {
                     group_opcode: op::STATISTICS,
-                    group_start: stats_start,
-                    group_length: stats_end - stats_start,
+                    group_start: statistics_start,
+                    group_length: summary_end - statistics_start,
                 });
-            } else {
-                stats_end = stats_start;
             }
 
             // Write the summary offsets we've been accumulating
             if self.options.output_summary_offsets {
-                summary_offset_start = stats_end;
+                summary_offset_start = summary_end;
                 for offset in offsets {
                     write_record(&mut ccw, &Record::SummaryOffset(offset))?;
                 }
