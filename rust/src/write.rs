@@ -1309,6 +1309,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         // We're done with all the chunk data. Move the cursor past the end and go back to just
         // appending records.
         assert_eq!(sink.seek(SeekFrom::End(0))?, data_end);
+        let chunk_length = data_end - self.header_start;
         let (writer, mode) = sink.finish()?;
 
         // Compute the CRC of the pre-chunk data + chunk header + compressed chunk data. That is,
@@ -1319,8 +1320,8 @@ impl<W: Write + Seek> ChunkWriter<W> {
         let mut writer = CountingCrcWriter::with_hasher(writer, post_chunk_crc);
 
         // Write our message indexes
+        let data_end = writer.stream_position()?;
         let mut message_index_offsets: BTreeMap<u16, u64> = BTreeMap::new();
-
         let mut index_buf = Vec::new();
         for (channel_id, records) in self.indexes {
             let existing_offset =
@@ -1336,15 +1337,15 @@ impl<W: Write + Seek> ChunkWriter<W> {
             op_and_len(&mut writer, op::MESSAGE_INDEX, index_buf.len() as _)?;
             writer.write_all(&index_buf)?;
         }
-        let end_of_indexes = writer.stream_position()?;
+        let message_index_length = writer.stream_position()? - data_end;
 
         let index = records::ChunkIndex {
             message_start_time: header.message_start_time,
             message_end_time: header.message_end_time,
             chunk_start_offset: self.chunk_offset,
-            chunk_length: data_end - self.header_start,
+            chunk_length,
             message_index_offsets,
-            message_index_length: end_of_indexes - data_end,
+            message_index_length,
             compression: header.compression,
             compressed_size: header.compressed_size,
             uncompressed_size: header.uncompressed_size,
