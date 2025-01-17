@@ -60,8 +60,8 @@ fn demo_round_trip_for_opts(opts: WriteOptions) -> Result<()> {
         match (i, offset.group_opcode) {
             (0, op::SCHEMA) => (),
             (1, op::CHANNEL) => (),
-            (2, op::CHUNK_INDEX) => (),
-            (3, op::STATISTICS) => (),
+            (2, op::STATISTICS) => (),
+            (3, op::CHUNK_INDEX) => (),
             _ => panic!("Summary offset {i} was {offset:?}"),
         };
 

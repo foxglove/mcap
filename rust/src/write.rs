@@ -982,6 +982,17 @@ impl<W: Write + Seek> Writer<W> {
                 });
             }
 
+            if self.options.output_statistics {
+                let statistics_start = summary_end;
+                write_record(&mut ccw, &Record::Statistics(stats))?;
+                summary_end = posit(&mut ccw)?;
+                offsets.push(records::SummaryOffset {
+                    group_opcode: op::STATISTICS,
+                    group_start: statistics_start,
+                    group_length: summary_end - statistics_start,
+                });
+            }
+
             if self.options.output_chunk_indexes && !chunk_indexes.is_empty() {
                 // Write all chunk indexes.
                 let chunk_indexes_start = summary_end;
@@ -1021,17 +1032,6 @@ impl<W: Write + Seek> Writer<W> {
                     group_opcode: op::METADATA_INDEX,
                     group_start: metadata_indexes_start,
                     group_length: summary_end - metadata_indexes_start,
-                });
-            }
-
-            if self.options.output_statistics {
-                let statistics_start = summary_end;
-                write_record(&mut ccw, &Record::Statistics(stats))?;
-                summary_end = posit(&mut ccw)?;
-                offsets.push(records::SummaryOffset {
-                    group_opcode: op::STATISTICS,
-                    group_start: statistics_start,
-                    group_length: summary_end - statistics_start,
                 });
             }
 
