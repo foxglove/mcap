@@ -1,7 +1,7 @@
 import { exec } from "child_process";
 import { join } from "path";
 import { promisify } from "util";
-import { TestVariant } from "variants/types";
+import { TestFeatures, TestVariant } from "variants/types";
 
 import { WriteTestRunner } from "./TestRunner";
 
@@ -23,7 +23,7 @@ export default class RustWriterTestRunner extends WriteTestRunner {
     return stdout as unknown as Uint8Array;
   }
 
-  supportsVariant(_variant: TestVariant): boolean {
-    return false;
+  supportsVariant(variant: TestVariant): boolean {
+    return !variant.features.has(TestFeatures.AddExtraDataToRecords);
   }
 }

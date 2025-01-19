@@ -3,8 +3,10 @@ use std::io::{Cursor, Seek, Write};
 /// The kind of writer that should be used for writing chunks.
 ///
 /// This is used to select what [`ChunkSink`] should be used by the MCAP writer.
+#[derive(Default)]
 pub(crate) enum ChunkMode {
     /// Mode specifying that chunks should be written directly to the output
+    #[default]
     Direct,
     /// Mode specifying that chunks should be buffered before writing to the output
     Buffered {
@@ -17,25 +19,54 @@ pub(crate) enum ChunkMode {
 ///
 /// If chunks are buffered they will be written to an internal buffer, which can be flushed to the
 /// provided writer once the chunk is completed.
-pub(crate) enum ChunkSink<W> {
-    Direct(W),
-    Buffered(W, Cursor<Vec<u8>>),
+pub(crate) struct ChunkSink<W> {
+    pub inner: W,
+    pub buffer: Option<Cursor<Vec<u8>>>,
+}
+
+impl<W> ChunkSink<W> {
+    pub fn new(writer: W, mode: ChunkMode) -> Self {
+        Self {
+            inner: writer,
+            buffer: match mode {
+                ChunkMode::Buffered { mut buffer } => {
+                    // ensure the buffer is empty before using it for the chunk
+                    buffer.clear();
+                    Some(Cursor::new(buffer))
+                }
+                ChunkMode::Direct => None,
+            },
+        }
+    }
 }
 
 impl<W: Write> ChunkSink<W> {
     fn as_mut_write(&mut self) -> &mut dyn Write {
-        match self {
-            Self::Direct(w) => w,
-            Self::Buffered(_, w) => w,
+        match &mut self.buffer {
+            Some(w) => w,
+            None => &mut self.inner,
         }
+    }
+
+    pub fn finish(self) -> std::io::Result<(W, ChunkMode)> {
+        let ChunkSink { mut inner, buffer } = self;
+        let mode = match buffer {
+            Some(buffer) => {
+                let buffer = buffer.into_inner();
+                inner.write_all(&buffer)?;
+                ChunkMode::Buffered { buffer }
+            }
+            None => ChunkMode::Direct,
+        };
+        Ok((inner, mode))
     }
 }
 
 impl<W: Seek> ChunkSink<W> {
     fn as_mut_seek(&mut self) -> &mut dyn Seek {
-        match self {
-            Self::Direct(w) => w,
-            Self::Buffered(_, w) => w,
+        match &mut self.buffer {
+            Some(w) => w,
+            None => &mut self.inner,
         }
     }
 }
