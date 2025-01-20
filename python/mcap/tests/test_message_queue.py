@@ -61,7 +61,7 @@ def push_elements(mq: _MessageQueue):
 
 def push_messages_reverse_order(mq: _MessageQueue, n: int = 10_000):
     for i in range(n):
-        mq.push(dummy_message_tuple(n-i, 0, i))
+        mq.push(dummy_message_tuple(n - i, 0, i))
 
 
 def test_chunk_message_ordering():

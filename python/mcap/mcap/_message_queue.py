@@ -74,7 +74,6 @@ def _make_orderable(item: QueueItem, reverse: bool) -> _Orderable:
 
 
 class _MessageQueue(ABC):
-
     @abstractmethod
     def push(self, item: QueueItem):
         raise NotImplementedError()
@@ -120,7 +119,9 @@ class InsertOrderQueue(_MessageQueue):
         return len(self._q)
 
 
-def make_message_queue(log_time_order: bool = True, reverse: bool = False) -> _MessageQueue:
+def make_message_queue(
+    log_time_order: bool = True, reverse: bool = False
+) -> _MessageQueue:
     """Create a queue of MCAP messages and chunk indices.
 
     :param log_time_order: if True, this queue acts as a priority queue, ordered by log time.
