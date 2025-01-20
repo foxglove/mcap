@@ -129,6 +129,7 @@ def test_insert_ordering():
     assert isinstance(results[5], tuple)
     assert results[5][2] == 30
 
+
 def test_insert_order_is_faster():
     log_time_order_mq = make_message_queue(log_time_order=True)
     push_messages_reverse_order(log_time_order_mq)
