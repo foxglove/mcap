@@ -1,7 +1,7 @@
 import time
 from typing import List
 
-from mcap._message_queue import make_message_queue, _MessageQueue, QueueItem
+from mcap._message_queue import QueueItem, _MessageQueue, make_message_queue
 from mcap.records import Channel, ChunkIndex, Message, Schema
 
 
