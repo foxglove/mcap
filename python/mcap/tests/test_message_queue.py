@@ -1,6 +1,7 @@
+import time
 from typing import List
 
-from mcap._message_queue import MessageQueue, QueueItem
+from mcap._message_queue import make_message_queue, _MessageQueue, QueueItem
 from mcap.records import Channel, ChunkIndex, Message, Schema
 
 
@@ -49,7 +50,7 @@ def dummy_message_tuple(
     )
 
 
-def push_elements(mq: MessageQueue):
+def push_elements(mq: _MessageQueue):
     mq.push(dummy_chunk_index(3, 6, 100))
     mq.push(dummy_chunk_index(1, 2, 400))
     mq.push(dummy_chunk_index(4, 5, 500))
@@ -58,8 +59,13 @@ def push_elements(mq: MessageQueue):
     mq.push(dummy_message_tuple(5, 200, 30))
 
 
+def push_messages_reverse_order(mq: _MessageQueue, n: int = 10_000):
+    for i in range(n):
+        mq.push(dummy_message_tuple(n-i, 0, i))
+
+
 def test_chunk_message_ordering():
-    mq = MessageQueue(log_time_order=True)
+    mq = make_message_queue(log_time_order=True)
     push_elements(mq)
 
     results: List[QueueItem] = []
@@ -81,7 +87,7 @@ def test_chunk_message_ordering():
 
 
 def test_reverse_ordering():
-    mq = MessageQueue(log_time_order=True, reverse=True)
+    mq = make_message_queue(log_time_order=True, reverse=True)
     push_elements(mq)
 
     results: List[QueueItem] = []
@@ -103,7 +109,7 @@ def test_reverse_ordering():
 
 
 def test_insert_ordering():
-    mq = MessageQueue(log_time_order=False)
+    mq = make_message_queue(log_time_order=False)
     push_elements(mq)
 
     results: List[QueueItem] = []
@@ -122,3 +128,20 @@ def test_insert_ordering():
     assert results[4][2] == 20
     assert isinstance(results[5], tuple)
     assert results[5][2] == 30
+
+def test_insert_order_is_faster():
+    log_time_order_mq = make_message_queue(log_time_order=True)
+    push_messages_reverse_order(log_time_order_mq)
+    log_time_start = time.time()
+    while log_time_order_mq:
+        log_time_order_mq.pop()
+    log_time_end = time.time()
+
+    insert_order_mq = make_message_queue(log_time_order=False)
+    push_messages_reverse_order(insert_order_mq)
+    insert_start = time.time()
+    while insert_order_mq:
+        insert_order_mq.pop()
+    insert_end = time.time()
+
+    assert insert_end - insert_start < log_time_end - log_time_start

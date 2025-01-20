@@ -1,5 +1,7 @@
 import heapq
-from typing import List, Optional, Tuple, Union
+from abc import ABC, abstractmethod
+from collections import deque
+from typing import Deque, List, Optional, Tuple, Union
 
 from .records import Channel, ChunkIndex, Message, Schema
 
@@ -65,34 +67,66 @@ class _MessageTupleWrapper(_Orderable):
         return (self.item[1], self.item[2])
 
 
-class MessageQueue:
-    """A queue of MCAP messages and chunk indices.
+def _make_orderable(item: QueueItem, reverse: bool) -> _Orderable:
+    if isinstance(item, ChunkIndex):
+        return _ChunkIndexWrapper(item, reverse)
+    return _MessageTupleWrapper(item, reverse)
+
+
+class _MessageQueue(ABC):
+
+    @abstractmethod
+    def push(self, item: QueueItem):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def pop(self) -> QueueItem:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def __len__(self) -> int:
+        raise NotImplementedError()
+
+
+class LogTimeOrderQueue(_MessageQueue):
+    def __init__(self, reverse: bool = False):
+        self._q: List[_Orderable] = []
+        self._reverse = reverse
+
+    def push(self, item: QueueItem):
+        orderable = _make_orderable(item, self._reverse)
+        heapq.heappush(self._q, orderable)
+
+    def pop(self) -> QueueItem:
+        return heapq.heappop(self._q).item
+
+    def __len__(self) -> int:
+        return len(self._q)
+
+
+class InsertOrderQueue(_MessageQueue):
+    def __init__(self, reverse: bool = False):
+        self._q: Deque[_Orderable] = deque()
+        self._reverse = reverse
+
+    def push(self, item: QueueItem):
+        orderable = _make_orderable(item, self._reverse)
+        self._q.append(orderable)
+
+    def pop(self) -> QueueItem:
+        return self._q.popleft().item
+
+    def __len__(self) -> int:
+        return len(self._q)
+
+
+def make_message_queue(log_time_order: bool = True, reverse: bool = False) -> _MessageQueue:
+    """Create a queue of MCAP messages and chunk indices.
 
     :param log_time_order: if True, this queue acts as a priority queue, ordered by log time.
         if False, ``pop()`` returns elements in insert order.
     :param reverse: if True, order elements in descending log time order rather than ascending.
     """
-
-    def __init__(self, log_time_order: bool, reverse: bool = False):
-        self._q: List[_Orderable] = []
-        self._log_time_order = log_time_order
-        self._reverse = reverse
-
-    def push(self, item: QueueItem):
-        if isinstance(item, ChunkIndex):
-            orderable = _ChunkIndexWrapper(item, self._reverse)
-        else:
-            orderable = _MessageTupleWrapper(item, self._reverse)
-        if self._log_time_order:
-            heapq.heappush(self._q, orderable)
-        else:
-            self._q.append(orderable)
-
-    def pop(self) -> QueueItem:
-        if self._log_time_order:
-            return heapq.heappop(self._q).item
-        else:
-            return self._q.pop(0).item
-
-    def __len__(self) -> int:
-        return len(self._q)
+    if log_time_order:
+        return LogTimeOrderQueue(reverse)
+    return InsertOrderQueue(reverse)
