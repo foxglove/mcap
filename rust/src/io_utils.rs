@@ -37,6 +37,10 @@ impl<W> CountingCrcWriter<W> {
     pub fn finalize(self) -> (W, Hasher) {
         (self.inner, self.hasher)
     }
+
+    pub fn current_checksum(&self) -> u32 {
+        self.hasher.clone().finalize()
+    }
 }
 
 impl<W: Write> Write for CountingCrcWriter<W> {
