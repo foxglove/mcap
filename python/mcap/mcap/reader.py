@@ -15,7 +15,7 @@ from typing import (
     Tuple,
 )
 
-from ._message_queue import MessageQueue
+from ._message_queue import make_message_queue
 from .data_stream import ReadDataStream, RecordBuilder
 from .decoder import DecoderFactory
 from .exceptions import DecoderNotFoundError, McapError
@@ -292,7 +292,9 @@ class SeekingReader(McapReader):
             )
             return
 
-        message_queue = MessageQueue(log_time_order=log_time_order, reverse=reverse)
+        message_queue = make_message_queue(
+            log_time_order=log_time_order, reverse=reverse
+        )
         for chunk_index in _chunks_matching_topics(
             summary, topics, start_time, end_time
         ):
