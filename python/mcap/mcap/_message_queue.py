@@ -104,16 +104,14 @@ class LogTimeOrderQueue(_MessageQueue):
 
 
 class InsertOrderQueue(_MessageQueue):
-    def __init__(self, reverse: bool = False):
-        self._q: Deque[_Orderable] = deque()
-        self._reverse = reverse
+    def __init__(self):
+        self._q: Deque[QueueItem] = deque()
 
     def push(self, item: QueueItem):
-        orderable = _make_orderable(item, self._reverse)
-        self._q.append(orderable)
+        self._q.append(item)
 
     def pop(self) -> QueueItem:
-        return self._q.popleft().item  # cspell:disable-line
+        return self._q.popleft()  # cspell:disable-line
 
     def __len__(self) -> int:
         return len(self._q)
@@ -127,7 +125,10 @@ def make_message_queue(
     :param log_time_order: if True, this queue acts as a priority queue, ordered by log time.
         if False, ``pop()`` returns elements in insert order.
     :param reverse: if True, order elements in descending log time order rather than ascending.
+        only valid if ``log_time_order`` is True, otherwise throws a ValueError.
     """
     if log_time_order:
         return LogTimeOrderQueue(reverse)
-    return InsertOrderQueue(reverse)
+    if reverse:
+        raise ValueError("reverse is only valid with log_time_order=True")
+    return InsertOrderQueue()
