@@ -1,8 +1,16 @@
-// eslint-disable-next-line @typescript-eslint/triple-slash-reference
-/// <reference path="../typings/protobufjs.d.ts" />
-
 import protobufjs from "protobufjs";
-import { FileDescriptorSet } from "protobufjs/ext/descriptor";
+import { FileDescriptorSet, IFileDescriptorSet } from "protobufjs/ext/descriptor";
+
+// https://github.com/protobufjs/protobuf.js/issues/1499
+declare module "protobufjs" {
+  interface ReflectionObject {
+    toDescriptor(protoVersion: string): protobufjs.Message<IFileDescriptorSet> & IFileDescriptorSet;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace ReflectionObject {
+    const fromDescriptor: (desc: protobufjs.Message) => protobufjs.Root;
+  }
+}
 
 export type ProtobufDescriptor = ReturnType<protobufjs.Root["toDescriptor"]>;
 
