@@ -139,30 +139,61 @@ Echo messages for a specific topic to stdout as JSON:
 
 All commands except `convert` support reading from remote files accessible either by HTTP(S) or GCS, Azure or S3:
 
+Remote reads will use the index at the end of the file to minimize latency and data transfer.
+
+#### HTTP Support
+
+Files can be accessed simply by their HTTP(S) URI:
+
 <!-- cspell: disable -->
 
-    $ mcap info gs://your-remote-bucket/demo.mcap
-    library: mcap go #(devel)
-    profile: ros1
-    messages: 1606
-    duration: 7.780758504s
-    start: 2017-03-21T19:26:20.103843113-07:00 (1490149580.103843113)
-    end: 2017-03-21T19:26:27.884601617-07:00 (1490149587.884601617)
-    compression:
-    	zstd: [14/14 chunks] (50.73%)
-    channels:
-      	(0) /diagnostics              52 msgs (6.68 Hz)    : diagnostic_msgs/DiagnosticArray [ros1msg]
-      	(1) /image_color/compressed  234 msgs (30.07 Hz)   : sensor_msgs/CompressedImage [ros1msg]
-      	(2) /tf                      774 msgs (99.48 Hz)   : tf2_msgs/TFMessage [ros1msg]
-      	(3) /radar/points            156 msgs (20.05 Hz)   : sensor_msgs/PointCloud2 [ros1msg]
-      	(4) /radar/range             156 msgs (20.05 Hz)   : sensor_msgs/Range [ros1msg]
-      	(5) /radar/tracks            156 msgs (20.05 Hz)   : radar_driver/RadarTracks [ros1msg]
-      	(6) /velodyne_points          78 msgs (10.02 Hz)   : sensor_msgs/PointCloud2 [ros1msg]
-    attachments: 0
+    $ mcap info http://example.com/data.mcap
 
-<!-- cspell: enable -->
+<!-- cspell: disable -->
 
-Remote reads will use the index at the end of the file to minimize latency and data transfer.
+URI query parameters are supported (eg. for passing authentication tokens to S3 objects accessed over HTTP).
+
+#### GCS Support
+
+The `mcap` CLI tools will use the `application-default` credentials for google cloud:
+
+<!-- cspell: disable -->
+
+    $ gcloud auth application-default login
+    $ mcap info gs://your-bucket/data.mcap
+
+<!-- cspell: disable -->
+
+#### S3 (& S3 compatible storage)
+
+The `mcap` CLI tools will use the `[default]` config and credentials in `~/.aws/`:
+
+<!-- cspell: disable -->
+
+    $ mcap info s3://your-bucket/data.mcap
+
+<!-- cspell: disable -->
+
+The `[default]` configuration can be overridden with environment variables:
+
+<!-- cspell: disable -->
+
+    $ AWS_ENDPOINT_URL_S3=https://s3.us-east-005.backblazeb2.com mcap info s3://your-bucket/data.mcap
+
+<!-- cspell: disable -->
+
+#### Azure Blob Storage
+
+The `mcap` CLI tools will use the default Azure config however objects in Azure Blob Storage are not globally namespaced so the storage account must be provided as an environment variable:
+
+<!-- cspell: disable -->
+
+    $ az login
+    $ AZURE_STORAGE_ACCOUNT=your-storage-account mcap info azblob://your-bucket/test.mcap
+
+<!-- cspell: disable -->
+
+See [the Go CDK Azblob documentation](https://pkg.go.dev/gocloud.dev/blob/azureblob) for more details about the URI format and available environment variables.
 
 ### File Diagnostics
 

@@ -4,7 +4,6 @@ go 1.20
 
 require (
 	gocloud.dev v0.40.0
-	github.com/jfbus/httprs v1.0.1
 	github.com/fatih/color v1.13.0
 	github.com/foxglove/go-rosbag v0.0.6
 	github.com/foxglove/mcap/go/mcap v0.4.0

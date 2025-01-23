@@ -6,12 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"regexp"
 	"time"
 
-	"github.com/jfbus/httprs"
 	"github.com/olekukonko/tablewriter"
 	"github.com/schollz/progressbar/v3"
 	"gocloud.dev/blob"
@@ -57,36 +55,42 @@ func StdoutRedirected() bool {
 	return true
 }
 
-func GetReader(ctx context.Context, uri string) (io.ReadSeekCloser, bool, error) {
+type LocalOrRemote bool
+
+const (
+	Local  LocalOrRemote = true
+	Remote LocalOrRemote = false
+)
+
+func GetReader(ctx context.Context, uri string) (io.ReadSeekCloser, LocalOrRemote, error) {
 	scheme, path := GetSchemeFromURI(uri)
 	switch scheme {
 	case "":
 		// Assume that a URI without a scheme is a local path
 		rs, err := os.Open(path)
-		return rs, false, err
+		return rs, Local, err
 	case "http", "https":
-		resp, err := http.Get(uri)
+		rs, err := NewHTTPSeeker(uri, WithMinRequestSize(2<<20))
 		if err != nil {
-			return nil, true, err
+			return nil, Remote, err
 		}
-		rs := httprs.NewHttpReadSeeker(resp)
-		return rs, true, nil
+		return rs, Remote, nil
 	default:
 		// Assume that any other scheme can be handled by Go CDK
 		bucket, filename := GetBucketFromPath(path)
 		bucketClient, err := blob.OpenBucket(ctx, fmt.Sprintf("%v://%v", scheme, bucket))
 		if err != nil {
-			return nil, true, err
+			return nil, Remote, err
 		}
 		rs, err := NewGoCloudReadSeekCloser(ctx, bucketClient, filename)
 		if err != nil {
-			return nil, true, err
+			return nil, Remote, err
 		}
-		return rs, true, err
+		return rs, Remote, err
 	}
 }
 
-func WithReader(ctx context.Context, uri string, f func(remote bool, rs io.ReadSeeker) error) error {
+func WithReader(ctx context.Context, uri string, f func(location LocalOrRemote, rs io.ReadSeeker) error) error {
 	reader, remote, err := GetReader(ctx, uri)
 	if err != nil {
 		return err

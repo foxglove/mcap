@@ -74,7 +74,7 @@ var listMetadataCmd = &cobra.Command{
 			die("Unexpected number of args")
 		}
 		filename := args[0]
-		err := utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
+		err := utils.WithReader(ctx, filename, func(_ utils.LocalOrRemote, rs io.ReadSeeker) error {
 			reader, err := mcap.NewReader(rs)
 			if err != nil {
 				return fmt.Errorf("failed to build mcap reader: %w", err)
@@ -141,7 +141,7 @@ var getMetadataCmd = &cobra.Command{
 			die("Unexpected number of args")
 		}
 		filename := args[0]
-		err := utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
+		err := utils.WithReader(ctx, filename, func(_ utils.LocalOrRemote, rs io.ReadSeeker) error {
 			reader, err := mcap.NewReader(rs)
 			if err != nil {
 				return fmt.Errorf("failed to build reader: %w", err)
