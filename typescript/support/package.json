@@ -1,6 +1,6 @@
 {
   "name": "@mcap/support",
-  "version": "1.0.3",
+  "version": "1.0.2",
   "description": "Common decompression for use with MCAP files",
   "license": "MIT",
   "repository": {
