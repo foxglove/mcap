@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, Optional, Type
 
 from google.protobuf.descriptor_pb2 import FileDescriptorProto, FileDescriptorSet
 from google.protobuf.descriptor_pool import DescriptorPool
-from google.protobuf.message_factory import GetMessageClassesForFiles
+from google.protobuf.message_factory import GetMessageClassesForFiles, GetMessageClass
 
 from mcap.decoder import DecoderFactory as McapDecoderFactory
 from mcap.exceptions import McapError
@@ -58,6 +58,26 @@ class DecoderFactory(McapDecoderFactory):
                 _add(descriptor_by_name.popitem()[1])
 
             messages = GetMessageClassesForFiles([fd.name for fd in fds.file], pool)
+
+            # GetMessageClassesForFiles only fetches top-level message definitions in the file.
+            #
+            # We must traverse the top-level message definitions to recursively find and append any
+            # nested message definitions.
+            nested_messages = {}
+            for message_class in messages.values():
+                nested_descriptions = list(
+                    message_class.DESCRIPTOR.nested_types_by_name.values()
+                )
+                while nested_descriptions:
+                    nested_desc = nested_descriptions.pop()
+                    nested_messages[nested_desc.full_name] = GetMessageClass(
+                        nested_desc
+                    )
+                    nested_descriptions.extend(
+                        nested_desc.nested_types_by_name.values()
+                    )
+
+            messages.update(nested_messages)
 
             for name, klass in messages.items():
                 if name == schema.name:

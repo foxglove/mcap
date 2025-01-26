@@ -13,6 +13,7 @@ from mcap_protobuf.writer import Writer  # noqa: #402
 from test_proto.complex_message_pb2 import ComplexMessage  # noqa: #402
 from test_proto.intermediate_message_1_pb2 import IntermediateMessage1  # noqa: #402
 from test_proto.intermediate_message_2_pb2 import IntermediateMessage2  # noqa: #402
+from test_proto.nested_type_message_pb2 import NestedTypeMessage  # noqa: #402
 from test_proto.simple_message_pb2 import SimpleMessage  # noqa: #402
 
 
@@ -65,6 +66,7 @@ def generate_sample_data(output: IO[Any]):
                 log_time=i * 1000,
                 publish_time=i * 1000,
             )
+
             complex_message = ComplexMessage(
                 intermediate1=IntermediateMessage1(
                     simple=SimpleMessage(data=f"Field A {i}")
@@ -79,4 +81,22 @@ def generate_sample_data(output: IO[Any]):
                 log_time=i * 1000,
                 publish_time=i * 1000,
             )
+
+            nested_type_message = NestedTypeMessage(
+                nested_type_message_1=NestedTypeMessage.NestedType1(
+                    doubly_nested_type_message=NestedTypeMessage.NestedType1.DoublyNestedType(
+                        data=f"Field C {i}"
+                    )
+                ),
+                nested_type_message_2=NestedTypeMessage.NestedType2(
+                    data=f"Field D {i}"
+                ),
+            )
+            writer.write_message(
+                topic="/nested_type_message",
+                message=nested_type_message,
+                log_time=i * 1000,
+                publish_time=i * 1000,
+            )
+
     output.seek(0)

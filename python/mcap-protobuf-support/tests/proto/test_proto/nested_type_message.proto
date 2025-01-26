@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+
+package test_proto;
+
+message NestedTypeMessage {
+  message NestedType1 {
+    message DoublyNestedType {
+      string data = 1;
+    }
+
+    DoublyNestedType doubly_nested_type_message = 1;
+  }
+
+  message NestedType2 {
+    string data = 1;
+  }
+
+  NestedType1 nested_type_message_1 = 1;
+  NestedType2 nested_type_message_2 = 2;
+}

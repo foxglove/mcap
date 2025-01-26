@@ -23,12 +23,17 @@ def test_protobuf_decoder():
         if channel.topic == "/complex_message":
             assert proto_msg.intermediate1.simple.data.startswith("Field A")
             assert proto_msg.intermediate2.simple.data.startswith("Field B")
+        elif channel.topic == "/nested_type_message":
+            assert proto_msg.nested_type_message_1.doubly_nested_type_message.data.startswith(
+                "Field C"
+            )
+            assert proto_msg.nested_type_message_2.data.startswith("Field D")
         elif channel.topic == "/simple_message":
             assert proto_msg.data.startswith("Hello MCAP protobuf world")
         else:
             raise AssertionError(f"unrecognized topic {channel.topic}")
 
-    assert count == 20
+    assert count == 30
 
 
 def test_with_disordered_file_descriptors():
