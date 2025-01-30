@@ -26,6 +26,11 @@ class DecoderFactory(McapDecoderFactory):
     def __init__(self) -> None:
         self._types: Dict[int, Type[Any]] = {}
 
+    def pb_message_from_schema(self, schema: Schema) -> Optional[Message]:
+        if schema.encoding != SchemaEncoding.Protobuf:
+            return None
+        return self._types.get(schema.id)
+
     def decoder_for(
         self, message_encoding: str, schema: Optional[Schema]
     ) -> Optional[Callable[[bytes], Any]]:
