@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, Optional, Type
 from google.protobuf.descriptor_pb2 import FileDescriptorProto, FileDescriptorSet
 from google.protobuf.descriptor_pool import DescriptorPool
 from google.protobuf.message_factory import GetMessageClassesForFiles, GetMessageClass
+from google.protobuf.reflection import GeneratedProtocolMessageType
 
 from mcap.decoder import DecoderFactory as McapDecoderFactory
 from mcap.exceptions import McapError
@@ -25,6 +26,13 @@ class DecoderFactory(McapDecoderFactory):
 
     def __init__(self) -> None:
         self._types: Dict[int, Type[Any]] = {}
+
+    def pb_message_from_schema(
+        self, schema: Schema
+    ) -> Optional[GeneratedProtocolMessageType]:
+        if schema.encoding != SchemaEncoding.Protobuf:
+            return None
+        return self._types.get(schema.id)
 
     def decoder_for(
         self, message_encoding: str, schema: Optional[Schema]
