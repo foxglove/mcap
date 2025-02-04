@@ -37,7 +37,7 @@ fn op_and_len<W: Write>(w: &mut W, op: u8, len: u64) -> io::Result<()> {
     Ok(())
 }
 
-fn write_record<W: Write>(w: &mut W, r: &Record) -> io::Result<()> {
+fn write_record<W: Write>(mut w: &mut W, r: &Record) -> io::Result<()> {
     // Annoying: our stream isn't Seek if we're writing to a compressed chunk stream,
     // so we need an intermediate buffer.
     macro_rules! record {
@@ -70,11 +70,11 @@ fn write_record<W: Write>(w: &mut W, r: &Record) -> io::Result<()> {
         }
         Record::Channel(c) => record!(op::CHANNEL, c),
         Record::Message { header, data } => {
-            let mut header_buf = Vec::new();
-            Cursor::new(&mut header_buf).write_le(header).unwrap();
-
-            op_and_len(w, op::MESSAGE, (header_buf.len() + data.len()) as _)?;
-            w.write_all(&header_buf)?;
+            let header_len = header.serialized_len();
+            op_and_len(w, op::MESSAGE, header_len + data.len() as u64)?;
+            NoSeek::new(&mut w)
+                .write_le(header)
+                .map_err(io::Error::other)?;
             w.write_all(data)?;
         }
         Record::Chunk { .. } => {

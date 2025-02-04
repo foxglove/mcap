@@ -350,6 +350,12 @@ pub struct MessageHeader {
     pub publish_time: u64,
 }
 
+impl MessageHeader {
+    pub(crate) fn serialized_len(&self) -> u64 {
+        2 + 4 + 8 + 8
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct ChunkHeader {
     pub message_start_time: u64,
@@ -535,5 +541,22 @@ mod tests {
         let mut written = Vec::new();
         Cursor::new(&mut written).write_le(&h).unwrap();
         assert_eq!(written, expected);
+    }
+
+    #[test]
+    fn test_message_header_len() {
+        let header = MessageHeader {
+            sequence: 1,
+            log_time: 2,
+            channel_id: 3,
+            publish_time: 4,
+        };
+
+        let len = header.serialized_len();
+
+        let mut buf = vec![];
+        Cursor::new(&mut buf).write_le(&header).unwrap();
+
+        assert_eq!(len as usize, buf.len());
     }
 }
