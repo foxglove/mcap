@@ -141,7 +141,7 @@ impl Default for WriteOptions {
             repeat_channels: true,
             repeat_schemas: true,
             calculate_chunk_crcs: true,
-            calculate_data_section_crc: false,
+            calculate_data_section_crc: true,
             calculate_summary_section_crc: true,
             calculate_attachment_crcs: true,
         }
@@ -305,19 +305,19 @@ impl WriteOptions {
         self
     }
 
-    /// Specifies whether to calculate and write a data section CRC into the DataEnd record. This is off by default.
+    /// Specifies whether to calculate and write a data section CRC into the DataEnd record. This is on by default.
     pub fn calculate_data_section_crc(mut self, calculate_data_section_crc: bool) -> Self {
         self.calculate_data_section_crc = calculate_data_section_crc;
         self
     }
 
-    /// Specifies whether to calculate and write a summary section CRC into the Footer record. This is off by default.
+    /// Specifies whether to calculate and write a summary section CRC into the Footer record. This is on by default.
     pub fn calculate_summary_section_crc(mut self, calculate_summary_section_crc: bool) -> Self {
         self.calculate_summary_section_crc = calculate_summary_section_crc;
         self
     }
 
-    /// Specifies whether to calculate and write a CRC for attachments. This is off by default.
+    /// Specifies whether to calculate and write a CRC for attachments. This is on by default.
     pub fn calculate_attachment_crcs(mut self, calculate_attachment_crcs: bool) -> Self {
         self.calculate_attachment_crcs = calculate_attachment_crcs;
         self
