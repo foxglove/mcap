@@ -321,9 +321,6 @@ impl LinearReader {
                 {
                     return None;
                 }
-                if self.chunk_state.is_some() {
-                    return Some(Err(McapError::UnexpectedEoc));
-                }
                 return Some(Err(McapError::UnexpectedEof));
             }
             self.file_data.end += written;
