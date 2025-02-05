@@ -41,6 +41,7 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
     }
 
     let mut writer = write_options
+        .calculate_data_section_crc(true)
         .create(binrw::io::NoSeek::new(std::io::stdout()))
         .expect("Couldn't create writer");
 
