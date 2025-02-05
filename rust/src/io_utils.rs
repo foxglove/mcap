@@ -4,20 +4,24 @@ use crc32fast::Hasher;
 
 pub struct CountingCrcWriter<W> {
     inner: W,
-    hasher: Hasher,
+    hasher: Option<Hasher>,
     count: u64,
 }
 
 impl<W> CountingCrcWriter<W> {
-    pub fn new(inner: W) -> Self {
+    pub fn new(inner: W, calculate_crc: bool) -> Self {
         Self {
             inner,
-            hasher: Hasher::new(),
+            hasher: if calculate_crc {
+                Some(Hasher::new())
+            } else {
+                None
+            },
             count: 0,
         }
     }
 
-    pub fn with_hasher(inner: W, hasher: Hasher) -> Self {
+    pub fn with_hasher(inner: W, hasher: Option<Hasher>) -> Self {
         Self {
             inner,
             hasher,
@@ -34,12 +38,15 @@ impl<W> CountingCrcWriter<W> {
     }
 
     /// Consumes the reader and returns the inner writer and the checksum
-    pub fn finalize(self) -> (W, Hasher) {
+    pub fn finalize(self) -> (W, Option<Hasher>) {
         (self.inner, self.hasher)
     }
 
     pub fn current_checksum(&self) -> u32 {
-        self.hasher.clone().finalize()
+        self.hasher
+            .clone()
+            .map(|hasher| hasher.finalize())
+            .unwrap_or(0)
     }
 }
 
@@ -47,7 +54,9 @@ impl<W: Write> Write for CountingCrcWriter<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let res = self.inner.write(buf)?;
         self.count += res as u64;
-        self.hasher.update(&buf[..res]);
+        if let Some(hasher) = &mut self.hasher {
+            hasher.update(&buf[..res]);
+        }
         Ok(res)
     }
 
