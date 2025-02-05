@@ -114,6 +114,10 @@ pub struct WriteOptions {
     emit_metadata_indexes: bool,
     repeat_channels: bool,
     repeat_schemas: bool,
+    calculate_chunk_crcs: bool,
+    calculate_data_section_crc: bool,
+    calculate_summary_section_crc: bool,
+    calculate_attachment_crcs: bool,
 }
 
 impl Default for WriteOptions {
@@ -136,6 +140,10 @@ impl Default for WriteOptions {
             emit_metadata_indexes: true,
             repeat_channels: true,
             repeat_schemas: true,
+            calculate_chunk_crcs: true,
+            calculate_data_section_crc: true,
+            calculate_summary_section_crc: true,
+            calculate_attachment_crcs: true,
         }
     }
 }
@@ -290,6 +298,30 @@ impl WriteOptions {
     pub fn create<W: Write + Seek>(self, w: W) -> McapResult<Writer<W>> {
         Writer::with_options(w, self)
     }
+
+    /// Specifies whether to calculate and write CRCs for chunk records. This is on by default.
+    pub fn calculate_chunk_crcs(mut self, calculate_chunk_crcs: bool) -> Self {
+        self.calculate_chunk_crcs = calculate_chunk_crcs;
+        self
+    }
+
+    /// Specifies whether to calculate and write a data section CRC into the DataEnd record. This is on by default.
+    pub fn calculate_data_section_crc(mut self, calculate_data_section_crc: bool) -> Self {
+        self.calculate_data_section_crc = calculate_data_section_crc;
+        self
+    }
+
+    /// Specifies whether to calculate and write a summary section CRC into the Footer record. This is on by default.
+    pub fn calculate_summary_section_crc(mut self, calculate_summary_section_crc: bool) -> Self {
+        self.calculate_summary_section_crc = calculate_summary_section_crc;
+        self
+    }
+
+    /// Specifies whether to calculate and write a CRC for attachments. This is on by default.
+    pub fn calculate_attachment_crcs(mut self, calculate_attachment_crcs: bool) -> Self {
+        self.calculate_attachment_crcs = calculate_attachment_crcs;
+        self
+    }
 }
 
 #[derive(Hash, PartialEq, Eq)]
@@ -336,7 +368,7 @@ impl<W: Write + Seek> Writer<W> {
     }
 
     fn with_options(writer: W, opts: WriteOptions) -> McapResult<Self> {
-        let mut writer = CountingCrcWriter::new(writer);
+        let mut writer = CountingCrcWriter::new(writer, opts.calculate_data_section_crc);
         writer.write_all(MAGIC)?;
 
         write_record(
@@ -681,6 +713,7 @@ impl<W: Write + Seek> Writer<W> {
             w,
             attachment_length,
             header,
+            self.options.calculate_attachment_crcs,
         )?));
 
         Ok(())
@@ -824,6 +857,7 @@ impl<W: Write + Seek> Writer<W> {
                     self.options.compression,
                     std::mem::take(&mut self.chunk_mode),
                     self.options.emit_message_indexes,
+                    self.options.calculate_chunk_crcs,
                 )?)
             }
             chunk => chunk,
@@ -951,7 +985,7 @@ impl<W: Write + Seek> Writer<W> {
 
         summary_start = writer.stream_position()?;
         let mut summary_end = summary_start;
-        ccw = CountingCrcWriter::new(writer);
+        ccw = CountingCrcWriter::new(writer, self.options.calculate_summary_section_crc);
 
         fn posit<W: Write + Seek>(ccw: &mut CountingCrcWriter<W>) -> io::Result<u64> {
             ccw.get_mut().stream_position()
@@ -1059,9 +1093,10 @@ impl<W: Write + Seek> Writer<W> {
         ccw.write_u64::<LE>(summary_start)?;
         ccw.write_u64::<LE>(summary_offset_start)?;
 
-        let (writer, summary_crc) = ccw.finalize();
+        let (writer, summary_hasher) = ccw.finalize();
+        let summary_crc = summary_hasher.map(|hasher| hasher.finalize()).unwrap_or(0);
 
-        writer.write_u32::<LE>(summary_crc.finalize())?;
+        writer.write_u32::<LE>(summary_crc)?;
 
         writer.write_all(MAGIC)?;
         writer.flush()?;
@@ -1164,7 +1199,7 @@ struct ChunkWriter<W: Write> {
     indexes: BTreeMap<u16, Vec<records::MessageIndexEntry>>,
 
     // Hasher from data before the chunk.
-    pre_chunk_crc: crc32fast::Hasher,
+    pre_chunk_crc: Option<crc32fast::Hasher>,
 
     emit_message_indexes: bool,
 }
@@ -1175,6 +1210,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         compression: Option<Compression>,
         mode: ChunkMode,
         emit_message_indexes: bool,
+        calculate_chunk_crcs: bool,
     ) -> McapResult<Self> {
         // Relative to start of original stream.
         let chunk_offset = writer.stream_position()?;
@@ -1209,7 +1245,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         };
         sink.write_le(&header)?;
         let data_start = sink.stream_position()?;
-        let sink = CountingCrcWriter::new(sink);
+        let sink = CountingCrcWriter::new(sink, calculate_chunk_crcs);
 
         let compressor = match compression {
             #[cfg(feature = "zstd")]
@@ -1234,7 +1270,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
             Some(_) => unreachable!("`Compression` is an empty enum that cannot be instantiated"),
             None => Compressor::Null(sink),
         };
-        let compressor = CountingCrcWriter::new(compressor);
+        let compressor = CountingCrcWriter::new(compressor, calculate_chunk_crcs);
         Ok(Self {
             chunk_offset,
             data_start,
@@ -1323,12 +1359,14 @@ impl<W: Write + Seek> ChunkWriter<W> {
             message_start_time: message_bounds.0,
             message_end_time: message_bounds.1,
             uncompressed_size,
-            uncompressed_crc: uncompressed_crc.finalize(),
+            uncompressed_crc: uncompressed_crc
+                .map(|hasher| hasher.finalize())
+                .unwrap_or(0),
             compression: String::from(self.compression_name),
             compressed_size,
         };
         writer.write_le(&header)?;
-        let (mut sink, post_chunk_header_crc) = writer.finalize();
+        let (mut sink, mut post_chunk_header_crc) = writer.finalize();
         assert_eq!(self.data_start, sink.stream_position()?);
         // We're done with all the chunk data. Move the cursor past the end and go back to just
         // appending records.
@@ -1339,9 +1377,11 @@ impl<W: Write + Seek> ChunkWriter<W> {
         // Compute the CRC of the pre-chunk data + chunk header + compressed chunk data. That is,
         // the CRC of the entire MCAP file up to the end of this chunk. This is necessary because
         // we ultimately have to produce a correct CRC of the MCAP file until the DataEnd record.
-        let mut post_chunk_crc = post_chunk_header_crc;
-        post_chunk_crc.combine(&compressed_crc);
-        let mut writer = CountingCrcWriter::with_hasher(writer, post_chunk_crc);
+        if let (Some(hasher), Some(compressed_crc)) = (&mut post_chunk_header_crc, &compressed_crc)
+        {
+            hasher.combine(&compressed_crc);
+        }
+        let mut writer = CountingCrcWriter::with_hasher(writer, post_chunk_header_crc);
 
         // Write our message indexes
         let data_end = writer.stream_position()?;
@@ -1389,7 +1429,12 @@ struct AttachmentWriter<W> {
 
 impl<W: Write + Seek> AttachmentWriter<W> {
     /// Create a new [`AttachmentWriter`] and write the attachment header to the output.
-    fn new(mut writer: W, attachment_length: u64, header: AttachmentHeader) -> McapResult<Self> {
+    fn new(
+        mut writer: W,
+        attachment_length: u64,
+        header: AttachmentHeader,
+        calculate_crc: bool,
+    ) -> McapResult<Self> {
         let record_offset = writer.stream_position()?;
 
         // We have to write to a temporary buffer here as the CountingCrcWriter doesn't support
@@ -1409,7 +1454,7 @@ impl<W: Write + Seek> AttachmentWriter<W> {
                 + size_of::<u32>() as u64,
         )?;
 
-        let mut writer = CountingCrcWriter::new(writer);
+        let mut writer = CountingCrcWriter::new(writer, calculate_crc);
         writer.write_all(&header_buf)?;
         writer.write_u64::<LE>(attachment_length)?;
 
@@ -1455,8 +1500,9 @@ impl<W: Write + Seek> AttachmentWriter<W> {
             return Err(McapError::AttachmentIncomplete { expected, current });
         }
 
-        let (mut writer, crc) = self.writer.finalize();
-        writer.write_u32::<LE>(crc.finalize())?;
+        let (mut writer, hasher) = self.writer.finalize();
+        let crc = hasher.map(|hasher| hasher.finalize()).unwrap_or(0);
+        writer.write_u32::<LE>(crc)?;
 
         let offset = self.record_offset;
         let length = writer.stream_position()? - offset;
