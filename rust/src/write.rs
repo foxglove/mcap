@@ -3,6 +3,7 @@
 use std::{
     borrow::Cow,
     collections::BTreeMap,
+    fmt::format,
     io::{self, prelude::*, Cursor, SeekFrom},
     mem::size_of,
 };
@@ -523,6 +524,49 @@ impl<W: Write + Seek> Writer<W> {
             metadata: metadata.clone(),
         })?;
         Ok(id)
+    }
+
+    pub fn add_channel_with_id(
+        &mut self,
+        id: u16,
+        schema_id: u16,
+        topic: &str,
+        message_encoding: &str,
+        metadata: &BTreeMap<String, String>,
+    ) -> McapResult<()> {
+        if self.channels.contains_right(&id) {
+            return Err(McapError::ConflictingChannels(format!(
+                "channel already exists with ID {id}"
+            )));
+        }
+
+        self.write_channel(records::Channel {
+            id,
+            schema_id,
+            topic: topic.into(),
+            message_encoding: message_encoding.into(),
+            metadata: metadata.clone(),
+        })
+    }
+
+    pub fn add_schema_with_id(
+        &mut self,
+        id: u16,
+        name: &str,
+        encoding: &str,
+        data: &[u8],
+    ) -> McapResult<()> {
+        if self.schemas.contains_right(&id) {
+            return Err(McapError::ConflictingSchemas(format!(
+                "schema already exists with ID {id}"
+            )));
+        }
+        self.write_schema(Schema {
+            id,
+            name: name.into(),
+            encoding: encoding.into(),
+            data: data.into(),
+        })
     }
 
     fn write_channel(&mut self, channel: records::Channel) -> McapResult<()> {
