@@ -12,7 +12,7 @@ public struct CRC32 {
   public static let polynomial: UInt32 = 0xEDB8_8320
 
   @usableFromInline
-  internal var state: UInt32 = 0xFFFF_FFFF
+  var state: UInt32 = 0xFFFF_FFFF
 
   public init() {}
 
@@ -31,21 +31,21 @@ public struct CRC32 {
 
   @inlinable
   public mutating func update(_ slice: Slice<UnsafeRawBufferPointer>) {
-    self.update(UnsafeRawBufferPointer(rebasing: slice))
+    update(UnsafeRawBufferPointer(rebasing: slice))
   }
 
   @inlinable
   public mutating func update(_ data: UnsafeRawBufferPointer) {
     #if (arch(arm) || arch(arm64)) && !os(iOS)
-      self.updateARM(data)
+      updateARM(data)
     #else
-      self.update16Byte(data)
+      update16Byte(data)
     #endif
   }
 
   /// 16-byte tabular update algorithm from: https://github.com/komrad36/CRC#option-10-16-byte-tabular
   @inlinable
-  internal mutating func update16Byte(_ data: UnsafeRawBufferPointer) {
+  mutating func update16Byte(_ data: UnsafeRawBufferPointer) {
     let lowByte: UInt32 = 0xFF
     let tableSize: UInt32 = 256
 
@@ -97,7 +97,7 @@ public struct CRC32 {
 
   #if (arch(arm) || arch(arm64)) && !os(iOS)
     @inlinable
-    internal mutating func updateARM(_ data: UnsafeRawBufferPointer) {
+    mutating func updateARM(_ data: UnsafeRawBufferPointer) {
       var offset = 0
       let basePtr = Int(bitPattern: data.baseAddress)
       while offset < data.count, !(basePtr + offset).isMultiple(of: MemoryLayout<UInt64>.alignment) {
@@ -122,7 +122,7 @@ public struct CRC32 {
 
 extension CRC32 {
   @usableFromInline
-  internal static let table = generateTables(16)
+  static let table = generateTables(16)
 
   private static func generateTables(_ numTables: Int) -> [UInt32] {
     var table = [UInt32](repeating: 0, count: numTables * 256)

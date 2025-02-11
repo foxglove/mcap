@@ -13,7 +13,7 @@ extension MCAPRandomAccessReader.MessageIterator {
   }
 }
 
-extension Message: Equatable {
+extension Message: @retroactive Equatable {
   // swiftlint:disable:next large_tuple
   var comparisonFields: (ChannelID, UInt32, Timestamp, Timestamp, Data) {
     (channelID, sequence, logTime, publishTime, data)

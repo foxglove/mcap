@@ -54,7 +54,7 @@ public extension Record {
     data.append(Self.opcode.rawValue)
     data.append(littleEndian: UInt64(0)) // placeholder
     let fieldsStartOffset = data.count
-    self.serializeFields(to: &data)
+    serializeFields(to: &data)
     let fieldsLength = data.count - fieldsStartOffset
     withUnsafeBytes(of: UInt64(fieldsLength).littleEndian) {
       data.replaceSubrange(
@@ -129,14 +129,14 @@ private extension Data {
   }
 
   mutating func appendPrefixedMap(_ map: [String: String]) {
-    let sizeOffset = self.count
+    let sizeOffset = count
     append(littleEndian: UInt32(0)) // placeholder
     for (key, value) in map {
       appendPrefixedString(key)
       appendPrefixedString(value)
     }
     Swift.withUnsafeBytes(
-      of: UInt32(self.count - sizeOffset - MemoryLayout<UInt32>.size).littleEndian
+      of: UInt32(count - sizeOffset - MemoryLayout<UInt32>.size).littleEndian
     ) {
       replaceSubrange(sizeOffset ..< sizeOffset + MemoryLayout<UInt32>.size, with: $0)
     }
@@ -170,9 +170,9 @@ private extension Data {
   }
 }
 
-internal extension UnsafeRawBufferPointer {
+extension UnsafeRawBufferPointer {
   func read<T: FixedWidthInteger & UnsignedInteger>(littleEndian _: T.Type, from offset: inout Int) throws -> T {
-    if offset + MemoryLayout<T>.size > self.count {
+    if offset + MemoryLayout<T>.size > count {
       throw MCAPReadError.readBeyondBounds(offset: UInt64(offset), length: UInt64(MemoryLayout<T>.size))
     }
     defer { offset += MemoryLayout<T>.size }
@@ -185,16 +185,17 @@ internal extension UnsafeRawBufferPointer {
 
   func readPrefixedString(from offset: inout Int) throws -> String {
     let length = try read(littleEndian: UInt32.self, from: &offset)
-    if offset + Int(length) > self.count {
+    if offset + Int(length) > count {
       throw MCAPReadError.stringLengthBeyondBounds
     }
     defer { offset += Int(length) }
+    // swiftlint:disable:next optional_data_string_conversion
     return String(decoding: self[offset ..< offset + Int(length)], as: UTF8.self)
   }
 
   func readUInt32PrefixedData(from offset: inout Int) throws -> Data {
     let length = try read(littleEndian: UInt32.self, from: &offset)
-    if offset + Int(length) > self.count {
+    if offset + Int(length) > count {
       throw MCAPReadError.dataLengthBeyondBounds
     }
     defer { offset += Int(length) }
@@ -203,7 +204,7 @@ internal extension UnsafeRawBufferPointer {
 
   func readUInt64PrefixedData(from offset: inout Int) throws -> Data {
     let length = try read(littleEndian: UInt64.self, from: &offset)
-    if offset + Int(length) > self.count {
+    if offset + Int(length) > count {
       throw MCAPReadError.dataLengthBeyondBounds
     }
     defer { offset += Int(length) }
@@ -452,7 +453,7 @@ public struct Chunk: Record {
     data.append(littleEndian: uncompressedSize)
     data.append(littleEndian: uncompressedCRC)
     data.appendPrefixedString(compression)
-    data.appendUInt64PrefixedData(self.records)
+    data.appendUInt64PrefixedData(records)
   }
 }
 
