@@ -475,7 +475,7 @@ jobs:
           lfs: false
       - uses: swift-actions/setup-swift@v2
         with:
-          swift-version: "5.7"
+          swift-version: "6.0"
       - run: docker run -t --rm -v $(pwd):/work -w /work ghcr.io/realm/swiftlint:0.58.2
       - run: docker run -t --rm -v $(pwd):/work ghcr.io/nicklockwood/swiftformat:0.55.5 --lint /work
       - run: swift build
