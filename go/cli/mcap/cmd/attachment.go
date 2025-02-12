@@ -73,7 +73,7 @@ var getAttachmentCmd = &cobra.Command{
 			}
 		}
 
-		err = utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
+		err = utils.WithReader(ctx, filename, func(_ utils.LocalOrRemote, rs io.ReadSeeker) error {
 			reader, err := mcap.NewReader(rs)
 			if err != nil {
 				return fmt.Errorf("failed to construct reader: %w", err)

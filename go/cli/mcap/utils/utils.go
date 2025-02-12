@@ -10,21 +10,34 @@ import (
 	"regexp"
 	"time"
 
-	"cloud.google.com/go/storage"
 	"github.com/olekukonko/tablewriter"
 	"github.com/schollz/progressbar/v3"
+	"gocloud.dev/blob"
+	_ "gocloud.dev/blob/azureblob" // blank import recommended by https://gocloud.dev/howto/blob/#opening
+	_ "gocloud.dev/blob/gcsblob"   // blank import recommended by https://gocloud.dev/howto/blob/#opening
+	_ "gocloud.dev/blob/s3blob"    // blank import recommended by https://gocloud.dev/howto/blob/#opening
 )
 
 var (
-	remoteFileRegex = regexp.MustCompile(`(?P<Scheme>\w+)://(?P<Bucket>[a-z0-9_.-]+)/(?P<Filename>.*)`)
+	schemeRegex = regexp.MustCompile(`(?P<Scheme>\w+)://(?P<Path>.*)`)
+	bucketRegex = regexp.MustCompile(`(?P<Bucket>[a-z0-9_.-]+)/(?P<Filename>.*)`)
 )
 
-func GetScheme(filename string) (match1 string, match2 string, match3 string) {
-	match := remoteFileRegex.FindStringSubmatch(filename)
+func GetSchemeFromURI(uri string) (scheme string, path string) {
+	match := schemeRegex.FindStringSubmatch(uri)
 	if len(match) == 0 {
-		return "", "", filename
+		// Probably just a raw path
+		return "", uri
 	}
-	return match[1], match[2], match[3]
+	return match[1], match[2]
+}
+
+func GetBucketFromPath(path string) (bucket string, filename string) {
+	match := bucketRegex.FindStringSubmatch(path)
+	if len(match) == 0 {
+		return "", path
+	}
+	return match[1], match[2]
 }
 
 func ReadingStdin() (bool, error) {
@@ -42,66 +55,48 @@ func StdoutRedirected() bool {
 	return true
 }
 
-func GetReader(ctx context.Context, filename string) (func() error, io.ReadSeekCloser, error) {
-	var rs io.ReadSeekCloser
-	var err error
-	closeReader := func() error { return nil }
-	scheme, bucket, path := GetScheme(filename)
-	if scheme != "" {
-		switch scheme {
-		case "gs":
-			client, err := storage.NewClient(ctx)
-			if err != nil {
-				return closeReader, nil, fmt.Errorf("failed to create GCS client: %w", err)
-			}
-			closeReader = client.Close
-			object := client.Bucket(bucket).Object(path)
-			rs, err = NewGCSReadSeekCloser(ctx, object)
-			if err != nil {
-				return closeReader, nil, fmt.Errorf("failed to build read seek closer: %w", err)
-			}
-		default:
-			return closeReader, nil, fmt.Errorf("unsupported remote file scheme: %s", scheme)
-		}
-	} else {
-		rs, err = os.Open(path)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to open local file")
-		}
-	}
+type LocalOrRemote bool
 
-	return closeReader, rs, nil
+const (
+	Local  LocalOrRemote = true
+	Remote LocalOrRemote = false
+)
+
+func GetReader(ctx context.Context, uri string) (io.ReadSeekCloser, LocalOrRemote, error) {
+	scheme, path := GetSchemeFromURI(uri)
+	switch scheme {
+	case "":
+		// Assume that a URI without a scheme is a local path
+		rs, err := os.Open(path)
+		return rs, Local, err
+	case "http", "https":
+		rs, err := NewHTTPSeeker(uri, WithMinRequestSize(2<<20))
+		if err != nil {
+			return nil, Remote, err
+		}
+		return rs, Remote, nil
+	default:
+		// Assume that any other scheme can be handled by Go CDK
+		bucket, filename := GetBucketFromPath(path)
+		bucketClient, err := blob.OpenBucket(ctx, fmt.Sprintf("%v://%v", scheme, bucket))
+		if err != nil {
+			return nil, Remote, err
+		}
+		rs, err := NewGoCloudReadSeekCloser(ctx, bucketClient, filename)
+		if err != nil {
+			return nil, Remote, err
+		}
+		return rs, Remote, err
+	}
 }
 
-func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.ReadSeeker) error) error {
-	var err error
-	var rs io.ReadSeekCloser
-	var remote bool
-	scheme, bucket, path := GetScheme(filename)
-	if scheme != "" {
-		remote = true
-		switch scheme {
-		case "gs":
-			client, err := storage.NewClient(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to create GCS client: %w", err)
-			}
-			object := client.Bucket(bucket).Object(path)
-			rs, err = NewGCSReadSeekCloser(ctx, object)
-			if err != nil {
-				return fmt.Errorf("failed to build read seek closer: %w", err)
-			}
-		default:
-			return fmt.Errorf("unsupported remote file scheme: %s", scheme)
-		}
-	} else {
-		rs, err = os.Open(path)
-		if err != nil {
-			return fmt.Errorf("failed to open local file")
-		}
+func WithReader(ctx context.Context, uri string, f func(location LocalOrRemote, rs io.ReadSeeker) error) error {
+	reader, remote, err := GetReader(ctx, uri)
+	if err != nil {
+		return err
 	}
-	defer rs.Close()
-	return f(remote, rs)
+	defer reader.Close()
+	return f(remote, reader)
 }
 
 func FormatTable(w io.Writer, rows [][]string) {
