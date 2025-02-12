@@ -77,7 +77,7 @@ jobs:
 
       - uses: swift-actions/setup-swift@v2
         with:
-          swift-version: "5.7"
+          swift-version: "6.0"
 
       - run: mkdir __docs__
 

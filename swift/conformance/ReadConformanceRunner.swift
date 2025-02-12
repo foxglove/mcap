@@ -78,7 +78,7 @@ private func readStreamed(file: FileHandle) throws -> Data {
 }
 
 private func readIndexed(file: FileHandle) throws -> Data {
-  let reader = try MCAPRandomAccessReader(file)
+  let reader = try MCAPRandomAccessReader(FileHandleReadable(fileHandle: file))
   let schemas: [Record] = reader.schemasById.values.map { $0 }.sorted { $0.id < $1.id }
   let channels: [Record] = reader.channelsById.values.map { $0 }.sorted { $0.id < $1.id }
   var messages: [Record] = []
@@ -103,23 +103,25 @@ private func readIndexed(file: FileHandle) throws -> Data {
   return data
 }
 
-extension FileHandle: IRandomAccessReadable {
+struct FileHandleReadable: IRandomAccessReadable {
+  let fileHandle: FileHandle
+
   public func size() -> UInt64 {
     if #available(macOS 10.15.4, *) {
-      return try! seekToEnd()
+      return try! fileHandle.seekToEnd()
     } else {
-      return seekToEndOfFile()
+      return fileHandle.seekToEndOfFile()
     }
   }
 
   public func read(offset: UInt64, length: UInt64) -> Data? {
     do {
       if #available(macOS 10.15.4, *) {
-        try seek(toOffset: offset)
+        try fileHandle.seek(toOffset: offset)
       } else {
-        seek(toFileOffset: offset)
+        fileHandle.seek(toFileOffset: offset)
       }
-      return readData(ofLength: Int(length))
+      return fileHandle.readData(ofLength: Int(length))
     } catch {
       return nil
     }

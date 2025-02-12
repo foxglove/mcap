@@ -66,7 +66,7 @@ public class MCAPStreamedReader {
       let record = try recordReader.nextRecord()
       switch record {
       case let chunk as Chunk:
-        chunkReader = RecordReader(try _decompress(chunk))
+        chunkReader = try RecordReader(_decompress(chunk))
       default:
         return record
       }
@@ -91,7 +91,7 @@ public class MCAPStreamedReader {
     let decompressedData: Data
     if chunk.compression.isEmpty {
       decompressedData = chunk.records
-    } else if let decompress = self.decompressHandlers[chunk.compression] {
+    } else if let decompress = decompressHandlers[chunk.compression] {
       decompressedData = try decompress(chunk.records, chunk.uncompressedSize)
     } else {
       throw MCAPReadError.unsupportedCompression(chunk.compression)

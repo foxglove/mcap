@@ -6,8 +6,8 @@
         "repositoryURL": "https://github.com/apple/swift-algorithms",
         "state": {
           "branch": null,
-          "revision": "b14b7f4c528c942f121c8b860b9410b2bf57825e",
-          "version": "1.0.0"
+          "revision": "87e50f483c54e6efd60e885f7f5aa946cee68023",
+          "version": "1.2.1"
         }
       },
       {
@@ -15,8 +15,8 @@
         "repositoryURL": "https://github.com/apple/swift-collections",
         "state": {
           "branch": null,
-          "revision": "53a8adc54374f620002a3b6401d39e0feb3c57ae",
-          "version": null
+          "revision": "671108c96644956dddcd89dd59c203dcdb36cec7",
+          "version": "1.1.4"
         }
       },
       {
@@ -24,7 +24,16 @@
         "repositoryURL": "https://github.com/apple/swift-docc-plugin",
         "state": {
           "branch": null,
-          "revision": "3303b164430d9a7055ba484c8ead67a52f7b74f6",
+          "revision": "85e4bb4e1cd62cec64a4b8e769dcefdf0c5b9d64",
+          "version": "1.4.3"
+        }
+      },
+      {
+        "package": "SymbolKit",
+        "repositoryURL": "https://github.com/swiftlang/swift-docc-symbolkit",
+        "state": {
+          "branch": null,
+          "revision": "b45d1f2ed151d057b54504d653e0da5552844e34",
           "version": "1.0.0"
         }
       },

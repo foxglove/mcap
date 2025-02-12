@@ -9,11 +9,11 @@ let package = Package(
     .library(name: "MCAP", targets: ["MCAP"]),
   ],
   dependencies: [
-    .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0"),
-    .package(url: "https://github.com/apple/swift-algorithms", from: "1.0.0"),
+    .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.4.3"),
+    .package(url: "https://github.com/apple/swift-algorithms", from: "1.2.1"),
 
     // Use pre-release version for Heap
-    .package(url: "https://github.com/apple/swift-collections", revision: "53a8adc54374f620002a3b6401d39e0feb3c57ae"),
+    .package(url: "https://github.com/apple/swift-collections", .upToNextMajor(from: "1.1.4")),
   ],
   targets: [
     .target(

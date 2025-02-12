@@ -17,7 +17,7 @@ public protocol IRandomAccessReadable {
 
 private extension IRandomAccessReadable {
   func checkedRead(offset: UInt64, length: UInt64) throws -> Data {
-    guard let data = self.read(offset: offset, length: length) else {
+    guard let data = read(offset: offset, length: length) else {
       throw MCAPReadError.readBeyondBounds(offset: offset, length: length)
     }
     if UInt64(data.count) != length {
@@ -77,7 +77,7 @@ class ChunkCursor: Comparable {
 
   var sortTime: UInt64 {
     if let messageIndexCursors = messageIndexCursors {
-      let cursor = messageIndexCursors.min()!
+      let cursor = messageIndexCursors.min!
       return cursor.records[cursor.index].logTime
     }
     return chunkIndex.messageStartTime
@@ -213,7 +213,7 @@ public class MCAPRandomAccessReader {
       }
       magicAndHeaderLength = UInt64(offset) + headerLength
       let headerData = try readable.checkedRead(offset: UInt64(offset), length: headerLength)
-      self.header = try Header.deserializingFields(from: headerData)
+      header = try Header.deserializingFields(from: headerData)
     }
 
     // Read trailing magic and footer
@@ -238,7 +238,7 @@ public class MCAPRandomAccessReader {
         throw MCAPReadError.invalidMagic(actual: Array(magic))
       }
 
-      self.footer = try Footer.deserializing(from: footerAndMagic)
+      footer = try Footer.deserializing(from: footerAndMagic)
     }
 
     if footer.summaryStart == 0 {
@@ -298,7 +298,7 @@ public class MCAPRandomAccessReader {
     let decompressedData: Data
     if chunk.compression.isEmpty {
       decompressedData = chunk.records
-    } else if let decompress = self.decompressHandlers[chunk.compression] {
+    } else if let decompress = decompressHandlers[chunk.compression] {
       decompressedData = try decompress(chunk.records, chunk.uncompressedSize)
     } else {
       throw MCAPReadError.unsupportedCompression(chunk.compression)
@@ -345,7 +345,7 @@ public class MCAPRandomAccessReader {
       if let topics = topics.map(Set.init) {
         relevantChannels = Set(reader.channelsById.lazy.filter { topics.contains($1.topic) }.map(\.key))
       }
-      self.chunkCursors = Heap<ChunkCursor>(reader.chunkIndexes.compactMap {
+      chunkCursors = Heap<ChunkCursor>(reader.chunkIndexes.compactMap {
         if let startTime = startTime, $0.messageEndTime < startTime {
           return nil
         }
