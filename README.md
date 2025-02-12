@@ -27,11 +27,11 @@ MCAP libraries are provided in the following languages. For guidance on each lan
 To run the conformance tests, you will need to use [Git LFS](https://git-lfs.github.com/),
 which is used to store the test logs under `tests/conformance/data`.
 
-## CLI tool
+## MCAP CLI
 
-Interact with MCAP files from the command line using the [MCAP CLI tool](./go/cli/mcap).
+Inspect, merge, and split MCAP files from the command line using the MCAP CLI.
 
-Download the latest `mcap-cli` version from the [releases page](https://github.com/foxglove/mcap/releases).
+Install with `brew install mcap` or download the latest version directly from the [releases page](https://github.com/foxglove/mcap/releases?q=mcap-cli).
 
 ## License
 
