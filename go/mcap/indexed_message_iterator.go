@@ -165,7 +165,12 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			}
 			// if the chunk overlaps with the requested parameters, load it
 			if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
-				it.chunkIndexes = append(it.chunkIndexes, idx)
+				for chanID := range idx.MessageIndexOffsets {
+					if it.channels.Get(chanID) != nil {
+						it.chunkIndexes = append(it.chunkIndexes, idx)
+						break
+					}
+				}
 			}
 		case TokenStatistics:
 			stats, err := ParseStatistics(record)
