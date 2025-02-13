@@ -318,13 +318,15 @@ var catCmd = &cobra.Command{
 		if err != nil {
 			die("Failed to stat() stdin: %s", err)
 		}
-		// read stdin if no filename has been provided and data is available on stdin.
-		readingStdin := (stat.Mode()&os.ModeCharDevice == 0 && len(args) == 0)
-		// stdin is a special case, since we can't seek
 
 		output := bufio.NewWriter(os.Stdout)
 		defer output.Flush()
 
+		// read stdin if no filename has been provided and data is available on
+		// stdin.
+		readingStdin := (stat.Mode()&os.ModeCharDevice == 0 && len(args) == 0)
+
+		// stdin is a special case, since we can't seek
 		if readingStdin {
 			reader, err := mcap.NewReader(os.Stdin)
 			if err != nil {
@@ -342,29 +344,31 @@ var catCmd = &cobra.Command{
 			return
 		}
 
-		// otherwise, could be a remote or local file
-		if len(args) != 1 {
+		// if not reading stdin, could be a remote or local file
+		if len(args) < 1 {
 			die("supply a file")
 		}
-		filename := args[0]
-		err = utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
-			reader, err := mcap.NewReader(rs)
+
+		for _, filename := range args {
+			err = utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
+				reader, err := mcap.NewReader(rs)
+				if err != nil {
+					return fmt.Errorf("failed to create reader from %s: %w", filename, err)
+				}
+				defer reader.Close()
+				it, err := reader.Messages(getReadOpts(true)...)
+				if err != nil {
+					return fmt.Errorf("failed to read messages from %s: %w", filename, err)
+				}
+				err = printMessages(output, it, catFormatJSON)
+				if err != nil {
+					return fmt.Errorf("failed to print messages from %s: %w", filename, err)
+				}
+				return nil
+			})
 			if err != nil {
-				return fmt.Errorf("failed to create reader: %w", err)
+				die("Error: %s", err)
 			}
-			defer reader.Close()
-			it, err := reader.Messages(getReadOpts(true)...)
-			if err != nil {
-				return fmt.Errorf("failed to read messages: %w", err)
-			}
-			err = printMessages(output, it, catFormatJSON)
-			if err != nil {
-				return fmt.Errorf("failed to print messages: %w", err)
-			}
-			return nil
-		})
-		if err != nil {
-			die("Error: %s", err)
 		}
 	},
 }
