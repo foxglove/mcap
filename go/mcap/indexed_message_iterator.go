@@ -165,6 +165,15 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			}
 			// if the chunk overlaps with the requested parameters, load it
 			if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
+				// Can't infer absence of a topic if there are no message indexes.
+				if len(idx.MessageIndexOffsets) == 0 {
+					it.chunkIndexes = append(it.chunkIndexes, idx)
+					continue
+				}
+				// Otherwise, scan the message index offsets and see if we are
+				// selecting it. ChannelInfo is set only for selected topics.
+				// NB: It would be nice if we had a more compact/direct
+				// representation of what channels are in a chunk.
 				for chanID := range idx.MessageIndexOffsets {
 					if it.channels.Get(chanID) != nil {
 						it.chunkIndexes = append(it.chunkIndexes, idx)
