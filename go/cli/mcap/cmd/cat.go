@@ -310,8 +310,8 @@ func printMessages(
 }
 
 var catCmd = &cobra.Command{
-	Use:   "cat [file]",
-	Short: "Cat the messages in an MCAP file to stdout",
+	Use:   "cat [file]...",
+	Short: "Concatenate the messages in one or more MCAP files to stdout",
 	Run: func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		stat, err := os.Stdin.Stat()
