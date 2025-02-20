@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use mcap::{Channel, Message, MessageStream, Schema};
+use mcap::{sans_io, Channel, Message, MessageStream, Schema};
 use std::borrow::Cow;
 use std::io::Cursor;
 use std::sync::Arc;
@@ -47,42 +47,151 @@ fn create_test_mcap(n: usize, compression: Option<mcap::Compression>) -> Vec<u8>
     buffer
 }
 
+fn load_summary(file: &mut std::io::Cursor<&[u8]>) -> mcap::Summary {
+    use std::io::{Read, Seek};
+    let mut reader = sans_io::SummaryReader::new();
+    while let Some(event) = reader.next_event() {
+        match event.expect("next event failed") {
+            sans_io::SummaryReadEvent::Read(n) => {
+                let read = file.read(reader.insert(n)).expect("read failed");
+                reader.notify_read(read);
+            }
+            sans_io::SummaryReadEvent::Seek(pos) => {
+                reader.notify_seeked(file.seek(pos).expect("seek failed"));
+            }
+        }
+    }
+    reader.finish().unwrap()
+}
+
+fn get_next_message(
+    reader: &mut sans_io::IndexedReader,
+    file: &mut std::io::Cursor<&[u8]>,
+    into: &mut Vec<u8>,
+) -> Option<mcap::records::MessageHeader> {
+    use std::io::{Read, Seek};
+    while let Some(event) = reader.next_event() {
+        match event.expect("next event failed") {
+            sans_io::IndexedReadEvent::Message { header, data } => {
+                into.resize(data.len(), 0);
+                into.copy_from_slice(data);
+                return Some(header);
+            }
+            sans_io::IndexedReadEvent::Seek(pos) => {
+                reader.notify_seeked(file.seek(pos).expect("seek failed"));
+            }
+            sans_io::IndexedReadEvent::Read(n) => {
+                let read = file.read(reader.insert(n)).expect("read failed");
+                reader.notify_read(read);
+            }
+        }
+    }
+    None
+}
+
 fn bench_read_messages(c: &mut Criterion) {
     const N: usize = 1_000_000;
     let mcap_data_uncompressed = create_test_mcap(N, None);
     let mcap_data_lz4 = create_test_mcap(N, Some(mcap::Compression::Lz4));
     let mcap_data_zstd = create_test_mcap(N, Some(mcap::Compression::Zstd));
-    let mut group = c.benchmark_group("mcap_read");
-    group.throughput(criterion::Throughput::Elements(N as u64));
+    {
+        let mut group = c.benchmark_group("mcap_read_linear");
+        group.throughput(criterion::Throughput::Elements(N as u64));
 
-    group.bench_function("MessageStream_1M_uncompressed", |b| {
-        b.iter(|| {
-            let stream = MessageStream::new(&mcap_data_uncompressed).unwrap();
-            for message in stream {
-                std::hint::black_box(message.unwrap());
-            }
+        group.bench_function("MessageStream_1M_uncompressed", |b| {
+            b.iter(|| {
+                let stream = MessageStream::new(&mcap_data_uncompressed).unwrap();
+                for message in stream {
+                    std::hint::black_box(message.unwrap());
+                }
+            });
         });
-    });
 
-    group.bench_function("MessageStream_1M_lz4", |b| {
-        b.iter(|| {
-            let stream = MessageStream::new(&mcap_data_lz4).unwrap();
-            for message in stream {
-                std::hint::black_box(message.unwrap());
-            }
+        group.bench_function("MessageStream_1M_lz4", |b| {
+            b.iter(|| {
+                let stream = MessageStream::new(&mcap_data_lz4).unwrap();
+                for message in stream {
+                    std::hint::black_box(message.unwrap());
+                }
+            });
         });
-    });
 
-    group.bench_function("MessageStream_1M_zstd", |b| {
-        b.iter(|| {
-            let stream = MessageStream::new(&mcap_data_zstd).unwrap();
-            for message in stream {
-                std::hint::black_box(message.unwrap());
-            }
+        group.bench_function("MessageStream_1M_zstd", |b| {
+            b.iter(|| {
+                let stream = MessageStream::new(&mcap_data_zstd).unwrap();
+                for message in stream {
+                    std::hint::black_box(message.unwrap());
+                }
+            });
         });
-    });
 
-    group.finish();
+        group.finish();
+    }
+    {
+        let mut group = c.benchmark_group("mcap_read_indexed");
+        group.throughput(criterion::Throughput::Elements(N as u64));
+
+        group.bench_function("IndexedReader_1M_uncompressed", |b| {
+            b.iter(|| {
+                let mut file = std::io::Cursor::new(&mcap_data_uncompressed[..]);
+                let summary = load_summary(&mut file);
+                let mut reader =
+                    sans_io::IndexedReader::new(&summary).expect("could not build reader");
+                let mut data_buf = Vec::new();
+                while let Some(header) = get_next_message(&mut reader, &mut file, &mut data_buf) {
+                    let message = mcap::Message {
+                        channel: summary.channels.get(&header.channel_id).unwrap().clone(),
+                        sequence: header.sequence,
+                        log_time: header.log_time,
+                        publish_time: header.publish_time,
+                        data: Cow::Borrowed(&data_buf),
+                    };
+                    std::hint::black_box(message);
+                }
+            });
+        });
+
+        group.bench_function("IndexedReader_1M_zstd", |b| {
+            b.iter(|| {
+                let mut file = std::io::Cursor::new(&mcap_data_zstd[..]);
+                let summary = load_summary(&mut file);
+                let mut reader =
+                    sans_io::IndexedReader::new(&summary).expect("could not build reader");
+                let mut data_buf = Vec::new();
+                while let Some(header) = get_next_message(&mut reader, &mut file, &mut data_buf) {
+                    let message = mcap::Message {
+                        channel: summary.channels.get(&header.channel_id).unwrap().clone(),
+                        sequence: header.sequence,
+                        log_time: header.log_time,
+                        publish_time: header.publish_time,
+                        data: Cow::Borrowed(&data_buf),
+                    };
+                    std::hint::black_box(message);
+                }
+            });
+        });
+
+        group.bench_function("IndexedReader_1M_lz4", |b| {
+            b.iter(|| {
+                let mut file = std::io::Cursor::new(&mcap_data_lz4[..]);
+                let summary = load_summary(&mut file);
+                let mut reader =
+                    sans_io::IndexedReader::new(&summary).expect("could not build reader");
+                let mut data_buf = Vec::new();
+                while let Some(header) = get_next_message(&mut reader, &mut file, &mut data_buf) {
+                    let message = mcap::Message {
+                        channel: summary.channels.get(&header.channel_id).unwrap().clone(),
+                        sequence: header.sequence,
+                        log_time: header.log_time,
+                        publish_time: header.publish_time,
+                        data: Cow::Borrowed(&data_buf),
+                    };
+                    std::hint::black_box(message);
+                }
+            });
+        });
+        group.finish();
+    }
 }
 
 criterion_group! {
