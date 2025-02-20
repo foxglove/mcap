@@ -287,13 +287,17 @@ impl<'a> Iterator for ChunkFlattener<'a> {
 
 /// Parses schemas and channels and wires them together
 #[derive(Debug, Default)]
-struct ChannelAccumulator<'a> {
-    schemas: HashMap<u16, Arc<Schema<'a>>>,
-    channels: HashMap<u16, Arc<Channel<'a>>>,
+pub(crate) struct ChannelAccumulator<'a> {
+    pub(crate) schemas: HashMap<u16, Arc<Schema<'a>>>,
+    pub(crate) channels: HashMap<u16, Arc<Channel<'a>>>,
 }
 
 impl<'a> ChannelAccumulator<'a> {
-    fn add_schema(&mut self, header: records::SchemaHeader, data: Cow<'a, [u8]>) -> McapResult<()> {
+    pub(crate) fn add_schema(
+        &mut self,
+        header: records::SchemaHeader,
+        data: Cow<'a, [u8]>,
+    ) -> McapResult<()> {
         if header.id == 0 {
             return Err(McapError::InvalidSchemaId);
         }
@@ -315,7 +319,7 @@ impl<'a> ChannelAccumulator<'a> {
         Ok(())
     }
 
-    fn add_channel(&mut self, chan: records::Channel) -> McapResult<()> {
+    pub(crate) fn add_channel(&mut self, chan: records::Channel) -> McapResult<()> {
         // The schema ID can be 0 for "no schema",
         // Or must reference some previously-read schema.
         let schema = if chan.schema_id == 0 {
@@ -346,7 +350,7 @@ impl<'a> ChannelAccumulator<'a> {
         Ok(())
     }
 
-    fn get(&self, chan_id: u16) -> Option<Arc<Channel<'a>>> {
+    pub(crate) fn get(&self, chan_id: u16) -> Option<Arc<Channel<'a>>> {
         self.channels.get(&chan_id).cloned()
     }
 }
