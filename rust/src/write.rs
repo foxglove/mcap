@@ -1695,7 +1695,7 @@ mod tests {
     }
 
     #[test]
-    fn preserves_written_channel_and_schema_ids() {
+    fn preserves_written_channel_ids() {
         let file = std::io::Cursor::new(Vec::new());
         let mut writer = Writer::new(file).expect("failed to construct writer");
         let schema = Arc::new(crate::Schema {
@@ -1756,5 +1756,58 @@ mod tests {
             .expect("expected a summary");
         assert_eq!(summary.channels.len(), 3);
         assert_eq!(summary.schemas.len(), 1);
+    }
+    #[test]
+    fn preserves_written_schema_ids() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let first_schema = crate::Schema {
+            id: 1,
+            name: "schema".into(),
+            encoding: "ros1msg".into(),
+            data: Vec::new().into(),
+        };
+        let second_schema = crate::Schema {
+            id: 2,
+            ..first_schema.clone()
+        };
+        let first_channel = crate::Channel {
+            id: 1,
+            topic: "chat".into(),
+            schema: Some(Arc::new(first_schema)),
+            message_encoding: "ros1".into(),
+            metadata: Default::default(),
+        };
+        let second_channel = crate::Channel {
+            id: 2,
+            schema: Some(Arc::new(second_schema)),
+            ..first_channel.clone()
+        };
+        writer
+            .write(&crate::Message {
+                channel: Arc::new(first_channel),
+                sequence: 0,
+                log_time: 0,
+                publish_time: 0,
+                data: Vec::new().into(),
+            })
+            .expect("failed to write first message");
+        writer
+            .write(&crate::Message {
+                channel: Arc::new(second_channel),
+                sequence: 0,
+                log_time: 0,
+                publish_time: 0,
+                data: Vec::new().into(),
+            })
+            .expect("failed to write first message");
+
+        writer.finish().expect("failed in finish");
+        let buf = writer.into_inner().into_inner();
+        let summary = crate::Summary::read(&buf)
+            .expect("failed to parse summary")
+            .expect("expected a summary");
+        assert_eq!(summary.channels.len(), 2);
+        assert_eq!(summary.schemas.len(), 2);
     }
 }
