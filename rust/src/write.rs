@@ -436,7 +436,7 @@ impl<W: Write + Seek> Writer<W> {
         }) {
             return Ok(id);
         }
-        while self.canonical_schemas.contains_right(&self.next_schema_id) {
+        while self.all_schema_ids.contains_key(&self.next_schema_id) {
             if self.next_schema_id == u16::MAX {
                 return Err(McapError::TooManySchemas);
             }
@@ -460,10 +460,16 @@ impl<W: Write + Seek> Writer<W> {
             data: Cow::Owned(schema.data.clone().into_owned()),
         };
         if let Some(canonical_id) = self.canonical_schemas.get_by_left(&content) {
-            self.all_schema_ids.insert(schema.id, *canonical_id);
+            assert!(self
+                .all_schema_ids
+                .insert(schema.id, *canonical_id)
+                .is_none());
         } else {
-            self.canonical_schemas.insert(content, schema.id);
-            self.all_schema_ids.insert(schema.id, schema.id);
+            assert!(!self
+                .canonical_schemas
+                .insert(content, schema.id)
+                .did_overwrite());
+            assert!(self.all_schema_ids.insert(schema.id, schema.id).is_none());
         }
 
         if self.options.use_chunks {
@@ -541,10 +547,19 @@ impl<W: Write + Seek> Writer<W> {
             metadata: Cow::Owned(channel.metadata.clone()),
         };
         if let Some(canonical_id) = self.canonical_channels.get_by_left(&content) {
-            self.all_channel_ids.insert(channel.id, *canonical_id);
+            assert!(self
+                .all_channel_ids
+                .insert(channel.id, *canonical_id)
+                .is_none());
         } else {
-            self.canonical_channels.insert(content, channel.id);
-            self.all_channel_ids.insert(channel.id, channel.id);
+            assert!(!self
+                .canonical_channels
+                .insert(content, channel.id)
+                .did_overwrite());
+            assert!(self
+                .all_channel_ids
+                .insert(channel.id, channel.id)
+                .is_none());
         }
         if self.options.use_chunks {
             self.start_chunk()?.write_channel(channel)
@@ -568,7 +583,10 @@ impl<W: Write + Seek> Writer<W> {
                         encoding: Cow::Borrowed(&schema.encoding),
                         data: Cow::Borrowed(&schema.data),
                     };
-                    if *self.canonical_schemas.get_by_right(previous).unwrap() != current {
+                    if *self.canonical_schemas.get_by_right(previous).expect(
+                        "id should exist in canonical_schemas for every value in all_schema_ids",
+                    ) != current
+                    {
                         return Err(McapError::ConflictingSchemas(schema.name.clone()));
                     }
                 }
@@ -589,7 +607,10 @@ impl<W: Write + Seek> Writer<W> {
                     message_encoding: Cow::Borrowed(&message.channel.message_encoding),
                     metadata: Cow::Borrowed(&message.channel.metadata),
                 };
-                if *self.canonical_channels.get_by_right(canonical).unwrap() != current {
+                if *self.canonical_channels.get_by_right(canonical).expect(
+                    "key should exist in canonical_channels for every value in all_channel_ids",
+                ) != current
+                {
                     return Err(McapError::ConflictingChannels(
                         message.channel.topic.clone(),
                     ));
@@ -967,7 +988,9 @@ impl<W: Write + Seek> Writer<W> {
             .all_channel_ids
             .iter()
             .map(|(&id, canonical_id)| {
-                let content = self.canonical_channels.get_by_right(canonical_id).unwrap();
+                let content = self.canonical_channels.get_by_right(canonical_id).expect(
+                    "ID should exist in canonical_channels for every value in all_channel_ids",
+                );
                 records::Channel {
                     id,
                     schema_id: content.schema_id,
@@ -981,7 +1004,9 @@ impl<W: Write + Seek> Writer<W> {
             .all_schema_ids
             .iter()
             .map(|(&id, canonical_id)| {
-                let content = self.canonical_schemas.get_by_right(canonical_id).unwrap();
+                let content = self.canonical_schemas.get_by_right(canonical_id).expect(
+                    "id should exist in canonical_schemas for every value in all_schema_ids",
+                );
                 Record::Schema {
                     header: records::SchemaHeader {
                         id,
