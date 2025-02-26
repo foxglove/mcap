@@ -574,9 +574,9 @@ impl<W: Write + Seek> Writer<W> {
             match self.all_schema_ids.entry(schema.id) {
                 Entry::Occupied(other) => {
                     // ensure that this message schema does not conflict with the existing one's content
-                    let canonical_schema_id_for_content = canonical_schema_id
+                    let canonical_schema_id = canonical_schema_id
                         .expect("all values in all_schema_ids should be canonical schema IDs");
-                    if *other.get() != *canonical_schema_id_for_content {
+                    if *other.get() != *canonical_schema_id {
                         return Err(McapError::ConflictingSchemas(schema.name.clone()));
                     }
                 }
@@ -586,11 +586,12 @@ impl<W: Write + Seek> Writer<W> {
                     if let Some(canonical_schema_id) = canonical_schema_id {
                         entry.insert(*canonical_schema_id);
                     } else {
-                        self.canonical_schemas.insert_no_overwrite(SchemaContent{
+                        let content = SchemaContent {
                             name: Cow::Owned(schema.name.clone()),
                             data: Cow::Owned(schema.data.clone().into()),
                             encoding: Cow::Owned(schema.encoding.clone()),
-                        }, schema.id).expect(
+                        };
+                        self.canonical_schemas.insert_no_overwrite(content, schema.id).expect(
                             "all right values in canonical_schemas should correspond to a key in all_schema_ids");
                         entry.insert(schema.id);
                     }
@@ -625,18 +626,14 @@ impl<W: Write + Seek> Writer<W> {
                 if let Some(canonical_channel_id) = canonical_channel_id {
                     entry.insert(*canonical_channel_id);
                 } else {
+                    let content = ChannelContent {
+                        topic: Cow::Owned(message.channel.topic.clone()),
+                        schema_id,
+                        message_encoding: Cow::Owned(message.channel.message_encoding.clone()),
+                        metadata: Cow::Owned(message.channel.metadata.clone()),
+                    };
                     self.canonical_channels
-                        .insert_no_overwrite(
-                            ChannelContent {
-                                topic: Cow::Owned(message.channel.topic.clone()),
-                                schema_id,
-                                message_encoding: Cow::Owned(
-                                    message.channel.message_encoding.clone(),
-                                ),
-                                metadata: Cow::Owned(message.channel.metadata.clone()),
-                            },
-                            message.channel.id,
-                        )
+                        .insert_no_overwrite(content, message.channel.id)
                         .expect(
                             "all values in all_channel_ids should be valid canonical channel IDs",
                         );
