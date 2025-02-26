@@ -497,13 +497,13 @@ jobs:
           components: "rustfmt, clippy"
       - run: rustup target add wasm32-unknown-unknown
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --all-targets -- --no-deps
-      - run: cargo clippy --no-default-features -- --no-deps
-      - run: cargo clippy --no-default-features --features lz4 -- --no-deps
-      - run: cargo clippy --no-default-features --features zstd -- --no-deps
-      - run: cargo clippy --no-default-features --features tokio -- --no-deps
-      - run: cargo clippy --no-default-features --features tokio,lz4 -- --no-deps
-      - run: cargo clippy --no-default-features --features tokio,zstd -- --no-deps
+      - run: cargo clippy --all-targets -- --no-deps -D warnings
+      - run: cargo clippy --no-default-features -- --no-deps -D warnings
+      - run: cargo clippy --no-default-features --features lz4 -- --no-deps -D warnings
+      - run: cargo clippy --no-default-features --features zstd -- --no-deps -D warnings
+      - run: cargo clippy --no-default-features --features tokio -- --no-deps -D warnings
+      - run: cargo clippy --no-default-features --features tokio,lz4 -- --no-deps -D warnings
+      - run: cargo clippy --no-default-features --features tokio,zstd -- --no-deps -D warnings
       - run: cargo build --all-features
       - run: cargo test --all-features
       - run: cargo build --all-features --target wasm32-unknown-unknown

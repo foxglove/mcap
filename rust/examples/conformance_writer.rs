@@ -12,6 +12,7 @@ const USE_ATTACHMENT_INDEX: &str = "ax";
 const USE_METADATA_INDEX: &str = "mdx";
 const USE_CHUNK_INDEX: &str = "chx";
 const USE_SUMMARY_OFFSET: &str = "sum";
+#[allow(dead_code)]
 const ADD_EXTRA_DATA_TO_RECORDS: &str = "pad";
 
 fn write_file(spec: &conformance_writer_spec::WriterSpec) {
