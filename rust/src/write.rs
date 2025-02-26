@@ -332,11 +332,32 @@ struct ChannelContent<'a> {
     metadata: Cow<'a, BTreeMap<String, String>>,
 }
 
+impl<'a> ChannelContent<'a> {
+    fn into_owned(self) -> ChannelContent<'static> {
+        ChannelContent {
+            topic: Cow::Owned(self.topic.into_owned()),
+            schema_id: self.schema_id,
+            message_encoding: Cow::Owned(self.message_encoding.into_owned()),
+            metadata: Cow::Owned(self.metadata.into_owned()),
+        }
+    }
+}
+
 #[derive(Hash, PartialEq, Eq, Debug)]
 struct SchemaContent<'a> {
     name: Cow<'a, str>,
     encoding: Cow<'a, str>,
     data: Cow<'a, [u8]>,
+}
+
+impl<'a> SchemaContent<'a> {
+    fn into_owned(self) -> SchemaContent<'static> {
+        SchemaContent {
+            name: Cow::Owned(self.name.into_owned()),
+            encoding: Cow::Owned(self.encoding.into_owned()),
+            data: Cow::Owned(self.data.into_owned()),
+        }
+    }
 }
 
 /// Writes an MCAP file to the given [writer](Write).
@@ -433,11 +454,12 @@ impl<W: Write + Seek> Writer<W> {
     /// * `data`: The serialized schema content. If `encoding` is an empty string, `data` should
     ///   have zero length.
     pub fn add_schema(&mut self, name: &str, encoding: &str, data: &[u8]) -> McapResult<u16> {
-        if let Some(&id) = self.canonical_schemas.get_by_left(&SchemaContent {
+        let content = SchemaContent {
             name: name.into(),
             encoding: encoding.into(),
             data: data.into(),
-        }) {
+        };
+        if let Some(&id) = self.canonical_schemas.get_by_left(&content) {
             return Ok(id);
         }
         while self.all_schema_ids.contains_key(&self.next_schema_id) {
@@ -449,14 +471,7 @@ impl<W: Write + Seek> Writer<W> {
         let id = self.next_schema_id;
         self.next_schema_id += 1;
         self.canonical_schemas
-            .insert_no_overwrite(
-                SchemaContent {
-                    name: Cow::Owned(name.to_owned()),
-                    encoding: Cow::Owned(encoding.to_owned()),
-                    data: Cow::Owned(data.to_owned().into()),
-                },
-                id,
-            )
+            .insert_no_overwrite(content.into_owned(), id)
             .expect("neither schema ID or content should be present in canonical_schemas");
         assert!(self.all_schema_ids.insert(id, id).is_none());
         self.write_schema(Schema {
@@ -506,12 +521,13 @@ impl<W: Write + Seek> Writer<W> {
         message_encoding: &str,
         metadata: &BTreeMap<String, String>,
     ) -> McapResult<u16> {
-        if let Some(&id) = self.canonical_channels.get_by_left(&ChannelContent {
+        let content = ChannelContent {
             topic: Cow::Borrowed(topic),
             schema_id,
             message_encoding: Cow::Borrowed(message_encoding),
             metadata: Cow::Borrowed(metadata),
-        }) {
+        };
+        if let Some(&id) = self.canonical_channels.get_by_left(&content) {
             return Ok(id);
         }
         if schema_id != 0 && !self.all_schema_ids.contains_key(&schema_id) {
@@ -527,15 +543,7 @@ impl<W: Write + Seek> Writer<W> {
         let id = self.next_channel_id;
         self.next_channel_id += 1;
         self.canonical_channels
-            .insert_no_overwrite(
-                ChannelContent {
-                    topic: Cow::Owned(topic.to_owned()),
-                    schema_id,
-                    message_encoding: Cow::Owned(message_encoding.to_owned()),
-                    metadata: Cow::Owned(metadata.clone()),
-                },
-                id,
-            )
+            .insert_no_overwrite(content.into_owned(), id)
             .expect("neither content nor new ID should be present in canonical_channels");
         assert!(self.all_channel_ids.insert(id, id).is_none());
 
@@ -586,12 +594,7 @@ impl<W: Write + Seek> Writer<W> {
                     if let Some(canonical_schema_id) = canonical_schema_id {
                         entry.insert(*canonical_schema_id);
                     } else {
-                        let content = SchemaContent {
-                            name: Cow::Owned(schema.name.clone()),
-                            data: Cow::Owned(schema.data.clone().into()),
-                            encoding: Cow::Owned(schema.encoding.clone()),
-                        };
-                        self.canonical_schemas.insert_no_overwrite(content, schema.id).expect(
+                        self.canonical_schemas.insert_no_overwrite(content.into_owned(), schema.id).expect(
                             "all right values in canonical_schemas should correspond to a key in all_schema_ids");
                         entry.insert(schema.id);
                     }
@@ -626,14 +629,8 @@ impl<W: Write + Seek> Writer<W> {
                 if let Some(canonical_channel_id) = canonical_channel_id {
                     entry.insert(*canonical_channel_id);
                 } else {
-                    let content = ChannelContent {
-                        topic: Cow::Owned(message.channel.topic.clone()),
-                        schema_id,
-                        message_encoding: Cow::Owned(message.channel.message_encoding.clone()),
-                        metadata: Cow::Owned(message.channel.metadata.clone()),
-                    };
                     self.canonical_channels
-                        .insert_no_overwrite(content, message.channel.id)
+                        .insert_no_overwrite(channel_content.into_owned(), message.channel.id)
                         .expect(
                             "all values in all_channel_ids should be valid canonical channel IDs",
                         );
