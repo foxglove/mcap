@@ -527,6 +527,18 @@ impl<W: Write + Seek> Writer<W> {
         }
         let id = self.next_channel_id;
         self.next_channel_id += 1;
+        self.canonical_channels
+            .insert_no_overwrite(
+                ChannelContent {
+                    topic: Cow::Owned(topic.to_owned()),
+                    schema_id,
+                    message_encoding: Cow::Owned(message_encoding.to_owned()),
+                    metadata: Cow::Owned(metadata.clone()),
+                },
+                id,
+            )
+            .expect("buggus");
+        self.all_channel_ids.insert(id, id);
 
         self.write_channel(records::Channel {
             id,
@@ -1713,7 +1725,7 @@ mod tests {
     }
 
     #[test]
-    fn preserves_written_channel_ids() {
+    fn preserves_written_channel_ids_in_write() {
         let file = std::io::Cursor::new(Vec::new());
         let mut writer = Writer::new(file).expect("failed to construct writer");
         let schema = Arc::new(crate::Schema {
@@ -1775,8 +1787,72 @@ mod tests {
         assert_eq!(summary.channels.len(), 3);
         assert_eq!(summary.schemas.len(), 1);
     }
+
     #[test]
-    fn preserves_written_schema_ids() {
+    fn deduplicated_ids_in_add_schema_channel() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let first_schema_id = writer
+            .add_schema("first", "ros1msg", &[1, 2, 3])
+            .expect("failed to write schema");
+        assert_eq!(
+            writer
+                .add_schema("first", "ros1msg", &[1, 2, 3])
+                .expect("failed to write schema"),
+            first_schema_id
+        );
+        let second_schema_id = writer
+            .add_schema("second", "ros1msg", &[1, 2, 3])
+            .expect("failed to write schema");
+        assert_ne!(first_schema_id, second_schema_id);
+
+        let first_channel_id = writer
+            .add_channel(first_schema_id, "a", "enc", &BTreeMap::new())
+            .expect("failed to write channel");
+        assert_eq!(
+            writer
+                .add_channel(first_schema_id, "a", "enc", &BTreeMap::new())
+                .expect("failed to write channel"),
+            first_channel_id
+        );
+        let second_channel_id = writer
+            .add_channel(first_schema_id, "b", "enc", &BTreeMap::new())
+            .expect("failed to write channel");
+
+        writer
+            .write_to_known_channel(
+                &MessageHeader {
+                    channel_id: first_channel_id,
+                    sequence: 0,
+                    log_time: 0,
+                    publish_time: 0,
+                },
+                &[1, 2, 3],
+            )
+            .expect("failed to write message");
+        writer
+            .write_to_known_channel(
+                &MessageHeader {
+                    channel_id: second_channel_id,
+                    sequence: 1,
+                    log_time: 1,
+                    publish_time: 1,
+                },
+                &[1, 2, 3],
+            )
+            .expect("failed to write message");
+
+        writer.finish().expect("failed to finish");
+        let mcap = writer.into_inner().into_inner();
+        let summary = crate::Summary::read(&mcap)
+            .expect("failed to read summary")
+            .expect("summary should be present");
+        assert_eq!(summary.channels.len(), 2);
+        assert_eq!(summary.schemas.len(), 2);
+    }
+
+    #[test]
+    fn preserves_written_schema_ids_in_write() {
         let file = std::io::Cursor::new(Vec::new());
         let mut writer = Writer::new(file).expect("failed to construct writer");
         let first_schema = crate::Schema {
