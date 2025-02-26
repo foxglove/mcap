@@ -448,17 +448,16 @@ impl<W: Write + Seek> Writer<W> {
         }
         let id = self.next_schema_id;
         self.next_schema_id += 1;
-        assert!(!self
-            .canonical_schemas
-            .insert(
+        self.canonical_schemas
+            .insert_no_overwrite(
                 SchemaContent {
                     name: Cow::Owned(name.to_owned()),
                     encoding: Cow::Owned(encoding.to_owned()),
                     data: Cow::Owned(data.to_owned().into()),
                 },
-                id
+                id,
             )
-            .did_overwrite());
+            .expect("neither schema ID or content should be present in canonical_schemas");
         assert!(self.all_schema_ids.insert(id, id).is_none());
         self.write_schema(Schema {
             id,
