@@ -324,7 +324,7 @@ impl WriteOptions {
     }
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Debug)]
 struct ChannelContent<'a> {
     topic: Cow<'a, str>,
     schema_id: u16,
@@ -332,7 +332,7 @@ struct ChannelContent<'a> {
     metadata: Cow<'a, BTreeMap<String, String>>,
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Debug)]
 struct SchemaContent<'a> {
     name: Cow<'a, str>,
     encoding: Cow<'a, str>,
@@ -348,9 +348,13 @@ pub struct Writer<W: Write + Seek> {
     is_finished: bool,
     chunk_mode: ChunkMode,
     options: WriteOptions,
-    canonical_schemas: BiHashMap<SchemaContent<'static>, u16>,
-    all_channel_ids: BTreeMap<u16, u16>,
+    // Maps all unique channel content to its "canonical" or first written ID.
     canonical_channels: BiHashMap<ChannelContent<'static>, u16>,
+    // Maps all written IDs of channels to the canonical ID for their content.
+    all_channel_ids: BTreeMap<u16, u16>,
+    // Maps all unique schema content to its "canonical" or first written ID.
+    canonical_schemas: BiHashMap<SchemaContent<'static>, u16>,
+    // Maps all written IDs of schemas to the canonical ID for their content.
     all_schema_ids: BTreeMap<u16, u16>,
     next_schema_id: u16,
     next_channel_id: u16,
@@ -444,6 +448,18 @@ impl<W: Write + Seek> Writer<W> {
         }
         let id = self.next_schema_id;
         self.next_schema_id += 1;
+        assert!(!self
+            .canonical_schemas
+            .insert(
+                SchemaContent {
+                    name: Cow::Owned(name.to_owned()),
+                    encoding: Cow::Owned(encoding.to_owned()),
+                    data: Cow::Owned(data.to_owned().into()),
+                },
+                id
+            )
+            .did_overwrite());
+        assert!(self.all_schema_ids.insert(id, id).is_none());
         self.write_schema(Schema {
             id,
             name: name.into(),
@@ -453,36 +469,8 @@ impl<W: Write + Seek> Writer<W> {
         Ok(id)
     }
 
-    /// Write a schema record into the MCAP, and adds this schema to `canonical_schemas` and
-    /// `all_schema_ids`. The caller is responsible for ensuring this schema does not conflict with
-    /// a previously-written schema with the same ID.
+    /// Write a schema record into the MCAP.
     fn write_schema(&mut self, schema: Schema) -> McapResult<()> {
-        let content = SchemaContent {
-            name: Cow::Owned(schema.name.clone()),
-            encoding: Cow::Owned(schema.encoding.clone()),
-            data: Cow::Owned(schema.data.clone().into_owned()),
-        };
-        if let Some(canonical_id) = self.canonical_schemas.get_by_left(&content) {
-            if let Some(old_canonical_id) = self.all_schema_ids.insert(schema.id, *canonical_id) {
-                assert!(
-                    old_canonical_id == *canonical_id,
-                    "caller must ensure that a second schema record with the same ID has identical content",
-                );
-            }
-        } else {
-            assert!(
-                !self
-                    .canonical_schemas
-                    .insert(content, schema.id)
-                    .did_overwrite(),
-                "caller must ensure that schema IDs do not conflict"
-            );
-            assert!(
-                self.all_schema_ids.insert(schema.id, schema.id).is_none(),
-                "caller must ensure that schema IDs do not conflict"
-            );
-        }
-
         if self.options.use_chunks {
             self.start_chunk()?.write_schema(schema)
         } else {
@@ -550,38 +538,8 @@ impl<W: Write + Seek> Writer<W> {
         Ok(id)
     }
 
-    /// Write a channel record into the MCAP, and adds this channel to `canonical_channels` and
-    /// `all_channel_ids`. The caller is responsible for ensuring this channel does not conflict
-    /// with a previously-written channel with the same ID.
+    /// Write a channel record into the MCAP.
     fn write_channel(&mut self, channel: records::Channel) -> McapResult<()> {
-        let content = ChannelContent {
-            topic: Cow::Owned(channel.topic.clone()),
-            schema_id: channel.schema_id,
-            message_encoding: Cow::Owned(channel.message_encoding.clone()),
-            metadata: Cow::Owned(channel.metadata.clone()),
-        };
-        if let Some(canonical_id) = self.canonical_channels.get_by_left(&content) {
-            if let Some(old_canonical_id) = self.all_channel_ids.insert(channel.id, *canonical_id) {
-                assert!(
-                    old_canonical_id == *canonical_id,
-                    "caller must ensure that channels with matching IDs have identical content"
-                );
-            }
-        } else {
-            assert!(
-                !self
-                    .canonical_channels
-                    .insert(content, channel.id)
-                    .did_overwrite(),
-                "caller must ensure that channel ID do not conflict"
-            );
-            assert!(
-                self.all_channel_ids
-                    .insert(channel.id, channel.id)
-                    .is_none(),
-                "caller must ensure that channel IDs do not conflict"
-            );
-        }
         if self.options.use_chunks {
             self.start_chunk()?.write_channel(channel)
         } else {
@@ -596,22 +554,37 @@ impl<W: Write + Seek> Writer<W> {
     /// The provided channel ID and schema ID will be used as IDs in the resulting MCAP.
     pub fn write(&mut self, message: &Message) -> McapResult<()> {
         if let Some(schema) = message.channel.schema.as_ref() {
+            let content = SchemaContent {
+                name: Cow::Borrowed(&schema.name),
+                encoding: Cow::Borrowed(&schema.encoding),
+                data: Cow::Borrowed(&schema.data),
+            };
+            let canonical_schema_id = self.canonical_schemas.get_by_left(&content);
             match self.all_schema_ids.get(&schema.id) {
-                Some(previous) => {
+                Some(other_canonical_schema_id) => {
                     // ensure that this message schema does not conflict with the existing one's content
-                    let current = SchemaContent {
-                        name: Cow::Borrowed(&schema.name),
-                        encoding: Cow::Borrowed(&schema.encoding),
-                        data: Cow::Borrowed(&schema.data),
-                    };
-                    if *self.canonical_schemas.get_by_right(previous).expect(
-                        "id should exist in canonical_schemas for every value in all_schema_ids",
-                    ) != current
-                    {
+                    let canonical_schema_id_for_content = canonical_schema_id
+                        .expect("all values in all_schema_ids should be canonical schema IDs");
+                    if *other_canonical_schema_id != *canonical_schema_id_for_content {
                         return Err(McapError::ConflictingSchemas(schema.name.clone()));
                     }
+                    self.all_schema_ids
+                        .insert(schema.id, *canonical_schema_id_for_content);
                 }
                 None => {
+                    // no previous schema has been written with this ID, but one may have with the same content.
+                    // this is OK.
+                    if let Some(canonical_schema_id) = canonical_schema_id {
+                        self.all_schema_ids.insert(schema.id, *canonical_schema_id);
+                    } else {
+                        self.canonical_schemas.insert_no_overwrite(SchemaContent{
+                            name: Cow::Owned(schema.name.clone()),
+                            data: Cow::Owned(schema.data.clone().into()),
+                            encoding: Cow::Owned(schema.encoding.clone()),
+                        }, schema.id).expect(
+                            "all right values in canonical_schemas should correspond to a key in all_schema_ids");
+                        self.all_schema_ids.insert(schema.id, schema.id);
+                    }
                     self.write_schema(schema.as_ref().clone())?;
                 }
             }
@@ -620,24 +593,48 @@ impl<W: Write + Seek> Writer<W> {
             None => 0,
             Some(schema) => schema.id,
         };
+        let channel_content = ChannelContent {
+            topic: Cow::Borrowed(&message.channel.topic),
+            schema_id: schema_id,
+            message_encoding: Cow::Borrowed(&message.channel.message_encoding),
+            metadata: Cow::Borrowed(&message.channel.metadata),
+        };
+        let canonical_channel_id = self.canonical_channels.get_by_left(&channel_content);
         match self.all_channel_ids.get(&message.channel.id) {
-            Some(canonical) => {
-                let current = ChannelContent {
-                    topic: Cow::Borrowed(&message.channel.topic),
-                    schema_id,
-                    message_encoding: Cow::Borrowed(&message.channel.message_encoding),
-                    metadata: Cow::Borrowed(&message.channel.metadata),
-                };
-                if *self.canonical_channels.get_by_right(canonical).expect(
-                    "key should exist in canonical_channels for every value in all_channel_ids",
-                ) != current
-                {
+            Some(other_canonical_channel_id) => {
+                let canonical_channel_id = canonical_channel_id
+                    .expect("values in all_channel_ids should be valid canonical channel IDs");
+                if *canonical_channel_id != *other_canonical_channel_id {
                     return Err(McapError::ConflictingChannels(
                         message.channel.topic.clone(),
                     ));
                 }
             }
             None => {
+                // no previous channel has been written with this ID, but one may have with the same content.
+                // this is OK.
+                if let Some(canonical_channel_id) = canonical_channel_id {
+                    self.all_channel_ids
+                        .insert(message.channel.id, *canonical_channel_id);
+                } else {
+                    self.canonical_channels
+                        .insert_no_overwrite(
+                            ChannelContent {
+                                topic: Cow::Owned(message.channel.topic.clone()),
+                                schema_id,
+                                message_encoding: Cow::Owned(
+                                    message.channel.message_encoding.clone(),
+                                ),
+                                metadata: Cow::Owned(message.channel.metadata.clone()),
+                            },
+                            message.channel.id,
+                        )
+                        .expect(
+                            "all values in all_channel_ids should be valid canonical channel IDs",
+                        );
+                    self.all_channel_ids
+                        .insert(message.channel.id, message.channel.id);
+                }
                 self.write_channel(records::Channel {
                     id: message.channel.id,
                     schema_id: message.channel.schema.as_ref().map(|s| s.id).unwrap_or(0),
