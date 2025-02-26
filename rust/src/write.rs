@@ -332,7 +332,7 @@ struct ChannelContent<'a> {
     metadata: Cow<'a, BTreeMap<String, String>>,
 }
 
-impl<'a> ChannelContent<'a> {
+impl ChannelContent<'_> {
     fn into_owned(self) -> ChannelContent<'static> {
         ChannelContent {
             topic: Cow::Owned(self.topic.into_owned()),
@@ -350,7 +350,7 @@ struct SchemaContent<'a> {
     data: Cow<'a, [u8]>,
 }
 
-impl<'a> SchemaContent<'a> {
+impl SchemaContent<'_> {
     fn into_owned(self) -> SchemaContent<'static> {
         SchemaContent {
             name: Cow::Owned(self.name.into_owned()),
@@ -608,7 +608,7 @@ impl<W: Write + Seek> Writer<W> {
         };
         let channel_content = ChannelContent {
             topic: Cow::Borrowed(&message.channel.topic),
-            schema_id: schema_id,
+            schema_id,
             message_encoding: Cow::Borrowed(&message.channel.message_encoding),
             metadata: Cow::Borrowed(&message.channel.metadata),
         };
