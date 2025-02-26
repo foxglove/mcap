@@ -453,6 +453,9 @@ impl<W: Write + Seek> Writer<W> {
         Ok(id)
     }
 
+    /// Write a schema record into the MCAP, and adds this schema to `canonical_schemas` and
+    /// `all_schema_ids`. The caller is responsible for ensuring this schema does not conflict with
+    /// a previously-written schema with the same ID.
     fn write_schema(&mut self, schema: Schema) -> McapResult<()> {
         let content = SchemaContent {
             name: Cow::Owned(schema.name.clone()),
@@ -460,16 +463,24 @@ impl<W: Write + Seek> Writer<W> {
             data: Cow::Owned(schema.data.clone().into_owned()),
         };
         if let Some(canonical_id) = self.canonical_schemas.get_by_left(&content) {
-            assert!(self
-                .all_schema_ids
-                .insert(schema.id, *canonical_id)
-                .is_none());
+            if let Some(old_canonical_id) = self.all_schema_ids.insert(schema.id, *canonical_id) {
+                assert!(
+                    old_canonical_id == *canonical_id,
+                    "caller must ensure that a second schema record with the same ID has identical content",
+                );
+            }
         } else {
-            assert!(!self
-                .canonical_schemas
-                .insert(content, schema.id)
-                .did_overwrite());
-            assert!(self.all_schema_ids.insert(schema.id, schema.id).is_none());
+            assert!(
+                !self
+                    .canonical_schemas
+                    .insert(content, schema.id)
+                    .did_overwrite(),
+                "caller must ensure that schema IDs do not conflict"
+            );
+            assert!(
+                self.all_schema_ids.insert(schema.id, schema.id).is_none(),
+                "caller must ensure that schema IDs do not conflict"
+            );
         }
 
         if self.options.use_chunks {
@@ -539,6 +550,9 @@ impl<W: Write + Seek> Writer<W> {
         Ok(id)
     }
 
+    /// Write a channel record into the MCAP, and adds this channel to `canonical_channels` and
+    /// `all_channel_ids`. The caller is responsible for ensuring this channel does not conflict
+    /// with a previously-written channel with the same ID.
     fn write_channel(&mut self, channel: records::Channel) -> McapResult<()> {
         let content = ChannelContent {
             topic: Cow::Owned(channel.topic.clone()),
@@ -547,19 +561,26 @@ impl<W: Write + Seek> Writer<W> {
             metadata: Cow::Owned(channel.metadata.clone()),
         };
         if let Some(canonical_id) = self.canonical_channels.get_by_left(&content) {
-            assert!(self
-                .all_channel_ids
-                .insert(channel.id, *canonical_id)
-                .is_none());
+            if let Some(old_canonical_id) = self.all_channel_ids.insert(channel.id, *canonical_id) {
+                assert!(
+                    old_canonical_id == *canonical_id,
+                    "caller must ensure that channels with matching IDs have identical content"
+                );
+            }
         } else {
-            assert!(!self
-                .canonical_channels
-                .insert(content, channel.id)
-                .did_overwrite());
-            assert!(self
-                .all_channel_ids
-                .insert(channel.id, channel.id)
-                .is_none());
+            assert!(
+                !self
+                    .canonical_channels
+                    .insert(content, channel.id)
+                    .did_overwrite(),
+                "caller must ensure that channel ID do not conflict"
+            );
+            assert!(
+                self.all_channel_ids
+                    .insert(channel.id, channel.id)
+                    .is_none(),
+                "caller must ensure that channel IDs do not conflict"
+            );
         }
         if self.options.use_chunks {
             self.start_chunk()?.write_channel(channel)
