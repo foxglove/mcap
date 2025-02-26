@@ -286,7 +286,7 @@ Note: This command will scan and uncompress the entire file.`,
 			die("Unexpected number of args")
 		}
 		filename := args[0]
-		err := utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
+		err := utils.WithReader(ctx, filename, func(_ utils.LocalOrRemote, rs io.ReadSeeker) error {
 			usage := newUsage(rs)
 			return usage.RunDu()
 		})

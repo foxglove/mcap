@@ -646,9 +646,9 @@ func main(_ *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	filename := args[0]
-	err := utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
+	err := utils.WithReader(ctx, filename, func(localOrRemote utils.LocalOrRemote, rs io.ReadSeeker) error {
 		doctor := newMcapDoctor(rs)
-		if remote {
+		if localOrRemote == utils.Remote {
 			doctor.warn("Will read full remote file")
 		}
 		if verbose {
