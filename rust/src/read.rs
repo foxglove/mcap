@@ -236,7 +236,7 @@ impl<'a> Iterator for InnerReader<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(event) = self.reader.next_event() {
             match event {
-                Ok(LinearReadEvent::Read(need)) => {
+                Ok(LinearReadEvent::ReadRequest(need)) => {
                     let len = std::cmp::min(self.buf.len(), need);
                     self.reader.insert(len).copy_from_slice(&self.buf[..len]);
                     self.reader.notify_read(len);
@@ -767,7 +767,7 @@ impl<'a> Summary<'a> {
         let mut uncompressed_offset: usize = 0;
         while let Some(event) = reader.next_event() {
             match event {
-                Ok(LinearReadEvent::Read(need)) => {
+                Ok(LinearReadEvent::ReadRequest(need)) => {
                     let len = std::cmp::min(remaining.len(), need);
                     reader.insert(len).copy_from_slice(&remaining[..len]);
                     reader.notify_read(len);

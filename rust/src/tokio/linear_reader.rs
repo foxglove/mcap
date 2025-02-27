@@ -50,7 +50,7 @@ where
     pub async fn next_record(&mut self, data: &mut Vec<u8>) -> Option<McapResult<u8>> {
         while let Some(event) = self.reader.next_event() {
             match event {
-                Ok(LinearReadEvent::Read(n)) => {
+                Ok(LinearReadEvent::ReadRequest(n)) => {
                     let written = match self.source.read(self.reader.insert(n)).await {
                         Ok(n) => n,
                         Err(err) => return Some(Err(err.into())),

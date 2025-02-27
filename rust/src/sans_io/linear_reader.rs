@@ -191,7 +191,7 @@ impl LinearReaderOptions {
 ///     let mut reader = mcap::sans_io::linear_reader::LinearReader::new();
 ///     while let Some(event) = reader.next_event() {
 ///         match event? {
-///             LinearReadEvent::Read(need) => {
+///             LinearReadEvent::ReadRequest(need) => {
 ///                 let written = file.read(reader.insert(need)).await?;
 ///                 reader.notify_read(written);
 ///             },
@@ -210,7 +210,7 @@ impl LinearReaderOptions {
 ///     let mut reader = mcap::sans_io::linear_reader::LinearReader::new();
 ///     while let Some(event) = reader.next_event() {
 ///         match event? {
-///             LinearReadEvent::Read(need) => {
+///             LinearReadEvent::ReadRequest(need) => {
 ///                 let written = file.read(reader.insert(need))?;
 ///                 reader.notify_read(written);
 ///             },
@@ -332,7 +332,7 @@ impl LinearReader {
         macro_rules! load {
             ($n:expr) => {{
                 if self.file_data.len() < $n {
-                    return Some(Ok(LinearReadEvent::Read($n - self.file_data.len())));
+                    return Some(Ok(LinearReadEvent::ReadRequest($n - self.file_data.len())));
                 }
                 &self.file_data.data[self.file_data.start..self.file_data.start + $n]
             }};
@@ -343,7 +343,7 @@ impl LinearReader {
         macro_rules! consume {
             ($n:expr) => {{
                 if self.file_data.len() < $n {
-                    return Some(Ok(LinearReadEvent::Read($n - self.file_data.len())));
+                    return Some(Ok(LinearReadEvent::ReadRequest($n - self.file_data.len())));
                 }
                 let start = self.file_data.start;
                 self.file_data.mark_read($n);
@@ -366,7 +366,7 @@ impl LinearReader {
                         &self.decompressed_content.data
                             [self.decompressed_content.start..self.decompressed_content.start + $n]
                     }
-                    Ok(Some(n)) => return Some(Ok(LinearReadEvent::Read(n))),
+                    Ok(Some(n)) => return Some(Ok(LinearReadEvent::ReadRequest(n))),
                     Err(err) => return Some(Err(err)),
                 }
             }};
@@ -663,14 +663,13 @@ impl LinearReader {
     }
 }
 
-/// Encapsulates the event the user should take next when reading an MCAP file.
-///
+/// Events emitted by the linear reader.
 pub enum LinearReadEvent<'a> {
     /// The reader needs more data to provide the next record. Call [`LinearReader::insert`] then
     /// [`LinearReader::notify_read`] to load more data. The value provided here is a hint for how
     /// much data to insert.
-    Read(usize),
-    /// Read a record out of the MCAP file. Use [`crate::parse_record`] to parse the record.
+    ReadRequest(usize),
+    /// A new record from the MCAP file. Use [`crate::parse_record`] to parse the record.
     Record { data: &'a [u8], opcode: u8 },
 }
 
@@ -807,7 +806,7 @@ mod tests {
         let mut iter_count = 0;
         while let Some(event) = reader.next_event() {
             match event? {
-                LinearReadEvent::Read(n) => {
+                LinearReadEvent::ReadRequest(n) => {
                     let written = cursor.read(reader.insert(n))?;
                     reader.notify_read(written);
                 }
@@ -849,7 +848,7 @@ mod tests {
         let mut iter_count = 0;
         while let Some(event) = reader.next_event() {
             match event? {
-                LinearReadEvent::Read(n) => {
+                LinearReadEvent::ReadRequest(n) => {
                     let written = cursor.read(reader.insert(n))?;
                     reader.notify_read(written);
                 }
@@ -875,7 +874,7 @@ mod tests {
         let mut iter_count = 0;
         while let Some(event) = reader.next_event() {
             match event? {
-                LinearReadEvent::Read(n) => {
+                LinearReadEvent::ReadRequest(n) => {
                     let written = cursor.read(reader.insert(n))?;
                     reader.notify_read(written);
                 }
@@ -959,7 +958,7 @@ mod tests {
             let mut iter_count = 0;
             while let Some(event) = reader.next_event() {
                 match event? {
-                    LinearReadEvent::Read(n) => {
+                    LinearReadEvent::ReadRequest(n) => {
                         let written = cursor.read(reader.insert(n))?;
                         reader.notify_read(written);
                     }
@@ -1007,7 +1006,7 @@ mod tests {
         let mut iter_count = 0;
         while let Some(event) = reader.next_event() {
             match event? {
-                LinearReadEvent::Read(n) => {
+                LinearReadEvent::ReadRequest(n) => {
                     let written = cursor.read(reader.insert(n))?;
                     reader.notify_read(written);
                 }
@@ -1084,7 +1083,7 @@ mod tests {
         let mut max_needed: usize = 0;
         while let Some(event) = reader.next_event() {
             match event? {
-                LinearReadEvent::Read(n) => {
+                LinearReadEvent::ReadRequest(n) => {
                     max_needed = std::cmp::max(max_needed, n);
                     // read slightly more than requested, such that the data in the buffer does not
                     // hit zero after the next event.
@@ -1124,7 +1123,7 @@ mod tests {
                         message_count += 1;
                     }
                 }
-                LinearReadEvent::Read(_) => {
+                LinearReadEvent::ReadRequest(_) => {
                     let read = f
                         .read(reader.insert(blocksize))
                         .expect("failed to read from file");
