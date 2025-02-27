@@ -14,8 +14,8 @@ struct MessageIndex {
 }
 
 pub enum IndexedReadEvent<'a> {
-    Read(usize),
-    Seek(SeekFrom),
+    ReadRequest(usize),
+    SeekRequest(SeekFrom),
     Message {
         header: crate::records::MessageHeader,
         data: &'a [u8],
@@ -247,7 +247,7 @@ impl IndexedReader {
                     // If we're not already at the start of compressed data, seek to it.
                     let compressed_data_start = get_compressed_data_start(cur_chunk);
                     if self.pos != compressed_data_start {
-                        return Ok(Some(IndexedReadEvent::Seek(SeekFrom::Start(
+                        return Ok(Some(IndexedReadEvent::SeekRequest(SeekFrom::Start(
                             compressed_data_start,
                         ))));
                     }
@@ -276,7 +276,7 @@ impl IndexedReader {
                     // Keep requesting more data until we have all of the compressed chunk.
                     if self.cur_compressed_chunk_loaded_bytes < compressed_size {
                         let need = compressed_size - self.cur_compressed_chunk_loaded_bytes;
-                        return Ok(Some(IndexedReadEvent::Read(need)));
+                        return Ok(Some(IndexedReadEvent::ReadRequest(need)));
                     }
                     // decompress the chunk into the current slot. For un-compressed chunks, we do
                     // nothing, because we already loaded the "compressed" data into the chunk slot.
@@ -612,13 +612,13 @@ mod tests {
         let mut iterations = 0;
         while let Some(event) = reader.next_event() {
             match event.expect("indexed reader failed") {
-                IndexedReadEvent::Read(n) => {
+                IndexedReadEvent::ReadRequest(n) => {
                     let res = cursor
                         .read(reader.insert(n))
                         .expect("read should not fail on cursor");
                     reader.notify_read(res);
                 }
-                IndexedReadEvent::Seek(to) => {
+                IndexedReadEvent::SeekRequest(to) => {
                     let pos = cursor.seek(to).expect("seek should not fail on cursor");
                     reader.notify_seeked(pos);
                 }
@@ -738,10 +738,10 @@ mod tests {
                 let mut reader = SummaryReader::new();
                 while let Some(event) = reader.next_event() {
                     match event.expect("failed to get next summary read event") {
-                        SummaryReadEvent::Seek(pos) => {
+                        SummaryReadEvent::SeekRequest(pos) => {
                             reader.notify_seeked(file.seek(pos).expect("seek failed"));
                         }
-                        SummaryReadEvent::Read(n) => {
+                        SummaryReadEvent::ReadRequest(n) => {
                             let n = match block_size {
                                 Some(block_size) => block_size,
                                 None => n,
@@ -757,10 +757,10 @@ mod tests {
             let mut messages = Vec::new();
             while let Some(event) = reader.next_event() {
                 match event.expect("failed to read next event") {
-                    IndexedReadEvent::Seek(pos) => {
+                    IndexedReadEvent::SeekRequest(pos) => {
                         reader.notify_seeked(file.seek(pos).expect("seek failed"));
                     }
-                    IndexedReadEvent::Read(n) => {
+                    IndexedReadEvent::ReadRequest(n) => {
                         let n = match block_size {
                             Some(block_size) => block_size,
                             None => n,

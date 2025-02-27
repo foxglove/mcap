@@ -24,10 +24,10 @@ pub fn main() {
         let mut reader = mcap::sans_io::SummaryReader::new();
         while let Some(event) = reader.next_event() {
             match event.expect("failed gathering summary") {
-                mcap::sans_io::SummaryReadEvent::Seek(pos) => {
+                mcap::sans_io::SummaryReadEvent::SeekRequest(pos) => {
                     reader.notify_seeked(cursor.seek(pos).expect("failed to seek file"));
                 }
-                mcap::sans_io::SummaryReadEvent::Read(n) => {
+                mcap::sans_io::SummaryReadEvent::ReadRequest(n) => {
                     let read = cursor.read(reader.insert(n)).expect("failed to read file");
                     reader.notify_read(read);
                 }
@@ -41,10 +41,10 @@ pub fn main() {
         mcap::sans_io::IndexedReader::new(&summary).expect("failed to initialize indexed reader");
     while let Some(event) = reader.next_event() {
         match event.expect("failed to get next event") {
-            mcap::sans_io::IndexedReadEvent::Seek(pos) => {
+            mcap::sans_io::IndexedReadEvent::SeekRequest(pos) => {
                 reader.notify_seeked(cursor.seek(pos).expect("failed to seek file"));
             }
-            mcap::sans_io::IndexedReadEvent::Read(n) => {
+            mcap::sans_io::IndexedReadEvent::ReadRequest(n) => {
                 let read = cursor.read(reader.insert(n)).expect("failed to read file");
                 reader.notify_read(read);
             }
