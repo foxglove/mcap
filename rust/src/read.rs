@@ -563,11 +563,11 @@ impl Summary {
         let mut summary_reader = SummaryReader::new();
         while let Some(event) = summary_reader.next_event() {
             match event? {
-                SummaryReadEvent::Read(n) => {
+                SummaryReadEvent::ReadRequest(n) => {
                     let read = cursor.read(summary_reader.insert(n))?;
                     summary_reader.notify_read(read);
                 }
-                SummaryReadEvent::Seek(to) => {
+                SummaryReadEvent::SeekRequest(to) => {
                     let pos = cursor.seek(to)?;
                     summary_reader.notify_seeked(pos);
                 }

@@ -52,11 +52,11 @@ fn load_summary(file: &mut std::io::Cursor<&[u8]>) -> mcap::Summary {
     let mut reader = sans_io::SummaryReader::new();
     while let Some(event) = reader.next_event() {
         match event.expect("next event failed") {
-            sans_io::SummaryReadEvent::Read(n) => {
+            sans_io::SummaryReadEvent::ReadRequest(n) => {
                 let read = file.read(reader.insert(n)).expect("read failed");
                 reader.notify_read(read);
             }
-            sans_io::SummaryReadEvent::Seek(pos) => {
+            sans_io::SummaryReadEvent::SeekRequest(pos) => {
                 reader.notify_seeked(file.seek(pos).expect("seek failed"));
             }
         }
@@ -77,10 +77,10 @@ fn get_next_message(
                 into.copy_from_slice(data);
                 return Some(header);
             }
-            sans_io::IndexedReadEvent::Seek(pos) => {
+            sans_io::IndexedReadEvent::SeekRequest(pos) => {
                 reader.notify_seeked(file.seek(pos).expect("seek failed"));
             }
-            sans_io::IndexedReadEvent::Read(n) => {
+            sans_io::IndexedReadEvent::ReadRequest(n) => {
                 let read = file.read(reader.insert(n)).expect("read failed");
                 reader.notify_read(read);
             }

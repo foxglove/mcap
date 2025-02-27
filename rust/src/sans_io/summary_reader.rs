@@ -8,9 +8,10 @@ use crate::{
 };
 use std::io::SeekFrom;
 
+/// Events returned by the summary reader. The summary reader yields
 pub enum SummaryReadEvent {
-    Read(usize),
-    Seek(std::io::SeekFrom),
+    ReadRequest(usize),
+    SeekRequest(std::io::SeekFrom),
 }
 
 #[derive(Default)]
@@ -54,7 +55,7 @@ impl SummaryReader {
             match &mut self.state {
                 State::SeekingToFooter => {
                     let Some(file_size) = self.file_size else {
-                        return Ok(Some(SummaryReadEvent::Seek(SeekFrom::End(-28))));
+                        return Ok(Some(SummaryReadEvent::SeekRequest(SeekFrom::End(-28))));
                     };
                     if file_size < 28 {
                         return Err(crate::McapError::UnexpectedEof);
@@ -64,7 +65,7 @@ impl SummaryReader {
                         self.state = State::ReadingFooter { loaded_bytes: 0 };
                         continue;
                     } else {
-                        return Ok(Some(SummaryReadEvent::Seek(SeekFrom::Start(
+                        return Ok(Some(SummaryReadEvent::SeekRequest(SeekFrom::Start(
                             footer_start_pos,
                         ))));
                     }
@@ -83,7 +84,7 @@ impl SummaryReader {
                         };
                         continue;
                     } else {
-                        return Ok(Some(SummaryReadEvent::Read(20 - *loaded_bytes)));
+                        return Ok(Some(SummaryReadEvent::ReadRequest(20 - *loaded_bytes)));
                     }
                 }
                 State::SeekingToSummary { summary_start } => {
@@ -97,7 +98,7 @@ impl SummaryReader {
                         };
                         continue;
                     } else {
-                        return Ok(Some(SummaryReadEvent::Seek(SeekFrom::Start(
+                        return Ok(Some(SummaryReadEvent::SeekRequest(SeekFrom::Start(
                             *summary_start,
                         ))));
                     }
@@ -126,7 +127,7 @@ impl SummaryReader {
                         continue;
                     }
                     Some(Ok(LinearReadEvent::ReadRequest(n))) => {
-                        return Ok(Some(SummaryReadEvent::Read(n)));
+                        return Ok(Some(SummaryReadEvent::ReadRequest(n)));
                     }
                     Some(Err(err)) => {
                         return Err(err);
@@ -214,11 +215,11 @@ mod tests {
         while let Some(event) = summary_loader.next_event() {
             let event = event.expect("got error instead of event");
             match event {
-                SummaryReadEvent::Read(n) => {
+                SummaryReadEvent::ReadRequest(n) => {
                     let read = f.read(summary_loader.insert(n)).expect("failed file read");
                     summary_loader.notify_read(read);
                 }
-                SummaryReadEvent::Seek(to) => {
+                SummaryReadEvent::SeekRequest(to) => {
                     let pos = f.seek(to).expect("failed file seek");
                     summary_loader.notify_seeked(pos);
                 }
