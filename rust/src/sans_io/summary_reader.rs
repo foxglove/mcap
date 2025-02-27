@@ -4,7 +4,7 @@ use crate::{
     parse_record,
     records::{Footer, Record},
     sans_io::linear_reader::{LinearReadEvent, LinearReader, LinearReaderOptions},
-    McapResult, Summary,
+    McapError, McapResult, Summary,
 };
 use std::io::SeekFrom;
 
@@ -90,6 +90,7 @@ pub struct SummaryReader {
     state: State,
     summary: crate::Summary,
     summary_present: bool,
+    at_eof: bool,
 }
 
 impl SummaryReader {
@@ -137,6 +138,9 @@ impl SummaryReader {
                         };
                         continue;
                     } else {
+                        if self.at_eof {
+                            return Err(McapError::UnexpectedEof);
+                        }
                         return Ok(Some(SummaryReadEvent::ReadRequest(20 - *loaded_bytes)));
                     }
                 }
@@ -199,6 +203,7 @@ impl SummaryReader {
     ///
     /// Panics if `n` is greater than the last `n` provided to [`Self::insert`].
     pub fn notify_read(&mut self, n: usize) {
+        self.at_eof = n == 0;
         match &mut self.state {
             State::ReadingFooter { loaded_bytes, .. } => {
                 if self.footer_buf.len() < *loaded_bytes + n {
@@ -216,6 +221,9 @@ impl SummaryReader {
 
     /// Inform the summary reader of the result of the latest seek of the underlying stream.
     pub fn notify_seeked(&mut self, pos: u64) {
+        if self.at_eof && self.pos != pos {
+            self.at_eof = false;
+        }
         // limitation: we assume the first seek that occurs is a seek to the footer start. The user
         // might seek somewhere else, we don't really have a way to tell.
         if self.file_size.is_none() {
