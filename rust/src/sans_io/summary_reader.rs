@@ -31,6 +31,57 @@ enum State {
     },
 }
 
+/// Reads the summary section of an MCAP file, parsing records and producing a [`crate::Summary`]
+/// when done.
+///
+/// This struct does not perform any I/O on its own, instead it requests reads and seeks from the
+/// caller and allows them to use their own I/O primitives.
+/// ```no_run
+/// use std::fs;
+///
+/// use tokio::fs::File as AsyncFile;
+/// use tokio::io::{AsyncReadExt, AsyncSeekExt};
+/// use std::io::{Read, Seek};
+///
+/// use mcap::sans_io::summary_reader::SummaryReadEvent;
+/// use mcap::McapResult;
+///
+/// // Asynchronously...
+/// async fn summarize_async() -> McapResult<Option<mcap::Summary>> {
+///     let mut file = AsyncFile::open("in.mcap").await.expect("couldn't open file");
+///     let mut reader = mcap::sans_io::summary_reader::SummaryReader::new();
+///     while let Some(event) = reader.next_event() {
+///         match event? {
+///             SummaryReadEvent::ReadRequest(need) => {
+///                 let written = file.read(reader.insert(need)).await?;
+///                 reader.notify_read(written);
+///             },
+///             SummaryReadEvent::SeekRequest(to) => {
+///                 reader.notify_seeked(file.seek(to).await?);
+///             }
+///         }
+///     }
+///     Ok(reader.finish())
+/// }
+///
+/// // Or synchronously.
+/// fn read_sync() -> McapResult<Option<mcap::Summary>> {
+///     let mut file = fs::File::open("in.mcap")?;
+///     let mut reader = mcap::sans_io::summary_reader::SummaryReader::new();
+///     while let Some(event) = reader.next_event() {
+///         match event? {
+///             SummaryReadEvent::ReadRequest(need) => {
+///                 let written = file.read(reader.insert(need))?;
+///                 reader.notify_read(written);
+///             },
+///             SummaryReadEvent::SeekRequest(to) => {
+///                 reader.notify_seeked(file.seek(to)?);
+///             }
+///         }
+///     }
+///     Ok(reader.finish())
+/// }
+/// ```
 #[derive(Default)]
 pub struct SummaryReader {
     pos: u64,
@@ -46,6 +97,8 @@ impl SummaryReader {
         Self::default()
     }
 
+    /// Returns the next event from the reader. Call this repeatedly and act on the resulting
+    /// events in order to read the MCAP summary.
     pub fn next_event(&mut self) -> Option<McapResult<SummaryReadEvent>> {
         self.next_event_inner().transpose()
     }
@@ -142,9 +195,15 @@ impl SummaryReader {
         }
     }
 
+    /// Inform the summary reader of the result of the latest read on the underlying stream.
+    ///
+    /// Panics if `n` is greater than the last `n` provided to [`Self::insert`].
     pub fn notify_read(&mut self, n: usize) {
         match &mut self.state {
             State::ReadingFooter { loaded_bytes, .. } => {
+                if self.footer_buf.len() < *loaded_bytes + n {
+                    panic!("notify_read called with n > last inserted length");
+                }
                 *loaded_bytes += n;
             }
             State::ReadingSummary { reader, .. } => {
@@ -155,9 +214,10 @@ impl SummaryReader {
         self.pos += n as u64;
     }
 
+    /// Inform the summary reader of the result of the latest seek of the underlying stream.
     pub fn notify_seeked(&mut self, pos: u64) {
-        // potential source for bugs: we assume the first seek that occurs is a seek to the
-        // footer start. The user might seek somewhere else, we don't really have a way to tell.
+        // limitation: we assume the first seek that occurs is a seek to the footer start. The user
+        // might seek somewhere else, we don't really have a way to tell.
         if self.file_size.is_none() {
             self.file_size = Some(pos + 28);
         }
@@ -178,6 +238,7 @@ impl SummaryReader {
         self.pos = pos;
     }
 
+    /// Get a mutable buffer of size `n` to read new MCAP data into from the stream.
     pub fn insert(&mut self, n: usize) -> &mut [u8] {
         match &mut self.state {
             State::ReadingFooter { loaded_bytes } => {
@@ -194,6 +255,8 @@ impl SummaryReader {
         }
     }
 
+    /// Get the finished summary information out of the reader. Returns None if the MCAP reader has
+    /// no summary section.
     pub fn finish(self) -> Option<Summary> {
         if self.summary_present {
             Some(self.summary)

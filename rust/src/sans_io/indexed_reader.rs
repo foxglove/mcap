@@ -13,9 +13,16 @@ struct MessageIndex {
     offset: usize,
 }
 
+/// Events yielded by the IndexedReader.
 pub enum IndexedReadEvent<'a> {
+    /// The reader needs more data to provide the next record. Call [`IndexedReader::insert`] then
+    /// [`IndexedReader::notify_read`] to load more data. The value provided here is a hint for how
+    /// much data to insert.
     ReadRequest(usize),
+    /// The reader needs to seek to a different position in the file. Call
+    /// [`IndexedReader::notify_seeked`] to inform the reader of the result of the seek.
     SeekRequest(SeekFrom),
+    /// Get a new message from the reader.
     Message {
         header: crate::records::MessageHeader,
         data: &'a [u8],
@@ -33,6 +40,56 @@ struct ChunkSlot {
     message_count: usize,
 }
 
+/// Reads messages from an MCAP file using index information from the summary. This enables
+/// efficient filtering by topic, time range, and efficient iteration in log-time order.
+///
+/// This struct does not perform any I/O on its own, instead it requests reads and seeks from the
+/// caller and allows them to use their own I/O primitives.
+/// ```no_run
+/// use std::fs;
+///
+/// use std::io::{Read, Seek};
+///
+/// use mcap::sans_io::summary_reader::SummaryReadEvent;
+/// use mcap::sans_io::indexed_reader::IndexedReadEvent;
+/// use mcap::McapResult;
+///
+/// fn read_sync() -> McapResult<()> {
+///     let mut file = fs::File::open("in.mcap")?;
+///     let summary = {
+///         let mut reader = mcap::sans_io::summary_reader::SummaryReader::new();
+///         while let Some(event) = reader.next_event() {
+///             match event? {
+///                 SummaryReadEvent::ReadRequest(need) => {
+///                     let written = file.read(reader.insert(need))?;
+///                     reader.notify_read(written);
+///                 },
+///                 SummaryReadEvent::SeekRequest(to) => {
+///                     reader.notify_seeked(file.seek(to)?);
+///                 }
+///             }
+///         }
+///         reader.finish().unwrap()
+///     };
+///     let mut reader = mcap::sans_io::indexed_reader::IndexedReader::new(&summary).expect("could not construct reader");
+///     while let Some(event) = reader.next_event() {
+///         match event? {
+///             IndexedReadEvent::ReadRequest(need) => {
+///                 let written = file.read(reader.insert(need))?;
+///                 reader.notify_read(written);
+///             },
+///             IndexedReadEvent::SeekRequest(to) => {
+///                 reader.notify_seeked(file.seek(to)?);
+///             },
+///             IndexedReadEvent::Message{ header, data } => {
+///                 let channel = summary.channels.get(&header.channel_id).unwrap();
+///                 // do something with the message header and data
+///             }
+///         }
+///     }
+///     Ok(())
+/// }
+/// ```
 pub struct IndexedReader {
     // This MCAP's chunk indexes, pre-filtered by time range and topic and sorted in the order
     // they should be visited.
@@ -99,11 +156,14 @@ impl IndexedReaderOptions {
         Self::default()
     }
 
+    /// Configure the reader to yield messages in the specified order (defaults to log-time order).
     pub fn with_order(mut self, order: ReadOrder) -> Self {
         self.order = order;
         self
     }
 
+    /// Configure the reader to yield only messages from topics matching this set of strings.
+    /// By default, all topics will be yielded.
     pub fn include_topics<T: IntoIterator<Item = impl Deref<Target = str>>>(
         mut self,
         topics: T,
@@ -112,11 +172,13 @@ impl IndexedReaderOptions {
         self
     }
 
+    /// Configure the reader to yield only messages with log time on or after this time.
     pub fn log_time_on_or_after(mut self, start: u64) -> Self {
         self.start = Some(start);
         self
     }
 
+    /// Configure the reader to yield only messages with log time before this time.
     pub fn log_time_before(mut self, end: u64) -> Self {
         self.end = Some(end);
         self
@@ -230,6 +292,8 @@ impl IndexedReader {
         })
     }
 
+    /// Returns the next event from the reader. Call this repeatedly and act on the resulting
+    /// events in order to read messages from the MCAP.
     pub fn next_event(&mut self) -> Option<McapResult<IndexedReadEvent>> {
         self.next_event_inner().transpose()
     }
@@ -392,6 +456,9 @@ impl IndexedReader {
         }
     }
 
+    /// Inform the reader of the result of the latest read on the underlying stream.
+    ///
+    /// Panics if `n` is greater than the last `n` provided to [`Self::insert`].
     pub fn notify_read(&mut self, n: usize) {
         if let State::LoadingChunkData { into_slot } = &self.state {
             let buffer_length = if self.chunk_indexes[self.cur_chunk_index]
@@ -410,6 +477,7 @@ impl IndexedReader {
         self.pos += n as u64;
     }
 
+    /// Inform the reader of the result of the latest seek of the underlying stream.
     pub fn notify_seeked(&mut self, pos: u64) {
         // If we're currently loading data, we need to reset and start loading from the beginning.
         if self.pos != pos && matches!(self.state, State::LoadingChunkData { .. }) {
@@ -422,6 +490,7 @@ impl IndexedReader {
         self.pos = pos;
     }
 
+    /// Get a mutable buffer of size `n` to read new MCAP data into from the stream.
     pub fn insert(&mut self, n: usize) -> &mut [u8] {
         let buf = match self.state {
             State::LoadingChunkData { into_slot } => {
