@@ -120,6 +120,7 @@ pub struct IndexedReader {
     order: ReadOrder,
     // Criteria for what messages from the MCAP should be yielded
     filter: Filter,
+    at_eof: bool,
 }
 struct Filter {
     // inclusive log time range start
@@ -289,6 +290,7 @@ impl IndexedReader {
                 end: options.end,
                 channel_ids,
             },
+            at_eof: false,
         })
     }
 
@@ -340,6 +342,9 @@ impl IndexedReader {
                     // Keep requesting more data until we have all of the compressed chunk.
                     if self.cur_compressed_chunk_loaded_bytes < compressed_size {
                         let need = compressed_size - self.cur_compressed_chunk_loaded_bytes;
+                        if self.at_eof {
+                            return Err(McapError::UnexpectedEof);
+                        }
                         return Ok(Some(IndexedReadEvent::ReadRequest(need)));
                     }
                     // decompress the chunk into the current slot. For un-compressed chunks, we do
@@ -456,10 +461,12 @@ impl IndexedReader {
         }
     }
 
-    /// Inform the reader of the result of the latest read on the underlying stream.
+    /// Inform the reader of the result of the latest read on the underlying stream. 0 implies
+    /// that the end of stream has been reached.
     ///
     /// Panics if `n` is greater than the last `n` provided to [`Self::insert`].
     pub fn notify_read(&mut self, n: usize) {
+        self.at_eof = n == 0;
         if let State::LoadingChunkData { into_slot } = &self.state {
             let buffer_length = if self.chunk_indexes[self.cur_chunk_index]
                 .compression
@@ -479,6 +486,9 @@ impl IndexedReader {
 
     /// Inform the reader of the result of the latest seek of the underlying stream.
     pub fn notify_seeked(&mut self, pos: u64) {
+        if self.at_eof && self.pos != pos {
+            self.at_eof = false;
+        }
         // If we're currently loading data, we need to reset and start loading from the beginning.
         if self.pos != pos && matches!(self.state, State::LoadingChunkData { .. }) {
             let mut state = State::SeekingToChunk;
