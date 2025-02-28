@@ -442,10 +442,11 @@ impl IndexedReader {
                     self.chunk_slots[message_index.chunk_slot_idx].message_count -= 1;
                     let record =
                         &self.chunk_slots[message_index.chunk_slot_idx].buf[message_index.offset..];
-                    // This should not happen - we failed in the indexing process somehow.
-                    if record[0] != op::MESSAGE {
-                        panic!("invariant: message indexes should point to message records");
-                    }
+                    assert_eq!(
+                        record[0],
+                        op::MESSAGE,
+                        "invariant: message indexes should point to message records"
+                    );
                     let len = u64::from_le_bytes(record[1..9].try_into().unwrap()) as usize; // size checked when indexing
                     let mut cursor = std::io::Cursor::new(&record[9..9 + len]);
                     let header = MessageHeader::read_le(&mut cursor)?;
