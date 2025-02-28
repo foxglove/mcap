@@ -414,9 +414,10 @@ impl IndexedReader {
             } else {
                 self.cur_compressed_chunk.len()
             };
-            if buffer_length < self.cur_compressed_chunk_loaded_bytes + n {
-                panic!("notify_read called with n > last inserted length");
-            }
+            assert!(
+                buffer_length > self.cur_compressed_chunk_loaded_bytes + n,
+                "notify_read called with n > last inserted length"
+            );
             self.cur_compressed_chunk_loaded_bytes += n;
         }
         self.pos += n as u64;
