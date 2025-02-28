@@ -415,7 +415,7 @@ impl IndexedReader {
                 self.cur_compressed_chunk.len()
             };
             assert!(
-                buffer_length > self.cur_compressed_chunk_loaded_bytes + n,
+                buffer_length >= self.cur_compressed_chunk_loaded_bytes + n,
                 "notify_read called with n > last inserted length"
             );
             self.cur_compressed_chunk_loaded_bytes += n;
