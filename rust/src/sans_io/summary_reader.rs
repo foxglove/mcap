@@ -4,9 +4,11 @@ use crate::{
     parse_record,
     records::{Footer, Record},
     sans_io::linear_reader::{LinearReadEvent, LinearReader, LinearReaderOptions},
-    McapError, McapResult, Summary,
+    McapError, McapResult, Summary, MAGIC,
 };
 use std::io::SeekFrom;
+
+const FOOTER_RECORD_AND_END_MAGIC: usize = 1 + 8 + 20 + 8;
 
 /// Events returned by the summary reader. The summary reader yields
 pub enum SummaryReadEvent {
@@ -109,12 +111,14 @@ impl SummaryReader {
             match &mut self.state {
                 State::SeekingToFooter => {
                     let Some(file_size) = self.file_size else {
-                        return Ok(Some(SummaryReadEvent::SeekRequest(SeekFrom::End(-28))));
+                        return Ok(Some(SummaryReadEvent::SeekRequest(SeekFrom::End(
+                            -(FOOTER_RECORD_AND_END_MAGIC as i64),
+                        ))));
                     };
-                    if file_size < 28 {
+                    if file_size < FOOTER_RECORD_AND_END_MAGIC as u64 + 8 {
                         return Err(crate::McapError::UnexpectedEof);
                     }
-                    let footer_start_pos = file_size - 28;
+                    let footer_start_pos = file_size - FOOTER_RECORD_AND_END_MAGIC as u64;
                     if self.pos == footer_start_pos {
                         self.state = State::ReadingFooter { loaded_bytes: 0 };
                         continue;
@@ -125,8 +129,19 @@ impl SummaryReader {
                     }
                 }
                 State::ReadingFooter { loaded_bytes } => {
-                    if *loaded_bytes >= 20 {
-                        let mut cursor = std::io::Cursor::new(&self.footer_buf[..*loaded_bytes]);
+                    if *loaded_bytes >= FOOTER_RECORD_AND_END_MAGIC {
+                        let opcode = self.footer_buf[0];
+                        // Ignore the length, it must always be 20 bytes
+                        let footer_body = &self.footer_buf[1 + 8..FOOTER_RECORD_AND_END_MAGIC - 8];
+                        let end_magic =
+                            &self.footer_buf[FOOTER_RECORD_AND_END_MAGIC - 8..*loaded_bytes];
+                        if opcode != crate::records::op::FOOTER {
+                            return Err(McapError::BadFooter);
+                        }
+                        if end_magic != MAGIC {
+                            return Err(McapError::BadMagic);
+                        }
+                        let mut cursor = std::io::Cursor::new(footer_body);
                         let footer = Footer::read_le(&mut cursor)?;
                         if footer.summary_start == 0 {
                             // There is no summary.
@@ -141,7 +156,9 @@ impl SummaryReader {
                         if self.at_eof {
                             return Err(McapError::UnexpectedEof);
                         }
-                        return Ok(Some(SummaryReadEvent::ReadRequest(20 - *loaded_bytes)));
+                        return Ok(Some(SummaryReadEvent::ReadRequest(
+                            FOOTER_RECORD_AND_END_MAGIC - *loaded_bytes,
+                        )));
                     }
                 }
                 State::SeekingToSummary { summary_start } => {
@@ -227,7 +244,7 @@ impl SummaryReader {
         // limitation: we assume the first seek that occurs is a seek to the footer start. The user
         // might seek somewhere else, we don't really have a way to tell.
         if self.file_size.is_none() {
-            self.file_size = Some(pos + 28);
+            self.file_size = Some(pos + FOOTER_RECORD_AND_END_MAGIC as u64);
         }
         if self.pos != pos {
             // if we're actively reading and got an unexpected seek, we need to reset.
@@ -300,5 +317,39 @@ mod tests {
             panic!("should have found a summary")
         };
         assert_eq!(summary.chunk_indexes.len(), 413);
+    }
+
+    #[test]
+    fn test_truncated_mcap() {
+        let mut buf = Vec::new();
+        std::fs::File::open("tests/data/uncompressed.mcap")
+            .expect("could not open file")
+            .read_to_end(&mut buf)
+            .expect("could not read file");
+        let truncated = &buf[..buf.len() - 100];
+        let mut cursor = std::io::Cursor::new(truncated);
+
+        let mut summary_loader = SummaryReader::new();
+        let mut failed = false;
+        while let Some(event) = summary_loader.next_event() {
+            match event {
+                Ok(SummaryReadEvent::ReadRequest(n)) => {
+                    let read = cursor
+                        .read(summary_loader.insert(n))
+                        .expect("failed file read");
+                    summary_loader.notify_read(read);
+                }
+                Ok(SummaryReadEvent::SeekRequest(to)) => {
+                    let pos = cursor.seek(to).expect("failed file seek");
+                    summary_loader.notify_seeked(pos);
+                }
+                Err(err) => {
+                    assert!(matches!(err, McapError::BadFooter));
+                    failed = true;
+                    break;
+                }
+            }
+        }
+        assert!(failed);
     }
 }
