@@ -430,11 +430,7 @@ impl IndexedReader {
         }
         // If we're currently loading data, we need to reset and start loading from the beginning.
         if self.pos != pos && matches!(self.state, State::LoadingChunkData { .. }) {
-            let mut state = State::SeekingToChunk;
-            std::mem::swap(&mut state, &mut self.state);
-            let State::LoadingChunkData { .. } = state else {
-                unreachable!();
-            };
+            self.state = State::SeekingToChunk;
         }
         self.pos = pos;
     }
