@@ -567,7 +567,7 @@ fn index_messages(
         if !sorting_required {
             sorting_required = msg.log_time < latest_timestamp
         }
-        latest_timestamp = std::cmp::max(latest_timestamp, msg.log_time);
+        latest_timestamp = latest_timestamp.max(msg.log_time);
         message_indexes.push(MessageIndex {
             chunk_slot_idx,
             log_time: msg.log_time,
