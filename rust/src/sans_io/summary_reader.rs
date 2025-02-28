@@ -223,9 +223,10 @@ impl SummaryReader {
         self.at_eof = n == 0;
         match &mut self.state {
             State::ReadingFooter { loaded_bytes, .. } => {
-                if self.footer_buf.len() < *loaded_bytes + n {
-                    panic!("notify_read called with n > last inserted length");
-                }
+                assert!(
+                    self.footer_buf.len() >= *loaded_bytes + n,
+                    "notify_read called with n > last inserted length",
+                );
                 *loaded_bytes += n;
             }
             State::ReadingSummary { reader, .. } => {
