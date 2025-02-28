@@ -537,11 +537,15 @@ fn index_messages(
     let new_message_index_start = message_indexes.len();
     while offset < chunk_data.len() {
         let record = &chunk_data[offset..];
-        let opcode = record[0];
+        // 1 byte opcode + 8 byte length == 9
         if record.len() < 9 {
             return Err(McapError::UnexpectedEoc);
         }
+        let opcode = record[0];
         let len = len_as_usize(u64::from_le_bytes(record[1..9].try_into().unwrap()))?;
+        if record.len() < (9 + len) {
+            return Err(McapError::UnexpectedEoc);
+        }
         let next_offset = offset + 9 + len;
         if opcode != op::MESSAGE {
             offset = next_offset;
