@@ -122,69 +122,6 @@ pub struct IndexedReader {
     filter: Filter,
     at_eof: bool,
 }
-struct Filter {
-    // inclusive log time range start
-    start: Option<u64>,
-    // exclusive log time range end
-    end: Option<u64>,
-    // If non-empty, only channels with these IDs will be yielded
-    channel_ids: BTreeSet<u16>,
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-pub enum ReadOrder {
-    /// Yield messages in order of message.log_time. For messages with equal log times, the message
-    /// earlier in the underlying file will be yielded first.
-    #[default]
-    LogTime,
-    /// Yield messages in reverse message.log_time order. For messages with equal log times, the
-    /// message later in the underlying file will be yielded first.
-    ReverseLogTime,
-    /// Yield messages in the order they are present in the file.
-    File,
-}
-
-#[derive(Default, Clone)]
-pub struct IndexedReaderOptions {
-    pub start: Option<u64>,
-    pub end: Option<u64>,
-    pub order: ReadOrder,
-    pub include_topics: Option<BTreeSet<String>>,
-}
-
-impl IndexedReaderOptions {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Configure the reader to yield messages in the specified order (defaults to log-time order).
-    pub fn with_order(mut self, order: ReadOrder) -> Self {
-        self.order = order;
-        self
-    }
-
-    /// Configure the reader to yield only messages from topics matching this set of strings.
-    /// By default, all topics will be yielded.
-    pub fn include_topics<T: IntoIterator<Item = impl Deref<Target = str>>>(
-        mut self,
-        topics: T,
-    ) -> Self {
-        self.include_topics = Some(topics.into_iter().map(|p| p.to_owned()).collect());
-        self
-    }
-
-    /// Configure the reader to yield only messages with log time on or after this time.
-    pub fn log_time_on_or_after(mut self, start: u64) -> Self {
-        self.start = Some(start);
-        self
-    }
-
-    /// Configure the reader to yield only messages with log time before this time.
-    pub fn log_time_before(mut self, end: u64) -> Self {
-        self.end = Some(end);
-        self
-    }
-}
 
 impl IndexedReader {
     pub fn new(summary: &crate::Summary) -> McapResult<Self> {
@@ -520,6 +457,70 @@ impl IndexedReader {
         let end = start + n;
         buf.resize(end, 0);
         &mut buf[start..end]
+    }
+}
+
+struct Filter {
+    // inclusive log time range start
+    start: Option<u64>,
+    // exclusive log time range end
+    end: Option<u64>,
+    // If non-empty, only channels with these IDs will be yielded
+    channel_ids: BTreeSet<u16>,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub enum ReadOrder {
+    /// Yield messages in order of message.log_time. For messages with equal log times, the message
+    /// earlier in the underlying file will be yielded first.
+    #[default]
+    LogTime,
+    /// Yield messages in reverse message.log_time order. For messages with equal log times, the
+    /// message later in the underlying file will be yielded first.
+    ReverseLogTime,
+    /// Yield messages in the order they are present in the file.
+    File,
+}
+
+#[derive(Default, Clone)]
+pub struct IndexedReaderOptions {
+    pub start: Option<u64>,
+    pub end: Option<u64>,
+    pub order: ReadOrder,
+    pub include_topics: Option<BTreeSet<String>>,
+}
+
+impl IndexedReaderOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Configure the reader to yield messages in the specified order (defaults to log-time order).
+    pub fn with_order(mut self, order: ReadOrder) -> Self {
+        self.order = order;
+        self
+    }
+
+    /// Configure the reader to yield only messages from topics matching this set of strings.
+    /// By default, all topics will be yielded.
+    pub fn include_topics<T: IntoIterator<Item = impl Deref<Target = str>>>(
+        mut self,
+        topics: T,
+    ) -> Self {
+        self.include_topics = Some(topics.into_iter().map(|p| p.to_owned()).collect());
+        self
+    }
+
+    /// Configure the reader to yield only messages with log time on or after this time.
+    pub fn log_time_on_or_after(mut self, start: u64) -> Self {
+        self.start = Some(start);
+        self
+    }
+
+    /// Configure the reader to yield only messages with log time before this time.
+    pub fn log_time_before(mut self, end: u64) -> Self {
+        self.end = Some(end);
+        self
     }
 }
 
