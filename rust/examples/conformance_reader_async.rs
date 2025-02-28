@@ -18,7 +18,7 @@ async fn main() {
         process::exit(1);
     }
     let file = File::open(&args[1]).await.expect("couldn't open file");
-    let mut reader = mcap::tokio::RecordReader::new(file);
+    let mut reader = mcap::tokio::LinearReader::new(file);
 
     let mut json_records: Vec<Value> = vec![];
     let mut buf: Vec<u8> = Vec::new();
