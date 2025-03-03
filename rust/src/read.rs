@@ -20,7 +20,7 @@ use log::*;
 
 use crate::{
     records::{self, op, Record},
-    sans_io::read::{LinearReader as SansIoReader, LinearReaderOptions, ReadAction},
+    sans_io::{LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions},
     Attachment, Channel, McapError, McapResult, Message, Schema, MAGIC,
 };
 
@@ -234,15 +234,15 @@ impl<'a> Iterator for InnerReader<'a> {
     type Item = McapResult<records::Record<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(action) = self.reader.next_action() {
-            match action {
-                Ok(ReadAction::NeedMore(need)) => {
+        while let Some(event) = self.reader.next_event() {
+            match event {
+                Ok(LinearReadEvent::ReadRequest(need)) => {
                     let len = std::cmp::min(self.buf.len(), need);
                     self.reader.insert(len).copy_from_slice(&self.buf[..len]);
-                    self.reader.set_written(len);
+                    self.reader.notify_read(len);
                     self.buf = &self.buf[len..];
                 }
-                Ok(ReadAction::GetRecord { data, opcode }) => match parse_record(opcode, data) {
+                Ok(LinearReadEvent::Record { data, opcode }) => match parse_record(opcode, data) {
                     Ok(record) => return Some(Ok(record.into_owned())),
                     Err(err) => return Some(Err(err)),
                 },
@@ -765,15 +765,15 @@ impl<'a> Summary<'a> {
         let mut reader = SansIoReader::for_chunk(h)?;
         let mut remaining = d;
         let mut uncompressed_offset: usize = 0;
-        while let Some(action) = reader.next_action() {
-            match action {
-                Ok(ReadAction::NeedMore(need)) => {
+        while let Some(event) = reader.next_event() {
+            match event {
+                Ok(LinearReadEvent::ReadRequest(need)) => {
                     let len = std::cmp::min(remaining.len(), need);
                     reader.insert(len).copy_from_slice(&remaining[..len]);
-                    reader.set_written(len);
+                    reader.notify_read(len);
                     remaining = &remaining[len..];
                 }
-                Ok(ReadAction::GetRecord { data, opcode }) => {
+                Ok(LinearReadEvent::Record { data, opcode }) => {
                     if (uncompressed_offset as u64) < message.offset {
                         uncompressed_offset += 9 + data.len();
                     } else {
