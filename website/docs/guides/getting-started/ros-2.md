@@ -39,10 +39,15 @@ $ cat << EOF > convert.yaml
 output_bags:
   - uri: ros2_output
     storage_id: mcap
+    storage_config_uri: my_storage_config.yaml
     all: true
 EOF
+$ cat << EOF > my_storage_config.yaml
+compression: Zstd
 $ ros2 bag convert -i ros2_input.db3 -o convert.yaml
 ```
+
+If you want to use compression when converting, specify a storage config file. Specifying `compression_mode` and `compression_format` directly in the `convert.yaml` file will result in an unplayable rosbag2 (https://github.com/ros2/rosbag2/issues/1920).
 
 ### Using the `mcap` CLI tool
 
