@@ -1,9 +1,14 @@
 #[path = "common/serialization.rs"]
 mod serialization;
-use std::collections::BTreeSet;
-use std::io::{Cursor, Read, Seek};
+use std::{
+    borrow::Cow,
+    io::{Cursor, Read, Seek},
+};
 
-use mcap::records::SchemaHeader;
+use mcap::{
+    records::{Channel, Record, SchemaHeader},
+    sans_io::{IndexedReadEvent, IndexedReader, SummaryReadEvent, SummaryReader},
+};
 use serde_json::{json, Value};
 
 use std::env;
@@ -19,13 +24,13 @@ pub fn main() {
     let mut messages: Vec<Value> = vec![];
     let mut cursor = Cursor::new(&file);
     let summary = {
-        let mut reader = mcap::sans_io::SummaryReader::new();
+        let mut reader = SummaryReader::new();
         while let Some(event) = reader.next_event() {
             match event.expect("failed gathering summary") {
-                mcap::sans_io::SummaryReadEvent::SeekRequest(pos) => {
+                SummaryReadEvent::SeekRequest(pos) => {
                     reader.notify_seeked(cursor.seek(pos).expect("failed to seek file"));
                 }
-                mcap::sans_io::SummaryReadEvent::ReadRequest(n) => {
+                SummaryReadEvent::ReadRequest(n) => {
                     let read = cursor.read(reader.insert(n)).expect("failed to read file");
                     reader.notify_read(read);
                 }
@@ -34,19 +39,18 @@ pub fn main() {
         reader.finish().expect("file should have a summary section")
     };
 
-    let mut reader =
-        mcap::sans_io::IndexedReader::new(&summary).expect("failed to initialize indexed reader");
+    let mut reader = IndexedReader::new(&summary).expect("failed to initialize indexed reader");
     while let Some(event) = reader.next_event() {
         match event.expect("failed to get next event") {
-            mcap::sans_io::IndexedReadEvent::SeekRequest(pos) => {
+            IndexedReadEvent::SeekRequest(pos) => {
                 reader.notify_seeked(cursor.seek(pos).expect("failed to seek file"));
             }
-            mcap::sans_io::IndexedReadEvent::ReadRequest(n) => {
+            IndexedReadEvent::ReadRequest(n) => {
                 let read = cursor.read(reader.insert(n)).expect("failed to read file");
                 reader.notify_read(read);
             }
-            mcap::sans_io::IndexedReadEvent::Message { header, data } => {
-                messages.push(serialization::as_json(&mcap::records::Record::Message {
+            IndexedReadEvent::Message { header, data } => {
+                messages.push(serialization::as_json(&Record::Message {
                     header,
                     data: std::borrow::Cow::Borrowed(data),
                 }));
@@ -56,22 +60,20 @@ pub fn main() {
 
     let mut statistics: Vec<Value> = vec![];
     if let Some(stats) = summary.stats {
-        statistics.push(serialization::as_json(&mcap::records::Record::Statistics(
-            stats.clone(),
-        )));
+        statistics.push(serialization::as_json(&Record::Statistics(stats.clone())));
     };
 
     let schemas: Vec<_> = summary
         .schemas
         .values()
         .map(|schema| {
-            serialization::as_json(&mcap::records::Record::Schema {
+            serialization::as_json(&Record::Schema {
                 header: SchemaHeader {
                     id: schema.id,
                     name: schema.name.clone(),
                     encoding: schema.encoding.clone(),
                 },
-                data: schema.data.to_owned(),
+                data: Cow::Owned(schema.data.clone().into_owned()),
             })
         })
         .collect();
@@ -80,7 +82,7 @@ pub fn main() {
         .channels
         .values()
         .map(|channel| {
-            serialization::as_json(&mcap::records::Record::Channel(mcap::records::Channel {
+            serialization::as_json(&Record::Channel(Channel {
                 id: channel.id,
                 schema_id: channel.schema.as_ref().map(|s| s.id).unwrap_or(0),
                 topic: channel.topic.clone(),
@@ -90,6 +92,11 @@ pub fn main() {
         })
         .collect();
 
-    let out = json!({ "messages": messages, "schemas": schemas, "channels": channels, "statistics": statistics });
+    let out = json!({
+        "messages": messages,
+        "schemas": schemas,
+        "channels": channels,
+        "statistics": statistics,
+    });
     print!("{}", serde_json::to_string_pretty(&out).unwrap());
 }
