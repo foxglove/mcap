@@ -97,7 +97,9 @@ pub struct IndexedReader {
     // The index in `chunk_indexes` of the current chunk to be loaded. cur_chunk_index >=
     // chunk_indexes.len() means that all chunks have been loaded.
     cur_chunk_index: usize,
-    // A set of decompressed chunks. Slots are re-used when their message count reaches zero.
+    // A set of decompressed chunks. Slots are re-used when their message count reaches zero.  There
+    // may be more than one chunk slot in use at a time if we are reading in log-time or
+    // reverse-log-time order, and there are chunks that overlap in time range.
     chunk_slots: Vec<ChunkSlot>,
     // An index into the messages stored in chunk slots. Index entries are sorted in the order
     // they should be yielded.
