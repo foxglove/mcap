@@ -180,23 +180,15 @@ impl IndexedReader {
         // put the chunk indexes in the order that we want to read them
         match options.order {
             ReadOrder::File => {
-                chunk_indexes.sort_by(|a, b| a.chunk_start_offset.cmp(&b.chunk_start_offset))
+                chunk_indexes.sort_by_key(|chunk_index| chunk_index.chunk_start_offset);
             }
             ReadOrder::LogTime => {
-                chunk_indexes.sort_by(|a, b| {
-                    match a.message_start_time.cmp(&b.message_start_time) {
-                        std::cmp::Ordering::Equal => {
-                            a.chunk_start_offset.cmp(&b.chunk_start_offset)
-                        }
-                        other => other,
-                    }
-                });
+                chunk_indexes.sort_by_key(|chunk_index| chunk_index.message_start_time);
             }
             ReadOrder::ReverseLogTime => {
-                chunk_indexes.sort_by(|a, b| match b.message_end_time.cmp(&a.message_end_time) {
-                    std::cmp::Ordering::Equal => b.chunk_start_offset.cmp(&a.chunk_start_offset),
-                    other => other,
-                });
+                // load chunks in reverse order of their _end_ time.
+                chunk_indexes.sort_by_key(|chunk_index| chunk_index.message_end_time);
+                chunk_indexes.reverse();
             }
         };
 
@@ -532,7 +524,11 @@ fn index_messages(
     cur_message_index: usize,
 ) -> McapResult<usize> {
     let mut offset = 0usize;
-    let mut sorting_required = cur_message_index != 0;
+    // sorting_required tracks whether the set of message indexes will need to be sorted after loading them.
+    // If there are any unread indexes in `message_indexes` before we begin loading
+    // the new chunk, they will need to be sorted with the new messages from the new chunk.
+    // If not, and we also don't detect any out-of-order messages within the chunk, we skip sorting.
+    let mut sorting_required = message_indexes.len() - cur_message_index > 0;
     let mut latest_timestamp = 0;
     let new_message_index_start = message_indexes.len();
     while offset < chunk_data.len() {
