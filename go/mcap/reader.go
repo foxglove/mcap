@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"unicode/utf8"
 )
+
+var ErrInvalidString = errors.New("string is not valid UTF-8")
 
 func getPrefixedString(data []byte, offset int) (s string, newoffset int, err error) {
 	if len(data[offset:]) < 4 {
@@ -16,7 +19,11 @@ func getPrefixedString(data []byte, offset int) (s string, newoffset int, err er
 	if len(data[offset+4:]) < length {
 		return "", 0, io.ErrShortBuffer
 	}
-	return string(data[offset+4 : offset+length+4]), offset + 4 + length, nil
+	b := data[offset+4 : offset+length+4]
+	if !utf8.Valid(b) {
+		return "", 0, fmt.Errorf("%w, hex: %x", ErrInvalidString, string(b))
+	}
+	return string(b), offset + 4 + length, nil
 }
 
 func getPrefixedBytes(data []byte, offset int) (s []byte, newoffset int, err error) {
