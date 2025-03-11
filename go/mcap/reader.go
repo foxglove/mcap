@@ -19,11 +19,11 @@ func getPrefixedString(data []byte, offset int) (s string, newoffset int, err er
 	if len(data[offset+4:]) < length {
 		return "", 0, io.ErrShortBuffer
 	}
-	b := data[offset+4 : offset+length+4]
-	if !utf8.Valid(b) {
-		return "", 0, fmt.Errorf("%w, hex: %x", ErrInvalidString, string(b))
+	asBytes := data[offset+4 : offset+length+4]
+	if !utf8.Valid(asBytes) {
+		return "", 0, fmt.Errorf("%w, hex: %x", ErrInvalidString, string(asBytes))
 	}
-	return string(b), offset + 4 + length, nil
+	return string(asBytes), offset + 4 + length, nil
 }
 
 func getPrefixedBytes(data []byte, offset int) (s []byte, newoffset int, err error) {

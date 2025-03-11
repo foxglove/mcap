@@ -221,6 +221,17 @@ func TestReadPrefixedMap(t *testing.T) {
 			18,
 			nil,
 		},
+		{
+			"invalid utf-8",
+			flatten(
+				encodedUint32(14),
+				prefixedString("foo"),
+				[]byte{4, 0, 0, 0, 255, 255, 255, 255},
+			),
+			nil,
+			0,
+			ErrInvalidString,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {
