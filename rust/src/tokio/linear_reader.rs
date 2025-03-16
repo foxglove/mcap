@@ -61,8 +61,8 @@ where
                     data: content,
                     opcode,
                 }) => {
-                    data.resize(content.len(), 0);
-                    data.copy_from_slice(content);
+                    data.clear();
+                    data.extend_from_slice(content);
                     return Some(Ok(opcode));
                 }
                 Err(err) => {
