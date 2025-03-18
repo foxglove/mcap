@@ -5,8 +5,15 @@ from enum import Enum, Flag, auto
 from io import BufferedWriter, RawIOBase
 from typing import IO, Any, Dict, List, OrderedDict, Union
 
-import lz4.frame  # type: ignore
-import zstandard
+try:
+    import lz4.frame as lz4
+except ImportError:
+    lz4 = None
+
+try:
+    import zstandard
+except ImportError:
+    zstandard = None
 
 from mcap import __version__
 
@@ -427,9 +434,13 @@ class Writer:
 
         chunk_data = self.__chunk_builder.end()
         if self.__compression == CompressionType.LZ4:
+            if lz4 is None:
+                raise RuntimeError("lz4 is not installed")
             compression = "lz4"
-            compressed_data: bytes = lz4.frame.compress(chunk_data)  # type: ignore
+            compressed_data: bytes = lz4.compress(chunk_data)  # type: ignore
         elif self.__compression == CompressionType.ZSTD:
+            if zstandard is None:
+                raise RuntimeError("zstandard is not installed")
             compression = "zstd"
             compressed_data: bytes = zstandard.compress(chunk_data)  # type: ignore
         else:
