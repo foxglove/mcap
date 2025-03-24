@@ -7,7 +7,7 @@ use std::io::BufWriter;
 
 use anyhow::Result;
 use itertools::Itertools;
-use memmap::Mmap;
+use memmap2::Mmap;
 use rayon::prelude::*;
 use tempfile::tempfile;
 

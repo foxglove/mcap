@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use log::*;
-use memmap::Mmap;
+use memmap2::Mmap;
 
 #[derive(Parser, Debug)]
 struct Args {
