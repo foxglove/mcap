@@ -28,10 +28,10 @@ static_assertions = "1.1.0"
 bimap = "0.6.3"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-zstd = { version = "0.11", features = ["wasm"], optional = true }
+zstd = { version = "0.13", features = ["wasm"], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-zstd = { version = "0.11", features = ["zstdmt"], optional = true }
+zstd = { version = "0.13", features = ["zstdmt"], optional = true }
 
 [features]
 default = ["zstd", "lz4"]
