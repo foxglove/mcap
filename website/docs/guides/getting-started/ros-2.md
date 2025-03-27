@@ -44,6 +44,7 @@ output_bags:
 EOF
 $ cat << EOF > my_storage_config.yaml
 compression: Zstd
+EOF
 $ ros2 bag convert -i ros2_input.db3 -o convert.yaml
 ```
 
