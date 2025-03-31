@@ -144,6 +144,8 @@ pub enum McapError {
     TooManyChannels,
     #[error("cannot write more than 65535 schemas to one MCAP")]
     TooManySchemas,
+    #[error("indexed reader received chunk data with unexpected offset or length")]
+    UnexpectedChunkDataInserted,
 }
 
 pub type McapResult<T> = Result<T, McapError>;
