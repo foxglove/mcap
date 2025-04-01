@@ -70,19 +70,23 @@ fn get_next_message(
     into: &mut Vec<u8>,
 ) -> Option<mcap::records::MessageHeader> {
     use std::io::{Read, Seek};
+    let mut buf = Vec::new();
     while let Some(event) = reader.next_event() {
         match event.expect("next event failed") {
             sans_io::IndexedReadEvent::Message { header, data } => {
                 into.resize(data.len(), 0);
                 into.copy_from_slice(data);
+                reader.consume_message();
                 return Some(header);
             }
-            sans_io::IndexedReadEvent::SeekRequest(pos) => {
-                reader.notify_seeked(file.seek(pos).expect("seek failed"));
-            }
-            sans_io::IndexedReadEvent::ReadRequest(n) => {
-                let read = file.read(reader.insert(n)).expect("read failed");
-                reader.notify_read(read);
+            sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                file.seek(std::io::SeekFrom::Start(offset))
+                    .expect("failed to seek");
+                buf.resize(length, 0);
+                file.read_exact(&mut buf).expect("failed to read");
+                reader
+                    .insert_chunk_record_data(offset, &buf)
+                    .expect("failed to insert");
             }
         }
     }

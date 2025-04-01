@@ -267,7 +267,7 @@ impl IndexedReader {
     /// the reader now has enough data to yield messages.
     pub fn insert_chunk_record_data(
         &mut self,
-        start_offset: u64,
+        offset: u64,
         compressed_data: &[u8],
     ) -> McapResult<()> {
         // linear search through our chunk indexes to figure out which one it is. In the common case,
@@ -276,7 +276,7 @@ impl IndexedReader {
             .chunk_indexes
             .iter()
             .enumerate()
-            .find(|(_, chunk_index)| get_compressed_data_start(chunk_index) == start_offset)
+            .find(|(_, chunk_index)| get_compressed_data_start(chunk_index) == offset)
         else {
             return Err(McapError::UnexpectedChunkDataInserted);
         };
@@ -284,11 +284,9 @@ impl IndexedReader {
             return Err(McapError::UnexpectedChunkDataInserted);
         }
         let uncompressed_size = chunk_index.uncompressed_size as usize;
-        let slot_idx =
-            find_or_make_chunk_slot(&mut self.chunk_slots, start_offset, uncompressed_size);
+        let slot_idx = find_or_make_chunk_slot(&mut self.chunk_slots, offset, uncompressed_size);
 
         let slot = &mut self.chunk_slots[slot_idx];
-        //
         slot.buf.resize(uncompressed_size, 0);
         match chunk_index.compression.as_str() {
             "" => {
@@ -340,7 +338,7 @@ impl IndexedReader {
             self.cur_message_index = 0;
         }
         // Now we need to remove the corresponding chunk index. In the common case, where
-        // the caller has inserted the next-needed chunk, we can just increment an index. In other
+        // the caller has inserted the next-needed chunk, we can just increment the start index. In other
         // cases, we remove the chunk index, which is O(n).
         if i == 0 {
             self.cur_chunk_index += 1;
