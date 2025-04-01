@@ -43,7 +43,7 @@ pub fn main() {
     while let Some(event) = reader.next_event() {
         match event.expect("failed to get next event") {
             IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                let chunk_data = file.split_at(offset as usize).1.split_at(length).0;
+                let chunk_data = &file[offset as usize..][..length];
                 reader
                     .insert_chunk_record_data(offset, chunk_data)
                     .expect("failed on insert");

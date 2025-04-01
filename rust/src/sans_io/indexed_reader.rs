@@ -227,16 +227,25 @@ impl IndexedReader {
             }
             // Time to yield the message.
             let buf = &self.chunk_slots[message_index.chunk_slot_idx].buf[message_index.offset..];
+            let Some((&[opcode], buf)) = buf.split_first_chunk() else {
+                return Some(Err(McapError::UnexpectedEoc));
+            };
             assert_eq!(
-                buf[0],
+                opcode,
                 op::MESSAGE,
                 "invariant: message indexes should point to message records"
             );
-            let msg_len = match len_as_usize(u64::from_le_bytes(buf[1..9].try_into().unwrap())) {
+            let Some((&len_buf, buf)) = buf.split_first_chunk() else {
+                return Some(Err(McapError::UnexpectedEoc));
+            };
+            let msg_len = match len_as_usize(u64::from_le_bytes(len_buf)) {
                 Ok(len) => len,
                 Err(err) => return Some(Err(err)),
             };
-            let msg_data = &buf[9..9 + msg_len];
+            if buf.len() < msg_len {
+                return Some(Err(McapError::UnexpectedEoc));
+            }
+            let msg_data = &buf[..msg_len];
             let mut reader = std::io::Cursor::new(msg_data);
             let header = match MessageHeader::read_le(&mut reader) {
                 Ok(header) => header,
@@ -442,22 +451,25 @@ fn index_messages(
     let new_message_index_start = message_indexes.len();
     let chunk_data = &chunk_slots[chunk_slot_idx].buf[..];
     while offset < chunk_data.len() {
-        let record = &chunk_data[offset..];
+        let buf = &chunk_data[offset..];
+        let Some((&[opcode], buf)) = buf.split_first_chunk() else {
+            return Err(McapError::UnexpectedEoc);
+        };
+        let Some((&len_buf, buf)) = buf.split_first_chunk() else {
+            return Err(McapError::UnexpectedEoc);
+        };
+        let len = len_as_usize(u64::from_le_bytes(len_buf))?;
+        if buf.len() < len {
+            return Err(McapError::UnexpectedEoc);
+        }
+        let record_data = &buf[..len];
         // 1 byte opcode + 8 byte length == 9
-        if record.len() < 9 {
-            return Err(McapError::UnexpectedEoc);
-        }
-        let opcode = record[0];
-        let len = len_as_usize(u64::from_le_bytes(record[1..9].try_into().unwrap()))?;
-        if record.len() < (9 + len) {
-            return Err(McapError::UnexpectedEoc);
-        }
         let next_offset = offset + 9 + len;
         if opcode != op::MESSAGE {
             offset = next_offset;
             continue;
         }
-        let msg = MessageHeader::read_le(&mut std::io::Cursor::new(&record[9..9 + len]))?;
+        let msg = MessageHeader::read_le(&mut std::io::Cursor::new(record_data))?;
         if let Some(end) = filter.end {
             if msg.log_time >= end {
                 offset = next_offset;
@@ -618,7 +630,7 @@ mod tests {
         while let Some(event) = reader.next_event() {
             match event.expect("indexed reader failed") {
                 IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                    let chunk_data = mcap.split_at(offset as usize).1.split_at(length).0;
+                    let chunk_data = &mcap[offset as usize..][..length];
                     reader
                         .insert_chunk_record_data(offset, chunk_data)
                         .expect("failed to insert");
@@ -665,7 +677,7 @@ mod tests {
                     let chunk_index = &my_chunk_indexes[cur_chunk_index];
                     let offset = get_compressed_data_start(chunk_index);
                     let len = chunk_index.compressed_size as usize;
-                    let chunk_buf = mcap.split_at(offset as usize).1.split_at(len).0;
+                    let chunk_buf = &mcap[offset as usize..][..len];
                     indexed_reader
                         .insert_chunk_record_data(offset, chunk_buf)
                         .expect("insert failed");
