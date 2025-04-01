@@ -112,7 +112,7 @@ fn chunk_request(index: &ChunkIndex) -> Option<McapResult<IndexedReadEvent<'stat
         Err(err) => return Some(Err(err)),
     };
     Some(Ok(IndexedReadEvent::ReadChunkRequest {
-        offset: get_compressed_data_start(index),
+        offset: index.compressed_data_offset(),
         length,
     }))
 }
@@ -263,8 +263,7 @@ impl IndexedReader {
         chunk_request(&self.chunk_indexes[self.cur_chunk_index])
     }
 
-    /// Call to insert new compressed records into this reader. The return value indicates whether
-    /// the reader now has enough data to yield messages.
+    /// Call to insert new compressed records into this reader.
     pub fn insert_chunk_record_data(
         &mut self,
         offset: u64,
@@ -276,7 +275,7 @@ impl IndexedReader {
             .chunk_indexes
             .iter()
             .enumerate()
-            .find(|(_, chunk_index)| get_compressed_data_start(chunk_index) == offset)
+            .find(|(_, chunk_index)| chunk_index.compressed_data_offset() == offset)
         else {
             return Err(McapError::UnexpectedChunkDataInserted);
         };
@@ -357,7 +356,8 @@ impl IndexedReader {
         match self.order {
             ReadOrder::File => {
                 let chunk_slot = &self.chunk_slots[message_index.chunk_slot_idx];
-                get_compressed_data_start(chunk_index) < chunk_slot.data_start
+                let data_offset = chunk_index.compressed_data_offset();
+                data_offset < chunk_slot.data_start
             }
             ReadOrder::LogTime => chunk_index.message_start_time < message_index.log_time,
             ReadOrder::ReverseLogTime => chunk_index.message_end_time > message_index.log_time,
@@ -553,19 +553,6 @@ fn find_or_make_chunk_slot(
     idx
 }
 
-fn get_compressed_data_start(chunk_index: &ChunkIndex) -> u64 {
-    chunk_index.chunk_start_offset
-    + 1 // opcode
-    + 8 // chunk record length
-    + 8 // start time
-    + 8 // end time
-    + 8 // uncompressed size
-    + 4 // CRC
-    + 4 // compression string length
-    + (chunk_index.compression.len() as u64) // compression string
-    + 8 // compressed size
-}
-
 fn len_as_usize(len: u64) -> McapResult<usize> {
     len.try_into().map_err(|_| McapError::TooLong(len))
 }
@@ -646,6 +633,9 @@ mod tests {
         found
     }
 
+    /// Simulate a reader that always inserts chunks in the order they appear in the file.
+    /// This lets readers iterate in log-time order over non-seekable sources, with a bit of
+    /// extra buffering of chunks inside the reader.
     fn read_mcap_noseek(options: IndexedReaderOptions, mcap: &[u8]) -> Vec<(u16, u64)> {
         let summary = crate::Summary::read(mcap)
             .expect("summary reading should succeed")
@@ -673,7 +663,7 @@ mod tests {
                 Some(Err(err)) => panic!("indexed reader failed: {err}"),
                 Some(Ok(IndexedReadEvent::ReadChunkRequest { .. })) => {
                     let chunk_index = &my_chunk_indexes[cur_chunk_index];
-                    let offset = get_compressed_data_start(chunk_index);
+                    let offset = chunk_index.compressed_data_offset();
                     let len = chunk_index.compressed_size as usize;
                     let chunk_buf = &mcap[offset as usize..][..len];
                     indexed_reader
@@ -695,11 +685,12 @@ mod tests {
             let mut expected: Vec<(u16, u64)> = chunks.iter().cloned().flatten().cloned().collect();
             match order {
                 ReadOrder::File => {}
-                // sort in log time order (stable, so that file order is preserved) for equal values
+                // stable-sort in log time order, so that file order is preserved for equal values
                 ReadOrder::LogTime => expected.sort_by_key(|(_, log_time)| *log_time),
-                // sort in log time order then reverse
+                // stable-sort in log time order, then reverse to preserve reverse-file order for
+                // equal values
                 ReadOrder::ReverseLogTime => {
-                    expected.sort_by_key(|(_, log_time)| Reverse(*log_time));
+                    expected.sort_by_key(|(_, log_time)| *log_time);
                     expected.reverse();
                 }
             }
