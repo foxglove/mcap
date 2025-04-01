@@ -4,7 +4,7 @@ use crate::{
     records::{op, ChunkIndex, MessageHeader},
     McapError, McapResult,
 };
-use std::{collections::BTreeSet, ops::Deref};
+use std::{cmp::Reverse, collections::BTreeSet, ops::Deref};
 
 #[derive(Clone, Copy)]
 struct MessageIndex {
@@ -250,7 +250,7 @@ impl IndexedReader {
         if self.cur_chunk_index >= self.chunk_indexes.len() {
             return None;
         }
-        return chunk_request(&self.chunk_indexes[self.cur_chunk_index]);
+        chunk_request(&self.chunk_indexes[self.cur_chunk_index])
     }
 
     /// Call to insert new compressed records into this reader. The return value indicates whether
@@ -316,13 +316,13 @@ impl IndexedReader {
         // load new indexes into `self.message_indexes`
         let message_count = index_messages(
             slot_idx,
-            &slot.buf,
+            &self.chunk_slots,
             self.order,
             &self.filter,
             &mut self.message_indexes,
             self.cur_message_index,
         )?;
-        slot.message_count = message_count;
+        self.chunk_slots[slot_idx].message_count = message_count;
         // If there is more dead space at the front of `self.message_indexes` than the
         // set of new message indexes, compact the message index array now.
         if message_count < (self.cur_message_index) {
@@ -425,7 +425,7 @@ impl IndexedReaderOptions {
 /// criteria.
 fn index_messages(
     chunk_slot_idx: usize,
-    chunk_data: &[u8],
+    chunk_slots: &[ChunkSlot],
     order: ReadOrder,
     filter: &Filter,
     message_indexes: &mut Vec<MessageIndex>,
@@ -436,9 +436,10 @@ fn index_messages(
     // If there are any unread indexes in `message_indexes` before we begin loading
     // the new chunk, they will need to be sorted with the new messages from the new chunk.
     // If not, and we also don't detect any out-of-order messages within the chunk, we skip sorting.
-    let mut sorting_required = message_indexes.len() > 0;
+    let mut sorting_required = !message_indexes.is_empty();
     let mut latest_timestamp = 0;
     let new_message_index_start = message_indexes.len();
+    let chunk_data = &chunk_slots[chunk_slot_idx].buf[..];
     while offset < chunk_data.len() {
         let record = &chunk_data[offset..];
         // 1 byte opcode + 8 byte length == 9
@@ -490,7 +491,13 @@ fn index_messages(
         ReadOrder::LogTime => {
             if sorting_required {
                 let unread_message_indexes = &mut message_indexes[cur_message_index..];
-                unread_message_indexes.sort_by(|a, b| a.log_time.cmp(&b.log_time));
+                unread_message_indexes.sort_by_key(|index| {
+                    (
+                        index.log_time,
+                        chunk_slots[index.chunk_slot_idx].data_start,
+                        index.offset,
+                    )
+                });
             }
         }
         ReadOrder::ReverseLogTime => {
@@ -499,7 +506,13 @@ fn index_messages(
             new_message_indexes.reverse();
             if sorting_required {
                 let unread_message_indexes = &mut message_indexes[cur_message_index..];
-                unread_message_indexes.sort_by(|a, b| b.log_time.cmp(&a.log_time));
+                unread_message_indexes.sort_by_key(|index| {
+                    Reverse((
+                        index.log_time,
+                        chunk_slots[index.chunk_slot_idx].data_start,
+                        index.offset,
+                    ))
+                });
             }
         }
     }
@@ -523,7 +536,7 @@ fn find_or_make_chunk_slot(
     let idx = chunk_slots.len();
     chunk_slots.push(ChunkSlot {
         message_count: 0,
-        data_start: 0,
+        data_start,
         buf: Vec::with_capacity(uncompressed_size),
     });
     idx
@@ -599,22 +612,14 @@ mod tests {
             .expect("there should be a summary");
         let mut reader = IndexedReader::new_with_options(&summary, options)
             .expect("reader construction should not fail");
-        let mut cursor = std::io::Cursor::new(&mcap);
         let mut found = Vec::new();
         let mut iterations = 0;
-        let mut buf = Vec::new();
         while let Some(event) = reader.next_event() {
             match event.expect("indexed reader failed") {
                 IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                    cursor
-                        .seek(std::io::SeekFrom::Start(offset))
-                        .expect("should not fail to seek");
-                    buf.resize(length, 0);
-                    cursor
-                        .read_exact(&mut buf)
-                        .expect("should not fail on read");
+                    let chunk_data = mcap.split_at(offset as usize).1.split_at(length).0;
                     reader
-                        .insert_chunk_record_data(offset, &buf)
+                        .insert_chunk_record_data(offset, chunk_data)
                         .expect("failed to insert");
                 }
                 IndexedReadEvent::Message { header, .. } => {
@@ -628,6 +633,45 @@ mod tests {
             }
         }
         found
+    }
+
+    fn read_mcap_noseek(options: IndexedReaderOptions, mcap: &[u8]) -> Vec<(u16, u64)> {
+        let summary = crate::Summary::read(mcap)
+            .expect("summary reading should succeed")
+            .expect("there should be a summary");
+        let mut indexed_reader = IndexedReader::new_with_options(&summary, options)
+            .expect("reader construction should not fail");
+        let mut my_chunk_indexes = summary.chunk_indexes.clone();
+        my_chunk_indexes.sort_by_key(|chunk_index| chunk_index.chunk_start_offset);
+
+        let mut found = Vec::new();
+        let mut cur_chunk_index = 0;
+        let mut iterations = 0;
+        loop {
+            iterations += 1;
+            if iterations > 100000 {
+                panic!("too many iterations");
+            }
+            // first check if the indexed reader is out of messages
+            match indexed_reader.next_event() {
+                None => return found,
+                Some(Ok(IndexedReadEvent::Message { header, .. })) => {
+                    found.push((header.channel_id, header.log_time));
+                    indexed_reader.consume_message();
+                }
+                Some(Err(err)) => panic!("indexed reader failed: {err}"),
+                Some(Ok(IndexedReadEvent::ReadChunkRequest { .. })) => {
+                    let chunk_index = &my_chunk_indexes[cur_chunk_index];
+                    let offset = get_compressed_data_start(chunk_index);
+                    let len = chunk_index.compressed_size as usize;
+                    let chunk_buf = mcap.split_at(offset as usize).1.split_at(len).0;
+                    indexed_reader
+                        .insert_chunk_record_data(offset, chunk_buf)
+                        .expect("insert failed");
+                    cur_chunk_index += 1;
+                }
+            };
+        }
     }
 
     fn test_read_order(chunks: &[&[(u16, u64)]]) {
@@ -649,7 +693,10 @@ mod tests {
                 }
             }
             let found = read_mcap(IndexedReaderOptions::new().with_order(order), &mcap);
-            assert_eq!(&found, &expected, "order: {order:?}");
+            assert_eq!(&found, &expected, "(seeking) order: {order:?}");
+            let found_noseek =
+                read_mcap_noseek(IndexedReaderOptions::new().with_order(order), &mcap);
+            assert_eq!(&found_noseek, &expected, "(no seeking) order: {order:?}");
         }
     }
     #[test]
@@ -691,7 +738,7 @@ mod tests {
     #[test]
     fn test_time_range_filter() {
         let mcap = make_mcap(None, &[&[(0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6)]]);
-        let messages = read_mcap(
+        let messages = read_mcap_noseek(
             IndexedReaderOptions::new()
                 .log_time_on_or_after(3)
                 .log_time_before(6),
@@ -707,7 +754,7 @@ mod tests {
             Some(crate::Compression::Zstd),
         ] {
             let mcap = make_mcap(compression, &[&[(0, 1), (0, 2)], &[(0, 3), (0, 4)]]);
-            let messages = read_mcap(IndexedReaderOptions::new(), &mcap);
+            let messages = read_mcap_noseek(IndexedReaderOptions::new(), &mcap);
             assert_eq!(
                 &messages,
                 &[(0, 1), (0, 2), (0, 3), (0, 4)],
@@ -719,7 +766,8 @@ mod tests {
     #[test]
     fn test_channel_filter() {
         let mcap = make_mcap(None, &[&[(0, 1), (1, 2), (2, 3), (1, 4), (0, 5), (1, 6)]]);
-        let messages = read_mcap(IndexedReaderOptions::new().include_topics(["even"]), &mcap);
+        let messages =
+            read_mcap_noseek(IndexedReaderOptions::new().include_topics(["even"]), &mcap);
         assert_eq!(&messages, &[(0, 1), (2, 3), (0, 5)])
     }
 
