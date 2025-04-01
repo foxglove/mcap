@@ -696,10 +696,10 @@ mod tests {
             match order {
                 ReadOrder::File => {}
                 // sort in log time order (stable, so that file order is preserved) for equal values
-                ReadOrder::LogTime => expected.sort_by(|a, b| a.1.cmp(&b.1)),
+                ReadOrder::LogTime => expected.sort_by_key(|(_, log_time)| *log_time),
                 // sort in log time order then reverse
                 ReadOrder::ReverseLogTime => {
-                    expected.sort_by(|a, b| a.1.cmp(&b.1));
+                    expected.sort_by_key(|(_, log_time)| Reverse(*log_time));
                     expected.reverse();
                 }
             }
