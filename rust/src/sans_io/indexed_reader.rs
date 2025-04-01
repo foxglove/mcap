@@ -63,17 +63,18 @@ struct ChunkSlot {
 ///         reader.finish().unwrap()
 ///     };
 ///     let mut reader = mcap::sans_io::indexed_reader::IndexedReader::new(&summary).expect("could not construct reader");
+///     let mut buffer = Vec::new();
 ///     while let Some(event) = reader.next_event() {
 ///         match event? {
-///             IndexedReadEvent::ReadChunkRequest{start, length} => {
-///                 file.seek(start)?;
-///                 let mut buffer = reader.reclaim_buffer();
+///             IndexedReadEvent::ReadChunkRequest{offset, length} => {
+///                 file.seek(std::io::SeekFrom::Start(offset))?;
 ///                 buffer.resize(length, 0);
 ///                 file.read_exact(&mut buffer)?;
-///                 reader.insert_chunk_record_data(start, buffer);
+///                 reader.insert_chunk_record_data(offset, &buffer);
 ///             },
 ///             IndexedReadEvent::Message{ header, data } => {
 ///                 let channel = summary.channels.get(&header.channel_id).unwrap();
+///                 reader.consume_message();
 ///                 // do something with the message header and data
 ///             }
 ///         }
