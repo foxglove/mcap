@@ -42,18 +42,18 @@ pub fn main() {
     let mut reader = IndexedReader::new(&summary).expect("failed to initialize indexed reader");
     while let Some(event) = reader.next_event() {
         match event.expect("failed to get next event") {
-            IndexedReadEvent::SeekRequest(pos) => {
-                reader.notify_seeked(cursor.seek(pos).expect("failed to seek file"));
-            }
-            IndexedReadEvent::ReadRequest(n) => {
-                let read = cursor.read(reader.insert(n)).expect("failed to read file");
-                reader.notify_read(read);
+            IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                let chunk_data = file.split_at(offset as usize).1.split_at(length).0;
+                reader
+                    .insert_chunk_record_data(offset, chunk_data)
+                    .expect("failed on insert");
             }
             IndexedReadEvent::Message { header, data } => {
                 messages.push(serialization::as_json(&Record::Message {
                     header,
                     data: std::borrow::Cow::Borrowed(data),
                 }));
+                reader.consume_message();
             }
         }
     }
