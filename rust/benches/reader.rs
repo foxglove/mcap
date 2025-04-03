@@ -75,7 +75,6 @@ fn get_next_message(
             sans_io::IndexedReadEvent::Message { header, data } => {
                 into.resize(data.len(), 0);
                 into.copy_from_slice(data);
-                reader.consume_message();
                 return Some(header);
             }
             sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {

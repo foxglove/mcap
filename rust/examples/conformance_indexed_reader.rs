@@ -53,7 +53,6 @@ pub fn main() {
                     header,
                     data: std::borrow::Cow::Borrowed(data),
                 }));
-                reader.consume_message();
             }
         }
     }

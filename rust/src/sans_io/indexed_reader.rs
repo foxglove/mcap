@@ -63,7 +63,7 @@ struct ChunkSlot {
 ///         reader.finish().unwrap()
 ///     };
 ///     let mut reader = mcap::sans_io::indexed_reader::IndexedReader::new(&summary).expect("could not construct reader");
-///     let mut buffer = Vec::new();
+///     let mut buumefer = Vec::new();
 ///     while let Some(event) = reader.next_event() {
 ///         match event? {
 ///             IndexedReadEvent::ReadChunkRequest{offset, length} => {
@@ -74,7 +74,6 @@ struct ChunkSlot {
 ///             },
 ///             IndexedReadEvent::Message{ header, data } => {
 ///                 let channel = summary.channels.get(&header.channel_id).unwrap();
-///                 reader.consume_message();
 ///                 // do something with the message header and data
 ///             }
 ///         }
@@ -214,7 +213,7 @@ impl IndexedReader {
 
     /// Returns the next event from the reader. Call this repeatedly and act on the resulting
     /// events in order to read messages from the MCAP.
-    pub fn next_event(&self) -> Option<McapResult<IndexedReadEvent>> {
+    pub fn next_event(&mut self) -> Option<McapResult<IndexedReadEvent>> {
         if self.cur_message_index < self.message_indexes.len() {
             let message_index = &self.message_indexes[self.cur_message_index];
             // There is a message index at the top of the queue - check if we need to yield it
@@ -253,6 +252,7 @@ impl IndexedReader {
             };
             let data_start_offset = reader.position() as usize;
             let data = &msg_data[data_start_offset..];
+            self.cur_message_index += 1;
             return Some(Ok(IndexedReadEvent::Message { header, data }));
         }
         // we're out of message indexes, we need to load a chunk.
@@ -345,11 +345,6 @@ impl IndexedReader {
             self.chunk_indexes.remove(i);
         }
         Ok(())
-    }
-
-    /// Call to indicate to the reader that it should move on to the next message.
-    pub fn consume_message(&mut self) {
-        self.cur_message_index += 1;
     }
 
     fn yield_chunk_first(&self, chunk_index: &ChunkIndex, message_index: &MessageIndex) -> bool {
@@ -622,7 +617,6 @@ mod tests {
                 }
                 IndexedReadEvent::Message { header, .. } => {
                     found.push((header.channel_id, header.log_time));
-                    reader.consume_message();
                 }
             }
             iterations += 1;
@@ -658,7 +652,6 @@ mod tests {
                 None => return found,
                 Some(Ok(IndexedReadEvent::Message { header, .. })) => {
                     found.push((header.channel_id, header.log_time));
-                    indexed_reader.consume_message();
                 }
                 Some(Err(err)) => panic!("indexed reader failed: {err}"),
                 Some(Ok(IndexedReadEvent::ReadChunkRequest { .. })) => {
@@ -815,7 +808,6 @@ mod tests {
                     }
                     IndexedReadEvent::Message { header, .. } => {
                         messages.push(header.log_time);
-                        reader.consume_message();
                     }
                 }
             }
