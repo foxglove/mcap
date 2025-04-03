@@ -63,7 +63,7 @@ struct ChunkSlot {
 ///         reader.finish().unwrap()
 ///     };
 ///     let mut reader = mcap::sans_io::indexed_reader::IndexedReader::new(&summary).expect("could not construct reader");
-///     let mut buumefer = Vec::new();
+///     let mut buffer = Vec::new();
 ///     while let Some(event) = reader.next_event() {
 ///         match event? {
 ///             IndexedReadEvent::ReadChunkRequest{offset, length} => {
@@ -263,16 +263,18 @@ impl IndexedReader {
         chunk_request(&self.chunk_indexes[self.cur_chunk_index])
     }
 
-    /// Call to insert new compressed records into this reader.
+    /// Call to insert new compressed records into this reader. `offset` should be a valid file
+    /// offset to the start of the compressed data in a chunk. `compressed_data` should be a slice
+    /// containing the entire compressed data for that chunk.
     pub fn insert_chunk_record_data(
         &mut self,
         offset: u64,
         compressed_data: &[u8],
     ) -> McapResult<()> {
+        let chunk_indexes = &self.chunk_indexes[self.cur_chunk_index..];
         // linear search through our chunk indexes to figure out which one it is. In the common case,
         // the first chunk index will be right.
-        let Some((i, chunk_index)) = self
-            .chunk_indexes
+        let Some((i, chunk_index)) = chunk_indexes
             .iter()
             .enumerate()
             .find(|(_, chunk_index)| chunk_index.compressed_data_offset() == offset)
@@ -342,7 +344,7 @@ impl IndexedReader {
         if i == 0 {
             self.cur_chunk_index += 1;
         } else {
-            self.chunk_indexes.remove(i);
+            self.chunk_indexes.remove(self.cur_chunk_index + i);
         }
         Ok(())
     }
