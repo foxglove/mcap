@@ -537,9 +537,9 @@ func TestSameSchemasNotDuplicated(t *testing.T) {
 
 func TestChannelCoalesceBehavior(t *testing.T) {
 	expectedMsgCountByChannel := map[string]map[uint16]int{
-		"none":  {1: 100, 2: 100, 3: 100, 4: 100},
-		"auto":  {1: 200, 2: 100, 3: 100},
-		"force": {1: 300, 2: 100},
+		"none":  {1: 100, 2: 100, 3: 100, 4: 100, 5: 100},
+		"auto":  {1: 200, 2: 200, 3: 100},
+		"force": {1: 400, 2: 100},
 	}
 
 	for coalesceChannels, messagesByChannel := range expectedMsgCountByChannel {
@@ -547,16 +547,20 @@ func TestChannelCoalesceBehavior(t *testing.T) {
 		buf2 := &bytes.Buffer{}
 		buf3 := &bytes.Buffer{}
 		buf4 := &bytes.Buffer{}
+		buf5 := &bytes.Buffer{}
+		fooMetadata := map[string]string{"k0": "v", "k1": "v", "k2": "v", "k3": "v"}
 		prepInput(t, buf1, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 1, Topic: "/foo"})
 		prepInput(t, buf2, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 2, Topic: "/foo"})
-		prepInput(t, buf3, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 3, Topic: "/foo", Metadata: map[string]string{"k": "v"}})
-		prepInput(t, buf4, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 4, Topic: "/bar"})
+		prepInput(t, buf3, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 3, Topic: "/foo", Metadata: fooMetadata})
+		prepInput(t, buf4, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 4, Topic: "/foo", Metadata: fooMetadata})
+		prepInput(t, buf5, &mcap.Schema{ID: 1}, &mcap.Channel{ID: 5, Topic: "/bar"})
 		output := &bytes.Buffer{}
 		inputs := []namedReader{
 			{"buf1", bytes.NewReader(buf1.Bytes())},
 			{"buf2", bytes.NewReader(buf2.Bytes())},
 			{"buf3", bytes.NewReader(buf3.Bytes())},
 			{"buf4", bytes.NewReader(buf4.Bytes())},
+			{"buf5", bytes.NewReader(buf5.Bytes())},
 		}
 		merger := newMCAPMerger(mergeOpts{coalesceChannels: coalesceChannels, allowDuplicateMetadata: true})
 		require.NoError(t, merger.mergeInputs(output, inputs))
