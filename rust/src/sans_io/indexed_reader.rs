@@ -19,6 +19,8 @@ pub enum IndexedReadEvent<'a> {
     /// Read a slice out of the underlying file with the given offset and length into a buffer,
     /// and call [`IndexedReader::insert_chunk_record_data`] with the result to get more messages.
     ReadChunkRequest { offset: u64, length: usize },
+    /// A message from the file. Use the channel ID in `header` to associate this message with its
+    /// channel and schema information in the summary.
     Message {
         header: crate::records::MessageHeader,
         data: &'a [u8],
@@ -140,8 +142,7 @@ impl IndexedReader {
         // filter out chunks that we won't use
         let mut chunk_indexes: Vec<crate::records::ChunkIndex> = summary
             .chunk_indexes
-            .clone()
-            .into_iter()
+            .iter()
             .filter(|chunk_index| {
                 if let Some(start) = options.start {
                     if chunk_index.message_end_time < start {
@@ -168,6 +169,7 @@ impl IndexedReader {
                 }
                 false
             })
+            .cloned()
             .collect();
 
         // put the chunk indexes in the order that we want to read them
@@ -214,17 +216,17 @@ impl IndexedReader {
     /// Returns the next event from the reader. Call this repeatedly and act on the resulting
     /// events in order to read messages from the MCAP.
     pub fn next_event(&mut self) -> Option<McapResult<IndexedReadEvent>> {
+        // If this reader is aware of messages that haven't been yielded yet, try to yield them.
         if self.cur_message_index < self.message_indexes.len() {
             let message_index = &self.message_indexes[self.cur_message_index];
-            // There is a message index at the top of the queue - check if we need to yield it
-            // or load another chunk first.
+            // Check if another chunk needs to be loaded before yielding this message
             if self.cur_chunk_index < self.chunk_indexes.len() {
                 let chunk_index = &self.chunk_indexes[self.cur_chunk_index];
                 if self.yield_chunk_first(chunk_index, message_index) {
                     return chunk_request(chunk_index);
                 }
             }
-            // Time to yield the message.
+            // slice the message out of its decompressed chunk buffer and yield it.
             let buf = &self.chunk_slots[message_index.chunk_slot_idx].buf[message_index.offset..];
             let Some((&[opcode], buf)) = buf.split_first_chunk() else {
                 return Some(Err(McapError::UnexpectedEoc));
@@ -386,9 +388,13 @@ pub enum ReadOrder {
 
 #[derive(Default, Clone)]
 pub struct IndexedReaderOptions {
+    /// If Some, only messages with a log time greater or equal to this value will be yielded.
     pub start: Option<u64>,
+    /// If Some, only messages with a log time less than this value will be yielded.
     pub end: Option<u64>,
+    /// The order in which to yield messages. Defaults to log-time order.
     pub order: ReadOrder,
+    /// If Some, only messages on channels with topics contained in this set will be yielded.
     pub include_topics: Option<BTreeSet<String>>,
 }
 
@@ -481,7 +487,7 @@ fn index_messages(
             offset = next_offset;
             continue;
         }
-        if !sorting_required {
+        if !sorting_required && !matches!(order, ReadOrder::File) {
             sorting_required = msg.log_time < latest_timestamp
         }
         latest_timestamp = latest_timestamp.max(msg.log_time);
