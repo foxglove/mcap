@@ -14,6 +14,8 @@ use std::{
 
 use binrw::*;
 
+use crate::{McapError, McapResult};
+
 /// Opcodes for MCAP file records.
 ///
 /// "Records are identified by a single-byte opcode.
@@ -417,17 +419,23 @@ pub struct ChunkIndex {
 impl ChunkIndex {
     /// Returns the offset in the file to the start of compressed chunk data.
     /// This can be useful for retrieving just the compressed content of a chunk given its index.
-    pub fn compressed_data_offset(&self) -> u64 {
-        self.chunk_start_offset
-        + 1 // opcode
-        + 8 // chunk record length
-        + 8 // start time
-        + 8 // end time
-        + 8 // uncompressed size
-        + 4 // CRC
-        + 4 // compression string length
-        + (self.compression.len() as u64) // compression string
-        + 8 // compressed size
+    /// Returns [`McapError::TooLong`] if the resulting offset would be greater than [`u64::MAX`].
+    pub fn compressed_data_offset(&self) -> McapResult<u64> {
+        let res = self.chunk_start_offset.checked_add(
+            1 // opcode
+            + 8 // chunk record length
+            + 8 // start time
+            + 8 // end time
+            + 8 // uncompressed size
+            + 4 // CRC
+            + 4 // compression string length
+            + (self.compression.len() as u64) // 32-bit compression string length
+            + 8, // compressed size
+        );
+        match res {
+            Some(n) => Ok(n),
+            None => Err(McapError::TooLong(self.chunk_start_offset)),
+        }
     }
 }
 

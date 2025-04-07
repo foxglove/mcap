@@ -113,7 +113,9 @@ fn chunk_request(index: &ChunkIndex) -> Option<McapResult<IndexedReadEvent<'stat
         Err(err) => return Some(Err(err)),
     };
     Some(Ok(IndexedReadEvent::ReadChunkRequest {
-        offset: index.compressed_data_offset(),
+        offset: index
+            .compressed_data_offset()
+            .expect("chunk data offset checked in new()"),
         length,
     }))
 }
@@ -171,6 +173,12 @@ impl IndexedReader {
             })
             .cloned()
             .collect();
+
+        for chunk_index in chunk_indexes.iter() {
+            // check that compressed data offset can be computed for every chunk index we intend to
+            // use.
+            chunk_index.compressed_data_offset()?;
+        }
 
         // put the chunk indexes in the order that we want to read them
         match options.order {
@@ -276,11 +284,12 @@ impl IndexedReader {
         let chunk_indexes = &self.chunk_indexes[self.cur_chunk_index..];
         // linear search through our chunk indexes to figure out which one it is. In the common case,
         // the first chunk index will be right.
-        let Some((i, chunk_index)) = chunk_indexes
-            .iter()
-            .enumerate()
-            .find(|(_, chunk_index)| chunk_index.compressed_data_offset() == offset)
-        else {
+        let Some((i, chunk_index)) = chunk_indexes.iter().enumerate().find(|(_, chunk_index)| {
+            let chunk_start_offset = chunk_index
+                .compressed_data_offset()
+                .expect("chunk data start offset checked in new()");
+            chunk_start_offset == offset
+        }) else {
             return Err(McapError::UnexpectedChunkDataInserted);
         };
         if compressed_data.len() != chunk_index.compressed_size as usize {
@@ -355,7 +364,9 @@ impl IndexedReader {
         match self.order {
             ReadOrder::File => {
                 let chunk_slot = &self.chunk_slots[message_index.chunk_slot_idx];
-                let data_offset = chunk_index.compressed_data_offset();
+                let data_offset = chunk_index
+                    .compressed_data_offset()
+                    .expect("chunk data start offset checked in new()");
                 data_offset < chunk_slot.data_start
             }
             ReadOrder::LogTime => chunk_index.message_start_time < message_index.log_time,
@@ -671,7 +682,9 @@ mod tests {
                 Some(Err(err)) => panic!("indexed reader failed: {err}"),
                 Some(Ok(IndexedReadEvent::ReadChunkRequest { .. })) => {
                     let chunk_index = &my_chunk_indexes[cur_chunk_index];
-                    let offset = chunk_index.compressed_data_offset();
+                    let offset = chunk_index
+                        .compressed_data_offset()
+                        .expect("chunk data start offset checked in new()");
                     let len = chunk_index.compressed_size as usize;
                     let chunk_buf = &mcap[offset as usize..][..len];
                     indexed_reader
