@@ -4,7 +4,7 @@ use crate::{
     records::{op, ChunkIndex, MessageHeader},
     McapError, McapResult,
 };
-use std::{cmp::Reverse, collections::BTreeSet, ops::Deref};
+use std::{cmp::Reverse, collections::BTreeSet};
 
 #[derive(Clone, Copy)]
 struct MessageIndex {
@@ -422,11 +422,8 @@ impl IndexedReaderOptions {
 
     /// Configure the reader to yield only messages from topics matching this set of strings.
     /// By default, all topics will be yielded.
-    pub fn include_topics<T: IntoIterator<Item = impl Deref<Target = str>>>(
-        mut self,
-        topics: T,
-    ) -> Self {
-        self.include_topics = Some(topics.into_iter().map(|p| p.to_owned()).collect());
+    pub fn include_topics<T: IntoIterator<Item = impl Into<String>>>(mut self, topics: T) -> Self {
+        self.include_topics = Some(topics.into_iter().map(|p| p.into()).collect());
         self
     }
 
