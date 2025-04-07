@@ -494,7 +494,14 @@ fn index_messages(
     }
     match order {
         ReadOrder::File => {
-            // in file order, message indexes do not need sorting
+            // in file order, message indexes only need sorting if the caller has loaded chunks
+            // out-of-order.
+            if sorting_required {
+                let unread_message_indexes = &mut message_indexes[cur_message_index..];
+                unread_message_indexes.sort_by_key(|index| {
+                    (chunk_slots[index.chunk_slot_idx].data_start, index.offset)
+                });
+            }
         }
         ReadOrder::LogTime => {
             if sorting_required {
@@ -639,7 +646,7 @@ mod tests {
         let mut indexed_reader = IndexedReader::new_with_options(&summary, options)
             .expect("reader construction should not fail");
         let mut my_chunk_indexes = summary.chunk_indexes.clone();
-        my_chunk_indexes.sort_by_key(|chunk_index| chunk_index.chunk_start_offset);
+        my_chunk_indexes.sort_by_key(|chunk_index| Reverse(chunk_index.chunk_start_offset));
 
         let mut found = Vec::new();
         let mut cur_chunk_index = 0;
