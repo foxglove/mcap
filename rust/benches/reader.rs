@@ -1,4 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
+use mcap::sans_io::IndexedReaderOptions;
 use mcap::{sans_io, Channel, Message, MessageStream, Schema};
 use std::borrow::Cow;
 use std::io::Cursor;
@@ -159,6 +160,30 @@ fn bench_read_messages(c: &mut Criterion) {
                 let summary = load_summary(&mut file);
                 let mut reader =
                     sans_io::IndexedReader::new(&summary).expect("could not build reader");
+                let mut data_buf = Vec::new();
+                while let Some(header) = get_next_message(&mut reader, &mut file, &mut data_buf) {
+                    let message = mcap::Message {
+                        channel: summary.channels.get(&header.channel_id).unwrap().clone(),
+                        sequence: header.sequence,
+                        log_time: header.log_time,
+                        publish_time: header.publish_time,
+                        data: Cow::Borrowed(&data_buf),
+                    };
+                    std::hint::black_box(message);
+                }
+            });
+        });
+
+        group.bench_function("IndexedReader_1M_zstd_reverse", |b| {
+            b.iter(|| {
+                let mut file = std::io::Cursor::new(&mcap_data_zstd[..]);
+                let summary = load_summary(&mut file);
+                let mut reader = sans_io::IndexedReader::new_with_options(
+                    &summary,
+                    IndexedReaderOptions::new()
+                        .with_order(sans_io::indexed_reader::ReadOrder::ReverseLogTime),
+                )
+                .expect("could not build reader");
                 let mut data_buf = Vec::new();
                 while let Some(header) = get_next_message(&mut reader, &mut file, &mut data_buf) {
                     let message = mcap::Message {

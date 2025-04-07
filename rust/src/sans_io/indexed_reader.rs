@@ -207,9 +207,13 @@ impl IndexedReader {
         // check through all chunk indexes once to ensure that we have address space for an
         // uncompressed chunk.
         for chunk_index in chunk_indexes.iter() {
+            // if usize < 64 bits, ensure that the compressed buffer will fit into our address
+            // space.
             if chunk_index.compressed_size > usize::MAX as u64 {
                 return Err(McapError::TooLong(chunk_index.compressed_size));
             }
+            // if usize < 64 bits, ensure that the uncompressed buffer will fit into our address
+            // space.
             if chunk_index.uncompressed_size > usize::MAX as u64 {
                 return Err(McapError::TooLong(chunk_index.uncompressed_size));
             }
@@ -507,8 +511,12 @@ fn index_messages(
             offset = next_offset;
             continue;
         }
-        if !sorting_required && !matches!(order, ReadOrder::File) {
-            sorting_required = msg.log_time < latest_timestamp
+        if !sorting_required {
+            sorting_required = match order {
+                ReadOrder::File => false,
+                ReadOrder::LogTime => msg.log_time < latest_timestamp,
+                ReadOrder::ReverseLogTime => msg.log_time < latest_timestamp,
+            }
         }
         latest_timestamp = latest_timestamp.max(msg.log_time);
         message_indexes.push(MessageIndex {
@@ -542,7 +550,8 @@ fn index_messages(
             }
         }
         ReadOrder::ReverseLogTime => {
-            // first, reverse the order of the new message indexes. This will make the sort much faster.
+            // first, reverse the order of the new message indexes. This removes the need to sort
+            // in the common case, where all messages are already in log-time order.
             let new_message_indexes = &mut message_indexes[new_message_index_start..];
             new_message_indexes.reverse();
             if sorting_required {
