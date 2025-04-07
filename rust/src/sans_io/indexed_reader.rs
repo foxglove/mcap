@@ -308,19 +308,20 @@ impl IndexedReader {
         let slot_idx = find_or_make_chunk_slot(&mut self.chunk_slots, offset, uncompressed_size);
 
         let slot = &mut self.chunk_slots[slot_idx];
-        slot.buf.resize(uncompressed_size, 0);
         match chunk_index.compression.as_str() {
             "" => {
+                slot.buf.resize(uncompressed_size, 0);
                 slot.buf[..].copy_from_slice(compressed_data);
             }
             #[cfg(feature = "zstd")]
             "zstd" => {
                 // decompress zstd into current slot
-                let n = zstd::zstd_safe::decompress(&mut slot.buf[..], compressed_data).map_err(
-                    |err| {
+                slot.buf.clear();
+                slot.buf.reserve(uncompressed_size);
+                let n =
+                    zstd::zstd_safe::decompress(&mut slot.buf, compressed_data).map_err(|err| {
                         McapError::DecompressionError(zstd::zstd_safe::get_error_name(err).into())
-                    },
-                )?;
+                    })?;
                 if n != uncompressed_size {
                     return Err(McapError::DecompressionError(format!(
                         "zstd decompression error: expected {uncompressed_size}, got {n}"
@@ -329,6 +330,7 @@ impl IndexedReader {
             }
             #[cfg(feature = "lz4")]
             "lz4" => {
+                slot.buf.resize(uncompressed_size, 0);
                 use std::io::Read;
                 let mut decoder = lz4::Decoder::new(std::io::Cursor::new(compressed_data))?;
                 decoder.read_exact(&mut slot.buf[..])?;
@@ -336,8 +338,9 @@ impl IndexedReader {
             other => return Err(McapError::UnsupportedCompression(other.into())),
         }
         // index the current chunk slot
-        // before starting, check if all existing message indexes have been exhausted -
-        // if so, clear them out now.
+        // before starting, check if all existing message indexes have been exhausted and clear them
+        // to re-use space in `self.message_indexes`. This is the common case, since most MCAPs do
+        // not have overlapping chunks.
         if self.cur_message_index >= self.message_indexes.len() {
             self.cur_message_index = 0;
             self.message_indexes.clear();
