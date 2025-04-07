@@ -509,10 +509,10 @@ impl<W: Write + Seek> Writer<W> {
     /// Useful with subequent calls to [`write_to_known_channel()`](Self::write_to_known_channel).
     ///
     /// * `schema_id`: a schema_id returned from [`Self::add_schema`], or 0 if the channel has no
-    ///    schema.
+    ///   schema.
     /// * `topic`: The topic name.
     /// * `message_encoding`: Encoding for messages on this channel. The [well-known message
-    ///    encodings](https://mcap.dev/spec/registry#well-known-message-encodings) are preferred.
+    ///   encodings](https://mcap.dev/spec/registry#well-known-message-encodings) are preferred.
     ///  * `metadata`: Metadata about this channel.
     pub fn add_channel(
         &mut self,

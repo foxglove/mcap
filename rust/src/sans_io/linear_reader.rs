@@ -1048,7 +1048,7 @@ mod tests {
         let mut buf = Vec::new();
         {
             let mut cursor = std::io::Cursor::new(buf);
-            let data = Vec::from_iter(std::iter::repeat(0x20u8).take(1024 * 1024 * 4));
+            let data = Vec::from_iter(std::iter::repeat_n(0x20u8, 1024 * 1024 * 4));
             let mut writer = crate::WriteOptions::new()
                 .compression(None)
                 .chunk_size(None)
