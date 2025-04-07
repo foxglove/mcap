@@ -186,12 +186,21 @@ impl IndexedReader {
                 chunk_indexes.sort_by_key(|chunk_index| chunk_index.chunk_start_offset);
             }
             ReadOrder::LogTime => {
-                chunk_indexes.sort_by_key(|chunk_index| chunk_index.message_start_time);
+                // load chunk indexes in order of their start time, falling back to position in
+                // file.
+                chunk_indexes.sort_by_key(|chunk_index| {
+                    (
+                        chunk_index.message_start_time,
+                        chunk_index.chunk_start_offset,
+                    )
+                });
             }
             ReadOrder::ReverseLogTime => {
-                // load chunks in reverse order of their _end_ time.
-                chunk_indexes.sort_by_key(|chunk_index| chunk_index.message_end_time);
-                chunk_indexes.reverse();
+                // load chunks in reverse order of their _end_ time, falling back to their
+                // position in the file.
+                chunk_indexes.sort_by_key(|chunk_index| {
+                    Reverse((chunk_index.message_end_time, chunk_index.chunk_start_offset))
+                });
             }
         };
 
