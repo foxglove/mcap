@@ -489,7 +489,10 @@ fn index_messages(
         }
         let record_data = &buf[..len];
         // 1 byte opcode + 8 byte length == 9
-        let next_offset = offset + 9 + len;
+        let next_offset = offset
+          + 1 // opcode
+          + 8 // record length
+          + len;
         if opcode != op::MESSAGE {
             offset = next_offset;
             continue;
