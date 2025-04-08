@@ -488,7 +488,6 @@ fn index_messages(
             return Err(McapError::UnexpectedEoc);
         }
         let record_data = &buf[..len];
-        // 1 byte opcode + 8 byte length == 9
         let next_offset = offset
           + 1 // opcode
           + 8 // record length

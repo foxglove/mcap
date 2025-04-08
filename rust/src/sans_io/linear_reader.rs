@@ -56,6 +56,9 @@ struct ChunkState {
     crc: u32,
 }
 
+// MCAP records start with an opcode (1 byte) and a 64-bit length (8 bytes).
+const OPCODE_LEN_SIZE: usize = 1 + 8;
+
 /// A private struct that encapsulates a buffer with start and end cursors.
 #[derive(Default)]
 struct RwBuf {
@@ -395,12 +398,12 @@ impl LinearReader {
                     self.currently_reading = CurrentlyReading::FileRecord;
                 }
                 FileRecord => {
-                    let opcode_length_buf = load!(9);
+                    let opcode_length_buf = load!(OPCODE_LEN_SIZE);
                     let opcode = opcode_length_buf[0];
                     let len = u64::from_le_bytes(opcode_length_buf[1..].try_into().unwrap());
                     // Some record types are handled specially.
                     if opcode == op::CHUNK && !self.options.emit_chunks {
-                        self.file_data.mark_read(9);
+                        self.file_data.mark_read(OPCODE_LEN_SIZE);
                         self.currently_reading = CurrentlyReading::ChunkHeader { len };
                         continue;
                     } else if opcode == op::DATA_END {
@@ -410,13 +413,13 @@ impl LinearReader {
                         // much data in the CRC.
                         let calculated =
                             self.file_data.hasher.take().map(|hasher| hasher.finalize());
-                        self.file_data.mark_read(9);
+                        self.file_data.mark_read(OPCODE_LEN_SIZE);
                         self.currently_reading = DataEnd { len, calculated };
                         continue;
                     } else if opcode == op::FOOTER {
                         // The summary section CRC needs to be checked against the CRC of the entire
                         // summary section _including_ the first bytes of the footer record.
-                        self.file_data.mark_read(9);
+                        self.file_data.mark_read(OPCODE_LEN_SIZE);
                         self.currently_reading = Footer {
                             len,
                             hasher: self.file_data.hasher.take(),
@@ -426,7 +429,7 @@ impl LinearReader {
                     // For all other records, load the entire record into memory and yield to the
                     // caller.
                     let len = check!(len_as_usize(len));
-                    let data = &consume!(9 + len)[9..];
+                    let data = &consume!(OPCODE_LEN_SIZE + len)[OPCODE_LEN_SIZE..];
                     return Some(Ok(LinearReadEvent::Record { data, opcode }));
                 }
                 CurrentlyReading::DataEnd { len, calculated } => {
@@ -571,17 +574,17 @@ impl LinearReader {
                                 self.currently_reading = PaddingAfterChunk;
                                 continue;
                             }
-                            let opcode_len_buf = load!(9);
+                            let opcode_len_buf = load!(OPCODE_LEN_SIZE);
                             let opcode = opcode_len_buf[0];
                             let len = check!(len_as_usize(u64::from_le_bytes(
                                 opcode_len_buf[1..].try_into().unwrap(),
                             )));
-                            let opcode_len_data = consume!(9 + len);
-                            let data = &opcode_len_data[9..];
+                            let opcode_len_data = consume!(OPCODE_LEN_SIZE + len);
+                            let data = &opcode_len_data[OPCODE_LEN_SIZE..];
                             if let Some(hasher) = state.uncompressed_data_hasher.as_mut() {
                                 hasher.update(opcode_len_data);
                             }
-                            state.compressed_remaining -= (9 + len) as u64;
+                            state.compressed_remaining -= (OPCODE_LEN_SIZE + len) as u64;
                             return Some(Ok(LinearReadEvent::Record { data, opcode }));
                         }
                         Some(decompressor) => {
@@ -602,13 +605,16 @@ impl LinearReader {
                                 self.currently_reading = PaddingAfterChunk;
                                 continue;
                             }
-                            let opcode_len_buf = decompress!(9, state, decompressor);
-                            let opcode = opcode_len_buf[0];
-                            let len = check!(len_as_usize(u64::from_le_bytes(
-                                opcode_len_buf[1..9].try_into().unwrap(),
-                            )));
-                            let _ = decompress!(9 + len, state, decompressor);
-                            self.decompressed_content.mark_read(9);
+                            let opcode_len_buf = decompress!(OPCODE_LEN_SIZE, state, decompressor);
+                            let Some((&[opcode], rest)) = opcode_len_buf.split_first_chunk() else {
+                                return Some(Err(McapError::UnexpectedEoc));
+                            };
+                            let Some((&len_buf, _)) = rest.split_first_chunk() else {
+                                return Some(Err(McapError::UnexpectedEoc));
+                            };
+                            let len = check!(len_as_usize(u64::from_le_bytes(len_buf)));
+                            let _ = decompress!(OPCODE_LEN_SIZE + len, state, decompressor);
+                            self.decompressed_content.mark_read(OPCODE_LEN_SIZE);
                             let (start, end) = (
                                 self.decompressed_content.start,
                                 self.decompressed_content.start + len,
