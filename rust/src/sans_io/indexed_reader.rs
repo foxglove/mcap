@@ -309,7 +309,7 @@ impl IndexedReader {
             return Err(McapError::UnexpectedChunkDataInserted);
         }
         let uncompressed_size = chunk_index.uncompressed_size as usize;
-        let slot_idx = find_or_make_chunk_slot(&mut self.chunk_slots, offset, uncompressed_size);
+        let slot_idx = find_or_make_chunk_slot(&mut self.chunk_slots, offset);
 
         let slot = &mut self.chunk_slots[slot_idx];
         match chunk_index.compression.as_str() {
@@ -513,12 +513,8 @@ fn index_messages(
             offset = next_offset;
             continue;
         }
-        if !sorting_required {
-            sorting_required = match order {
-                ReadOrder::File => false,
-                ReadOrder::LogTime => msg.log_time < latest_timestamp,
-                ReadOrder::ReverseLogTime => msg.log_time < latest_timestamp,
-            }
+        if !sorting_required && !matches!(order, ReadOrder::File) {
+            sorting_required = msg.log_time < latest_timestamp;
         }
         latest_timestamp = latest_timestamp.max(msg.log_time);
         message_indexes.push(MessageIndex {
@@ -571,17 +567,11 @@ fn index_messages(
     Ok(message_indexes.len() - new_message_index_start)
 }
 
-/// Finds a chunk slot with no outstanding messages in it and returns its index, or creates a new one.
-fn find_or_make_chunk_slot(
-    chunk_slots: &mut Vec<ChunkSlot>,
-    data_start: u64,
-    uncompressed_size: usize,
-) -> usize {
+/// Finds a free chunk slot or creates a new one if none are available, and returns its index.
+fn find_or_make_chunk_slot(chunk_slots: &mut Vec<ChunkSlot>, data_start: u64) -> usize {
     for (i, slot) in chunk_slots.iter_mut().enumerate() {
         if slot.message_count == 0 {
-            slot.buf.clear();
             slot.data_start = data_start;
-            slot.buf.reserve(uncompressed_size);
             return i;
         }
     }
@@ -589,7 +579,7 @@ fn find_or_make_chunk_slot(
     chunk_slots.push(ChunkSlot {
         message_count: 0,
         data_start,
-        buf: Vec::with_capacity(uncompressed_size),
+        buf: Vec::new(),
     });
     idx
 }
