@@ -505,6 +505,9 @@ impl Iterator for MessageStream<'_> {
 const FOOTER_LEN: usize = 8 // summary start
  + 8 // summary offset start
  + 4; // summary section CRC
+const FOOTER_RECORD_LEN: usize = 1 // opcode
+     + 8 // record length
+     + FOOTER_LEN;
 
 /// Read the MCAP footer.
 ///
@@ -512,12 +515,9 @@ const FOOTER_LEN: usize = 8 // summary start
 /// then index into the rest of the file with
 /// [`Summary::stream_chunk`], [`attachment`], [`metadata`], etc.
 pub fn footer(mcap: &[u8]) -> McapResult<records::Footer> {
-    let footer_record_len = 1 // opcode
-     + 8 // record length
-     + FOOTER_LEN;
     // an MCAP must be at least large enough to accomodate a header magic, a footer record and a
     // footer magic.
-    if mcap.len() < (MAGIC.len() + (footer_record_len) + MAGIC.len()) {
+    if mcap.len() < (MAGIC.len() + FOOTER_RECORD_LEN + MAGIC.len()) {
         return Err(McapError::UnexpectedEof);
     }
 

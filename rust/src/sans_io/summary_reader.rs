@@ -8,7 +8,12 @@ use crate::{
 };
 use std::io::SeekFrom;
 
-const FOOTER_RECORD_AND_END_MAGIC: usize = 1 + 8 + 20 + 8;
+const FOOTER_RECORD_AND_END_MAGIC: usize = 1 // footer opcode
+    + 8 // footer length
+    + 8 // footer summary start field
+    + 8 // footer summary offset start field
+    + 4 // footer summary CRC field
+    + 8; // end magic
 
 /// Events returned by the summary reader. The summary reader yields
 pub enum SummaryReadEvent {
