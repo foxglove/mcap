@@ -286,9 +286,11 @@ impl IndexedReader {
         chunk_request(&self.chunk_indexes[self.cur_chunk_index])
     }
 
-    /// Call to insert new compressed records into this reader. `offset` should be a valid file
-    /// offset to the start of the compressed data in a chunk. `compressed_data` should be a slice
+    /// Call to insert new compressed records into this reader. `offset` must be a valid file
+    /// offset to the start of the compressed data in a chunk. `compressed_data` must be a slice
     /// containing the entire compressed data for that chunk.
+    /// Chunk contents can be inserted into this reader in a different order than they are requested
+    /// from `next_event`. Inserting the same chunk contents twice will result in an error.
     pub fn insert_chunk_record_data(
         &mut self,
         offset: u64,
@@ -376,6 +378,8 @@ impl IndexedReader {
         Ok(())
     }
 
+    // determine whether the chunk referred to by `chunk_index` should be loaded before the message
+    // referred to by `message_index` is yielded.
     fn yield_chunk_first(&self, chunk_index: &ChunkIndex, message_index: &MessageIndex) -> bool {
         match self.order {
             ReadOrder::File => {
