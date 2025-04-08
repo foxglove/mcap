@@ -390,11 +390,13 @@ pub struct Writer<W: Write + Seek> {
 }
 
 impl<W: Write + Seek> Writer<W> {
+    /// Create a new MCAP [`Writer`] using the provided seeking writer.
     pub fn new(writer: W) -> McapResult<Self> {
         Self::with_options(writer, WriteOptions::default())
     }
 
-    fn with_options(writer: W, opts: WriteOptions) -> McapResult<Self> {
+    /// Create a new MCAP [`Writer`] using the provided seeking writer and [`WriteOptions`].
+    pub fn with_options(writer: W, opts: WriteOptions) -> McapResult<Self> {
         let mut writer = CountingCrcWriter::new(writer, opts.calculate_data_section_crc);
         writer.write_all(MAGIC)?;
 

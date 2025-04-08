@@ -1,7 +1,7 @@
 //! Read MCAP data from a memory-mapped file.
 //!
 //! MCAPs are read from a byte slice instead of a [`std::io::Read`] trait object.
-//! Consider [memory-mapping](https://docs.rs/memmap/0.7.0/memmap/struct.Mmap.html)
+//! Consider [memory-mapping](https://docs.rs/memmap2/0.9.5/memmap2/struct.Mmap.html)
 //! the file - the OS will load (and cache!) it on-demand, without any
 //! further system calls.
 use std::{

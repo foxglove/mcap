@@ -6,7 +6,7 @@ use std::io::BufWriter;
 
 use anyhow::Result;
 use itertools::Itertools;
-use memmap::Mmap;
+use memmap2::Mmap;
 use tempfile::tempfile;
 
 fn round_trip(comp: Option<mcap::Compression>) -> Result<()> {

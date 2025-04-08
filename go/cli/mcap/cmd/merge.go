@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
@@ -157,9 +158,16 @@ func getChannelHash(channel *mcap.Channel, coalesceChannels string) HashSum {
 
 	switch coalesceChannels {
 	case AutoCoalescing: // Include channel metadata in hash
-		for key, value := range channel.Metadata {
+		// sort keys so we get same metadata order in the hash
+		keys := make([]string, 0, len(channel.Metadata))
+		for key := range channel.Metadata {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+
+		for _, key := range keys {
 			hasher.Write([]byte(key))
-			hasher.Write([]byte(value))
+			hasher.Write([]byte(channel.Metadata[key]))
 		}
 	case ForceCoalescing: // Channel metadata is not included in hash
 		break

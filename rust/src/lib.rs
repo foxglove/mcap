@@ -6,7 +6,7 @@
 //!
 //! use anyhow::{Context, Result};
 //! use camino::Utf8Path;
-//! use memmap::Mmap;
+//! use memmap2::Mmap;
 //!
 //! fn map_mcap<P: AsRef<Utf8Path>>(p: P) -> Result<Mmap> {
 //!     let fd = fs::File::open(p.as_ref()).context("Couldn't open MCAP file")?;

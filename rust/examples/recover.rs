@@ -8,7 +8,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use enumset::enum_set;
 use log::*;
-use memmap::Mmap;
+use memmap2::Mmap;
 
 #[derive(Parser, Debug)]
 struct Args {
