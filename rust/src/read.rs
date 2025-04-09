@@ -16,11 +16,13 @@ use binrw::prelude::*;
 use byteorder::{ReadBytesExt, LE};
 use crc32fast::hash as crc32;
 use enumset::{enum_set, EnumSet, EnumSetType};
-use log::*;
 
 use crate::{
-    records::{self, op, Record},
-    sans_io::{LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions},
+    records::{self, op, Footer, Record},
+    sans_io::{
+        LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions, SummaryReadEvent,
+        SummaryReader,
+    },
     Attachment, Channel, McapError, McapResult, Message, Schema, MAGIC,
 };
 
@@ -287,13 +289,17 @@ impl<'a> Iterator for ChunkFlattener<'a> {
 
 /// Parses schemas and channels and wires them together
 #[derive(Debug, Default)]
-struct ChannelAccumulator<'a> {
-    schemas: HashMap<u16, Arc<Schema<'a>>>,
-    channels: HashMap<u16, Arc<Channel<'a>>>,
+pub(crate) struct ChannelAccumulator<'a> {
+    pub(crate) schemas: HashMap<u16, Arc<Schema<'a>>>,
+    pub(crate) channels: HashMap<u16, Arc<Channel<'a>>>,
 }
 
 impl<'a> ChannelAccumulator<'a> {
-    fn add_schema(&mut self, header: records::SchemaHeader, data: Cow<'a, [u8]>) -> McapResult<()> {
+    pub(crate) fn add_schema(
+        &mut self,
+        header: records::SchemaHeader,
+        data: Cow<'a, [u8]>,
+    ) -> McapResult<()> {
         if header.id == 0 {
             return Err(McapError::InvalidSchemaId);
         }
@@ -315,7 +321,7 @@ impl<'a> ChannelAccumulator<'a> {
         Ok(())
     }
 
-    fn add_channel(&mut self, chan: records::Channel) -> McapResult<()> {
+    pub(crate) fn add_channel(&mut self, chan: records::Channel) -> McapResult<()> {
         // The schema ID can be 0 for "no schema",
         // Or must reference some previously-read schema.
         let schema = if chan.schema_id == 0 {
@@ -346,7 +352,7 @@ impl<'a> ChannelAccumulator<'a> {
         Ok(())
     }
 
-    fn get(&self, chan_id: u16) -> Option<Arc<Channel<'a>>> {
+    pub(crate) fn get(&self, chan_id: u16) -> Option<Arc<Channel<'a>>> {
         self.channels.get(&chan_id).cloned()
     }
 }
@@ -496,7 +502,12 @@ impl Iterator for MessageStream<'_> {
     }
 }
 
-const FOOTER_LEN: usize = 20 + 8 + 1; // 20 bytes + 8 byte len + 1 byte opcode
+const FOOTER_LEN: usize = 8 // summary start
+ + 8 // summary offset start
+ + 4; // summary section CRC
+const FOOTER_RECORD_LEN: usize = 1 // opcode
+     + 8 // record length
+     + FOOTER_LEN;
 
 /// Read the MCAP footer.
 ///
@@ -504,7 +515,9 @@ const FOOTER_LEN: usize = 20 + 8 + 1; // 20 bytes + 8 byte len + 1 byte opcode
 /// then index into the rest of the file with
 /// [`Summary::stream_chunk`], [`attachment`], [`metadata`], etc.
 pub fn footer(mcap: &[u8]) -> McapResult<records::Footer> {
-    if mcap.len() < MAGIC.len() * 2 + FOOTER_LEN {
+    // an MCAP must be at least large enough to accomodate a header magic, a footer record and a
+    // footer magic.
+    if mcap.len() < (MAGIC.len() + FOOTER_RECORD_LEN + MAGIC.len()) {
         return Err(McapError::UnexpectedEof);
     }
 
@@ -513,27 +526,25 @@ pub fn footer(mcap: &[u8]) -> McapResult<records::Footer> {
     }
 
     let footer_buf = &mcap[mcap.len() - MAGIC.len() - FOOTER_LEN..];
+    let mut cursor = std::io::Cursor::new(footer_buf);
 
-    match LinearReader::sans_magic(footer_buf).next() {
-        Some(Ok(Record::Footer(f))) => Ok(f),
-        _ => Err(McapError::BadFooter),
-    }
+    Ok(Footer::read_le(&mut cursor)?)
 }
 
 /// Indexes of an MCAP file parsed from its (optional) summary section
 #[derive(Default, Eq, PartialEq)]
-pub struct Summary<'a> {
+pub struct Summary {
     pub stats: Option<records::Statistics>,
     /// Maps channel IDs to their channel
-    pub channels: HashMap<u16, Arc<Channel<'a>>>,
+    pub channels: HashMap<u16, Arc<Channel<'static>>>,
     /// Maps schema IDs to their schema
-    pub schemas: HashMap<u16, Arc<Schema<'a>>>,
+    pub schemas: HashMap<u16, Arc<Schema<'static>>>,
     pub chunk_indexes: Vec<records::ChunkIndex>,
     pub attachment_indexes: Vec<records::AttachmentIndex>,
     pub metadata_indexes: Vec<records::MetadataIndex>,
 }
 
-impl fmt::Debug for Summary<'_> {
+impl fmt::Debug for Summary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Keep the actual maps as HashMaps for constant-time lookups,
         // but order everything up before debug printing it here.
@@ -551,69 +562,37 @@ impl fmt::Debug for Summary<'_> {
     }
 }
 
-impl<'a> Summary<'a> {
+impl Summary {
     /// Read the summary section of the given mapped MCAP file, if it has one.
-    pub fn read(mcap: &'a [u8]) -> McapResult<Option<Self>> {
-        let foot = footer(mcap)?;
-
-        // A summary start offset of 0 means there's no summary.
-        if foot.summary_start == 0 {
-            return Ok(None);
-        }
-
-        if foot.summary_crc != 0 {
-            // The checksum covers the entire summary _except_ itself, including other footer bytes.
-            let calculated =
-                crc32(&mcap[foot.summary_start as usize..mcap.len() - MAGIC.len() - 4]);
-            if foot.summary_crc != calculated {
-                return Err(McapError::BadSummaryCrc {
-                    saved: foot.summary_crc,
-                    calculated,
-                });
+    pub fn read(mcap: &[u8]) -> McapResult<Option<Self>> {
+        use std::io::{Read, Seek};
+        let mut cursor = std::io::Cursor::new(mcap);
+        let mut summary_reader = SummaryReader::new();
+        while let Some(event) = summary_reader.next_event() {
+            match event? {
+                SummaryReadEvent::ReadRequest(n) => {
+                    let read = cursor.read(summary_reader.insert(n))?;
+                    summary_reader.notify_read(read);
+                }
+                SummaryReadEvent::SeekRequest(to) => {
+                    let pos = cursor.seek(to)?;
+                    summary_reader.notify_seeked(pos);
+                }
             }
         }
 
-        let mut summary = Summary::default();
-        let mut channeler = ChannelAccumulator::default();
-
-        let summary_end = match foot.summary_offset_start {
-            0 => MAGIC.len() - FOOTER_LEN,
-            sos => sos as usize,
-        };
-        let summary_buf = &mcap[foot.summary_start as usize..summary_end];
-
-        for record in LinearReader::sans_magic(summary_buf) {
-            match record? {
-                Record::Statistics(s) => {
-                    if summary.stats.is_some() {
-                        warn!("Multiple statistics records found in summary");
-                    }
-                    summary.stats = Some(s);
-                }
-                Record::Schema { header, data } => channeler.add_schema(header, data)?,
-                Record::Channel(c) => channeler.add_channel(c)?,
-                Record::ChunkIndex(c) => summary.chunk_indexes.push(c),
-                Record::AttachmentIndex(a) => summary.attachment_indexes.push(a),
-                Record::MetadataIndex(i) => summary.metadata_indexes.push(i),
-                _ => {}
-            };
-        }
-
-        summary.schemas = channeler.schemas;
-        summary.channels = channeler.channels;
-
-        Ok(Some(summary))
+        Ok(summary_reader.finish())
     }
 
     /// Stream messages from the chunk with the given index.
     ///
     /// To avoid having to read all preceding chunks first,
     /// channels and their schemas are pulled from this summary.
-    pub fn stream_chunk(
-        &self,
+    pub fn stream_chunk<'a, 'b: 'a>(
+        &'b self,
         mcap: &'a [u8],
         index: &records::ChunkIndex,
-    ) -> McapResult<impl Iterator<Item = McapResult<Message<'a>>> + '_> {
+    ) -> McapResult<impl Iterator<Item = McapResult<Message<'a>>> + 'a> {
         let end = (index.chunk_start_offset + index.chunk_length) as usize;
         if mcap.len() < end {
             return Err(McapError::BadIndex);
@@ -631,7 +610,7 @@ impl<'a> Summary<'a> {
         // Chunks from the LinearReader will always borrow from the file.
         // (Getting a normal reference to the underlying data back
         // frees us from returning things that reference this local Cow.)
-        let d: &'a [u8] = match d {
+        let d: &[u8] = match d {
             Cow::Borrowed(b) => b,
             Cow::Owned(_) => unreachable!(),
         };
@@ -734,7 +713,7 @@ impl<'a> Summary<'a> {
     /// Compressed chunks aren't random access -
     /// this decompresses everything in the chunk before
     /// [`message.offset`](records::MessageIndexEntry::offset) and throws it away.
-    pub fn seek_message(
+    pub fn seek_message<'a>(
         &self,
         mcap: &'a [u8],
         index: &records::ChunkIndex,

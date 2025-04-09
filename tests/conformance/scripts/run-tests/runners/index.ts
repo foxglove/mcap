@@ -9,6 +9,7 @@ import PythonIndexedReaderTestRunner from "./PythonIndexedReaderTestRunner";
 import PythonStreamedReaderTestRunner from "./PythonStreamedReaderTestRunner";
 import PythonWriterTestRunner from "./PythonWriterTestRunner";
 import RustAsyncReaderTestRunner from "./RustAsyncReaderTestRunner";
+import RustIndexedReaderTestRunner from "./RustIndexedReaderTestRunner";
 import RustReaderTestRunner from "./RustReaderTestRunner";
 import RustWriterTestRunner from "./RustWriterTestRunner";
 import SwiftIndexedReaderTestRunner from "./SwiftIndexedReaderTestRunner";
@@ -34,6 +35,7 @@ const runners: readonly (IndexedReadTestRunner | StreamedReadTestRunner | WriteT
   new TypescriptWriterTestRunner(),
   new RustAsyncReaderTestRunner(),
   new RustReaderTestRunner(),
+  new RustIndexedReaderTestRunner(),
   new RustWriterTestRunner(),
   new SwiftWriterTestRunner(),
   new SwiftStreamedReaderTestRunner(),
