@@ -488,6 +488,7 @@ void McapWriter::terminate() {
   chunkIndex_.clear();
   statistics_ = {};
   writtenSchemas_.clear();
+  schemas_.clear();
   currentMessageIndex_.clear();
   currentChunkStart_ = MaxTime;
   currentChunkEnd_ = 0;
