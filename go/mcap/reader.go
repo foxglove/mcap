@@ -229,7 +229,7 @@ func (r *Reader) GetMetadata(offset uint64) (*Metadata, error) {
 		return nil, err
 	}
 	if token != TokenMetadata {
-		return nil, NewErrUnexpectedToken(fmt.Errorf("expected metadata record, found %v", data))
+		return nil, NewErrUnexpectedToken(fmt.Errorf("expected metadata record, found %q", token))
 	}
 	metadata, err := ParseMetadata(data)
 	if err != nil {
@@ -260,7 +260,7 @@ func NewReader(r io.Reader) (*Reader, error) {
 		return nil, fmt.Errorf("could not read MCAP header when opening reader: %w", err)
 	}
 	if token != TokenHeader {
-		return nil, NewErrUnexpectedToken(fmt.Errorf("expected first record in MCAP to be a Header, found %v", headerData))
+		return nil, NewErrUnexpectedToken(fmt.Errorf("expected first record in MCAP to be header, found %q", token))
 	}
 	header, err := ParseHeader(headerData)
 	if err != nil {
