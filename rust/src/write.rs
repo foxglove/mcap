@@ -161,7 +161,7 @@ impl WriteOptions {
         }
     }
 
-    /// specifies the profile that should be written to the MCAP Header record.
+    /// Specifies the profile that should be written to the MCAP Header record.
     pub fn profile<S: Into<String>>(self, profile: S) -> Self {
         Self {
             profile: profile.into(),
@@ -169,7 +169,8 @@ impl WriteOptions {
         }
     }
 
-    /// specifies the library that should be written to the MCAP Header record.
+    /// Specifies the library that should be written to the MCAP Header record.
+    ///
     /// This is a free-form string that can be used to identify the library that wrote the file.
     /// It is not used for any other purpose.
     pub fn library<S: Into<String>>(self, library: S) -> Self {
@@ -179,7 +180,7 @@ impl WriteOptions {
         }
     }
 
-    /// specifies the target uncompressed size of each chunk.
+    /// Specifies the target uncompressed size of each chunk.
     ///
     /// Messages will be written to chunks until the uncompressed chunk is larger than the
     /// target chunk size, at which point the chunk will be closed and a new one started.
@@ -189,7 +190,7 @@ impl WriteOptions {
         Self { chunk_size, ..self }
     }
 
-    /// specifies whether to use chunks for storing messages.
+    /// Specifies whether to use chunks for storing messages.
     ///
     /// If `false`, messages will be written directly to the data section of the file.
     /// This prevents using compression or indexing, but may be useful on small embedded systems
@@ -294,7 +295,7 @@ impl WriteOptions {
         self
     }
 
-    /// Creates a [`Writer`] whch writes to `w` using the given options
+    /// Creates a [`Writer`] which writes to `w` using the given options
     pub fn create<W: Write + Seek>(self, w: W) -> McapResult<Writer<W>> {
         Writer::with_options(w, self)
     }
@@ -508,7 +509,7 @@ impl<W: Write + Seek> Writer<W> {
     /// Adds a channel, returning its ID. If a channel with equivalent content was added previously,
     /// its ID is returned.
     ///
-    /// Useful with subequent calls to [`write_to_known_channel()`](Self::write_to_known_channel).
+    /// Useful with subsequent calls to [`write_to_known_channel()`](Self::write_to_known_channel).
     ///
     /// * `schema_id`: a schema_id returned from [`Self::add_schema`], or 0 if the channel has no
     ///   schema.
@@ -742,7 +743,7 @@ impl<W: Write + Seek> Writer<W> {
     /// writer.put_attachment_bytes(&[ 1, 2, 3, 4 ])?;
     /// writer.put_attachment_bytes(&[ 5, 6 ])?;
     ///
-    /// // Finsh writing the attachment.
+    /// // Finish writing the attachment.
     /// writer.finish_attachment()?;
     /// #
     /// # Ok(())
@@ -862,7 +863,7 @@ impl<W: Write + Seek> Writer<W> {
     /// (The alternative is to just flush the writer mid-chunk.
     /// But if we did that, and then writing was suddenly interrupted afterwards,
     /// readers would have to try to recover a half-written chunk,
-    /// probably with an unfinished compresion stream.)
+    /// probably with an unfinished compression stream.)
     ///
     /// Note that lossless compression schemes like LZ4 and Zstd improve
     /// as they go, so larger chunks will tend to have better compression.
@@ -974,7 +975,7 @@ impl<W: Write + Seek> Writer<W> {
         let data_section_crc = writer.current_checksum();
         let writer = writer.get_mut();
 
-        // We're done with the data secton!
+        // We're done with the data section!
         write_record(
             writer,
             &Record::DataEnd(records::DataEnd { data_section_crc }),
