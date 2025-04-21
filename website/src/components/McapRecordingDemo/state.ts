@@ -1,3 +1,5 @@
+// cspell:ignore Millis
+
 import { fromMillis } from "@foxglove/rostime";
 import { PoseInFrame, RawAudio } from "@foxglove/schemas";
 import { create } from "zustand";
