@@ -21,7 +21,7 @@ export type RawAudioMessage = {
 export const RawAudioSchema: FoxgloveMessageSchema = {
   type: "message",
   name: "RawAudio",
-  description: "A chunk of raw audio bitstream",
+  description: "A chunk of raw audio bit stream",
   fields: [
     {
       name: "timestamp",

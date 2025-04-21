@@ -118,6 +118,21 @@
   position: relative;
   border-radius: 4px;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.audioWaveform {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  background: #000000;
 }
 
 [data-theme="dark"] .mediaContainer {
@@ -154,9 +169,11 @@
 
 .mediaLoadingIndicator {
   position: absolute;
-  top: 50%;
+  bottom: 10px;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
+  z-index: 2;
+  width: 80%;
 }
 
 .error {

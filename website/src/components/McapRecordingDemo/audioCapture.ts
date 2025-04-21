@@ -3,8 +3,8 @@ import { fromMillis } from "@foxglove/rostime";
 import { RawAudioMessage } from "./schemas";
 
 type AudioStreamParams = {
-  /** Progress element to display the volume level */
-  progress: HTMLProgressElement;
+  /** Canvas element to display the audio visualization */
+  canvas: HTMLCanvasElement;
   /** Called when the audio stream is available */
   onAudioStream: (stream: MediaStream) => void;
   /** Called when an error is encountered */
@@ -12,11 +12,11 @@ type AudioStreamParams = {
 };
 
 /**
- * Prompts the user for microphone permission and displays audio volume in the provided <progress> element
+ * Prompts the user for microphone permission and displays audio visualization in the provided canvas
  * @returns A function to stop the stream and clean up resources
  */
 export function startAudioStream({
-  progress,
+  canvas,
   onAudioStream,
   onError,
 }: AudioStreamParams): () => void {
@@ -35,12 +35,37 @@ export function startAudioStream({
       }
 
       animationID = requestAnimationFrame(() => {
-        // Update the progress bar to show the audio level
-        const fbcArray = new Uint8Array(analyzer.frequencyBinCount);
-        analyzer.getByteFrequencyData(fbcArray);
-        const level =
-          fbcArray.reduce((acc, val) => acc + val, 0) / fbcArray.length;
-        progress.value = level / 100;
+        // Get time domain data for waveform visualization
+        const timeData = new Uint8Array(analyzer.frequencyBinCount);
+        analyzer.getByteTimeDomainData(timeData);
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          const width = canvas.width;
+          const height = canvas.height;
+
+          // Clear with fade effect
+          ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+          ctx.fillRect(0, 0, width, height);
+
+          const centerY = height / 2;
+          const step = width / timeData.length;
+          const scale = height / 256; // Scale factor for 8-bit audio data
+
+          ctx.beginPath();
+          ctx.moveTo(0, centerY);
+
+          for (let i = 0; i < timeData.length; i++) {
+            const x = i * step;
+            // Convert from [0, 255] to [-1, 1] range
+            const sample = (timeData[i] ?? 128) - 128;
+            const y = centerY + sample * scale;
+            ctx.lineTo(x, y);
+          }
+
+          ctx.strokeStyle = "#00ffff";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
 
         update(analyzer);
       });
@@ -57,9 +82,10 @@ export function startAudioStream({
         stream = mediaStream;
         onAudioStream(stream);
 
-        // For displaying volume level
+        // For displaying waveform
         const source = context.createMediaStreamSource(stream);
         const analyzer = context.createAnalyser();
+        analyzer.fftSize = 2048;
         source.connect(analyzer);
 
         update(analyzer);

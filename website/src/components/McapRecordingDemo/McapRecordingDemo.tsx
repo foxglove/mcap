@@ -138,7 +138,7 @@ export function McapRecordingDemo(): JSX.Element {
 
   const videoRef = useRef<HTMLVideoElement | undefined>();
   const videoContainerRef = useRef<HTMLDivElement>(null);
-  const audioProgressRef = useRef<HTMLProgressElement>(null);
+  const audioWaveformRef = useRef<HTMLCanvasElement>(null);
   const [recordJpeg, setRecordJpeg] = useState(false);
   const [recordH264, setRecordH264] = useState(false);
   const [recordH265, setRecordH265] = useState(false);
@@ -306,13 +306,24 @@ export function McapRecordingDemo(): JSX.Element {
 
   const enableMicrophone = recordAudio;
   useEffect(() => {
-    const progress = audioProgressRef.current;
-    if (!progress || !enableMicrophone) {
+    if (!enableMicrophone) {
       return;
     }
 
+    const canvasElement = audioWaveformRef.current;
+    if (!canvasElement) {
+      return;
+    }
+
+    // Set canvas size to match its display size
+    const rect = canvasElement.getBoundingClientRect();
+    canvasElement.width = rect.width * window.devicePixelRatio;
+    canvasElement.height = rect.height * window.devicePixelRatio;
+    canvasElement.style.width = `${rect.width}px`;
+    canvasElement.style.height = `${rect.height}px`;
+
     const cleanup = startAudioStream({
-      progress,
+      canvas: canvasElement,
       onAudioStream: (stream) => {
         setAudioStream(stream);
       },
@@ -334,11 +345,54 @@ export function McapRecordingDemo(): JSX.Element {
       return;
     }
 
+    const canvasElement = audioWaveformRef.current;
+    if (canvasElement) {
+      // Set canvas size to match its display size
+      const rect = canvasElement.getBoundingClientRect();
+      canvasElement.width = rect.width * window.devicePixelRatio;
+      canvasElement.height = rect.height * window.devicePixelRatio;
+      canvasElement.style.width = `${rect.width}px`;
+      canvasElement.style.height = `${rect.height}px`;
+    }
+
     const cleanup = startAudioCapture({
       enablePCM: recordAudio,
       stream: audioStream,
       onAudioData: (data) => {
         addAudioData(data);
+        // Draw waveform
+        const waveformCanvas = audioWaveformRef.current;
+        if (waveformCanvas) {
+          const ctx = waveformCanvas.getContext("2d", { alpha: true });
+          if (ctx) {
+            const width = waveformCanvas.width;
+            const height = waveformCanvas.height;
+
+            // Clear with slight fade effect
+            ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+            ctx.fillRect(0, 0, width, height);
+
+            // Convert audio data to Int16Array
+            const audioData = new Int16Array(data.data);
+            const centerY = height / 2;
+            const step = Math.max(1, width / audioData.length);
+
+            ctx.beginPath();
+            ctx.moveTo(0, centerY);
+
+            for (let i = 0; i < audioData.length; i++) {
+              const x = i * step;
+              // Ensure we have a valid value from the array
+              const sample = audioData[i] ?? 0;
+              const y = centerY + (sample / 32768.0) * (height / 2);
+              ctx.lineTo(x, y);
+            }
+
+            ctx.strokeStyle = "#6f3be8";
+            ctx.lineWidth = 4 * window.devicePixelRatio;
+            ctx.stroke();
+          }
+        }
       },
       onError: (error) => {
         setAudioError(error);
@@ -347,6 +401,14 @@ export function McapRecordingDemo(): JSX.Element {
 
     return () => {
       cleanup?.();
+      // Clear canvas on cleanup
+      const cleanupCanvas = audioWaveformRef.current;
+      if (cleanupCanvas) {
+        const ctx = cleanupCanvas.getContext("2d");
+        if (ctx) {
+          ctx.clearRect(0, 0, cleanupCanvas.width, cleanupCanvas.height);
+        }
+      }
     };
   }, [addAudioData, enableMicrophone, audioStream, recording, recordAudio]);
 
@@ -658,7 +720,7 @@ export function McapRecordingDemo(): JSX.Element {
                     }
                   }}
                 >
-                  Enable “Camera” to record video
+                  Enable &ldquo;Camera&rdquo; to record video
                 </span>
               )}
             </div>
@@ -671,13 +733,13 @@ export function McapRecordingDemo(): JSX.Element {
                   {audioError.toString()}
                 </div>
               ) : enableMicrophone ? (
-                <progress
-                  className={styles.mediaLoadingIndicator}
-                  ref={audioProgressRef}
+                <canvas
+                  ref={audioWaveformRef}
+                  className={styles.audioWaveform}
                 />
               ) : (
                 <span className={styles.mediaPlaceholderText}>
-                  Enable “Microphone” to record audio
+                  Enable &ldquo;Microphone&rdquo; to record audio
                 </span>
               )}
             </div>
