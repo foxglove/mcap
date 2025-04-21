@@ -39,11 +39,7 @@ export function McapRecordingDemo(): JSX.Element {
     recording,
     orientationPermissionError,
     showDownloadInfo,
-    recordJpeg,
-    recordH264,
-    recordH265,
-    recordVP9,
-    recordAV1,
+    videoFormat,
     recordAudio,
     recordMouse,
     recordOrientation,
@@ -54,11 +50,7 @@ export function McapRecordingDemo(): JSX.Element {
     setRecording,
     setOrientationPermissionError,
     setShowDownloadInfo,
-    setRecordJpeg,
-    setRecordH264,
-    setRecordH265,
-    setRecordVP9,
-    setRecordAV1,
+    setVideoFormat,
     setRecordAudio,
     setRecordMouse,
     setRecordOrientation,
@@ -77,11 +69,7 @@ export function McapRecordingDemo(): JSX.Element {
   const canStartRecording =
     recordMouse ||
     (!hasMouse && recordOrientation) ||
-    (recordAV1 && !videoError) ||
-    (recordVP9 && !videoError) ||
-    (recordH265 && !videoError) ||
-    (recordH264 && !videoError) ||
-    (recordJpeg && !videoError) ||
+    (videoFormat !== "none" && !videoError) ||
     (recordAudio && !audioError);
 
   // Automatically pause recording after 30 seconds to avoid unbounded growth
@@ -128,8 +116,7 @@ export function McapRecordingDemo(): JSX.Element {
     };
   }, [addPoseMessage, recording, recordOrientation]);
 
-  const enableCamera =
-    recordAV1 || recordVP9 || recordH265 || recordH264 || recordJpeg;
+  const enableCamera = videoFormat !== "none";
   useEffect(() => {
     const videoContainer = videoContainerRef.current;
     if (!videoContainer || !enableCamera) {
@@ -175,11 +162,11 @@ export function McapRecordingDemo(): JSX.Element {
 
     const stopCapture = startVideoCapture({
       video,
-      enableAV1: recordAV1,
-      enableVP9: recordVP9,
-      enableH265: recordH265,
-      enableH264: recordH264,
-      enableJpeg: recordJpeg,
+      enableAV1: videoFormat === "av1",
+      enableVP9: videoFormat === "vp9",
+      enableH265: videoFormat === "h265",
+      enableH264: videoFormat === "h264",
+      enableJpeg: videoFormat === "jpeg",
       frameDurationSec: 1 / 30,
       onJpegFrame: (blob) => {
         addJpegFrame(blob);
@@ -199,13 +186,9 @@ export function McapRecordingDemo(): JSX.Element {
     addJpegFrame,
     addVideoFrame,
     enableCamera,
-    recordH264,
-    recordH265,
-    recordVP9,
-    recordAV1,
     recording,
     videoStarted,
-    recordJpeg,
+    videoFormat,
     setVideoError,
   ]);
 
@@ -404,64 +387,85 @@ export function McapRecordingDemo(): JSX.Element {
             />
             Mouse position
           </label>
-          {av1Support?.supported === true && (
-            <label>
-              <input
-                type="checkbox"
-                checked={recordAV1}
-                onChange={(event) => {
-                  setRecordAV1({ shouldRecord: event.target.checked });
-                }}
-              />
-              Camera (AV1)
-            </label>
-          )}
-          {vp9Support?.supported === true && (
-            <label>
-              <input
-                type="checkbox"
-                checked={recordVP9}
-                onChange={(event) => {
-                  setRecordVP9({ shouldRecord: event.target.checked });
-                }}
-              />
-              Camera (VP9)
-            </label>
-          )}
-          {h265Support?.supported === true && (
-            <label>
-              <input
-                type="checkbox"
-                checked={recordH265}
-                onChange={(event) => {
-                  setRecordH265({ shouldRecord: event.target.checked });
-                }}
-              />
-              Camera (H.265)
-            </label>
-          )}
-          {h264Support?.supported === true && (
-            <label>
-              <input
-                type="checkbox"
-                checked={recordH264}
-                onChange={(event) => {
-                  setRecordH264({ shouldRecord: event.target.checked });
-                }}
-              />
-              Camera (H.264)
-            </label>
-          )}
-          <label>
-            <input
-              type="checkbox"
-              checked={recordJpeg}
-              onChange={(event) => {
-                setRecordJpeg({ shouldRecord: event.target.checked });
-              }}
-            />
-            Camera (JPEG)
-          </label>
+          <div className={styles.videoFormatGroup}>
+            <label>Camera format:</label>
+            <div className={styles.radioGroup}>
+              <label>
+                <input
+                  type="radio"
+                  name="videoFormat"
+                  checked={videoFormat === "none"}
+                  onChange={() => {
+                    setVideoFormat({ format: "none" });
+                  }}
+                />
+                None
+              </label>
+              {av1Support?.supported === true && (
+                <label>
+                  <input
+                    type="radio"
+                    name="videoFormat"
+                    checked={videoFormat === "av1"}
+                    onChange={() => {
+                      setVideoFormat({ format: "av1" });
+                    }}
+                  />
+                  AV1
+                </label>
+              )}
+              {vp9Support?.supported === true && (
+                <label>
+                  <input
+                    type="radio"
+                    name="videoFormat"
+                    checked={videoFormat === "vp9"}
+                    onChange={() => {
+                      setVideoFormat({ format: "vp9" });
+                    }}
+                  />
+                  VP9
+                </label>
+              )}
+              {h265Support?.supported === true && (
+                <label>
+                  <input
+                    type="radio"
+                    name="videoFormat"
+                    checked={videoFormat === "h265"}
+                    onChange={() => {
+                      setVideoFormat({ format: "h265" });
+                    }}
+                  />
+                  H.265
+                </label>
+              )}
+              {h264Support?.supported === true && (
+                <label>
+                  <input
+                    type="radio"
+                    name="videoFormat"
+                    checked={videoFormat === "h264"}
+                    onChange={() => {
+                      setVideoFormat({ format: "h264" });
+                    }}
+                  />
+                  H.264
+                </label>
+              )}
+              <label>
+                <input
+                  type="radio"
+                  name="videoFormat"
+                  checked={videoFormat === "jpeg"}
+                  onChange={() => {
+                    setVideoFormat({ format: "jpeg" });
+                  }}
+                />
+                JPEG
+              </label>
+            </div>
+          </div>
           {audioSupport === true && (
             <label>
               <input
@@ -513,12 +517,13 @@ export function McapRecordingDemo(): JSX.Element {
           </div>
         )}
 
-        {recordH264 && h264Support?.mayUseLotsOfKeyframes === true && (
-          <div className={styles.h264Warning}>
-            Note: This browser may have a bug that causes H.264 encoding to be
-            less efficient.
-          </div>
-        )}
+        {videoFormat === "h264" &&
+          h264Support?.mayUseLotsOfKeyframes === true && (
+            <div className={styles.h264Warning}>
+              Note: This browser may have a bug that causes H.264 encoding to be
+              less efficient.
+            </div>
+          )}
 
         <div className={styles.recordingControls}>
           <div className={styles.recordingControlsColumn}>
@@ -622,13 +627,13 @@ export function McapRecordingDemo(): JSX.Element {
                   className={styles.mediaPlaceholderText}
                   onClick={() => {
                     if (av1Support?.supported === true) {
-                      setRecordAV1({ shouldRecord: true });
+                      setVideoFormat({ format: "av1" });
                     } else if (h265Support?.supported === true) {
-                      setRecordH265({ shouldRecord: true });
+                      setVideoFormat({ format: "h265" });
                     } else if (h264Support?.supported === true) {
-                      setRecordH264({ shouldRecord: true });
+                      setVideoFormat({ format: "h264" });
                     } else {
-                      setRecordJpeg({ shouldRecord: true });
+                      setVideoFormat({ format: "jpeg" });
                     }
                   }}
                 >

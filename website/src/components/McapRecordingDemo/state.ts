@@ -11,6 +11,8 @@ import {
 import type { AudioDataMessage } from "./audioCapture";
 import type { CompressedVideoFrame } from "./videoCapture";
 
+type VideoFormat = "none" | "jpeg" | "h264" | "h265" | "vp9" | "av1";
+
 type McapDemoState = {
   bytesWritten: bigint;
   messageCount: bigint;
@@ -25,11 +27,7 @@ type McapDemoState = {
   showDownloadInfo: boolean;
 
   // Recording options
-  recordJpeg: boolean;
-  recordH264: boolean;
-  recordH265: boolean;
-  recordVP9: boolean;
-  recordAV1: boolean;
+  videoFormat: VideoFormat;
   recordAudio: boolean;
   recordMouse: boolean;
   recordOrientation: boolean;
@@ -50,11 +48,7 @@ type McapDemoState = {
   setRecording: (value: { isRecording: boolean }) => void;
   setOrientationPermissionError: (value: { hasError: boolean }) => void;
   setShowDownloadInfo: (value: { shouldShow: boolean }) => void;
-  setRecordJpeg: (value: { shouldRecord: boolean }) => void;
-  setRecordH264: (value: { shouldRecord: boolean }) => void;
-  setRecordH265: (value: { shouldRecord: boolean }) => void;
-  setRecordVP9: (value: { shouldRecord: boolean }) => void;
-  setRecordAV1: (value: { shouldRecord: boolean }) => void;
+  setVideoFormat: (value: { format: VideoFormat }) => void;
   setRecordAudio: (value: { shouldRecord: boolean }) => void;
   setRecordMouse: (value: { shouldRecord: boolean }) => void;
   setRecordOrientation: (value: { shouldRecord: boolean }) => void;
@@ -128,11 +122,7 @@ export const useStore = create<McapDemoState>((set) => {
     showDownloadInfo: false,
 
     // Recording options
-    recordJpeg: false,
-    recordH264: false,
-    recordH265: false,
-    recordVP9: false,
-    recordAV1: false,
+    videoFormat: "none",
     recordAudio: false,
     recordMouse: true,
     recordOrientation: true,
@@ -173,20 +163,8 @@ export const useStore = create<McapDemoState>((set) => {
     setShowDownloadInfo: ({ shouldShow }) => {
       set({ showDownloadInfo: shouldShow });
     },
-    setRecordJpeg: ({ shouldRecord }) => {
-      set({ recordJpeg: shouldRecord });
-    },
-    setRecordH264: ({ shouldRecord }) => {
-      set({ recordH264: shouldRecord });
-    },
-    setRecordH265: ({ shouldRecord }) => {
-      set({ recordH265: shouldRecord });
-    },
-    setRecordVP9: ({ shouldRecord }) => {
-      set({ recordVP9: shouldRecord });
-    },
-    setRecordAV1: ({ shouldRecord }) => {
-      set({ recordAV1: shouldRecord });
+    setVideoFormat: ({ format }) => {
+      set({ videoFormat: format });
     },
     setRecordAudio: ({ shouldRecord }) => {
       set({ recordAudio: shouldRecord });
