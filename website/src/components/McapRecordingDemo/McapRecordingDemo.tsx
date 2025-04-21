@@ -377,119 +377,141 @@ export function McapRecordingDemo(): JSX.Element {
           </p>
         </header>
         <div className={styles.sensors}>
-          <label>
-            <input
-              type="checkbox"
-              checked={recordMouse}
-              onChange={(event) => {
-                setRecordMouse({ shouldRecord: event.target.checked });
-              }}
-            />
-            Mouse position
-          </label>
-          <div className={styles.videoFormatGroup}>
-            <label>Camera format:</label>
-            <div className={styles.radioGroup}>
-              <label>
-                <input
-                  type="radio"
-                  name="videoFormat"
-                  checked={videoFormat === "none"}
-                  onChange={() => {
-                    setVideoFormat({ format: "none" });
-                  }}
-                />
-                None
-              </label>
-              {av1Support?.supported === true && (
-                <label>
-                  <input
-                    type="radio"
-                    name="videoFormat"
-                    checked={videoFormat === "av1"}
-                    onChange={() => {
-                      setVideoFormat({ format: "av1" });
-                    }}
-                  />
-                  AV1
-                </label>
-              )}
-              {vp9Support?.supported === true && (
-                <label>
-                  <input
-                    type="radio"
-                    name="videoFormat"
-                    checked={videoFormat === "vp9"}
-                    onChange={() => {
-                      setVideoFormat({ format: "vp9" });
-                    }}
-                  />
-                  VP9
-                </label>
-              )}
-              {h265Support?.supported === true && (
-                <label>
-                  <input
-                    type="radio"
-                    name="videoFormat"
-                    checked={videoFormat === "h265"}
-                    onChange={() => {
-                      setVideoFormat({ format: "h265" });
-                    }}
-                  />
-                  H.265
-                </label>
-              )}
-              {h264Support?.supported === true && (
-                <label>
-                  <input
-                    type="radio"
-                    name="videoFormat"
-                    checked={videoFormat === "h264"}
-                    onChange={() => {
-                      setVideoFormat({ format: "h264" });
-                    }}
-                  />
-                  H.264
-                </label>
-              )}
-              <label>
-                <input
-                  type="radio"
-                  name="videoFormat"
-                  checked={videoFormat === "jpeg"}
-                  onChange={() => {
-                    setVideoFormat({ format: "jpeg" });
-                  }}
-                />
-                JPEG
-              </label>
-            </div>
-          </div>
-          {audioSupport === true && (
-            <label>
-              <input
-                type="checkbox"
-                checked={recordAudio}
-                onChange={(event) => {
-                  setRecordAudio({ shouldRecord: event.target.checked });
-                }}
-              />
-              Microphone
-            </label>
-          )}
-          {!hasMouse && (
-            <label>
-              <input
-                type="checkbox"
-                checked={recordOrientation}
-                onChange={(event) => {
-                  setRecordOrientation({ shouldRecord: event.target.checked });
-                }}
-              />
-              Orientation
-            </label>
-          )}
+          <table className={styles.sensorsTable}>
+            <tbody>
+              <tr>
+                <td className={styles.sensorCategory}>Video</td>
+                <td>
+                  <div className={styles.videoFormatGroup}>
+                    <div className={styles.radioGroup}>
+                      <label>
+                        <input
+                          type="radio"
+                          name="videoFormat"
+                          checked={videoFormat === "none"}
+                          onChange={() => {
+                            setVideoFormat({ format: "none" });
+                          }}
+                        />
+                        None
+                      </label>
+                      {av1Support?.supported === true && (
+                        <label>
+                          <input
+                            type="radio"
+                            name="videoFormat"
+                            checked={videoFormat === "av1"}
+                            onChange={() => {
+                              setVideoFormat({ format: "av1" });
+                            }}
+                          />
+                          AV1
+                        </label>
+                      )}
+                      {vp9Support?.supported === true && (
+                        <label>
+                          <input
+                            type="radio"
+                            name="videoFormat"
+                            checked={videoFormat === "vp9"}
+                            onChange={() => {
+                              setVideoFormat({ format: "vp9" });
+                            }}
+                          />
+                          VP9
+                        </label>
+                      )}
+                      {h265Support?.supported === true && (
+                        <label>
+                          <input
+                            type="radio"
+                            name="videoFormat"
+                            checked={videoFormat === "h265"}
+                            onChange={() => {
+                              setVideoFormat({ format: "h265" });
+                            }}
+                          />
+                          H.265
+                        </label>
+                      )}
+                      {h264Support?.supported === true && (
+                        <label>
+                          <input
+                            type="radio"
+                            name="videoFormat"
+                            checked={videoFormat === "h264"}
+                            onChange={() => {
+                              setVideoFormat({ format: "h264" });
+                            }}
+                          />
+                          H.264
+                        </label>
+                      )}
+                      <label>
+                        <input
+                          type="radio"
+                          name="videoFormat"
+                          checked={videoFormat === "jpeg"}
+                          onChange={() => {
+                            setVideoFormat({ format: "jpeg" });
+                          }}
+                        />
+                        JPEG
+                      </label>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td className={styles.sensorCategory}>Audio</td>
+                <td>
+                  {audioSupport === true && (
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={recordAudio}
+                        onChange={(event) => {
+                          setRecordAudio({
+                            shouldRecord: event.target.checked,
+                          });
+                        }}
+                      />
+                      Microphone
+                    </label>
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td className={styles.sensorCategory}>Controls</td>
+                <td>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={recordMouse}
+                      onChange={(event) => {
+                        setRecordMouse({ shouldRecord: event.target.checked });
+                      }}
+                    />
+                    Mouse position
+                  </label>
+                  {!hasMouse && (
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={recordOrientation}
+                        onChange={(event) => {
+                          setRecordOrientation({
+                            shouldRecord: event.target.checked,
+                          });
+                        }}
+                      />
+                      Orientation
+                    </label>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
         {orientationPermissionError && (
           <div className={styles.error}>
