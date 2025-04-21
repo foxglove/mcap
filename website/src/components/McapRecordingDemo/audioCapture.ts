@@ -1,6 +1,5 @@
 import { fromMillis } from "@foxglove/rostime";
-
-import { RawAudioMessage } from "./schemas";
+import { RawAudio } from "@foxglove/schemas";
 
 type AudioStreamParams = {
   /** Canvas element to display the audio visualization */
@@ -137,17 +136,12 @@ export const supportsPCMEncoding = async (): Promise<boolean> => {
   return true;
 };
 
-export type AudioDataMessage = RawAudioMessage & {
-  /** Call this function to release the buffer so it can be reused for new frames */
-  release: () => void;
-};
-
 type AudioCaptureParams = {
   enablePCM: boolean;
   /** MediaStream from startAudioStream */
   stream: MediaStream;
   /** Called when an audio frame has been encoded */
-  onAudioData: (data: AudioDataMessage) => void;
+  onAudioData: (data: RawAudio) => void;
   onError: (error: Error) => void;
 };
 
@@ -236,9 +230,6 @@ export function startAudioCapture({
           data: new Uint8Array(pcmData.buffer),
           sample_rate: 44100,
           number_of_channels: 1,
-          release: () => {
-            // No need to release buffer in this implementation
-          },
         });
       };
 

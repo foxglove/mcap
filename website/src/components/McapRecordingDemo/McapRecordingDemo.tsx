@@ -287,14 +287,20 @@ export function McapRecordingDemo(): JSX.Element {
       },
     });
 
+    const currentAudioWaveform = audioWaveformRef.current;
+
     return () => {
       cleanup?.();
       // Clear canvas on cleanup
-      const cleanupCanvas = audioWaveformRef.current;
-      if (cleanupCanvas) {
-        const ctx = cleanupCanvas.getContext("2d");
+      if (currentAudioWaveform) {
+        const ctx = currentAudioWaveform.getContext("2d");
         if (ctx) {
-          ctx.clearRect(0, 0, cleanupCanvas.width, cleanupCanvas.height);
+          ctx.clearRect(
+            0,
+            0,
+            currentAudioWaveform.width,
+            currentAudioWaveform.height,
+          );
         }
       }
     };

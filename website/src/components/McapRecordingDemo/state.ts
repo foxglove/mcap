@@ -1,5 +1,5 @@
 import { fromMillis } from "@foxglove/rostime";
-import { PoseInFrame } from "@foxglove/schemas";
+import { PoseInFrame, RawAudio } from "@foxglove/schemas";
 import { create } from "zustand";
 
 import {
@@ -8,7 +8,6 @@ import {
   Recorder,
   toProtobufTime,
 } from "./Recorder";
-import type { AudioDataMessage } from "./audioCapture";
 import type { CompressedVideoFrame } from "./videoCapture";
 
 type VideoFormat = "none" | "jpeg" | "h264" | "h265" | "vp9" | "av1";
@@ -43,7 +42,7 @@ type McapDemoState = {
   addPoseMessage: (msg: DeviceOrientationEvent) => void;
   addJpegFrame: (blob: Blob) => void;
   addVideoFrame: (frame: CompressedVideoFrame) => void;
-  addAudioData: (data: AudioDataMessage) => void;
+  addAudioData: (data: RawAudio) => void;
   closeAndRestart: () => Promise<Blob>;
   setRecording: (value: { isRecording: boolean }) => void;
   setOrientationPermissionError: (value: { hasError: boolean }) => void;
@@ -148,7 +147,7 @@ export const useStore = create<McapDemoState>((set) => {
     addVideoFrame(frame: CompressedVideoFrame) {
       void recorder.addVideoFrame(frame);
     },
-    addAudioData(data: AudioDataMessage) {
+    addAudioData(data: RawAudio) {
       void recorder.addAudioData(data);
     },
     async closeAndRestart() {

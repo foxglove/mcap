@@ -14,7 +14,6 @@ import { EventEmitter } from "eventemitter3";
 import Queue from "promise-queue";
 
 import { ProtobufChannelInfo, addProtobufChannel } from "./addProtobufChannel";
-import { AudioDataMessage } from "./audioCapture";
 import { CompressedVideoFrame } from "./videoCapture";
 
 export type ProtobufObject<Message> = {
@@ -285,7 +284,7 @@ export class Recorder extends EventEmitter<RecorderEvents> {
     });
   }
 
-  async addAudioData(data: AudioDataMessage): Promise<void> {
+  async addAudioData(data: RawAudio): Promise<void> {
     void this.#queue.add(async () => {
       if (!this.#writer) {
         return;
@@ -305,7 +304,6 @@ export class Recorder extends EventEmitter<RecorderEvents> {
         number_of_channels: data.number_of_channels,
       };
       const encodedMsg = rootType.encode(msg).finish();
-      data.release();
       const now = this.#time();
       await this.#writer.addMessage({
         sequence,
