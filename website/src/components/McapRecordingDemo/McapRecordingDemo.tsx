@@ -248,39 +248,6 @@ export function McapRecordingDemo(): JSX.Element {
       stream: audioStream,
       onAudioData: (data) => {
         addAudioData(data);
-        // Draw waveform
-        const waveformCanvas = audioWaveformRef.current;
-        if (waveformCanvas) {
-          const ctx = waveformCanvas.getContext("2d", { alpha: true });
-          if (ctx) {
-            const width = waveformCanvas.width;
-            const height = waveformCanvas.height;
-
-            // Clear with slight fade effect
-            ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
-            ctx.fillRect(0, 0, width, height);
-
-            // Convert audio data to Int16Array
-            const audioData = new Int16Array(data.data);
-            const centerY = height / 2;
-            const step = Math.max(1, width / audioData.length);
-
-            ctx.beginPath();
-            ctx.moveTo(0, centerY);
-
-            for (let i = 0; i < audioData.length; i++) {
-              const x = i * step;
-              // Ensure we have a valid value from the array
-              const sample = audioData[i] ?? 0;
-              const y = centerY + (sample / 32768.0) * (height / 2);
-              ctx.lineTo(x, y);
-            }
-
-            ctx.strokeStyle = "#6f3be8";
-            ctx.lineWidth = 4 * window.devicePixelRatio;
-            ctx.stroke();
-          }
-        }
       },
       onError: (error) => {
         setAudioError(error);
