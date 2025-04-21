@@ -1,3 +1,7 @@
+import { fromMillis } from "@foxglove/rostime";
+
+import { RawAudioMessage } from "./schemas";
+
 type AudioStreamParams = {
   /** Progress element to display the volume level */
   progress: HTMLProgressElement;
@@ -87,135 +91,55 @@ export function startAudioStream({
 /**
  * Determine whether required Web Audio APIs are supported.
  *
- * Capture uses MediaStreamTrackProcessor and AudioEncoder to
- * read and encode audio frames.
+ * Capture uses AudioWorkletNode to get raw PCM data from the audio stream.
  *
- * MediaStreamTrackProcessor: https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamTrackProcessor#browser_compatibility
- * AudioEncoder: https://developer.mozilla.org/en-US/docs/Web/API/AudioEncoder#browser_compatibility
+ * AudioWorkletNode: https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletNode
  *
- * As of 2024-12-15, Chrome and Edge have support
+ * This is the modern replacement for the deprecated ScriptProcessorNode.
  */
-const supportsMediaCaptureTransformAndWebCodecs = (): boolean => {
-  return "MediaStreamTrackProcessor" in window && "AudioEncoder" in window;
-};
-
-const DEFAULT_OPUS_CONFIG: AudioEncoderConfig = {
-  codec: "opus",
-  sampleRate: 48000,
-  numberOfChannels: 1,
+const supportsWebAudio = (): boolean => {
+  return "AudioContext" in window || "webkitAudioContext" in window;
 };
 
 /**
- * Determine whether AudioEncoder can be used to encode audio with Opus.
+ * Determine whether we can capture raw PCM audio.
  */
-export const supportsOpusEncoding = async (): Promise<boolean> => {
-  if (!supportsMediaCaptureTransformAndWebCodecs()) {
+export const supportsPCMEncoding = async (): Promise<boolean> => {
+  if (!supportsWebAudio()) {
     return false;
   }
-
-  const support = await AudioEncoder.isConfigSupported(DEFAULT_OPUS_CONFIG);
-  return support.supported === true;
+  return true;
 };
 
-const DEFAULT_MP4A_CONFIG: AudioEncoderConfig = {
-  codec: "mp4a.40.2",
-  numberOfChannels: 1,
-  sampleRate: 48000,
-};
-
-/**
- * Determine whether AudioEncoder can be used to encode audio with mp4a.40.2.
- */
-export const supportsMP4AEncoding = async (): Promise<boolean> => {
-  if (!supportsMediaCaptureTransformAndWebCodecs()) {
-    return false;
-  }
-
-  const support = await AudioEncoder.isConfigSupported(DEFAULT_MP4A_CONFIG);
-  return support.supported === true;
-};
-
-const configureEncoder = ({
-  config,
-  framePool,
-  onAudioData,
-  onError,
-}: {
-  config: AudioEncoderConfig;
-  framePool: ArrayBuffer[];
-  onAudioData: (data: CompressedAudioData) => void;
-  onError: (error: Error) => void;
-}): AudioEncoder => {
-  const encoder = new AudioEncoder({
-    output: (chunk) => {
-      let buffer = framePool.pop();
-      if (!buffer || buffer.byteLength < chunk.byteLength) {
-        buffer = new ArrayBuffer(chunk.byteLength);
-      }
-      chunk.copyTo(buffer);
-      onAudioData({
-        format: config.codec as CompressedAudioFormat,
-        type: chunk.type as CompressedAudioType,
-        timestamp: chunk.timestamp,
-        data: new Uint8Array(buffer, 0, chunk.byteLength),
-        sampleRate: config.sampleRate,
-        numberOfChannels: config.numberOfChannels,
-        release() {
-          if (buffer) {
-            framePool.push(buffer);
-          }
-        },
-      });
-    },
-    error: (error) => {
-      onError(error);
-    },
-  });
-  encoder.configure(config);
-
-  return encoder;
-};
-
-type CompressedAudioFormat = "opus" | "mp4a.40.2";
-type CompressedAudioType = "key" | "delta";
-export type CompressedAudioData = {
-  format: CompressedAudioFormat;
-  type: CompressedAudioType;
-  timestamp: number;
-  data: Uint8Array;
-  sampleRate: number;
-  numberOfChannels: number;
-
+export type AudioDataMessage = RawAudioMessage & {
   /** Call this function to release the buffer so it can be reused for new frames */
   release: () => void;
 };
 
-interface AudioCaptureParams {
-  enableMP4A: boolean;
-  enableOpus: boolean;
+type AudioCaptureParams = {
+  enablePCM: boolean;
   /** MediaStream from startAudioStream */
   stream: MediaStream;
   /** Called when an audio frame has been encoded */
-  onAudioData: (data: CompressedAudioData) => void;
+  onAudioData: (data: AudioDataMessage) => void;
   onError: (error: Error) => void;
-}
+};
 
 export function startAudioCapture({
-  enableMP4A,
-  enableOpus,
+  enablePCM,
   stream,
   onAudioData,
   onError,
 }: AudioCaptureParams): (() => void) | undefined {
-  if (!enableMP4A && !enableOpus) {
-    onError(new Error("Invariant: expected Opus encoding to be enabled"));
+  if (!enablePCM) {
+    onError(new Error("Invariant: expected PCM encoding to be enabled"));
     return undefined;
   }
 
-  if (!supportsMediaCaptureTransformAndWebCodecs()) {
+  if (!supportsWebAudio()) {
     onError(
       new Error(
-        "Audio capture not supported: MediaStreamTrackProcessor and AudioEncoder not supported in browser",
+        "Audio capture not supported: Web Audio API not supported in browser",
       ),
     );
     return undefined;
@@ -227,67 +151,87 @@ export function startAudioCapture({
     return undefined;
   }
 
-  const trackProcessor = new MediaStreamTrackProcessor({
-    track,
+  let canceled = false;
+  const audioContext = new AudioContext({
+    sampleRate: 44100, // Fixed sample rate
   });
 
-  const framePool: ArrayBuffer[] = [];
-
-  const encoders = [
-    ...(enableMP4A
-      ? [
-          configureEncoder({
-            config: DEFAULT_MP4A_CONFIG,
-            framePool,
-            onAudioData,
-            onError,
-          }),
-        ]
-      : []),
-    ...(enableOpus
-      ? [
-          configureEncoder({
-            config: DEFAULT_OPUS_CONFIG,
-            framePool,
-            onAudioData,
-            onError,
-          }),
-        ]
-      : []),
-  ];
-
-  const reader = trackProcessor.readable.getReader();
-  let canceled = false;
-
-  const readAndEncode = () => {
-    if (canceled) {
-      return;
+  // Create and register the audio worklet processor
+  const workletCode = `
+    class PCMProcessor extends AudioWorkletProcessor {
+      process(inputs, outputs, parameters) {
+        const input = inputs[0];
+        if (input.length > 0) {
+          const channelData = input[0];
+          this.port.postMessage(channelData);
+        }
+        return true;
+      }
     }
+    registerProcessor('pcm-processor', PCMProcessor);
+  `;
 
-    reader
-      .read()
-      .then((result) => {
-        if (result.done || canceled) {
+  const blob = new Blob([workletCode], { type: "application/javascript" });
+  const workletUrl = URL.createObjectURL(blob);
+
+  const source = audioContext.createMediaStreamSource(stream);
+  let workletNode: AudioWorkletNode | undefined;
+
+  void audioContext.audioWorklet
+    .addModule(workletUrl)
+    .then(() => {
+      if (canceled) {
+        return;
+      }
+
+      workletNode = new AudioWorkletNode(audioContext, "pcm-processor", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+      });
+
+      workletNode.port.onmessage = (event) => {
+        if (canceled) {
           return;
         }
 
-        for (const encoder of encoders) {
-          encoder.encode(result.value);
+        const inputData = event.data as Float32Array;
+
+        // Convert Float32Array to Int16Array (PCM S16)
+        const pcmData = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          // Convert from float [-1, 1] to int16 [-32768, 32767]
+          pcmData[i] = Math.max(-1, Math.min(1, inputData[i] ?? 0)) * 0x7fff;
         }
 
-        readAndEncode();
-      })
-      .catch((error) => {
-        onError(error as Error);
-      });
-  };
+        onAudioData({
+          format: "pcm-s16",
+          timestamp: fromMillis(Date.now()),
+          data: new Uint8Array(pcmData.buffer),
+          sample_rate: 44100,
+          number_of_channels: 1,
+          release: () => {
+            // No need to release buffer in this implementation
+          },
+        });
+      };
 
-  readAndEncode();
+      // Connect the audio processing chain
+      source.connect(workletNode);
+      workletNode.connect(audioContext.destination);
+    })
+    .catch(onError);
 
   return () => {
     canceled = true;
-    for (const encoder of encoders) {
-      encoder.close();
+    if (workletNode) {
+      workletNode.disconnect();
+    }
+    source.disconnect();
+    void audioContext.close();
+    URL.revokeObjectURL(workletUrl);
+    for (const audioTrack of stream.getTracks()) {
+      audioTrack.stop();
     }
   };
 }

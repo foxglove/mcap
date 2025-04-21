@@ -1,11 +1,10 @@
 // cspell:word millis
 
-import { Time, fromMillis, fromNanoSec } from "@foxglove/rostime";
+import { Time, fromNanoSec } from "@foxglove/rostime";
 import {
-  PoseInFrame,
   CompressedImage,
   CompressedVideo,
-  CompressedAudio,
+  PoseInFrame,
 } from "@foxglove/schemas";
 import { foxgloveMessageSchemas } from "@foxglove/schemas/internal";
 import zstd from "@foxglove/wasm-zstd";
@@ -14,7 +13,8 @@ import { EventEmitter } from "eventemitter3";
 import Queue from "promise-queue";
 
 import { ProtobufChannelInfo, addProtobufChannel } from "./addProtobufChannel";
-import { CompressedAudioData } from "./audioCapture";
+import { AudioDataMessage } from "./audioCapture";
+import { RawAudioMessage, RawAudioSchema } from "./schemas";
 import { CompressedVideoFrame } from "./videoCapture";
 
 export type ProtobufObject<Message> = {
@@ -50,24 +50,22 @@ export class Recorder extends EventEmitter<RecorderEvents> {
   #writer?: McapWriter;
   /** Used to ensure all operations on the McapWriter are sequential */
   #queue = new Queue(/*maxPendingPromises=*/ 1);
-  #mouseChannelId?: number;
-  #mouseChannelSeq = 0;
-  #poseChannel?: ProtobufChannelInfo;
-  #poseChannelSeq = 0;
-  #jpegChannel?: ProtobufChannelInfo;
-  #jpegChannelSeq = 0;
+  #audioChannel?: ProtobufChannelInfo;
+  #audioChannelSeq = 0;
+  #av1Channel?: ProtobufChannelInfo;
+  #av1ChannelSeq = 0;
   #h264Channel?: ProtobufChannelInfo;
   #h264ChannelSeq = 0;
   #h265Channel?: ProtobufChannelInfo;
   #h265ChannelSeq = 0;
+  #jpegChannel?: ProtobufChannelInfo;
+  #jpegChannelSeq = 0;
+  #mouseChannelId?: number;
+  #mouseChannelSeq = 0;
+  #poseChannel?: ProtobufChannelInfo;
+  #poseChannelSeq = 0;
   #vp9Channel?: ProtobufChannelInfo;
   #vp9ChannelSeq = 0;
-  #av1Channel?: ProtobufChannelInfo;
-  #av1ChannelSeq = 0;
-  #mp4aChannel?: ProtobufChannelInfo;
-  #mp4aChannelSeq = 0;
-  #opusChannel?: ProtobufChannelInfo;
-  #opusChannelSeq = 0;
 
   #blobParts: Uint8Array[] = [];
   bytesWritten = 0n;
@@ -108,22 +106,20 @@ export class Recorder extends EventEmitter<RecorderEvents> {
       this.#emit();
     });
     // Channels are lazily added later
-    this.#mouseChannelId = undefined;
-    this.#mouseChannelSeq = 0;
-    this.#poseChannel = undefined;
-    this.#poseChannelSeq = 0;
-    this.#jpegChannel = undefined;
-    this.#jpegChannelSeq = 0;
+    this.#audioChannel = undefined;
+    this.#audioChannelSeq = 0;
+    this.#av1Channel = undefined;
+    this.#av1ChannelSeq = 0;
     this.#h264Channel = undefined;
     this.#h264ChannelSeq = 0;
     this.#h265Channel = undefined;
     this.#h265ChannelSeq = 0;
-    this.#av1Channel = undefined;
-    this.#av1ChannelSeq = 0;
-    this.#mp4aChannel = undefined;
-    this.#mp4aChannelSeq = 0;
-    this.#opusChannel = undefined;
-    this.#opusChannelSeq = 0;
+    this.#jpegChannel = undefined;
+    this.#jpegChannelSeq = 0;
+    this.#mouseChannelId = undefined;
+    this.#mouseChannelSeq = 0;
+    this.#poseChannel = undefined;
+    this.#poseChannelSeq = 0;
   }
 
   #time(): bigint {
@@ -289,39 +285,24 @@ export class Recorder extends EventEmitter<RecorderEvents> {
     });
   }
 
-  async addAudioData(data: CompressedAudioData): Promise<void> {
+  async addAudioData(data: AudioDataMessage): Promise<void> {
     void this.#queue.add(async () => {
       if (!this.#writer) {
         return;
       }
-      let channel: ProtobufChannelInfo;
-      let sequence: number;
-      switch (data.format) {
-        case "mp4a.40.2":
-          channel = this.#mp4aChannel ??= await addProtobufChannel(
-            this.#writer,
-            "microphone_mp4a",
-            foxgloveMessageSchemas.CompressedAudio,
-          );
-          sequence = this.#mp4aChannelSeq++;
-          break;
-        case "opus":
-          channel = this.#opusChannel ??= await addProtobufChannel(
-            this.#writer,
-            "microphone_opus",
-            foxgloveMessageSchemas.CompressedAudio,
-          );
-          sequence = this.#opusChannelSeq++;
-          break;
-      }
+      const channel = (this.#audioChannel ??= await addProtobufChannel(
+        this.#writer,
+        "microphone",
+        RawAudioSchema,
+      ));
+      const sequence = this.#audioChannelSeq++;
       const { id, rootType } = channel;
-      const msg: ProtobufObject<CompressedAudio> = {
-        timestamp: toProtobufTime(fromMillis(data.timestamp)),
+      const msg: ProtobufObject<RawAudioMessage> = {
+        timestamp: toProtobufTime(data.timestamp),
         data: data.data,
         format: data.format,
-        type: data.type,
-        sample_rate: data.sampleRate,
-        number_of_channels: data.numberOfChannels,
+        sample_rate: data.sample_rate,
+        number_of_channels: data.number_of_channels,
       };
       const encodedMsg = rootType.encode(msg).finish();
       data.release();

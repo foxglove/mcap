@@ -16,11 +16,10 @@ import {
   toProtobufTime,
 } from "./Recorder";
 import {
-  startAudioStream,
-  CompressedAudioData,
+  AudioDataMessage,
   startAudioCapture,
-  supportsOpusEncoding,
-  supportsMP4AEncoding,
+  startAudioStream,
+  supportsPCMEncoding,
 } from "./audioCapture";
 import {
   CompressedVideoFrame,
@@ -44,7 +43,7 @@ type State = {
   addPoseMessage: (msg: DeviceOrientationEvent) => void;
   addJpegFrame: (blob: Blob) => void;
   addVideoFrame: (frame: CompressedVideoFrame) => void;
-  addAudioData: (data: CompressedAudioData) => void;
+  addAudioData: (data: AudioDataMessage) => void;
   closeAndRestart: () => Promise<Blob>;
 };
 
@@ -78,7 +77,7 @@ const useStore = create<State>((set) => {
     addVideoFrame(frame: CompressedVideoFrame) {
       void recorder.addVideoFrame(frame);
     },
-    addAudioData(data: CompressedAudioData) {
+    addAudioData(data: AudioDataMessage) {
       void recorder.addAudioData(data);
     },
     async closeAndRestart() {
@@ -145,8 +144,7 @@ export function McapRecordingDemo(): JSX.Element {
   const [recordH265, setRecordH265] = useState(false);
   const [recordVP9, setRecordVP9] = useState(false);
   const [recordAV1, setRecordAV1] = useState(false);
-  const [recordMP4A, setRecordMP4A] = useState(false);
-  const [recordOpus, setRecordOpus] = useState(false);
+  const [recordAudio, setRecordAudio] = useState(false);
   const [recordMouse, setRecordMouse] = useState(true);
   const [recordOrientation, setRecordOrientation] = useState(true);
   const [videoStarted, setVideoStarted] = useState(false);
@@ -166,8 +164,7 @@ export function McapRecordingDemo(): JSX.Element {
   const { data: h265Support } = useAsync(supportsH265Encoding);
   const { data: vp9Support } = useAsync(supportsVP9Encoding);
   const { data: av1Support } = useAsync(supportsAV1Encoding);
-  const { data: mp4aSupport } = useAsync(supportsMP4AEncoding);
-  const { data: opusSupport } = useAsync(supportsOpusEncoding);
+  const { data: audioSupport } = useAsync(supportsPCMEncoding);
 
   const canStartRecording =
     recordMouse ||
@@ -177,8 +174,7 @@ export function McapRecordingDemo(): JSX.Element {
     (recordH265 && !videoError) ||
     (recordH264 && !videoError) ||
     (recordJpeg && !videoError) ||
-    (recordMP4A && !audioError) ||
-    (recordOpus && !audioError);
+    (recordAudio && !audioError);
 
   // Automatically pause recording after 30 seconds to avoid unbounded growth
   useEffect(() => {
@@ -308,7 +304,7 @@ export function McapRecordingDemo(): JSX.Element {
     undefined,
   );
 
-  const enableMicrophone = recordMP4A || recordOpus;
+  const enableMicrophone = recordAudio;
   useEffect(() => {
     const progress = audioProgressRef.current;
     if (!progress || !enableMicrophone) {
@@ -339,8 +335,7 @@ export function McapRecordingDemo(): JSX.Element {
     }
 
     const cleanup = startAudioCapture({
-      enableMP4A: recordMP4A,
-      enableOpus: recordOpus,
+      enablePCM: recordAudio,
       stream: audioStream,
       onAudioData: (data) => {
         addAudioData(data);
@@ -353,14 +348,7 @@ export function McapRecordingDemo(): JSX.Element {
     return () => {
       cleanup?.();
     };
-  }, [
-    addAudioData,
-    enableMicrophone,
-    recordMP4A,
-    recordOpus,
-    audioStream,
-    recording,
-  ]);
+  }, [addAudioData, enableMicrophone, audioStream, recording, recordAudio]);
 
   const onRecordClick = useCallback(
     (event: React.MouseEvent) => {
@@ -500,28 +488,16 @@ export function McapRecordingDemo(): JSX.Element {
             />
             Camera (JPEG)
           </label>
-          {mp4aSupport === true && (
+          {audioSupport === true && (
             <label>
               <input
                 type="checkbox"
-                checked={recordMP4A}
+                checked={recordAudio}
                 onChange={(event) => {
-                  setRecordMP4A(event.target.checked);
+                  setRecordAudio(event.target.checked);
                 }}
               />
-              Microphone (mp4a.40.2)
-            </label>
-          )}
-          {opusSupport === true && (
-            <label>
-              <input
-                type="checkbox"
-                checked={recordOpus}
-                onChange={(event) => {
-                  setRecordOpus(event.target.checked);
-                }}
-              />
-              Microphone (Opus)
+              Microphone
             </label>
           )}
           {!hasMouse && (
