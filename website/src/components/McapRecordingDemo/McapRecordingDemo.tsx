@@ -523,7 +523,7 @@ export function McapRecordingDemo(): JSX.Element {
                   }
                 }}
               >
-                Enable &ldquo;Camera&rdquo; to record video
+                Choose a video format to enable video.
               </span>
             )}
           </div>
