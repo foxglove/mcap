@@ -1,3 +1,4 @@
+// cspell:ignore webcodecs, mediacapture
 {
   "extends": "@tsconfig/docusaurus/tsconfig.json",
   "include": ["./**/*"],

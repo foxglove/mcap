@@ -34,6 +34,7 @@ ignorePaths:
   - go
   - rust
   - cpp/examples/protobuf/proto
+
 words:
   - Aescape
   - Anduril
@@ -67,7 +68,6 @@ words:
   - libmcap
   - matplotlib
   - mcap
-  - Millis
   - msgdef
   - msgpack
   - nanos
@@ -111,10 +111,12 @@ words:
   - zstandard
   - zstd
   - zustand
+
 languageSettings:
-  - languageId: markdown
+  - languageId: "markdown"
     ignoreRegExpList:
-      - /^\s*```[\s\S]*?^\s*```/gm
+      - "/^\\s*```[\\s\\S]*?^\\s*```/gm"
+
 overrides:
   - filename: "**/*.go"
     words:
@@ -123,26 +125,31 @@ overrides:
       - dynamicpb
     ignoreRegExpList:
       - '"github\.com.+?"'
-  - filename: go/**/Makefile
+
+  - filename: "go/**/Makefile"
     words:
       - memprofile
       - cpuprofile
       - benchmem
-  - filename: CMakeLists.txt
+
+  - filename: "CMakeLists.txt"
     words:
       - conanbuildinfo
-  - filename: cpp/**
+
+  - filename: "cpp/**"
     words:
       - cppstd
       - hdoc
       - nlohmann
     ignoreRegExpList:
-      - LZ4F_\w+
-      - LZ4HC_\w+
+      - "LZ4F_\\w+"
+      - "LZ4HC_\\w+"
+
   - filename: "**/{*.js,*.ts,*.tsx}"
     ignoreRegExpList:
-      - 0x[0-9a-f]+n?
-  - filename: (Pipfile|README.md|pyproject.toml|setup.cfg)
+      - "0x[0-9a-f]+n?"
+
+  - filename: "(Pipfile|README.md|pyproject.toml|setup.cfg)"
     words:
       - pypi
       - pyright
@@ -152,7 +159,8 @@ overrides:
       - xfail
       - Pipfile
       - pyyaml
-  - filename: python/**/*.rst
+
+  - filename: "python/**/*.rst"
     words:
       - mdinclude
       - toctree
@@ -161,6 +169,7 @@ overrides:
       - genindex
       - modindex
       - literalinclude
+
   - filename: "**/*.py"
     words:
       - klass
@@ -169,17 +178,15 @@ overrides:
       - ivar
       - rclpy
       - rosidl
+
   - filename: "**/*.swift"
     ignoreRegExpList:
-      - \b0x[0-9a-f_]+
+      - "\\b0x[0-9a-f_]+"
     words:
       - subrange
       - unkeyed
       - lowercased
-  - filename: docs/**
+
+  - filename: "docs/**"
     words:
       - plex
-  - filename: tsconfig.json
-    words:
-      - webcodecs
-      - mediacapture
