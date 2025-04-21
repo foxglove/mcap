@@ -5,6 +5,7 @@ import {
   CompressedImage,
   CompressedVideo,
   PoseInFrame,
+  RawAudio,
 } from "@foxglove/schemas";
 import { foxgloveMessageSchemas } from "@foxglove/schemas/internal";
 import zstd from "@foxglove/wasm-zstd";
@@ -14,7 +15,6 @@ import Queue from "promise-queue";
 
 import { ProtobufChannelInfo, addProtobufChannel } from "./addProtobufChannel";
 import { AudioDataMessage } from "./audioCapture";
-import { RawAudioMessage, RawAudioSchema } from "./schemas";
 import { CompressedVideoFrame } from "./videoCapture";
 
 export type ProtobufObject<Message> = {
@@ -293,11 +293,11 @@ export class Recorder extends EventEmitter<RecorderEvents> {
       const channel = (this.#audioChannel ??= await addProtobufChannel(
         this.#writer,
         "microphone",
-        RawAudioSchema,
+        foxgloveMessageSchemas.RawAudio,
       ));
       const sequence = this.#audioChannelSeq++;
       const { id, rootType } = channel;
-      const msg: ProtobufObject<RawAudioMessage> = {
+      const msg: ProtobufObject<RawAudio> = {
         timestamp: toProtobufTime(data.timestamp),
         data: data.data,
         format: data.format,

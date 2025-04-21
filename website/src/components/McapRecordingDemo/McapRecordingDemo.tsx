@@ -377,141 +377,81 @@ export function McapRecordingDemo(): JSX.Element {
           </p>
         </header>
         <div className={styles.sensors}>
-          <table className={styles.sensorsTable}>
-            <tbody>
-              <tr>
-                <td className={styles.sensorCategory}>Video</td>
-                <td>
-                  <div className={styles.videoFormatGroup}>
-                    <div className={styles.radioGroup}>
-                      <label>
-                        <input
-                          type="radio"
-                          name="videoFormat"
-                          checked={videoFormat === "none"}
-                          onChange={() => {
-                            setVideoFormat({ format: "none" });
-                          }}
-                        />
-                        None
-                      </label>
-                      {av1Support?.supported === true && (
-                        <label>
-                          <input
-                            type="radio"
-                            name="videoFormat"
-                            checked={videoFormat === "av1"}
-                            onChange={() => {
-                              setVideoFormat({ format: "av1" });
-                            }}
-                          />
-                          AV1
-                        </label>
-                      )}
-                      {vp9Support?.supported === true && (
-                        <label>
-                          <input
-                            type="radio"
-                            name="videoFormat"
-                            checked={videoFormat === "vp9"}
-                            onChange={() => {
-                              setVideoFormat({ format: "vp9" });
-                            }}
-                          />
-                          VP9
-                        </label>
-                      )}
-                      {h265Support?.supported === true && (
-                        <label>
-                          <input
-                            type="radio"
-                            name="videoFormat"
-                            checked={videoFormat === "h265"}
-                            onChange={() => {
-                              setVideoFormat({ format: "h265" });
-                            }}
-                          />
-                          H.265
-                        </label>
-                      )}
-                      {h264Support?.supported === true && (
-                        <label>
-                          <input
-                            type="radio"
-                            name="videoFormat"
-                            checked={videoFormat === "h264"}
-                            onChange={() => {
-                              setVideoFormat({ format: "h264" });
-                            }}
-                          />
-                          H.264
-                        </label>
-                      )}
-                      <label>
-                        <input
-                          type="radio"
-                          name="videoFormat"
-                          checked={videoFormat === "jpeg"}
-                          onChange={() => {
-                            setVideoFormat({ format: "jpeg" });
-                          }}
-                        />
-                        JPEG
-                      </label>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-              <tr>
-                <td className={styles.sensorCategory}>Audio</td>
-                <td>
-                  {audioSupport === true && (
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={recordAudio}
-                        onChange={(event) => {
-                          setRecordAudio({
-                            shouldRecord: event.target.checked,
-                          });
-                        }}
-                      />
-                      Microphone
-                    </label>
+          <div className={styles.sensorsGrid}>
+            <div className={styles.sensorCategory}>Video</div>
+            <div>
+              <div className={styles.videoFormatGroup}>
+                <select
+                  value={videoFormat}
+                  onChange={(e) => {
+                    setVideoFormat({
+                      format: e.target.value as typeof videoFormat,
+                    });
+                  }}
+                  className={styles.videoFormatSelect}
+                >
+                  <option value="none">None</option>
+                  {av1Support?.supported === true && (
+                    <option value="av1">AV1</option>
                   )}
-                </td>
-              </tr>
-              <tr>
-                <td className={styles.sensorCategory}>Controls</td>
-                <td>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={recordMouse}
-                      onChange={(event) => {
-                        setRecordMouse({ shouldRecord: event.target.checked });
-                      }}
-                    />
-                    Mouse position
-                  </label>
-                  {!hasMouse && (
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={recordOrientation}
-                        onChange={(event) => {
-                          setRecordOrientation({
-                            shouldRecord: event.target.checked,
-                          });
-                        }}
-                      />
-                      Orientation
-                    </label>
+                  {vp9Support?.supported === true && (
+                    <option value="vp9">VP9</option>
                   )}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  {h265Support?.supported === true && (
+                    <option value="h265">H.265</option>
+                  )}
+                  {h264Support?.supported === true && (
+                    <option value="h264">H.264</option>
+                  )}
+                  <option value="jpeg">JPEG</option>
+                </select>
+              </div>
+            </div>
+            <div className={styles.sensorCategory}>Audio</div>
+            <div>
+              {audioSupport === true && (
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={recordAudio}
+                    onChange={(event) => {
+                      setRecordAudio({
+                        shouldRecord: event.target.checked,
+                      });
+                    }}
+                  />
+                  Microphone
+                </label>
+              )}
+            </div>
+            <div className={styles.sensorCategory}>Controls</div>
+            <div>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={recordMouse}
+                  onChange={(event) => {
+                    setRecordMouse({ shouldRecord: event.target.checked });
+                  }}
+                />
+                Mouse position
+              </label>
+              {!hasMouse && (
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={recordOrientation}
+                    onChange={(event) => {
+                      setRecordOrientation({
+                        shouldRecord: event.target.checked,
+                      });
+                    }}
+                  />
+                  Orientation
+                </label>
+              )}
+            </div>
+          </div>
         </div>
         {orientationPermissionError && (
           <div className={styles.error}>
@@ -546,6 +486,61 @@ export function McapRecordingDemo(): JSX.Element {
               less efficient.
             </div>
           )}
+
+        <div className={styles.statsCounters}>
+          <div className={styles.statCounter}>
+            <var>Messages</var> {state.messageCount.toString()}
+          </div>
+          <div className={styles.statCounter}>
+            <var>Chunks</var> {state.chunkCount}
+          </div>
+        </div>
+
+        <div className={styles.mediaRow}>
+          <div className={styles.mediaContainer} ref={videoContainerRef}>
+            {videoError ? (
+              <div className={cx(styles.error, styles.mediaErrorContainer)}>
+                {videoError.toString()}
+              </div>
+            ) : enableCamera ? (
+              <>
+                {!videoStarted && (
+                  <progress className={styles.mediaLoadingIndicator} />
+                )}
+              </>
+            ) : (
+              <span
+                className={styles.mediaPlaceholderText}
+                onClick={() => {
+                  if (av1Support?.supported === true) {
+                    setVideoFormat({ format: "av1" });
+                  } else if (h265Support?.supported === true) {
+                    setVideoFormat({ format: "h265" });
+                  } else if (h264Support?.supported === true) {
+                    setVideoFormat({ format: "h264" });
+                  } else {
+                    setVideoFormat({ format: "jpeg" });
+                  }
+                }}
+              >
+                Enable &ldquo;Camera&rdquo; to record video
+              </span>
+            )}
+          </div>
+          <div className={styles.mediaContainer}>
+            {audioError ? (
+              <div className={cx(styles.error, styles.mediaErrorContainer)}>
+                {audioError.toString()}
+              </div>
+            ) : enableMicrophone ? (
+              <canvas ref={audioWaveformRef} className={styles.audioWaveform} />
+            ) : (
+              <span className={styles.mediaPlaceholderText}>
+                Enable &ldquo;Microphone&rdquo; to record audio
+              </span>
+            )}
+          </div>
+        </div>
 
         <div className={styles.recordingControls}>
           <div className={styles.recordingControlsColumn}>
@@ -614,74 +609,6 @@ export function McapRecordingDemo(): JSX.Element {
                 <hr />
               </>
             )}
-            <div className={styles.recordingStatsSection}>
-              <div>
-                <Link href="/guides/concepts" target="_blank">
-                  <var>Messages</var>
-                </Link>
-                : {state.messageCount.toString()}
-              </div>
-              <div>
-                <Link href="/spec#use-of-chunk-records" target="_blank">
-                  <var>Chunks</var>
-                </Link>
-                : {state.chunkCount}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className={styles.recordingControls}>
-          <div className={styles.recordingControlsColumn}>
-            <div className={styles.mediaContainer} ref={videoContainerRef}>
-              {videoError ? (
-                <div className={cx(styles.error, styles.mediaErrorContainer)}>
-                  {videoError.toString()}
-                </div>
-              ) : enableCamera ? (
-                <>
-                  {!videoStarted && (
-                    <progress className={styles.mediaLoadingIndicator} />
-                  )}
-                </>
-              ) : (
-                <span
-                  className={styles.mediaPlaceholderText}
-                  onClick={() => {
-                    if (av1Support?.supported === true) {
-                      setVideoFormat({ format: "av1" });
-                    } else if (h265Support?.supported === true) {
-                      setVideoFormat({ format: "h265" });
-                    } else if (h264Support?.supported === true) {
-                      setVideoFormat({ format: "h264" });
-                    } else {
-                      setVideoFormat({ format: "jpeg" });
-                    }
-                  }}
-                >
-                  Enable &ldquo;Camera&rdquo; to record video
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className={styles.recordingControlsColumn}>
-            <div className={styles.mediaContainer}>
-              {audioError ? (
-                <div className={cx(styles.error, styles.mediaErrorContainer)}>
-                  {audioError.toString()}
-                </div>
-              ) : enableMicrophone ? (
-                <canvas
-                  ref={audioWaveformRef}
-                  className={styles.audioWaveform}
-                />
-              ) : (
-                <span className={styles.mediaPlaceholderText}>
-                  Enable &ldquo;Microphone&rdquo; to record audio
-                </span>
-              )}
-            </div>
           </div>
         </div>
       </div>
