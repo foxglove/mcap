@@ -173,7 +173,8 @@ pub fn parse_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
             //
             // 2. Since the CRC depends on the serialized header, it doesn't make
             //    much sense to have users check it.
-            //    (What would they do? lol reserialize the header?)
+            // We still provide the parsed CRC to the caller in case they want to re-serialize the
+            // record in another MCAP, and so they know if the record had a non-zero CRC.
             if crc != 0 {
                 let calculated = crc32(&body[..header_len + data.len()]);
                 if crc != calculated {
@@ -187,6 +188,7 @@ pub fn parse_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
             Record::Attachment {
                 header,
                 data: Cow::Borrowed(data),
+                crc,
             }
         }
         op::ATTACHMENT_INDEX => Record::AttachmentIndex(record!(body)),
@@ -801,7 +803,7 @@ pub fn attachment<'a>(
 
     let mut reader = LinearReader::sans_magic(&mcap[index.offset as usize..end]);
     let (h, d) = match reader.next().ok_or(McapError::BadIndex)? {
-        Ok(records::Record::Attachment { header, data }) => (header, data),
+        Ok(records::Record::Attachment { header, data, .. }) => (header, data),
         Ok(_other_record) => return Err(McapError::BadIndex),
         Err(e) => return Err(e),
     };
