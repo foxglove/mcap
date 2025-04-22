@@ -802,8 +802,8 @@ pub fn attachment<'a>(
     }
 
     let mut reader = LinearReader::sans_magic(&mcap[index.offset as usize..end]);
-    let (h, d, crc) = match reader.next().ok_or(McapError::BadIndex)? {
-        Ok(records::Record::Attachment { header, data, crc }) => (header, data, crc),
+    let (h, d) = match reader.next().ok_or(McapError::BadIndex)? {
+        Ok(records::Record::Attachment { header, data, .. }) => (header, data),
         Ok(_other_record) => return Err(McapError::BadIndex),
         Err(e) => return Err(e),
     };
@@ -819,7 +819,6 @@ pub fn attachment<'a>(
         name: h.name,
         media_type: h.media_type,
         data: d,
-        crc,
     })
 }
 

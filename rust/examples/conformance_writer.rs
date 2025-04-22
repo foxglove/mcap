@@ -57,8 +57,6 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                     log_time: record.get_field_u64("log_time"),
                     data: Cow::from(record.get_field_data("data")),
                     media_type: record.get_field_str("media_type").to_owned(),
-                    // This is ignord by the writer
-                    crc: 0,
                 };
                 writer
                     .attach(&attachment)
