@@ -14,7 +14,7 @@ fn smoke() -> Result<()> {
     let mapped = map_mcap("../tests/conformance/data/OneAttachment/OneAttachment.mcap")?;
     let attachments = mcap::read::LinearReader::new(&mapped)?
         .filter_map(|record| match record.unwrap() {
-            mcap::records::Record::Attachment { header, data } => Some((header, data)),
+            mcap::records::Record::Attachment { header, data, crc } => Some((header, data, crc)),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -87,6 +87,7 @@ fn test_attach_in_multiple_parts() -> Result<()> {
         name: "great-attachment".into(),
         media_type: "application/octet-stream".into(),
         data: Cow::Borrowed(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+        crc: 2147504207,
     };
 
     assert_eq!(
@@ -102,20 +103,21 @@ fn round_trip() -> Result<()> {
     let mapped = map_mcap("../tests/conformance/data/OneAttachment/OneAttachment.mcap")?;
     let attachments =
         mcap::read::LinearReader::new(&mapped)?.filter_map(|record| match record.unwrap() {
-            mcap::records::Record::Attachment { header, data } => Some((header, data)),
+            mcap::records::Record::Attachment { header, data, crc } => Some((header, data, crc)),
             _ => None,
         });
 
     let mut tmp = tempfile()?;
     let mut writer = mcap::Writer::new(BufWriter::new(&mut tmp))?;
 
-    for (h, d) in attachments {
+    for (h, d, crc) in attachments {
         let a = mcap::Attachment {
             log_time: h.log_time,
             create_time: h.create_time,
             media_type: h.media_type,
             name: h.name,
             data: Cow::Borrowed(&d),
+            crc,
         };
         writer.attach(&a)?;
     }
@@ -149,6 +151,7 @@ fn round_trip() -> Result<()> {
         name: String::from("myFile"),
         media_type: String::from("application/octet-stream"),
         data: Cow::Borrowed(&[1, 2, 3]),
+        crc: 171394340,
     };
 
     assert_eq!(

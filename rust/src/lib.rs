@@ -215,6 +215,10 @@ pub struct Attachment<'a> {
     pub name: String,
     pub media_type: String,
     pub data: Cow<'a, [u8]>,
+    /// CRC of the preceding record content.
+    ///
+    /// NOTE: this field is ignored by [`crate::write::Writer::attach`].
+    pub crc: u32,
 }
 
 pub use read::{parse_record, MessageStream, Summary};

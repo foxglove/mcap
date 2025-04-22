@@ -66,6 +66,7 @@ pub enum Record<'a> {
     Attachment {
         header: AttachmentHeader,
         data: Cow<'a, [u8]>,
+        crc: u32,
     },
     AttachmentIndex(AttachmentIndex),
     Statistics(Statistics),
@@ -123,9 +124,10 @@ impl Record<'_> {
             },
             Record::MessageIndex(index) => Record::MessageIndex(index),
             Record::ChunkIndex(index) => Record::ChunkIndex(index),
-            Record::Attachment { header, data } => Record::Attachment {
+            Record::Attachment { header, data, crc } => Record::Attachment {
                 header,
                 data: Cow::Owned(data.into_owned()),
+                crc,
             },
             Record::AttachmentIndex(index) => Record::AttachmentIndex(index),
             Record::Statistics(statistics) => Record::Statistics(statistics),

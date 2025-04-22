@@ -81,12 +81,13 @@ fn get_fields(rec: &Record<'_>) -> Value {
             ["message_start_time", i.message_start_time.to_string()],
             ["uncompressed_size", i.uncompressed_size.to_string()]
         ]),
-        Record::Attachment { header, data } => json!([
+        Record::Attachment { header, data, crc } => json!([
             ["create_time", header.create_time.to_string()],
             ["data", b2s(data)],
             ["log_time", header.log_time.to_string()],
             ["media_type", header.media_type],
-            ["name", header.name]
+            ["name", header.name],
+            ["crc", crc],
         ]),
         Record::AttachmentIndex(i) => json!([
             ["create_time", i.create_time.to_string()],
