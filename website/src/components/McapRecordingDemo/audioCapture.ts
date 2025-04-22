@@ -181,11 +181,28 @@ export function startAudioCapture({
   // Create and register the audio worklet processor
   const workletCode = `
     class PCMProcessor extends AudioWorkletProcessor {
+      constructor() {
+        super();
+        this.buffer = new Float32Array(1024);
+        this.bufferIndex = 0;
+      }
+
       process(inputs, outputs, parameters) {
         const input = inputs[0];
         if (input.length > 0) {
           const channelData = input[0];
-          this.port.postMessage(channelData);
+
+          // Copy samples into our buffer
+          for (let i = 0; i < channelData.length; i++) {
+            this.buffer[this.bufferIndex++] = channelData[i];
+
+            // If we've filled our buffer, send it and reset
+            if (this.bufferIndex >= 1024) {
+              this.port.postMessage(this.buffer);
+              this.buffer = new Float32Array(1024);
+              this.bufferIndex = 0;
+            }
+          }
         }
         return true;
       }
