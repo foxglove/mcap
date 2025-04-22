@@ -28,8 +28,11 @@ fn smoke() -> Result<()> {
         media_type: String::from("application/octet-stream"),
     };
 
-    assert_eq!(attachments[0].0, expected_header);
-    assert_eq!(&*attachments[0].1, &[1, 2, 3]);
+    let (header, data, crc) = attachments[0].clone();
+
+    assert_eq!(header, expected_header);
+    assert_eq!(data, &[1u8, 2u8, 3u8] as &[u8]);
+    assert_eq!(crc, 171394340);
 
     Ok(())
 }
