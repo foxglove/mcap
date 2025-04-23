@@ -954,6 +954,18 @@ func TestReadingBigTimestamps(t *testing.T) {
 		assert.Equal(t, 1, count)
 	})
 }
+func TestUnexpectedTokenOnHeader(t *testing.T) {
+	buf := &bytes.Buffer{}
+	w, err := NewWriter(buf, &WriterOptions{
+		Chunked:   true,
+		ChunkSize: 100,
+	})
+	require.NoError(t, err)
+	require.NoError(t, w.WriteSchema(&Schema{ID: 1}))
+	require.NoError(t, w.Close())
+	_, err = NewReader(bytes.NewReader(buf.Bytes()))
+	require.ErrorContains(t, err, "expected first record in MCAP to be header, found \"chunk\"")
+}
 
 func BenchmarkReader(b *testing.B) {
 	inputParameters := []struct {
