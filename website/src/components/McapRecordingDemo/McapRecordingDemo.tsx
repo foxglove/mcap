@@ -6,11 +6,8 @@ import React, { useCallback, useEffect, useRef } from "react";
 import { useAsync } from "react-async";
 
 import styles from "./McapRecordingDemo.module.css";
-import {
-  startAudioCapture,
-  startAudioStream,
-  supportsPCMEncoding,
-} from "./audioCapture";
+import { RecordingControls } from "./RecordingControls";
+import { startAudioCapture, startAudioStream } from "./audioCapture";
 import { useStore, formatBytes } from "./state";
 import {
   startVideoCapture,
@@ -18,7 +15,6 @@ import {
   supportsAV1Encoding,
   supportsH264Encoding,
   supportsH265Encoding,
-  supportsVP9Encoding,
 } from "./videoCapture";
 
 const hasMouse = window.matchMedia("(hover: hover)").matches;
@@ -31,40 +27,23 @@ export function McapRecordingDemo(): JSX.Element {
   const audioWaveformRef = useRef<HTMLCanvasElement>(null);
 
   const {
-    addJpegFrame,
-    addVideoFrame,
-    addMouseEventMessage,
-    addPoseMessage,
-    addAudioData,
-    recording,
-    orientationPermissionError,
-    showDownloadInfo,
-    videoFormat,
-    recordAudio,
-    recordMouse,
-    recordOrientation,
-    videoStarted,
-    videoError,
+    actions,
     audioError,
     audioStream,
-    setRecording,
-    setOrientationPermissionError,
-    setShowDownloadInfo,
-    setVideoFormat,
-    setRecordAudio,
-    setRecordMouse,
-    setRecordOrientation,
-    setVideoStarted,
-    setVideoError,
-    setAudioError,
-    setAudioStream,
+    orientationPermissionError,
+    recordAudio,
+    recording,
+    recordMouse,
+    recordOrientation,
+    showDownloadInfo,
+    videoError,
+    videoFormat,
+    videoStarted,
   } = state;
 
   const { data: h264Support } = useAsync(supportsH264Encoding);
   const { data: h265Support } = useAsync(supportsH265Encoding);
-  const { data: vp9Support } = useAsync(supportsVP9Encoding);
   const { data: av1Support } = useAsync(supportsAV1Encoding);
-  const { data: audioSupport } = useAsync(supportsPCMEncoding);
 
   const canStartRecording =
     recordMouse ||
@@ -78,19 +57,22 @@ export function McapRecordingDemo(): JSX.Element {
       return;
     }
     const timeout = setTimeout(() => {
-      setRecording({ isRecording: false });
+      actions.setRecording({ isRecording: false });
     }, 30000);
     return () => {
       clearTimeout(timeout);
     };
-  }, [recording, setRecording]);
+  }, [recording, actions]);
 
   useEffect(() => {
     if (!recording || !recordMouse) {
       return;
     }
     const handleMouseEvent = (event: PointerEvent) => {
-      addMouseEventMessage({ clientX: event.clientX, clientY: event.clientY });
+      actions.addMouseEventMessage({
+        clientX: event.clientX,
+        clientY: event.clientY,
+      });
     };
     window.addEventListener("pointerdown", handleMouseEvent);
     window.addEventListener("pointermove", handleMouseEvent);
@@ -98,14 +80,14 @@ export function McapRecordingDemo(): JSX.Element {
       window.removeEventListener("pointerdown", handleMouseEvent);
       window.removeEventListener("pointermove", handleMouseEvent);
     };
-  }, [addMouseEventMessage, recording, recordMouse]);
+  }, [actions, recording, recordMouse]);
 
   useEffect(() => {
     if (!recording || !recordOrientation) {
       return;
     }
     const handleDeviceOrientationEvent = (event: DeviceOrientationEvent) => {
-      addPoseMessage(event);
+      actions.addPoseMessage(event);
     };
     window.addEventListener("deviceorientation", handleDeviceOrientationEvent);
     return () => {
@@ -114,7 +96,7 @@ export function McapRecordingDemo(): JSX.Element {
         handleDeviceOrientationEvent,
       );
     };
-  }, [addPoseMessage, recording, recordOrientation]);
+  }, [actions, recording, recordOrientation]);
 
   const enableCamera = videoFormat !== "none";
   useEffect(() => {
@@ -135,10 +117,10 @@ export function McapRecordingDemo(): JSX.Element {
     const cleanup = startVideoStream({
       video: videoRef.current,
       onStart: () => {
-        setVideoStarted({ isStarted: true });
+        actions.setVideoStarted({ isStarted: true });
       },
       onError: (err) => {
-        setVideoError(err);
+        actions.setVideoError(err);
         console.error(err);
       },
     });
@@ -146,10 +128,10 @@ export function McapRecordingDemo(): JSX.Element {
     return () => {
       cleanup();
       video.remove();
-      setVideoStarted({ isStarted: false });
-      setVideoError(undefined);
+      actions.setVideoStarted({ isStarted: false });
+      actions.setVideoError(undefined);
     };
-  }, [enableCamera, setVideoStarted, setVideoError]);
+  }, [enableCamera, actions]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -169,28 +151,20 @@ export function McapRecordingDemo(): JSX.Element {
       enableJpeg: videoFormat === "jpeg",
       frameDurationSec: 1 / 30,
       onJpegFrame: (blob) => {
-        addJpegFrame(blob);
+        actions.addJpegFrame(blob);
       },
       onVideoFrame: (frame) => {
-        addVideoFrame(frame);
+        actions.addVideoFrame(frame);
       },
       onError: (err) => {
-        setVideoError(err);
+        actions.setVideoError(err);
         console.error(err);
       },
     });
     return () => {
       stopCapture();
     };
-  }, [
-    addJpegFrame,
-    addVideoFrame,
-    enableCamera,
-    recording,
-    videoStarted,
-    videoFormat,
-    setVideoError,
-  ]);
+  }, [enableCamera, recording, videoStarted, videoFormat, actions]);
 
   const enableMicrophone = recordAudio;
   useEffect(() => {
@@ -213,20 +187,20 @@ export function McapRecordingDemo(): JSX.Element {
     const cleanup = startAudioStream({
       canvas: canvasElement,
       onAudioStream: (stream) => {
-        setAudioStream(stream);
+        actions.setAudioStream(stream);
       },
       onError: (err) => {
-        setAudioError(err);
+        actions.setAudioError(err);
         console.error(err);
       },
     });
 
     return () => {
       cleanup();
-      setAudioStream(undefined);
-      setAudioError(undefined);
+      actions.setAudioStream(undefined);
+      actions.setAudioError(undefined);
     };
-  }, [enableMicrophone, setAudioStream, setAudioError]);
+  }, [enableMicrophone, actions]);
 
   useEffect(() => {
     if (!enableMicrophone || !recording || !audioStream) {
@@ -247,10 +221,10 @@ export function McapRecordingDemo(): JSX.Element {
       enablePCM: recordAudio,
       stream: audioStream,
       onAudioData: (data) => {
-        addAudioData(data);
+        actions.addAudioData(data);
       },
       onError: (error) => {
-        setAudioError(error);
+        actions.setAudioError(error);
       },
     });
 
@@ -271,26 +245,19 @@ export function McapRecordingDemo(): JSX.Element {
         }
       }
     };
-  }, [
-    addAudioData,
-    enableMicrophone,
-    audioStream,
-    recording,
-    recordAudio,
-    setAudioError,
-  ]);
+  }, [enableMicrophone, audioStream, recording, recordAudio, actions]);
 
   const onRecordClick = useCallback(
     (event: React.MouseEvent) => {
       event.preventDefault();
       if (recording) {
-        setRecording({ isRecording: false });
+        actions.setRecording({ isRecording: false });
         return;
       }
-      setRecording({ isRecording: true });
+      actions.setRecording({ isRecording: true });
 
       // Requesting orientation permission must be done as part of a user gesture
-      setOrientationPermissionError({ hasError: false });
+      actions.setOrientationPermissionError({ hasError: false });
       if (
         recordOrientation &&
         typeof DeviceOrientationEvent !== "undefined" &&
@@ -300,20 +267,20 @@ export function McapRecordingDemo(): JSX.Element {
         void Promise.resolve(DeviceOrientationEvent.requestPermission())
           .then((result) => {
             if (result !== "granted") {
-              setOrientationPermissionError({ hasError: true });
+              actions.setOrientationPermissionError({ hasError: true });
             }
           })
           .catch(console.error);
       }
     },
-    [recordOrientation, recording, setRecording, setOrientationPermissionError],
+    [recordOrientation, recording, actions],
   );
 
   const onDownloadClick = useCallback(
     (event: React.MouseEvent) => {
       event.preventDefault();
       void (async () => {
-        const blob = await state.closeAndRestart();
+        const blob = await actions.closeAndRestart();
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
@@ -333,10 +300,10 @@ export function McapRecordingDemo(): JSX.Element {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-        setShowDownloadInfo({ shouldShow: true });
+        actions.setShowDownloadInfo({ shouldShow: true });
       })();
     },
-    [state, setShowDownloadInfo],
+    [actions],
   );
 
   return (
@@ -349,83 +316,7 @@ export function McapRecordingDemo(): JSX.Element {
             and saved locally.
           </p>
         </header>
-        <div className={styles.sensors}>
-          <div className={styles.sensorsGrid}>
-            <div className={styles.sensorCategory}>Camera</div>
-            <div>
-              <div className={styles.videoFormatGroup}>
-                <select
-                  value={videoFormat}
-                  onChange={(e) => {
-                    setVideoFormat({
-                      format: e.target.value as typeof videoFormat,
-                    });
-                  }}
-                  className={styles.videoFormatSelect}
-                >
-                  <option value="none">None</option>
-                  {av1Support?.supported === true && (
-                    <option value="av1">AV1</option>
-                  )}
-                  {vp9Support?.supported === true && (
-                    <option value="vp9">VP9</option>
-                  )}
-                  {h265Support?.supported === true && (
-                    <option value="h265">H.265</option>
-                  )}
-                  {h264Support?.supported === true && (
-                    <option value="h264">H.264</option>
-                  )}
-                  <option value="jpeg">JPEG</option>
-                </select>
-              </div>
-            </div>
-            <div className={styles.sensorCategory}>Audio</div>
-            <div>
-              {audioSupport === true && (
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={recordAudio}
-                    onChange={(event) => {
-                      setRecordAudio({
-                        shouldRecord: event.target.checked,
-                      });
-                    }}
-                  />
-                  Microphone
-                </label>
-              )}
-            </div>
-            <div className={styles.sensorCategory}>Controls</div>
-            <div>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={recordMouse}
-                  onChange={(event) => {
-                    setRecordMouse({ shouldRecord: event.target.checked });
-                  }}
-                />
-                Mouse position
-              </label>
-              {!hasMouse && (
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={recordOrientation}
-                    onChange={(event) => {
-                      setRecordOrientation({
-                        shouldRecord: event.target.checked,
-                      });
-                    }}
-                  />
-                  Orientation
-                </label>
-              )}
-            </div>
-          </div>
-        </div>
+        <RecordingControls />
         {orientationPermissionError && (
           <div className={styles.error}>
             Allow permission to use device orientation
@@ -441,7 +332,7 @@ export function McapRecordingDemo(): JSX.Element {
               className={cx("clean-btn", styles.downloadInfoCloseButton)}
               type="button"
               onClick={() => {
-                setShowDownloadInfo({ shouldShow: false });
+                actions.setShowDownloadInfo({ shouldShow: false });
               }}
             >
               <span aria-hidden="true">&times;</span>
@@ -486,13 +377,13 @@ export function McapRecordingDemo(): JSX.Element {
                 className={styles.mediaPlaceholderText}
                 onClick={() => {
                   if (av1Support?.supported === true) {
-                    setVideoFormat({ format: "av1" });
+                    actions.setVideoFormat({ format: "av1" });
                   } else if (h265Support?.supported === true) {
-                    setVideoFormat({ format: "h265" });
+                    actions.setVideoFormat({ format: "h265" });
                   } else if (h264Support?.supported === true) {
-                    setVideoFormat({ format: "h264" });
+                    actions.setVideoFormat({ format: "h264" });
                   } else {
-                    setVideoFormat({ format: "jpeg" });
+                    actions.setVideoFormat({ format: "jpeg" });
                   }
                 }}
               >

@@ -40,23 +40,25 @@ type McapDemoState = {
   audioStream: MediaStream | undefined;
 
   // Actions
-  addMouseEventMessage: (msg: MouseEventMessage) => void;
-  addPoseMessage: (msg: DeviceOrientationEvent) => void;
-  addJpegFrame: (blob: Blob) => void;
-  addVideoFrame: (frame: CompressedVideoFrame) => void;
-  addAudioData: (data: RawAudio) => void;
-  closeAndRestart: () => Promise<Blob>;
-  setRecording: (value: { isRecording: boolean }) => void;
-  setOrientationPermissionError: (value: { hasError: boolean }) => void;
-  setShowDownloadInfo: (value: { shouldShow: boolean }) => void;
-  setVideoFormat: (value: { format: VideoFormat }) => void;
-  setRecordAudio: (value: { shouldRecord: boolean }) => void;
-  setRecordMouse: (value: { shouldRecord: boolean }) => void;
-  setRecordOrientation: (value: { shouldRecord: boolean }) => void;
-  setVideoStarted: (value: { isStarted: boolean }) => void;
-  setVideoError: (error: Error | undefined) => void;
-  setAudioError: (error: Error | undefined) => void;
-  setAudioStream: (stream: MediaStream | undefined) => void;
+  actions: {
+    addMouseEventMessage: (msg: MouseEventMessage) => void;
+    addPoseMessage: (msg: DeviceOrientationEvent) => void;
+    addJpegFrame: (blob: Blob) => void;
+    addVideoFrame: (frame: CompressedVideoFrame) => void;
+    addAudioData: (data: RawAudio) => void;
+    closeAndRestart: () => Promise<Blob>;
+    setRecording: (value: { isRecording: boolean }) => void;
+    setOrientationPermissionError: (value: { hasError: boolean }) => void;
+    setShowDownloadInfo: (value: { shouldShow: boolean }) => void;
+    setVideoFormat: (value: { format: VideoFormat }) => void;
+    setRecordAudio: (value: { shouldRecord: boolean }) => void;
+    setRecordMouse: (value: { shouldRecord: boolean }) => void;
+    setRecordOrientation: (value: { shouldRecord: boolean }) => void;
+    setVideoStarted: (value: { isStarted: boolean }) => void;
+    setVideoError: (error: Error | undefined) => void;
+    setAudioError: (error: Error | undefined) => void;
+    setAudioStream: (stream: MediaStream | undefined) => void;
+  };
 };
 
 const RADIANS_PER_DEGREE = Math.PI / 180;
@@ -135,58 +137,60 @@ export const useStore = create<McapDemoState>((set) => {
     audioStream: undefined,
 
     // Actions
-    addMouseEventMessage(msg: MouseEventMessage) {
-      void recorder.addMouseEvent(msg);
-      set({ latestMouse: msg });
-    },
-    addPoseMessage(msg: DeviceOrientationEvent) {
-      void recorder.addPose(deviceOrientationToPose(msg));
-      set({ latestOrientation: msg });
-    },
-    addJpegFrame(blob: Blob) {
-      void recorder.addJpegFrame(blob);
-    },
-    addVideoFrame(frame: CompressedVideoFrame) {
-      void recorder.addVideoFrame(frame);
-    },
-    addAudioData(data: RawAudio) {
-      void recorder.addAudioData(data);
-    },
-    async closeAndRestart() {
-      return await recorder.closeAndRestart();
-    },
-    setRecording: ({ isRecording }) => {
-      set({ recording: isRecording });
-    },
-    setOrientationPermissionError: ({ hasError }) => {
-      set({ orientationPermissionError: hasError });
-    },
-    setShowDownloadInfo: ({ shouldShow }) => {
-      set({ showDownloadInfo: shouldShow });
-    },
-    setVideoFormat: ({ format }) => {
-      set({ videoFormat: format });
-    },
-    setRecordAudio: ({ shouldRecord }) => {
-      set({ recordAudio: shouldRecord });
-    },
-    setRecordMouse: ({ shouldRecord }) => {
-      set({ recordMouse: shouldRecord });
-    },
-    setRecordOrientation: ({ shouldRecord }) => {
-      set({ recordOrientation: shouldRecord });
-    },
-    setVideoStarted: ({ isStarted }) => {
-      set({ videoStarted: isStarted });
-    },
-    setVideoError: (error) => {
-      set({ videoError: error });
-    },
-    setAudioError: (error) => {
-      set({ audioError: error });
-    },
-    setAudioStream: (stream) => {
-      set({ audioStream: stream });
+    actions: {
+      addMouseEventMessage(msg: MouseEventMessage) {
+        void recorder.addMouseEvent(msg);
+        set({ latestMouse: msg });
+      },
+      addPoseMessage(msg: DeviceOrientationEvent) {
+        void recorder.addPose(deviceOrientationToPose(msg));
+        set({ latestOrientation: msg });
+      },
+      addJpegFrame(blob: Blob) {
+        void recorder.addJpegFrame(blob);
+      },
+      addVideoFrame(frame: CompressedVideoFrame) {
+        void recorder.addVideoFrame(frame);
+      },
+      addAudioData(data: RawAudio) {
+        void recorder.addAudioData(data);
+      },
+      async closeAndRestart() {
+        return await recorder.closeAndRestart();
+      },
+      setRecording: ({ isRecording }) => {
+        set({ recording: isRecording });
+      },
+      setOrientationPermissionError: ({ hasError }) => {
+        set({ orientationPermissionError: hasError });
+      },
+      setShowDownloadInfo: ({ shouldShow }) => {
+        set({ showDownloadInfo: shouldShow });
+      },
+      setVideoFormat: ({ format }) => {
+        set({ videoFormat: format });
+      },
+      setRecordAudio: ({ shouldRecord }) => {
+        set({ recordAudio: shouldRecord });
+      },
+      setRecordMouse: ({ shouldRecord }) => {
+        set({ recordMouse: shouldRecord });
+      },
+      setRecordOrientation: ({ shouldRecord }) => {
+        set({ recordOrientation: shouldRecord });
+      },
+      setVideoStarted: ({ isStarted }) => {
+        set({ videoStarted: isStarted });
+      },
+      setVideoError: (error) => {
+        set({ videoError: error });
+      },
+      setAudioError: (error) => {
+        set({ audioError: error });
+      },
+      setAudioStream: (stream) => {
+        set({ audioStream: stream });
+      },
     },
   };
 });
