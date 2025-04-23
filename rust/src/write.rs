@@ -2,9 +2,10 @@
 
 use std::{
     borrow::Cow,
-    collections::{btree_map::Entry, BTreeMap},
+    collections::{btree_map::Entry, BTreeMap, HashMap},
     io::{self, prelude::*, Cursor, SeekFrom},
     mem::size_of,
+    sync::Arc,
 };
 
 use bimap::BiHashMap;
@@ -16,8 +17,11 @@ use zstd::stream::{raw as zraw, zio};
 use crate::{
     chunk_sink::{ChunkMode, ChunkSink},
     io_utils::CountingCrcWriter,
-    records::{self, op, AttachmentHeader, AttachmentIndex, MessageHeader, Record},
-    Attachment, Compression, McapError, McapResult, Message, Schema, MAGIC,
+    records::{
+        self, op, AttachmentHeader, AttachmentIndex, MessageHeader, Record, SchemaHeader,
+        Statistics,
+    },
+    Attachment, Channel, Compression, McapError, McapResult, Message, Schema, Summary, MAGIC,
 };
 
 // re-export to help with linear writing
@@ -367,7 +371,7 @@ impl SchemaContent<'_> {
 /// and check for errors when done; otherwise the result will be unwrapped on drop.
 pub struct Writer<W: Write + Seek> {
     writer: Option<WriteMode<W>>,
-    is_finished: bool,
+    finished_summary: Option<Summary>,
     chunk_mode: ChunkMode,
     options: WriteOptions,
     // Maps all unique channel content to its "canonical" or first written ID.
@@ -428,7 +432,7 @@ impl<W: Write + Seek> Writer<W> {
 
         Ok(Self {
             writer: Some(WriteMode::Raw(writer)),
-            is_finished: false,
+            finished_summary: None,
             options: opts,
             chunk_mode,
             canonical_schemas: Default::default(),
@@ -879,7 +883,7 @@ impl<W: Write + Seek> Writer<W> {
 
     fn assert_not_finished(&self) {
         assert!(
-            !self.is_finished,
+            self.finished_summary.is_none(),
             "{}",
             "Trying to write a record on a finished MCAP"
         );
@@ -951,19 +955,20 @@ impl<W: Write + Seek> Writer<W> {
         Ok(w)
     }
 
-    /// Finishes any current chunk and writes out the rest of the file.
+    /// Finishes any current chunk and writes out the summary section of the file.
     ///
-    /// Subsequent calls to other methods will panic.
-    pub fn finish(&mut self) -> McapResult<()> {
-        if self.is_finished {
+    /// Returns a [`Summary`] of data written to the file.  Subsequent calls to other methods will
+    /// panic.
+    pub fn finish(&mut self) -> McapResult<Summary> {
+        if let Some(summary) = &self.finished_summary {
             // We already called finish().
             // Maybe we're dropping after the user called it?
-            return Ok(());
+            return Ok(summary.clone());
         }
-
         // Finish any chunk we were working on and update stats, indexes, etc.
         self.finish_chunk()?;
-        self.is_finished = true;
+
+        let summary = self.summarize();
 
         // Grab the writer - self.writer becoming None makes subsequent writes fail.
         let writer = match &mut self.writer {
@@ -980,27 +985,6 @@ impl<W: Write + Seek> Writer<W> {
             writer,
             &Record::DataEnd(records::DataEnd { data_section_crc }),
         )?;
-
-        // Take all the data we need, swapping in empty containers.
-        // Without this, we get yelled at for moving things out of a mutable ref
-        // (&mut self).
-        // (We could get around all this noise by having finish() take self,
-        // but then it wouldn't be droppable _and_ finish...able.)
-        let channel_message_counts = std::mem::take(&mut self.channel_message_counts);
-
-        // Grab stats before we munge all the self fields below.
-        let message_bounds = self.message_bounds.unwrap_or((0, 0));
-        let stats = records::Statistics {
-            message_count: channel_message_counts.values().sum(),
-            schema_count: self.all_schema_ids.len() as u16,
-            channel_count: self.all_channel_ids.len() as u32,
-            attachment_count: self.attachment_count,
-            metadata_count: self.metadata_count,
-            chunk_count: self.chunk_indexes.len() as u32,
-            message_start_time: message_bounds.0,
-            message_end_time: message_bounds.1,
-            channel_message_counts,
-        };
 
         let chunk_indexes = std::mem::take(&mut self.chunk_indexes);
         let attachment_indexes = std::mem::take(&mut self.attachment_indexes);
@@ -1084,7 +1068,15 @@ impl<W: Write + Seek> Writer<W> {
 
         if self.options.emit_statistics {
             let statistics_start = summary_end;
-            write_record(&mut ccw, &Record::Statistics(stats))?;
+            write_record(
+                &mut ccw,
+                &Record::Statistics(
+                    summary
+                        .stats
+                        .clone()
+                        .expect("summarize always emits Some(stats)"),
+                ),
+            )?;
             summary_end = posit(&mut ccw)?;
             offsets.push(records::SummaryOffset {
                 group_opcode: op::STATISTICS,
@@ -1151,11 +1143,10 @@ impl<W: Write + Seek> Writer<W> {
             0 // We didn't write anything to the summary section.
         };
 
-        // Wat: the CRC in the footer _includes_ part of the footer.
+        // The CRC in the footer _includes_ part of the footer.
         op_and_len(&mut ccw, op::FOOTER, 20)?;
         ccw.write_u64::<LE>(summary_start)?;
         ccw.write_u64::<LE>(summary_offset_start)?;
-
         let (writer, summary_hasher) = ccw.finalize();
         let summary_crc = summary_hasher.map(|hasher| hasher.finalize()).unwrap_or(0);
 
@@ -1163,7 +1154,65 @@ impl<W: Write + Seek> Writer<W> {
 
         writer.write_all(MAGIC)?;
         writer.flush()?;
-        Ok(())
+        Ok(summary)
+    }
+
+    fn summarize(&self) -> Summary {
+        // Grab stats before we munge all the self fields below.
+        let message_bounds = self.message_bounds.unwrap_or((0, 0));
+        let stats = records::Statistics {
+            message_count: self.channel_message_counts.values().sum(),
+            schema_count: self.all_schema_ids.len() as u16,
+            channel_count: self.all_channel_ids.len() as u32,
+            attachment_count: self.attachment_count,
+            metadata_count: self.metadata_count,
+            chunk_count: self.chunk_indexes.len() as u32,
+            message_start_time: message_bounds.0,
+            message_end_time: message_bounds.1,
+            channel_message_counts: self.channel_message_counts.clone(),
+        };
+        let mut schemas: HashMap<u16, Arc<Schema<'static>>> =
+            HashMap::with_capacity(self.all_schema_ids.len());
+        let mut channels = HashMap::with_capacity(self.all_channel_ids.len());
+        for (schema_id, canonical_id) in self.all_schema_ids.iter() {
+            let schema_content = self
+                .canonical_schemas
+                .get_by_right(canonical_id)
+                .expect("schema content must be present for canonical id");
+            schemas.insert(
+                *schema_id,
+                Arc::new(Schema {
+                    id: *schema_id,
+                    name: schema_content.name.clone().into(),
+                    encoding: schema_content.encoding.clone().into(),
+                    data: schema_content.data.clone().into(),
+                }),
+            );
+        }
+        for (channel_id, canonical_id) in self.all_channel_ids.iter() {
+            let channel_content = self
+                .canonical_channels
+                .get_by_right(canonical_id)
+                .expect("channel content must be present for canonical id");
+            channels.insert(
+                *channel_id,
+                Arc::new(Channel {
+                    id: *channel_id,
+                    topic: channel_content.topic.clone().into(),
+                    schema: schemas.get(&channel_content.schema_id).cloned(),
+                    message_encoding: channel_content.message_encoding.clone().into(),
+                    metadata: channel_content.metadata.as_ref().to_owned(),
+                }),
+            );
+        }
+        Summary {
+            stats: Some(stats),
+            channels,
+            schemas,
+            chunk_indexes: self.chunk_indexes.clone(),
+            attachment_indexes: self.attachment_indexes.clone(),
+            metadata_indexes: self.metadata_indexes.clone(),
+        }
     }
 
     /// Consumes this writer, returning the underlying stream. Unless [`Self::finish()`] was called
@@ -1173,7 +1222,9 @@ impl<W: Write + Seek> Writer<W> {
     /// particular, if using [`std::fs::File`], you may wish to call [`std::fs::File::sync_all()`]
     /// to ensure all data was sent to the filesystem.
     pub fn into_inner(mut self) -> W {
-        self.is_finished = true;
+        if self.finished_summary.is_none() {
+            self.finished_summary = Some(self.summarize());
+        }
         // Peel away all the layers of the writer to get the underlying stream.
         match self.writer.take().expect(Self::WRITER_IS_NONE) {
             WriteMode::Raw(w) => w.finalize().0,
@@ -1185,7 +1236,7 @@ impl<W: Write + Seek> Writer<W> {
 
 impl<W: Write + Seek> Drop for Writer<W> {
     fn drop(&mut self) {
-        self.finish().unwrap()
+        self.finish().unwrap();
     }
 }
 
