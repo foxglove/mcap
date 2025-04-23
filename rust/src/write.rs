@@ -17,10 +17,7 @@ use zstd::stream::{raw as zraw, zio};
 use crate::{
     chunk_sink::{ChunkMode, ChunkSink},
     io_utils::CountingCrcWriter,
-    records::{
-        self, op, AttachmentHeader, AttachmentIndex, MessageHeader, Record, SchemaHeader,
-        Statistics,
-    },
+    records::{self, op, AttachmentHeader, AttachmentIndex, MessageHeader, Record},
     Attachment, Channel, Compression, McapError, McapResult, Message, Schema, Summary, MAGIC,
 };
 
@@ -969,6 +966,7 @@ impl<W: Write + Seek> Writer<W> {
         self.finish_chunk()?;
 
         let summary = self.summarize();
+        self.finished_summary = Some(summary.clone());
 
         // Grab the writer - self.writer becoming None makes subsequent writes fail.
         let writer = match &mut self.writer {
@@ -1185,7 +1183,7 @@ impl<W: Write + Seek> Writer<W> {
                     id: *schema_id,
                     name: schema_content.name.clone().into(),
                     encoding: schema_content.encoding.clone().into(),
-                    data: schema_content.data.clone().into(),
+                    data: schema_content.data.clone(),
                 }),
             );
         }
@@ -1707,6 +1705,87 @@ mod tests {
             panic!("should not be able to add another channel");
         };
         assert!(matches!(too_many, McapError::TooManySchemas));
+    }
+
+    #[test]
+    fn summary_contains_all_ids() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let schema_a = Arc::new(crate::Schema {
+            id: u16::MAX,
+            name: "int".into(),
+            encoding: "jsonschema".into(),
+            data: Cow::Owned(Vec::new()),
+        });
+        let schema_b = Arc::new(crate::Schema {
+            id: u16::MAX,
+            name: "int".into(),
+            encoding: "jsonschema".into(),
+            data: Cow::Owned(Vec::new()),
+        });
+        let channel_a = Arc::new(crate::Channel {
+            id: 0,
+            topic: "chat".into(),
+            message_encoding: "json".into(),
+            metadata: BTreeMap::new(),
+            schema: Some(schema_a.clone()),
+        });
+        let channel_b = Arc::new(crate::Channel {
+            id: 1,
+            topic: "chat".into(),
+            message_encoding: "json".into(),
+            metadata: BTreeMap::new(),
+            schema: Some(schema_a.clone()),
+        });
+        let channel_c = Arc::new(crate::Channel {
+            id: 2,
+            topic: "chat".into(),
+            message_encoding: "json".into(),
+            metadata: BTreeMap::new(),
+            schema: Some(schema_b.clone()),
+        });
+
+        let data: &[u8] = &[0, 1, 2, 3];
+
+        writer
+            .write(&Message {
+                channel: channel_a.clone(),
+                sequence: 1,
+                log_time: 1,
+                publish_time: 1,
+                data: Cow::Borrowed(data),
+            })
+            .expect("failed write 1");
+        writer
+            .write(&Message {
+                channel: channel_b.clone(),
+                sequence: 2,
+                log_time: 2,
+                publish_time: 2,
+                data: Cow::Borrowed(data),
+            })
+            .expect("failed write 2");
+        writer
+            .write(&Message {
+                channel: channel_c.clone(),
+                sequence: 3,
+                log_time: 3,
+                publish_time: 3,
+                data: Cow::Borrowed(data),
+            })
+            .expect("failed write 3");
+        let summary = writer.finish().expect("failed to finish");
+        let statistics = summary.stats.unwrap();
+        assert_eq!(statistics.channel_message_counts.get(&0), Some(&1));
+        assert_eq!(statistics.channel_message_counts.get(&1), Some(&1));
+        assert_eq!(statistics.channel_message_counts.get(&2), Some(&1));
+        assert_eq!(statistics.message_count, 3);
+        assert_eq!(statistics.metadata_count, 0);
+        assert_eq!(statistics.attachment_count, 0);
+        assert_eq!(statistics.chunk_count, 1);
+        assert!(summary.attachment_indexes.is_empty());
+        assert!(summary.metadata_indexes.is_empty());
+        assert_eq!(summary.chunk_indexes.len(), 1);
     }
 
     #[test]
