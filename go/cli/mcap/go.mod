@@ -1,6 +1,6 @@
 module github.com/foxglove/mcap/go/cli/mcap
 
-go 1.20
+go 1.21
 
 require (
 	cloud.google.com/go/storage v1.23.0
