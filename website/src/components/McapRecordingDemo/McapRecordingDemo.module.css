@@ -6,7 +6,6 @@
 
 .container var {
   font-style: normal;
-  font-weight: 600;
 }
 
 [data-theme="dark"] .container {
@@ -71,17 +70,17 @@
 .sensorsGrid {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 8px 24px;
+  gap: 0.5rem 1.5rem;
   align-items: center;
   width: 100%;
   margin: 16px 0;
 }
 
 .sensorCategory {
-  padding-right: 1rem;
   color: #666;
-  font-weight: 600;
+  font-weight: bold;
   white-space: nowrap;
+  text-align: right;
 }
 
 [data-theme="dark"] .sensorCategory {
@@ -206,16 +205,15 @@
   display: flex;
   gap: 12px;
   justify-content: center;
-  margin: 4px 0 12px 0;
+  margin: 0px 0 8px 0;
 }
 
 .statCounter {
   background: #f5f1ff;
   border: 1px solid #6f3be87f;
   border-radius: 16px;
-  padding: 4px 14px;
-  font-size: 0.95rem;
-  font-weight: 600;
+  padding: 4px 12px;
+  font-size: smaller;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -224,7 +222,6 @@
 
 .statCounter var {
   font-style: normal;
-  font-weight: 700;
   margin-right: 4px;
 }
 

@@ -351,7 +351,7 @@ export function McapRecordingDemo(): JSX.Element {
         </header>
         <div className={styles.sensors}>
           <div className={styles.sensorsGrid}>
-            <div className={styles.sensorCategory}>Video</div>
+            <div className={styles.sensorCategory}>Camera</div>
             <div>
               <div className={styles.videoFormatGroup}>
                 <select
