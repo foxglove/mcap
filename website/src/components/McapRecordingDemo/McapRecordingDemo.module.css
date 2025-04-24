@@ -365,13 +365,17 @@
 }
 
 .videoFormatGroup {
-  margin: 8px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .videoFormatGroup > label {
-  display: block;
-  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .videoFormatSelect {

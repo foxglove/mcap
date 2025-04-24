@@ -15,8 +15,7 @@ const hasMouse = window.matchMedia("(hover: hover)").matches;
 
 export function RecordingControls(): JSX.Element {
   const state = useStore();
-  const { actions, videoFormat, recordAudio, recordMouse, recordOrientation } =
-    state;
+  const { actions, recordAudio, recordMouse, recordOrientation } = state;
 
   const { data: h264Support } = useAsync(supportsH264Encoding);
   const { data: h265Support } = useAsync(supportsH265Encoding);
@@ -30,30 +29,79 @@ export function RecordingControls(): JSX.Element {
         <div className={styles.sensorCategory}>Camera</div>
         <div>
           <div className={styles.videoFormatGroup}>
-            <select
-              value={videoFormat}
-              onChange={(e) => {
-                actions.setVideoFormat({
-                  format: e.target.value as typeof videoFormat,
-                });
-              }}
-              className={styles.videoFormatSelect}
-            >
-              <option value="none">None</option>
-              {av1Support?.supported === true && (
-                <option value="av1">AV1</option>
-              )}
-              {vp9Support?.supported === true && (
-                <option value="vp9">VP9</option>
-              )}
-              {h265Support?.supported === true && (
-                <option value="h265">H.265</option>
-              )}
-              {h264Support?.supported === true && (
-                <option value="h264">H.264</option>
-              )}
-              <option value="jpeg">JPEG</option>
-            </select>
+            {av1Support?.supported === true && (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={state.enabledVideoFormats.has("av1")}
+                  onChange={(event) => {
+                    actions.setVideoFormat({
+                      format: "av1",
+                      enabled: event.target.checked,
+                    });
+                  }}
+                />
+                AV1
+              </label>
+            )}
+            {vp9Support?.supported === true && (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={state.enabledVideoFormats.has("vp9")}
+                  onChange={(event) => {
+                    actions.setVideoFormat({
+                      format: "vp9",
+                      enabled: event.target.checked,
+                    });
+                  }}
+                />
+                VP9
+              </label>
+            )}
+            {h265Support?.supported === true && (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={state.enabledVideoFormats.has("h265")}
+                  onChange={(event) => {
+                    actions.setVideoFormat({
+                      format: "h265",
+                      enabled: event.target.checked,
+                    });
+                  }}
+                />
+                H.265
+              </label>
+            )}
+            {h264Support?.supported === true && (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={state.enabledVideoFormats.has("h264")}
+                  onChange={(event) => {
+                    actions.setVideoFormat({
+                      format: "h264",
+                      enabled: event.target.checked,
+                    });
+                  }}
+                />
+                H.264
+              </label>
+            )}
+            <label>
+              <input
+                type="checkbox"
+                checked={state.enabledVideoFormats.has("jpeg")}
+                onChange={(event) => {
+                  actions.setVideoFormat({
+                    format: "jpeg",
+                    enabled: event.target.checked,
+                  });
+                }}
+              />
+              JPEG
+            </label>
           </div>
         </div>
         <div className={styles.sensorCategory}>Audio</div>

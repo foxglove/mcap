@@ -37,7 +37,7 @@ export function McapRecordingDemo(): JSX.Element {
     recordOrientation,
     showDownloadInfo,
     videoError,
-    videoFormat,
+    enabledVideoFormats,
     videoStarted,
   } = state;
 
@@ -48,7 +48,7 @@ export function McapRecordingDemo(): JSX.Element {
   const canStartRecording =
     recordMouse ||
     (!hasMouse && recordOrientation) ||
-    (videoFormat !== "none" && !videoError) ||
+    (enabledVideoFormats.size > 0 && !videoError) ||
     (recordAudio && !audioError);
 
   // Automatically pause recording after 30 seconds to avoid unbounded growth
@@ -98,7 +98,7 @@ export function McapRecordingDemo(): JSX.Element {
     };
   }, [actions, recording, recordOrientation]);
 
-  const enableCamera = videoFormat !== "none";
+  const enableCamera = enabledVideoFormats.size > 0;
   useEffect(() => {
     const videoContainer = videoContainerRef.current;
     if (!videoContainer || !enableCamera) {
@@ -144,11 +144,11 @@ export function McapRecordingDemo(): JSX.Element {
 
     const stopCapture = startVideoCapture({
       video,
-      enableAV1: videoFormat === "av1",
-      enableVP9: videoFormat === "vp9",
-      enableH265: videoFormat === "h265",
-      enableH264: videoFormat === "h264",
-      enableJpeg: videoFormat === "jpeg",
+      enableAV1: enabledVideoFormats.has("av1"),
+      enableVP9: enabledVideoFormats.has("vp9"),
+      enableH265: enabledVideoFormats.has("h265"),
+      enableH264: enabledVideoFormats.has("h264"),
+      enableJpeg: enabledVideoFormats.has("jpeg"),
       frameDurationSec: 1 / 30,
       onJpegFrame: (blob) => {
         actions.addJpegFrame(blob);
@@ -164,7 +164,7 @@ export function McapRecordingDemo(): JSX.Element {
     return () => {
       stopCapture();
     };
-  }, [enableCamera, recording, videoStarted, videoFormat, actions]);
+  }, [enableCamera, recording, videoStarted, enabledVideoFormats, actions]);
 
   const enableMicrophone = recordAudio;
   useEffect(() => {
@@ -343,13 +343,41 @@ export function McapRecordingDemo(): JSX.Element {
           </div>
         )}
 
-        {videoFormat === "h264" &&
-          h264Support?.mayUseLotsOfKeyframes === true && (
-            <div className={styles.h264Warning}>
-              Note: This browser may have a bug that causes H.264 encoding to be
-              less efficient.
-            </div>
-          )}
+        {videoError ? (
+          <div className={cx(styles.error, styles.mediaErrorContainer)}>
+            {videoError.toString()}
+          </div>
+        ) : enableCamera ? (
+          <>
+            {!videoStarted && (
+              <progress className={styles.mediaLoadingIndicator} />
+            )}
+            {enabledVideoFormats.has("h264") &&
+              h264Support?.mayUseLotsOfKeyframes === true && (
+                <div className={styles.h264Warning}>
+                  Note: This browser may have a bug that causes H.264 encoding
+                  to be less efficient.
+                </div>
+              )}
+          </>
+        ) : (
+          <span
+            className={styles.mediaPlaceholderText}
+            onClick={() => {
+              if (av1Support?.supported === true) {
+                actions.setVideoFormat({ format: "av1", enabled: true });
+              } else if (h265Support?.supported === true) {
+                actions.setVideoFormat({ format: "h265", enabled: true });
+              } else if (h264Support?.supported === true) {
+                actions.setVideoFormat({ format: "h264", enabled: true });
+              } else {
+                actions.setVideoFormat({ format: "jpeg", enabled: true });
+              }
+            }}
+          >
+            Choose a video format to enable video.
+          </span>
+        )}
 
         <div className={styles.statsCounters}>
           <div className={styles.statCounter}>
@@ -371,19 +399,26 @@ export function McapRecordingDemo(): JSX.Element {
                 {!videoStarted && (
                   <progress className={styles.mediaLoadingIndicator} />
                 )}
+                {enabledVideoFormats.has("h264") &&
+                  h264Support?.mayUseLotsOfKeyframes === true && (
+                    <div className={styles.h264Warning}>
+                      Note: This browser may have a bug that causes H.264
+                      encoding to be less efficient.
+                    </div>
+                  )}
               </>
             ) : (
               <span
                 className={styles.mediaPlaceholderText}
                 onClick={() => {
                   if (av1Support?.supported === true) {
-                    actions.setVideoFormat({ format: "av1" });
+                    actions.setVideoFormat({ format: "av1", enabled: true });
                   } else if (h265Support?.supported === true) {
-                    actions.setVideoFormat({ format: "h265" });
+                    actions.setVideoFormat({ format: "h265", enabled: true });
                   } else if (h264Support?.supported === true) {
-                    actions.setVideoFormat({ format: "h264" });
+                    actions.setVideoFormat({ format: "h264", enabled: true });
                   } else {
-                    actions.setVideoFormat({ format: "jpeg" });
+                    actions.setVideoFormat({ format: "jpeg", enabled: true });
                   }
                 }}
               >

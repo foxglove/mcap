@@ -12,7 +12,7 @@ import {
 } from "./Recorder";
 import type { CompressedVideoFrame } from "./videoCapture";
 
-type VideoFormat = "none" | "jpeg" | "h264" | "h265" | "vp9" | "av1";
+type VideoFormat = "jpeg" | "h264" | "h265" | "vp9" | "av1";
 
 type McapDemoState = {
   bytesWritten: bigint;
@@ -28,7 +28,7 @@ type McapDemoState = {
   showDownloadInfo: boolean;
 
   // Recording options
-  videoFormat: VideoFormat;
+  enabledVideoFormats: Set<VideoFormat>;
   recordAudio: boolean;
   recordMouse: boolean;
   recordOrientation: boolean;
@@ -50,7 +50,7 @@ type McapDemoState = {
     setRecording: (value: { isRecording: boolean }) => void;
     setOrientationPermissionError: (value: { hasError: boolean }) => void;
     setShowDownloadInfo: (value: { shouldShow: boolean }) => void;
-    setVideoFormat: (value: { format: VideoFormat }) => void;
+    setVideoFormat: (value: { format: VideoFormat; enabled: boolean }) => void;
     setRecordAudio: (value: { shouldRecord: boolean }) => void;
     setRecordMouse: (value: { shouldRecord: boolean }) => void;
     setRecordOrientation: (value: { shouldRecord: boolean }) => void;
@@ -125,7 +125,7 @@ export const useStore = create<McapDemoState>((set) => {
     showDownloadInfo: false,
 
     // Recording options
-    videoFormat: "none",
+    enabledVideoFormats: new Set<VideoFormat>(),
     recordAudio: false,
     recordMouse: true,
     recordOrientation: true,
@@ -167,8 +167,16 @@ export const useStore = create<McapDemoState>((set) => {
       setShowDownloadInfo: ({ shouldShow }) => {
         set({ showDownloadInfo: shouldShow });
       },
-      setVideoFormat: ({ format }) => {
-        set({ videoFormat: format });
+      setVideoFormat: ({ format, enabled }) => {
+        set((state) => {
+          const newFormats = new Set(state.enabledVideoFormats);
+          if (enabled) {
+            newFormats.add(format);
+          } else {
+            newFormats.delete(format);
+          }
+          return { enabledVideoFormats: newFormats };
+        });
       },
       setRecordAudio: ({ shouldRecord }) => {
         set({ recordAudio: shouldRecord });
