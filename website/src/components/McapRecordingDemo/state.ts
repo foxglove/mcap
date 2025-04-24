@@ -12,7 +12,7 @@ import {
 } from "./Recorder";
 import type { CompressedVideoFrame } from "./videoCapture";
 
-type VideoFormat = "jpeg" | "h264" | "h265" | "vp9" | "av1";
+export type VideoFormat = "jpeg" | "h264" | "h265" | "vp9" | "av1";
 
 type McapDemoState = {
   bytesWritten: bigint;
