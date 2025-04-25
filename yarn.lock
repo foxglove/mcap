@@ -3066,22 +3066,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/schemas@npm:1.7.0":
+"@foxglove/schemas@npm:1.7.0, @foxglove/schemas@npm:^1.0.0":
   version: 1.7.0
   resolution: "@foxglove/schemas@npm:1.7.0"
   dependencies:
     tslib: "npm:^2"
   checksum: 10c0/40754a7acc581f89d225e4d499739204e985d6c73e804e5ffb02732c328d4fd8c2afb1f01d8d7669949d115f23277ec1f147bee44db6426d82cef41607cfc07a
-  languageName: node
-  linkType: hard
-
-"@foxglove/schemas@npm:^1.0.0":
-  version: 1.6.2
-  resolution: "@foxglove/schemas@npm:1.6.2"
-  dependencies:
-    "@foxglove/rosmsg-msgs-common": "npm:^3.0.0"
-    tslib: "npm:^2.5.0"
-  checksum: 10c0/de2a0f6a699e67593653a51ad1c0edbae3bff3f647677da68d3b3efd90c404e3b609f5db5254a14b5c817148b4a5eed8599a7365e16a1a5556a94187dd679d82
   languageName: node
   linkType: hard
 
