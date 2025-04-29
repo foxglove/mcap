@@ -14,7 +14,11 @@ except ImportError:
     zstandard = None
 
 from .data_stream import ReadDataStream
-from .exceptions import InvalidMagic, RecordLengthLimitExceeded
+from .exceptions import (
+    InvalidMagic,
+    RecordLengthLimitExceeded,
+    UnsupportedCompressionError,
+)
 from .opcode import Opcode
 from .records import (
     Attachment,
@@ -78,11 +82,11 @@ def get_chunk_data_stream(
 ) -> Tuple[ReadDataStream, int]:
     if chunk.compression == "zstd":
         if zstandard is None:
-            raise ImportError("zstandard is required to decompress zstd chunks")
+            raise UnsupportedCompressionError("zstandard")
         data: bytes = zstandard.decompress(chunk.data, chunk.uncompressed_size)
     elif chunk.compression == "lz4":
         if lz4 is None:
-            raise ImportError("lz4 is required to decompress lz4 chunks")
+            raise UnsupportedCompressionError("lz4")
         data: bytes = lz4.decompress(chunk.data)  # type: ignore
     else:
         data = chunk.data
