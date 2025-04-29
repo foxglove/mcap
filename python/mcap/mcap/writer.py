@@ -5,7 +5,7 @@ from enum import Enum, Flag, auto
 from io import BufferedWriter, RawIOBase
 from typing import IO, Any, Dict, List, OrderedDict, Union
 
-from mcap.mcap.exceptions import UnsupportedCompressionError
+from .exceptions import UnsupportedCompressionError
 
 try:
     import lz4.frame  # type: ignore
