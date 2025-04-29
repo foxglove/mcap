@@ -6,7 +6,7 @@ use mcap::records::AttachmentHeader;
 use std::{borrow::Cow, io::BufWriter};
 
 use anyhow::Result;
-use memmap::Mmap;
+use memmap2::Mmap;
 use tempfile::tempfile;
 
 #[test]
@@ -14,7 +14,7 @@ fn smoke() -> Result<()> {
     let mapped = map_mcap("../tests/conformance/data/OneAttachment/OneAttachment.mcap")?;
     let attachments = mcap::read::LinearReader::new(&mapped)?
         .filter_map(|record| match record.unwrap() {
-            mcap::records::Record::Attachment { header, data } => Some((header, data)),
+            mcap::records::Record::Attachment { header, data, crc } => Some((header, data, crc)),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -28,8 +28,11 @@ fn smoke() -> Result<()> {
         media_type: String::from("application/octet-stream"),
     };
 
-    assert_eq!(attachments[0].0, expected_header);
-    assert_eq!(&*attachments[0].1, &[1, 2, 3]);
+    let (header, data, crc) = attachments[0].clone();
+
+    assert_eq!(header, expected_header);
+    assert_eq!(data, &[1u8, 2u8, 3u8] as &[u8]);
+    assert_eq!(crc, 171394340);
 
     Ok(())
 }
@@ -102,7 +105,7 @@ fn round_trip() -> Result<()> {
     let mapped = map_mcap("../tests/conformance/data/OneAttachment/OneAttachment.mcap")?;
     let attachments =
         mcap::read::LinearReader::new(&mapped)?.filter_map(|record| match record.unwrap() {
-            mcap::records::Record::Attachment { header, data } => Some((header, data)),
+            mcap::records::Record::Attachment { header, data, .. } => Some((header, data)),
             _ => None,
         });
 

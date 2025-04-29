@@ -2,7 +2,7 @@ use std::fs;
 
 use anyhow::{Context, Result};
 use camino::Utf8Path;
-use memmap::Mmap;
+use memmap2::Mmap;
 
 pub fn map_mcap<P: AsRef<Utf8Path>>(p: P) -> Result<Mmap> {
     let p = p.as_ref();

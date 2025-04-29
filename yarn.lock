@@ -3066,13 +3066,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/schemas@npm:1.6.2, @foxglove/schemas@npm:^1.0.0":
-  version: 1.6.2
-  resolution: "@foxglove/schemas@npm:1.6.2"
+"@foxglove/schemas@npm:1.7.0, @foxglove/schemas@npm:^1.0.0":
+  version: 1.7.0
+  resolution: "@foxglove/schemas@npm:1.7.0"
   dependencies:
-    "@foxglove/rosmsg-msgs-common": "npm:^3.0.0"
-    tslib: "npm:^2.5.0"
-  checksum: 10c0/de2a0f6a699e67593653a51ad1c0edbae3bff3f647677da68d3b3efd90c404e3b609f5db5254a14b5c817148b4a5eed8599a7365e16a1a5556a94187dd679d82
+    tslib: "npm:^2"
+  checksum: 10c0/40754a7acc581f89d225e4d499739204e985d6c73e804e5ffb02732c328d4fd8c2afb1f01d8d7669949d115f23277ec1f147bee44db6426d82cef41607cfc07a
   languageName: node
   linkType: hard
 
@@ -4150,6 +4149,22 @@ __metadata:
   version: 5.0.2
   resolution: "@types/diff@npm:5.0.2"
   checksum: 10c0/244eab93e8423c157d0361a1c03929d8f938cd705e4b4857126af35b502f3eb1a28675482418c926d387bf7485391992470d7aa4cc8152f9b70170aee3a612ea
+  languageName: node
+  linkType: hard
+
+"@types/dom-mediacapture-transform@npm:0.1.10":
+  version: 0.1.10
+  resolution: "@types/dom-mediacapture-transform@npm:0.1.10"
+  dependencies:
+    "@types/dom-webcodecs": "npm:*"
+  checksum: 10c0/cbad14e0b78bdd36dad7780d06526ab27cdc14c90035826dec0d2a1e71d5b77cc3f58feb0d9e0c08c9f6ebdb4d5a60cc507c7126115e0829d5987acc49e4dd30
+  languageName: node
+  linkType: hard
+
+"@types/dom-webcodecs@npm:*, @types/dom-webcodecs@npm:0.1.13":
+  version: 0.1.13
+  resolution: "@types/dom-webcodecs@npm:0.1.13"
+  checksum: 10c0/16683fd0330fdfbb867affec1c18fd493d88433a4ec66257579adc5d07b07e9492268b4401e9017b7388b13750722365b0392b375e39c84e74f564d5b4f634a4
   languageName: node
   linkType: hard
 
@@ -15610,11 +15625,13 @@ __metadata:
     "@docusaurus/preset-classic": "npm:2.4.1"
     "@foxglove/eslint-plugin": "npm:1.0.1"
     "@foxglove/rostime": "npm:1.1.2"
-    "@foxglove/schemas": "npm:1.6.2"
+    "@foxglove/schemas": "npm:1.7.0"
     "@foxglove/tsconfig": "npm:2.0.0"
     "@mcap/core": "workspace:*"
     "@mdx-js/react": "npm:1.6.22"
     "@tsconfig/docusaurus": "npm:1.0.7"
+    "@types/dom-mediacapture-transform": "npm:0.1.10"
+    "@types/dom-webcodecs": "npm:0.1.13"
     "@types/promise-queue": "npm:2.2.0"
     buffer: "npm:6.0.3"
     classnames: "npm:2.3.2"

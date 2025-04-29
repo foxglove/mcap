@@ -2,7 +2,7 @@ use crate::{
     sans_io::decompressor::{DecompressResult, Decompressor},
     McapError, McapResult,
 };
-use zstd::zstd_safe::{get_error_name, DStream, InBuffer, OutBuffer, SafeResult};
+use zstd::zstd_safe::{get_error_name, DStream, InBuffer, OutBuffer, ResetDirective, SafeResult};
 
 pub struct ZstdDecoder {
     s: DStream<'static>,
@@ -14,7 +14,7 @@ impl ZstdDecoder {
     pub fn new() -> Self {
         let mut stream = DStream::create();
         ZstdDecoder {
-            need: stream.init(),
+            need: stream.init().expect("zstd decoder init failed"),
             s: stream,
         }
     }
@@ -42,7 +42,7 @@ impl Decompressor for ZstdDecoder {
         })
     }
     fn reset(&mut self) -> McapResult<()> {
-        handle_error(self.s.reset())?;
+        handle_error(self.s.reset(ResetDirective::SessionOnly))?;
         Ok(())
     }
 

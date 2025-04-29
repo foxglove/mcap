@@ -5,7 +5,7 @@ use common::*;
 use std::{borrow::Cow, io::BufWriter, sync::Arc};
 
 use anyhow::Result;
-use memmap::Mmap;
+use memmap2::Mmap;
 use tempfile::tempfile;
 
 #[test]

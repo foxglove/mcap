@@ -1,4 +1,4 @@
 //! Read MCAP data from a stream asynchronously
-pub mod read;
+pub mod linear_reader;
 
-pub use read::{LinearReaderOptions, RecordReader};
+pub use linear_reader::{LinearReader, LinearReaderOptions};

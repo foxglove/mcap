@@ -14,6 +14,8 @@ use std::{
 
 use binrw::*;
 
+use crate::{McapError, McapResult};
+
 /// Opcodes for MCAP file records.
 ///
 /// "Records are identified by a single-byte opcode.
@@ -64,6 +66,7 @@ pub enum Record<'a> {
     Attachment {
         header: AttachmentHeader,
         data: Cow<'a, [u8]>,
+        crc: u32,
     },
     AttachmentIndex(AttachmentIndex),
     Statistics(Statistics),
@@ -121,9 +124,10 @@ impl Record<'_> {
             },
             Record::MessageIndex(index) => Record::MessageIndex(index),
             Record::ChunkIndex(index) => Record::ChunkIndex(index),
-            Record::Attachment { header, data } => Record::Attachment {
+            Record::Attachment { header, data, crc } => Record::Attachment {
                 header,
                 data: Cow::Owned(data.into_owned()),
+                crc,
             },
             Record::AttachmentIndex(index) => Record::AttachmentIndex(index),
             Record::Statistics(statistics) => Record::Statistics(statistics),
@@ -412,6 +416,29 @@ pub struct ChunkIndex {
     pub compressed_size: u64,
 
     pub uncompressed_size: u64,
+}
+
+impl ChunkIndex {
+    /// Returns the offset in the file to the start of compressed chunk data.
+    /// This can be useful for retrieving just the compressed content of a chunk given its index.
+    /// Returns [`McapError::TooLong`] if the resulting offset would be greater than [`u64::MAX`].
+    pub fn compressed_data_offset(&self) -> McapResult<u64> {
+        let res = self.chunk_start_offset.checked_add(
+            1 // opcode
+            + 8 // chunk record length
+            + 8 // start time
+            + 8 // end time
+            + 8 // uncompressed size
+            + 4 // CRC
+            + 4 // compression string length
+            + (self.compression.len() as u64) // 32-bit compression string length
+            + 8, // compressed size
+        );
+        match res {
+            Some(n) => Ok(n),
+            None => Err(McapError::TooLong(self.chunk_start_offset)),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, BinRead, BinWrite)]

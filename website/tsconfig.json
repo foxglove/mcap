@@ -1,3 +1,4 @@
+// cspell:ignore webcodecs, mediacapture
 {
   "extends": "@tsconfig/docusaurus/tsconfig.json",
   "include": ["./**/*"],
@@ -10,6 +11,7 @@
       "@mcap/core": ["../typescript/core/src"]
     },
     "moduleResolution": "node",
+    "types": ["dom-webcodecs", "dom-mediacapture-transform"],
 
     // Settings from @foxglove/tsconfig/base
     "newLine": "lf",

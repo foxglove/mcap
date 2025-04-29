@@ -38,6 +38,10 @@ The Channel `message_encoding` field describes the encoding for all messages wit
 
 - `message_encoding`: [`cbor`](https://cbor.io/)
 
+### msgpack
+
+- `message_encoding`: [`msgpack`](https://msgpack.org/)
+
 ### json
 
 - `message_encoding`: [`json`](https://www.json.org/json-en.html)

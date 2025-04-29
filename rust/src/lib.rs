@@ -6,7 +6,7 @@
 //!
 //! use anyhow::{Context, Result};
 //! use camino::Utf8Path;
-//! use memmap::Mmap;
+//! use memmap2::Mmap;
 //!
 //! fn map_mcap<P: AsRef<Utf8Path>>(p: P) -> Result<Mmap> {
 //!     let fd = fs::File::open(p.as_ref()).context("Couldn't open MCAP file")?;
@@ -144,6 +144,8 @@ pub enum McapError {
     TooManyChannels,
     #[error("cannot write more than 65535 schemas to one MCAP")]
     TooManySchemas,
+    #[error("indexed reader received chunk data with unexpected offset or length")]
+    UnexpectedChunkDataInserted,
 }
 
 pub type McapResult<T> = Result<T, McapError>;
@@ -226,7 +228,7 @@ mod assertions {
 
     assert_impl_all!(Writer<Cursor<Vec<u8>>>: Send);
     assert_impl_all!(MessageStream: Send);
-    assert_impl_all!(sans_io::read::LinearReader: Send);
+    assert_impl_all!(sans_io::LinearReader: Send);
     #[cfg(feature = "tokio")]
-    assert_impl_all!(tokio::read::RecordReader<Cursor<Vec<u8>>>: Send);
+    assert_impl_all!(tokio::linear_reader::LinearReader<Cursor<Vec<u8>>>: Send);
 }

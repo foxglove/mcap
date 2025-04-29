@@ -1,8 +1,11 @@
+// cspell:word millis
+
 import { Time, fromNanoSec } from "@foxglove/rostime";
 import {
-  PoseInFrame,
   CompressedImage,
   CompressedVideo,
+  PoseInFrame,
+  RawAudio,
 } from "@foxglove/schemas";
 import { foxgloveMessageSchemas } from "@foxglove/schemas/internal";
 import zstd from "@foxglove/wasm-zstd";
@@ -46,20 +49,22 @@ export class Recorder extends EventEmitter<RecorderEvents> {
   #writer?: McapWriter;
   /** Used to ensure all operations on the McapWriter are sequential */
   #queue = new Queue(/*maxPendingPromises=*/ 1);
-  #mouseChannelId?: number;
-  #mouseChannelSeq = 0;
-  #poseChannel?: ProtobufChannelInfo;
-  #poseChannelSeq = 0;
-  #jpegChannel?: ProtobufChannelInfo;
-  #jpegChannelSeq = 0;
+  #audioChannel?: ProtobufChannelInfo;
+  #audioChannelSeq = 0;
+  #av1Channel?: ProtobufChannelInfo;
+  #av1ChannelSeq = 0;
   #h264Channel?: ProtobufChannelInfo;
   #h264ChannelSeq = 0;
   #h265Channel?: ProtobufChannelInfo;
   #h265ChannelSeq = 0;
+  #jpegChannel?: ProtobufChannelInfo;
+  #jpegChannelSeq = 0;
+  #mouseChannelId?: number;
+  #mouseChannelSeq = 0;
+  #poseChannel?: ProtobufChannelInfo;
+  #poseChannelSeq = 0;
   #vp9Channel?: ProtobufChannelInfo;
   #vp9ChannelSeq = 0;
-  #av1Channel?: ProtobufChannelInfo;
-  #av1ChannelSeq = 0;
 
   #blobParts: Uint8Array[] = [];
   bytesWritten = 0n;
@@ -100,18 +105,20 @@ export class Recorder extends EventEmitter<RecorderEvents> {
       this.#emit();
     });
     // Channels are lazily added later
-    this.#mouseChannelId = undefined;
-    this.#mouseChannelSeq = 0;
-    this.#poseChannel = undefined;
-    this.#poseChannelSeq = 0;
-    this.#jpegChannel = undefined;
-    this.#jpegChannelSeq = 0;
+    this.#audioChannel = undefined;
+    this.#audioChannelSeq = 0;
+    this.#av1Channel = undefined;
+    this.#av1ChannelSeq = 0;
     this.#h264Channel = undefined;
     this.#h264ChannelSeq = 0;
     this.#h265Channel = undefined;
     this.#h265ChannelSeq = 0;
-    this.#av1Channel = undefined;
-    this.#av1ChannelSeq = 0;
+    this.#jpegChannel = undefined;
+    this.#jpegChannelSeq = 0;
+    this.#mouseChannelId = undefined;
+    this.#mouseChannelSeq = 0;
+    this.#poseChannel = undefined;
+    this.#poseChannelSeq = 0;
   }
 
   #time(): bigint {
@@ -271,6 +278,39 @@ export class Recorder extends EventEmitter<RecorderEvents> {
         logTime: now,
         publishTime: now,
         data,
+      });
+      this.messageCount++;
+      this.#emit();
+    });
+  }
+
+  async addAudioData(data: RawAudio): Promise<void> {
+    void this.#queue.add(async () => {
+      if (!this.#writer) {
+        return;
+      }
+      const channel = (this.#audioChannel ??= await addProtobufChannel(
+        this.#writer,
+        "microphone",
+        foxgloveMessageSchemas.RawAudio,
+      ));
+      const sequence = this.#audioChannelSeq++;
+      const { id, rootType } = channel;
+      const msg: ProtobufObject<RawAudio> = {
+        timestamp: toProtobufTime(data.timestamp),
+        data: data.data,
+        format: data.format,
+        sample_rate: data.sample_rate,
+        number_of_channels: data.number_of_channels,
+      };
+      const encodedMsg = rootType.encode(msg).finish();
+      const now = this.#time();
+      await this.#writer.addMessage({
+        sequence,
+        channelId: id,
+        logTime: now,
+        publishTime: now,
+        data: encodedMsg,
       });
       this.messageCount++;
       this.#emit();

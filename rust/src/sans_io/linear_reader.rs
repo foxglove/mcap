@@ -56,6 +56,9 @@ struct ChunkState {
     crc: u32,
 }
 
+// MCAP records start with an opcode (1 byte) and a 64-bit length (8 bytes).
+const OPCODE_LEN_SIZE: usize = 1 + 8;
+
 /// A private struct that encapsulates a buffer with start and end cursors.
 #[derive(Default)]
 struct RwBuf {
@@ -182,20 +185,20 @@ impl LinearReaderOptions {
 /// use tokio::io::AsyncReadExt;
 /// use std::io::Read;
 ///
-/// use mcap::sans_io::read::ReadAction;
+/// use mcap::sans_io::linear_reader::LinearReadEvent;
 /// use mcap::McapResult;
 ///
 /// // Asynchronously...
 /// async fn read_async() -> McapResult<()> {
 ///     let mut file = AsyncFile::open("in.mcap").await.expect("couldn't open file");
-///     let mut reader = mcap::sans_io::read::LinearReader::new();
-///     while let Some(action) = reader.next_action() {
-///         match action? {
-///             ReadAction::NeedMore(need) => {
+///     let mut reader = mcap::sans_io::linear_reader::LinearReader::new();
+///     while let Some(event) = reader.next_event() {
+///         match event? {
+///             LinearReadEvent::ReadRequest(need) => {
 ///                 let written = file.read(reader.insert(need)).await?;
-///                 reader.set_written(written);
+///                 reader.notify_read(written);
 ///             },
-///             ReadAction::GetRecord{ opcode, data } => {
+///             LinearReadEvent::Record{ opcode, data } => {
 ///                 let raw_record = mcap::parse_record(opcode, data)?;
 ///                 // do something with the record...
 ///             }
@@ -207,14 +210,14 @@ impl LinearReaderOptions {
 /// // Or synchronously.
 /// fn read_sync() -> McapResult<()> {
 ///     let mut file = fs::File::open("in.mcap")?;
-///     let mut reader = mcap::sans_io::read::LinearReader::new();
-///     while let Some(action) = reader.next_action() {
-///         match action? {
-///             ReadAction::NeedMore(need) => {
+///     let mut reader = mcap::sans_io::linear_reader::LinearReader::new();
+///     while let Some(event) = reader.next_event() {
+///         match event? {
+///             LinearReadEvent::ReadRequest(need) => {
 ///                 let written = file.read(reader.insert(need))?;
-///                 reader.set_written(written);
+///                 reader.notify_read(written);
 ///             },
-///             ReadAction::GetRecord{ opcode, data } => {
+///             LinearReadEvent::Record { opcode, data } => {
 ///                 let raw_record = mcap::parse_record(opcode, data)?;
 ///                 // do something with the record...
 ///             }
@@ -236,9 +239,9 @@ pub struct LinearReader {
     decompressed_content: RwBuf,
     // decompressor that can be re-used between chunks.
     decompressors: HashMap<String, Box<dyn Decompressor>>,
-    // Stores the number of bytes written into this reader since the last `next_action()` call.
-    last_write: Option<usize>,
+    // Stores the number of bytes written into this reader since the last `next_event()` call.
     options: LinearReaderOptions,
+    at_eof: bool,
 }
 
 impl Default for LinearReader {
@@ -266,7 +269,7 @@ impl LinearReader {
             options,
             chunk_state: None,
             decompressors: Default::default(),
-            last_write: None,
+            at_eof: false,
         }
     }
 
@@ -291,52 +294,48 @@ impl LinearReader {
         Ok(result)
     }
 
-    /// Get a mutable slice to write new MCAP data into. Call [`Self::set_written`] afterwards with
+    /// Get a mutable slice to write new MCAP data into. Call [`Self::notify_read`] afterwards with
     /// the number of bytes successfully written.
     pub fn insert(&mut self, to_write: usize) -> &mut [u8] {
         self.file_data.tail_with_size(to_write)
     }
 
-    /// Set the number of bytes successfully written into the buffer returned from [`Self::insert`]
-    /// since the last [`Self::next_action`] call. Providing 0 indicates EOF to the reader.
+    /// Notify the number of bytes read into the linear reader
+    /// since the last [`Self::next_event`] call. Providing 0 indicates EOF to the reader.
     ///
-    /// Panics if `written` is greater than the last `to_write` provided to [`Self::insert`].
-    pub fn set_written(&mut self, written: usize) {
-        if (self.file_data.data.len() - self.file_data.end) < written {
-            panic!("set_written called with written > last inserted length");
+    /// Panics if `read` is greater than the last `to_write` provided to [`Self::insert`].
+    pub fn notify_read(&mut self, written: usize) {
+        if written == 0 {
+            self.at_eof = true;
         }
-        self.last_write = Some(written);
+        if (self.file_data.data.len() - self.file_data.end) < written {
+            panic!("notify_read called with n > last inserted length");
+        }
+        self.file_data.end += written;
     }
 
-    /// Yields the next action the caller should take to progress through the file.
-    pub fn next_action(&mut self) -> Option<McapResult<ReadAction>> {
-        if let Some(written) = self.last_write.take() {
-            if written == 0 {
-                // at EOF. If the reader is not expecting end magic, and it isn't in the middle of a
-                // record or chunk, this is OK.
-                if self.options.skip_end_magic
-                    && self.file_data.len() == 0
-                    && self.decompressed_content.len() == 0
-                    && self.chunk_state.is_none()
-                {
-                    return None;
-                }
-                if self.chunk_state.is_some() {
-                    return Some(Err(McapError::UnexpectedEoc));
-                }
-                return Some(Err(McapError::UnexpectedEof));
+    /// Yields the next event the caller should take to progress through the file.
+    pub fn next_event(&mut self) -> Option<McapResult<LinearReadEvent>> {
+        if self.at_eof {
+            // at EOF. If the reader is not expecting end magic, and it isn't in the middle of a
+            // record or chunk, this is OK.
+            if self.options.skip_end_magic
+                && self.file_data.len() == 0
+                && self.decompressed_content.len() == 0
+                && self.chunk_state.is_none()
+            {
+                return None;
             }
-            self.file_data.end += written;
+            return Some(Err(McapError::UnexpectedEof));
         }
-
-        /// Macros for loading data into the reader. These return early with NeedMore(n) if
+        /// Macros for loading data into the reader. These return early with Read(n) if
         /// more data is needed.
         ///
         /// load ensures that $n bytes are available unread in self.file_data.
         macro_rules! load {
             ($n:expr) => {{
                 if self.file_data.len() < $n {
-                    return Some(Ok(ReadAction::NeedMore($n - self.file_data.len())));
+                    return Some(Ok(LinearReadEvent::ReadRequest($n - self.file_data.len())));
                 }
                 &self.file_data.data[self.file_data.start..self.file_data.start + $n]
             }};
@@ -347,7 +346,7 @@ impl LinearReader {
         macro_rules! consume {
             ($n:expr) => {{
                 if self.file_data.len() < $n {
-                    return Some(Ok(ReadAction::NeedMore($n - self.file_data.len())));
+                    return Some(Ok(LinearReadEvent::ReadRequest($n - self.file_data.len())));
                 }
                 let start = self.file_data.start;
                 self.file_data.mark_read($n);
@@ -370,7 +369,7 @@ impl LinearReader {
                         &self.decompressed_content.data
                             [self.decompressed_content.start..self.decompressed_content.start + $n]
                     }
-                    Ok(Some(n)) => return Some(Ok(ReadAction::NeedMore(n))),
+                    Ok(Some(n)) => return Some(Ok(LinearReadEvent::ReadRequest(n))),
                     Err(err) => return Some(Err(err)),
                 }
             }};
@@ -399,12 +398,12 @@ impl LinearReader {
                     self.currently_reading = CurrentlyReading::FileRecord;
                 }
                 FileRecord => {
-                    let opcode_length_buf = load!(9);
+                    let opcode_length_buf = load!(OPCODE_LEN_SIZE);
                     let opcode = opcode_length_buf[0];
                     let len = u64::from_le_bytes(opcode_length_buf[1..].try_into().unwrap());
                     // Some record types are handled specially.
                     if opcode == op::CHUNK && !self.options.emit_chunks {
-                        self.file_data.mark_read(9);
+                        self.file_data.mark_read(OPCODE_LEN_SIZE);
                         self.currently_reading = CurrentlyReading::ChunkHeader { len };
                         continue;
                     } else if opcode == op::DATA_END {
@@ -414,13 +413,13 @@ impl LinearReader {
                         // much data in the CRC.
                         let calculated =
                             self.file_data.hasher.take().map(|hasher| hasher.finalize());
-                        self.file_data.mark_read(9);
+                        self.file_data.mark_read(OPCODE_LEN_SIZE);
                         self.currently_reading = DataEnd { len, calculated };
                         continue;
                     } else if opcode == op::FOOTER {
                         // The summary section CRC needs to be checked against the CRC of the entire
                         // summary section _including_ the first bytes of the footer record.
-                        self.file_data.mark_read(9);
+                        self.file_data.mark_read(OPCODE_LEN_SIZE);
                         self.currently_reading = Footer {
                             len,
                             hasher: self.file_data.hasher.take(),
@@ -430,8 +429,8 @@ impl LinearReader {
                     // For all other records, load the entire record into memory and yield to the
                     // caller.
                     let len = check!(len_as_usize(len));
-                    let data = &consume!(9 + len)[9..];
-                    return Some(Ok(ReadAction::GetRecord { data, opcode }));
+                    let data = &consume!(OPCODE_LEN_SIZE + len)[OPCODE_LEN_SIZE..];
+                    return Some(Ok(LinearReadEvent::Record { data, opcode }));
                 }
                 CurrentlyReading::DataEnd { len, calculated } => {
                     let len = check!(len_as_usize(len));
@@ -447,7 +446,7 @@ impl LinearReader {
                     if self.options.validate_summary_section_crc {
                         self.file_data.hasher = Some(crc32fast::Hasher::new());
                     }
-                    return Some(Ok(ReadAction::GetRecord {
+                    return Some(Ok(LinearReadEvent::Record {
                         data,
                         opcode: op::DATA_END,
                     }));
@@ -468,7 +467,7 @@ impl LinearReader {
                         }
                     }
                     self.currently_reading = EndMagic;
-                    return Some(Ok(ReadAction::GetRecord {
+                    return Some(Ok(LinearReadEvent::Record {
                         data,
                         opcode: op::FOOTER,
                     }));
@@ -548,7 +547,7 @@ impl LinearReader {
                         Some(decompressor) => {
                             // decompress all available compressed data until there are no compressed
                             // bytes remaining. If not all of the compressed bytes are available in
-                            // file_data, decompress! will return a NeedMore action for more data.
+                            // file_data, decompress! will return a Read event for more data.
                             let uncompressed_len = check!(len_as_usize(state.uncompressed_len));
                             if self.decompressed_content.len() >= uncompressed_len {
                                 let calculated =
@@ -575,18 +574,18 @@ impl LinearReader {
                                 self.currently_reading = PaddingAfterChunk;
                                 continue;
                             }
-                            let opcode_len_buf = load!(9);
+                            let opcode_len_buf = load!(OPCODE_LEN_SIZE);
                             let opcode = opcode_len_buf[0];
                             let len = check!(len_as_usize(u64::from_le_bytes(
                                 opcode_len_buf[1..].try_into().unwrap(),
                             )));
-                            let opcode_len_data = consume!(9 + len);
-                            let data = &opcode_len_data[9..];
+                            let opcode_len_data = consume!(OPCODE_LEN_SIZE + len);
+                            let data = &opcode_len_data[OPCODE_LEN_SIZE..];
                             if let Some(hasher) = state.uncompressed_data_hasher.as_mut() {
                                 hasher.update(opcode_len_data);
                             }
-                            state.compressed_remaining -= (9 + len) as u64;
-                            return Some(Ok(ReadAction::GetRecord { data, opcode }));
+                            state.compressed_remaining -= (OPCODE_LEN_SIZE + len) as u64;
+                            return Some(Ok(LinearReadEvent::Record { data, opcode }));
                         }
                         Some(decompressor) => {
                             if self.decompressed_content.len() == 0 {
@@ -606,20 +605,23 @@ impl LinearReader {
                                 self.currently_reading = PaddingAfterChunk;
                                 continue;
                             }
-                            let opcode_len_buf = decompress!(9, state, decompressor);
-                            let opcode = opcode_len_buf[0];
-                            let len = check!(len_as_usize(u64::from_le_bytes(
-                                opcode_len_buf[1..9].try_into().unwrap(),
-                            )));
-                            let _ = decompress!(9 + len, state, decompressor);
-                            self.decompressed_content.mark_read(9);
+                            let opcode_len_buf = decompress!(OPCODE_LEN_SIZE, state, decompressor);
+                            let Some((&[opcode], rest)) = opcode_len_buf.split_first_chunk() else {
+                                return Some(Err(McapError::UnexpectedEoc));
+                            };
+                            let Some((&len_buf, _)) = rest.split_first_chunk() else {
+                                return Some(Err(McapError::UnexpectedEoc));
+                            };
+                            let len = check!(len_as_usize(u64::from_le_bytes(len_buf)));
+                            let _ = decompress!(OPCODE_LEN_SIZE + len, state, decompressor);
+                            self.decompressed_content.mark_read(OPCODE_LEN_SIZE);
                             let (start, end) = (
                                 self.decompressed_content.start,
                                 self.decompressed_content.start + len,
                             );
                             self.decompressed_content.mark_read(len);
                             let data = &self.decompressed_content.data[start..end];
-                            return Some(Ok(ReadAction::GetRecord { data, opcode }));
+                            return Some(Ok(LinearReadEvent::Record { data, opcode }));
                         }
                     }
                 }
@@ -667,15 +669,14 @@ impl LinearReader {
     }
 }
 
-/// Encapsulates the action the user should take next when reading an MCAP file.
-///
-pub enum ReadAction<'a> {
+/// Events emitted by the linear reader.
+pub enum LinearReadEvent<'a> {
     /// The reader needs more data to provide the next record. Call [`LinearReader::insert`] then
-    /// [`LinearReader::set_written`] to load more data. The value provided here is a hint for how
+    /// [`LinearReader::notify_read`] to load more data. The value provided here is a hint for how
     /// much data to insert.
-    NeedMore(usize),
-    /// Read a record out of the MCAP file. Use [`crate::parse_record`] to parse the record.
-    GetRecord { data: &'a [u8], opcode: u8 },
+    ReadRequest(usize),
+    /// A new record from the MCAP file. Use [`crate::parse_record`] to parse the record.
+    Record { data: &'a [u8], opcode: u8 },
 }
 
 /// casts a 64-bit length value from an MCAP into a [`usize`].
@@ -809,13 +810,13 @@ mod tests {
         let mut cursor = std::io::Cursor::new(buf.into_inner());
         let mut opcodes: Vec<u8> = Vec::new();
         let mut iter_count = 0;
-        while let Some(action) = reader.next_action() {
-            match action? {
-                ReadAction::NeedMore(n) => {
+        while let Some(event) = reader.next_event() {
+            match event? {
+                LinearReadEvent::ReadRequest(n) => {
                     let written = cursor.read(reader.insert(n))?;
-                    reader.set_written(written);
+                    reader.notify_read(written);
                 }
-                ReadAction::GetRecord { data, opcode } => {
+                LinearReadEvent::Record { data, opcode } => {
                     opcodes.push(opcode);
                     parse_record(opcode, data)?;
                 }
@@ -851,13 +852,13 @@ mod tests {
         let mut cursor = std::io::Cursor::new(basic_chunked_file(None)?);
         let mut opcodes: Vec<u8> = Vec::new();
         let mut iter_count = 0;
-        while let Some(action) = reader.next_action() {
-            match action? {
-                ReadAction::NeedMore(n) => {
+        while let Some(event) = reader.next_event() {
+            match event? {
+                LinearReadEvent::ReadRequest(n) => {
                     let written = cursor.read(reader.insert(n))?;
-                    reader.set_written(written);
+                    reader.notify_read(written);
                 }
-                ReadAction::GetRecord { data, opcode } => {
+                LinearReadEvent::Record { data, opcode } => {
                     opcodes.push(opcode);
                     parse_record(opcode, data)?;
                 }
@@ -877,13 +878,13 @@ mod tests {
         let mut cursor = std::io::Cursor::new(basic_chunked_file(compression)?);
         let mut opcodes: Vec<u8> = Vec::new();
         let mut iter_count = 0;
-        while let Some(action) = reader.next_action() {
-            match action? {
-                ReadAction::NeedMore(n) => {
+        while let Some(event) = reader.next_event() {
+            match event? {
+                LinearReadEvent::ReadRequest(n) => {
                     let written = cursor.read(reader.insert(n))?;
-                    reader.set_written(written);
+                    reader.notify_read(written);
                 }
-                ReadAction::GetRecord { data, opcode } => {
+                LinearReadEvent::Record { data, opcode } => {
                     opcodes.push(opcode);
                     parse_record(opcode, data)?;
                 }
@@ -961,13 +962,13 @@ mod tests {
             let mut cursor = std::io::Cursor::new(input);
             let mut opcodes: Vec<u8> = Vec::new();
             let mut iter_count = 0;
-            while let Some(action) = reader.next_action() {
-                match action? {
-                    ReadAction::NeedMore(n) => {
+            while let Some(event) = reader.next_event() {
+                match event? {
+                    LinearReadEvent::ReadRequest(n) => {
                         let written = cursor.read(reader.insert(n))?;
-                        reader.set_written(written);
+                        reader.notify_read(written);
                     }
-                    ReadAction::GetRecord { data, opcode } => {
+                    LinearReadEvent::Record { data, opcode } => {
                         opcodes.push(opcode);
                         parse_record(opcode, data)?;
                     }
@@ -1009,13 +1010,13 @@ mod tests {
         let mut cursor = std::io::Cursor::new(mcap);
         let mut opcodes: Vec<u8> = Vec::new();
         let mut iter_count = 0;
-        while let Some(action) = reader.next_action() {
-            match action? {
-                ReadAction::NeedMore(n) => {
+        while let Some(event) = reader.next_event() {
+            match event? {
+                LinearReadEvent::ReadRequest(n) => {
                     let written = cursor.read(reader.insert(n))?;
-                    reader.set_written(written);
+                    reader.notify_read(written);
                 }
-                ReadAction::GetRecord { data, opcode } => {
+                LinearReadEvent::Record { data, opcode } => {
                     opcodes.push(opcode);
                     parse_record(opcode, data)?;
                 }
@@ -1049,11 +1050,11 @@ mod tests {
     // Ensures that the internal buffer for the linear reader gets compacted regularly and does not
     // expand unbounded.
     #[test]
-    fn test_buffer_compaction() -> McapResult<()> {
+    fn test_buffer_compevent() -> McapResult<()> {
         let mut buf = Vec::new();
         {
             let mut cursor = std::io::Cursor::new(buf);
-            let data = Vec::from_iter(std::iter::repeat(0x20u8).take(1024 * 1024 * 4));
+            let data = Vec::from_iter(std::iter::repeat_n(0x20u8, 1024 * 1024 * 4));
             let mut writer = crate::WriteOptions::new()
                 .compression(None)
                 .chunk_size(None)
@@ -1086,14 +1087,14 @@ mod tests {
         let mut opcodes: Vec<u8> = Vec::new();
         let mut iter_count = 0;
         let mut max_needed: usize = 0;
-        while let Some(action) = reader.next_action() {
-            match action? {
-                ReadAction::NeedMore(n) => {
+        while let Some(event) = reader.next_event() {
+            match event? {
+                LinearReadEvent::ReadRequest(n) => {
                     max_needed = std::cmp::max(max_needed, n);
                     // read slightly more than requested, such that the data in the buffer does not
-                    // hit zero after the next action.
+                    // hit zero after the next event.
                     let written = cursor.read(reader.insert(n + 1))?;
-                    reader.set_written(written);
+                    reader.notify_read(written);
                     let buffer_size = reader.file_data.data.len();
                     assert!(
                         buffer_size < std::cmp::max(max_needed * 2, 4096),
@@ -1102,7 +1103,7 @@ mod tests {
                         buffer_size
                     );
                 }
-                ReadAction::GetRecord { data, opcode } => {
+                LinearReadEvent::Record { data, opcode } => {
                     opcodes.push(opcode);
                     parse_record(opcode, data)?;
                 }
@@ -1121,18 +1122,18 @@ mod tests {
         let blocksize: usize = 1024;
         let mut reader = LinearReader::new();
         let mut message_count = 0;
-        while let Some(action) = reader.next_action() {
-            match action.expect("failed to get next action") {
-                ReadAction::GetRecord { opcode, .. } => {
+        while let Some(event) = reader.next_event() {
+            match event.expect("failed to get next event") {
+                LinearReadEvent::Record { opcode, .. } => {
                     if opcode == op::MESSAGE {
                         message_count += 1;
                     }
                 }
-                ReadAction::NeedMore(_) => {
+                LinearReadEvent::ReadRequest(_) => {
                     let read = f
                         .read(reader.insert(blocksize))
                         .expect("failed to read from file");
-                    reader.set_written(read);
+                    reader.notify_read(read);
                 }
             }
         }
