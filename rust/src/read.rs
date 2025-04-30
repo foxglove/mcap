@@ -534,7 +534,7 @@ pub fn footer(mcap: &[u8]) -> McapResult<records::Footer> {
 }
 
 /// Indexes of an MCAP file parsed from its (optional) summary section
-#[derive(Default, Eq, PartialEq)]
+#[derive(Default, Eq, PartialEq, Clone)]
 pub struct Summary {
     pub stats: Option<records::Statistics>,
     /// Maps channel IDs to their channel
