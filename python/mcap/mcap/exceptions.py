@@ -31,3 +31,8 @@ class RecordLengthLimitExceeded(McapError):
         super().__init__(
             f"{opcode_name} record has length {length} that exceeds limit {limit}",
         )
+
+
+class UnsupportedCompressionError(McapError):
+    def __init__(self, compression: str):
+        super().__init__(f"unsupported compression type {compression}")

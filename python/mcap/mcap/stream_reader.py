@@ -3,11 +3,22 @@ import zlib
 from io import BufferedReader, BytesIO, RawIOBase
 from typing import IO, Iterator, List, Optional, Tuple, Union
 
-import lz4.frame  # type: ignore
-import zstandard
+try:
+    import lz4.frame as lz4
+except ImportError:
+    lz4 = None
+
+try:
+    import zstandard
+except ImportError:
+    zstandard = None
 
 from .data_stream import ReadDataStream
-from .exceptions import InvalidMagic, RecordLengthLimitExceeded
+from .exceptions import (
+    InvalidMagic,
+    RecordLengthLimitExceeded,
+    UnsupportedCompressionError,
+)
 from .opcode import Opcode
 from .records import (
     Attachment,
@@ -70,9 +81,13 @@ def get_chunk_data_stream(
     chunk: Chunk, validate_crc: bool = False
 ) -> Tuple[ReadDataStream, int]:
     if chunk.compression == "zstd":
+        if zstandard is None:
+            raise UnsupportedCompressionError("zstandard")
         data: bytes = zstandard.decompress(chunk.data, chunk.uncompressed_size)
     elif chunk.compression == "lz4":
-        data: bytes = lz4.frame.decompress(chunk.data)  # type: ignore
+        if lz4 is None:
+            raise UnsupportedCompressionError("lz4")
+        data: bytes = lz4.decompress(chunk.data)  # type: ignore
     else:
         data = chunk.data
 

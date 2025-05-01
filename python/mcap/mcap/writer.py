@@ -5,8 +5,17 @@ from enum import Enum, Flag, auto
 from io import BufferedWriter, RawIOBase
 from typing import IO, Any, Dict, List, OrderedDict, Union
 
-import lz4.frame  # type: ignore
-import zstandard
+from .exceptions import UnsupportedCompressionError
+
+try:
+    import lz4.frame  # type: ignore
+except ImportError:
+    lz4 = None
+
+try:
+    import zstandard
+except ImportError:
+    zstandard = None
 
 from mcap import __version__
 
@@ -117,6 +126,14 @@ class Writer:
         self.__enable_crcs = enable_crcs
         self.__enable_data_crcs = enable_data_crcs
         self.__data_section_crc = 0
+
+        # validate compression
+        if self.__compression == CompressionType.LZ4:
+            if lz4 is None:
+                raise UnsupportedCompressionError("lz4")
+        elif self.__compression == CompressionType.ZSTD:
+            if zstandard is None:
+                raise UnsupportedCompressionError("zstandard")
 
     def add_attachment(
         self, create_time: int, log_time: int, name: str, media_type: str, data: bytes
