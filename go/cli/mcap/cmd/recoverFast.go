@@ -101,6 +101,18 @@ func recoverFastRun(
 		if len(data) > len(buf) {
 			buf = data
 		}
+
+		if token != mcap.TokenMessageIndex {
+			if lastChunk != nil {
+				err = mcapWriter.WriteChunkWithIndexes(lastChunk, lastIndexes)
+				if err != nil {
+					return err
+				}
+				lastIndexes = nil
+				lastChunk = nil
+			}
+		}
+
 		switch token {
 		case mcap.TokenHeader:
 			header, err := mcap.ParseHeader(data)
@@ -111,15 +123,8 @@ func recoverFastRun(
 				return err
 			}
 		case mcap.TokenChunk:
-			if lastChunk != nil {
-				err = mcapWriter.WriteChunkWithIndexes(lastChunk, lastIndexes)
-				if err != nil {
-					return err
-				}
-				lastIndexes = nil
-				lastChunk = nil
-			}
 			lastChunk, err = mcap.ParseChunk(data)
+			// copy the records, since it is referenced and the buffer will be reused
 			recordsCopy := make([]byte, len(lastChunk.Records))
 			copy(recordsCopy, lastChunk.Records)
 			lastChunk.Records = recordsCopy
@@ -128,6 +133,9 @@ func recoverFastRun(
 				return err
 			}
 		case mcap.TokenMessageIndex:
+			if lastChunk == nil {
+				return fmt.Errorf("got message index but not chunk before it")
+			}
 			index, err := mcap.ParseMessageIndex(data)
 			if err != nil {
 				return err

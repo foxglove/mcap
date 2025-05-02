@@ -542,8 +542,9 @@ func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex)
 		}
 		defer lexer.Close()
 
+		msg := make([]byte, 1024)
 		for {
-			token, data, err := lexer.Next(buf)
+			token, data, err := lexer.Next(msg)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					return nil
@@ -557,8 +558,8 @@ func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex)
 				}
 				return err
 			}
-			if len(data) > len(buf) {
-				buf = data
+			if len(data) > len(msg) {
+				msg = data
 			}
 
 			switch token {
