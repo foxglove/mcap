@@ -414,6 +414,182 @@ func (w *Writer) WriteDataEnd(e *DataEnd) error {
 	return err
 }
 
+// WriteChunkWithIndexes writes a chunk record with the associated message indexes to the output.
+// If the message indexes contains unknown channels, the chunk is decompressed and the new
+// channels and schemas are added to the writer.
+func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex) error {
+	if c.UncompressedSize == 0 {
+		return nil
+	}
+	compressedlen := int(len(c.Records))
+	uncompressedlen := c.UncompressedSize
+
+	// topFields = StartTime(8) + EndTime(8) + UncompressedSize(8) + CRC(4) + compressionLen(4+len) + CompressedSize(8)
+	topFieldsLen := 8 + 8 + 8 + 4 + 4 + len(c.Compression) + 8
+	msgLen := topFieldsLen + len(c.Records)
+	headerLen := 1 + 8 + topFieldsLen // OpChunk(1) + msgLen(8) + topFields
+	chunkStartOffset := w.w.Size()
+
+	w.ensureSized(headerLen)
+	buf := w.msg[:headerLen]
+
+	offset, err := putByte(w.msg, byte(OpChunk))
+	if err != nil {
+		return err
+	}
+
+	offset += putUint64(buf[offset:], uint64(msgLen))
+	offset += putUint64(buf[offset:], c.MessageStartTime)
+	offset += putUint64(buf[offset:], c.MessageEndTime)
+	offset += putUint64(buf[offset:], uncompressedlen)
+	offset += putUint32(buf[offset:], c.UncompressedCRC)
+	offset += putPrefixedString(buf[offset:], c.Compression)
+	offset += putUint64(buf[offset:], uint64(compressedlen))
+
+	_, err = w.w.Write(w.msg[:offset])
+	if err != nil {
+		return err
+	}
+	_, err = w.w.Write(c.Records)
+	if err != nil {
+		return err
+	}
+
+	chunkEndOffset := w.w.Size()
+
+	// message indexes
+	containsNewChannel := false
+	messageIndexOffsets := make(map[uint16]uint64)
+	for _, messageIndex := range messageIndexes {
+		if !messageIndex.IsEmpty() {
+			messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
+			err = w.WriteMessageIndex(messageIndex)
+			if err != nil {
+				return err
+			}
+			if w.channels[messageIndex.ChannelID] == nil {
+				containsNewChannel = true
+			}
+			w.Statistics.MessageCount += uint64(len(messageIndex.Records))
+			w.Statistics.ChannelMessageCounts[messageIndex.ChannelID] += uint64(len(messageIndex.Records))
+		}
+	}
+
+	messageIndexEnd := w.w.Size()
+	messageIndexLength := messageIndexEnd - chunkEndOffset
+	w.ChunkIndexes = append(w.ChunkIndexes, &ChunkIndex{
+		MessageStartTime:    c.MessageStartTime,
+		MessageEndTime:      c.MessageEndTime,
+		ChunkStartOffset:    chunkStartOffset,
+		ChunkLength:         chunkEndOffset - chunkStartOffset,
+		MessageIndexOffsets: messageIndexOffsets,
+		MessageIndexLength:  messageIndexLength,
+		Compression:         CompressionFormat(c.Compression),
+		CompressedSize:      uint64(compressedlen),
+		UncompressedSize:    uint64(uncompressedlen),
+	})
+
+	w.Statistics.ChunkCount++
+	w.currentChunkStartTime = math.MaxUint64
+	w.currentChunkEndTime = 0
+	w.currentChunkMessageCount = 0
+
+	if (w.Statistics.MessageStartTime == 0 || c.MessageStartTime < w.Statistics.MessageStartTime) && c.MessageStartTime != 0 {
+		w.Statistics.MessageStartTime = c.MessageStartTime
+	}
+	if c.MessageEndTime > w.Statistics.MessageEndTime {
+		w.Statistics.MessageEndTime = c.MessageEndTime
+	}
+
+	if containsNewChannel {
+		var uncompressedBytes []byte
+
+		switch CompressionFormat(c.Compression) {
+		case CompressionNone:
+			uncompressedBytes = c.Records
+		case CompressionZSTD:
+			compressedDataReader := bytes.NewReader(c.Records)
+			chunkDataReader, err := zstd.NewReader(compressedDataReader)
+			if err != nil {
+				return err
+			}
+			defer chunkDataReader.Close()
+			uncompressedBytes, err = io.ReadAll(chunkDataReader)
+			if err != nil {
+				return err
+			}
+		case CompressionLZ4:
+			var err error
+			compressedDataReader := bytes.NewReader(c.Records)
+			chunkDataReader := lz4.NewReader(compressedDataReader)
+			uncompressedBytes, err = io.ReadAll(chunkDataReader)
+			if err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unsupported compression format: %s", c.Compression)
+		}
+
+		uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
+
+		lexer, err := NewLexer(uncompressedBytesReader, &LexerOptions{
+			SkipMagic:         true,
+			ValidateChunkCRCs: true,
+			EmitChunks:        true,
+		})
+		if err != nil {
+			return err
+		}
+		defer lexer.Close()
+
+		for {
+			token, data, err := lexer.Next(buf)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return nil
+				}
+				var expected *ErrTruncatedRecord
+				if errors.As(err, &expected) {
+					return nil
+				}
+				if token == TokenInvalidChunk {
+					continue
+				}
+				return err
+			}
+			if len(data) > len(buf) {
+				buf = data
+			}
+
+			switch token {
+			case TokenSchema:
+				s, err := ParseSchema(data)
+				if err != nil {
+					return err
+				}
+				if w.schemas[s.ID] == nil {
+					w.Statistics.SchemaCount++
+					w.schemas[s.ID] = s
+					w.schemaIDs = append(w.schemaIDs, s.ID)
+				}
+			case TokenChannel:
+				c, err := ParseChannel(data)
+				if err != nil {
+					return err
+				}
+				if w.channels[c.ID] == nil {
+					w.Statistics.ChannelCount++
+					w.channels[c.ID] = c
+					w.channelIDs = append(w.channelIDs, c.ID)
+				}
+			}
+		}
+
+	}
+
+	return nil
+}
+
 func (w *Writer) flushActiveChunk() error {
 	if w.compressedWriter.Size() == 0 {
 		return nil
