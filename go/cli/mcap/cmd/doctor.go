@@ -38,10 +38,11 @@ type mcapDoctor struct {
 
 	inSummarySection bool
 
-	messageCount uint64
-	minLogTime   uint64
-	maxLogTime   uint64
-	statistics   *mcap.Statistics
+	messageCount         uint64
+	channelMessageCounts map[uint16]uint64
+	minLogTime           uint64
+	maxLogTime           uint64
+	statistics           *mcap.Statistics
 
 	diagnosis Diagnosis
 }
@@ -290,6 +291,7 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64) {
 
 			chunkMessageCount++
 			doctor.messageCount++
+			doctor.channelMessageCounts[message.ChannelID]++
 
 		default:
 			doctor.error("Illegal record in chunk: %d", tokenType)
@@ -622,6 +624,16 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 				doctor.messageCount,
 			)
 		}
+		for channelID, count := range doctor.channelMessageCounts {
+			if count != doctor.statistics.ChannelMessageCounts[channelID] {
+				doctor.error(
+					"Statistics has message count %d for channel %d, but actual number of messages is %d",
+					doctor.statistics.ChannelMessageCounts[channelID],
+					channelID,
+					count,
+				)
+			}
+		}
 	}
 	return doctor.diagnosis
 }
@@ -636,6 +648,7 @@ func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
 		schemasInDataSection:               make(map[uint16]*mcap.Schema),
 		chunkIndexes:                       make(map[uint64]*mcap.ChunkIndex),
 		minLogTime:                         math.MaxUint64,
+		channelMessageCounts:               make(map[uint16]uint64),
 	}
 }
 
