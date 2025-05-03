@@ -162,7 +162,11 @@ func (doctor *mcapDoctor) examineChannel(channel *mcap.Channel) {
 	}
 }
 
-func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64, messageIndexes map[uint16]*mcap.MessageIndex) {
+func (doctor *mcapDoctor) examineChunk(
+	chunk *mcap.Chunk,
+	startOffset uint64,
+	messageIndexes map[uint16]*mcap.MessageIndex,
+) {
 	referencedChannels := make(map[uint16]bool)
 	compressionFormat := mcap.CompressionFormat(chunk.Compression)
 	var uncompressedBytes []byte
