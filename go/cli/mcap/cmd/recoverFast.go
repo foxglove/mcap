@@ -45,7 +45,6 @@ func recoverFastRun(
 		EmitChunks:        true,
 		EmitInvalidChunks: true,
 		AttachmentCallback: func(ar *mcap.AttachmentReader) error {
-
 			err = mcapWriter.WriteAttachment(&mcap.Attachment{
 				LogTime:    ar.LogTime,
 				CreateTime: ar.CreateTime,
