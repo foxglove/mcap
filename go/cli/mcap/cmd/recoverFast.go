@@ -16,7 +16,6 @@ func recoverFastRun(
 	r io.Reader,
 	w io.Writer,
 ) error {
-
 	mcapWriter, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Chunked: true,
 	})
@@ -84,8 +83,6 @@ func recoverFastRun(
 				if err != nil {
 					return err
 				}
-				lastIndexes = nil
-				lastChunk = nil
 			}
 			if errors.Is(err, io.EOF) {
 				return nil
@@ -218,7 +215,6 @@ It does not decompress the chunks, so it is much faster than the regular recover
 		if err != nil {
 			die("failed to recover: %s", err)
 		}
-
 	}
 	rootCmd.AddCommand(recoverFast)
 }

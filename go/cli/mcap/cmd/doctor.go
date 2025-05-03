@@ -513,7 +513,6 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 				} else {
 					lastChunkIndexes[messageIndex.ChannelID] = messageIndex
 				}
-
 			}
 		case mcap.TokenChunkIndex:
 			chunkIndex, err := mcap.ParseChunkIndex(data)
@@ -571,8 +570,6 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 
 	if lastChunk != nil {
 		doctor.examineChunk(lastChunk, lastChunkStartOffset, lastChunkIndexes)
-		lastChunk = nil
-		lastChunkIndexes = nil
 	}
 
 	for chunkOffset, chunkIndex := range doctor.chunkIndexes {
