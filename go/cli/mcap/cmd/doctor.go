@@ -162,7 +162,7 @@ func (doctor *mcapDoctor) examineChannel(channel *mcap.Channel) {
 	}
 }
 
-func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64) {
+func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64, messageIndexes map[uint16]*mcap.MessageIndex) {
 	referencedChannels := make(map[uint16]bool)
 	compressionFormat := mcap.CompressionFormat(chunk.Compression)
 	var uncompressedBytes []byte
@@ -228,6 +228,11 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64) {
 
 	msg := make([]byte, 1024)
 	for {
+		currentPosition, err := uncompressedBytesReader.Seek(0, io.SeekCurrent)
+		if err != nil {
+			doctor.error("Failed to determine read cursor: %s", err)
+			return
+		}
 		tokenType, data, err := lexer.Next(msg)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -293,6 +298,41 @@ func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64) {
 			doctor.messageCount++
 			doctor.channelMessageCounts[message.ChannelID]++
 
+			if messageIndex, ok := messageIndexes[message.ChannelID]; ok {
+				if messageIndex.ChannelID == message.ChannelID {
+					foundIndexEntry := false
+					for _, index := range messageIndex.Records {
+						if index.Offset == uint64(currentPosition) {
+							if index.Timestamp != message.LogTime {
+								doctor.error(
+									"MessageIndex entry for channel %d at offset %d has timestamp %d, but message has timestamp %d",
+									message.ChannelID,
+									currentPosition,
+									index.Timestamp,
+									message.LogTime,
+								)
+							}
+							foundIndexEntry = true
+							break
+						}
+					}
+
+					if !foundIndexEntry {
+						doctor.warn(
+							"No MessageIndex entry found for message channel %d with log time %d at offset %d",
+							message.ChannelID,
+							message.LogTime,
+							currentPosition,
+						)
+					}
+				}
+			} else {
+				doctor.warn(
+					"No MessageIndex record found for channel %d",
+					message.ChannelID,
+				)
+			}
+
 		default:
 			doctor.error("Illegal record in chunk: %d", tokenType)
 		}
@@ -350,6 +390,10 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 	var dataEnd *mcap.DataEnd
 	var footer *mcap.Footer
 	var messageOutsideChunk bool
+	var lastChunk *mcap.Chunk
+	var lastChunkStartOffset uint64
+	var lastChunkIndexes map[uint16]*mcap.MessageIndex
+
 	msg := make([]byte, 1024)
 	for {
 		tokenType, data, err := lexer.Next(msg)
@@ -368,6 +412,14 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 		lastToken = tokenType
 		if len(data) > len(msg) {
 			msg = data
+		}
+
+		if tokenType != mcap.TokenMessageIndex {
+			if lastChunk != nil {
+				doctor.examineChunk(lastChunk, lastChunkStartOffset, lastChunkIndexes)
+				lastChunk = nil
+				lastChunkIndexes = nil
+			}
 		}
 		switch tokenType {
 		case mcap.TokenHeader:
@@ -435,15 +487,33 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 				// cannot continue if seek fails
 				doctor.fatalf("failed to determine read cursor: %s", err)
 			}
-			chunkStartOffset := uint64(pos - int64(len(data)) - 9)
-			doctor.examineChunk(chunk, chunkStartOffset)
+			lastChunkStartOffset = uint64(pos - int64(len(data)) - 9)
+
+			lastChunk = chunk
+			// copy the records, since it is referenced and the buffer will be reused
+			recordsCopy := make([]byte, len(lastChunk.Records))
+			copy(recordsCopy, lastChunk.Records)
+			lastChunk.Records = recordsCopy
 		case mcap.TokenMessageIndex:
-			_, err := mcap.ParseMessageIndex(data)
+			messageIndex, err := mcap.ParseMessageIndex(data)
 			if err != nil {
 				doctor.error("Failed to parse message index: %s", err)
 			}
 			if messageOutsideChunk {
 				doctor.warn("Message index in file has message records outside chunks. Indexed readers will miss these messages.")
+			}
+			if lastChunk == nil {
+				doctor.error("Message index found but no chunk before it")
+			} else {
+				if lastChunkIndexes == nil {
+					lastChunkIndexes = make(map[uint16]*mcap.MessageIndex)
+				}
+				if _, ok := lastChunkIndexes[messageIndex.ChannelID]; ok {
+					doctor.warn("Duplicate message index found for channel %d", messageIndex.ChannelID)
+				} else {
+					lastChunkIndexes[messageIndex.ChannelID] = messageIndex
+				}
+
 			}
 		case mcap.TokenChunkIndex:
 			chunkIndex, err := mcap.ParseChunkIndex(data)
@@ -497,6 +567,12 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 			// from the lexer, which we caught at the top.
 			doctor.fatalf("Failed to parse:", err)
 		}
+	}
+
+	if lastChunk != nil {
+		doctor.examineChunk(lastChunk, lastChunkStartOffset, lastChunkIndexes)
+		lastChunk = nil
+		lastChunkIndexes = nil
 	}
 
 	for chunkOffset, chunkIndex := range doctor.chunkIndexes {
