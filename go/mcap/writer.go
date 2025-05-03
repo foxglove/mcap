@@ -525,7 +525,6 @@ func (w *Writer) WriteChunkAndGenerateMessageIndexFromContent(c *Chunk) error {
 			idx.Add(m.LogTime, uint64(position))
 		}
 	}
-
 }
 
 // WriteChunkWithIndexes writes a chunk record with the associated message indexes to the output.
@@ -535,10 +534,10 @@ func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex)
 	if c.UncompressedSize == 0 {
 		return nil
 	}
-	compressedlen := int(len(c.Records))
-	uncompressedlen := c.UncompressedSize
+	compressedlen := len(c.Records)
+	uncompressedLen := c.UncompressedSize
 
-	// topFields = StartTime(8) + EndTime(8) + UncompressedSize(8) + CRC(4) + compressionLen(4+len) + CompressedSize(8)
+	// the "top fields" are all fields of the chunk record except for the compressed records.
 	topFieldsLen := 8 + 8 + 8 + 4 + 4 + len(c.Compression) + 8
 	msgLen := topFieldsLen + len(c.Records)
 	headerLen := 1 + 8 + topFieldsLen // OpChunk(1) + msgLen(8) + topFields
@@ -555,7 +554,7 @@ func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex)
 	offset += putUint64(buf[offset:], uint64(msgLen))
 	offset += putUint64(buf[offset:], c.MessageStartTime)
 	offset += putUint64(buf[offset:], c.MessageEndTime)
-	offset += putUint64(buf[offset:], uncompressedlen)
+	offset += putUint64(buf[offset:], uncompressedLen)
 	offset += putUint32(buf[offset:], c.UncompressedCRC)
 	offset += putPrefixedString(buf[offset:], c.Compression)
 	offset += putUint64(buf[offset:], uint64(compressedlen))
@@ -576,17 +575,18 @@ func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex)
 	messageIndexOffsets := make(map[uint16]uint64)
 	for _, messageIndex := range messageIndexes {
 		if !messageIndex.IsEmpty() {
-			messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
-			err = w.WriteMessageIndex(messageIndex)
-			if err != nil {
-				return err
-			}
-			if w.channels[messageIndex.ChannelID] == nil {
-				containsNewChannel = true
-			}
-			w.Statistics.MessageCount += uint64(len(messageIndex.Records))
-			w.Statistics.ChannelMessageCounts[messageIndex.ChannelID] += uint64(len(messageIndex.Records))
+			continue
 		}
+		messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
+		err = w.WriteMessageIndex(messageIndex)
+		if err != nil {
+			return err
+		}
+		if w.channels[messageIndex.ChannelID] == nil {
+			containsNewChannel = true
+		}
+		w.Statistics.MessageCount += uint64(len(messageIndex.Records))
+		w.Statistics.ChannelMessageCounts[messageIndex.ChannelID] += uint64(len(messageIndex.Records))
 	}
 
 	messageIndexEnd := w.w.Size()
@@ -600,7 +600,7 @@ func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex)
 		MessageIndexLength:  messageIndexLength,
 		Compression:         CompressionFormat(c.Compression),
 		CompressedSize:      uint64(compressedlen),
-		UncompressedSize:    uint64(uncompressedlen),
+		UncompressedSize:    uncompressedLen,
 	})
 
 	w.Statistics.ChunkCount++
@@ -608,7 +608,7 @@ func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex)
 	w.currentChunkEndTime = 0
 	w.currentChunkMessageCount = 0
 
-	if (w.Statistics.MessageStartTime == 0 || c.MessageStartTime < w.Statistics.MessageStartTime) && c.MessageStartTime != 0 {
+	if w.Statistics.MessageStartTime == 0 || c.MessageStartTime < w.Statistics.MessageStartTime {
 		w.Statistics.MessageStartTime = c.MessageStartTime
 	}
 	if c.MessageEndTime > w.Statistics.MessageEndTime {
@@ -699,9 +699,7 @@ func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex)
 				}
 			}
 		}
-
 	}
-
 	return nil
 }
 
