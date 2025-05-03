@@ -414,6 +414,120 @@ func (w *Writer) WriteDataEnd(e *DataEnd) error {
 	return err
 }
 
+func (w *Writer) WriteChunkAndGenerateMessageIndexFromContent(c *Chunk) error {
+	var uncompressedBytes []byte
+
+	switch CompressionFormat(c.Compression) {
+	case CompressionNone:
+		uncompressedBytes = c.Records
+	case CompressionZSTD:
+		compressedDataReader := bytes.NewReader(c.Records)
+		chunkDataReader, err := zstd.NewReader(compressedDataReader)
+		if err != nil {
+			return err
+		}
+		defer chunkDataReader.Close()
+		uncompressedBytes, err = io.ReadAll(chunkDataReader)
+		if err != nil {
+			return err
+		}
+	case CompressionLZ4:
+		var err error
+		compressedDataReader := bytes.NewReader(c.Records)
+		chunkDataReader := lz4.NewReader(compressedDataReader)
+		uncompressedBytes, err = io.ReadAll(chunkDataReader)
+		if err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unsupported compression format: %s", c.Compression)
+	}
+
+	uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
+
+	lexer, err := NewLexer(uncompressedBytesReader, &LexerOptions{
+		SkipMagic:         true,
+		ValidateChunkCRCs: true,
+		EmitChunks:        true,
+	})
+	if err != nil {
+		return err
+	}
+	defer lexer.Close()
+
+	messageIndexes := make(map[uint16]*MessageIndex)
+
+	msg := make([]byte, 1024)
+	for {
+		token, data, err := lexer.Next(msg)
+		if err != nil {
+			msgIndexList := make([]*MessageIndex, 0, len(messageIndexes))
+			for _, idx := range messageIndexes {
+				fmt.Printf("Adding message index %d %v\n", idx.ChannelID, len(idx.Records))
+				msgIndexList = append(msgIndexList, idx)
+			}
+			err = w.WriteChunkWithIndexes(c, msgIndexList)
+			if err != nil {
+				return err
+			}
+
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			var expected *ErrTruncatedRecord
+			if errors.As(err, &expected) {
+				return nil
+			}
+			return err
+		}
+		if len(data) > len(msg) {
+			msg = data
+		}
+
+		switch token {
+		case TokenSchema:
+			s, err := ParseSchema(data)
+			if err != nil {
+				return err
+			}
+			if w.schemas[s.ID] == nil {
+				w.Statistics.SchemaCount++
+				w.schemas[s.ID] = s
+				w.schemaIDs = append(w.schemaIDs, s.ID)
+			}
+		case TokenChannel:
+			c, err := ParseChannel(data)
+			if err != nil {
+				return err
+			}
+			if w.channels[c.ID] == nil {
+				w.Statistics.ChannelCount++
+				w.channels[c.ID] = c
+				w.channelIDs = append(w.channelIDs, c.ID)
+			}
+		case TokenMessage:
+			m, err := ParseMessage(data)
+			if err != nil {
+				return err
+			}
+			idx, ok := messageIndexes[m.ChannelID]
+			if !ok {
+				idx = &MessageIndex{
+					ChannelID: m.ChannelID,
+					Records:   nil,
+				}
+				messageIndexes[m.ChannelID] = idx
+			}
+			position, err := uncompressedBytesReader.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return err
+			}
+			idx.Add(m.LogTime, uint64(position))
+		}
+	}
+
+}
+
 // WriteChunkWithIndexes writes a chunk record with the associated message indexes to the output.
 // If the message indexes contains unknown channels, the chunk is decompressed and the new
 // channels and schemas are added to the writer.

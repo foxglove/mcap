@@ -70,20 +70,23 @@ func recoverFastRun(
 	var lastChunk *mcap.Chunk
 	var lastIndexes []*mcap.MessageIndex
 
-	defer func() {
-		if lastChunk != nil {
-			err = mcapWriter.WriteChunkWithIndexes(lastChunk, lastIndexes)
-			if err != nil {
-				return
-			}
-			lastIndexes = nil
-			lastChunk = nil
-		}
-	}()
-
 	for {
 		token, data, err := lexer.Next(buf)
 		if err != nil {
+			if token == mcap.TokenInvalidChunk {
+				fmt.Printf("Invalid chunk encountered, skipping: %s\n", err)
+				continue
+			}
+			if lastChunk != nil {
+				// Reconstruct message indexes for the last chunk, because it is unclear if the
+				// message indexes are complete or not.
+				err = mcapWriter.WriteChunkAndGenerateMessageIndexFromContent(lastChunk)
+				if err != nil {
+					return err
+				}
+				lastIndexes = nil
+				lastChunk = nil
+			}
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
@@ -91,10 +94,6 @@ func recoverFastRun(
 			if errors.As(err, &expected) {
 				fmt.Println(expected.Error())
 				return nil
-			}
-			if token == mcap.TokenInvalidChunk {
-				fmt.Printf("Invalid chunk encountered, skipping: %s\n", err)
-				continue
 			}
 			return err
 		}
