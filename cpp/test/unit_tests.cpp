@@ -733,6 +733,7 @@ TEST_CASE("Read Order", "[reader][writer]") {
 
     mcap::McapWriter writer;
     mcap::McapWriterOptions opts("test");
+    opts.chunkSize = 512 * 1024;
     opts.compression = mcap::Compression::None;
     opts.forceCompression = true;
     writer.open(buffer, opts);
@@ -741,8 +742,10 @@ TEST_CASE("Read Order", "[reader][writer]") {
     mcap::Channel channel("topic", "messageEncoding", schema.id);
     writer.addChannel(channel);
 
+    // Write larger-than-chunk-size messages.
     mcap::Message msg;
-    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    std::vector<std::byte> data(1024 * 1024);
+    std::fill(data.begin(), data.end(), std::byte(0x42));
     WriteMsg(writer, channel.id, 0, 0, 0, data);
     WriteMsg(writer, channel.id, 2, 2, 2, data);
     WriteMsg(writer, channel.id, 1, 1, 1, data);
