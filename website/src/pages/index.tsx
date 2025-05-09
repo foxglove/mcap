@@ -103,7 +103,7 @@ export default function Home(): JSX.Element {
             <h1>{siteConfig.title}</h1>
             <img
               src="/img/mcap720.webp"
-              alt="mcap logo"
+              alt="logo"
               width="240"
               height="180"
             ></img>
