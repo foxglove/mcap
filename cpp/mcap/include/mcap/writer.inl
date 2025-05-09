@@ -552,8 +552,8 @@ Status McapWriter::write(const Message& message) {
   if (chunkWriter != nullptr && /* Chunked? */
       uncompressedSize_ != 0 && /* Current chunk is not empty/new? */
       9 + getRecordSize(message) + uncompressedSize_ >= chunkSize_ /* Overflowing? */) {
-      auto& fileOutput = *output_;
-      writeChunk(fileOutput, *chunkWriter);
+    auto& fileOutput = *output_;
+    writeChunk(fileOutput, *chunkWriter);
   }
 
   // For the chunk-local message index.
@@ -780,8 +780,10 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
     const uint64_t messageIndexLength = output.size() - messageIndexOffset;
 
     // Fill in the newly created chunk index record. This will be written into
-    // the summary section when close() is called
-    chunkIndexRecord.messageStartTime = currentChunkStart_;
+    // the summary section when close() is called. Note that currentChunkStart_
+    // may still be initialized to MaxTime if this chunk does not contain any
+    // messages.
+    chunkIndexRecord.messageStartTime = currentChunkStart_ == MaxTime ? 0 : currentChunkStart_;
     chunkIndexRecord.messageEndTime = currentChunkEnd_;
     chunkIndexRecord.chunkStartOffset = chunkStartOffset;
     chunkIndexRecord.chunkLength = chunkLength;
