@@ -1815,7 +1815,10 @@ IndexedMessageReader::IndexedMessageReader(
     }
     chunkIndexes = mcapReader_.chunkIndexes();
   }
-  if (chunkIndexes.size() == 0 || chunkIndexes[0].messageIndexLength == 0) {
+  if (chunkIndexes.size() == 0 ||
+      std::all_of(chunkIndexes.begin(), chunkIndexes.end(), [](const ChunkIndex& ci) {
+        return ci.messageIndexLength == 0;
+      })) {
     status_ = Status(StatusCode::NoMessageIndexesAvailable,
                      "cannot read MCAP in time order with no message indexes");
     return;
