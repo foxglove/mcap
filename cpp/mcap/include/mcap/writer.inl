@@ -389,8 +389,8 @@ void McapWriter::close() {
     ByteOffset schemaStart = fileOutput.size();
     if (!options_.noRepeatedSchemas) {
       // Write all schema records
-      for (const auto& schema : schemas_) {
-        write(fileOutput, schema);
+      for (const auto& schemaId : writtenSchemas_) {
+        write(fileOutput, schemas_[schemaId - 1]);
       }
     }
 
@@ -435,7 +435,7 @@ void McapWriter::close() {
     if (!options_.noSummaryOffsets) {
       // Write summary offset records
       summaryOffsetStart = fileOutput.size();
-      if (!options_.noRepeatedSchemas && !schemas_.empty()) {
+      if (!options_.noRepeatedSchemas && !writtenSchemas_.empty()) {
         write(fileOutput, SummaryOffset{OpCode::Schema, schemaStart, channelStart - schemaStart});
       }
       if (!options_.noRepeatedChannels && !channels_.empty()) {
@@ -479,6 +479,9 @@ void McapWriter::terminate() {
   fileOutput_.reset();
   streamOutput_.reset();
   uncompressedChunk_.reset();
+#ifndef MCAP_COMPRESSION_NO_LZ4
+  lz4Chunk_.reset();
+#endif
 #ifndef MCAP_COMPRESSION_NO_ZSTD
   zstdChunk_.reset();
 #endif
@@ -488,9 +491,13 @@ void McapWriter::terminate() {
   chunkIndex_.clear();
   statistics_ = {};
   writtenSchemas_.clear();
+  // Should we be clearing channels between files when the writer is re-used?
+  channels_.clear();
   currentMessageIndex_.clear();
   currentChunkStart_ = MaxTime;
   currentChunkEnd_ = 0;
+  compression_ = Compression::None;
+  uncompressedSize_ = 0;
 
   opened_ = false;
 }
@@ -552,8 +559,8 @@ Status McapWriter::write(const Message& message) {
   if (chunkWriter != nullptr && /* Chunked? */
       uncompressedSize_ != 0 && /* Current chunk is not empty/new? */
       9 + getRecordSize(message) + uncompressedSize_ >= chunkSize_ /* Overflowing? */) {
-      auto& fileOutput = *output_;
-      writeChunk(fileOutput, *chunkWriter);
+    auto& fileOutput = *output_;
+    writeChunk(fileOutput, *chunkWriter);
   }
 
   // For the chunk-local message index.
