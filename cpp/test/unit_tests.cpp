@@ -1056,3 +1056,92 @@ TEST_CASE("parsing", "header") {
   REQUIRE(header->library == "my-library");
   REQUIRE(header->profile == "my-profile");
 }
+
+TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[writer][reader]") {
+  // First file with Schema1
+  Buffer buffer1;
+  mcap::McapWriter writer;
+  {
+    mcap::McapWriterOptions opts("test");
+    opts.noRepeatedSchemas = false;
+    writer.open(buffer1, opts);
+
+    mcap::Schema schema1("Schema1", "encoding1", "schema1_data");
+    writer.addSchema(schema1);
+    mcap::Channel channel1("topic1", "msgencoding1", schema1.id);
+    writer.addChannel(channel1);
+
+    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    WriteMsg(writer, channel1.id, 0, 1, 1, data);
+
+    writer.close();
+  }
+
+  // Second file with Schema2 - using same writer instance
+  Buffer buffer2;
+  {
+    mcap::McapWriterOptions opts("test");
+    opts.noRepeatedSchemas = false;
+    writer.open(buffer2, opts);
+
+    mcap::Schema schema2("Schema2", "encoding2", "schema2_data");
+    writer.addSchema(schema2);
+    mcap::Channel channel2("topic2", "msgencoding2", schema2.id);
+    writer.addChannel(channel2);
+
+    std::vector<std::byte> data = {std::byte(4), std::byte(5), std::byte(6)};
+    WriteMsg(writer, channel2.id, 0, 2, 2, data);
+
+    writer.close();
+  }
+
+  // Verify first file only has Schema1
+  {
+    mcap::McapReader reader;
+    auto status = reader.open(buffer1);
+    requireOk(status);
+
+    status = reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan);
+    requireOk(status);
+
+    const auto& schemas = reader.schemas();
+    REQUIRE(schemas.size() == 1);
+
+    bool hasSchema1 = false;
+    bool hasSchema2 = false;
+    for (const auto& [id, schema] : schemas) {
+      if (schema->name == "Schema1") hasSchema1 = true;
+      if (schema->name == "Schema2") hasSchema2 = true;
+    }
+
+    REQUIRE(hasSchema1);
+    REQUIRE(!hasSchema2);
+
+    reader.close();
+  }
+
+  // Verify second file only has Schema2
+  {
+    mcap::McapReader reader;
+    auto status = reader.open(buffer2);
+    requireOk(status);
+
+    status = reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan);
+    requireOk(status);
+
+    const auto& schemas = reader.schemas();
+    REQUIRE(schemas.size() == 1);
+
+    bool hasSchema1 = false;
+    bool hasSchema2 = false;
+    for (const auto& [id, schema] : schemas) {
+      if (schema->name == "Schema1") hasSchema1 = true;
+      if (schema->name == "Schema2") hasSchema2 = true;
+    }
+
+    REQUIRE(!hasSchema1);
+    REQUIRE(hasSchema2);
+
+    reader.close();
+  }
+}
