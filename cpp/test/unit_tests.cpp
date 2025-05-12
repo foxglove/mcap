@@ -1068,11 +1068,11 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
 
   mcap::Schema schema1("Schema1", "encoding1", "schema1_data");
   writer.addSchema(schema1);
-  mcap::Channel channel1("topic1", "msgencoding1", schema1.id);
+  mcap::Channel channel1("topic1", "msg_encoding1", schema1.id);
   writer.addChannel(channel1);
   mcap::Schema schema2("Schema2", "encoding2", "schema2_data");
   writer.addSchema(schema2);
-  mcap::Channel channel2("topic2", "msgencoding2", schema2.id);
+  mcap::Channel channel2("topic2", "msg_encoding2", schema2.id);
   writer.addChannel(channel2);
 
   {
