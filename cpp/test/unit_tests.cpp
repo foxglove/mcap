@@ -1061,16 +1061,21 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
   // First file with Schema1
   Buffer buffer1;
   mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("test");
+  opts.noRepeatedSchemas = false;
+  opts.noRepeatedChannels = false;
+  writer.open(buffer1, opts);
+
+  mcap::Schema schema1("Schema1", "encoding1", "schema1_data");
+  writer.addSchema(schema1);
+  mcap::Channel channel1("topic1", "msgencoding1", schema1.id);
+  writer.addChannel(channel1);
+  mcap::Schema schema2("Schema2", "encoding2", "schema2_data");
+  writer.addSchema(schema2);
+  mcap::Channel channel2("topic2", "msgencoding2", schema2.id);
+  writer.addChannel(channel2);
+
   {
-    mcap::McapWriterOptions opts("test");
-    opts.noRepeatedSchemas = false;
-    writer.open(buffer1, opts);
-
-    mcap::Schema schema1("Schema1", "encoding1", "schema1_data");
-    writer.addSchema(schema1);
-    mcap::Channel channel1("topic1", "msgencoding1", schema1.id);
-    writer.addChannel(channel1);
-
     std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
     WriteMsg(writer, channel1.id, 0, 1, 1, data);
 
@@ -1080,14 +1085,7 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
   // Second file with Schema2 - using same writer instance
   Buffer buffer2;
   {
-    mcap::McapWriterOptions opts("test");
-    opts.noRepeatedSchemas = false;
     writer.open(buffer2, opts);
-
-    mcap::Schema schema2("Schema2", "encoding2", "schema2_data");
-    writer.addSchema(schema2);
-    mcap::Channel channel2("topic2", "msgencoding2", schema2.id);
-    writer.addChannel(channel2);
 
     std::vector<std::byte> data = {std::byte(4), std::byte(5), std::byte(6)};
     WriteMsg(writer, channel2.id, 0, 2, 2, data);
@@ -1095,7 +1093,7 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
     writer.close();
   }
 
-  // Verify first file only has Schema1
+  // Verify first file only has Schema1 and Channel1
   {
     mcap::McapReader reader;
     auto status = reader.open(buffer1);
@@ -1117,10 +1115,23 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
     REQUIRE(hasSchema1);
     REQUIRE(!hasSchema2);
 
+    const auto& channels = reader.channels();
+    REQUIRE(channels.size() == 1);
+
+    bool hasChannel1 = false;
+    bool hasChannel2 = false;
+    for (const auto& [id, channel] : channels) {
+      if (channel->topic == "topic1") hasChannel1 = true;
+      if (channel->topic == "topic2") hasChannel2 = true;
+    }
+
+    REQUIRE(hasChannel1);
+    REQUIRE(!hasChannel2);
+
     reader.close();
   }
 
-  // Verify second file only has Schema2
+  // Verify second file only has Schema2 and Channel2
   {
     mcap::McapReader reader;
     auto status = reader.open(buffer2);
@@ -1141,6 +1152,19 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
 
     REQUIRE(!hasSchema1);
     REQUIRE(hasSchema2);
+
+    const auto& channels = reader.channels();
+    REQUIRE(channels.size() == 1);
+
+    bool hasChannel1 = false;
+    bool hasChannel2 = false;
+    for (const auto& [id, channel] : channels) {
+      if (channel->topic == "topic1") hasChannel1 = true;
+      if (channel->topic == "topic2") hasChannel2 = true;
+    }
+
+    REQUIRE(!hasChannel1);
+    REQUIRE(hasChannel2);
 
     reader.close();
   }

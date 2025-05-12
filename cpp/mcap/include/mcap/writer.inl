@@ -396,9 +396,12 @@ void McapWriter::close() {
 
     ByteOffset channelStart = fileOutput.size();
     if (!options_.noRepeatedChannels) {
-      // Write all channel records
+      // Write all channel records, but only if they appeared in this file
+      auto& channelMessageCounts = statistics_.channelMessageCounts;
       for (const auto& channel : channels_) {
-        write(fileOutput, channel);
+        if (channelMessageCounts.find(channel.id) != channelMessageCounts.end()) {
+          write(fileOutput, channel);
+        }
       }
     }
 
@@ -491,13 +494,14 @@ void McapWriter::terminate() {
   chunkIndex_.clear();
   statistics_ = {};
   writtenSchemas_.clear();
-  // Should we be clearing channels between files when the writer is re-used?
-  channels_.clear();
   currentMessageIndex_.clear();
   currentChunkStart_ = MaxTime;
   currentChunkEnd_ = 0;
   compression_ = Compression::None;
   uncompressedSize_ = 0;
+
+  // Don't clear schemas or channels, those can be re-used between files
+  // Only the channels and schemas actually referenced in the file will be written to it.
 
   opened_ = false;
 }
