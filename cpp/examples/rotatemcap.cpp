@@ -16,6 +16,9 @@ mcap::Timestamp now() {
                            .count());
 }
 
+// Use a single McapWriter to manage a "rotating" series of mcap files.
+// Wrtie some data to one mcap file, then switch to a new mcap file,
+// while using the same set of schemas and channels.
 int main() {
   mcap::McapWriter writer;
 

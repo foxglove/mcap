@@ -1082,17 +1082,6 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
     writer.close();
   }
 
-  // Second file with Schema2 - using same writer instance
-  Buffer buffer2;
-  {
-    writer.open(buffer2, opts);
-
-    std::vector<std::byte> data = {std::byte(4), std::byte(5), std::byte(6)};
-    WriteMsg(writer, channel2.id, 0, 2, 2, data);
-
-    writer.close();
-  }
-
   // Verify first file only has Schema1 and Channel1
   {
     mcap::McapReader reader;
@@ -1104,31 +1093,24 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
 
     const auto& schemas = reader.schemas();
     REQUIRE(schemas.size() == 1);
-
-    bool hasSchema1 = false;
-    bool hasSchema2 = false;
-    for (const auto& [id, schema] : schemas) {
-      if (schema->name == "Schema1") hasSchema1 = true;
-      if (schema->name == "Schema2") hasSchema2 = true;
-    }
-
-    REQUIRE(hasSchema1);
-    REQUIRE(!hasSchema2);
+    REQUIRE(schemas.begin()->second->name == "Schema1");
 
     const auto& channels = reader.channels();
     REQUIRE(channels.size() == 1);
-
-    bool hasChannel1 = false;
-    bool hasChannel2 = false;
-    for (const auto& [id, channel] : channels) {
-      if (channel->topic == "topic1") hasChannel1 = true;
-      if (channel->topic == "topic2") hasChannel2 = true;
-    }
-
-    REQUIRE(hasChannel1);
-    REQUIRE(!hasChannel2);
+    REQUIRE(channels.begin()->second->topic == "topic1");
 
     reader.close();
+  }
+
+  // Second file with Schema2 - using same writer instance
+  Buffer buffer2;
+  {
+    writer.open(buffer2, opts);
+
+    std::vector<std::byte> data = {std::byte(4), std::byte(5), std::byte(6)};
+    WriteMsg(writer, channel2.id, 0, 2, 2, data);
+
+    writer.close();
   }
 
   // Verify second file only has Schema2 and Channel2
@@ -1142,29 +1124,11 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
 
     const auto& schemas = reader.schemas();
     REQUIRE(schemas.size() == 1);
-
-    bool hasSchema1 = false;
-    bool hasSchema2 = false;
-    for (const auto& [id, schema] : schemas) {
-      if (schema->name == "Schema1") hasSchema1 = true;
-      if (schema->name == "Schema2") hasSchema2 = true;
-    }
-
-    REQUIRE(!hasSchema1);
-    REQUIRE(hasSchema2);
+    REQUIRE(schemas.begin()->second->name == "Schema2");
 
     const auto& channels = reader.channels();
     REQUIRE(channels.size() == 1);
-
-    bool hasChannel1 = false;
-    bool hasChannel2 = false;
-    for (const auto& [id, channel] : channels) {
-      if (channel->topic == "topic1") hasChannel1 = true;
-      if (channel->topic == "topic2") hasChannel2 = true;
-    }
-
-    REQUIRE(!hasChannel1);
-    REQUIRE(hasChannel2);
+    REQUIRE(channels.begin()->second->topic == "topic2");
 
     reader.close();
   }
