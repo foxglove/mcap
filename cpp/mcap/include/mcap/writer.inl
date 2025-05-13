@@ -304,6 +304,8 @@ McapWriter::~McapWriter() {
 }
 
 void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
+  // If the writer was opened, close it first
+  close();
   options_ = options;
   opened_ = true;
   chunkSize_ = options.noChunking ? 0 : options.chunkSize;
@@ -338,6 +340,8 @@ void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
 }
 
 Status McapWriter::open(const std::string_view filename, const McapWriterOptions& options) {
+  // If the writer was opened, close it first
+  close();
   fileOutput_ = std::make_unique<FileWriter>();
   const auto status = fileOutput_->open(filename);
   if (!status.ok()) {
@@ -349,6 +353,8 @@ Status McapWriter::open(const std::string_view filename, const McapWriterOptions
 }
 
 void McapWriter::open(std::ostream& stream, const McapWriterOptions& options) {
+  // If the writer was opened, close it first
+  close();
   streamOutput_ = std::make_unique<StreamWriter>(stream);
   open(*streamOutput_, options);
 }
@@ -389,16 +395,19 @@ void McapWriter::close() {
     ByteOffset schemaStart = fileOutput.size();
     if (!options_.noRepeatedSchemas) {
       // Write all schema records
-      for (const auto& schema : schemas_) {
-        write(fileOutput, schema);
+      for (const auto& schemaId : writtenSchemas_) {
+        write(fileOutput, schemas_[schemaId - 1]);
       }
     }
 
     ByteOffset channelStart = fileOutput.size();
     if (!options_.noRepeatedChannels) {
-      // Write all channel records
+      // Write all channel records, but only if they appeared in this file
+      auto& channelMessageCounts = statistics_.channelMessageCounts;
       for (const auto& channel : channels_) {
-        write(fileOutput, channel);
+        if (channelMessageCounts.find(channel.id) != channelMessageCounts.end()) {
+          write(fileOutput, channel);
+        }
       }
     }
 
@@ -435,7 +444,7 @@ void McapWriter::close() {
     if (!options_.noSummaryOffsets) {
       // Write summary offset records
       summaryOffsetStart = fileOutput.size();
-      if (!options_.noRepeatedSchemas && !schemas_.empty()) {
+      if (!options_.noRepeatedSchemas && !writtenSchemas_.empty()) {
         write(fileOutput, SummaryOffset{OpCode::Schema, schemaStart, channelStart - schemaStart});
       }
       if (!options_.noRepeatedChannels && !channels_.empty()) {
@@ -479,6 +488,9 @@ void McapWriter::terminate() {
   fileOutput_.reset();
   streamOutput_.reset();
   uncompressedChunk_.reset();
+#ifndef MCAP_COMPRESSION_NO_LZ4
+  lz4Chunk_.reset();
+#endif
 #ifndef MCAP_COMPRESSION_NO_ZSTD
   zstdChunk_.reset();
 #endif
@@ -491,6 +503,11 @@ void McapWriter::terminate() {
   currentMessageIndex_.clear();
   currentChunkStart_ = MaxTime;
   currentChunkEnd_ = 0;
+  compression_ = Compression::None;
+  uncompressedSize_ = 0;
+
+  // Don't clear schemas or channels, those can be re-used between files
+  // Only the channels and schemas actually referenced in the file will be written to it.
 
   opened_ = false;
 }

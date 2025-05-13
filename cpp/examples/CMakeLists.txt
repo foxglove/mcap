@@ -22,5 +22,8 @@ target_link_libraries(bag2mcap ${CONAN_LIBS})
 add_executable(mcapdump mcapdump.cpp)
 target_link_libraries(mcapdump ${CONAN_LIBS})
 
+add_executable(rotatemcap rotatemcap.cpp)
+target_link_libraries(rotatemcap ${CONAN_LIBS})
+
 add_subdirectory(protobuf)
 add_subdirectory(jsonschema)
