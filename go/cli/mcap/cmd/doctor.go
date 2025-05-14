@@ -396,7 +396,7 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 	var messageOutsideChunk bool
 	var lastChunk *mcap.Chunk
 	var lastChunkStartOffset uint64
-	var lastChunkIndexes map[uint16]*mcap.MessageIndex
+	var lastChunkMessageIndexes map[uint16]*mcap.MessageIndex
 
 	msg := make([]byte, 1024)
 	for {
@@ -420,9 +420,9 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 
 		if tokenType != mcap.TokenMessageIndex {
 			if lastChunk != nil {
-				doctor.examineChunk(lastChunk, lastChunkStartOffset, lastChunkIndexes)
+				doctor.examineChunk(lastChunk, lastChunkStartOffset, lastChunkMessageIndexes)
 				lastChunk = nil
-				lastChunkIndexes = nil
+				lastChunkMessageIndexes = nil
 			}
 		}
 		switch tokenType {
@@ -509,13 +509,13 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 			if lastChunk == nil {
 				doctor.error("Message index found but no chunk before it")
 			} else {
-				if lastChunkIndexes == nil {
-					lastChunkIndexes = make(map[uint16]*mcap.MessageIndex)
+				if lastChunkMessageIndexes == nil {
+					lastChunkMessageIndexes = make(map[uint16]*mcap.MessageIndex)
 				}
-				if _, ok := lastChunkIndexes[messageIndex.ChannelID]; ok {
+				if _, ok := lastChunkMessageIndexes[messageIndex.ChannelID]; ok {
 					doctor.warn("Duplicate message index found for channel %d", messageIndex.ChannelID)
 				} else {
-					lastChunkIndexes[messageIndex.ChannelID] = messageIndex
+					lastChunkMessageIndexes[messageIndex.ChannelID] = messageIndex
 				}
 			}
 		case mcap.TokenChunkIndex:
@@ -573,7 +573,7 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 	}
 
 	if lastChunk != nil {
-		doctor.examineChunk(lastChunk, lastChunkStartOffset, lastChunkIndexes)
+		doctor.examineChunk(lastChunk, lastChunkStartOffset, lastChunkMessageIndexes)
 	}
 
 	for chunkOffset, chunkIndex := range doctor.chunkIndexes {
