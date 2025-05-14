@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,8 +10,209 @@ import (
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
+	"github.com/klauspost/compress/zstd"
+	"github.com/pierrec/lz4/v4"
 	"github.com/spf13/cobra"
 )
+
+func writeChunkAndGenerateMessageIndexFromContent(w *mcap.Writer, c *mcap.Chunk) error {
+	var uncompressedBytes []byte
+
+	switch mcap.CompressionFormat(c.Compression) {
+	case mcap.CompressionNone:
+		uncompressedBytes = c.Records
+	case mcap.CompressionZSTD:
+		compressedDataReader := bytes.NewReader(c.Records)
+		chunkDataReader, err := zstd.NewReader(compressedDataReader)
+		if err != nil {
+			return err
+		}
+		defer chunkDataReader.Close()
+		uncompressedBytes, err = io.ReadAll(chunkDataReader)
+		if err != nil {
+			return err
+		}
+	case mcap.CompressionLZ4:
+		var err error
+		compressedDataReader := bytes.NewReader(c.Records)
+		chunkDataReader := lz4.NewReader(compressedDataReader)
+		uncompressedBytes, err = io.ReadAll(chunkDataReader)
+		if err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unsupported compression format: %s", c.Compression)
+	}
+
+	uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
+
+	lexer, err := mcap.NewLexer(uncompressedBytesReader, &mcap.LexerOptions{
+		SkipMagic:         true,
+		ValidateChunkCRCs: true,
+		EmitChunks:        true,
+	})
+	if err != nil {
+		return err
+	}
+	defer lexer.Close()
+
+	messageIndexes := make(map[uint16]*mcap.MessageIndex)
+
+	msg := make([]byte, 1024)
+	for {
+		token, data, err := lexer.Next(msg)
+		if err != nil {
+			msgIndexList := make([]*mcap.MessageIndex, 0, len(messageIndexes))
+			for _, idx := range messageIndexes {
+				fmt.Printf("Adding message index %d %v\n", idx.ChannelID, len(idx.Records))
+				msgIndexList = append(msgIndexList, idx)
+			}
+			err = w.WriteChunkWithIndexes(c, msgIndexList)
+			if err != nil {
+				return err
+			}
+
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			var expected *mcap.ErrTruncatedRecord
+			if errors.As(err, &expected) {
+				return nil
+			}
+			return err
+		}
+		if len(data) > len(msg) {
+			msg = data
+		}
+
+		switch token {
+		case mcap.TokenSchema:
+			s, err := mcap.ParseSchema(data)
+			if err != nil {
+				return err
+			}
+			w.AddSchema(s)
+		case mcap.TokenChannel:
+			c, err := mcap.ParseChannel(data)
+			if err != nil {
+				return err
+			}
+			w.AddChannel(c)
+		case mcap.TokenMessage:
+			m, err := mcap.ParseMessage(data)
+			if err != nil {
+				return err
+			}
+			idx, ok := messageIndexes[m.ChannelID]
+			if !ok {
+				idx = &mcap.MessageIndex{
+					ChannelID: m.ChannelID,
+					Records:   nil,
+				}
+				messageIndexes[m.ChannelID] = idx
+			}
+			position, err := uncompressedBytesReader.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return err
+			}
+			idx.Add(m.LogTime, uint64(position))
+		}
+	}
+}
+
+func addNewChannels(w *mcap.Writer, c *mcap.Chunk, messageIndexes []*mcap.MessageIndex) error {
+	containsNewChannel := false
+	for _, messageIndex := range messageIndexes {
+		if messageIndex.IsEmpty() {
+			continue
+		}
+		if !w.HasChannel(messageIndex.ChannelID) {
+			containsNewChannel = true
+		}
+
+		w.Statistics.MessageCount += uint64(len(messageIndex.Records))
+		w.Statistics.ChannelMessageCounts[messageIndex.ChannelID] += uint64(len(messageIndex.Records))
+	}
+
+	if containsNewChannel {
+		var uncompressedBytes []byte
+
+		switch mcap.CompressionFormat(c.Compression) {
+		case mcap.CompressionNone:
+			uncompressedBytes = c.Records
+		case mcap.CompressionZSTD:
+			compressedDataReader := bytes.NewReader(c.Records)
+			chunkDataReader, err := zstd.NewReader(compressedDataReader)
+			if err != nil {
+				return err
+			}
+			defer chunkDataReader.Close()
+			uncompressedBytes, err = io.ReadAll(chunkDataReader)
+			if err != nil {
+				return err
+			}
+		case mcap.CompressionLZ4:
+			var err error
+			compressedDataReader := bytes.NewReader(c.Records)
+			chunkDataReader := lz4.NewReader(compressedDataReader)
+			uncompressedBytes, err = io.ReadAll(chunkDataReader)
+			if err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unsupported compression format: %s", c.Compression)
+		}
+
+		uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
+
+		lexer, err := mcap.NewLexer(uncompressedBytesReader, &mcap.LexerOptions{
+			SkipMagic:         true,
+			ValidateChunkCRCs: true,
+			EmitChunks:        true,
+		})
+		if err != nil {
+			return err
+		}
+		defer lexer.Close()
+
+		msg := make([]byte, 1024)
+		for {
+			token, data, err := lexer.Next(msg)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return nil
+				}
+				var expected *mcap.ErrTruncatedRecord
+				if errors.As(err, &expected) {
+					return nil
+				}
+				if token == mcap.TokenInvalidChunk {
+					continue
+				}
+				return err
+			}
+			if len(data) > len(msg) {
+				msg = data
+			}
+
+			switch token {
+			case mcap.TokenSchema:
+				s, err := mcap.ParseSchema(data)
+				if err != nil {
+					return err
+				}
+				w.AddSchema(s)
+			case mcap.TokenChannel:
+				c, err := mcap.ParseChannel(data)
+				if err != nil {
+					return err
+				}
+				w.AddChannel(c)
+			}
+		}
+	}
+	return nil
+}
 
 func recoverFastRun(
 	r io.Reader,
@@ -78,7 +280,7 @@ func recoverFastRun(
 			if lastChunk != nil {
 				// Reconstruct message indexes for the last chunk, because it is unclear if the
 				// message indexes are complete or not.
-				err = mcapWriter.WriteChunkAndGenerateMessageIndexFromContent(lastChunk)
+				err = writeChunkAndGenerateMessageIndexFromContent(mcapWriter, lastChunk)
 				if err != nil {
 					return err
 				}
@@ -100,6 +302,10 @@ func recoverFastRun(
 		if token != mcap.TokenMessageIndex {
 			if lastChunk != nil {
 				err = mcapWriter.WriteChunkWithIndexes(lastChunk, lastIndexes)
+				if err != nil {
+					return err
+				}
+				err = addNewChannels(mcapWriter, lastChunk, lastIndexes)
 				if err != nil {
 					return err
 				}

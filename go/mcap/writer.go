@@ -125,6 +125,19 @@ func (w *Writer) WriteSchema(s *Schema) (err error) {
 	return nil
 }
 
+func (w *Writer) AddSchema(s *Schema) {
+	if _, ok := w.schemas[s.ID]; !ok {
+		w.schemaIDs = append(w.schemaIDs, s.ID)
+		w.schemas[s.ID] = s
+		w.Statistics.SchemaCount++
+	}
+}
+
+func (w *Writer) HasSchema(id uint16) bool {
+	_, ok := w.schemas[id]
+	return ok
+}
+
 // WriteChannel writes a channel info record to the output. Channel Info
 // records are uniquely identified within a file by their channel ID. A Channel
 // Info record must occur at least once in the file prior to any message
@@ -165,6 +178,19 @@ func (w *Writer) WriteChannel(c *Channel) error {
 		w.channelIDs = append(w.channelIDs, c.ID)
 	}
 	return nil
+}
+
+func (w *Writer) AddChannel(c *Channel) {
+	if _, ok := w.channels[c.ID]; !ok {
+		w.Statistics.ChannelCount++
+		w.channels[c.ID] = c
+		w.channelIDs = append(w.channelIDs, c.ID)
+	}
+}
+
+func (w *Writer) HasChannel(id uint16) bool {
+	_, ok := w.channels[id]
+	return ok
 }
 
 // WriteMessage writes a message to the output. A message record encodes a
@@ -414,151 +440,37 @@ func (w *Writer) WriteDataEnd(e *DataEnd) error {
 	return err
 }
 
-func (w *Writer) WriteChunkAndGenerateMessageIndexFromContent(c *Chunk) error {
-	var uncompressedBytes []byte
-
-	switch CompressionFormat(c.Compression) {
-	case CompressionNone:
-		uncompressedBytes = c.Records
-	case CompressionZSTD:
-		compressedDataReader := bytes.NewReader(c.Records)
-		chunkDataReader, err := zstd.NewReader(compressedDataReader)
-		if err != nil {
-			return err
-		}
-		defer chunkDataReader.Close()
-		uncompressedBytes, err = io.ReadAll(chunkDataReader)
-		if err != nil {
-			return err
-		}
-	case CompressionLZ4:
-		var err error
-		compressedDataReader := bytes.NewReader(c.Records)
-		chunkDataReader := lz4.NewReader(compressedDataReader)
-		uncompressedBytes, err = io.ReadAll(chunkDataReader)
-		if err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("unsupported compression format: %s", c.Compression)
-	}
-
-	uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
-
-	lexer, err := NewLexer(uncompressedBytesReader, &LexerOptions{
-		SkipMagic:         true,
-		ValidateChunkCRCs: true,
-		EmitChunks:        true,
-	})
-	if err != nil {
-		return err
-	}
-	defer lexer.Close()
-
-	messageIndexes := make(map[uint16]*MessageIndex)
-
-	msg := make([]byte, 1024)
-	for {
-		token, data, err := lexer.Next(msg)
-		if err != nil {
-			msgIndexList := make([]*MessageIndex, 0, len(messageIndexes))
-			for _, idx := range messageIndexes {
-				fmt.Printf("Adding message index %d %v\n", idx.ChannelID, len(idx.Records))
-				msgIndexList = append(msgIndexList, idx)
-			}
-			err = w.WriteChunkWithIndexes(c, msgIndexList)
-			if err != nil {
-				return err
-			}
-
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			var expected *ErrTruncatedRecord
-			if errors.As(err, &expected) {
-				return nil
-			}
-			return err
-		}
-		if len(data) > len(msg) {
-			msg = data
-		}
-
-		switch token {
-		case TokenSchema:
-			s, err := ParseSchema(data)
-			if err != nil {
-				return err
-			}
-			if w.schemas[s.ID] == nil {
-				w.Statistics.SchemaCount++
-				w.schemas[s.ID] = s
-				w.schemaIDs = append(w.schemaIDs, s.ID)
-			}
-		case TokenChannel:
-			c, err := ParseChannel(data)
-			if err != nil {
-				return err
-			}
-			if w.channels[c.ID] == nil {
-				w.Statistics.ChannelCount++
-				w.channels[c.ID] = c
-				w.channelIDs = append(w.channelIDs, c.ID)
-			}
-		case TokenMessage:
-			m, err := ParseMessage(data)
-			if err != nil {
-				return err
-			}
-			idx, ok := messageIndexes[m.ChannelID]
-			if !ok {
-				idx = &MessageIndex{
-					ChannelID: m.ChannelID,
-					Records:   nil,
-				}
-				messageIndexes[m.ChannelID] = idx
-			}
-			position, err := uncompressedBytesReader.Seek(0, io.SeekCurrent)
-			if err != nil {
-				return err
-			}
-			idx.Add(m.LogTime, uint64(position))
-		}
-	}
-}
-
 // WriteChunkWithIndexes writes a chunk record with the associated message indexes to the output.
-// If the message indexes contains unknown channels, the chunk is decompressed and the new
-// channels and schemas are added to the writer.
 func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex) error {
 	if c.UncompressedSize == 0 {
 		return nil
 	}
+
 	compressedlen := len(c.Records)
-	uncompressedLen := c.UncompressedSize
+	uncompressedlen := c.UncompressedSize
 
 	// the "top fields" are all fields of the chunk record except for the compressed records.
 	topFieldsLen := 8 + 8 + 8 + 4 + 4 + len(c.Compression) + 8
-	msgLen := topFieldsLen + len(c.Records)
-	headerLen := 1 + 8 + topFieldsLen // OpChunk(1) + msgLen(8) + topFields
+	msglen := topFieldsLen + compressedlen
 	chunkStartOffset := w.w.Size()
 
-	w.ensureSized(headerLen)
-	buf := w.msg[:headerLen]
-
+	// when writing a chunk, we don't go through writerecord to avoid needing to
+	// materialize the compressed data again. Instead, write the leading bytes
+	// then copy from the compressed data buffer.
+	recordHeaderLen := 1 + 8 + topFieldsLen
+	w.ensureSized(recordHeaderLen)
 	offset, err := putByte(w.msg, byte(OpChunk))
 	if err != nil {
 		return err
 	}
 
-	offset += putUint64(buf[offset:], uint64(msgLen))
-	offset += putUint64(buf[offset:], c.MessageStartTime)
-	offset += putUint64(buf[offset:], c.MessageEndTime)
-	offset += putUint64(buf[offset:], uncompressedLen)
-	offset += putUint32(buf[offset:], c.UncompressedCRC)
-	offset += putPrefixedString(buf[offset:], c.Compression)
-	offset += putUint64(buf[offset:], uint64(compressedlen))
-
+	offset += putUint64(w.msg[offset:], uint64(msglen))
+	offset += putUint64(w.msg[offset:], c.MessageStartTime)
+	offset += putUint64(w.msg[offset:], c.MessageEndTime)
+	offset += putUint64(w.msg[offset:], uncompressedlen)
+	offset += putUint32(w.msg[offset:], c.UncompressedCRC)
+	offset += putPrefixedString(w.msg[offset:], c.Compression)
+	offset += putUint64(w.msg[offset:], uint64(compressedlen))
 	_, err = w.w.Write(w.msg[:offset])
 	if err != nil {
 		return err
@@ -567,26 +479,20 @@ func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex)
 	if err != nil {
 		return err
 	}
-
 	chunkEndOffset := w.w.Size()
 
 	// message indexes
-	containsNewChannel := false
 	messageIndexOffsets := make(map[uint16]uint64)
-	for _, messageIndex := range messageIndexes {
-		if !messageIndex.IsEmpty() {
-			continue
+	if !w.opts.SkipMessageIndexing {
+		for _, messageIndex := range messageIndexes {
+			if !messageIndex.IsEmpty() {
+				messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
+				err = w.WriteMessageIndex(messageIndex)
+				if err != nil {
+					return err
+				}
+			}
 		}
-		messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
-		err = w.WriteMessageIndex(messageIndex)
-		if err != nil {
-			return err
-		}
-		if w.channels[messageIndex.ChannelID] == nil {
-			containsNewChannel = true
-		}
-		w.Statistics.MessageCount += uint64(len(messageIndex.Records))
-		w.Statistics.ChannelMessageCounts[messageIndex.ChannelID] += uint64(len(messageIndex.Records))
 	}
 
 	messageIndexEnd := w.w.Size()
@@ -600,7 +506,7 @@ func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex)
 		MessageIndexLength:  messageIndexLength,
 		Compression:         CompressionFormat(c.Compression),
 		CompressedSize:      uint64(compressedlen),
-		UncompressedSize:    uncompressedLen,
+		UncompressedSize:    uncompressedlen,
 	})
 
 	w.Statistics.ChunkCount++
@@ -615,91 +521,6 @@ func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex)
 		w.Statistics.MessageEndTime = c.MessageEndTime
 	}
 
-	if containsNewChannel {
-		var uncompressedBytes []byte
-
-		switch CompressionFormat(c.Compression) {
-		case CompressionNone:
-			uncompressedBytes = c.Records
-		case CompressionZSTD:
-			compressedDataReader := bytes.NewReader(c.Records)
-			chunkDataReader, err := zstd.NewReader(compressedDataReader)
-			if err != nil {
-				return err
-			}
-			defer chunkDataReader.Close()
-			uncompressedBytes, err = io.ReadAll(chunkDataReader)
-			if err != nil {
-				return err
-			}
-		case CompressionLZ4:
-			var err error
-			compressedDataReader := bytes.NewReader(c.Records)
-			chunkDataReader := lz4.NewReader(compressedDataReader)
-			uncompressedBytes, err = io.ReadAll(chunkDataReader)
-			if err != nil {
-				return err
-			}
-		default:
-			return fmt.Errorf("unsupported compression format: %s", c.Compression)
-		}
-
-		uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
-
-		lexer, err := NewLexer(uncompressedBytesReader, &LexerOptions{
-			SkipMagic:         true,
-			ValidateChunkCRCs: true,
-			EmitChunks:        true,
-		})
-		if err != nil {
-			return err
-		}
-		defer lexer.Close()
-
-		msg := make([]byte, 1024)
-		for {
-			token, data, err := lexer.Next(msg)
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					return nil
-				}
-				var expected *ErrTruncatedRecord
-				if errors.As(err, &expected) {
-					return nil
-				}
-				if token == TokenInvalidChunk {
-					continue
-				}
-				return err
-			}
-			if len(data) > len(msg) {
-				msg = data
-			}
-
-			switch token {
-			case TokenSchema:
-				s, err := ParseSchema(data)
-				if err != nil {
-					return err
-				}
-				if w.schemas[s.ID] == nil {
-					w.Statistics.SchemaCount++
-					w.schemas[s.ID] = s
-					w.schemaIDs = append(w.schemaIDs, s.ID)
-				}
-			case TokenChannel:
-				c, err := ParseChannel(data)
-				if err != nil {
-					return err
-				}
-				if w.channels[c.ID] == nil {
-					w.Statistics.ChannelCount++
-					w.channels[c.ID] = c
-					w.channelIDs = append(w.channelIDs, c.ID)
-				}
-			}
-		}
-	}
 	return nil
 }
 
