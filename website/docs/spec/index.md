@@ -325,7 +325,7 @@ Multi-byte integers (`uint16`, `uint32`, `uint64`) are serialized using [little-
 
 ### String
 
-Strings are serialized using a `uint32` byte length followed by the string data, which should be valid [UTF-8](https://en.wikipedia.org/wiki/UTF-8).
+Strings are serialized using a `uint32` byte length followed by the string data, which must be valid [UTF-8](https://en.wikipedia.org/wiki/UTF-8).
 
     <byte length><utf-8 bytes>
 
