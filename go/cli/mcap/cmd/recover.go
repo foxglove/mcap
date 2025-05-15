@@ -38,8 +38,10 @@ func recoverRun(
 	}
 
 	defer func() {
-		mcapWriter.Statistics.MessageCount = info.Statistics.MessageCount
-		mcapWriter.Statistics.ChannelMessageCounts = info.Statistics.ChannelMessageCounts
+		mcapWriter.Statistics.MessageCount += info.Statistics.MessageCount
+		for channelID, count := range info.Statistics.ChannelMessageCounts {
+			mcapWriter.Statistics.ChannelMessageCounts[channelID] += count
+		}
 
 		for _, schema := range info.Schemas {
 			mcapWriter.AddSchema(schema)
