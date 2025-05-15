@@ -15,9 +15,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type recoverOps struct {
+	decodeChunk bool
+}
+
 // write chunk and indexes to the writer
 // if chunk contains new unseen channels, add them to the writer
-// if messageIndex is nil, it will be generated from the chunk
+// if messageIndex is nil, it will be generated from the chunk.
 func writeChunk(w *mcap.Writer, c *mcap.Chunk, messageIndexes []*mcap.MessageIndex) error {
 	containsNewChannel := false
 	recreateMessageIndexes := false
@@ -147,8 +151,9 @@ func writeChunk(w *mcap.Writer, c *mcap.Chunk, messageIndexes []*mcap.MessageInd
 func recoverRun(
 	r io.Reader,
 	w io.Writer,
-	decodeChunk bool,
+	ops *recoverOps,
 ) error {
+	decodeChunk := ops.decodeChunk
 	mcapWriter, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Chunked: true,
 	})
@@ -210,8 +215,7 @@ func recoverRun(
 				// message indexes are complete or not.
 				err = writeChunk(mcapWriter, lastChunk, nil)
 				if err != nil {
-					fmt.Printf("Failed to add channels for last chunk: %s\n", err)
-					return err
+					fmt.Printf("Failed to write chunk, skipping: %s\n", err)
 				}
 			}
 			if errors.Is(err, io.EOF) {
@@ -232,8 +236,7 @@ func recoverRun(
 			if lastChunk != nil {
 				err = writeChunk(mcapWriter, lastChunk, lastIndexes)
 				if err != nil {
-					fmt.Printf("TokenMessageIndex: Failed to add channels for last chunk: %s\n", err)
-					return err
+					fmt.Printf("Failed to write chunk, skipping: %s\n", err)
 				}
 				lastIndexes = nil
 				lastChunk = nil
@@ -254,8 +257,7 @@ func recoverRun(
 			if decodeChunk {
 				err = writeChunk(mcapWriter, chunk, nil)
 				if err != nil {
-					fmt.Printf("TokenChunk: Failed to add channels for last chunk: %s\n", err)
-					return err
+					fmt.Printf("Failed to write chunk, skipping: %s\n", err)
 				}
 			} else {
 				// copy the records, since it is referenced and the buffer will be reused
@@ -324,7 +326,12 @@ usage:
   mcap recover in.mcap -o out.mcap`,
 	}
 	output := recoverCmd.PersistentFlags().StringP("output", "o", "", "output filename")
-	alwaysDecodeChunk := recoverCmd.PersistentFlags().BoolP("always-decode-chunk", "a", false, "always decode chunks, even if the file is not chunked")
+	alwaysDecodeChunk := recoverCmd.PersistentFlags().BoolP(
+		"always-decode-chunk",
+		"a",
+		false,
+		"always decode chunks, even if the file is not chunked",
+	)
 	recoverCmd.Run = func(_ *cobra.Command, args []string) {
 		var reader io.Reader
 		if len(args) == 0 {
@@ -369,7 +376,9 @@ usage:
 			writer = newWriter
 		}
 
-		err := recoverRun(reader, writer, *alwaysDecodeChunk)
+		err := recoverRun(reader, writer, &recoverOps{
+			decodeChunk: *alwaysDecodeChunk,
+		})
 		if err != nil {
 			die("failed to recover: %s", err)
 		}
