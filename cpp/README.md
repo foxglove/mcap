@@ -86,6 +86,22 @@ following dependencies:
 If your project does not need `lz4` or `zstd` support, you can optionally disable these by defining
 `MCAP_COMPRESSION_NO_LZ4` or `MCAP_COMPRESSION_NO_ZSTD` respectively.
 
+The C++ implementation of MCAP can also be compiled into a static or shared library.
+When compiling for Windows, the correct `dllexport` and `dllimport` storage-class attributes need to be set.
+This is handled in [mcap/visibility.hpp](https://github.com/foxglove/mcap/blob/main/cpp/mcap/include/mcap/visibility.hpp).
+
+There are two `#defines` that need (not) to be set depending on whether using MCAP as static or shared library and whether we are compiling the MCAP library itself or linking against it:
+
+| Static library | `MCAP_IMPLEMENTATION` | `MCAP_STATIC_DEFINE` |
+| -------------- | --------------------  | -------------------- |
+| Compiling      | Set                   | Set                  |
+| Link against   | Not set               | Set                  |
+
+| Shared library | `MCAP_IMPLEMENTATION` | `MCAP_STATIC_DEFINE` |
+| -------------- | --------------------  | -------------------- |
+| Compiling      | Set                   | Not set              |
+| Link against   | Not set               | Not set              |
+
 ### Conan
 
 To simplify installation of dependencies, the [Conan](https://conan.io/) package
