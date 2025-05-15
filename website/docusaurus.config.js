@@ -13,7 +13,7 @@ const modifySvgoConfigInPlace = require("./modifySvgoConfigInPlace");
 const config = {
   title: "MCAP",
   tagline: "MCAP file format",
-  favicon: "img/favicon32.png",
+  favicon: "img/favicon.png",
   url: "https://mcap.dev",
   baseUrl: "/",
   onBrokenLinks: "throw",
