@@ -66,6 +66,7 @@ words:
   - jsonschema
   - kaitai
   - libmcap
+  - magick
   - matplotlib
   - mcap
   - msgdef
