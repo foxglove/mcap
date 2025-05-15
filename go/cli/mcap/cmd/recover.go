@@ -144,7 +144,7 @@ func writeChunk(w *mcap.Writer, c *mcap.Chunk, messageIndexes []*mcap.MessageInd
 	return w.WriteChunkWithIndexes(c, messageIndexes)
 }
 
-func recoverFastRun(
+func recoverRun(
 	r io.Reader,
 	w io.Writer,
 	decodeChunk bool,
@@ -315,18 +315,17 @@ func recoverFastRun(
 }
 
 func init() {
-	var recoverFast = &cobra.Command{
-		Use:   "recover-fast [file]",
-		Short: "Recover data from a potentially corrupt MCAP file without decompressing",
+	var recoverCmd = &cobra.Command{
+		Use:   "recover [file]",
+		Short: "Recover data from a potentially corrupt MCAP file",
 		Long: `This subcommand reads a potentially corrupt MCAP file and copies data to a new file.
-It does not decompress the chunks, so it is much faster than the regular recover command.
 
-	usage:
-	mcap recover in.mcap -o out.mcap`,
+usage:
+  mcap recover in.mcap -o out.mcap`,
 	}
-	output := recoverFast.PersistentFlags().StringP("output", "o", "", "output filename")
-	alwaysDecodeChunk := recoverFast.PersistentFlags().BoolP("always-decode-chunk", "a", false, "always decode chunks, even if the file is not chunked")
-	recoverFast.Run = func(_ *cobra.Command, args []string) {
+	output := recoverCmd.PersistentFlags().StringP("output", "o", "", "output filename")
+	alwaysDecodeChunk := recoverCmd.PersistentFlags().BoolP("always-decode-chunk", "a", false, "always decode chunks, even if the file is not chunked")
+	recoverCmd.Run = func(_ *cobra.Command, args []string) {
 		var reader io.Reader
 		if len(args) == 0 {
 			stat, err := os.Stdin.Stat()
@@ -370,10 +369,10 @@ It does not decompress the chunks, so it is much faster than the regular recover
 			writer = newWriter
 		}
 
-		err := recoverFastRun(reader, writer, *alwaysDecodeChunk)
+		err := recoverRun(reader, writer, *alwaysDecodeChunk)
 		if err != nil {
 			die("failed to recover: %s", err)
 		}
 	}
-	rootCmd.AddCommand(recoverFast)
+	rootCmd.AddCommand(recoverCmd)
 }
