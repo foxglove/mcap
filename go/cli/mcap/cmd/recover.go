@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,142 +9,11 @@ import (
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
 	"github.com/foxglove/mcap/go/mcap"
-	"github.com/klauspost/compress/zstd"
-	"github.com/pierrec/lz4/v4"
 	"github.com/spf13/cobra"
 )
 
 type recoverOps struct {
 	decodeChunk bool
-}
-
-// write chunk and indexes to the writer
-// if chunk contains new unseen channels, add them to the writer
-// if messageIndex is nil, it will be generated from the chunk.
-func writeChunk(w *mcap.Writer, c *mcap.Chunk, messageIndexes []*mcap.MessageIndex) error {
-	containsNewChannel := false
-	recreateMessageIndexes := false
-	var messageIndexesByChannelID map[uint16]*mcap.MessageIndex
-
-	if messageIndexes == nil {
-		recreateMessageIndexes = true
-		messageIndexesByChannelID = make(map[uint16]*mcap.MessageIndex)
-	} else {
-		for _, messageIndex := range messageIndexes {
-			if messageIndex.IsEmpty() {
-				continue
-			}
-			if !w.HasChannel(messageIndex.ChannelID) {
-				containsNewChannel = true
-			}
-			w.Statistics.MessageCount += uint64(len(messageIndex.Records))
-			w.Statistics.ChannelMessageCounts[messageIndex.ChannelID] += uint64(len(messageIndex.Records))
-		}
-	}
-
-	if containsNewChannel || recreateMessageIndexes {
-		var uncompressedBytes []byte
-
-		switch mcap.CompressionFormat(c.Compression) {
-		case mcap.CompressionNone:
-			uncompressedBytes = c.Records
-		case mcap.CompressionZSTD:
-			compressedDataReader := bytes.NewReader(c.Records)
-			chunkDataReader, err := zstd.NewReader(compressedDataReader)
-			if err != nil {
-				return err
-			}
-			defer chunkDataReader.Close()
-			uncompressedBytes, err = io.ReadAll(chunkDataReader)
-			if err != nil {
-				return err
-			}
-		case mcap.CompressionLZ4:
-			var err error
-			compressedDataReader := bytes.NewReader(c.Records)
-			chunkDataReader := lz4.NewReader(compressedDataReader)
-			uncompressedBytes, err = io.ReadAll(chunkDataReader)
-			if err != nil {
-				return err
-			}
-		default:
-			return fmt.Errorf("unsupported compression format: %s", c.Compression)
-		}
-
-		uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
-
-		lexer, err := mcap.NewLexer(uncompressedBytesReader, &mcap.LexerOptions{
-			SkipMagic: true,
-		})
-		if err != nil {
-			return err
-		}
-		defer lexer.Close()
-
-		msg := make([]byte, 1024)
-		for {
-			position, err := uncompressedBytesReader.Seek(0, io.SeekCurrent)
-			if err != nil {
-				return err
-			}
-			token, data, err := lexer.Next(msg)
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					break
-				}
-				return err
-			}
-			if len(data) > len(msg) {
-				msg = data
-			}
-
-			switch token {
-			case mcap.TokenSchema:
-				schema, err := mcap.ParseSchema(data)
-				if err != nil {
-					return err
-				}
-				w.AddSchema(schema)
-			case mcap.TokenChannel:
-				channel, err := mcap.ParseChannel(data)
-				if err != nil {
-					return err
-				}
-				w.AddChannel(channel)
-			case mcap.TokenMessage:
-				if recreateMessageIndexes {
-					m, err := mcap.ParseMessage(data)
-					if err != nil {
-						return err
-					}
-					idx, ok := messageIndexesByChannelID[m.ChannelID]
-					if !ok {
-						idx = &mcap.MessageIndex{
-							ChannelID: m.ChannelID,
-							Records:   nil,
-						}
-						messageIndexesByChannelID[m.ChannelID] = idx
-					}
-					if err != nil {
-						return err
-					}
-					idx.Add(m.LogTime, uint64(position))
-
-					// Also update stats if recreating indexes
-					w.Statistics.MessageCount++
-					w.Statistics.ChannelMessageCounts[m.ChannelID]++
-				}
-			}
-		}
-	}
-
-	if recreateMessageIndexes {
-		messageIndexes = make([]*mcap.MessageIndex, 0, len(messageIndexesByChannelID))
-		for _, idx := range messageIndexesByChannelID {
-			messageIndexes = append(messageIndexes, idx)
-		}
-	}
-	return w.WriteChunkWithIndexes(c, messageIndexes)
 }
 
 func recoverRun(
@@ -161,7 +29,25 @@ func recoverRun(
 		return err
 	}
 
+	info := &mcap.Info{
+		Statistics: &mcap.Statistics{
+			ChannelMessageCounts: make(map[uint16]uint64),
+		},
+		Channels: make(map[uint16]*mcap.Channel),
+		Schemas:  make(map[uint16]*mcap.Schema),
+	}
+
 	defer func() {
+		mcapWriter.Statistics.MessageCount = info.Statistics.MessageCount
+		mcapWriter.Statistics.ChannelMessageCounts = info.Statistics.ChannelMessageCounts
+
+		for _, schema := range info.Schemas {
+			mcapWriter.AddSchema(schema)
+		}
+		for _, channel := range info.Channels {
+			mcapWriter.AddChannel(channel)
+		}
+
 		err := mcapWriter.Close()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to close mcap writer: %v\n", err)
@@ -213,9 +99,14 @@ func recoverRun(
 			if lastChunk != nil {
 				// Reconstruct message indexes for the last chunk, because it is unclear if the
 				// message indexes are complete or not.
-				err = writeChunk(mcapWriter, lastChunk, nil)
+				idx, err := utils.UpdateInfoFromChunk(info, lastChunk, nil)
 				if err != nil {
-					fmt.Printf("Failed to write chunk, skipping: %s\n", err)
+					fmt.Printf("Failed to update info from chunk, skipping: %s\n", err)
+				} else {
+					err = mcapWriter.WriteChunkWithIndexes(lastChunk, idx)
+					if err != nil {
+						fmt.Printf("Failed to write chunk, skipping: %s\n", err)
+					}
 				}
 			}
 			if errors.Is(err, io.EOF) {
@@ -234,9 +125,14 @@ func recoverRun(
 
 		if token != mcap.TokenMessageIndex {
 			if lastChunk != nil {
-				err = writeChunk(mcapWriter, lastChunk, lastIndexes)
+				_, err := utils.UpdateInfoFromChunk(info, lastChunk, nil)
 				if err != nil {
-					fmt.Printf("Failed to write chunk, skipping: %s\n", err)
+					fmt.Printf("Failed to update info from chunk, skipping: %s\n", err)
+				} else {
+					err = mcapWriter.WriteChunkWithIndexes(lastChunk, lastIndexes)
+					if err != nil {
+						fmt.Printf("Failed to write chunk, skipping: %s\n", err)
+					}
 				}
 				lastIndexes = nil
 				lastChunk = nil
@@ -255,9 +151,14 @@ func recoverRun(
 		case mcap.TokenChunk:
 			chunk, err := mcap.ParseChunk(data)
 			if decodeChunk {
-				err = writeChunk(mcapWriter, chunk, nil)
+				idx, err := utils.UpdateInfoFromChunk(info, chunk, nil)
 				if err != nil {
-					fmt.Printf("Failed to write chunk, skipping: %s\n", err)
+					fmt.Printf("Failed to update info from chunk, skipping: %s\n", err)
+				} else {
+					err = mcapWriter.WriteChunkWithIndexes(chunk, idx)
+					if err != nil {
+						fmt.Printf("Failed to write chunk, skipping: %s\n", err)
+					}
 				}
 			} else {
 				// copy the records, since it is referenced and the buffer will be reused

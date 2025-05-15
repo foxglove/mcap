@@ -206,27 +206,51 @@ func printSummaryRows(w io.Writer, rows [][]string) error {
 	return scanner.Err()
 }
 
-var infoCmd = &cobra.Command{
-	Use:   "info",
-	Short: "Report statistics about an MCAP file",
-	Run: func(_ *cobra.Command, args []string) {
+func init() {
+	var infoCmd = &cobra.Command{
+		Use:   "info",
+		Short: "Report statistics about an MCAP file",
+	}
+	noRebuild := infoCmd.PersistentFlags().BoolP("no-rebuild", "n", false,
+		"Do not attempt to rebuild the info section if it is missing or invalid")
+	rebuild := infoCmd.PersistentFlags().BoolP("rebuild", "r", false, "Always rebuild the info")
+
+	infoCmd.Run = func(_ *cobra.Command, args []string) {
 		ctx := context.Background()
 		if len(args) != 1 {
-			die("Unexpected number of args")
+			die("Unexpected number of args: expected 1, got %d", len(args))
 		}
 		// check if it's a remote file
 		filename := args[0]
 		err := utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
-			reader, err := mcap.NewReader(rs)
-			if err != nil {
-				return fmt.Errorf("failed to get reader: %w", err)
+			var info *mcap.Info
+			if !*rebuild {
+				reader, err := mcap.NewReader(rs)
+				if err != nil {
+					return fmt.Errorf("failed to get reader: %w", err)
+				}
+				defer reader.Close()
+				info, err = reader.Info()
+				if err != nil {
+					if *noRebuild {
+						return err
+					}
+					fmt.Println("Failed to read info from file, regenerating...")
+					_, err := rs.Seek(0, io.SeekStart)
+					if err != nil {
+						return fmt.Errorf("failed to seek: %w", err)
+					}
+				}
 			}
-			defer reader.Close()
-			info, err := reader.Info()
-			if err != nil {
-				return fmt.Errorf("failed to get info: %w", err)
+			if info == nil {
+				fmt.Println("Rebuilding info...")
+				rebuildData, err := utils.RebuildInfo(rs)
+				if err != nil {
+					return fmt.Errorf("failed to regenerate info: %w", err)
+				}
+				info = rebuildData.Info
 			}
-			err = printInfo(os.Stdout, info)
+			err := printInfo(os.Stdout, info)
 			if err != nil {
 				return fmt.Errorf("failed to print info: %w", err)
 			}
@@ -235,9 +259,6 @@ var infoCmd = &cobra.Command{
 		if err != nil {
 			die("Failed to read file %s: %v", filename, err)
 		}
-	},
-}
-
-func init() {
+	}
 	rootCmd.AddCommand(infoCmd)
 }
