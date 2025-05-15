@@ -15,126 +15,31 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func writeChunkAndGenerateMessageIndexFromContent(w *mcap.Writer, c *mcap.Chunk) error {
-	var uncompressedBytes []byte
-
-	switch mcap.CompressionFormat(c.Compression) {
-	case mcap.CompressionNone:
-		uncompressedBytes = c.Records
-	case mcap.CompressionZSTD:
-		compressedDataReader := bytes.NewReader(c.Records)
-		chunkDataReader, err := zstd.NewReader(compressedDataReader)
-		if err != nil {
-			return err
-		}
-		defer chunkDataReader.Close()
-		uncompressedBytes, err = io.ReadAll(chunkDataReader)
-		if err != nil {
-			return err
-		}
-	case mcap.CompressionLZ4:
-		var err error
-		compressedDataReader := bytes.NewReader(c.Records)
-		chunkDataReader := lz4.NewReader(compressedDataReader)
-		uncompressedBytes, err = io.ReadAll(chunkDataReader)
-		if err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("unsupported compression format: %s", c.Compression)
-	}
-
-	uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
-
-	lexer, err := mcap.NewLexer(uncompressedBytesReader, &mcap.LexerOptions{
-		SkipMagic:         true,
-		ValidateChunkCRCs: true,
-		EmitChunks:        true,
-	})
-	if err != nil {
-		return err
-	}
-	defer lexer.Close()
-
-	messageIndexes := make(map[uint16]*mcap.MessageIndex)
-
-	msg := make([]byte, 1024)
-	for {
-		token, data, err := lexer.Next(msg)
-		if err != nil {
-			msgIndexList := make([]*mcap.MessageIndex, 0, len(messageIndexes))
-			for _, idx := range messageIndexes {
-				fmt.Printf("Adding message index %d %v\n", idx.ChannelID, len(idx.Records))
-				msgIndexList = append(msgIndexList, idx)
-			}
-			err = w.WriteChunkWithIndexes(c, msgIndexList)
-			if err != nil {
-				return err
-			}
-
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			var expected *mcap.ErrTruncatedRecord
-			if errors.As(err, &expected) {
-				return nil
-			}
-			return err
-		}
-		if len(data) > len(msg) {
-			msg = data
-		}
-
-		switch token {
-		case mcap.TokenSchema:
-			s, err := mcap.ParseSchema(data)
-			if err != nil {
-				return err
-			}
-			w.AddSchema(s)
-		case mcap.TokenChannel:
-			c, err := mcap.ParseChannel(data)
-			if err != nil {
-				return err
-			}
-			w.AddChannel(c)
-		case mcap.TokenMessage:
-			m, err := mcap.ParseMessage(data)
-			if err != nil {
-				return err
-			}
-			idx, ok := messageIndexes[m.ChannelID]
-			if !ok {
-				idx = &mcap.MessageIndex{
-					ChannelID: m.ChannelID,
-					Records:   nil,
-				}
-				messageIndexes[m.ChannelID] = idx
-			}
-			position, err := uncompressedBytesReader.Seek(0, io.SeekCurrent)
-			if err != nil {
-				return err
-			}
-			idx.Add(m.LogTime, uint64(position))
-		}
-	}
-}
-
-func addNewChannels(w *mcap.Writer, c *mcap.Chunk, messageIndexes []*mcap.MessageIndex) error {
+// write chunk and indexes to the writer
+// if chunk contains new unseen channels, add them to the writer
+// if messageIndex is nil, it will be generated from the chunk
+func writeChunk(w *mcap.Writer, c *mcap.Chunk, messageIndexes []*mcap.MessageIndex) error {
 	containsNewChannel := false
-	for _, messageIndex := range messageIndexes {
-		if messageIndex.IsEmpty() {
-			continue
-		}
-		if !w.HasChannel(messageIndex.ChannelID) {
-			containsNewChannel = true
-		}
+	recreateMessageIndexes := false
+	var messageIndexesByChannelID map[uint16]*mcap.MessageIndex
 
-		w.Statistics.MessageCount += uint64(len(messageIndex.Records))
-		w.Statistics.ChannelMessageCounts[messageIndex.ChannelID] += uint64(len(messageIndex.Records))
+	if messageIndexes == nil {
+		recreateMessageIndexes = true
+		messageIndexesByChannelID = make(map[uint16]*mcap.MessageIndex)
+	} else {
+		for _, messageIndex := range messageIndexes {
+			if messageIndex.IsEmpty() {
+				continue
+			}
+			if !w.HasChannel(messageIndex.ChannelID) {
+				containsNewChannel = true
+			}
+			w.Statistics.MessageCount += uint64(len(messageIndex.Records))
+			w.Statistics.ChannelMessageCounts[messageIndex.ChannelID] += uint64(len(messageIndex.Records))
+		}
 	}
 
-	if containsNewChannel {
+	if containsNewChannel || recreateMessageIndexes {
 		var uncompressedBytes []byte
 
 		switch mcap.CompressionFormat(c.Compression) {
@@ -166,9 +71,7 @@ func addNewChannels(w *mcap.Writer, c *mcap.Chunk, messageIndexes []*mcap.Messag
 		uncompressedBytesReader := bytes.NewReader(uncompressedBytes)
 
 		lexer, err := mcap.NewLexer(uncompressedBytesReader, &mcap.LexerOptions{
-			SkipMagic:         true,
-			ValidateChunkCRCs: true,
-			EmitChunks:        true,
+			SkipMagic: true,
 		})
 		if err != nil {
 			return err
@@ -177,17 +80,14 @@ func addNewChannels(w *mcap.Writer, c *mcap.Chunk, messageIndexes []*mcap.Messag
 
 		msg := make([]byte, 1024)
 		for {
+			position, err := uncompressedBytesReader.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return err
+			}
 			token, data, err := lexer.Next(msg)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
-					return nil
-				}
-				var expected *mcap.ErrTruncatedRecord
-				if errors.As(err, &expected) {
-					return nil
-				}
-				if token == mcap.TokenInvalidChunk {
-					continue
+					break
 				}
 				return err
 			}
@@ -197,26 +97,57 @@ func addNewChannels(w *mcap.Writer, c *mcap.Chunk, messageIndexes []*mcap.Messag
 
 			switch token {
 			case mcap.TokenSchema:
-				s, err := mcap.ParseSchema(data)
+				schema, err := mcap.ParseSchema(data)
 				if err != nil {
 					return err
 				}
-				w.AddSchema(s)
+				w.AddSchema(schema)
 			case mcap.TokenChannel:
-				c, err := mcap.ParseChannel(data)
+				channel, err := mcap.ParseChannel(data)
 				if err != nil {
 					return err
 				}
-				w.AddChannel(c)
+				w.AddChannel(channel)
+			case mcap.TokenMessage:
+				if recreateMessageIndexes {
+					m, err := mcap.ParseMessage(data)
+					if err != nil {
+						return err
+					}
+					idx, ok := messageIndexesByChannelID[m.ChannelID]
+					if !ok {
+						idx = &mcap.MessageIndex{
+							ChannelID: m.ChannelID,
+							Records:   nil,
+						}
+						messageIndexesByChannelID[m.ChannelID] = idx
+					}
+					if err != nil {
+						return err
+					}
+					idx.Add(m.LogTime, uint64(position))
+
+					// Also update stats if recreating indexes
+					w.Statistics.MessageCount++
+					w.Statistics.ChannelMessageCounts[m.ChannelID]++
+				}
 			}
 		}
 	}
-	return nil
+
+	if recreateMessageIndexes {
+		messageIndexes = make([]*mcap.MessageIndex, 0, len(messageIndexesByChannelID))
+		for _, idx := range messageIndexesByChannelID {
+			messageIndexes = append(messageIndexes, idx)
+		}
+	}
+	return w.WriteChunkWithIndexes(c, messageIndexes)
 }
 
 func recoverFastRun(
 	r io.Reader,
 	w io.Writer,
+	decodeChunk bool,
 ) error {
 	mcapWriter, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Chunked: true,
@@ -224,8 +155,6 @@ func recoverFastRun(
 	if err != nil {
 		return err
 	}
-
-	var numMessages, numAttachments, numMetadata int
 
 	defer func() {
 		err := mcapWriter.Close()
@@ -236,9 +165,9 @@ func recoverFastRun(
 		fmt.Fprintf(
 			os.Stderr,
 			"Recovered %d messages, %d attachments, and %d metadata records.\n",
-			numMessages,
-			numAttachments,
-			numMetadata,
+			mcapWriter.Statistics.MessageCount,
+			mcapWriter.Statistics.AttachmentCount,
+			mcapWriter.Statistics.MetadataCount,
 		)
 	}()
 
@@ -258,7 +187,6 @@ func recoverFastRun(
 			if err != nil {
 				return err
 			}
-			numAttachments++
 			return nil
 		},
 	})
@@ -280,8 +208,9 @@ func recoverFastRun(
 			if lastChunk != nil {
 				// Reconstruct message indexes for the last chunk, because it is unclear if the
 				// message indexes are complete or not.
-				err = writeChunkAndGenerateMessageIndexFromContent(mcapWriter, lastChunk)
+				err = writeChunk(mcapWriter, lastChunk, nil)
 				if err != nil {
+					fmt.Printf("Failed to add channels for last chunk: %s\n", err)
 					return err
 				}
 			}
@@ -301,12 +230,9 @@ func recoverFastRun(
 
 		if token != mcap.TokenMessageIndex {
 			if lastChunk != nil {
-				err = mcapWriter.WriteChunkWithIndexes(lastChunk, lastIndexes)
+				err = writeChunk(mcapWriter, lastChunk, lastIndexes)
 				if err != nil {
-					return err
-				}
-				err = addNewChannels(mcapWriter, lastChunk, lastIndexes)
-				if err != nil {
+					fmt.Printf("TokenMessageIndex: Failed to add channels for last chunk: %s\n", err)
 					return err
 				}
 				lastIndexes = nil
@@ -324,25 +250,35 @@ func recoverFastRun(
 				return err
 			}
 		case mcap.TokenChunk:
-			lastChunk, err = mcap.ParseChunk(data)
-			// copy the records, since it is referenced and the buffer will be reused
-			recordsCopy := make([]byte, len(lastChunk.Records))
-			copy(recordsCopy, lastChunk.Records)
-			lastChunk.Records = recordsCopy
+			chunk, err := mcap.ParseChunk(data)
+			if decodeChunk {
+				err = writeChunk(mcapWriter, chunk, nil)
+				if err != nil {
+					fmt.Printf("TokenChunk: Failed to add channels for last chunk: %s\n", err)
+					return err
+				}
+			} else {
+				// copy the records, since it is referenced and the buffer will be reused
+				recordsCopy := make([]byte, len(chunk.Records))
+				copy(recordsCopy, chunk.Records)
+				lastChunk = chunk
+				lastChunk.Records = recordsCopy
 
-			if err != nil {
-				return err
+				if err != nil {
+					return err
+				}
 			}
 		case mcap.TokenMessageIndex:
-			if lastChunk == nil {
-				return fmt.Errorf("got message index but not chunk before it")
+			if !decodeChunk {
+				if lastChunk == nil {
+					return fmt.Errorf("got message index but not chunk before it")
+				}
+				index, err := mcap.ParseMessageIndex(data)
+				if err != nil {
+					return err
+				}
+				lastIndexes = append(lastIndexes, index)
 			}
-			index, err := mcap.ParseMessageIndex(data)
-			if err != nil {
-				return err
-			}
-			numMessages += len(index.Records)
-			lastIndexes = append(lastIndexes, index)
 		case mcap.TokenMetadata:
 			metadata, err := mcap.ParseMetadata(data)
 			if err != nil {
@@ -351,7 +287,24 @@ func recoverFastRun(
 			if err := mcapWriter.WriteMetadata(metadata); err != nil {
 				return err
 			}
-			numMetadata++
+		case mcap.TokenSchema:
+			decodeChunk = true // mcap is not chunked
+			schema, err := mcap.ParseSchema(data)
+			if err != nil {
+				return err
+			}
+			if err := mcapWriter.WriteSchema(schema); err != nil {
+				return err
+			}
+		case mcap.TokenChannel:
+			decodeChunk = true // mcap is not chunked
+			channel, err := mcap.ParseChannel(data)
+			if err != nil {
+				return err
+			}
+			if err := mcapWriter.WriteChannel(channel); err != nil {
+				return err
+			}
 		case mcap.TokenDataEnd, mcap.TokenFooter:
 			// data section is over, either because the file is over or the summary section starts.
 			return nil
@@ -372,6 +325,7 @@ It does not decompress the chunks, so it is much faster than the regular recover
 	mcap recover in.mcap -o out.mcap`,
 	}
 	output := recoverFast.PersistentFlags().StringP("output", "o", "", "output filename")
+	alwaysDecodeChunk := recoverFast.PersistentFlags().BoolP("always-decode-chunk", "a", false, "always decode chunks, even if the file is not chunked")
 	recoverFast.Run = func(_ *cobra.Command, args []string) {
 		var reader io.Reader
 		if len(args) == 0 {
@@ -416,7 +370,7 @@ It does not decompress the chunks, so it is much faster than the regular recover
 			writer = newWriter
 		}
 
-		err := recoverFastRun(reader, writer)
+		err := recoverFastRun(reader, writer, *alwaysDecodeChunk)
 		if err != nil {
 			die("failed to recover: %s", err)
 		}
