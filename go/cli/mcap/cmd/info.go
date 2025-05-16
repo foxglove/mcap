@@ -244,7 +244,7 @@ func init() {
 			}
 			if info == nil {
 				fmt.Println("Rebuilding info...")
-				rebuildData, err := utils.RebuildInfo(rs)
+				rebuildData, err := utils.RebuildInfo(rs, false)
 				if err != nil {
 					return fmt.Errorf("failed to regenerate info: %w", err)
 				}

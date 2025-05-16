@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"io"
 	"os"
 
@@ -9,10 +10,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func recoverInPlace(file *os.File) error {
-	rebuildData, err := utils.RebuildInfo(file)
+func recoverInPlace(file *os.File, includeCRC bool) error {
+	rebuildData, err := utils.RebuildInfo(file, includeCRC)
 	if err != nil {
 		return err
+	}
+	if rebuildData.ContainsFaultyChunks {
+		return fmt.Errorf("file contains faulty chunks, cannot recover in place")
 	}
 
 	fileSize, err := file.Seek(0, io.SeekEnd)
@@ -67,6 +71,13 @@ usage:
   mcap recover-in-place in.mcap`,
 	}
 
+	includeCRC := recoverInPlaceCmd.PersistentFlags().BoolP(
+		"include-crc",
+		"",
+		false,
+		"include chunk CRC checksums in output",
+	)
+
 	recoverInPlaceCmd.Run = func(_ *cobra.Command, args []string) {
 		if len(args) == 0 {
 			die("please supply a file. see --help for usage details.")
@@ -76,7 +87,7 @@ usage:
 				die("failed to open file: %s", err)
 			}
 			defer file.Close()
-			err = recoverInPlace(file)
+			err = recoverInPlace(file, *includeCRC)
 			if err != nil {
 				die("failed to recover file: %s", err)
 			}

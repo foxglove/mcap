@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"hash/crc32"
 	"io"
 
 	"github.com/foxglove/mcap/go/mcap"
@@ -121,9 +120,6 @@ func UpdateInfoFromChunk(
 						}
 						messageIndexesByChannelID[m.ChannelID] = idx
 					}
-					if err != nil {
-						return nil, err
-					}
 					idx.Add(m.LogTime, uint64(position))
 
 					// Also update stats if recreating indexes
@@ -139,10 +135,9 @@ func UpdateInfoFromChunk(
 		for _, idx := range messageIndexesByChannelID {
 			messageIndexes = append(messageIndexes, idx)
 		}
-		return messageIndexes, nil
 	}
 
-	return nil, nil
+	return messageIndexes, nil
 }
 
 type RebuildData struct {
@@ -152,14 +147,16 @@ type RebuildData struct {
 	DataEndOffset int64
 	// ContainsFaultyChunks indicates if the file contains chunks that are not
 	ContainsFaultyChunks bool
-	// MessageIndexes for the lust chunk, if any.
+	// MessageIndexes for the last chunk, if any.
 	MessageIndexes []*mcap.MessageIndex
 
 	DataSectionCRC uint32
 }
 
 // RebuildInfo reads an MCAP file and rebuilds the info from it.
-func RebuildInfo(r io.ReadSeeker) (*RebuildData, error) {
+func RebuildInfo(reader io.Reader, includeCRC bool) (*RebuildData, error) {
+	readerCounter := NewChecksummingReaderCounter(reader, includeCRC)
+
 	info := &mcap.Info{
 		Statistics: &mcap.Statistics{
 			ChannelMessageCounts: make(map[uint16]uint64),
@@ -182,7 +179,7 @@ func RebuildInfo(r io.ReadSeeker) (*RebuildData, error) {
 
 	var position int64
 
-	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{
+	lexer, err := mcap.NewLexer(readerCounter, &mcap.LexerOptions{
 		ValidateChunkCRCs: true,
 		EmitChunks:        true,
 		EmitInvalidChunks: true,
@@ -226,20 +223,17 @@ func RebuildInfo(r io.ReadSeeker) (*RebuildData, error) {
 		}
 	}
 	buf := make([]byte, 1024)
-	bufLen := 0
 	doneReading := false
+
 	for !doneReading {
 		// The offset of the previous read it the last valid position
 		rebuildData.DataEndOffset = position
 
-		position, err = r.Seek(0, io.SeekCurrent)
-		if err != nil {
-			return nil, err
-		}
-		rebuildData.DataSectionCRC = crc32.Update(rebuildData.DataSectionCRC, crc32.IEEETable, buf[:bufLen])
+		position = readerCounter.Count()
+
+		rebuildData.DataSectionCRC = readerCounter.Checksum()
 
 		token, data, err := lexer.Next(buf)
-		bufLen = len(data)
 		if err != nil {
 			if token == mcap.TokenInvalidChunk {
 				fmt.Printf("Invalid chunk encountered, skipping: %s\n", err)
@@ -261,14 +255,12 @@ func RebuildInfo(r io.ReadSeeker) (*RebuildData, error) {
 
 		if token != mcap.TokenMessageIndex {
 			if lastChunk != nil {
-				idx, err := UpdateInfoFromChunk(info, lastChunk, lastIndexes)
+				// If the chunk does not have message indexes, they will be recreated here.
+				_, err := UpdateInfoFromChunk(info, lastChunk, lastIndexes)
 				if err != nil {
 					fmt.Printf("Failed to read chunk, skipping: %s\n", err)
 					rebuildData.ContainsFaultyChunks = true
 					lastChunk = nil
-				}
-				if idx != nil {
-					fmt.Println("Unexpected message index")
 				}
 				finalizeChunk()
 			}
@@ -303,10 +295,7 @@ func RebuildInfo(r io.ReadSeeker) (*RebuildData, error) {
 			lastChunk.Records = recordsCopy
 			messageIndexOffsets = make(map[uint16]uint64)
 			chunkStartOffset = position
-			chunkEndOffset, err = r.Seek(0, io.SeekCurrent)
-			if err != nil {
-				return nil, err
-			}
+			chunkEndOffset = readerCounter.Count()
 		case mcap.TokenMessageIndex:
 			if lastChunk == nil {
 				return nil, fmt.Errorf("got message index but not chunk before it")

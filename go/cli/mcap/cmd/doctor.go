@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -25,7 +26,8 @@ var (
 )
 
 type mcapDoctor struct {
-	reader io.ReadSeeker
+	reader             io.ReadSeeker
+	readerChecksumming *utils.ChecksummingReaderCounter
 
 	channelsInDataSection              map[uint16]*mcap.Channel
 	schemasInDataSection               map[uint16]*mcap.Schema
@@ -379,7 +381,7 @@ type Diagnosis struct {
 }
 
 func (doctor *mcapDoctor) Examine() Diagnosis {
-	lexer, err := mcap.NewLexer(doctor.reader, &mcap.LexerOptions{
+	lexer, err := mcap.NewLexer(doctor.readerChecksumming, &mcap.LexerOptions{
 		SkipMagic:         false,
 		ValidateChunkCRCs: true,
 		EmitChunks:        true,
@@ -400,6 +402,8 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 
 	msg := make([]byte, 1024)
 	for {
+		// Read the crc first since the crc does not contain DataEnd
+		previousCRC := doctor.readerChecksumming.Checksum()
 		tokenType, data, err := lexer.Next(msg)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -443,6 +447,15 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 			footer, err = mcap.ParseFooter(data)
 			if err != nil {
 				doctor.error("Failed to parse footer: %s", err)
+			}
+			// Everything in the footer besides the CRC is contained in the CRC calculation
+			footerHeader := make([]byte, 9)
+			footerHeader[0] = byte(mcap.OpFooter)
+			binary.LittleEndian.PutUint64(footerHeader[1:], 8+8+4)
+			previousCRC = crc32.Update(previousCRC, crc32.IEEETable, footerHeader)
+			previousCRC = crc32.Update(previousCRC, crc32.IEEETable, data[:len(data)-4])
+			if footer.SummaryCRC != 0 && footer.SummaryCRC != previousCRC {
+				doctor.error("Summary CRC mismatch: %x != %x", footer.SummaryCRC, previousCRC)
 			}
 		case mcap.TokenSchema:
 			schema, err := mcap.ParseSchema(data)
@@ -565,6 +578,11 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 				doctor.error("Failed to parse data end: %s", err)
 			}
 			doctor.inSummarySection = true
+
+			if dataEnd.DataSectionCRC != 0 && dataEnd.DataSectionCRC != previousCRC {
+				doctor.error("Data section CRC mismatch: %x != %x", dataEnd.DataSectionCRC, previousCRC)
+			}
+			doctor.readerChecksumming.ResetCRC()
 		case mcap.TokenError:
 			// this is the value of the tokenType when there is an error
 			// from the lexer, which we caught at the top.
@@ -718,6 +736,7 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
 	return &mcapDoctor{
 		reader:                             reader,
+		readerChecksumming:                 utils.NewChecksummingReaderCounter(reader, true),
 		channelsInDataSection:              make(map[uint16]*mcap.Channel),
 		channelsReferencedInChunksByOffset: make(map[uint64][]uint16),
 		channelIDsInSummarySection:         make(map[uint16]bool),

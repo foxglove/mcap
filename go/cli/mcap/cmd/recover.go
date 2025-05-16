@@ -127,7 +127,7 @@ func recoverRun(
 
 		if token != mcap.TokenMessageIndex {
 			if lastChunk != nil {
-				_, err := utils.UpdateInfoFromChunk(info, lastChunk, nil)
+				lastIndexes, err := utils.UpdateInfoFromChunk(info, lastChunk, lastIndexes)
 				if err != nil {
 					fmt.Printf("Failed to update info from chunk, skipping: %s\n", err)
 				} else {
