@@ -1,4 +1,6 @@
 #!/bin/bash
+# This script generates the smaller png and webp thumbnails from mcap.svg
+# Do not manually edit the generated thumbnails!
 set -eux
 
 cd "$(dirname "$0")"
