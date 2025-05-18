@@ -1,4 +1,4 @@
-<img src="/website/static/img/mcap.png" alt="MCAP logo" width="150px" height="150px"/>
+<img src="/website/static/img/mcap720.webp" alt="MCAP logo" width="240" height="180"/>
 
 # MCAP
 
