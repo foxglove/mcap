@@ -93,7 +93,7 @@ const config = {
         title: "MCAP",
         logo: {
           alt: "MCAP Logo",
-          src: "img/mcap240.webp",
+          src: "img/mcap64.webp",
         },
         items: [
           {
