@@ -834,7 +834,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 }
 
 // Test reading an MCAP with two overlapping chunks, with an AfterNanos filter that causes the
-// chunks to be read in reverse order
+// chunks to be read in reverse order.
 func TestReadingMessageOrderWithFilter(t *testing.T) {
 	buf := &bytes.Buffer{}
 	writer, err := NewWriter(buf, &WriterOptions{
@@ -878,7 +878,7 @@ func TestReadingMessageOrderWithFilter(t *testing.T) {
 	require.NoError(t, err)
 	info, err := reader.Info()
 	require.NoError(t, err)
-	require.Equal(t, 2, len(info.ChunkIndexes))
+	require.Len(t, info.ChunkIndexes, 2)
 
 	// We will filter out 1 message
 	expectedMsgCount := msgCount - 1
