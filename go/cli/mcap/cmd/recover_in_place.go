@@ -10,7 +10,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func recoverInPlace(file *os.File, includeCRC bool) error {
+type readWriteSeekerTruncate interface {
+	io.ReadWriteSeeker
+	Truncate(size int64) error
+}
+
+func recoverInPlace(file readWriteSeekerTruncate, includeCRC bool) error {
 	rebuildData, err := utils.RebuildInfo(file, includeCRC)
 	if err != nil {
 		return err
