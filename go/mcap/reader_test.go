@@ -839,7 +839,7 @@ func TestReadingMessageOrderWithFilter(t *testing.T) {
 	buf := &bytes.Buffer{}
 	writer, err := NewWriter(buf, &WriterOptions{
 		Chunked:     true,
-		ChunkSize:   72,
+		ChunkSize:   200,
 		Compression: CompressionLZ4,
 	})
 	require.NoError(t, err)
@@ -876,6 +876,9 @@ func TestReadingMessageOrderWithFilter(t *testing.T) {
 	// start reading the MCAP back
 	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
 	require.NoError(t, err)
+	info, err := reader.Info()
+	require.NoError(t, err)
+	require.Equal(t, 2, len(info.ChunkIndexes))
 
 	// We will filter out 1 message
 	expectedMsgCount := msgCount - 1
