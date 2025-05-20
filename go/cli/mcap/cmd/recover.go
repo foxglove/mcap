@@ -12,18 +12,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type recoverOps struct {
+type recoverOptions struct {
 	decodeChunk bool
+	chunkSize   int64
+	compression mcap.CompressionFormat
 }
 
 func recoverRun(
 	r io.Reader,
 	w io.Writer,
-	ops *recoverOps,
+	ops *recoverOptions,
 ) error {
 	decodeChunk := ops.decodeChunk
 	mcapWriter, err := mcap.NewWriter(w, &mcap.WriterOptions{
-		Chunked: true,
+		Chunked:     true,
+		ChunkSize:   ops.chunkSize,
+		Compression: ops.compression,
 	})
 	if err != nil {
 		return err
@@ -66,7 +70,7 @@ func recoverRun(
 
 	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{
 		ValidateChunkCRCs: true,
-		EmitChunks:        true,
+		EmitChunks:        !ops.decodeChunk,
 		EmitInvalidChunks: true,
 		AttachmentCallback: func(ar *mcap.AttachmentReader) error {
 			err = mcapWriter.WriteAttachment(&mcap.Attachment{
@@ -127,7 +131,7 @@ func recoverRun(
 
 		if token != mcap.TokenMessageIndex {
 			if lastChunk != nil {
-				lastIndexes, err := utils.UpdateInfoFromChunk(info, lastChunk, lastIndexes)
+				lastIndexes, err = utils.UpdateInfoFromChunk(info, lastChunk, lastIndexes)
 				if err != nil {
 					fmt.Printf("Failed to update info from chunk, skipping: %s\n", err)
 				} else {
@@ -235,6 +239,27 @@ usage:
 		false,
 		"always decode chunks, even if the file is not chunked",
 	)
+	chunkSize := recoverCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
+	compression := recoverCmd.PersistentFlags().String(
+		"compression",
+		"zstd",
+		"compression algorithm to use on output file",
+	)
+	var compressionFormat mcap.CompressionFormat
+	switch *compression {
+	case CompressionFormatZstd:
+		compressionFormat = mcap.CompressionZSTD
+	case CompressionFormatLz4:
+		compressionFormat = mcap.CompressionLZ4
+	case CompressionFormatNone:
+	case "":
+		compressionFormat = mcap.CompressionNone
+	default:
+		die(
+			"unrecognized compression format '%s': valid options are 'lz4', 'zstd', or 'none'",
+			*compression,
+		)
+	}
 	recoverCmd.Run = func(_ *cobra.Command, args []string) {
 		var reader io.Reader
 		if len(args) == 0 {
@@ -279,8 +304,10 @@ usage:
 			writer = newWriter
 		}
 
-		err := recoverRun(reader, writer, &recoverOps{
+		err := recoverRun(reader, writer, &recoverOptions{
 			decodeChunk: *alwaysDecodeChunk,
+			chunkSize:   *chunkSize,
+			compression: compressionFormat,
 		})
 		if err != nil {
 			die("failed to recover: %s", err)

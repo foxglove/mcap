@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"errors"
 	"hash/crc32"
 	"io"
 	"testing"
@@ -14,7 +15,7 @@ func TestNewChecksummingReaderCounter_WithCRC(t *testing.T) {
 
 	buf := make([]byte, len(data))
 	n, err := crcReader.Read(buf)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if n != len(data) {
@@ -37,7 +38,7 @@ func TestNewChecksummingReaderCounter_WithoutCRC(t *testing.T) {
 
 	buf := make([]byte, len(data))
 	n, err := crcReader.Read(buf)
-	if err != nil && err != io.EOF {
+	if err != nil && errors.Is(err, io.EOF) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if n != len(data) {

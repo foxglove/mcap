@@ -17,7 +17,7 @@ func TestRecover(t *testing.T) {
 		writeFilterTestInput(t, &readBuf)
 		readBuf.Truncate(readBuf.Len() / 2)
 
-		require.NoError(t, recoverRun(&readBuf, &writeBuf, &recoverOps{}))
+		require.NoError(t, recoverRun(&readBuf, &writeBuf, &recoverOptions{}))
 
 		messageCounter := map[uint16]int{
 			1: 0,
@@ -64,7 +64,7 @@ func TestRecover(t *testing.T) {
 		writeFilterTestInput(t, &readBuf)
 		readBuf.Bytes()[0x12b] = 1 // overwrite crc
 
-		require.NoError(t, recoverRun(&readBuf, &writeBuf, &recoverOps{}))
+		require.NoError(t, recoverRun(&readBuf, &writeBuf, &recoverOptions{}))
 		messageCounter := map[uint16]int{
 			1: 0,
 			2: 0,
