@@ -833,6 +833,96 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	require.ErrorIs(t, io.EOF, err)
 }
 
+// Test reading an MCAP with two overlapping chunks, with an AfterNanos filter that causes the
+// chunks to be read in reverse order
+func TestReadingMessageOrderWithFilter(t *testing.T) {
+	buf := &bytes.Buffer{}
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   72,
+		Compression: CompressionLZ4,
+	})
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&Header{}))
+	require.NoError(t, writer.WriteChannel(&Channel{ID: 0}))
+	msgCount := 0
+	addMsg := func(timestamp uint64) {
+		require.NoError(t, writer.WriteMessage(&Message{
+			ChannelID:   0,
+			LogTime:     timestamp,
+			PublishTime: timestamp,
+			Data:        []byte("hello"),
+		}))
+		msgCount++
+	}
+
+	addMsg(100)
+	addMsg(200)
+	addMsg(300)
+	addMsg(400)
+	addMsg(500)
+
+	// this should have filled and closed the first chunk
+	assert.Zero(t, writer.compressedWriter.Size())
+
+	// The second chunk has a message with an earlier log time, but this will be excluded by the filter
+	addMsg(1)
+	addMsg(10100)
+	addMsg(10200)
+	addMsg(10300)
+
+	require.NoError(t, writer.Close())
+
+	// start reading the MCAP back
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	require.NoError(t, err)
+
+	// We will filter out 1 message
+	expectedMsgCount := msgCount - 1
+
+	it, err := reader.Messages(
+		UsingIndex(true),
+		AfterNanos(50),
+		InOrder(LogTimeOrder),
+	)
+	require.NoError(t, err)
+
+	// check that timestamps monotonically increase from the returned iterator
+	var lastSeenTimestamp uint64
+	for i := 0; i < expectedMsgCount; i++ {
+		_, _, msg, err := it.Next(nil)
+		require.NoError(t, err)
+		if i != 0 {
+			assert.Greater(t, msg.LogTime, lastSeenTimestamp)
+		}
+		lastSeenTimestamp = msg.LogTime
+	}
+	_, _, msg, err := it.Next(nil)
+	require.Nil(t, msg)
+	require.ErrorIs(t, io.EOF, err)
+
+	// now try iterating in reverse
+	reverseIt, err := reader.Messages(
+		UsingIndex(true),
+		AfterNanos(50),
+		InOrder(ReverseLogTimeOrder),
+	)
+	require.NoError(t, err)
+
+	// check that timestamps monotonically decrease from the returned iterator
+	for i := 0; i < expectedMsgCount; i++ {
+		_, _, msg, err := reverseIt.NextInto(nil)
+		require.NoError(t, err)
+		if i != 0 {
+			assert.Less(t, msg.LogTime, lastSeenTimestamp)
+		}
+		lastSeenTimestamp = msg.LogTime
+	}
+	_, _, msg, err = reverseIt.Next(nil)
+	require.Nil(t, msg)
+	require.ErrorIs(t, io.EOF, err)
+}
+
 func TestOrderStableWithEquivalentTimestamps(t *testing.T) {
 	buf := &bytes.Buffer{}
 	// write an MCAP with two chunks, where in each chunk all messages have ascending timestamps,
