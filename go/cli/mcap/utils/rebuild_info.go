@@ -177,17 +177,30 @@ func RebuildInfo(reader io.Reader, includeCRC bool) (*RebuildData, error) {
 		Info: info,
 	}
 
-	var position int64
+	var currentPos int64
 
 	lexer, err := mcap.NewLexer(readerCounter, &mcap.LexerOptions{
 		ValidateChunkCRCs: true,
 		EmitChunks:        true,
 		EmitInvalidChunks: true,
 		AttachmentCallback: func(ar *mcap.AttachmentReader) error {
-			info.MetadataIndexes = append(info.MetadataIndexes, &mcap.MetadataIndex{
-				Offset: uint64(position),
-				Length: ar.DataSize,
-				Name:   ar.Name,
+			bufferLen := 1 + // opcode
+				8 + // record length
+				8 + // log time
+				8 + // create time
+				4 + len(ar.Name) + // name
+				4 + len(ar.MediaType) + // media type
+				8 + // content length
+				4 // CRC
+
+			info.AttachmentIndexes = append(info.AttachmentIndexes, &mcap.AttachmentIndex{
+				Offset:     uint64(currentPos),
+				Length:     uint64(bufferLen) + ar.DataSize,
+				DataSize:   ar.DataSize,
+				LogTime:    ar.LogTime,
+				CreateTime: ar.CreateTime,
+				Name:       ar.Name,
+				MediaType:  ar.MediaType,
 			})
 			return nil
 		},
@@ -204,7 +217,7 @@ func RebuildInfo(reader io.Reader, includeCRC bool) (*RebuildData, error) {
 
 	finalizeChunk := func() {
 		if lastChunk != nil {
-			messageIndexEnd := uint64(position)
+			messageIndexEnd := uint64(currentPos)
 			info.ChunkIndexes = append(info.ChunkIndexes, &mcap.ChunkIndex{
 				MessageStartTime:    lastChunk.MessageStartTime,
 				MessageEndTime:      lastChunk.MessageEndTime,
@@ -224,12 +237,11 @@ func RebuildInfo(reader io.Reader, includeCRC bool) (*RebuildData, error) {
 	}
 	buf := make([]byte, 1024)
 	doneReading := false
-
 	for !doneReading {
 		// The offset of the previous read it the last valid position
-		rebuildData.DataEndOffset = position
+		rebuildData.DataEndOffset = currentPos
 
-		position = readerCounter.Count()
+		currentPos = readerCounter.Count()
 
 		rebuildData.DataSectionCRC = readerCounter.Checksum()
 
@@ -294,7 +306,7 @@ func RebuildInfo(reader io.Reader, includeCRC bool) (*RebuildData, error) {
 			lastChunk = chunk
 			lastChunk.Records = recordsCopy
 			messageIndexOffsets = make(map[uint16]uint64)
-			chunkStartOffset = position
+			chunkStartOffset = currentPos
 			chunkEndOffset = readerCounter.Count()
 		case mcap.TokenMessageIndex:
 			if lastChunk == nil {
@@ -305,22 +317,22 @@ func RebuildInfo(reader io.Reader, includeCRC bool) (*RebuildData, error) {
 				return nil, err
 			}
 			lastIndexes = append(lastIndexes, index)
-			messageIndexOffsets[index.ChannelID] = uint64(position)
+			messageIndexOffsets[index.ChannelID] = uint64(currentPos)
 		case mcap.TokenMetadata:
 			metadata, err := mcap.ParseMetadata(data)
 			if err != nil {
 				return nil, err
 			}
 			info.MetadataIndexes = append(info.MetadataIndexes, &mcap.MetadataIndex{
-				Offset: uint64(position),
-				Length: uint64(len(data)),
+				Offset: uint64(currentPos),
+				Length: uint64(len(data) + 8 + 1),
 				Name:   metadata.Name,
 			})
 		case mcap.TokenDataEnd, mcap.TokenFooter:
 			// data section is over, either because the file is over or the summary section starts.
 			doneReading = true
 			// Set the end offset for the data section
-			rebuildData.DataEndOffset = position
+			rebuildData.DataEndOffset = currentPos
 		case mcap.TokenSchema, mcap.TokenChannel, mcap.TokenMessage:
 			return nil, fmt.Errorf("rebuilding info only supports chunked mcaps")
 		case mcap.TokenError:
