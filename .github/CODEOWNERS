@@ -12,18 +12,18 @@
 # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
 # Any file(s) or path(s) not assigned to someone specific falls back to these owners
-* @jtbandes @james-rms
+* @jtbandes @james-rms @sofuture
 
 # Sanity check changes to the owners file for syntax and ordering
-/.github/CODEOWNERS @defunctzombie @jtbandes @james-rms
+/.github/CODEOWNERS @defunctzombie @jtbandes @james-rms @sofuture
 
-/cpp @jtbandes @james-rms
+/cpp @gasmith @jtbandes @james-rms
 
-/go @james-rms
+/go @gasmith @james-rms
 
-/python @jtbandes @james-rms
+/python @gasmith @jtbandes @james-rms
 
-/rust @james-rms @bennetthardwick
+/rust @gasmith @james-rms @bennetthardwick
 
 /swift @jtbandes
 
