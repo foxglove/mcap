@@ -125,6 +125,19 @@ func (w *Writer) WriteSchema(s *Schema) (err error) {
 	return nil
 }
 
+func (w *Writer) AddSchema(s *Schema) {
+	if _, ok := w.schemas[s.ID]; !ok {
+		w.schemaIDs = append(w.schemaIDs, s.ID)
+		w.schemas[s.ID] = s
+		w.Statistics.SchemaCount++
+	}
+}
+
+func (w *Writer) HasSchema(id uint16) bool {
+	_, ok := w.schemas[id]
+	return ok
+}
+
 // WriteChannel writes a channel info record to the output. Channel Info
 // records are uniquely identified within a file by their channel ID. A Channel
 // Info record must occur at least once in the file prior to any message
@@ -165,6 +178,19 @@ func (w *Writer) WriteChannel(c *Channel) error {
 		w.channelIDs = append(w.channelIDs, c.ID)
 	}
 	return nil
+}
+
+func (w *Writer) AddChannel(c *Channel) {
+	if _, ok := w.channels[c.ID]; !ok {
+		w.Statistics.ChannelCount++
+		w.channels[c.ID] = c
+		w.channelIDs = append(w.channelIDs, c.ID)
+	}
+}
+
+func (w *Writer) HasChannel(id uint16) bool {
+	_, ok := w.channels[id]
+	return ok
 }
 
 // WriteMessage writes a message to the output. A message record encodes a
@@ -412,6 +438,90 @@ func (w *Writer) WriteDataEnd(e *DataEnd) error {
 	offset := putUint32(w.msg, e.DataSectionCRC)
 	_, err := w.writeRecord(w.w, OpDataEnd, w.msg[:offset])
 	return err
+}
+
+// WriteChunkWithIndexes writes a chunk record with the associated message indexes to the output.
+func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex) error {
+	if c.UncompressedSize == 0 {
+		return nil
+	}
+
+	compressedlen := len(c.Records)
+	uncompressedlen := c.UncompressedSize
+
+	// the "top fields" are all fields of the chunk record except for the compressed records.
+	topFieldsLen := 8 + 8 + 8 + 4 + 4 + len(c.Compression) + 8
+	msglen := topFieldsLen + compressedlen
+	chunkStartOffset := w.w.Size()
+
+	// when writing a chunk, we don't go through writerecord to avoid needing to
+	// materialize the compressed data again. Instead, write the leading bytes
+	// then copy from the compressed data buffer.
+	recordHeaderLen := 1 + 8 + topFieldsLen
+	w.ensureSized(recordHeaderLen)
+	offset, err := putByte(w.msg, byte(OpChunk))
+	if err != nil {
+		return err
+	}
+
+	offset += putUint64(w.msg[offset:], uint64(msglen))
+	offset += putUint64(w.msg[offset:], c.MessageStartTime)
+	offset += putUint64(w.msg[offset:], c.MessageEndTime)
+	offset += putUint64(w.msg[offset:], uncompressedlen)
+	offset += putUint32(w.msg[offset:], c.UncompressedCRC)
+	offset += putPrefixedString(w.msg[offset:], c.Compression)
+	offset += putUint64(w.msg[offset:], uint64(compressedlen))
+	_, err = w.w.Write(w.msg[:offset])
+	if err != nil {
+		return err
+	}
+	_, err = w.w.Write(c.Records)
+	if err != nil {
+		return err
+	}
+	chunkEndOffset := w.w.Size()
+
+	// message indexes
+	messageIndexOffsets := make(map[uint16]uint64)
+	if !w.opts.SkipMessageIndexing {
+		for _, messageIndex := range messageIndexes {
+			if !messageIndex.IsEmpty() {
+				messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
+				err = w.WriteMessageIndex(messageIndex)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	messageIndexEnd := w.w.Size()
+	messageIndexLength := messageIndexEnd - chunkEndOffset
+	w.ChunkIndexes = append(w.ChunkIndexes, &ChunkIndex{
+		MessageStartTime:    c.MessageStartTime,
+		MessageEndTime:      c.MessageEndTime,
+		ChunkStartOffset:    chunkStartOffset,
+		ChunkLength:         chunkEndOffset - chunkStartOffset,
+		MessageIndexOffsets: messageIndexOffsets,
+		MessageIndexLength:  messageIndexLength,
+		Compression:         CompressionFormat(c.Compression),
+		CompressedSize:      uint64(compressedlen),
+		UncompressedSize:    uncompressedlen,
+	})
+
+	w.Statistics.ChunkCount++
+	w.currentChunkStartTime = math.MaxUint64
+	w.currentChunkEndTime = 0
+	w.currentChunkMessageCount = 0
+
+	if w.Statistics.MessageStartTime == 0 || c.MessageStartTime < w.Statistics.MessageStartTime {
+		w.Statistics.MessageStartTime = c.MessageStartTime
+	}
+	if c.MessageEndTime > w.Statistics.MessageEndTime {
+		w.Statistics.MessageEndTime = c.MessageEndTime
+	}
+
+	return nil
 }
 
 func (w *Writer) flushActiveChunk() error {
