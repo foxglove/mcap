@@ -133,11 +133,6 @@ func (w *Writer) AddSchema(s *Schema) {
 	}
 }
 
-func (w *Writer) HasSchema(id uint16) bool {
-	_, ok := w.schemas[id]
-	return ok
-}
-
 // WriteChannel writes a channel info record to the output. Channel Info
 // records are uniquely identified within a file by their channel ID. A Channel
 // Info record must occur at least once in the file prior to any message
@@ -186,11 +181,6 @@ func (w *Writer) AddChannel(c *Channel) {
 		w.channels[c.ID] = c
 		w.channelIDs = append(w.channelIDs, c.ID)
 	}
-}
-
-func (w *Writer) HasChannel(id uint16) bool {
-	_, ok := w.channels[id]
-	return ok
 }
 
 // WriteMessage writes a message to the output. A message record encodes a
@@ -483,7 +473,7 @@ func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex)
 
 	// message indexes
 	messageIndexOffsets := make(map[uint16]uint64)
-	if !w.opts.SkipMessageIndexing {
+	if !w.opts.SkipMessageIndexing && len(messageIndexes) > 0 {
 		for _, messageIndex := range messageIndexes {
 			if !messageIndex.IsEmpty() {
 				messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
@@ -510,9 +500,6 @@ func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex)
 	})
 
 	w.Statistics.ChunkCount++
-	w.currentChunkStartTime = math.MaxUint64
-	w.currentChunkEndTime = 0
-	w.currentChunkMessageCount = 0
 
 	if w.Statistics.MessageStartTime == 0 || c.MessageStartTime < w.Statistics.MessageStartTime {
 		w.Statistics.MessageStartTime = c.MessageStartTime
@@ -534,81 +521,44 @@ func (w *Writer) flushActiveChunk() error {
 		return err
 	}
 	crc := w.compressedWriter.CRC()
-	compressedlen := w.compressed.Len()
 	uncompressedlen := w.compressedWriter.Size()
-	// the "top fields" are all fields of the chunk record except for the compressed records.
-	topFieldsLen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8
-	msglen := topFieldsLen + compressedlen
-	chunkStartOffset := w.w.Size()
 	var start, end uint64
 	if w.currentChunkMessageCount != 0 {
 		start = w.currentChunkStartTime
 		end = w.currentChunkEndTime
 	}
 
-	// when writing a chunk, we don't go through writerecord to avoid needing to
-	// materialize the compressed data again. Instead, write the leading bytes
-	// then copy from the compressed data buffer.
-	recordHeaderLen := 1 + 8 + topFieldsLen
-	w.ensureSized(recordHeaderLen)
-	offset, err := putByte(w.msg, byte(OpChunk))
-	if err != nil {
-		return err
-	}
-
-	offset += putUint64(w.msg[offset:], uint64(msglen))
-	offset += putUint64(w.msg[offset:], start)
-	offset += putUint64(w.msg[offset:], end)
-	offset += putUint64(w.msg[offset:], uint64(uncompressedlen))
-	offset += putUint32(w.msg[offset:], crc)
-	offset += putPrefixedString(w.msg[offset:], string(w.opts.Compression))
-	offset += putUint64(w.msg[offset:], uint64(w.compressed.Len()))
-	_, err = w.w.Write(w.msg[:offset])
-	if err != nil {
-		return err
-	}
-	_, err = w.w.Write(w.compressed.Bytes())
-	if err != nil {
-		return err
+	chunk := Chunk{
+		MessageStartTime: start,
+		MessageEndTime:   end,
+		UncompressedSize: uint64(uncompressedlen),
+		UncompressedCRC:  crc,
+		Compression:      string(w.opts.Compression),
+		Records:          w.compressed.Bytes(),
 	}
 	w.compressed.Reset()
 	w.compressedWriter.Reset(w.compressed)
 	w.compressedWriter.ResetSize()
 	w.compressedWriter.ResetCRC()
-	chunkEndOffset := w.w.Size()
 
 	// message indexes
-	messageIndexOffsets := make(map[uint16]uint64)
+	messageIndexes := []*MessageIndex{}
 	if !w.opts.SkipMessageIndexing {
 		for _, chanID := range w.channelIDs {
 			messageIndex, ok := w.messageIndexes[chanID]
 			if ok && !messageIndex.IsEmpty() {
-				messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
-				err = w.WriteMessageIndex(messageIndex)
-				if err != nil {
-					return err
-				}
+				messageIndexes = append(messageIndexes, messageIndex)
 			}
 		}
 	}
 
-	messageIndexEnd := w.w.Size()
-	messageIndexLength := messageIndexEnd - chunkEndOffset
-	w.ChunkIndexes = append(w.ChunkIndexes, &ChunkIndex{
-		MessageStartTime:    start,
-		MessageEndTime:      end,
-		ChunkStartOffset:    chunkStartOffset,
-		ChunkLength:         chunkEndOffset - chunkStartOffset,
-		MessageIndexOffsets: messageIndexOffsets,
-		MessageIndexLength:  messageIndexLength,
-		Compression:         w.opts.Compression,
-		CompressedSize:      uint64(compressedlen),
-		UncompressedSize:    uint64(uncompressedlen),
-	})
+	err = w.WriteChunkWithIndexes(&chunk, messageIndexes)
+	if err != nil {
+		return err
+	}
 	for _, idx := range w.messageIndexes {
 		idx.Reset()
 	}
-	w.Statistics.ChunkCount++
 	w.currentChunkStartTime = math.MaxUint64
 	w.currentChunkEndTime = 0
 	w.currentChunkMessageCount = 0

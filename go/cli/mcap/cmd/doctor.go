@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -26,8 +25,7 @@ var (
 )
 
 type mcapDoctor struct {
-	reader             io.ReadSeeker
-	readerChecksumming *utils.ChecksummingReaderCounter
+	reader io.ReadSeeker
 
 	channelsInDataSection              map[uint16]*mcap.Channel
 	schemasInDataSection               map[uint16]*mcap.Schema
@@ -40,11 +38,10 @@ type mcapDoctor struct {
 
 	inSummarySection bool
 
-	messageCount         uint64
-	channelMessageCounts map[uint16]uint64
-	minLogTime           uint64
-	maxLogTime           uint64
-	statistics           *mcap.Statistics
+	messageCount uint64
+	minLogTime   uint64
+	maxLogTime   uint64
+	statistics   *mcap.Statistics
 
 	diagnosis Diagnosis
 }
@@ -164,11 +161,7 @@ func (doctor *mcapDoctor) examineChannel(channel *mcap.Channel) {
 	}
 }
 
-func (doctor *mcapDoctor) examineChunk(
-	chunk *mcap.Chunk,
-	startOffset uint64,
-	messageIndexes map[uint16]*mcap.MessageIndex,
-) {
+func (doctor *mcapDoctor) examineChunk(chunk *mcap.Chunk, startOffset uint64) {
 	referencedChannels := make(map[uint16]bool)
 	compressionFormat := mcap.CompressionFormat(chunk.Compression)
 	var uncompressedBytes []byte
@@ -234,11 +227,6 @@ func (doctor *mcapDoctor) examineChunk(
 
 	msg := make([]byte, 1024)
 	for {
-		currentPosition, err := uncompressedBytesReader.Seek(0, io.SeekCurrent)
-		if err != nil {
-			doctor.error("Failed to determine read cursor: %s", err)
-			return
-		}
 		tokenType, data, err := lexer.Next(msg)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -302,42 +290,6 @@ func (doctor *mcapDoctor) examineChunk(
 
 			chunkMessageCount++
 			doctor.messageCount++
-			doctor.channelMessageCounts[message.ChannelID]++
-
-			if messageIndex, ok := messageIndexes[message.ChannelID]; ok {
-				if messageIndex.ChannelID == message.ChannelID {
-					foundIndexEntry := false
-					for _, index := range messageIndex.Records {
-						if index.Offset == uint64(currentPosition) {
-							if index.Timestamp != message.LogTime {
-								doctor.error(
-									"MessageIndex entry for channel %d at offset %d has timestamp %d, but message has timestamp %d",
-									message.ChannelID,
-									currentPosition,
-									index.Timestamp,
-									message.LogTime,
-								)
-							}
-							foundIndexEntry = true
-							break
-						}
-					}
-
-					if !foundIndexEntry {
-						doctor.warn(
-							"No MessageIndex entry found for message channel %d with log time %d at offset %d",
-							message.ChannelID,
-							message.LogTime,
-							currentPosition,
-						)
-					}
-				}
-			} else {
-				doctor.warn(
-					"No MessageIndex record found for channel %d",
-					message.ChannelID,
-				)
-			}
 
 		default:
 			doctor.error("Illegal record in chunk: %d", tokenType)
@@ -381,7 +333,7 @@ type Diagnosis struct {
 }
 
 func (doctor *mcapDoctor) Examine() Diagnosis {
-	lexer, err := mcap.NewLexer(doctor.readerChecksumming, &mcap.LexerOptions{
+	lexer, err := mcap.NewLexer(doctor.reader, &mcap.LexerOptions{
 		SkipMagic:         false,
 		ValidateChunkCRCs: true,
 		EmitChunks:        true,
@@ -396,14 +348,8 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 	var dataEnd *mcap.DataEnd
 	var footer *mcap.Footer
 	var messageOutsideChunk bool
-	var lastChunk *mcap.Chunk
-	var lastChunkStartOffset uint64
-	var lastChunkMessageIndexes map[uint16]*mcap.MessageIndex
-
 	msg := make([]byte, 1024)
 	for {
-		// Read the crc first since the crc does not contain DataEnd
-		previousCRC := doctor.readerChecksumming.Checksum()
 		tokenType, data, err := lexer.Next(msg)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -420,14 +366,6 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 		lastToken = tokenType
 		if len(data) > len(msg) {
 			msg = data
-		}
-
-		if tokenType != mcap.TokenMessageIndex {
-			if lastChunk != nil {
-				doctor.examineChunk(lastChunk, lastChunkStartOffset, lastChunkMessageIndexes)
-				lastChunk = nil
-				lastChunkMessageIndexes = nil
-			}
 		}
 		switch tokenType {
 		case mcap.TokenHeader:
@@ -447,15 +385,6 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 			footer, err = mcap.ParseFooter(data)
 			if err != nil {
 				doctor.error("Failed to parse footer: %s", err)
-			}
-			// Everything in the footer besides the CRC is contained in the CRC calculation
-			footerHeader := make([]byte, 9)
-			footerHeader[0] = byte(mcap.OpFooter)
-			binary.LittleEndian.PutUint64(footerHeader[1:], 8+8+4)
-			previousCRC = crc32.Update(previousCRC, crc32.IEEETable, footerHeader)
-			previousCRC = crc32.Update(previousCRC, crc32.IEEETable, data[:len(data)-4])
-			if footer.SummaryCRC != 0 && footer.SummaryCRC != previousCRC {
-				doctor.error("Summary CRC mismatch: %x != %x", footer.SummaryCRC, previousCRC)
 			}
 		case mcap.TokenSchema:
 			schema, err := mcap.ParseSchema(data)
@@ -504,32 +433,15 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 				// cannot continue if seek fails
 				doctor.fatalf("failed to determine read cursor: %s", err)
 			}
-			lastChunkStartOffset = uint64(pos - int64(len(data)) - 9)
-
-			lastChunk = chunk
-			// copy the records, since it is referenced and the buffer will be reused
-			recordsCopy := make([]byte, len(lastChunk.Records))
-			copy(recordsCopy, lastChunk.Records)
-			lastChunk.Records = recordsCopy
+			chunkStartOffset := uint64(pos - int64(len(data)) - 9)
+			doctor.examineChunk(chunk, chunkStartOffset)
 		case mcap.TokenMessageIndex:
-			messageIndex, err := mcap.ParseMessageIndex(data)
+			_, err := mcap.ParseMessageIndex(data)
 			if err != nil {
 				doctor.error("Failed to parse message index: %s", err)
 			}
 			if messageOutsideChunk {
 				doctor.warn("Message index in file has message records outside chunks. Indexed readers will miss these messages.")
-			}
-			if lastChunk == nil {
-				doctor.error("Message index found but no chunk before it")
-			} else {
-				if lastChunkMessageIndexes == nil {
-					lastChunkMessageIndexes = make(map[uint16]*mcap.MessageIndex)
-				}
-				if _, ok := lastChunkMessageIndexes[messageIndex.ChannelID]; ok {
-					doctor.warn("Duplicate message index found for channel %d", messageIndex.ChannelID)
-				} else {
-					lastChunkMessageIndexes[messageIndex.ChannelID] = messageIndex
-				}
 			}
 		case mcap.TokenChunkIndex:
 			chunkIndex, err := mcap.ParseChunkIndex(data)
@@ -578,20 +490,11 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 				doctor.error("Failed to parse data end: %s", err)
 			}
 			doctor.inSummarySection = true
-
-			if dataEnd.DataSectionCRC != 0 && dataEnd.DataSectionCRC != previousCRC {
-				doctor.error("Data section CRC mismatch: %x != %x", dataEnd.DataSectionCRC, previousCRC)
-			}
-			doctor.readerChecksumming.ResetCRC()
 		case mcap.TokenError:
 			// this is the value of the tokenType when there is an error
 			// from the lexer, which we caught at the top.
 			doctor.fatalf("Failed to parse:", err)
 		}
-	}
-
-	if lastChunk != nil {
-		doctor.examineChunk(lastChunk, lastChunkStartOffset, lastChunkMessageIndexes)
 	}
 
 	for chunkOffset, chunkIndex := range doctor.chunkIndexes {
@@ -719,16 +622,6 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 				doctor.messageCount,
 			)
 		}
-		for channelID, count := range doctor.channelMessageCounts {
-			if count != doctor.statistics.ChannelMessageCounts[channelID] {
-				doctor.error(
-					"Statistics has message count %d for channel %d, but actual number of messages is %d",
-					doctor.statistics.ChannelMessageCounts[channelID],
-					channelID,
-					count,
-				)
-			}
-		}
 	}
 	return doctor.diagnosis
 }
@@ -736,7 +629,6 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
 	return &mcapDoctor{
 		reader:                             reader,
-		readerChecksumming:                 utils.NewChecksummingReaderCounter(reader, true),
 		channelsInDataSection:              make(map[uint16]*mcap.Channel),
 		channelsReferencedInChunksByOffset: make(map[uint64][]uint16),
 		channelIDsInSummarySection:         make(map[uint16]bool),
@@ -744,7 +636,6 @@ func newMcapDoctor(reader io.ReadSeeker) *mcapDoctor {
 		schemasInDataSection:               make(map[uint16]*mcap.Schema),
 		chunkIndexes:                       make(map[uint64]*mcap.ChunkIndex),
 		minLogTime:                         math.MaxUint64,
-		channelMessageCounts:               make(map[uint16]uint64),
 	}
 }
 

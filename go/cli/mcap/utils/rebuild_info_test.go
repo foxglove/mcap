@@ -21,41 +21,41 @@ func dump(data interface{}) string {
 	return string(b)
 }
 
-func compareInfo(a, b *mcap.Info) error {
-	if a == b {
+func compareInfo(genInfo, realInfo *mcap.Info) error {
+	if genInfo == realInfo {
 		return nil
 	}
-	if a == nil || b == nil {
+	if genInfo == nil || realInfo == nil {
 		return fmt.Errorf("one of the Info structs is nil")
 	}
-	if b.Statistics != nil {
-		if !reflect.DeepEqual(a.Statistics, b.Statistics) {
-			return fmt.Errorf("Statistics mismatch: %s != %s", dump(a.Statistics), dump(b.Statistics))
+	if realInfo.Statistics != nil {
+		if !reflect.DeepEqual(genInfo.Statistics, realInfo.Statistics) {
+			return fmt.Errorf("Statistics mismatch: %s != %s", dump(genInfo.Statistics), dump(realInfo.Statistics))
 		}
 	}
-	if len(b.Channels) > 0 {
-		if !reflect.DeepEqual(a.Channels, b.Channels) {
-			return fmt.Errorf("Channels mismatch: %v != %v", a.Channels, b.Channels)
+	if len(realInfo.Channels) > 0 {
+		if !reflect.DeepEqual(genInfo.Channels, realInfo.Channels) {
+			return fmt.Errorf("Channels mismatch: %v != %v", genInfo.Channels, realInfo.Channels)
 		}
 	}
-	if len(b.Schemas) > 0 {
-		if !reflect.DeepEqual(a.Schemas, b.Schemas) {
-			return fmt.Errorf("Schemas mismatch: %v != %v", a.Schemas, b.Schemas)
+	if len(realInfo.Schemas) > 0 {
+		if !reflect.DeepEqual(genInfo.Schemas, realInfo.Schemas) {
+			return fmt.Errorf("Schemas mismatch: %v != %v", genInfo.Schemas, realInfo.Schemas)
 		}
 	}
-	if len(b.ChunkIndexes) > 0 {
-		if !reflect.DeepEqual(a.ChunkIndexes, b.ChunkIndexes) {
-			return fmt.Errorf("ChunkIndexes mismatch: %s != %s", dump(a.ChunkIndexes), dump(b.ChunkIndexes))
+	if len(realInfo.ChunkIndexes) > 0 {
+		if !reflect.DeepEqual(genInfo.ChunkIndexes, realInfo.ChunkIndexes) {
+			return fmt.Errorf("ChunkIndexes mismatch: %s != %s", dump(genInfo.ChunkIndexes), dump(realInfo.ChunkIndexes))
 		}
 	}
-	if len(b.MetadataIndexes) > 0 {
-		if !reflect.DeepEqual(a.MetadataIndexes, b.MetadataIndexes) {
-			return fmt.Errorf("MetadataIndexes mismatch: %s != %s", dump(a.MetadataIndexes), dump(b.MetadataIndexes))
+	if len(realInfo.MetadataIndexes) > 0 {
+		if !reflect.DeepEqual(genInfo.MetadataIndexes, realInfo.MetadataIndexes) {
+			return fmt.Errorf("MetadataIndexes mismatch: %s != %s", dump(genInfo.MetadataIndexes), dump(realInfo.MetadataIndexes))
 		}
 	}
-	if len(b.AttachmentIndexes) > 0 {
-		if !reflect.DeepEqual(a.AttachmentIndexes, b.AttachmentIndexes) {
-			return fmt.Errorf("AttachmentIndexes mismatch: %s != %s", dump(a.AttachmentIndexes), dump(b.AttachmentIndexes))
+	if len(realInfo.AttachmentIndexes) > 0 {
+		if !reflect.DeepEqual(genInfo.AttachmentIndexes, realInfo.AttachmentIndexes) {
+			return fmt.Errorf("AttachmentIndexes mismatch: %s != %s", dump(genInfo.AttachmentIndexes), dump(realInfo.AttachmentIndexes))
 		}
 	}
 
