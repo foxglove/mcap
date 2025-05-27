@@ -50,12 +50,14 @@ func compareInfo(genInfo, realInfo *mcap.Info) error {
 	}
 	if len(realInfo.MetadataIndexes) > 0 {
 		if !reflect.DeepEqual(genInfo.MetadataIndexes, realInfo.MetadataIndexes) {
-			return fmt.Errorf("MetadataIndexes mismatch: %s != %s", dump(genInfo.MetadataIndexes), dump(realInfo.MetadataIndexes))
+			return fmt.Errorf("MetadataIndexes mismatch: %s != %s",
+				dump(genInfo.MetadataIndexes), dump(realInfo.MetadataIndexes))
 		}
 	}
 	if len(realInfo.AttachmentIndexes) > 0 {
 		if !reflect.DeepEqual(genInfo.AttachmentIndexes, realInfo.AttachmentIndexes) {
-			return fmt.Errorf("AttachmentIndexes mismatch: %s != %s", dump(genInfo.AttachmentIndexes), dump(realInfo.AttachmentIndexes))
+			return fmt.Errorf("AttachmentIndexes mismatch: %s != %s",
+				dump(genInfo.AttachmentIndexes), dump(realInfo.AttachmentIndexes))
 		}
 	}
 
