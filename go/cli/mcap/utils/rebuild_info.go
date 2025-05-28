@@ -243,7 +243,7 @@ func RebuildInfo(reader io.Reader, includeCRC bool) (*RebuildData, error) {
 
 		currentPos = readerCounter.Count()
 
-		rebuildData.DataSectionCRC = readerCounter.Checksum()
+		rebuildData.DataSectionCRC = readerCounter.CRC()
 
 		token, data, err := lexer.Next(buf)
 		if err != nil {

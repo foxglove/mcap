@@ -26,7 +26,7 @@ func TestNewChecksummingReaderCounter_WithCRC(t *testing.T) {
 	}
 
 	expectedCRC := crc32.ChecksumIEEE(data)
-	if crc := crcReader.Checksum(); crc != expectedCRC {
+	if crc := crcReader.CRC(); crc != expectedCRC {
 		t.Errorf("expected checksum %v, got %v", expectedCRC, crc)
 	}
 }
@@ -48,7 +48,7 @@ func TestNewChecksummingReaderCounter_WithoutCRC(t *testing.T) {
 		t.Errorf("expected count %d, got %d", len(data), crcReader.Count())
 	}
 
-	if crc := crcReader.Checksum(); crc != 0 {
+	if crc := crcReader.CRC(); crc != 0 {
 		t.Errorf("expected checksum 0, got %v", crc)
 	}
 }
@@ -60,14 +60,14 @@ func TestNewChecksummingReaderCounter_ResetCRC(t *testing.T) {
 
 	buf := make([]byte, len(data))
 	_, _ = crcReader.Read(buf)
-	crcBefore := crcReader.Checksum()
+	crcBefore := crcReader.CRC()
 	crcReader.ResetCRC()
 
 	// After reset, reading the same data should produce the same checksum
 	reader2 := bytes.NewReader(data)
 	crcReader2 := NewChecksummingReaderCounter(reader2, true)
 	_, _ = crcReader2.Read(buf)
-	crcAfter := crcReader2.Checksum()
+	crcAfter := crcReader2.CRC()
 
 	if crcBefore != crcAfter {
 		t.Errorf("expected checksum after reset to match, got %v and %v", crcBefore, crcAfter)
