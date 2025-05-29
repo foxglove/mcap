@@ -117,14 +117,13 @@ func (w *Writer) WriteSchema(s *Schema) (err error) {
 	if err != nil {
 		return err
 	}
-	if _, ok := w.schemas[s.ID]; !ok {
-		w.schemaIDs = append(w.schemaIDs, s.ID)
-		w.schemas[s.ID] = s
-		w.Statistics.SchemaCount++
-	}
+	w.AddSchema(s)
 	return nil
 }
 
+// AddSchema adds a schema but does not write the schema record to the output.
+// This is useful to add a schema to the summary section without writing it
+// immediately. If the schema already exists, it is not added again.
 func (w *Writer) AddSchema(s *Schema) {
 	if _, ok := w.schemas[s.ID]; !ok {
 		w.schemaIDs = append(w.schemaIDs, s.ID)
@@ -167,14 +166,13 @@ func (w *Writer) WriteChannel(c *Channel) error {
 			return err
 		}
 	}
-	if _, ok := w.channels[c.ID]; !ok {
-		w.Statistics.ChannelCount++
-		w.channels[c.ID] = c
-		w.channelIDs = append(w.channelIDs, c.ID)
-	}
+	w.AddChannel(c)
 	return nil
 }
 
+// AddChannel adds a channel but does not write the channel info record to the output.
+// This is useful to add a channel to the summary section without writing it
+// immediately. If the channel already exists, it is not added again.
 func (w *Writer) AddChannel(c *Channel) {
 	if _, ok := w.channels[c.ID]; !ok {
 		w.Statistics.ChannelCount++
