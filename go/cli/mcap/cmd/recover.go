@@ -123,7 +123,7 @@ func recoverRun(
 				fmt.Println(expected.Error())
 				return nil
 			}
-			return err
+			return nil
 		}
 		if len(data) > len(buf) {
 			buf = data
@@ -212,6 +212,15 @@ func recoverRun(
 				return err
 			}
 			if err := mcapWriter.WriteChannel(channel); err != nil {
+				return err
+			}
+		case mcap.TokenMessage:
+			decodeChunk = true // mcap is not chunked
+			message, err := mcap.ParseMessage(data)
+			if err != nil {
+				return err
+			}
+			if err := mcapWriter.WriteMessage(message); err != nil {
 				return err
 			}
 		case mcap.TokenDataEnd, mcap.TokenFooter:
