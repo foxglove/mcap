@@ -71,10 +71,10 @@ func (doctor *mcapDoctor) fatalf(format string, v ...any) {
 
 func (doctor *mcapDoctor) examineSchema(schema *mcap.Schema) {
 	if !utf8.ValidString(schema.Encoding) {
-		doctor.warn("schema with ID (%d) encoding is not valid UTF-8: %q", schema.ID, schema.Encoding)
+		doctor.error("schema with ID (%d) encoding is not valid UTF-8: %q", schema.ID, schema.Encoding)
 	}
 	if !utf8.ValidString(schema.Name) {
-		doctor.warn("schema with ID (%d) name is not valid UTF-8: %q", schema.ID, schema.Name)
+		doctor.error("schema with ID (%d) name is not valid UTF-8: %q", schema.ID, schema.Name)
 	}
 	if schema.Encoding == "" {
 		if len(schema.Data) == 0 {
@@ -122,17 +122,17 @@ func (doctor *mcapDoctor) examineSchema(schema *mcap.Schema) {
 
 func (doctor *mcapDoctor) examineChannel(channel *mcap.Channel) {
 	if !utf8.ValidString(channel.Topic) {
-		doctor.warn("channel with ID (%d) topic is not valid UTF-8: %q", channel.ID, channel.Topic)
+		doctor.error("channel with ID (%d) topic is not valid UTF-8: %q", channel.ID, channel.Topic)
 	}
 	if !utf8.ValidString(channel.MessageEncoding) {
-		doctor.warn("channel with ID (%d) message encoding is not valid UTF-8: %q", channel.ID, channel.MessageEncoding)
+		doctor.error("channel with ID (%d) message encoding is not valid UTF-8: %q", channel.ID, channel.MessageEncoding)
 	}
 	for key, value := range channel.Metadata {
 		if !utf8.ValidString(key) {
-			doctor.warn("channel with ID (%d) metadata key is not valid UTF-8: %q", channel.ID, key)
+			doctor.error("channel with ID (%d) metadata key is not valid UTF-8: %q", channel.ID, key)
 		}
 		if !utf8.ValidString(value) {
-			doctor.warn("channel with ID (%d) metadata key is not valid UTF-8: %q", channel.ID, value)
+			doctor.error("channel with ID (%d) metadata key is not valid UTF-8: %q", channel.ID, value)
 		}
 	}
 	previous := doctor.channelsInDataSection[channel.ID]
@@ -360,10 +360,10 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 		EmitChunks:        true,
 		AttachmentCallback: func(attachment *mcap.AttachmentReader) error {
 			if !utf8.ValidString(attachment.Name) {
-				doctor.warn("Attachment name %q is not valid utf-8", attachment.Name)
+				doctor.error("Attachment name %q is not valid utf-8", attachment.Name)
 			}
 			if !utf8.ValidString(attachment.MediaType) {
-				doctor.warn("Attachment media type %q is not valid utf-8", attachment.MediaType)
+				doctor.error("Attachment media type %q is not valid utf-8", attachment.MediaType)
 			}
 			return nil
 		},
@@ -408,10 +408,10 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 				doctor.warn("Set the Header.library field to a value that identifies the software that produced the file.")
 			}
 			if !utf8.ValidString(header.Library) {
-				doctor.warn("header library is not valid utf-8: %q", header.Library)
+				doctor.error("header library is not valid utf-8: %q", header.Library)
 			}
 			if !utf8.ValidString(header.Profile) {
-				doctor.warn("header profile is not valid utf-8: %q", header.Profile)
+				doctor.error("header profile is not valid utf-8: %q", header.Profile)
 			}
 			if header.Profile != "" && header.Profile != "ros1" && header.Profile != "ros2" {
 				doctor.warn(`Header.profile field %q is not a well-known profile.`, header.Profile)
@@ -496,10 +496,10 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 				doctor.error("Failed to parse attachment index: %s", err)
 			}
 			if !utf8.ValidString(index.Name) {
-				doctor.warn("Attachment name %q in index is not valid utf-8", index.Name)
+				doctor.error("Attachment name %q in index is not valid utf-8", index.Name)
 			}
 			if !utf8.ValidString(index.MediaType) {
-				doctor.warn("Attachment media type %q in index is not valid utf-8", index.MediaType)
+				doctor.error("Attachment media type %q in index is not valid utf-8", index.MediaType)
 			}
 		case mcap.TokenStatistics:
 			statistics, err := mcap.ParseStatistics(data)
@@ -516,14 +516,14 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 				doctor.error("Failed to parse metadata: %s", err)
 			}
 			if !utf8.ValidString(metadataRecord.Name) {
-				doctor.warn("metadata record name is not valid utf-8: %q", metadataRecord.Name)
+				doctor.error("metadata record name is not valid utf-8: %q", metadataRecord.Name)
 			}
 			for key, value := range metadataRecord.Metadata {
 				if !utf8.ValidString(key) {
-					doctor.warn("metadata with name %q key is not valid utf-8: %q", key)
+					doctor.error("metadata with name %q key is not valid utf-8: %q", metadataRecord.Name, key)
 				}
 				if !utf8.ValidString(value) {
-					doctor.warn("metadata with name %q value is not valid utf-8: %q", value)
+					doctor.error("metadata with name %q value is not valid utf-8: %q", metadataRecord.Name, value)
 				}
 			}
 		case mcap.TokenMetadataIndex:
@@ -532,7 +532,7 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 				doctor.error("Failed to parse metadata index: %s", err)
 			}
 			if !utf8.ValidString(index.Name) {
-				doctor.warn("Metadata name %q in index is not valid utf-8", index.Name)
+				doctor.error("Metadata name %q in index is not valid utf-8", index.Name)
 			}
 		case mcap.TokenSummaryOffset:
 			_, err := mcap.ParseSummaryOffset(data)
@@ -704,7 +704,7 @@ func main(_ *cobra.Command, args []string) {
 	err := utils.WithReader(ctx, filename, func(remote bool, rs io.ReadSeeker) error {
 		doctor := newMcapDoctor(rs)
 		if remote {
-			doctor.warn("Will read full remote file")
+			color.Yellow("Will read full remote file")
 		}
 		if verbose {
 			fmt.Printf("Examining %s\n", args[0])
