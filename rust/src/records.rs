@@ -6,10 +6,7 @@
 //! [`Message`](crate::Message), [`Channel`](crate::Channel), and [`Schema`](crate::Schema),
 //! read from iterators like [`MesssageStream`](crate::MessageStream).
 
-use std::{
-    borrow::Cow,
-    collections::BTreeMap,
-};
+use std::{borrow::Cow, collections::BTreeMap};
 
 use binrw::*;
 
