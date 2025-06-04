@@ -14,7 +14,7 @@ from ._vendor.rosidl_adapter.parser import (
     parse_message_string,
 )
 
-# cSpell:words ftype wstring msgdefs
+# cSpell:words ftype wstring msgdefs typecode tobytes
 
 DecodedMessage = SimpleNamespace
 DecoderFunction = Callable[[bytes], DecodedMessage]
