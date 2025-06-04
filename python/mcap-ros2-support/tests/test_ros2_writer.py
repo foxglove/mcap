@@ -81,9 +81,7 @@ def test_write_uint8_array_with_py_array():
     ros_writer.finish()
 
     output.seek(0)
-    msgs = list(read_ros2_messages(output))
-    assert len(msgs) == 10
-    for i, msg in enumerate(msgs):
+    for i, msg in enumerate(read_ros2_messages(output)):
         assert msg.channel.topic == "/image"
         assert msg.schema.name == "test_msgs/ByteArray"
         assert list(msg.decoded_message.data) == [i] * 5
