@@ -2,6 +2,7 @@
 
 import re
 from io import BytesIO
+import array as py_array
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -13,7 +14,7 @@ from ._vendor.rosidl_adapter.parser import (
     parse_message_string,
 )
 
-# cSpell:words ftype wstring msgdefs
+# cSpell:words ftype wstring msgdefs typecode tobytes
 
 DecodedMessage = SimpleNamespace
 DecoderFunction = Callable[[bytes], DecodedMessage]
@@ -427,6 +428,7 @@ def _write_complex_type(
                     not isinstance(array, list)
                     and not isinstance(array, tuple)
                     and not isinstance(array, bytes)
+                    and not isinstance(array, py_array.array)
                 ):
                     raise ValueError(
                         f'Field "{field.name}" is not an array ({type(array)}) but has array type '
@@ -434,8 +436,12 @@ def _write_complex_type(
                     )
 
                 # Special handling for bytes
-                if isinstance(array, bytes):
-                    byte_array: bytes = array
+                if isinstance(array, bytes) or (
+                    isinstance(array, py_array.array) and array.typecode == "B"
+                ):
+                    byte_array: bytes = (
+                        array if isinstance(array, bytes) else array.tobytes()
+                    )
                     if ftype.type != "uint8" and ftype.type != "byte":
                         raise ValueError(
                             f'Field "{field.name}" has type "uint8[]" but has type "{ftype.type}[]"'
@@ -471,8 +477,11 @@ def _write_complex_type(
 
                     if ftype.is_fixed_size_array() and ftype.array_size is not None:
                         # Convert tuples to lists
-                        list_array = list(array) if isinstance(array, tuple) else array
-
+                        list_array = (
+                            list(array)
+                            if isinstance(array, (tuple, py_array.array))
+                            else array
+                        )
                         # Fixed length array, ensure the input array is the correct length
                         while len(list_array) < ftype.array_size:
                             list_array.append(None)
@@ -492,6 +501,9 @@ def _write_complex_type(
                         ):
                             array = array[: ftype.array_size]
 
+                        array = (
+                            list(array) if isinstance(array, py_array.array) else array
+                        )
                         array = _coerce_values(array, ftype.type, field.default_value)
 
                         # Dynamic length array, write a uint32 prefix
