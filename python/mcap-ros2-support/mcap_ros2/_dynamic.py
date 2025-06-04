@@ -477,8 +477,11 @@ def _write_complex_type(
 
                     if ftype.is_fixed_size_array() and ftype.array_size is not None:
                         # Convert tuples to lists
-                        list_array = list(array) if isinstance(array, tuple) else array
-
+                        list_array = (
+                            list(array)
+                            if isinstance(array, (tuple, py_array.array))
+                            else array
+                        )
                         # Fixed length array, ensure the input array is the correct length
                         while len(list_array) < ftype.array_size:
                             list_array.append(None)
@@ -498,6 +501,9 @@ def _write_complex_type(
                         ):
                             array = array[: ftype.array_size]
 
+                        array = (
+                            list(array) if isinstance(array, py_array.array) else array
+                        )
                         array = _coerce_values(array, ftype.type, field.default_value)
 
                         # Dynamic length array, write a uint32 prefix
