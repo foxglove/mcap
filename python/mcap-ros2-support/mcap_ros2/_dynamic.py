@@ -436,7 +436,10 @@ def _write_complex_type(
                     )
 
                 # Special handling for bytes
-                if (isinstance(array, bytes) or (isinstance(array, py_array.array) and array.typecode == "B")):
+                if (
+                    isinstance(array, bytes)
+                    or (isinstance(array, py_array.array) and array.typecode == "B")
+                ):
                     byte_array: bytes = array if isinstance(array, bytes) else array.tobytes()
                     if ftype.type != "uint8" and ftype.type != "byte":
                         raise ValueError(
