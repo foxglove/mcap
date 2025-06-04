@@ -2,6 +2,7 @@
 
 import re
 from io import BytesIO
+import array as py_array
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -427,6 +428,7 @@ def _write_complex_type(
                     not isinstance(array, list)
                     and not isinstance(array, tuple)
                     and not isinstance(array, bytes)
+                    and not isinstance(array, py_array.array)
                 ):
                     raise ValueError(
                         f'Field "{field.name}" is not an array ({type(array)}) but has array type '
@@ -434,8 +436,8 @@ def _write_complex_type(
                     )
 
                 # Special handling for bytes
-                if isinstance(array, bytes):
-                    byte_array: bytes = array
+                if (isinstance(array, bytes) or (isinstance(array, py_array.array) and array.typecode == "B")):
+                    byte_array: bytes = array if isinstance(array, bytes) else array.tobytes()
                     if ftype.type != "uint8" and ftype.type != "byte":
                         raise ValueError(
                             f'Field "{field.name}" has type "uint8[]" but has type "{ftype.type}[]"'
