@@ -119,13 +119,8 @@ pub struct WriteOptions {
     calculate_data_section_crc: bool,
     calculate_summary_section_crc: bool,
     calculate_attachment_crcs: bool,
-
-    /// Compression level, or zero to use the default compression level.
     #[cfg(any(feature = "zstd", feature = "lz4"))]
     compression_level: u32,
-
-    /// Threads to use for compression, or zero to disable
-    /// multithreaded compression.
     #[cfg(feature = "zstd")]
     compression_threads: u32,
 }
@@ -306,6 +301,23 @@ impl WriteOptions {
     /// section](https://mcap.dev/spec#summary-section). This is on by default.
     pub fn repeat_schemas(mut self, repeat_schemas: bool) -> Self {
         self.repeat_schemas = repeat_schemas;
+        self
+    }
+
+    /// Specifies the compression level to use. A value of zero instructs the
+    /// compressor to use the default compression level.
+    #[cfg(any(feature = "zstd", feature = "lz4"))]
+    pub fn compression_level(mut self, compression_level: u32) -> Self {
+        self.compression_level = compression_level;
+        self
+    }
+
+    /// Specifies how many threads to use for compression. A value of zero
+    /// to disables multithreaded compression. The default number of threads
+    /// is equal to the number of physical CPUs.
+    #[cfg(feature = "zstd")]
+    pub fn compression_threads(mut self, compression_threads: u32) -> Self {
+        self.compression_threads = compression_threads;
         self
     }
 
