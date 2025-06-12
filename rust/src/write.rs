@@ -313,7 +313,7 @@ impl WriteOptions {
     }
 
     /// Specifies how many threads to use for compression. A value of zero
-    /// to disables multithreaded compression. The default number of threads
+    /// disables multithreaded compression. The default number of threads
     /// is equal to the number of physical CPUs.
     #[cfg(feature = "zstd")]
     pub fn compression_threads(mut self, compression_threads: u32) -> Self {
