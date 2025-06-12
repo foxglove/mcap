@@ -119,6 +119,10 @@ pub struct WriteOptions {
     calculate_data_section_crc: bool,
     calculate_summary_section_crc: bool,
     calculate_attachment_crcs: bool,
+    #[cfg(any(feature = "zstd", feature = "lz4"))]
+    compression_level: u32,
+    #[cfg(feature = "zstd")]
+    compression_threads: u32,
 }
 
 impl Default for WriteOptions {
@@ -145,6 +149,10 @@ impl Default for WriteOptions {
             calculate_data_section_crc: true,
             calculate_summary_section_crc: true,
             calculate_attachment_crcs: true,
+            #[cfg(any(feature = "zstd", feature = "lz4"))]
+            compression_level: 0,
+            #[cfg(feature = "zstd")]
+            compression_threads: num_cpus::get_physical() as u32,
         }
     }
 }
@@ -293,6 +301,23 @@ impl WriteOptions {
     /// section](https://mcap.dev/spec#summary-section). This is on by default.
     pub fn repeat_schemas(mut self, repeat_schemas: bool) -> Self {
         self.repeat_schemas = repeat_schemas;
+        self
+    }
+
+    /// Specifies the compression level to use. A value of zero instructs the
+    /// compressor to use the default compression level.
+    #[cfg(any(feature = "zstd", feature = "lz4"))]
+    pub fn compression_level(mut self, compression_level: u32) -> Self {
+        self.compression_level = compression_level;
+        self
+    }
+
+    /// Specifies how many threads to use for compression. A value of zero
+    /// disables multithreaded compression. The default number of threads
+    /// is equal to the number of physical CPUs.
+    #[cfg(feature = "zstd")]
+    pub fn compression_threads(mut self, compression_threads: u32) -> Self {
+        self.compression_threads = compression_threads;
         self
     }
 
@@ -913,6 +938,10 @@ impl<W: Write + Seek> Writer<W> {
                     std::mem::take(&mut self.chunk_mode),
                     self.options.emit_message_indexes,
                     self.options.calculate_chunk_crcs,
+                    #[cfg(any(feature = "zstd", feature = "lz4"))]
+                    self.options.compression_level,
+                    #[cfg(feature = "zstd")]
+                    self.options.compression_threads,
                 )?)
             }
             chunk => chunk,
@@ -1322,6 +1351,8 @@ impl<W: Write + Seek> ChunkWriter<W> {
         mode: ChunkMode,
         emit_message_indexes: bool,
         calculate_chunk_crcs: bool,
+        #[cfg(any(feature = "zstd", feature = "lz4"))] compression_level: u32,
+        #[cfg(feature = "zstd")] compression_threads: u32,
     ) -> McapResult<Self> {
         // Relative to start of original stream.
         let chunk_offset = writer.stream_position()?;
@@ -1362,15 +1393,20 @@ impl<W: Write + Seek> ChunkWriter<W> {
             #[cfg(feature = "zstd")]
             Some(Compression::Zstd) => {
                 #[allow(unused_mut)]
-                let mut enc = zraw::Encoder::with_dictionary(0, &[])?;
+                let mut enc = zraw::Encoder::with_dictionary(compression_level as i32, &[])?;
                 // Enable multithreaded encoding on non-WASM targets.
                 #[cfg(not(target_arch = "wasm32"))]
-                enc.set_parameter(zraw::CParameter::NbWorkers(num_cpus::get_physical() as u32))?;
+                enc.set_parameter(zraw::CParameter::NbWorkers(compression_threads))?;
+
                 Compressor::Zstd(zio::Writer::new(sink, enc))
             }
             #[cfg(feature = "lz4")]
             Some(Compression::Lz4) => Compressor::Lz4(
+                // Note: lz4-1.10.0 supports multithreaded compression
+                // (github.com/lz4/lz4/pull/1336), but this is not yet
+                // available through the lz4 / lz4-sys crates.
                 lz4::EncoderBuilder::new()
+                    .level(compression_level)
                     // Disable the block checksum for wider compatibility with MCAP tooling that
                     // includes a fault block checksum calculation. Since the MCAP spec includes a
                     // CRC for the compressed chunk this would be a superfluous check anyway.
