@@ -119,6 +119,8 @@ pub struct WriteOptions {
     calculate_data_section_crc: bool,
     calculate_summary_section_crc: bool,
     calculate_attachment_crcs: bool,
+    /// Compression level, or zero to use the default compression level.
+    compression_level: u32,
 }
 
 impl Default for WriteOptions {
@@ -145,6 +147,7 @@ impl Default for WriteOptions {
             calculate_data_section_crc: true,
             calculate_summary_section_crc: true,
             calculate_attachment_crcs: true,
+            compression_level: 0,
         }
     }
 }
@@ -913,6 +916,7 @@ impl<W: Write + Seek> Writer<W> {
                     std::mem::take(&mut self.chunk_mode),
                     self.options.emit_message_indexes,
                     self.options.calculate_chunk_crcs,
+                    self.options.compression_level,
                 )?)
             }
             chunk => chunk,
@@ -1322,6 +1326,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         mode: ChunkMode,
         emit_message_indexes: bool,
         calculate_chunk_crcs: bool,
+        compression_level: u32,
     ) -> McapResult<Self> {
         // Relative to start of original stream.
         let chunk_offset = writer.stream_position()?;
@@ -1362,7 +1367,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
             #[cfg(feature = "zstd")]
             Some(Compression::Zstd) => {
                 #[allow(unused_mut)]
-                let mut enc = zraw::Encoder::with_dictionary(0, &[])?;
+                let mut enc = zraw::Encoder::with_dictionary(compression_level as i32, &[])?;
                 // Enable multithreaded encoding on non-WASM targets.
                 #[cfg(not(target_arch = "wasm32"))]
                 enc.set_parameter(zraw::CParameter::NbWorkers(num_cpus::get_physical() as u32))?;
@@ -1371,6 +1376,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
             #[cfg(feature = "lz4")]
             Some(Compression::Lz4) => Compressor::Lz4(
                 lz4::EncoderBuilder::new()
+                    .level(compression_level)
                     // Disable the block checksum for wider compatibility with MCAP tooling that
                     // includes a fault block checksum calculation. Since the MCAP spec includes a
                     // CRC for the compressed chunk this would be a superfluous check anyway.
