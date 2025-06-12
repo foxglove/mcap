@@ -126,7 +126,7 @@ pub struct WriteOptions {
 
     /// Threads to use for compression, or zero to disable
     /// multithreaded compression.
-    #[cfg(any(feature = "zstd", feature = "lz4"))]
+    #[cfg(feature = "zstd")]
     compression_threads: u32,
 }
 
@@ -156,7 +156,7 @@ impl Default for WriteOptions {
             calculate_attachment_crcs: true,
             #[cfg(any(feature = "zstd", feature = "lz4"))]
             compression_level: 0,
-            #[cfg(any(feature = "zstd", feature = "lz4"))]
+            #[cfg(feature = "zstd")]
             compression_threads: num_cpus::get_physical() as u32,
         }
     }
@@ -928,7 +928,7 @@ impl<W: Write + Seek> Writer<W> {
                     self.options.calculate_chunk_crcs,
                     #[cfg(any(feature = "zstd", feature = "lz4"))]
                     self.options.compression_level,
-                    #[cfg(any(feature = "zstd", feature = "lz4"))]
+                    #[cfg(feature = "zstd")]
                     self.options.compression_threads,
                 )?)
             }
@@ -1340,7 +1340,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         emit_message_indexes: bool,
         calculate_chunk_crcs: bool,
         #[cfg(any(feature = "zstd", feature = "lz4"))] compression_level: u32,
-        #[cfg(any(feature = "zstd", feature = "lz4"))] compression_threads: u32,
+        #[cfg(feature = "zstd")] compression_threads: u32,
     ) -> McapResult<Self> {
         // Relative to start of original stream.
         let chunk_offset = writer.stream_position()?;
