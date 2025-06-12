@@ -121,6 +121,9 @@ pub struct WriteOptions {
     calculate_attachment_crcs: bool,
     /// Compression level, or zero to use the default compression level.
     compression_level: u32,
+    /// Threads to use for compression, or zero to disable
+    /// multithreaded compression.
+    compression_threads: u32,
 }
 
 impl Default for WriteOptions {
@@ -148,6 +151,7 @@ impl Default for WriteOptions {
             calculate_summary_section_crc: true,
             calculate_attachment_crcs: true,
             compression_level: 0,
+            compression_threads: num_cpus::get_physical() as u32,
         }
     }
 }
@@ -917,6 +921,7 @@ impl<W: Write + Seek> Writer<W> {
                     self.options.emit_message_indexes,
                     self.options.calculate_chunk_crcs,
                     self.options.compression_level,
+                    self.options.compression_threads,
                 )?)
             }
             chunk => chunk,
@@ -1327,6 +1332,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         emit_message_indexes: bool,
         calculate_chunk_crcs: bool,
         compression_level: u32,
+        compression_threads: u32,
     ) -> McapResult<Self> {
         // Relative to start of original stream.
         let chunk_offset = writer.stream_position()?;
@@ -1370,11 +1376,15 @@ impl<W: Write + Seek> ChunkWriter<W> {
                 let mut enc = zraw::Encoder::with_dictionary(compression_level as i32, &[])?;
                 // Enable multithreaded encoding on non-WASM targets.
                 #[cfg(not(target_arch = "wasm32"))]
-                enc.set_parameter(zraw::CParameter::NbWorkers(num_cpus::get_physical() as u32))?;
+                enc.set_parameter(zraw::CParameter::NbWorkers(compression_threads))?;
+
                 Compressor::Zstd(zio::Writer::new(sink, enc))
             }
             #[cfg(feature = "lz4")]
             Some(Compression::Lz4) => Compressor::Lz4(
+                // Note: lz4-1.10.0 supports multithreaded compression
+                // (github.com/lz4/lz4/pull/1336), but this is not yet
+                // available through the lz4 / lz4-sys crates.
                 lz4::EncoderBuilder::new()
                     .level(compression_level)
                     // Disable the block checksum for wider compatibility with MCAP tooling that
