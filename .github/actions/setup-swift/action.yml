@@ -24,8 +24,8 @@ runs:
         export SWIFTLY_HOME_DIR="$HOME/.local/share/swiftly"
         export SWIFTLY_BIN_DIR="$HOME/.local/share/swiftly/bin"
 
-        echo "SWIFTLY_HOME_DIR=$SWIFTY_HOME_DIR" >> $GITHUB_ENV
-        echo "SWIFTLY_BIN_DIR=$SWIFTY_BIN_DIR" >> $GITHUB_ENV
+        echo "SWIFTLY_HOME_DIR=$SWIFTLY_HOME_DIR" >> $GITHUB_ENV
+        echo "SWIFTLY_BIN_DIR=$SWIFTLY_BIN_DIR" >> $GITHUB_ENV
         echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
 
         ./swiftly init --no-modify-profile --assume-yes --skip-install
