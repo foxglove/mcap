@@ -21,7 +21,7 @@ runs:
 
         tar xzf $archive
 
-        ./swiftly init --no-modify-profile --assume-yes --verbose --skip-install
+        ./swiftly init --no-modify-profile --assume-yes --skip-install
 
     - name: export swift env
       shell: bash
