@@ -37,3 +37,5 @@ runs:
     - name: install swift
       shell: bash
       run: swiftly install --use -y ${{ inputs.swift-version }}
+    - shell: bash
+      run: swift --version
