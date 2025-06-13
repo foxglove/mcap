@@ -28,7 +28,7 @@ runs:
       run: |
         echo "SWIFTLY_HOME_DIR=$HOME/.local/share/swiftly" >> $GITHUB_ENV
         echo "SWIFTLY_BIN_DIR=$HOME/.local/share/swiftly/bin" >> $GITHUB_ENV
-        echo "$SWIFTLY_BIN_DIR" >> $GITHUB_PATH
+        echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
 
     - name: install swift
       shell: bash
