@@ -127,7 +127,7 @@ jobs:
       - run: yarn test:conformance --runner ksy-
 
   conformance-swift:
-    runs-on: ubuntu-22.04 # https://github.com/swift-actions/setup-swift/issues/677
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -137,9 +137,9 @@ jobs:
         with:
           node-version: 20.x
           cache: yarn
-      - uses: swift-actions/setup-swift@v2
+      - uses: ./.github/actions/setup-swift
         with:
-          swift-version: "5.7"
+          swift-version: "6.1"
       - run: swift build
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
@@ -468,14 +468,14 @@ jobs:
           draft: false
 
   swift:
-    runs-on: ubuntu-22.04 # https://github.com/swift-actions/setup-swift/issues/677
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           lfs: false
-      - uses: swift-actions/setup-swift@v2
+      - uses: ./.github/actions/setup-swift
         with:
-          swift-version: "6.0"
+          swift-version: "6.1"
       - run: docker run -t --rm -v $(pwd):/work -w /work ghcr.io/realm/swiftlint:0.58.2
       - run: docker run -t --rm -v $(pwd):/work ghcr.io/nicklockwood/swiftformat:0.55.5 --lint /work
       - run: swift build
