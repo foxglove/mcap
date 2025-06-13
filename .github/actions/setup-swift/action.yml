@@ -1,0 +1,32 @@
+name: Setup Rust
+inputs:
+  swift-version:
+    description: "The Swift version"
+    default: latest
+
+runs:
+  using: composite
+  steps:
+    - name: install swiftly
+      shell: bash
+      run: |
+        set -e
+
+        checksum="8c11f8bdeee212ed4b541a1ce2708866d4d290fdfe02362b0048b4cc57614341"
+        version="1.0.0"
+        archive="swiftly-$version-x86_64.tar.gz"
+
+        wget https://download.swift.org/swiftly/linux/$archive
+        echo "$checksum  ./$archive" | sha256sum --check
+
+        tar xzf $archive
+
+        ./swiftly init --assume-yes --verbose --skip-install
+
+        echo "SWIFTLY_HOME_DIR=$HOME/.local/share/swiftly" >> $GITHUB_ENV
+        echo "SWIFTLY_BIN_DIR=$HOME/.local/share/swiftly/bin" >> $GITHUB_ENV
+        echo "$SWIFTLY_BIN_DIR" >> $GITHUB_PATH
+
+    - name: install swift
+      shell: bash
+      run: swiftly install ${{ inputs.swift-version }}
