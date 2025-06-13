@@ -15,6 +15,8 @@ runs:
       shell: bash
     - run: ./swiftly init --skip-install
       shell: bash
+    - run: echo "source ~/.local/share/swiftly/env.sh" >> ~/.bashrc
+      shell: bash
     - run: swiftly install --use ${{ inputs.swift-version }}
       shell: bash
     - run: which swift
