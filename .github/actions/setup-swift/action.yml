@@ -2,7 +2,7 @@ name: Setup Swift
 inputs:
   swift-version:
     description: "The Swift version"
-    default: latest
+    required: true
 
 runs:
   using: composite
