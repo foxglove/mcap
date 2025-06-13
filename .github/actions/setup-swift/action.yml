@@ -15,7 +15,7 @@ runs:
       shell: bash
     - run: ./swiftly init --skip-install
       shell: bash
-    - run: ./swiftly install --use ${{ inputs.swift-version }}
+    - run: swiftly install --use ${{ inputs.swift-version }}
       shell: bash
     - run: which swift
       shell: bash
