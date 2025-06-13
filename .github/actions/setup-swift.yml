@@ -1,0 +1,8 @@
+name: Set up Swift
+runs:
+  using: composite
+  steps:
+    - run: curl -O https://download.swift.org/swiftly/linux/swiftly-1.0.0-x86_64.tar.gz
+    - run: echo "8c11f8bdeee212ed4b541a1ce2708866d4d290fdfe02362b0048b4cc57614341 swiftly-1.0.0-x86_64.tar.gz" | sha256sum --check --strict
+    - run: tar -zxf swiftly-1.0.0-x86_64.tar.gz
+    - run: ./swiftly init
