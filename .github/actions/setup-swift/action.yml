@@ -21,7 +21,7 @@ runs:
 
         tar xzf $archive
 
-        ./swiftly init --assume-yes --verbose --skip-install
+        ./swiftly init --no-modify-profile --assume-yes --verbose --skip-install
 
         echo "SWIFTLY_HOME_DIR=$HOME/.local/share/swiftly" >> $GITHUB_ENV
         echo "SWIFTLY_BIN_DIR=$HOME/.local/share/swiftly/bin" >> $GITHUB_ENV
