@@ -139,7 +139,7 @@ jobs:
           cache: yarn
       - uses: ./.github/actions/setup-swift
         with:
-          swift-version: "5.7"
+          swift-version: "5.10"
       - run: swift build
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
