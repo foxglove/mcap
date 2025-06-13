@@ -75,6 +75,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-swift
+        with:
+          swift-version: 6.1.2
 
       - run: mkdir __docs__
 

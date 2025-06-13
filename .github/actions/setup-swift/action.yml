@@ -13,5 +13,13 @@ runs:
       shell: bash
     - run: tar -zxf swiftly-1.0.0-x86_64.tar.gz
       shell: bash
-    - run: ./swiftly init
+    - run: ./swiftly init --skip-install
+      shell: bash
+    - run: ./swiftly install --use ${{ inputs.swift-version }}
+      shell: bash
+    - run: which swift
+      shell: bash
+    - run: swift --version
+      shell: bash
+    - run: "false"
       shell: bash
