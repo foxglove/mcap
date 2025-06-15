@@ -29,12 +29,6 @@ type McapReaderOptions = {
    * reading starts in the middle of an MCAP file.
    */
   noMagicPrefix?: boolean;
-
-  /**
-   * When set to true, Unknown records will be returned from `nextRecord` instead of being skipped.
-   * This is useful for handling application extensions and user records.
-   */
-  includeUnknownRecords?: boolean;
 };
 
 /**
@@ -61,7 +55,6 @@ export default class McapStreamReader {
   #reader = new Reader(this.#view);
   #decompressHandlers;
   #includeChunks;
-  #includeUnknownRecords;
   #validateCrcs;
   #noMagicPrefix;
   #doneReading = false;
@@ -73,13 +66,11 @@ export default class McapStreamReader {
     decompressHandlers = {},
     validateCrcs = true,
     noMagicPrefix = false,
-    includeUnknownRecords = false,
   }: McapReaderOptions = {}) {
     this.#includeChunks = includeChunks;
     this.#decompressHandlers = decompressHandlers;
     this.#validateCrcs = validateCrcs;
     this.#noMagicPrefix = noMagicPrefix;
-    this.#includeUnknownRecords = includeUnknownRecords;
   }
 
   /** @returns True if a valid, complete mcap file has been parsed. */
@@ -214,11 +205,6 @@ export default class McapStreamReader {
       }
 
       switch (record.type) {
-        case "Unknown":
-          if (this.#includeUnknownRecords) {
-            yield record;
-          }
-          break;
         case "Header":
           if (header) {
             throw new Error(
@@ -228,6 +214,7 @@ export default class McapStreamReader {
           header = record;
           yield record;
           break;
+        case "Unknown":
         case "Schema":
         case "Channel":
         case "Message":
@@ -268,11 +255,6 @@ export default class McapStreamReader {
           let chunkRecord;
           while ((chunkRecord = parseRecord(chunkReader, this.#validateCrcs))) {
             switch (chunkRecord.type) {
-              case "Unknown":
-                if (this.#includeUnknownRecords) {
-                  yield chunkRecord;
-                }
-                break;
               case "Header":
               case "Footer":
               case "Chunk":
@@ -286,6 +268,7 @@ export default class McapStreamReader {
               case "SummaryOffset":
               case "DataEnd":
                 throw errorWithLibrary(`${chunkRecord.type} record not allowed inside a chunk`);
+              case "Unknown":
               case "Schema":
               case "Channel":
               case "Message":
