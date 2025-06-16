@@ -32,33 +32,6 @@ enum WriteMode<W: Write + Seek> {
     Attachment(AttachmentWriter<CountingCrcWriter<W>>),
 }
 
-/// A [`CustomRecord`] is a record that exists as part of an application or user MCAP extension.
-///
-/// MCAP files containing custom records may not be supported by other tools.
-pub trait CustomRecord {
-    /// The opcode of the record.
-    ///
-    /// This must be in the range 0x80 - 0xFF as other values are reserved by the MCAP spec.
-    fn opcode(&self) -> u8;
-    /// Whether the record can be written to a chunk or not.
-    fn chunkable(&self) -> bool;
-    /// The data bytes for the custom record.
-    fn data(&self) -> &[u8];
-}
-
-fn write_custom_record<W: Write, R: CustomRecord>(w: &mut W, r: &R) -> io::Result<()> {
-    let data = r.data();
-    let len = data.len();
-    let op = r.opcode();
-    assert!(
-        op >= 0x80,
-        "custom records must have opcode in range 0x80-0xFF"
-    );
-    op_and_len(w, op, len as u64)?;
-    w.write_all(data)?;
-    Ok(())
-}
-
 fn op_and_len<W: Write>(w: &mut W, op: u8, len: u64) -> io::Result<()> {
     w.write_u8(op)?;
     w.write_u64::<LE>(len)?;
@@ -121,7 +94,16 @@ fn write_record<W: Write>(mut w: &mut W, r: &Record) -> io::Result<()> {
         Record::MetadataIndex(mi) => record!(op::METADATA_INDEX, mi),
         Record::SummaryOffset(so) => record!(op::SUMMARY_OFFSET, so),
         Record::DataEnd(eod) => record!(op::DATA_END, eod),
-        _ => todo!(),
+        Record::Unknown { opcode, data } => {
+            let len = data.len();
+            let op = *opcode;
+            assert!(
+                op >= 0x80,
+                "unknown records must have opcode in range 0x80-0xFF"
+            );
+            op_and_len(w, op, len as u64)?;
+            w.write_all(data)?;
+        }
     };
     Ok(())
 }
@@ -541,21 +523,18 @@ impl<W: Write + Seek> Writer<W> {
 
     /// Write a schema record into the MCAP.
     fn write_schema(&mut self, schema: Schema) -> McapResult<()> {
-        if self.options.use_chunks {
-            self.start_chunk()?.write_schema(schema)
-        } else {
-            let header = records::SchemaHeader {
+        let record = Record::Schema {
+            header: records::SchemaHeader {
                 id: schema.id,
                 name: schema.name,
                 encoding: schema.encoding,
-            };
-            Ok(write_record(
-                &mut self.finish_chunk()?,
-                &Record::Schema {
-                    header,
-                    data: schema.data,
-                },
-            )?)
+            },
+            data: schema.data,
+        };
+        if self.options.use_chunks {
+            self.start_chunk()?.write_record(&record)
+        } else {
+            Ok(write_record(&mut self.finish_chunk()?, &record)?)
         }
     }
 
@@ -615,13 +594,11 @@ impl<W: Write + Seek> Writer<W> {
 
     /// Write a channel record into the MCAP.
     fn write_channel(&mut self, channel: records::Channel) -> McapResult<()> {
+        let record = Record::Channel(channel);
         if self.options.use_chunks {
-            self.start_chunk()?.write_channel(channel)
+            self.start_chunk()?.write_record(&record)
         } else {
-            Ok(write_record(
-                self.finish_chunk()?,
-                &Record::Channel(channel),
-            )?)
+            Ok(write_record(self.finish_chunk()?, &record)?)
         }
     }
 
@@ -765,11 +742,21 @@ impl<W: Write + Seek> Writer<W> {
     /// will be written to a chunk.
     ///
     /// If the record has an invalid opcode this method will panic.
-    pub fn write_custom_record<R: CustomRecord>(&mut self, record: &R) -> McapResult<()> {
-        if record.chunkable() && self.options.use_chunks {
-            self.start_chunk()?.write_custom_record(record)?;
+    pub fn write_unknown_record(
+        &mut self,
+        opcode: u8,
+        data: &[u8],
+        chunkable: bool,
+    ) -> McapResult<()> {
+        let record = Record::Unknown {
+            opcode,
+            data: Cow::Borrowed(data),
+        };
+
+        if chunkable && self.options.use_chunks {
+            self.start_chunk()?.write_record(&record)?;
         } else {
-            write_custom_record(self.finish_chunk()?, record)?;
+            write_record(self.finish_chunk()?, &record)?;
         }
         Ok(())
     }
@@ -1473,29 +1460,8 @@ impl<W: Write + Seek> ChunkWriter<W> {
         })
     }
 
-    fn write_schema(&mut self, schema: Schema) -> McapResult<()> {
-        let header = records::SchemaHeader {
-            id: schema.id,
-            name: schema.name,
-            encoding: schema.encoding,
-        };
-        write_record(
-            &mut self.compressor,
-            &Record::Schema {
-                header,
-                data: schema.data,
-            },
-        )?;
-        Ok(())
-    }
-
-    fn write_custom_record<R: CustomRecord>(&mut self, record: &R) -> McapResult<()> {
-        write_custom_record(&mut self.compressor, record)?;
-        Ok(())
-    }
-
-    fn write_channel(&mut self, chan: records::Channel) -> McapResult<()> {
-        write_record(&mut self.compressor, &Record::Channel(chan))?;
+    fn write_record(&mut self, record: &Record) -> McapResult<()> {
+        write_record(&mut self.compressor, record)?;
         Ok(())
     }
 
@@ -1517,13 +1483,11 @@ impl<W: Write + Seek> ChunkWriter<W> {
                 });
         }
 
-        write_record(
-            &mut self.compressor,
-            &Record::Message {
-                header: *header,
-                data: Cow::Borrowed(data),
-            },
-        )?;
+        self.write_record(&Record::Message {
+            header: *header,
+            data: Cow::Borrowed(data),
+        })?;
+
         Ok(())
     }
 
@@ -1720,7 +1684,7 @@ impl<W: Write + Seek> AttachmentWriter<W> {
 mod tests {
     use std::sync::Arc;
 
-    use crate::read::{ChunkFlattener, LinearReader, Options};
+    use crate::read::LinearReader;
 
     use super::*;
     #[test]
@@ -2121,41 +2085,12 @@ mod tests {
             .create(Cursor::new(&mut file))
             .expect("failed to construct writer");
 
-        struct MyRecord {
-            value: String,
-            chunkable: bool,
-        }
-
-        impl CustomRecord for MyRecord {
-            fn opcode(&self) -> u8 {
-                if self.chunkable {
-                    0x81
-                } else {
-                    0x82
-                }
-            }
-
-            fn chunkable(&self) -> bool {
-                self.chunkable
-            }
-
-            fn data(&self) -> &[u8] {
-                self.value.as_bytes()
-            }
-        }
-
         writer
-            .write_custom_record(&MyRecord {
-                value: "this is in a chunk".to_string(),
-                chunkable: true,
-            })
+            .write_unknown_record(0x81, b"this is in a chunk", true)
             .expect("failed to write");
 
         writer
-            .write_custom_record(&MyRecord {
-                value: "this is not in a chunk".to_string(),
-                chunkable: false,
-            })
+            .write_unknown_record(0x82, b"this is not in a chunk", false)
             .expect("failed to write");
 
         drop(writer);
