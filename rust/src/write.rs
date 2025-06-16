@@ -39,9 +39,9 @@ pub trait CustomRecord {
     /// The opcode of the record.
     ///
     /// This must be in the range 0x80 - 0xFF as other values are reserved by the MCAP spec.
-    const OPCODE: u8;
+    fn opcode(&self) -> u8;
     /// Whether the record can be written to a chunk or not.
-    const CHUNKABLE: bool;
+    fn chunkable(&self) -> bool;
     /// The data bytes for the custom record.
     fn data(&self) -> &[u8];
 }
@@ -49,12 +49,12 @@ pub trait CustomRecord {
 fn write_custom_record<W: Write, R: CustomRecord>(w: &mut W, r: &R) -> io::Result<()> {
     let data = r.data();
     let len = data.len();
-    let op = R::OPCODE;
+    let op = r.opcode();
     assert!(
         op >= 0x80,
         "custom records must have opcode in range 0x80-0xFF"
     );
-    op_and_len(w, R::OPCODE, len as u64)?;
+    op_and_len(w, op, len as u64)?;
     w.write_all(data)?;
     Ok(())
 }
@@ -761,12 +761,12 @@ impl<W: Write + Seek> Writer<W> {
 
     /// Write a [`CustomRecord`].
     ///
-    /// If [`CustomRecord::CHUNKABLE`] and [`WriteOptions::use_chunks`] are set then this record
+    /// If [`CustomRecord::chunkable`] and [`WriteOptions::use_chunks`] are set then this record
     /// will be written to a chunk.
     ///
     /// If the record has an invalid opcode this method will panic.
     pub fn write_custom_record<R: CustomRecord>(&mut self, record: &R) -> McapResult<()> {
-        if R::CHUNKABLE && self.options.use_chunks {
+        if record.chunkable() && self.options.use_chunks {
             self.start_chunk()?.write_custom_record(record)?;
         } else {
             write_custom_record(self.finish_chunk()?, record)?;
@@ -1720,6 +1720,8 @@ impl<W: Write + Seek> AttachmentWriter<W> {
 mod tests {
     use std::sync::Arc;
 
+    use crate::read::{ChunkFlattener, LinearReader, Options};
+
     use super::*;
     #[test]
     fn writes_all_channel_ids() {
@@ -2107,5 +2109,81 @@ mod tests {
             .expect("expected a summary");
         assert_eq!(summary.channels.len(), 2);
         assert_eq!(summary.schemas.len(), 2);
+    }
+
+    #[test]
+    fn test_writes_custom_record_to_chunk() {
+        let mut file = vec![];
+
+        let mut writer = WriteOptions::new()
+            .use_chunks(true)
+            .compression(None)
+            .create(Cursor::new(&mut file))
+            .expect("failed to construct writer");
+
+        struct MyRecord {
+            value: String,
+            chunkable: bool,
+        }
+
+        impl CustomRecord for MyRecord {
+            fn opcode(&self) -> u8 {
+                if self.chunkable {
+                    0x81
+                } else {
+                    0x82
+                }
+            }
+
+            fn chunkable(&self) -> bool {
+                self.chunkable
+            }
+
+            fn data(&self) -> &[u8] {
+                self.value.as_bytes()
+            }
+        }
+
+        writer
+            .write_custom_record(&MyRecord {
+                value: "this is in a chunk".to_string(),
+                chunkable: true,
+            })
+            .expect("failed to write");
+
+        writer
+            .write_custom_record(&MyRecord {
+                value: "this is not in a chunk".to_string(),
+                chunkable: false,
+            })
+            .expect("failed to write");
+
+        drop(writer);
+
+        let mut reader = LinearReader::new(&file[..]).expect("failed to construct reader");
+
+        let Record::Header(_) = reader.next().unwrap().unwrap() else {
+            panic!("expected header for first record");
+        };
+
+        let Record::Chunk { data, .. } = reader.next().unwrap().unwrap() else {
+            panic!("expected chunk for next record");
+        };
+
+        let mut chunk_reader = LinearReader::sans_magic(&data[..]);
+
+        let Record::Unknown { opcode, data } = chunk_reader.next().unwrap().unwrap() else {
+            panic!("expected chunk to contain unknown record");
+        };
+
+        assert_eq!(opcode, 0x81);
+        assert_eq!(String::from_utf8_lossy(&data[..]), "this is in a chunk");
+
+        let Record::Unknown { opcode, data } = reader.next().unwrap().unwrap() else {
+            panic!("expected chunk for next record");
+        };
+
+        assert_eq!(opcode, 0x82);
+        assert_eq!(String::from_utf8_lossy(&data[..]), "this is not in a chunk");
     }
 }
