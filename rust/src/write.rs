@@ -736,12 +736,11 @@ impl<W: Write + Seek> Writer<W> {
         Ok(())
     }
 
-    /// Write a [`CustomRecord`].
+    /// Write an unknown record. If the record can be present in chunks then the `chunkable` flag
+    /// should be set to true.
     ///
-    /// If [`CustomRecord::chunkable`] and [`WriteOptions::use_chunks`] are set then this record
-    /// will be written to a chunk.
-    ///
-    /// If the record has an invalid opcode this method will panic.
+    /// Unknown records must have a non-reserved opcode. This method will panic if provided a
+    /// method with an invalid opcode.
     pub fn write_unknown_record(
         &mut self,
         opcode: u8,
