@@ -32,6 +32,33 @@ enum WriteMode<W: Write + Seek> {
     Attachment(AttachmentWriter<CountingCrcWriter<W>>),
 }
 
+/// A [`CustomRecord`] is a record that exists as part of an application or user MCAP extension.
+///
+/// MCAP files containing custom records may not be supported by other tools.
+pub trait CustomRecord {
+    /// The opcode of the record.
+    ///
+    /// This must be in the range 0x80 - 0xFF as other values are reserved by the MCAP spec.
+    const OPCODE: u8;
+    /// Whether the record can be written to a chunk or not.
+    const CHUNKABLE: bool;
+    /// The data bytes for the custom record.
+    fn data(&self) -> &[u8];
+}
+
+fn write_custom_record<W: Write, R: CustomRecord>(w: &mut W, r: &R) -> io::Result<()> {
+    let data = r.data();
+    let len = data.len();
+    let op = R::OPCODE;
+    assert!(
+        op >= 0x80,
+        "custom records must have opcode in range 0x80-0xFF"
+    );
+    op_and_len(w, R::OPCODE, len as u64)?;
+    w.write_all(data)?;
+    Ok(())
+}
+
 fn op_and_len<W: Write>(w: &mut W, op: u8, len: u64) -> io::Result<()> {
     w.write_u8(op)?;
     w.write_u64::<LE>(len)?;
@@ -728,6 +755,21 @@ impl<W: Write + Seek> Writer<W> {
                     data: Cow::Borrowed(data),
                 },
             )?;
+        }
+        Ok(())
+    }
+
+    /// Write a [`CustomRecord`].
+    ///
+    /// If [`CustomRecord::CHUNKABLE`] and [`WriteOptions::use_chunks`] are set then this record
+    /// will be written to a chunk.
+    ///
+    /// If the record has an invalid opcode this method will panic.
+    pub fn write_custom_record<R: CustomRecord>(&mut self, record: &R) -> McapResult<()> {
+        if R::CHUNKABLE && self.options.use_chunks {
+            self.start_chunk()?.write_custom_record(record)?;
+        } else {
+            write_custom_record(self.finish_chunk()?, record)?;
         }
         Ok(())
     }
@@ -1444,6 +1486,11 @@ impl<W: Write + Seek> ChunkWriter<W> {
                 data: schema.data,
             },
         )?;
+        Ok(())
+    }
+
+    fn write_custom_record<R: CustomRecord>(&mut self, record: &R) -> McapResult<()> {
+        write_custom_record(&mut self.compressor, record)?;
         Ok(())
     }
 
