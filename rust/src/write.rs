@@ -732,12 +732,11 @@ impl<W: Write + Seek> Writer<W> {
         Ok(())
     }
 
-    /// Write an unknown record. If the record can be present in chunks then the `chunkable` flag
+    /// Write a private record. If the record can be present in chunks then the `chunkable` flag
     /// should be set to true.
     ///
-    /// Extension records must have a non-reserved opcode. This method will panic if provided a
-    /// method with an invalid opcode.
-    pub fn write_extension_record(
+    /// Private records must have an opcode >= 0x80.
+    pub fn write_private_record(
         &mut self,
         opcode: u8,
         data: &[u8],
@@ -2085,11 +2084,11 @@ mod tests {
             .expect("failed to construct writer");
 
         writer
-            .write_extension_record(0x81, b"this is in a chunk", true)
+            .write_private_record(0x81, b"this is in a chunk", true)
             .expect("failed to write");
 
         writer
-            .write_extension_record(0x82, b"this is not in a chunk", false)
+            .write_private_record(0x82, b"this is not in a chunk", false)
             .expect("failed to write");
 
         drop(writer);
@@ -2132,7 +2131,7 @@ mod tests {
             .expect("failed to construct writer");
 
         let e = writer
-            .write_extension_record(0x1, &[1, 2, 3, 4], true)
+            .write_private_record(0x1, &[1, 2, 3, 4], true)
             .expect_err("should return err");
 
         assert_eq!(
