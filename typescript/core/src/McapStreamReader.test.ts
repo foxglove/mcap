@@ -715,4 +715,53 @@ describe("McapStreamReader", () => {
     expect(streamReader.nextRecord()).toEqual({ ...makeMessage(5), type: "Message" });
     expect(streamReader.bytesRemaining()).toBe(0);
   });
+
+  it("yields records with unknown opcodes", () => {
+    const chunkedUnknownRecord = record(0x81 as Opcode, [5, 6, 7, 8]);
+
+    const fullMcap = new Uint8Array([
+      ...MCAP_MAGIC,
+      // custom op code
+      ...record(0x80 as Opcode, [1, 2, 3, 4]),
+      ...record(Opcode.CHUNK, [
+        ...uint64LE(0n), // start_time
+        ...uint64LE(0n), // end_time
+        ...uint64LE(BigInt(chunkedUnknownRecord.byteLength)), // decompressed size
+        ...uint32LE(crc32(chunkedUnknownRecord)), // decompressed crc32
+        ...string(""), // compression
+        ...uint64LE(BigInt(chunkedUnknownRecord.byteLength)),
+        ...chunkedUnknownRecord,
+      ]),
+      ...record(Opcode.FOOTER, [
+        ...uint64LE(0n), // summary start
+        ...uint64LE(0n), // summary offset start
+        ...uint32LE(0), // summary crc
+      ]),
+      ...MCAP_MAGIC,
+    ]);
+
+    const reader = new McapStreamReader();
+    reader.append(fullMcap);
+
+    expect(reader.nextRecord()).toEqual({
+      type: "Unknown",
+      opcode: 0x80,
+      data: new Uint8Array([1, 2, 3, 4]),
+    });
+
+    expect(reader.nextRecord()).toEqual({
+      type: "Unknown",
+      opcode: 0x81,
+      data: new Uint8Array([5, 6, 7, 8]),
+    });
+
+    expect(reader.nextRecord()).toEqual({
+      type: "Footer",
+      summaryStart: 0n,
+      summaryOffsetStart: 0n,
+      summaryCrc: 0,
+    });
+
+    expect(reader.nextRecord()).toBeUndefined();
+  });
 });
