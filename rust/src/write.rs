@@ -97,10 +97,6 @@ fn write_record<W: Write>(mut w: &mut W, r: &Record) -> io::Result<()> {
         Record::Unknown { opcode, data } => {
             let len = data.len();
             let op = *opcode;
-            assert!(
-                op >= 0x80,
-                "unknown records must have opcode in range 0x80-0xFF"
-            );
             op_and_len(w, op, len as u64)?;
             w.write_all(data)?;
         }
@@ -739,14 +735,18 @@ impl<W: Write + Seek> Writer<W> {
     /// Write an unknown record. If the record can be present in chunks then the `chunkable` flag
     /// should be set to true.
     ///
-    /// Unknown records must have a non-reserved opcode. This method will panic if provided a
+    /// Extension records must have a non-reserved opcode. This method will panic if provided a
     /// method with an invalid opcode.
-    pub fn write_unknown_record(
+    pub fn write_extension_record(
         &mut self,
         opcode: u8,
         data: &[u8],
         chunkable: bool,
     ) -> McapResult<()> {
+        if opcode < 0x80 {
+            return Err(McapError::BadExtensionOpcode { opcode });
+        }
+
         let record = Record::Unknown {
             opcode,
             data: Cow::Borrowed(data),
@@ -2085,11 +2085,11 @@ mod tests {
             .expect("failed to construct writer");
 
         writer
-            .write_unknown_record(0x81, b"this is in a chunk", true)
+            .write_extension_record(0x81, b"this is in a chunk", true)
             .expect("failed to write");
 
         writer
-            .write_unknown_record(0x82, b"this is not in a chunk", false)
+            .write_extension_record(0x82, b"this is not in a chunk", false)
             .expect("failed to write");
 
         drop(writer);
@@ -2119,5 +2119,25 @@ mod tests {
 
         assert_eq!(opcode, 0x82);
         assert_eq!(String::from_utf8_lossy(&data[..]), "this is not in a chunk");
+    }
+
+    #[test]
+    fn test_invalid_extension_opcode_fails() {
+        let mut file = vec![];
+
+        let mut writer = WriteOptions::new()
+            .use_chunks(true)
+            .compression(None)
+            .create(Cursor::new(&mut file))
+            .expect("failed to construct writer");
+
+        let e = writer
+            .write_extension_record(0x1, &[1, 2, 3, 4], true)
+            .expect_err("should return err");
+
+        assert_eq!(
+            e.to_string(),
+            "Extension records must have an opcode >= 0x80, got 0x01"
+        );
     }
 }
