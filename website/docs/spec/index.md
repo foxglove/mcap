@@ -105,7 +105,7 @@ The summary offset section aids random access reading.
 
 MCAP files may contain a variety of records. Records are identified by a single-byte **opcode**. Record opcodes in the range 0x01-0x7F are reserved for future MCAP format usage. 0x80-0xFF are reserved for private records. 0x00 is not a valid opcode.
 
-Private records are application-specific and not defined within the MCAP spec. Tools without explicit support for certain private records should skip them.
+Private records are application-specific and not defined within the MCAP spec.
 
 All MCAP records are serialized as follows:
 
