@@ -142,6 +142,8 @@ pub enum McapError {
     RecordTooLong { opcode: u8, len: u64 },
     #[error("chunk (de)compressed length exceeds limit: `{0}`")]
     ChunkTooLarge(u64),
+    #[error("chunk start offset is out of file range: {0}")]
+    BadChunkStartOffset(u64),
     #[error("cannot write more than 65536 channels to one MCAP")]
     TooManyChannels,
     #[error("cannot write more than 65535 schemas to one MCAP")]

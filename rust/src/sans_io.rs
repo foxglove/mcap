@@ -8,8 +8,6 @@ pub use indexed_reader::{IndexedReadEvent, IndexedReader, IndexedReaderOptions};
 pub use linear_reader::{LinearReadEvent, LinearReader, LinearReaderOptions};
 pub use summary_reader::{SummaryReadEvent, SummaryReader};
 
-use crate::{McapError, McapResult};
-
 #[cfg(feature = "lz4")]
 mod lz4;
 

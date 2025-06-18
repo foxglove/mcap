@@ -422,7 +422,7 @@ impl ChunkIndex {
         );
         match res {
             Some(n) => Ok(n),
-            None => Err(McapError::TooLong(self.chunk_start_offset)),
+            None => Err(McapError::BadChunkStartOffset(self.chunk_start_offset)),
         }
     }
 }

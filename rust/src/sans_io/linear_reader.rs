@@ -177,6 +177,11 @@ impl LinearReaderOptions {
         self.validate_summary_section_crc = validate_summary_section_crc;
         self
     }
+
+    pub fn with_record_length_limit(mut self, record_length_limit: usize) -> Self {
+        self.record_length_limit = Some(record_length_limit);
+        self
+    }
 }
 
 /// Reads an MCAP file from start to end, yielding raw records by opcode and data buffer.
@@ -894,6 +899,44 @@ mod tests {
             assert!(iter_count < 10000);
         }
         Ok(())
+    }
+
+    #[test]
+    fn test_record_length_limit() {
+        let mut reader = LinearReader::new_with_options(
+            LinearReaderOptions::default().with_record_length_limit(10),
+        );
+        let mut cursor = std::io::Cursor::new(basic_chunked_file(None).unwrap());
+        let mut opcodes: Vec<u8> = Vec::new();
+        let mut iter_count = 0;
+        while let Some(event) = reader.next_event() {
+            match event {
+                Ok(LinearReadEvent::ReadRequest(n)) => {
+                    let written = cursor
+                        .read(reader.insert(n))
+                        .expect("insert should not fail");
+                    reader.notify_read(written);
+                }
+                Ok(LinearReadEvent::Record { data, opcode }) => {
+                    opcodes.push(opcode);
+                    parse_record(opcode, data).expect("parse should not fail");
+                }
+                Err(err) => {
+                    assert!(matches!(
+                        err,
+                        McapError::RecordTooLong {
+                            opcode: op::HEADER,
+                            len: 22
+                        }
+                    ));
+                    return;
+                }
+            }
+            iter_count += 1;
+            // guard against infinite loop
+            assert!(iter_count < 10000);
+        }
+        panic!("should have errored")
     }
 
     fn test_chunked(

@@ -474,6 +474,14 @@ impl IndexedReaderOptions {
         self.end = Some(end);
         self
     }
+
+    /// Configure the reader to return an error on any record with length > `limit`. The
+    /// reader will also return an error on any chunk record where the compressed OR decompressed
+    /// length are > `limit`.
+    pub fn with_record_length_limit(mut self, limit: usize) -> Self {
+        self.record_length_limit = Some(limit);
+        self
+    }
 }
 
 /// Insert indexes into `message_indexes` for every message in this chunk that matches the filter
@@ -821,6 +829,20 @@ mod tests {
         let messages =
             read_mcap_noseek(IndexedReaderOptions::new().include_topics(["even"]), &mcap);
         assert_eq!(&messages, &[(0, 1), (2, 3), (0, 5)])
+    }
+
+    #[test]
+    fn test_record_length_limit() {
+        let mcap = make_mcap(None, &[&[(0, 1), (1, 2)]]);
+        let summary = crate::Summary::read(&mcap)
+            .expect("summary reading should succeed")
+            .expect("there should be a summary");
+        // should discover chunks are too large from the indexes
+        let result = IndexedReader::new_with_options(
+            &summary,
+            IndexedReaderOptions::default().with_record_length_limit(2),
+        );
+        assert!(matches!(result, Err(McapError::ChunkTooLarge(_))));
     }
 
     #[test]
