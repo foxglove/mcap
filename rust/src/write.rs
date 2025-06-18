@@ -2136,7 +2136,7 @@ mod tests {
 
         assert_eq!(
             e.to_string(),
-            "Extension records must have an opcode >= 0x80, got 0x01"
+            "Private records must have an opcode >= 0x80, got 0x01"
         );
     }
 }
