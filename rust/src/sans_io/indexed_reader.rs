@@ -2,6 +2,7 @@ use binrw::BinRead;
 
 use crate::{
     records::{op, ChunkIndex, MessageHeader},
+    sans_io::check_len,
     McapError, McapResult,
 };
 use std::{cmp::Reverse, collections::BTreeSet};
@@ -105,12 +106,18 @@ pub struct IndexedReader {
     order: ReadOrder,
     // Criteria for what messages from the MCAP should be yielded
     filter: Filter,
+    /// If Some(limit), the reader will return an error on any non-chunk record with length > `limit`.
+    /// If used in conjunction with `prevalidate_chunk_crcs`, the reader will return an error on any
+    /// chunk record where the compressed OR decompressed length are > `limit`.
+    pub record_length_limit: Option<usize>,
 }
 
-fn chunk_request(index: &ChunkIndex) -> Option<McapResult<IndexedReadEvent<'static>>> {
-    let length = match len_as_usize(index.compressed_size) {
-        Ok(len) => len,
-        Err(err) => return Some(Err(err)),
+fn chunk_request(
+    index: &ChunkIndex,
+    record_length_limit: Option<usize>,
+) -> Option<McapResult<IndexedReadEvent<'static>>> {
+    let Some(length) = check_len(index.compressed_size, record_length_limit) else {
+        return Some(Err(McapError::ChunkTooLarge(index.compressed_size)));
     };
     Some(Ok(IndexedReadEvent::ReadChunkRequest {
         offset: index
@@ -207,16 +214,10 @@ impl IndexedReader {
         // check through all chunk indexes once to ensure that we have address space for an
         // uncompressed chunk.
         for chunk_index in chunk_indexes.iter() {
-            // if usize < 64 bits, ensure that the compressed buffer will fit into our address
-            // space.
-            if chunk_index.compressed_size > usize::MAX as u64 {
-                return Err(McapError::TooLong(chunk_index.compressed_size));
-            }
-            // if usize < 64 bits, ensure that the uncompressed buffer will fit into our address
-            // space.
-            if chunk_index.uncompressed_size > usize::MAX as u64 {
-                return Err(McapError::TooLong(chunk_index.uncompressed_size));
-            }
+            check_len(chunk_index.compressed_size, options.record_length_limit)
+                .ok_or(McapError::ChunkTooLarge(chunk_index.compressed_size))?;
+            check_len(chunk_index.uncompressed_size, options.record_length_limit)
+                .ok_or(McapError::ChunkTooLarge(chunk_index.compressed_size))?;
         }
         // need to deep-clone channels and schemas here.
         Ok(Self {
@@ -231,6 +232,7 @@ impl IndexedReader {
                 end: options.end,
                 channel_ids,
             },
+            record_length_limit: options.record_length_limit,
         })
     }
 
@@ -244,7 +246,7 @@ impl IndexedReader {
             if self.cur_chunk_index < self.chunk_indexes.len() {
                 let chunk_index = &self.chunk_indexes[self.cur_chunk_index];
                 if self.yield_chunk_first(chunk_index, message_index) {
-                    return chunk_request(chunk_index);
+                    return chunk_request(chunk_index, self.record_length_limit);
                 }
             }
             // slice the message out of its decompressed chunk buffer and yield it.
@@ -260,9 +262,15 @@ impl IndexedReader {
             let Some((&len_buf, buf)) = buf.split_first_chunk() else {
                 return Some(Err(McapError::UnexpectedEoc));
             };
-            let msg_len = match len_as_usize(u64::from_le_bytes(len_buf)) {
-                Ok(len) => len,
-                Err(err) => return Some(Err(err)),
+            let msg_len = u64::from_le_bytes(len_buf);
+            let msg_len = match check_len(msg_len, self.record_length_limit) {
+                Some(len) => len,
+                None => {
+                    return Some(Err(McapError::RecordTooLong {
+                        opcode,
+                        len: msg_len,
+                    }))
+                }
             };
             if buf.len() < msg_len {
                 return Some(Err(McapError::UnexpectedEoc));
@@ -283,7 +291,10 @@ impl IndexedReader {
         if self.cur_chunk_index >= self.chunk_indexes.len() {
             return None;
         }
-        chunk_request(&self.chunk_indexes[self.cur_chunk_index])
+        chunk_request(
+            &self.chunk_indexes[self.cur_chunk_index],
+            self.record_length_limit,
+        )
     }
 
     /// Call to insert new compressed records into this reader. `offset` must be a valid file
@@ -359,6 +370,7 @@ impl IndexedReader {
             &self.filter,
             &mut self.message_indexes,
             self.cur_message_index,
+            self.record_length_limit,
         )?;
         self.chunk_slots[slot_idx].message_count = message_count;
         // If there is more dead space at the front of `self.message_indexes` than the
@@ -427,6 +439,10 @@ pub struct IndexedReaderOptions {
     pub order: ReadOrder,
     /// If Some, only messages on channels with topics contained in this set will be yielded.
     pub include_topics: Option<BTreeSet<String>>,
+    /// If Some(limit), the reader will return an error on any record with length > `limit`. The
+    /// reader will also return an error on any chunk record where the compressed OR decompressed
+    /// length are > `limit`.
+    pub record_length_limit: Option<usize>,
 }
 
 impl IndexedReaderOptions {
@@ -469,6 +485,7 @@ fn index_messages(
     filter: &Filter,
     message_indexes: &mut Vec<MessageIndex>,
     cur_message_index: usize,
+    record_length_limit: Option<usize>,
 ) -> McapResult<usize> {
     let mut offset = 0usize;
     // sorting_required tracks whether the set of message indexes will need to be sorted after loading them.
@@ -487,7 +504,9 @@ fn index_messages(
         let Some((&len_buf, buf)) = buf.split_first_chunk() else {
             return Err(McapError::UnexpectedEoc);
         };
-        let len = len_as_usize(u64::from_le_bytes(len_buf))?;
+        let len = u64::from_le_bytes(len_buf);
+        let len =
+            check_len(len, record_length_limit).ok_or(McapError::RecordTooLong { opcode, len })?;
         if buf.len() < len {
             return Err(McapError::UnexpectedEoc);
         }
@@ -586,10 +605,6 @@ fn find_or_make_chunk_slot(chunk_slots: &mut Vec<ChunkSlot>, data_start: u64) ->
         buf: Vec::new(),
     });
     idx
-}
-
-fn len_as_usize(len: u64) -> McapResult<usize> {
-    len.try_into().map_err(|_| McapError::TooLong(len))
 }
 
 #[cfg(test)]

@@ -136,10 +136,12 @@ pub enum McapError {
     UnsupportedCompression(String),
     #[error("Error during decompression: `{0}`")]
     DecompressionError(String),
-    #[error("chunk buffer exceeds usize max: `{0}`")]
+    #[error("chunk size option exceeds usize max: `{0}`")]
     ChunkBufferTooLarge(u64),
-    #[error("length exceeds usize max: `{0}`")]
-    TooLong(u64),
+    #[error("record with opcode {opcode:02x} length exceeds limit: `{len}`")]
+    RecordTooLong { opcode: u8, len: u64 },
+    #[error("chunk (de)compressed length exceeds limit: `{0}`")]
+    ChunkTooLarge(u64),
     #[error("cannot write more than 65536 channels to one MCAP")]
     TooManyChannels,
     #[error("cannot write more than 65535 schemas to one MCAP")]
