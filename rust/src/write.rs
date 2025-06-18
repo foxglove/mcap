@@ -743,7 +743,7 @@ impl<W: Write + Seek> Writer<W> {
         chunkable: bool,
     ) -> McapResult<()> {
         if opcode < 0x80 {
-            return Err(McapError::BadExtensionOpcode { opcode });
+            return Err(McapError::BadPrivateRecordOpcode { opcode });
         }
 
         let record = Record::Unknown {
@@ -2074,7 +2074,7 @@ mod tests {
     }
 
     #[test]
-    fn test_writes_custom_record_to_chunk() {
+    fn test_writes_private_record_to_chunk() {
         let mut file = vec![];
 
         let mut writer = WriteOptions::new()
@@ -2121,7 +2121,7 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_extension_opcode_fails() {
+    fn test_invalid_private_record_opcode_fails() {
         let mut file = vec![];
 
         let mut writer = WriteOptions::new()

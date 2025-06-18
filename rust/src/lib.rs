@@ -110,8 +110,8 @@ pub enum McapError {
     BadChunkLength { header: u64, available: u64 },
     #[error("Schema length ({header}) exceeds space in record ({available})")]
     BadSchemaLength { header: u32, available: u32 },
-    #[error("Extension records must have an opcode >= 0x80, got {opcode:#04x}")]
-    BadExtensionOpcode { opcode: u8 },
+    #[error("Private records must have an opcode >= 0x80, got {opcode:#04x}")]
+    BadPrivateRecordOpcode { opcode: u8 },
     #[error("Channel `{0}` has mulitple records that don't match.")]
     ConflictingChannels(String),
     #[error("Schema `{0}` has mulitple records that don't match.")]
