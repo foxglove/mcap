@@ -266,7 +266,7 @@ impl IndexedReader {
             let msg_len = match check_len(msg_len, self.record_length_limit) {
                 Some(len) => len,
                 None => {
-                    return Some(Err(McapError::RecordTooLong {
+                    return Some(Err(McapError::RecordTooLarge {
                         opcode,
                         len: msg_len,
                     }))
@@ -514,7 +514,7 @@ fn index_messages(
         };
         let len = u64::from_le_bytes(len_buf);
         let len =
-            check_len(len, record_length_limit).ok_or(McapError::RecordTooLong { opcode, len })?;
+            check_len(len, record_length_limit).ok_or(McapError::RecordTooLarge { opcode, len })?;
         if buf.len() < len {
             return Err(McapError::UnexpectedEoc);
         }

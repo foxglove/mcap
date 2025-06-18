@@ -439,13 +439,13 @@ impl LinearReader {
                     // For all other records, load the entire record into memory and yield to the
                     // caller.
                     let len = check!(check_len(len, self.options.record_length_limit)
-                        .ok_or(McapError::RecordTooLong { opcode, len }));
+                        .ok_or(McapError::RecordTooLarge { opcode, len }));
                     let data = &consume!(OPCODE_LEN_SIZE + len)[OPCODE_LEN_SIZE..];
                     return Some(Ok(LinearReadEvent::Record { data, opcode }));
                 }
                 CurrentlyReading::DataEnd { len, calculated } => {
                     let len = check!(check_len(len, self.options.record_length_limit).ok_or(
-                        McapError::RecordTooLong {
+                        McapError::RecordTooLarge {
                             opcode: op::DATA_END,
                             len
                         }
@@ -469,7 +469,7 @@ impl LinearReader {
                 }
                 CurrentlyReading::Footer { len, hasher } => {
                     let len = check!(check_len(len, self.options.record_length_limit).ok_or(
-                        McapError::RecordTooLong {
+                        McapError::RecordTooLarge {
                             opcode: op::FOOTER,
                             len
                         }
@@ -609,7 +609,7 @@ impl LinearReader {
                             let opcode = opcode_len_buf[0];
                             let len = u64::from_le_bytes(opcode_len_buf[1..].try_into().unwrap());
                             let len = check!(check_len(len, self.options.record_length_limit)
-                                .ok_or(McapError::RecordTooLong { opcode, len }));
+                                .ok_or(McapError::RecordTooLarge { opcode, len }));
                             let opcode_len_data = consume!(OPCODE_LEN_SIZE + len);
                             let data = &opcode_len_data[OPCODE_LEN_SIZE..];
                             if let Some(hasher) = state.uncompressed_data_hasher.as_mut() {
@@ -648,7 +648,7 @@ impl LinearReader {
                             };
                             let len = u64::from_le_bytes(len_buf);
                             let len = check!(check_len(len, self.options.record_length_limit)
-                                .ok_or(McapError::RecordTooLong { opcode, len }));
+                                .ok_or(McapError::RecordTooLarge { opcode, len }));
                             let _ = decompress!(OPCODE_LEN_SIZE + len, state, decompressor);
                             self.decompressed_content.mark_read(OPCODE_LEN_SIZE);
                             let (start, end) = (
@@ -924,7 +924,7 @@ mod tests {
                 Err(err) => {
                     assert!(matches!(
                         err,
-                        McapError::RecordTooLong {
+                        McapError::RecordTooLarge {
                             opcode: op::HEADER,
                             len: 22
                         }

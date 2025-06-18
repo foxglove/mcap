@@ -139,7 +139,7 @@ pub enum McapError {
     #[error("chunk size option exceeds usize max: `{0}`")]
     ChunkBufferTooLarge(u64),
     #[error("record with opcode {opcode:02x} length exceeds limit: `{len}`")]
-    RecordTooLong { opcode: u8, len: u64 },
+    RecordTooLarge { opcode: u8, len: u64 },
     #[error("chunk (de)compressed length exceeds limit: `{0}`")]
     ChunkTooLarge(u64),
     #[error("chunk start offset is out of file range: {0}")]
