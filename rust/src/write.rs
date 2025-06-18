@@ -32,6 +32,13 @@ enum WriteMode<W: Write + Seek> {
     Attachment(AttachmentWriter<CountingCrcWriter<W>>),
 }
 
+pub enum PrivateRecordKind {
+    /// The private record can appear in chunks.
+    Chunkable,
+    /// The private record cannot appear in chunks.
+    NonChunkable,
+}
+
 fn op_and_len<W: Write>(w: &mut W, op: u8, len: u64) -> io::Result<()> {
     w.write_u8(op)?;
     w.write_u64::<LE>(len)?;
@@ -732,15 +739,15 @@ impl<W: Write + Seek> Writer<W> {
         Ok(())
     }
 
-    /// Write a private record. If the record can be present in chunks then the `chunkable` flag
-    /// should be set to true.
+    /// Write a private record. If the record can be present in chunks then
+    /// `PrivateRecordKind::Chunkable` should be passed.
     ///
     /// Private records must have an opcode >= 0x80.
     pub fn write_private_record(
         &mut self,
         opcode: u8,
         data: &[u8],
-        chunkable: bool,
+        kind: PrivateRecordKind,
     ) -> McapResult<()> {
         if opcode < 0x80 {
             return Err(McapError::BadPrivateRecordOpcode { opcode });
@@ -751,11 +758,15 @@ impl<W: Write + Seek> Writer<W> {
             data: Cow::Borrowed(data),
         };
 
-        if chunkable && self.options.use_chunks {
-            self.start_chunk()?.write_record(&record)?;
-        } else {
-            write_record(self.finish_chunk()?, &record)?;
+        if self.options.use_chunks {
+            if let PrivateRecordKind::Chunkable = kind {
+                self.start_chunk()?.write_record(&record)?;
+                return Ok(());
+            }
         }
+
+        write_record(self.finish_chunk()?, &record)?;
+
         Ok(())
     }
 
@@ -2084,11 +2095,15 @@ mod tests {
             .expect("failed to construct writer");
 
         writer
-            .write_private_record(0x81, b"this is in a chunk", true)
+            .write_private_record(0x81, b"this is in a chunk", PrivateRecordKind::Chunkable)
             .expect("failed to write");
 
         writer
-            .write_private_record(0x82, b"this is not in a chunk", false)
+            .write_private_record(
+                0x82,
+                b"this is not in a chunk",
+                PrivateRecordKind::NonChunkable,
+            )
             .expect("failed to write");
 
         drop(writer);
@@ -2131,7 +2146,7 @@ mod tests {
             .expect("failed to construct writer");
 
         let e = writer
-            .write_private_record(0x1, &[1, 2, 3, 4], true)
+            .write_private_record(0x1, &[1, 2, 3, 4], PrivateRecordKind::Chunkable)
             .expect_err("should return err");
 
         assert_eq!(
