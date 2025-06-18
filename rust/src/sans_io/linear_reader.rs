@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use super::decompressor::Decompressor;
 use crate::{
     records::{op, ChunkHeader},
+    sans_io::check_len,
     McapError, McapResult, MAGIC,
 };
 use binrw::BinReaderExt;
@@ -132,15 +133,19 @@ pub struct LinearReaderOptions {
     /// If true, the reader will yield entire chunk records. Otherwise, the reader will decompress
     /// and read into chunks, yielding the records inside.
     pub emit_chunks: bool,
-    // Enables chunk CRC validation. Ignored if `prevalidate_chunk_crcs: true`.
+    /// Enables chunk CRC validation. Ignored if `prevalidate_chunk_crcs: true`.
     pub validate_chunk_crcs: bool,
-    // Enables chunk CRC validation before yielding any messages from the chunk. Implies
-    // `validate_chunk_crcs: true`.
+    /// Enables chunk CRC validation before yielding any messages from the chunk. Implies
+    /// `validate_chunk_crcs: true`.
     pub prevalidate_chunk_crcs: bool,
-    // Enables data section CRC validation.
+    /// Enables data section CRC validation.
     pub validate_data_section_crc: bool,
-    // Enables summary section CRC validation.
+    /// Enables summary section CRC validation.
     pub validate_summary_section_crc: bool,
+    /// If Some(limit), the reader will return an error on any non-chunk record with length > `limit`.
+    /// If used in conjunction with `prevalidate_chunk_crcs`, the reader will return an error on any
+    /// chunk record where the compressed OR decompressed length are > `limit`.
+    pub record_length_limit: Option<usize>,
 }
 
 impl LinearReaderOptions {
@@ -170,6 +175,11 @@ impl LinearReaderOptions {
     }
     pub fn with_validate_summary_section_crc(mut self, validate_summary_section_crc: bool) -> Self {
         self.validate_summary_section_crc = validate_summary_section_crc;
+        self
+    }
+
+    pub fn with_record_length_limit(mut self, record_length_limit: usize) -> Self {
+        self.record_length_limit = Some(record_length_limit);
         self
     }
 }
@@ -428,12 +438,18 @@ impl LinearReader {
                     }
                     // For all other records, load the entire record into memory and yield to the
                     // caller.
-                    let len = check!(len_as_usize(len));
+                    let len = check!(check_len(len, self.options.record_length_limit)
+                        .ok_or(McapError::RecordTooLarge { opcode, len }));
                     let data = &consume!(OPCODE_LEN_SIZE + len)[OPCODE_LEN_SIZE..];
                     return Some(Ok(LinearReadEvent::Record { data, opcode }));
                 }
                 CurrentlyReading::DataEnd { len, calculated } => {
-                    let len = check!(len_as_usize(len));
+                    let len = check!(check_len(len, self.options.record_length_limit).ok_or(
+                        McapError::RecordTooLarge {
+                            opcode: op::DATA_END,
+                            len
+                        }
+                    ));
                     let data = consume!(len);
                     let rec: crate::records::DataEnd = check!(std::io::Cursor::new(data).read_le());
                     let saved = rec.data_section_crc;
@@ -452,7 +468,12 @@ impl LinearReader {
                     }));
                 }
                 CurrentlyReading::Footer { len, hasher } => {
-                    let len = check!(len_as_usize(len));
+                    let len = check!(check_len(len, self.options.record_length_limit).ok_or(
+                        McapError::RecordTooLarge {
+                            opcode: op::FOOTER,
+                            len
+                        }
+                    ));
                     let data = consume!(len);
                     let footer: crate::records::Footer =
                         check!(std::io::Cursor::new(data).read_le());
@@ -488,9 +509,11 @@ impl LinearReader {
                         &mut self.decompressors,
                         &header.compression
                     ));
-                    let padding_after_compressed_data = check!(len_as_usize(
-                        len - (header_len as u64) - header.compressed_size
-                    ));
+                    let padding_after_compressed_data = check!(check_len(
+                        len - (header_len as u64) - header.compressed_size,
+                        self.options.record_length_limit
+                    )
+                    .ok_or(McapError::ChunkTooLarge(len)));
 
                     let state = ChunkState {
                         decompressor,
@@ -535,7 +558,11 @@ impl LinearReader {
                         .expect("chunk state should be set");
                     match &mut state.decompressor {
                         None => {
-                            let to_load = check!(len_as_usize(state.compressed_remaining));
+                            let to_load = check!(check_len(
+                                state.compressed_remaining,
+                                self.options.record_length_limit
+                            )
+                            .ok_or(McapError::ChunkTooLarge(state.compressed_remaining)));
                             let records = load!(to_load);
                             let calculated = crc32fast::hash(records);
                             let saved = state.crc;
@@ -548,7 +575,11 @@ impl LinearReader {
                             // decompress all available compressed data until there are no compressed
                             // bytes remaining. If not all of the compressed bytes are available in
                             // file_data, decompress! will return a Read event for more data.
-                            let uncompressed_len = check!(len_as_usize(state.uncompressed_len));
+                            let uncompressed_len = check!(check_len(
+                                state.uncompressed_len,
+                                self.options.record_length_limit
+                            )
+                            .ok_or(McapError::ChunkTooLarge(state.uncompressed_len)));
                             if self.decompressed_content.len() >= uncompressed_len {
                                 let calculated =
                                     crc32fast::hash(self.decompressed_content.unread());
@@ -576,9 +607,9 @@ impl LinearReader {
                             }
                             let opcode_len_buf = load!(OPCODE_LEN_SIZE);
                             let opcode = opcode_len_buf[0];
-                            let len = check!(len_as_usize(u64::from_le_bytes(
-                                opcode_len_buf[1..].try_into().unwrap(),
-                            )));
+                            let len = u64::from_le_bytes(opcode_len_buf[1..].try_into().unwrap());
+                            let len = check!(check_len(len, self.options.record_length_limit)
+                                .ok_or(McapError::RecordTooLarge { opcode, len }));
                             let opcode_len_data = consume!(OPCODE_LEN_SIZE + len);
                             let data = &opcode_len_data[OPCODE_LEN_SIZE..];
                             if let Some(hasher) = state.uncompressed_data_hasher.as_mut() {
@@ -599,8 +630,11 @@ impl LinearReader {
                                 // `self.file_data`. This can happen when a compressor adds extra
                                 // bytes after its last frame. We need to treat this as "padding
                                 // after the chunk" and skip over it before reading the next record.
-                                state.padding_after_compressed_data +=
-                                    check!(len_as_usize(state.compressed_remaining));
+                                state.padding_after_compressed_data += check!(check_len(
+                                    state.compressed_remaining,
+                                    self.options.record_length_limit
+                                )
+                                .ok_or(McapError::ChunkTooLarge(state.compressed_remaining)));
                                 state.compressed_remaining = 0;
                                 self.currently_reading = PaddingAfterChunk;
                                 continue;
@@ -612,7 +646,9 @@ impl LinearReader {
                             let Some((&len_buf, _)) = rest.split_first_chunk() else {
                                 return Some(Err(McapError::UnexpectedEoc));
                             };
-                            let len = check!(len_as_usize(u64::from_le_bytes(len_buf)));
+                            let len = u64::from_le_bytes(len_buf);
+                            let len = check!(check_len(len, self.options.record_length_limit)
+                                .ok_or(McapError::RecordTooLarge { opcode, len }));
                             let _ = decompress!(OPCODE_LEN_SIZE + len, state, decompressor);
                             self.decompressed_content.mark_read(OPCODE_LEN_SIZE);
                             let (start, end) = (
@@ -677,11 +713,6 @@ pub enum LinearReadEvent<'a> {
     ReadRequest(usize),
     /// A new record from the MCAP file. Use [`crate::parse_record`] to parse the record.
     Record { data: &'a [u8], opcode: u8 },
-}
-
-/// casts a 64-bit length value from an MCAP into a [`usize`].
-fn len_as_usize(len: u64) -> McapResult<usize> {
-    len.try_into().map_err(|_| McapError::TooLong(len))
 }
 
 /// casts a 64-bit length from an MCAP into a [`usize`], saturating to [`usize::MAX`] if too large.
@@ -868,6 +899,44 @@ mod tests {
             assert!(iter_count < 10000);
         }
         Ok(())
+    }
+
+    #[test]
+    fn test_record_length_limit() {
+        let mut reader = LinearReader::new_with_options(
+            LinearReaderOptions::default().with_record_length_limit(10),
+        );
+        let mut cursor = std::io::Cursor::new(basic_chunked_file(None).unwrap());
+        let mut opcodes: Vec<u8> = Vec::new();
+        let mut iter_count = 0;
+        while let Some(event) = reader.next_event() {
+            match event {
+                Ok(LinearReadEvent::ReadRequest(n)) => {
+                    let written = cursor
+                        .read(reader.insert(n))
+                        .expect("insert should not fail");
+                    reader.notify_read(written);
+                }
+                Ok(LinearReadEvent::Record { data, opcode }) => {
+                    opcodes.push(opcode);
+                    parse_record(opcode, data).expect("parse should not fail");
+                }
+                Err(err) => {
+                    assert!(matches!(
+                        err,
+                        McapError::RecordTooLarge {
+                            opcode: op::HEADER,
+                            len: 22
+                        }
+                    ));
+                    return;
+                }
+            }
+            iter_count += 1;
+            // guard against infinite loop
+            assert!(iter_count < 10000);
+        }
+        panic!("should have errored")
     }
 
     fn test_chunked(

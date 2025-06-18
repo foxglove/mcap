@@ -13,3 +13,12 @@ mod lz4;
 
 #[cfg(feature = "zstd")]
 mod zstd;
+
+/// Utility function for checking u64 lengths from MCAP files.
+pub(crate) fn check_len(len: u64, limit: Option<usize>) -> Option<usize> {
+    let len_as_usize: usize = len.try_into().ok()?;
+    match limit {
+        Some(limit) if len_as_usize > limit => None,
+        _ => Some(len_as_usize),
+    }
+}
