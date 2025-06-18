@@ -103,7 +103,9 @@ The summary offset section aids random access reading.
 
 ## Records
 
-MCAP files may contain a variety of records. Records are identified by a single-byte **opcode**. Record opcodes in the range 0x01-0x7F are reserved for future MCAP format usage. 0x80-0xFF are reserved for application extensions and user proposals. 0x00 is not a valid opcode.
+MCAP files may contain a variety of records. Records are identified by a single-byte **opcode**. Record opcodes in the range 0x01-0x7F are reserved for future MCAP format usage. 0x80-0xFF are reserved for private records. 0x00 is not a valid opcode.
+
+Private records are application-specific and not defined within the MCAP spec.
 
 All MCAP records are serialized as follows:
 
@@ -181,7 +183,7 @@ The message encoding and schema must match that of the Channel record correspond
 
 ### Chunk (op=0x06)
 
-A Chunk contains a batch of records. Readers should expect Schema, Channel, and Message records to be present in chunks, but future spec changes or user extensions may include others. The batch of records contained in a chunk may be compressed or uncompressed.
+A Chunk contains a batch of records. Readers should expect Schema, Channel, and Message records to be present in chunks, but future spec changes may include others. Private records may also be included. The batch of records contained in a chunk may be compressed or uncompressed.
 
 All messages in the chunk must reference channels recorded earlier in the file (in a previous chunk, earlier in the current chunk, or earlier in the data section).
 
