@@ -11,6 +11,7 @@ use std::{
 use bimap::BiHashMap;
 use binrw::prelude::*;
 use byteorder::{WriteBytesExt, LE};
+use enumset::{EnumSet, EnumSetType};
 #[cfg(feature = "zstd")]
 use zstd::stream::{raw as zraw, zio};
 
@@ -32,11 +33,10 @@ enum WriteMode<W: Write + Seek> {
     Attachment(AttachmentWriter<CountingCrcWriter<W>>),
 }
 
-pub enum PrivateRecordKind {
+#[derive(EnumSetType, Debug)]
+pub enum PrivateRecordOptions {
     /// The private record can appear in chunks.
-    Chunkable,
-    /// The private record cannot appear in chunks.
-    NonChunkable,
+    IncludeInChunks,
 }
 
 fn op_and_len<W: Write>(w: &mut W, op: u8, len: u64) -> io::Result<()> {
@@ -739,18 +739,17 @@ impl<W: Write + Seek> Writer<W> {
         Ok(())
     }
 
-    /// Write a private record. If the record can be present in chunks then
-    /// `PrivateRecordKind::Chunkable` should be passed.
+    /// Write a private record using the provided options.
     ///
     /// Private records must have an opcode >= 0x80.
     pub fn write_private_record(
         &mut self,
         opcode: u8,
         data: &[u8],
-        kind: PrivateRecordKind,
+        options: EnumSet<PrivateRecordOptions>,
     ) -> McapResult<()> {
         if opcode < 0x80 {
-            return Err(McapError::BadPrivateRecordOpcode { opcode });
+            return Err(McapError::PrivateRecordOpcodeIsReserved { opcode });
         }
 
         let record = Record::Unknown {
@@ -758,14 +757,11 @@ impl<W: Write + Seek> Writer<W> {
             data: Cow::Borrowed(data),
         };
 
-        if self.options.use_chunks {
-            if let PrivateRecordKind::Chunkable = kind {
-                self.start_chunk()?.write_record(&record)?;
-                return Ok(());
-            }
+        if self.options.use_chunks && options.contains(PrivateRecordOptions::IncludeInChunks) {
+            self.start_chunk()?.write_record(&record)?;
+        } else {
+            write_record(self.finish_chunk()?, &record)?;
         }
-
-        write_record(self.finish_chunk()?, &record)?;
 
         Ok(())
     }
@@ -2095,15 +2091,15 @@ mod tests {
             .expect("failed to construct writer");
 
         writer
-            .write_private_record(0x81, b"this is in a chunk", PrivateRecordKind::Chunkable)
+            .write_private_record(
+                0x81,
+                b"this is in a chunk",
+                PrivateRecordOptions::IncludeInChunks.into(),
+            )
             .expect("failed to write");
 
         writer
-            .write_private_record(
-                0x82,
-                b"this is not in a chunk",
-                PrivateRecordKind::NonChunkable,
-            )
+            .write_private_record(0x82, b"this is not in a chunk", Default::default())
             .expect("failed to write");
 
         drop(writer);
@@ -2146,7 +2142,11 @@ mod tests {
             .expect("failed to construct writer");
 
         let e = writer
-            .write_private_record(0x1, &[1, 2, 3, 4], PrivateRecordKind::Chunkable)
+            .write_private_record(
+                0x1,
+                &[1, 2, 3, 4],
+                PrivateRecordOptions::IncludeInChunks.into(),
+            )
             .expect_err("should return err");
 
         assert_eq!(
