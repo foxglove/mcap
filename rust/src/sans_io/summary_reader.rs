@@ -98,11 +98,33 @@ pub struct SummaryReader {
     summary: crate::Summary,
     summary_present: bool,
     at_eof: bool,
+    options: SummaryReaderOptions,
+}
+
+#[derive(Debug, Default)]
+pub struct SummaryReaderOptions {
+    /// If Some(limit), the reader will return an error on any record with length > `limit`.
+    pub record_length_limit: Option<usize>,
+}
+
+impl SummaryReaderOptions {
+    /// Configure the reader to return an error on any record with length > `limit`.
+    pub fn with_record_length_limit(mut self, limit: usize) -> Self {
+        self.record_length_limit = Some(limit);
+        self
+    }
 }
 
 impl SummaryReader {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn new_with_options(options: SummaryReaderOptions) -> Self {
+        Self {
+            options,
+            ..Default::default()
+        }
     }
 
     /// Returns the next event from the reader. Call this repeatedly and act on the resulting
@@ -168,11 +190,14 @@ impl SummaryReader {
                 }
                 State::SeekingToSummary { summary_start } => {
                     if self.pos == *summary_start {
+                        let mut options =
+                            LinearReaderOptions::default().with_skip_start_magic(true);
+                        if let Some(limit) = self.options.record_length_limit {
+                            options = options.with_record_length_limit(limit);
+                        }
                         self.state = State::ReadingSummary {
                             summary_start: *summary_start,
-                            reader: Box::new(LinearReader::new_with_options(
-                                LinearReaderOptions::default().with_skip_start_magic(true),
-                            )),
+                            reader: Box::new(LinearReader::new_with_options(options)),
                             channeler: crate::read::ChannelAccumulator::default(),
                         };
                         continue;
