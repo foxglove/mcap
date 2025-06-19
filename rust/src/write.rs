@@ -35,7 +35,7 @@ enum WriteMode<W: Write + Seek> {
 
 #[derive(EnumSetType, Debug)]
 pub enum PrivateRecordOptions {
-    /// The private record can appear in chunks.
+    /// If set and chunking is enabled, the private record will be written into a chunk. Otherwise, the record will be written directly to the file.
     IncludeInChunks,
 }
 
