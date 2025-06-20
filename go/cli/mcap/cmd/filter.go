@@ -33,7 +33,6 @@ type filterFlags struct {
 }
 
 type filterOpts struct {
-	recover            bool
 	output             string
 	includeTopics      []regexp.Regexp
 	excludeTopics      []regexp.Regexp
@@ -224,7 +223,6 @@ func filter(
 
 	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{
 		ValidateChunkCRCs: true,
-		EmitInvalidChunks: opts.recover,
 		AttachmentCallback: func(ar *mcap.AttachmentReader) error {
 			if !opts.includeAttachments {
 				return nil
@@ -260,15 +258,6 @@ func filter(
 			fmt.Fprintf(os.Stderr, "failed to close mcap writer: %v\n", err)
 			return
 		}
-		if opts.recover {
-			fmt.Fprintf(
-				os.Stderr,
-				"Recovered %d messages, %d attachments, and %d metadata records.\n",
-				numMessages,
-				numAttachments,
-				numMetadata,
-			)
-		}
 	}()
 
 	buf := make([]byte, 1024)
@@ -280,17 +269,6 @@ func filter(
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return nil
-			}
-			if opts.recover {
-				var expected *mcap.ErrTruncatedRecord
-				if errors.As(err, &expected) {
-					fmt.Println(expected.Error())
-					return nil
-				}
-				if token == mcap.TokenInvalidChunk {
-					fmt.Printf("Invalid chunk encountered, skipping: %s\n", err)
-					continue
-				}
 			}
 			return err
 		}
@@ -502,39 +480,6 @@ usage:
 			run(filterOptions, args)
 		}
 		rootCmd.AddCommand(filterCmd)
-	}
-
-	{
-		var recoverCmd = &cobra.Command{
-			Use:   "recover [file]",
-			Short: "Recover data from a potentially corrupt MCAP file",
-			Long: `This subcommand reads a potentially corrupt MCAP file and copies data to a new file.
-
-usage:
-  mcap recover in.mcap -o out.mcap`,
-		}
-		output := recoverCmd.PersistentFlags().StringP("output", "o", "", "output filename")
-		chunkSize := recoverCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
-		compression := recoverCmd.PersistentFlags().String(
-			"compression",
-			"zstd",
-			"compression algorithm to use on output file",
-		)
-		recoverCmd.Run = func(_ *cobra.Command, args []string) {
-			filterOptions, err := buildFilterOptions(&filterFlags{
-				output:             *output,
-				chunkSize:          *chunkSize,
-				outputCompression:  *compression,
-				includeMetadata:    true,
-				includeAttachments: true,
-			})
-			if err != nil {
-				die("configuration error: %s", err)
-			}
-			filterOptions.recover = true
-			run(filterOptions, args)
-		}
-		rootCmd.AddCommand(recoverCmd)
 	}
 
 	{
