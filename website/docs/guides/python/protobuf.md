@@ -11,8 +11,6 @@ To start writing Python code that reads and writes Protobuf data in MCAP, instal
 To read in Protobuf data from an MCAP file (`my_data.mcap`), use the high-level `reader` interface.
 
 ```python
-import sys
-
 from mcap_protobuf.reader import read_protobuf_messages
 
 def main():
