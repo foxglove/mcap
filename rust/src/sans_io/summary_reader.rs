@@ -103,15 +103,39 @@ pub struct SummaryReader {
 
 #[derive(Debug, Default)]
 pub struct SummaryReaderOptions {
+    /// The file size, if known in advance.
+    pub file_size: Option<u64>,
     /// If Some(limit), the reader will return an error on any record with length > `limit`.
     pub record_length_limit: Option<usize>,
 }
 
 impl SummaryReaderOptions {
+    /// Configure the reader with a known file size.
+    pub fn with_file_size(mut self, size: u64) -> Self {
+        self.file_size = Some(size);
+        self
+    }
+
     /// Configure the reader to return an error on any record with length > `limit`.
     pub fn with_record_length_limit(mut self, limit: usize) -> Self {
         self.record_length_limit = Some(limit);
         self
+    }
+}
+
+/// Returns the lesser of the remaining file size, and the configured record length limit.
+fn compute_record_length_limit(
+    pos: u64,
+    file_size: Option<u64>,
+    record_length_limit: Option<usize>,
+) -> Option<usize> {
+    let remain =
+        file_size.map(|size| usize::try_from(size.saturating_sub(pos)).unwrap_or(usize::MAX));
+    match (remain, record_length_limit) {
+        (Some(remain), Some(limit)) => Some(std::cmp::min(remain, limit)),
+        (Some(remain), None) => Some(remain),
+        (None, Some(limit)) => Some(limit),
+        (None, None) => None,
     }
 }
 
@@ -122,6 +146,7 @@ impl SummaryReader {
 
     pub fn new_with_options(options: SummaryReaderOptions) -> Self {
         Self {
+            file_size: options.file_size,
             options,
             ..Default::default()
         }
@@ -192,7 +217,11 @@ impl SummaryReader {
                     if self.pos == *summary_start {
                         let mut options =
                             LinearReaderOptions::default().with_skip_start_magic(true);
-                        if let Some(limit) = self.options.record_length_limit {
+                        if let Some(limit) = compute_record_length_limit(
+                            self.pos,
+                            self.file_size,
+                            self.options.record_length_limit,
+                        ) {
                             options = options.with_record_length_limit(limit);
                         }
                         self.state = State::ReadingSummary {
@@ -325,7 +354,8 @@ impl SummaryReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{Read, Seek};
+    use assert_matches::assert_matches;
+    use std::io::{Read, Seek, Write};
 
     #[test]
     fn test_smoke() {
@@ -382,5 +412,101 @@ mod tests {
             }
         }
         assert!(failed);
+    }
+
+    #[test]
+    fn test_bounds() {
+        let buf = Vec::new();
+        let mut file = std::io::Cursor::new(buf);
+
+        // Write just the magic.
+        file.write_all(MAGIC).unwrap();
+        assert_matches!(Summary::read(file.get_ref()), Err(McapError::UnexpectedEof));
+
+        // Write a statistics section.
+        let stats_record = file.stream_position().unwrap();
+        file.write_all(&[0x0b]).unwrap();
+        file.write_all(&46_u64.to_le_bytes()).unwrap();
+        file.write_all(&[0x0; 46]).unwrap();
+
+        // Footer record header.
+        let footer_record = file.stream_position().unwrap();
+        file.write_all(&[0x02]).unwrap();
+        file.write_all(&20_u64.to_le_bytes()).unwrap();
+        let footer_content = file.stream_position().unwrap();
+
+        // Write out an footer record with invalid offsets.
+        file.write_all(&[0xff; 20]).unwrap();
+        file.write_all(MAGIC).unwrap();
+        assert_matches!(Summary::read(file.get_ref()), Err(McapError::UnexpectedEof));
+
+        // Write a footer with no summary offset.
+        file.seek(SeekFrom::Start(footer_content)).unwrap();
+        file.write_all(&[0x00; 20]).unwrap();
+        file.write_all(MAGIC).unwrap();
+        assert_matches!(Summary::read(file.get_ref()), Ok(None));
+
+        // Write out a valid footer that points to itself as the start of the summary section.
+        file.seek(SeekFrom::Start(footer_content)).unwrap();
+        file.write_all(&footer_record.to_le_bytes()).unwrap();
+        file.write_all(&[0x00; 12]).unwrap();
+        file.write_all(MAGIC).unwrap();
+        assert_matches!(
+            Summary::read(file.get_ref()),
+            Ok(Some(Summary { stats: None, .. }))
+        );
+
+        // Write out a valid footer that points to the stats record.
+        file.seek(SeekFrom::Start(footer_content)).unwrap();
+        file.write_all(&stats_record.to_le_bytes()).unwrap();
+        file.write_all(&[0x00; 12]).unwrap();
+        file.write_all(MAGIC).unwrap();
+        assert_matches!(
+            Summary::read(file.get_ref()),
+            Ok(Some(Summary { stats: Some(_), .. }))
+        );
+
+        // Update stats header length to a value too large to allocate.
+        file.seek(SeekFrom::Start(stats_record + 1)).unwrap();
+        file.write_all(&[0x11; 8]).unwrap();
+        assert_matches!(
+            Summary::read(file.get_ref()),
+            Err(McapError::RecordTooLarge { opcode: 0x0b, .. })
+        );
+
+        // Update stats header length to u64::MAX to probe for overflow arithmetic.
+        file.seek(SeekFrom::Start(stats_record + 1)).unwrap();
+        file.write_all(&[0xff; 8]).unwrap();
+        assert_matches!(
+            Summary::read(file.get_ref()),
+            Err(McapError::RecordTooLarge { opcode: 0x0b, .. })
+        );
+
+        // Update the footer to point to itself as the start of the summary section again, so that
+        // the reader ignores the stats record with the invalid length.
+        file.seek(SeekFrom::Start(footer_content)).unwrap();
+        file.write_all(&footer_record.to_le_bytes()).unwrap();
+
+        // Update footer header length to extend one byte beyond the end of the file (20 bytes for
+        // record, 8 bytes for magic, 1 byte for fun).
+        file.seek(SeekFrom::Start(footer_record + 1)).unwrap();
+        file.write_all(&(20_u64 + 8 + 1).to_le_bytes()).unwrap();
+        assert_matches!(Summary::read(file.get_ref()), Err(McapError::UnexpectedEof));
+
+        // Update footer header length to a value that's too large to be allocated.
+        file.seek(SeekFrom::Start(footer_record + 1)).unwrap();
+        file.write_all(&[0x11; 8]).unwrap();
+        assert_matches!(
+            Summary::read(file.get_ref()),
+            Err(McapError::RecordTooLarge { opcode: 2, .. })
+        );
+
+        // Update footer header length to u64::MAX to probe for overflow arithmetic.
+        file.seek(SeekFrom::Start(footer_record + 1)).unwrap();
+        file.write_all(&[0xff; 8]).unwrap();
+        assert_matches!(
+            Summary::read(file.get_ref()),
+            Err(McapError::RecordTooLarge { opcode: 2, .. })
+        );
     }
 }
