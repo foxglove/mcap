@@ -68,7 +68,7 @@ fn run() -> Result<()> {
 
 fn main() {
     run().unwrap_or_else(|e| {
-        error!("{:?}", e);
+        error!("{e:?}");
         std::process::exit(1);
     });
 }
