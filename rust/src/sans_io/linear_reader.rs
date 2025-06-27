@@ -1167,9 +1167,7 @@ mod tests {
                     let buffer_size = reader.file_data.data.len();
                     assert!(
                         buffer_size < std::cmp::max(max_needed * 2, 4096),
-                        "max needed: {0}, buffer size: {1}",
-                        max_needed,
-                        buffer_size
+                        "max needed: {max_needed}, buffer size: {buffer_size}",
                     );
                 }
                 LinearReadEvent::Record { data, opcode } => {

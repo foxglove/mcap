@@ -250,7 +250,8 @@ impl IndexedReader {
                 }
             }
             // slice the message out of its decompressed chunk buffer and yield it.
-            let buf = &self.chunk_slots[message_index.chunk_slot_idx].buf[message_index.offset..];
+            let chunk_slot = &mut self.chunk_slots[message_index.chunk_slot_idx];
+            let buf = &chunk_slot.buf[message_index.offset..];
             let Some((&[opcode], buf)) = buf.split_first_chunk() else {
                 return Some(Err(McapError::UnexpectedEoc));
             };
@@ -284,6 +285,7 @@ impl IndexedReader {
             let data_start_offset = reader.position() as usize;
             let data = &msg_data[data_start_offset..];
             self.cur_message_index += 1;
+            chunk_slot.message_count -= 1;
             return Some(Ok(IndexedReadEvent::Message { header, data }));
         }
         // we're out of message indexes, we need to load a chunk.
@@ -603,6 +605,7 @@ fn find_or_make_chunk_slot(chunk_slots: &mut Vec<ChunkSlot>, data_start: u64) ->
     for (i, slot) in chunk_slots.iter_mut().enumerate() {
         if slot.message_count == 0 {
             slot.data_start = data_start;
+            slot.buf.clear();
             return i;
         }
     }
