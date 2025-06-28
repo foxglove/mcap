@@ -11,7 +11,7 @@ import { useStore } from "../state";
 export function useAudioRecording(
   audioWaveformRef: React.RefObject<HTMLCanvasElement>,
 ): void {
-  const { actions, recording, recordAudio, audioStream } = useStore();
+  const { actions, recording, recordAudio, audioStream, selectedAudioDeviceId } = useStore();
 
   const enableMicrophone = recordAudio;
 
@@ -34,6 +34,7 @@ export function useAudioRecording(
 
     const cleanup = startAudioStream({
       canvas: canvasElement,
+      deviceId: selectedAudioDeviceId,
       onAudioStream: (stream: MediaStream) => {
         actions.setAudioStream(stream);
       },
@@ -48,7 +49,7 @@ export function useAudioRecording(
       actions.setAudioStream(undefined);
       actions.setAudioError(undefined);
     };
-  }, [enableMicrophone, actions, audioWaveformRef]);
+  }, [enableMicrophone, selectedAudioDeviceId, actions, audioWaveformRef]);
 
   useEffect(() => {
     if (!enableMicrophone || !recording || !audioStream) {
