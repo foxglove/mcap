@@ -45,7 +45,7 @@ fn make_output_path(input: Utf8PathBuf) -> Result<Utf8PathBuf> {
 fn run() -> Result<()> {
     let args = Args::parse();
     logsetup::init_logger(args.verbose, args.color);
-    debug!("{:?}", args);
+    debug!("{args:?}");
 
     let mapped = map_mcap(&args.input)?;
     let output_path = args.output.unwrap_or(make_output_path(args.input)?);
@@ -73,13 +73,13 @@ fn run() -> Result<()> {
             }
         }
     }
-    info!("recovered {} messages", recovered_count);
+    info!("recovered {recovered_count} messages");
     Ok(())
 }
 
 fn main() {
     run().unwrap_or_else(|e| {
-        error!("{:?}", e);
+        error!("{e:?}");
         std::process::exit(1);
     });
 }

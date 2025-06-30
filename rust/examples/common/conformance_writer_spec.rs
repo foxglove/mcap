@@ -25,14 +25,14 @@ impl Record {
             .fields
             .iter()
             .find(|f| f.0 == name)
-            .unwrap_or_else(|| panic!("Invalid: {}", name))
+            .unwrap_or_else(|| panic!("Invalid {name}"))
             .1
     }
 
     pub fn get_field_data(&self, name: &str) -> Vec<u8> {
         self.get_field(name)
             .as_array()
-            .unwrap_or_else(|| panic!("Invalid: {}", name))
+            .unwrap_or_else(|| panic!("Invalid {name}"))
             .iter()
             .filter_map(|v| match v {
                 Value::String(s) => s.parse::<u8>().ok(),
@@ -46,7 +46,7 @@ impl Record {
         let data = self
             .get_field(name)
             .as_object()
-            .unwrap_or_else(|| panic!("Invalid: {}", name));
+            .unwrap_or_else(|| panic!("Invalid {name}"));
         let mut result = BTreeMap::new();
         for (key, value) in data.iter() {
             result.insert(key.to_string(), value.as_str().unwrap().to_string());
@@ -57,28 +57,28 @@ impl Record {
     pub fn get_field_str(&self, name: &str) -> &str {
         self.get_field(name)
             .as_str()
-            .unwrap_or_else(|| panic!("Invalid: {}", name))
+            .unwrap_or_else(|| panic!("Invalid {name}"))
     }
 
     pub fn get_field_u16(&self, name: &str) -> u16 {
         self.get_field(name)
             .as_str()
             .and_then(|s| s.parse::<u16>().ok())
-            .unwrap_or_else(|| panic!("Invalid: {}", name))
+            .unwrap_or_else(|| panic!("Invalid {name}"))
     }
 
     pub fn get_field_u32(&self, name: &str) -> u32 {
         self.get_field(name)
             .as_str()
             .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or_else(|| panic!("Invalid: {}", name))
+            .unwrap_or_else(|| panic!("Invalid {name}"))
     }
 
     pub fn get_field_u64(&self, name: &str) -> u64 {
         self.get_field(name)
             .as_str()
             .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or_else(|| panic!("Invalid: {}", name))
+            .unwrap_or_else(|| panic!("Invalid {name}"))
     }
 }
 
