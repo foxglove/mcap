@@ -411,3 +411,83 @@
 [data-theme="dark"] .videoFormatSelect:hover {
   border-color: #9f7bff;
 }
+
+.deviceSelector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+[data-theme="dark"] .deviceSelector {
+  background-color: #2a2a2a;
+  border-color: #4a4a4a;
+}
+
+.deviceGroup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.deviceLabel {
+  font-weight: 600;
+  color: #333;
+  min-width: 80px;
+  font-size: 14px;
+}
+
+[data-theme="dark"] .deviceLabel {
+  color: #ccc;
+}
+
+.deviceSelect {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: white;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+[data-theme="dark"] .deviceSelect {
+  background-color: #3a3a3a;
+  border-color: #555;
+  color: #fff;
+}
+
+.deviceSelect:focus {
+  outline: none;
+  border-color: #6f3be8;
+  box-shadow: 0 0 0 2px rgba(111, 59, 232, 0.2);
+}
+
+[data-theme="dark"] .deviceSelect:focus {
+  border-color: #9f7bff;
+  box-shadow: 0 0 0 2px rgba(159, 123, 255, 0.2);
+}
+
+.deviceSelect:hover {
+  border-color: #6f3be8;
+}
+
+[data-theme="dark"] .deviceSelect:hover {
+  border-color: #9f7bff;
+}
+
+.deviceSelect option {
+  background-color: white;
+  color: #333;
+}
+
+[data-theme="dark"] .deviceSelect option {
+  background-color: #3a3a3a;
+  color: #fff;
+}

@@ -14,7 +14,13 @@ import {
 export function useVideoRecording(
   videoContainerRef: React.RefObject<HTMLDivElement>,
 ): void {
-  const { actions, recording, videoStarted, enabledVideoFormats } = useStore();
+  const {
+    actions,
+    recording,
+    videoStarted,
+    enabledVideoFormats,
+    selectedCameraDeviceId,
+  } = useStore();
 
   const enableCamera = enabledVideoFormats.size > 0;
 
@@ -51,6 +57,7 @@ export function useVideoRecording(
 
     const cleanup = startVideoStream({
       video,
+      deviceId: selectedCameraDeviceId,
       onStart: () => {
         actions.setVideoStarted({ isStarted: true });
       },
@@ -66,7 +73,7 @@ export function useVideoRecording(
       actions.setVideoStarted({ isStarted: false });
       actions.setVideoError(undefined);
     };
-  }, [enableCamera, actions, videoContainerRef]);
+  }, [enableCamera, selectedCameraDeviceId, actions, videoContainerRef]);
 
   useEffect(() => {
     const videoContainer = videoContainerRef.current;
