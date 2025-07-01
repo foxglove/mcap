@@ -7,6 +7,8 @@ type VideoStreamParams = {
   onStart: () => void;
   /** Called when an error is encountered */
   onError: (error: Error) => void;
+  /** Optional device ID for specific camera selection */
+  deviceId?: string;
 };
 
 // https://www.w3.org/TR/webcodecs-hevc-codec-registration/#videoencoderconfig-extensions
@@ -33,8 +35,12 @@ export function startVideoStream(params: VideoStreamParams): () => void {
   if (typeof navigator.mediaDevices !== "object") {
     params.onError(new Error("navigator.mediaDevices is not defined"));
   } else {
+    const constraints: MediaStreamConstraints = {
+      video: params.deviceId ? { deviceId: { exact: params.deviceId } } : true,
+    };
+
     navigator.mediaDevices
-      .getUserMedia({ video: true })
+      .getUserMedia(constraints)
       .then(async (videoStream) => {
         if (canceled) {
           return;

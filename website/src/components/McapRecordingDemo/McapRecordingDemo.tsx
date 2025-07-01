@@ -5,6 +5,7 @@ import cx from "classnames";
 import React, { useRef } from "react";
 
 import { AudioContainer } from "./AudioContainer";
+import { DeviceSelector } from "./DeviceSelector";
 import styles from "./McapRecordingDemo.module.css";
 import { RecordingControls } from "./RecordingControls";
 import { RecordingStats } from "./RecordingStats";
@@ -69,6 +70,7 @@ export function McapRecordingDemo(): JSX.Element {
           </p>
         </header>
         <RecordingControls />
+        <DeviceSelector />
         {orientationPermissionError && (
           <div className={styles.error}>
             Allow permission to use device orientation

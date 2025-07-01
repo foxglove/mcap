@@ -10,6 +10,8 @@ type AudioStreamParams = {
   onAudioStream: (stream: MediaStream) => void;
   /** Called when an error is encountered */
   onError: (error: Error) => void;
+  /** Optional device ID for specific microphone selection */
+  deviceId?: string;
 };
 
 /**
@@ -20,6 +22,7 @@ export function startAudioStream({
   canvas,
   onAudioStream,
   onError,
+  deviceId,
 }: AudioStreamParams): () => void {
   let canceled = false;
   let stream: MediaStream | undefined;
@@ -74,8 +77,13 @@ export function startAudioStream({
 
     const context = new AudioContext();
     void context.resume();
+
+    const constraints: MediaStreamConstraints = {
+      audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+    };
+
     navigator.mediaDevices
-      .getUserMedia({ audio: true })
+      .getUserMedia(constraints)
       .then((mediaStream) => {
         if (canceled) {
           return;
