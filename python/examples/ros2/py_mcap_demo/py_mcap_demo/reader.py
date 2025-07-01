@@ -1,5 +1,4 @@
 """script that reads ROS2 messages from an MCAP bag using the rosbag2_py API."""
-import argparse
 
 import rosbag2_py
 from rclpy.serialization import deserialize_message
@@ -32,13 +31,7 @@ def read_messages(input_bag: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "input", help="input bag path (folder or filepath) to read from"
-    )
-
-    args = parser.parse_args()
-    for topic, msg, timestamp in read_messages(args.input):
+    for topic, msg, timestamp in read_messages(input("Enter the path to your .mcap file here:"):
         print(f"{topic} ({type(msg).__name__}) [{timestamp}]: '{msg.data}'")
 
 
