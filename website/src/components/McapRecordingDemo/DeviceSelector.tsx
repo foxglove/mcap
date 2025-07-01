@@ -67,7 +67,13 @@ export function DeviceSelector(): JSX.Element {
         handleDeviceChange,
       );
     };
-  }, [selectedCameraDeviceId, selectedAudioDeviceId, videoStarted, audioStream, actions]);
+  }, [
+    selectedCameraDeviceId,
+    selectedAudioDeviceId,
+    videoStarted,
+    audioStream,
+    actions,
+  ]);
 
   const cameras = devices.filter((device) => device.kind === "videoinput");
   const audioDevices = devices.filter((device) => device.kind === "audioinput");
