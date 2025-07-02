@@ -94,6 +94,7 @@ func recoverRun(
 	buf := make([]byte, 1024)
 	var lastChunk *mcap.Chunk
 	var lastIndexes []*mcap.MessageIndex
+	var recordsCopy []byte
 
 	for {
 		token, data, err := lexer.Next(buf)
@@ -168,7 +169,11 @@ func recoverRun(
 				}
 			} else {
 				// copy the records, since it is referenced and the buffer will be reused
-				recordsCopy := make([]byte, len(chunk.Records))
+				if cap(recordsCopy) < len(chunk.Records) {
+					recordsCopy = make([]byte, len(chunk.Records))
+				} else {
+					recordsCopy = recordsCopy[:len(chunk.Records)]
+				}
 				copy(recordsCopy, chunk.Records)
 				lastChunk = chunk
 				lastChunk.Records = recordsCopy
