@@ -187,11 +187,11 @@ impl SummaryReader {
                         let footer_body = &self.footer_buf[1 + 8..FOOTER_RECORD_AND_END_MAGIC - 8];
                         let end_magic =
                             &self.footer_buf[FOOTER_RECORD_AND_END_MAGIC - 8..*loaded_bytes];
-                        if opcode != crate::records::op::FOOTER {
-                            return Err(McapError::BadFooter);
-                        }
                         if end_magic != MAGIC {
                             return Err(McapError::BadMagic);
+                        }
+                        if opcode != crate::records::op::FOOTER {
+                            return Err(McapError::BadFooter);
                         }
                         let mut cursor = std::io::Cursor::new(footer_body);
                         let footer = Footer::read_le(&mut cursor)?;
@@ -405,7 +405,7 @@ mod tests {
                     summary_loader.notify_seeked(pos);
                 }
                 Err(err) => {
-                    assert!(matches!(err, McapError::BadFooter));
+                    assert!(matches!(err, McapError::BadMagic));
                     failed = true;
                     break;
                 }
