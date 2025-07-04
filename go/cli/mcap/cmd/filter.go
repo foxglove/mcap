@@ -20,6 +20,7 @@ type filterFlags struct {
 	output             string
 	includeTopics      []string
 	excludeTopics      []string
+	latchedTopics      []string
 	startSec           uint64
 	endSec             uint64
 	startNano          uint64
@@ -37,6 +38,7 @@ type filterOpts struct {
 	output             string
 	includeTopics      []regexp.Regexp
 	excludeTopics      []regexp.Regexp
+	latchedTopics      []regexp.Regexp
 	start              uint64
 	end                uint64
 	includeMetadata    bool
@@ -124,6 +126,13 @@ func buildFilterOptions(flags *filterFlags) (*filterOpts, error) {
 		return nil, err
 	}
 	opts.excludeTopics = excludeTopics
+
+	latchedTopics, err := compileMatchers(flags.latchedTopics)
+	if err != nil {
+		return nil, err
+	}
+	opts.latchedTopics = latchedTopics
+
 	opts.chunkSize = flags.chunkSize
 	opts.unchunked = flags.unchunked
 	return opts, nil
@@ -266,6 +275,8 @@ func filter(
 	buf := make([]byte, 1024)
 	schemas := make(map[uint16]markableSchema)
 	channels := make(map[uint16]markableChannel)
+	mostRecentLatched := make(map[uint16]*mcap.Message)
+	handledLatched := false
 
 	for {
 		token, data, err := lexer.Next(buf)
@@ -298,6 +309,12 @@ func filter(
 			if err != nil {
 				return err
 			}
+			for i := range opts.latchedTopics {
+				matcher := opts.latchedTopics[i]
+				if matcher.MatchString(channel.Topic) {
+					mostRecentLatched[channel.ID] = nil
+				}
+			}
 			// if any topics match an includeTopic, add it.
 			for i := range opts.includeTopics {
 				matcher := opts.includeTopics[i]
@@ -327,11 +344,59 @@ func filter(
 			if err != nil {
 				return err
 			}
+			most_recent, ok := mostRecentLatched[message.ChannelID]
 			if message.LogTime < opts.start {
+
+				if ok {
+					if most_recent == nil || most_recent.LogTime < message.LogTime {
+						mostRecentLatched[message.ChannelID] = message
+						oldData := message.Data
+						mostRecentLatched[message.ChannelID].Data = make([]byte, len(message.Data))
+						copy(mostRecentLatched[message.ChannelID].Data, oldData)
+					}
+				}
 				continue
 			}
 			if message.LogTime >= opts.end {
 				continue
+			}
+			if !handledLatched {
+				handledLatched = true
+				// We have reached the start of the record, so here we need to add the latched topics
+				for _, mostRecent := range mostRecentLatched {
+					if mostRecent == nil {
+						continue
+					}
+					// We might still need to write the channel
+					channel, ok := channels[mostRecent.ChannelID]
+					if !ok {
+						continue
+					}
+					if !channel.written {
+						if channel.SchemaID != 0 {
+							schema, ok := schemas[channel.SchemaID]
+							if !ok {
+								return fmt.Errorf("encountered channel with topic %s with unknown schema ID %d", channel.Topic, channel.SchemaID)
+							}
+							if !schema.written {
+								if err := mcapWriter.WriteSchema(schema.Schema); err != nil {
+									return err
+								}
+								schemas[channel.SchemaID] = markableSchema{schema.Schema, true}
+							}
+						}
+						if err := mcapWriter.WriteChannel(channel.Channel); err != nil {
+							return err
+						}
+						channels[mostRecent.ChannelID] = markableChannel{channel.Channel, true}
+					}
+					mostRecent.LogTime = opts.start
+					mostRecent.PublishTime = opts.start
+					if err := mcapWriter.WriteMessage(mostRecent); err != nil {
+						return err
+					}
+					numMessages++
+				}
 			}
 			channel, ok := channels[message.ChannelID]
 			if !ok {
@@ -406,6 +471,12 @@ usage:
 			[]string{},
 			"messages with topic names matching this regex will be excluded, can be supplied multiple times",
 		)
+		latchedTopics := filterCmd.PersistentFlags().StringArrayP(
+			"latched-topic-regex",
+			"l",
+			[]string{},
+			"For included topics matching this regex, the most recent message previous to the start time will still be included, with its time adjusted to the start time of the output",
+		)
 		start := filterCmd.PersistentFlags().StringP(
 			"start",
 			"S",
@@ -466,6 +537,7 @@ usage:
 				output:             *output,
 				includeTopics:      *includeTopics,
 				excludeTopics:      *excludeTopics,
+				latchedTopics:      *latchedTopics,
 				start:              *start,
 				startSec:           *startSec,
 				startNano:          *startNano,
