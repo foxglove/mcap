@@ -425,6 +425,13 @@ jobs:
             env:
               CC: aarch64-linux-gnu-gcc
               CXX: aarch64-linux-gnu-g++
+          - os: linux
+            image: ubuntu-latest
+            arch: arm
+            setup: sudo apt-get update && sudo apt-get install -qq gcc-arm-linux-gnueabihf
+            env:
+              CC: arm-linux-gnueabihf-gcc
+              CXX: arm-linux-gnueabihf-g++
           - os: macos
             image: macos-latest
             arch: amd64
