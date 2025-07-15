@@ -428,10 +428,11 @@ jobs:
           - os: linux
             image: ubuntu-latest
             arch: arm
-            setup: sudo apt-get update && sudo apt-get install -qq gcc-arm-linux-gnueabihf
+            setup: sudo apt-get update && sudo apt-get install -qq gcc-arm-linux-gnueabi
             env:
-              CC: arm-linux-gnueabihf-gcc
-              CXX: arm-linux-gnueabihf-g++
+              CC: arm-linux-gnueabi-gcc
+              CXX: arm-linux-gnueabi-g++
+              GOARM: 6
           - os: macos
             image: macos-latest
             arch: amd64
