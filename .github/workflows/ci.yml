@@ -401,12 +401,11 @@ jobs:
           startsWith(github.ref, 'refs/tags/go/mcap/v')
         run: make -C cli/mcap build && ./check_tag.sh cli/mcap/bin/mcap
 
-  go-release-cli:
+  go-cli:
     permissions:
       contents: write
     needs:
       - go
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
     defaults:
       run:
         working-directory: go/cli/mcap
@@ -432,6 +431,7 @@ jobs:
             env:
               CC: arm-linux-gnueabihf-gcc
               CXX: arm-linux-gnueabihf-g++
+              GOARM: 7
           - os: macos
             image: macos-latest
             arch: amd64
@@ -445,7 +445,7 @@ jobs:
             arch: amd64
             env: {}
 
-    name: Build (${{ matrix.os }}/${{ matrix.arch }})
+    name: go-cli (${{ matrix.os }}/${{ matrix.arch }})
     runs-on: ${{ matrix.image }}
     env: ${{ matrix.env }}
 
@@ -464,10 +464,17 @@ jobs:
         env:
           GOARCH: ${{ matrix.arch }}
           OUTPUT: mcap-${{ matrix.os }}-${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcap-cli-${{ matrix.os }}-${{ matrix.arch }}
+          path: go/cli/mcap/bin/mcap-${{ matrix.os }}-${{ matrix.arch }}
+          retention-days: 7
       - name: Make release notes
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
         run: |
           git log --oneline --no-merges --first-parent --grep CLI --decorate-refs=refs $(git describe --tags $(git rev-list --tags=releases/mcap-cli --max-count=1))..HEAD > ${{ github.workspace }}-CHANGELOG.txt
       - name: Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
         uses: softprops/action-gh-release@v2
         with:
           files: ./go/cli/mcap/bin/*
