@@ -14,7 +14,21 @@ import { BlobReadable } from "@mcap/browser";
 import { McapIndexedReader } from "@mcap/core";
 
 async function onInputOrDrop(event: InputEvent | DragEvent) {
-  const file = event.dataTransfer.files[0];
+  let file: File | undefined;
+
+  if ("dataTransfer" in event && event.dataTransfer) {
+    // DragEvent
+    file = event.dataTransfer.files[0];
+  } else if ("target" in event && event.target) {
+    // InputEvent
+    file = (event.target as HTMLInputElement).files?.[0];
+  }
+
+  if (!file) {
+    console.error("No file found");
+    return;
+  }
+
   const decompressHandlers = await loadDecompressHandlers();
   const reader = await McapIndexedReader.Initialize({
     readable: new BlobReadable(file),
