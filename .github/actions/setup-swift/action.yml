@@ -1,0 +1,41 @@
+name: Setup Swift
+inputs:
+  swift-version:
+    description: "The Swift version"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: install swiftly
+      shell: bash
+      run: |
+        set -e
+
+        checksum="8c11f8bdeee212ed4b541a1ce2708866d4d290fdfe02362b0048b4cc57614341"
+        version="1.0.0"
+        archive="swiftly-$version-x86_64.tar.gz"
+
+        wget https://download.swift.org/swiftly/linux/$archive
+        echo "$checksum  ./$archive" | sha256sum --check
+
+        tar xzf $archive
+
+        export SWIFTLY_HOME_DIR="$HOME/.local/share/swiftly"
+        export SWIFTLY_BIN_DIR="$HOME/.local/share/swiftly/bin"
+
+        echo "SWIFTLY_HOME_DIR=$SWIFTLY_HOME_DIR" >> $GITHUB_ENV
+        echo "SWIFTLY_BIN_DIR=$SWIFTLY_BIN_DIR" >> $GITHUB_ENV
+        echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
+
+        ./swiftly init --no-modify-profile --assume-yes --skip-install
+
+    - name: install deps
+      shell: bash
+      run: sudo apt-get -y install libcurl4-openssl-dev
+
+    - name: install swift
+      shell: bash
+      run: swiftly install --use -y ${{ inputs.swift-version }}
+    - shell: bash
+      run: swift --version

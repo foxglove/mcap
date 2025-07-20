@@ -11,6 +11,7 @@ use std::{
 use bimap::BiHashMap;
 use binrw::prelude::*;
 use byteorder::{WriteBytesExt, LE};
+use enumset::{EnumSet, EnumSetType};
 #[cfg(feature = "zstd")]
 use zstd::stream::{raw as zraw, zio};
 
@@ -30,6 +31,12 @@ enum WriteMode<W: Write + Seek> {
     Raw(CountingCrcWriter<W>),
     Chunk(ChunkWriter<W>),
     Attachment(AttachmentWriter<CountingCrcWriter<W>>),
+}
+
+#[derive(EnumSetType, Debug)]
+pub enum PrivateRecordOptions {
+    /// If set and chunking is enabled, the private record will be written into a chunk. Otherwise, the record will be written directly to the file.
+    IncludeInChunks,
 }
 
 fn op_and_len<W: Write>(w: &mut W, op: u8, len: u64) -> io::Result<()> {
@@ -94,7 +101,12 @@ fn write_record<W: Write>(mut w: &mut W, r: &Record) -> io::Result<()> {
         Record::MetadataIndex(mi) => record!(op::METADATA_INDEX, mi),
         Record::SummaryOffset(so) => record!(op::SUMMARY_OFFSET, so),
         Record::DataEnd(eod) => record!(op::DATA_END, eod),
-        _ => todo!(),
+        Record::Unknown { opcode, data } => {
+            let len = data.len();
+            let op = *opcode;
+            op_and_len(w, op, len as u64)?;
+            w.write_all(data)?;
+        }
     };
     Ok(())
 }
@@ -119,6 +131,10 @@ pub struct WriteOptions {
     calculate_data_section_crc: bool,
     calculate_summary_section_crc: bool,
     calculate_attachment_crcs: bool,
+    #[cfg(any(feature = "zstd", feature = "lz4"))]
+    compression_level: u32,
+    #[cfg(feature = "zstd")]
+    compression_threads: u32,
 }
 
 impl Default for WriteOptions {
@@ -145,6 +161,10 @@ impl Default for WriteOptions {
             calculate_data_section_crc: true,
             calculate_summary_section_crc: true,
             calculate_attachment_crcs: true,
+            #[cfg(any(feature = "zstd", feature = "lz4"))]
+            compression_level: 0,
+            #[cfg(feature = "zstd")]
+            compression_threads: num_cpus::get_physical() as u32,
         }
     }
 }
@@ -293,6 +313,23 @@ impl WriteOptions {
     /// section](https://mcap.dev/spec#summary-section). This is on by default.
     pub fn repeat_schemas(mut self, repeat_schemas: bool) -> Self {
         self.repeat_schemas = repeat_schemas;
+        self
+    }
+
+    /// Specifies the compression level to use. A value of zero instructs the
+    /// compressor to use the default compression level.
+    #[cfg(any(feature = "zstd", feature = "lz4"))]
+    pub fn compression_level(mut self, compression_level: u32) -> Self {
+        self.compression_level = compression_level;
+        self
+    }
+
+    /// Specifies how many threads to use for compression. A value of zero
+    /// disables multithreaded compression. The default number of threads
+    /// is equal to the number of physical CPUs.
+    #[cfg(feature = "zstd")]
+    pub fn compression_threads(mut self, compression_threads: u32) -> Self {
+        self.compression_threads = compression_threads;
         self
     }
 
@@ -489,21 +526,18 @@ impl<W: Write + Seek> Writer<W> {
 
     /// Write a schema record into the MCAP.
     fn write_schema(&mut self, schema: Schema) -> McapResult<()> {
-        if self.options.use_chunks {
-            self.start_chunk()?.write_schema(schema)
-        } else {
-            let header = records::SchemaHeader {
+        let record = Record::Schema {
+            header: records::SchemaHeader {
                 id: schema.id,
                 name: schema.name,
                 encoding: schema.encoding,
-            };
-            Ok(write_record(
-                &mut self.finish_chunk()?,
-                &Record::Schema {
-                    header,
-                    data: schema.data,
-                },
-            )?)
+            },
+            data: schema.data,
+        };
+        if self.options.use_chunks {
+            self.start_chunk()?.write_record(&record)
+        } else {
+            Ok(write_record(&mut self.finish_chunk()?, &record)?)
         }
     }
 
@@ -563,13 +597,11 @@ impl<W: Write + Seek> Writer<W> {
 
     /// Write a channel record into the MCAP.
     fn write_channel(&mut self, channel: records::Channel) -> McapResult<()> {
+        let record = Record::Channel(channel);
         if self.options.use_chunks {
-            self.start_chunk()?.write_channel(channel)
+            self.start_chunk()?.write_record(&record)
         } else {
-            Ok(write_record(
-                self.finish_chunk()?,
-                &Record::Channel(channel),
-            )?)
+            Ok(write_record(self.finish_chunk()?, &record)?)
         }
     }
 
@@ -704,6 +736,33 @@ impl<W: Write + Seek> Writer<W> {
                 },
             )?;
         }
+        Ok(())
+    }
+
+    /// Write a private record using the provided options.
+    ///
+    /// Private records must have an opcode >= 0x80.
+    pub fn write_private_record(
+        &mut self,
+        opcode: u8,
+        data: &[u8],
+        options: EnumSet<PrivateRecordOptions>,
+    ) -> McapResult<()> {
+        if opcode < 0x80 {
+            return Err(McapError::PrivateRecordOpcodeIsReserved { opcode });
+        }
+
+        let record = Record::Unknown {
+            opcode,
+            data: Cow::Borrowed(data),
+        };
+
+        if self.options.use_chunks && options.contains(PrivateRecordOptions::IncludeInChunks) {
+            self.start_chunk()?.write_record(&record)?;
+        } else {
+            write_record(self.finish_chunk()?, &record)?;
+        }
+
         Ok(())
     }
 
@@ -913,6 +972,10 @@ impl<W: Write + Seek> Writer<W> {
                     std::mem::take(&mut self.chunk_mode),
                     self.options.emit_message_indexes,
                     self.options.calculate_chunk_crcs,
+                    #[cfg(any(feature = "zstd", feature = "lz4"))]
+                    self.options.compression_level,
+                    #[cfg(feature = "zstd")]
+                    self.options.compression_threads,
                 )?)
             }
             chunk => chunk,
@@ -1322,6 +1385,8 @@ impl<W: Write + Seek> ChunkWriter<W> {
         mode: ChunkMode,
         emit_message_indexes: bool,
         calculate_chunk_crcs: bool,
+        #[cfg(any(feature = "zstd", feature = "lz4"))] compression_level: u32,
+        #[cfg(feature = "zstd")] compression_threads: u32,
     ) -> McapResult<Self> {
         // Relative to start of original stream.
         let chunk_offset = writer.stream_position()?;
@@ -1362,15 +1427,20 @@ impl<W: Write + Seek> ChunkWriter<W> {
             #[cfg(feature = "zstd")]
             Some(Compression::Zstd) => {
                 #[allow(unused_mut)]
-                let mut enc = zraw::Encoder::with_dictionary(0, &[])?;
+                let mut enc = zraw::Encoder::with_dictionary(compression_level as i32, &[])?;
                 // Enable multithreaded encoding on non-WASM targets.
                 #[cfg(not(target_arch = "wasm32"))]
-                enc.set_parameter(zraw::CParameter::NbWorkers(num_cpus::get_physical() as u32))?;
+                enc.set_parameter(zraw::CParameter::NbWorkers(compression_threads))?;
+
                 Compressor::Zstd(zio::Writer::new(sink, enc))
             }
             #[cfg(feature = "lz4")]
             Some(Compression::Lz4) => Compressor::Lz4(
+                // Note: lz4-1.10.0 supports multithreaded compression
+                // (github.com/lz4/lz4/pull/1336), but this is not yet
+                // available through the lz4 / lz4-sys crates.
                 lz4::EncoderBuilder::new()
+                    .level(compression_level)
                     // Disable the block checksum for wider compatibility with MCAP tooling that
                     // includes a fault block checksum calculation. Since the MCAP spec includes a
                     // CRC for the compressed chunk this would be a superfluous check anyway.
@@ -1395,24 +1465,8 @@ impl<W: Write + Seek> ChunkWriter<W> {
         })
     }
 
-    fn write_schema(&mut self, schema: Schema) -> McapResult<()> {
-        let header = records::SchemaHeader {
-            id: schema.id,
-            name: schema.name,
-            encoding: schema.encoding,
-        };
-        write_record(
-            &mut self.compressor,
-            &Record::Schema {
-                header,
-                data: schema.data,
-            },
-        )?;
-        Ok(())
-    }
-
-    fn write_channel(&mut self, chan: records::Channel) -> McapResult<()> {
-        write_record(&mut self.compressor, &Record::Channel(chan))?;
+    fn write_record(&mut self, record: &Record) -> McapResult<()> {
+        write_record(&mut self.compressor, record)?;
         Ok(())
     }
 
@@ -1434,13 +1488,11 @@ impl<W: Write + Seek> ChunkWriter<W> {
                 });
         }
 
-        write_record(
-            &mut self.compressor,
-            &Record::Message {
-                header: *header,
-                data: Cow::Borrowed(data),
-            },
-        )?;
+        self.write_record(&Record::Message {
+            header: *header,
+            data: Cow::Borrowed(data),
+        })?;
+
         Ok(())
     }
 
@@ -1636,6 +1688,8 @@ impl<W: Write + Seek> AttachmentWriter<W> {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+
+    use crate::read::LinearReader;
 
     use super::*;
     #[test]
@@ -2024,5 +2078,80 @@ mod tests {
             .expect("expected a summary");
         assert_eq!(summary.channels.len(), 2);
         assert_eq!(summary.schemas.len(), 2);
+    }
+
+    #[test]
+    fn test_writes_private_record_to_chunk() {
+        let mut file = vec![];
+
+        let mut writer = WriteOptions::new()
+            .use_chunks(true)
+            .compression(None)
+            .create(Cursor::new(&mut file))
+            .expect("failed to construct writer");
+
+        writer
+            .write_private_record(
+                0x81,
+                b"this is in a chunk",
+                PrivateRecordOptions::IncludeInChunks.into(),
+            )
+            .expect("failed to write");
+
+        writer
+            .write_private_record(0x82, b"this is not in a chunk", Default::default())
+            .expect("failed to write");
+
+        drop(writer);
+
+        let mut reader = LinearReader::new(&file[..]).expect("failed to construct reader");
+
+        let Record::Header(_) = reader.next().unwrap().unwrap() else {
+            panic!("expected header for first record");
+        };
+
+        let Record::Chunk { data, .. } = reader.next().unwrap().unwrap() else {
+            panic!("expected chunk for next record");
+        };
+
+        let mut chunk_reader = LinearReader::sans_magic(&data[..]);
+
+        let Record::Unknown { opcode, data } = chunk_reader.next().unwrap().unwrap() else {
+            panic!("expected chunk to contain unknown record");
+        };
+
+        assert_eq!(opcode, 0x81);
+        assert_eq!(String::from_utf8_lossy(&data[..]), "this is in a chunk");
+
+        let Record::Unknown { opcode, data } = reader.next().unwrap().unwrap() else {
+            panic!("expected chunk for next record");
+        };
+
+        assert_eq!(opcode, 0x82);
+        assert_eq!(String::from_utf8_lossy(&data[..]), "this is not in a chunk");
+    }
+
+    #[test]
+    fn test_invalid_private_record_opcode_fails() {
+        let mut file = vec![];
+
+        let mut writer = WriteOptions::new()
+            .use_chunks(true)
+            .compression(None)
+            .create(Cursor::new(&mut file))
+            .expect("failed to construct writer");
+
+        let e = writer
+            .write_private_record(
+                0x1,
+                &[1, 2, 3, 4],
+                PrivateRecordOptions::IncludeInChunks.into(),
+            )
+            .expect_err("should return err");
+
+        assert_eq!(
+            e.to_string(),
+            "Private records must have an opcode >= 0x80, got 0x01"
+        );
     }
 }

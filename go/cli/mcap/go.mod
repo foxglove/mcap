@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/storage v1.23.0
 	github.com/fatih/color v1.13.0
 	github.com/foxglove/go-rosbag v0.0.7
-	github.com/foxglove/mcap/go/mcap v1.7.2
+	github.com/foxglove/mcap/go/mcap v1.7.3
 	github.com/foxglove/mcap/go/ros v0.0.0-20230114025807-456e6a6ca1be
 	github.com/klauspost/compress v1.16.7
 	github.com/mattn/go-sqlite3 v1.14.14

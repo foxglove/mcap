@@ -8,8 +8,6 @@ use std::env;
 use std::process;
 use tokio::fs::File;
 
-use tokio;
-
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let args: Vec<String> = env::args().collect();

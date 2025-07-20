@@ -200,7 +200,7 @@ export class ChunkCursor {
       this.#orderedMessageOffsets[this.#orderedMessageOffsets.length - 1]!;
     if (logTimeLastMessage > this.chunkIndex.messageEndTime) {
       throw new Error(
-        `Chunk at offset ${this.chunkIndex.chunkStartOffset} contains a message with logTime with logTime (${logTimeLastMessage}) later than chunk messageEndTime (${this.chunkIndex.messageEndTime})`,
+        `Chunk at offset ${this.chunkIndex.chunkStartOffset} contains a message with logTime (${logTimeLastMessage}) later than chunk messageEndTime (${this.chunkIndex.messageEndTime})`,
       );
     }
 

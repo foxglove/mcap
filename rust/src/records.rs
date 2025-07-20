@@ -6,11 +6,7 @@
 //! [`Message`](crate::Message), [`Channel`](crate::Channel), and [`Schema`](crate::Schema),
 //! read from iterators like [`MesssageStream`](crate::MessageStream).
 
-use std::{
-    borrow::Cow,
-    collections::BTreeMap,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{borrow::Cow, collections::BTreeMap};
 
 use binrw::*;
 
@@ -334,16 +330,6 @@ pub struct Channel {
     pub metadata: BTreeMap<String, String>,
 }
 
-pub fn system_time_to_nanos(d: &SystemTime) -> u64 {
-    let ns = d.duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    assert!(ns <= u64::MAX as u128);
-    ns as u64
-}
-
-pub fn nanos_to_system_time(n: u64) -> SystemTime {
-    UNIX_EPOCH + Duration::from_nanos(n)
-}
-
 #[derive(Debug, Copy, Clone, Eq, PartialEq, BinRead, BinWrite)]
 pub struct MessageHeader {
     pub channel_id: u16,
@@ -436,7 +422,7 @@ impl ChunkIndex {
         );
         match res {
             Some(n) => Ok(n),
-            None => Err(McapError::TooLong(self.chunk_start_offset)),
+            None => Err(McapError::BadChunkStartOffset(self.chunk_start_offset)),
         }
     }
 }

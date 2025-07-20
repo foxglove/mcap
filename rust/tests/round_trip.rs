@@ -53,7 +53,7 @@ fn demo_round_trip_for_opts(opts: WriteOptions) -> Result<()> {
     {
         let offset = match rec {
             Ok(mcap::records::Record::SummaryOffset(sos)) => sos,
-            wut => panic!("Expected summary offset, got {:?}", wut),
+            wut => panic!("Expected summary offset, got {wut:?}"),
         };
 
         // We expect these offsets in this (arbitrary) order:

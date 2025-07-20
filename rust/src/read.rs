@@ -21,7 +21,7 @@ use crate::{
     records::{self, op, Footer, Record},
     sans_io::{
         LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions, SummaryReadEvent,
-        SummaryReader,
+        SummaryReader, SummaryReaderOptions,
     },
     Attachment, Channel, McapError, McapResult, Message, Schema, MAGIC,
 };
@@ -569,7 +569,9 @@ impl Summary {
     pub fn read(mcap: &[u8]) -> McapResult<Option<Self>> {
         use std::io::{Read, Seek};
         let mut cursor = std::io::Cursor::new(mcap);
-        let mut summary_reader = SummaryReader::new();
+        let mut summary_reader = SummaryReader::new_with_options(
+            SummaryReaderOptions::default().with_file_size(mcap.len() as u64),
+        );
         while let Some(event) = summary_reader.next_event() {
             match event? {
                 SummaryReadEvent::ReadRequest(n) => {

@@ -71,13 +71,13 @@ jobs:
           retention-days: 1
 
   docs-swift:
-    runs-on: ubuntu-22.04 # https://github.com/swift-actions/setup-swift/issues/677
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: swift-actions/setup-swift@v2
+      - uses: ./.github/actions/setup-swift
         with:
-          swift-version: "6.0"
+          swift-version: "6.1"
 
       - run: mkdir __docs__
 

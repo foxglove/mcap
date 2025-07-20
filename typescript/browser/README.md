@@ -12,7 +12,6 @@ The `@mcap/browser` package provides utilities for working with MCAP files in br
 import { loadDecompressHandlers } from "@mcap/support";
 import { BlobReadable } from "@mcap/browser";
 import { McapIndexedReader } from "@mcap/core";
-import { open } from "fs/promises";
 
 async function onInputOrDrop(event: InputEvent | DragEvent) {
   const file = event.dataTransfer.files[0];

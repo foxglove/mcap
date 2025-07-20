@@ -287,12 +287,16 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 	}
 	// produce message indexes for the newly decompressed chunk data.
 	var maxLogTime uint64
+	// Always assume we need to sort newly added message indexes unless there are no outstanding
+	// messages. Even though chunks indexes are in order of messageStartTime, the message indexes
+	// within them may overlap or be out of order (especially when time/topic filters are considered).
+	sortingRequired := true
 	// if there are no message indexes outstanding, truncate now.
 	if it.curMessageIndex == len(it.messageIndexes) {
 		it.curMessageIndex = 0
 		it.messageIndexes = it.messageIndexes[:0]
+		sortingRequired = false
 	}
-	sortingRequired := it.curMessageIndex != 0
 	startIdx := len(it.messageIndexes)
 	for offset := uint64(0); offset < bufSize; {
 		if bufSize < offset+1+8 {

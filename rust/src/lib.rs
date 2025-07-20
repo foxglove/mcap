@@ -110,6 +110,8 @@ pub enum McapError {
     BadChunkLength { header: u64, available: u64 },
     #[error("Schema length ({header}) exceeds space in record ({available})")]
     BadSchemaLength { header: u32, available: u32 },
+    #[error("Private records must have an opcode >= 0x80, got {opcode:#04x}")]
+    PrivateRecordOpcodeIsReserved { opcode: u8 },
     #[error("Channel `{0}` has mulitple records that don't match.")]
     ConflictingChannels(String),
     #[error("Schema `{0}` has mulitple records that don't match.")]
@@ -136,10 +138,14 @@ pub enum McapError {
     UnsupportedCompression(String),
     #[error("Error during decompression: `{0}`")]
     DecompressionError(String),
-    #[error("chunk buffer exceeds usize max: `{0}`")]
+    #[error("chunk size option exceeds usize max: `{0}`")]
     ChunkBufferTooLarge(u64),
-    #[error("length exceeds usize max: `{0}`")]
-    TooLong(u64),
+    #[error("record with opcode {opcode:02x} length exceeds limit: `{len}`")]
+    RecordTooLarge { opcode: u8, len: u64 },
+    #[error("chunk (de)compressed length exceeds limit: `{0}`")]
+    ChunkTooLarge(u64),
+    #[error("chunk start offset is out of file range: {0}")]
+    BadChunkStartOffset(u64),
     #[error("cannot write more than 65536 channels to one MCAP")]
     TooManyChannels,
     #[error("cannot write more than 65535 schemas to one MCAP")]

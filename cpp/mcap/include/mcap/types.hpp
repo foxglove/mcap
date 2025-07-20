@@ -3,6 +3,7 @@
 #include "errors.hpp"
 #include "visibility.hpp"
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -13,7 +14,7 @@
 
 namespace mcap {
 
-#define MCAP_LIBRARY_VERSION "2.0.0"
+#define MCAP_LIBRARY_VERSION "2.0.2"
 
 using SchemaId = uint16_t;
 using ChannelId = uint16_t;

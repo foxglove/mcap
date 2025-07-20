@@ -326,6 +326,9 @@ public:
   /**
    * @brief Open a new MCAP file for writing and write the header.
    *
+   * If the writer was already opened, this calls `close`() first to reset the state.
+   * A writer may be re-used after being reset via `close`() or `terminate`().
+   *
    * @param filename Filename of the MCAP file to write.
    * @param options Options for MCAP writing. `profile` is required.
    * @return A non-success status if the file could not be opened for writing.
@@ -334,6 +337,9 @@ public:
 
   /**
    * @brief Open a new MCAP file for writing and write the header.
+   *
+   * If the writer was already opened, this calls `close`() first to reset the state.
+   * A writer may be re-used after being reset via `close`() or `terminate`().
    *
    * @param writer An implementation of the IWritable interface. Output bytes
    *   will be written to this object.
@@ -351,20 +357,26 @@ public:
 
   /**
    * @brief Write the MCAP footer, flush pending writes to the output stream,
-   * and reset internal state.
+   * and reset internal state. The writer may be re-used with another call to open afterwards.
    */
   void close();
 
   /**
    * @brief Reset internal state without writing the MCAP footer or flushing
    * pending writes. This should only be used in error cases as the output MCAP
-   * file will be truncated.
+   * file will be truncated. The writer may be re-used with another call to open afterwards.
    */
   void terminate();
 
   /**
    * @brief Add a new schema to the MCAP file and set `schema.id` to a generated
    * schema id. The schema id is used when adding channels to the file.
+   *
+   * Schemas are not cleared when the state is reset via `close`() or `terminate`().
+   * If you're re-using a writer for multiple files in a row, the schemas only need
+   * to be added once, before first use.
+   *
+   * This method does not de-duplicate schemas.
    *
    * @param schema Description of the schema to register. The `id` field is
    *   ignored and will be set to a generated schema id.
@@ -375,6 +387,12 @@ public:
    * @brief Add a new channel to the MCAP file and set `channel.id` to a
    * generated channel id. The channel id is used when adding messages to the
    * file.
+   *
+   * Channels are not cleared when the state is reset via `close`() or `terminate`().
+   * If you're re-using a writer for multiple files in a row, the channels only need
+   * to be added once, before first use.
+   *
+   * This method does not de-duplicate channels.
    *
    * @param channel Description of the channel to register. The `id` value is
    *   ignored and will be set to a generated channel id.
