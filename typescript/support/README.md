@@ -19,7 +19,7 @@ import { McapIndexedReader } from "@mcap/core";
  * For drag & drop, listen for "drop" events. (Note that you must also listen for "dragover" events
  * and call event.preventDefault(), to enable listening for drop events.)
  */
-async function onInputOrDrop(event: Event) {
+async function onChangeOrDrop(event: Event) {
   let file: File | undefined;
   if (event instanceof DragEvent) {
     file = event.dataTransfer?.files[0];
