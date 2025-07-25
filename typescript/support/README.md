@@ -13,8 +13,25 @@ import { loadDecompressHandlers } from "@mcap/support";
 import { BlobReadable } from "@mcap/browser";
 import { McapIndexedReader } from "@mcap/core";
 
-async function onInputOrDrop(event: InputEvent | DragEvent) {
-  const file = event.dataTransfer.files[0];
+/**
+ * For <input type="file"/>, listen for "change" events.
+ *
+ * For drag & drop, listen for "drop" events. (Note that you must also listen for "dragover" events
+ * and call event.preventDefault(), to enable listening for drop events.)
+ */
+async function onChangeOrDrop(event: Event) {
+  let file: File | undefined;
+  if (event instanceof DragEvent) {
+    file = event.dataTransfer?.files[0];
+    event.preventDefault();
+  } else if (event.target instanceof HTMLInputElement) {
+    file = event.target.files?.[0];
+  } else {
+    throw new Error(`Unexpected event type: ${event.type}`);
+  }
+  if (!file) {
+    throw new Error("No file selected");
+  }
   const decompressHandlers = await loadDecompressHandlers();
   const reader = await McapIndexedReader.Initialize({
     readable: new BlobReadable(file),
