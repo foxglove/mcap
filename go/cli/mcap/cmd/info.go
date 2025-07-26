@@ -100,12 +100,37 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			compressedSize   uint64
 			uncompressedSize uint64
 		})
+		var largestChunkCompressedSize uint64
+		var largestChunkUncompressedSize uint64
+
+		// Check for overlapping chunks
+		hasOverlaps := false
+		overlapCount := 0
+		for i := 0; i < len(info.ChunkIndexes); i++ {
+			for j := i + 1; j < len(info.ChunkIndexes); j++ {
+				chunk1 := info.ChunkIndexes[i]
+				chunk2 := info.ChunkIndexes[j]
+				// Check if the message time ranges overlap
+				if chunk1.MessageStartTime < chunk2.MessageEndTime && chunk2.MessageStartTime < chunk1.MessageEndTime {
+					hasOverlaps = true
+					overlapCount++
+				}
+			}
+		}
+
 		for _, ci := range info.ChunkIndexes {
 			stats := compressionFormatStats[ci.Compression]
 			stats.count++
 			stats.compressedSize += ci.CompressedSize
 			stats.uncompressedSize += ci.UncompressedSize
 			compressionFormatStats[ci.Compression] = stats
+
+			if ci.CompressedSize > largestChunkCompressedSize {
+				largestChunkCompressedSize = ci.CompressedSize
+			}
+			if ci.UncompressedSize > largestChunkUncompressedSize {
+				largestChunkUncompressedSize = ci.UncompressedSize
+			}
 		}
 		fmt.Fprintf(buf, "compression:\n")
 		chunkCount := len(info.ChunkIndexes)
@@ -118,6 +143,14 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 				fmt.Fprintf(buf, "[%s/sec] ", humanBytes(uint64(float64(v.compressedSize)/durationInSeconds)))
 			}
 			fmt.Fprintf(buf, "\n")
+		}
+		fmt.Fprintf(buf, "chunks:\n")
+		fmt.Fprintf(buf, "\tmax size: %s / %s\n",
+			humanBytes(largestChunkUncompressedSize), humanBytes(largestChunkCompressedSize))
+		if hasOverlaps {
+			fmt.Fprintf(buf, "\toverlapping: yes (%d overlaps)\n", overlapCount)
+		} else {
+			fmt.Fprintf(buf, "\toverlapping: no\n")
 		}
 	}
 	fmt.Fprintf(buf, "channels:\n")
