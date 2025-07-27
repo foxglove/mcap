@@ -60,23 +60,31 @@ func addRow(rows [][]string, field string, value string, args ...any) [][]string
 }
 
 type chunkEvent struct {
-	time    uint64
-	isStart bool
+	time             uint64
+	isStart          bool
+	uncompressedSize uint64
 }
 
-// countChunkOverlaps uses a sweep-line algorithm to count overlapping chunks
-// in O(n log n) time.
-func countChunkOverlaps(chunks []*mcap.ChunkIndex) (hasOverlaps bool, overlapCount int) {
+// countChunkOverlaps uses a sweep-line algorithm to find the maximum number
+// of simultaneously active chunks and their total uncompressed size in O(n log n) time.
+func countChunkOverlaps(chunks []*mcap.ChunkIndex) (
+	hasOverlaps bool,
+	maxActiveChunks int,
+	maxTotalUncompressedSize uint64,
+) {
 	if len(chunks) < 2 {
-		return false, 0
+		if len(chunks) == 1 {
+			return false, 1, chunks[0].UncompressedSize
+		}
+		return false, 0, 0
 	}
 
 	// Create start and end events for each chunk
 	events := make([]chunkEvent, 0, len(chunks)*2)
 	for _, chunk := range chunks {
 		events = append(events,
-			chunkEvent{time: chunk.MessageStartTime, isStart: true},
-			chunkEvent{time: chunk.MessageEndTime, isStart: false},
+			chunkEvent{time: chunk.MessageStartTime, isStart: true, uncompressedSize: chunk.UncompressedSize},
+			chunkEvent{time: chunk.MessageEndTime, isStart: false, uncompressedSize: chunk.UncompressedSize},
 		)
 	}
 
@@ -89,18 +97,28 @@ func countChunkOverlaps(chunks []*mcap.ChunkIndex) (hasOverlaps bool, overlapCou
 		return events[i].time < events[j].time
 	})
 
-	// Sweep through events counting overlaps
+	// Sweep through events tracking max active chunks and total size
 	activeChunks := 0
+	maxActiveChunks = 0
+	currentTotalSize := uint64(0)
+	maxTotalUncompressedSize = 0
+
 	for _, event := range events {
 		if event.isStart {
-			overlapCount += activeChunks
 			activeChunks++
+			currentTotalSize += event.uncompressedSize
+			if activeChunks > maxActiveChunks ||
+				(activeChunks == maxActiveChunks && currentTotalSize > maxTotalUncompressedSize) {
+				maxActiveChunks = activeChunks
+				maxTotalUncompressedSize = currentTotalSize
+			}
 		} else {
 			activeChunks--
+			currentTotalSize -= event.uncompressedSize
 		}
 	}
 
-	return overlapCount > 0, overlapCount
+	return maxActiveChunks > 1, maxActiveChunks, maxTotalUncompressedSize
 }
 
 func printInfo(w io.Writer, info *mcap.Info) error {
@@ -145,7 +163,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			uncompressedSize uint64
 		})
 
-		hasOverlaps, overlapCount := countChunkOverlaps(info.ChunkIndexes)
+		hasOverlaps, maxActiveChunks, maxTotalUncompressedSize := countChunkOverlaps(info.ChunkIndexes)
 
 		var largestChunkCompressedSize uint64
 		var largestChunkUncompressedSize uint64
@@ -180,9 +198,10 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		fmt.Fprintf(buf, "\tmax size: %s / %s\n",
 			humanBytes(largestChunkUncompressedSize), humanBytes(largestChunkCompressedSize))
 		if hasOverlaps {
-			fmt.Fprintf(buf, "\toverlapping: yes (%d overlaps)\n", overlapCount)
+			fmt.Fprintf(buf, "\toverlaps: yes [max overlapping: %d, decompressed: %s]\n",
+				maxActiveChunks, humanBytes(maxTotalUncompressedSize))
 		} else {
-			fmt.Fprintf(buf, "\toverlapping: no\n")
+			fmt.Fprintf(buf, "\toverlaps: no\n")
 		}
 	}
 	fmt.Fprintf(buf, "channels:\n")
