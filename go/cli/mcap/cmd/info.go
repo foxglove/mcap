@@ -59,6 +59,50 @@ func addRow(rows [][]string, field string, value string, args ...any) [][]string
 	return append(rows, []string{field, fmt.Sprintf(value, args...)})
 }
 
+type chunkEvent struct {
+	time    uint64
+	isStart bool
+}
+
+// countChunkOverlaps uses a sweep-line algorithm to count overlapping chunks
+// in O(n log n) time.
+func countChunkOverlaps(chunks []*mcap.ChunkIndex) (hasOverlaps bool, overlapCount int) {
+	if len(chunks) < 2 {
+		return false, 0
+	}
+
+	// Create start and end events for each chunk
+	events := make([]chunkEvent, 0, len(chunks)*2)
+	for _, chunk := range chunks {
+		events = append(events,
+			chunkEvent{time: chunk.MessageStartTime, isStart: true},
+			chunkEvent{time: chunk.MessageEndTime, isStart: false},
+		)
+	}
+
+	// Sort events by time, with starts before ends at the same time
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].time == events[j].time {
+			// If times are equal, process starts before ends
+			return events[i].isStart && !events[j].isStart
+		}
+		return events[i].time < events[j].time
+	})
+
+	// Sweep through events counting overlaps
+	activeChunks := 0
+	for _, event := range events {
+		if event.isStart {
+			overlapCount += activeChunks
+			activeChunks++
+		} else {
+			activeChunks--
+		}
+	}
+
+	return overlapCount > 0, overlapCount
+}
+
 func printInfo(w io.Writer, info *mcap.Info) error {
 	buf := &bytes.Buffer{}
 
@@ -100,23 +144,11 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 			compressedSize   uint64
 			uncompressedSize uint64
 		})
+
+		hasOverlaps, overlapCount := countChunkOverlaps(info.ChunkIndexes)
+
 		var largestChunkCompressedSize uint64
 		var largestChunkUncompressedSize uint64
-
-		// Check for overlapping chunks
-		hasOverlaps := false
-		overlapCount := 0
-		for i := 0; i < len(info.ChunkIndexes); i++ {
-			for j := i + 1; j < len(info.ChunkIndexes); j++ {
-				chunk1 := info.ChunkIndexes[i]
-				chunk2 := info.ChunkIndexes[j]
-				// Check if the message time ranges overlap
-				if chunk1.MessageStartTime < chunk2.MessageEndTime && chunk2.MessageStartTime < chunk1.MessageEndTime {
-					hasOverlaps = true
-					overlapCount++
-				}
-			}
-		}
 
 		for _, ci := range info.ChunkIndexes {
 			stats := compressionFormatStats[ci.Compression]
