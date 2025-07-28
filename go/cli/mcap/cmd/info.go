@@ -198,7 +198,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		fmt.Fprintf(buf, "\tmax size: %s / %s\n",
 			humanBytes(largestChunkUncompressedSize), humanBytes(largestChunkCompressedSize))
 		if hasOverlaps {
-			fmt.Fprintf(buf, "\toverlaps: yes [max overlapping: %d, decompressed: %s]\n",
+			fmt.Fprintf(buf, "\toverlaps: [max concurrent: %d, decompressed: %s]\n",
 				maxActiveChunks, humanBytes(maxTotalUncompressedSize))
 		} else {
 			fmt.Fprintf(buf, "\toverlaps: no\n")
