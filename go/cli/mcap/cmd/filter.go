@@ -344,11 +344,10 @@ func filter(
 			if err != nil {
 				return err
 			}
-			most_recent, ok := mostRecentLatched[message.ChannelID]
+			mostRecent, ok := mostRecentLatched[message.ChannelID]
 			if message.LogTime < opts.start {
-
 				if ok {
-					if most_recent == nil || most_recent.LogTime < message.LogTime {
+					if mostRecent == nil || mostRecent.LogTime < message.LogTime {
 						mostRecentLatched[message.ChannelID] = message
 						oldData := message.Data
 						mostRecentLatched[message.ChannelID].Data = make([]byte, len(message.Data))
@@ -376,7 +375,8 @@ func filter(
 						if channel.SchemaID != 0 {
 							schema, ok := schemas[channel.SchemaID]
 							if !ok {
-								return fmt.Errorf("encountered channel with topic %s with unknown schema ID %d", channel.Topic, channel.SchemaID)
+								return fmt.Errorf("encountered channel with topic %s with unknown schema ID %d",
+									channel.Topic, channel.SchemaID)
 							}
 							if !schema.written {
 								if err := mcapWriter.WriteSchema(schema.Schema); err != nil {
@@ -475,7 +475,8 @@ usage:
 			"latched-topic-regex",
 			"l",
 			[]string{},
-			"For included topics matching this regex, the most recent message previous to the start time will still be included, with its time adjusted to the start time of the output",
+			"For included topics matching this regex, the most recent message previous to the start time"+
+				" will still be included, with its time adjusted to the start time of the output",
 		)
 		start := filterCmd.PersistentFlags().StringP(
 			"start",
