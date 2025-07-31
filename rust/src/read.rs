@@ -59,6 +59,7 @@ impl<'a> LinearReader<'a> {
                 buf,
                 reader: SansIoReader::new_with_options(
                     LinearReaderOptions::default()
+                        .with_record_length_limit(buf.len())
                         .with_skip_end_magic(options.contains(Options::IgnoreEndMagic))
                         .with_validate_chunk_crcs(true)
                         .with_emit_chunks(true),
@@ -76,6 +77,7 @@ impl<'a> LinearReader<'a> {
                 buf,
                 reader: SansIoReader::new_with_options(
                     LinearReaderOptions::default()
+                        .with_record_length_limit(buf.len())
                         .with_skip_end_magic(true)
                         .with_skip_start_magic(true),
                 ),
