@@ -117,12 +117,19 @@ func (w *Writer) WriteSchema(s *Schema) (err error) {
 	if err != nil {
 		return err
 	}
+	w.AddSchema(s)
+	return nil
+}
+
+// AddSchema adds a schema but does not write the schema record to the output.
+// This is useful to add a schema to the summary section without writing it
+// immediately. If the schema already exists, it is not added again.
+func (w *Writer) AddSchema(s *Schema) {
 	if _, ok := w.schemas[s.ID]; !ok {
 		w.schemaIDs = append(w.schemaIDs, s.ID)
 		w.schemas[s.ID] = s
 		w.Statistics.SchemaCount++
 	}
-	return nil
 }
 
 // WriteChannel writes a channel info record to the output. Channel Info
@@ -159,12 +166,19 @@ func (w *Writer) WriteChannel(c *Channel) error {
 			return err
 		}
 	}
+	w.AddChannel(c)
+	return nil
+}
+
+// AddChannel adds a channel but does not write the channel info record to the output.
+// This is useful to add a channel to the summary section without writing it
+// immediately. If the channel already exists, it is not added again.
+func (w *Writer) AddChannel(c *Channel) {
 	if _, ok := w.channels[c.ID]; !ok {
 		w.Statistics.ChannelCount++
 		w.channels[c.ID] = c
 		w.channelIDs = append(w.channelIDs, c.ID)
 	}
-	return nil
 }
 
 // WriteMessage writes a message to the output. A message record encodes a
@@ -414,27 +428,19 @@ func (w *Writer) WriteDataEnd(e *DataEnd) error {
 	return err
 }
 
-func (w *Writer) flushActiveChunk() error {
-	if w.compressedWriter.Size() == 0 {
+// WriteChunkWithIndexes writes a chunk record with the associated message indexes to the output.
+func (w *Writer) WriteChunkWithIndexes(c *Chunk, messageIndexes []*MessageIndex) error {
+	if c.UncompressedSize == 0 {
 		return nil
 	}
 
-	err := w.compressedWriter.Close()
-	if err != nil {
-		return err
-	}
-	crc := w.compressedWriter.CRC()
-	compressedlen := w.compressed.Len()
-	uncompressedlen := w.compressedWriter.Size()
+	compressedlen := len(c.Records)
+	uncompressedlen := c.UncompressedSize
+
 	// the "top fields" are all fields of the chunk record except for the compressed records.
-	topFieldsLen := 8 + 8 + 8 + 4 + 4 + len(w.opts.Compression) + 8
+	topFieldsLen := 8 + 8 + 8 + 4 + 4 + len(c.Compression) + 8
 	msglen := topFieldsLen + compressedlen
 	chunkStartOffset := w.w.Size()
-	var start, end uint64
-	if w.currentChunkMessageCount != 0 {
-		start = w.currentChunkStartTime
-		end = w.currentChunkEndTime
-	}
 
 	// when writing a chunk, we don't go through writerecord to avoid needing to
 	// materialize the compressed data again. Instead, write the leading bytes
@@ -447,32 +453,27 @@ func (w *Writer) flushActiveChunk() error {
 	}
 
 	offset += putUint64(w.msg[offset:], uint64(msglen))
-	offset += putUint64(w.msg[offset:], start)
-	offset += putUint64(w.msg[offset:], end)
-	offset += putUint64(w.msg[offset:], uint64(uncompressedlen))
-	offset += putUint32(w.msg[offset:], crc)
-	offset += putPrefixedString(w.msg[offset:], string(w.opts.Compression))
-	offset += putUint64(w.msg[offset:], uint64(w.compressed.Len()))
+	offset += putUint64(w.msg[offset:], c.MessageStartTime)
+	offset += putUint64(w.msg[offset:], c.MessageEndTime)
+	offset += putUint64(w.msg[offset:], uncompressedlen)
+	offset += putUint32(w.msg[offset:], c.UncompressedCRC)
+	offset += putPrefixedString(w.msg[offset:], c.Compression)
+	offset += putUint64(w.msg[offset:], uint64(compressedlen))
 	_, err = w.w.Write(w.msg[:offset])
 	if err != nil {
 		return err
 	}
-	_, err = w.w.Write(w.compressed.Bytes())
+	_, err = w.w.Write(c.Records)
 	if err != nil {
 		return err
 	}
-	w.compressed.Reset()
-	w.compressedWriter.Reset(w.compressed)
-	w.compressedWriter.ResetSize()
-	w.compressedWriter.ResetCRC()
 	chunkEndOffset := w.w.Size()
 
 	// message indexes
 	messageIndexOffsets := make(map[uint16]uint64)
-	if !w.opts.SkipMessageIndexing {
-		for _, chanID := range w.channelIDs {
-			messageIndex, ok := w.messageIndexes[chanID]
-			if ok && !messageIndex.IsEmpty() {
+	if !w.opts.SkipMessageIndexing && len(messageIndexes) > 0 {
+		for _, messageIndex := range messageIndexes {
+			if !messageIndex.IsEmpty() {
 				messageIndexOffsets[messageIndex.ChannelID] = w.w.Size()
 				err = w.WriteMessageIndex(messageIndex)
 				if err != nil {
@@ -485,20 +486,77 @@ func (w *Writer) flushActiveChunk() error {
 	messageIndexEnd := w.w.Size()
 	messageIndexLength := messageIndexEnd - chunkEndOffset
 	w.ChunkIndexes = append(w.ChunkIndexes, &ChunkIndex{
-		MessageStartTime:    start,
-		MessageEndTime:      end,
+		MessageStartTime:    c.MessageStartTime,
+		MessageEndTime:      c.MessageEndTime,
 		ChunkStartOffset:    chunkStartOffset,
 		ChunkLength:         chunkEndOffset - chunkStartOffset,
 		MessageIndexOffsets: messageIndexOffsets,
 		MessageIndexLength:  messageIndexLength,
-		Compression:         w.opts.Compression,
+		Compression:         CompressionFormat(c.Compression),
 		CompressedSize:      uint64(compressedlen),
-		UncompressedSize:    uint64(uncompressedlen),
+		UncompressedSize:    uncompressedlen,
 	})
+
+	w.Statistics.ChunkCount++
+
+	if w.Statistics.MessageStartTime == 0 || c.MessageStartTime < w.Statistics.MessageStartTime {
+		w.Statistics.MessageStartTime = c.MessageStartTime
+	}
+	if c.MessageEndTime > w.Statistics.MessageEndTime {
+		w.Statistics.MessageEndTime = c.MessageEndTime
+	}
+
+	return nil
+}
+
+func (w *Writer) flushActiveChunk() error {
+	if w.compressedWriter.Size() == 0 {
+		return nil
+	}
+
+	err := w.compressedWriter.Close()
+	if err != nil {
+		return err
+	}
+	crc := w.compressedWriter.CRC()
+	uncompressedlen := w.compressedWriter.Size()
+	var start, end uint64
+	if w.currentChunkMessageCount != 0 {
+		start = w.currentChunkStartTime
+		end = w.currentChunkEndTime
+	}
+
+	chunk := Chunk{
+		MessageStartTime: start,
+		MessageEndTime:   end,
+		UncompressedSize: uint64(uncompressedlen),
+		UncompressedCRC:  crc,
+		Compression:      string(w.opts.Compression),
+		Records:          w.compressed.Bytes(),
+	}
+	w.compressed.Reset()
+	w.compressedWriter.Reset(w.compressed)
+	w.compressedWriter.ResetSize()
+	w.compressedWriter.ResetCRC()
+
+	// message indexes
+	messageIndexes := []*MessageIndex{}
+	if !w.opts.SkipMessageIndexing {
+		for _, chanID := range w.channelIDs {
+			messageIndex, ok := w.messageIndexes[chanID]
+			if ok && !messageIndex.IsEmpty() {
+				messageIndexes = append(messageIndexes, messageIndex)
+			}
+		}
+	}
+
+	err = w.WriteChunkWithIndexes(&chunk, messageIndexes)
+	if err != nil {
+		return err
+	}
 	for _, idx := range w.messageIndexes {
 		idx.Reset()
 	}
-	w.Statistics.ChunkCount++
 	w.currentChunkStartTime = math.MaxUint64
 	w.currentChunkEndTime = 0
 	w.currentChunkMessageCount = 0

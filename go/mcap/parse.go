@@ -204,8 +204,9 @@ func ParseMessageIndex(buf []byte) (*MessageIndex, error) {
 		})
 	}
 	return &MessageIndex{
-		ChannelID: channelID,
-		Records:   records,
+		ChannelID:    channelID,
+		Records:      records,
+		currentIndex: len(records),
 	}, nil
 }
 
