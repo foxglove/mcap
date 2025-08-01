@@ -1,0 +1,134 @@
+name: Feature Parity Tests
+
+on:
+  push:
+    branches: [ main, "adrian/vibe-cli" ]
+    paths: [ 'rust/cli/**', 'go/cli/**' ]
+  pull_request:
+    branches: [ main ]
+    paths: [ 'rust/cli/**', 'go/cli/**' ]
+
+jobs:
+  feature-parity:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Set up Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc
+
+    - name: Install system dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install bc
+
+    - name: Install system dependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        # bc equivalent for Windows (using PowerShell for calculations)
+        echo "Windows uses PowerShell for calculations"
+
+    - name: Build Go CLI
+      run: |
+        cd go/cli/mcap
+        go build -o mcap${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+
+    - name: Build Rust CLI (Release)
+      run: |
+        cd rust/cli
+        cargo build --release
+
+    - name: Generate test data
+      shell: bash
+      run: |
+        cd rust/cli/parity
+        chmod +x tests/generate_edge_cases.sh
+        ./tests/generate_edge_cases.sh
+
+    - name: Make scripts executable (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd rust/cli/parity
+        chmod +x test_runner.sh
+        chmod +x compare_outputs.sh
+        chmod +x tests/*.sh
+
+    - name: Run feature parity tests
+      shell: bash
+      run: |
+        cd rust/cli/parity
+        ./test_runner.sh
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}
+        path: rust/cli/parity/results/
+
+    - name: Display test summary
+      if: always()
+      shell: bash
+      run: |
+        cd rust/cli/parity
+        echo "=== Test Summary ==="
+        if [[ -f "results/test_summary.log" ]]; then
+          cat results/test_summary.log
+        else
+          echo "No test summary found"
+        fi
+
+        echo ""
+        echo "=== Test Files Generated ==="
+        find results/ -type f -name "*.log" | head -10
+
+        echo ""
+        echo "=== Failed Tests ==="
+        if grep -r "FAIL:" results/ 2>/dev/null; then
+          echo "Some tests failed - check artifacts for details"
+        else
+          echo "No test failures detected"
+        fi
+
+  test-data-inventory:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Inventory existing test data
+      run: |
+        echo "=== MCAP Test Data Inventory ==="
+        echo ""
+        echo "Basic testdata:"
+        find testdata -name "*.mcap" 2>/dev/null | wc -l || echo "0"
+        find testdata -name "*.bag" 2>/dev/null | wc -l || echo "0"
+        find testdata -name "*.db3" 2>/dev/null | wc -l || echo "0"
+        echo ""
+        echo "Conformance test data:"
+        find tests/conformance/data -name "*.mcap" 2>/dev/null | wc -l || echo "0"
+        echo ""
+        echo "File breakdown:"
+        echo "- NoData: $(find tests/conformance/data/NoData -name "*.mcap" 2>/dev/null | wc -l || echo "0")"
+        echo "- OneMessage: $(find tests/conformance/data/OneMessage -name "*.mcap" 2>/dev/null | wc -l || echo "0")"
+        echo "- OneAttachment: $(find tests/conformance/data/OneAttachment -name "*.mcap" 2>/dev/null | wc -l || echo "0")"
+        echo "- OneMetadata: $(find tests/conformance/data/OneMetadata -name "*.mcap" 2>/dev/null | wc -l || echo "0")"
+        echo "- OneSchemalessMessage: $(find tests/conformance/data/OneSchemalessMessage -name "*.mcap" 2>/dev/null | wc -l || echo "0")"
+        echo "- TenMessages: $(find tests/conformance/data/TenMessages -name "*.mcap" 2>/dev/null | wc -l || echo "0")"
