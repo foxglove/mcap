@@ -71,7 +71,7 @@ The version number is set at build time based on the tag.
 
 There are several python packages; updating any follows a similar process.
 
-1. Update the version in the appropriate `__init.py__` file
+1. Update the version in the appropriate `__init__.py` file
 2. Tag a release
    - For the core mcap library, match the pattern `releases/python/vX.Y.Z`
    - For other packages, use `releases/python/PACKAGE/vX.Y.Z`
