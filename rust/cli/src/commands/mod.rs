@@ -3,7 +3,7 @@ use clap::Subcommand;
 
 // Import command modules (will be implemented in later phases)
 // pub mod add;
-// pub mod cat;
+pub mod cat;
 // pub mod compress;
 // pub mod convert;
 // pub mod decompress;
@@ -11,8 +11,8 @@ use clap::Subcommand;
 // pub mod du;
 // pub mod filter;
 // pub mod get;
-// pub mod info;
-// pub mod list;
+pub mod info;
+pub mod list;
 // pub mod merge;
 // pub mod recover;
 // pub mod sort;
@@ -22,14 +22,20 @@ pub mod version;
 pub enum Commands {
     /// Show version information
     Version,
-    // Placeholder for future commands - will be uncommented as they're implemented
-    /*
+
     /// Display information about an MCAP file
     Info(info::InfoArgs),
 
     /// Output messages from an MCAP file
     Cat(cat::CatArgs),
 
+    /// List records in an MCAP file
+    List {
+        #[command(subcommand)]
+        command: list::ListCommands,
+    },
+    // Placeholder for future commands - will be uncommented as they're implemented
+    /*
     /// Filter messages and copy to a new MCAP file
     Filter(filter::FilterArgs),
 
@@ -68,12 +74,6 @@ pub enum Commands {
         #[command(subcommand)]
         command: get::GetCommands,
     },
-
-    /// List records in an MCAP file
-    List {
-        #[command(subcommand)]
-        command: list::ListCommands,
-    },
     */
 }
 
@@ -81,10 +81,11 @@ pub enum Commands {
 pub async fn execute(command: Commands) -> CliResult<()> {
     match command {
         Commands::Version => version::execute().await,
-        // Placeholder implementations for future commands
-        /*
         Commands::Info(args) => info::execute(args).await,
         Commands::Cat(args) => cat::execute(args).await,
+        Commands::List { command } => list::execute(command).await,
+        // Placeholder implementations for future commands
+        /*
         Commands::Filter(args) => filter::execute(args).await,
         Commands::Sort(args) => sort::execute(args).await,
         Commands::Merge(args) => merge::execute(args).await,
@@ -96,7 +97,6 @@ pub async fn execute(command: Commands) -> CliResult<()> {
         Commands::Recover(args) => recover::execute(args).await,
         Commands::Add { command } => add::execute(command).await,
         Commands::Get { command } => get::execute(command).await,
-        Commands::List { command } => list::execute(command).await,
         */
     }
 }
