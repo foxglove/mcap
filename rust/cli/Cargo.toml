@@ -1,0 +1,61 @@
+[package]
+name = "mcap-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Command line tool for working with MCAP files"
+homepage = "https://mcap.dev"
+repository = "https://github.com/foxglove/mcap"
+license = "MIT"
+readme = "README.md"
+
+[[bin]]
+name = "mcap"
+path = "src/main.rs"
+
+[dependencies]
+# CLI framework
+clap = { version = "4.0", features = ["derive", "cargo"] }
+
+# MCAP library (already exists)
+mcap = { path = "../", features = ["zstd", "lz4"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Table formatting
+tabled = "0.15"
+
+# Progress bars
+indicatif = "0.17"
+
+# File I/O and compression
+tokio = { version = "1.0", features = ["full"] }
+bytes = "1.0"
+
+# Protobuf support
+prost = "0.12"
+prost-types = "0.12"
+
+# Cloud storage (if needed)
+cloud-storage = { version = "0.11", optional = true }
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Config management
+config = "0.14"
+dirs = "5.0"
+
+[features]
+default = ["cloud"]
+cloud = ["dep:cloud-storage"]
+
+[dev-dependencies]
+tempfile = "3.0"
+assert_cmd = "2.0"
+predicates = "3.0"
