@@ -1,0 +1,70 @@
+[package]
+name = "mcap-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Command-line tool for working with MCAP files"
+license = "MIT"
+repository = "https://github.com/foxglove/mcap"
+authors = ["Foxglove Technologies"]
+
+[[bin]]
+name = "mcap-rs"
+path = "src/main.rs"
+
+[dependencies]
+# Core MCAP library
+mcap = { path = "../", features = ["zstd", "lz4"] }
+
+# CLI framework
+clap = { version = "4.0", features = ["derive", "color"] }
+clap-verbosity-flag = "2.0"
+
+# Async runtime
+tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "fs", "io-util", "macros"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# UI and formatting
+indicatif = "0.17"          # Progress bars
+comfy-table = "7.0"         # Table formatting
+colored = "2.0"             # Terminal colors
+
+# Utilities
+regex = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+memmap2 = "0.9"             # Memory-mapped files
+rayon = "1.5"               # Parallel processing
+env_logger = "0.10"         # Logging initialization
+
+# Remote file support (optional features)
+reqwest = { version = "0.11", features = ["stream"], optional = true }
+google-cloud-storage = { version = "0.15", optional = true }
+
+[dev-dependencies]
+tempfile = "3.3"
+criterion = { version = "0.5", features = ["html_reports"] }
+assert_cmd = "2.0"
+predicates = "3.0"
+
+[features]
+default = ["remote"]
+remote = ["reqwest", "google-cloud-storage"]
+
+# Optimize for size in release builds
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+# Enable benchmarks
+[[bench]]
+name = "cli_benchmarks"
+harness = false
+path = "benches/cli_benchmarks.rs"
