@@ -2,7 +2,7 @@ use crate::error::CliResult;
 use clap::Subcommand;
 
 // Import command modules (will be implemented in later phases)
-// pub mod add;
+pub mod add;
 pub mod cat;
 pub mod compress;
 pub mod convert;
@@ -10,7 +10,7 @@ pub mod decompress;
 pub mod doctor;
 pub mod du;
 pub mod filter;
-// pub mod get;
+pub mod get;
 pub mod info;
 pub mod list;
 pub mod merge;
@@ -61,8 +61,7 @@ pub enum Commands {
 
     /// Convert bag files to MCAP
     Convert(convert::ConvertArgs),
-    // Placeholder for future commands - will be uncommented as they're implemented
-    /*
+
     /// Add records to an MCAP file
     Add {
         #[command(subcommand)]
@@ -74,7 +73,6 @@ pub enum Commands {
         #[command(subcommand)]
         command: get::GetCommands,
     },
-    */
 }
 
 /// Execute the given command
@@ -93,10 +91,7 @@ pub async fn execute(command: Commands) -> CliResult<()> {
         Commands::Merge(args) => merge::execute(args).await,
         Commands::Recover(args) => recover::execute(args).await,
         Commands::Convert(args) => convert::execute(args).await,
-        // Placeholder implementations for future commands
-        /*
         Commands::Add { command } => add::execute(command).await,
         Commands::Get { command } => get::execute(command).await,
-        */
     }
 }
