@@ -1,3 +1,4 @@
+use colored::*;
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, McapCliError>;
@@ -23,32 +24,42 @@ pub enum McapCliError {
     FileNotFound(String),
 }
 
-/// Enhanced error handling for MCAP files with better error messages
+/// Enhanced error handling for MCAP files with detailed diagnostic messages
 pub fn enhance_mcap_error(error: mcap::McapError, file_path: &str) -> anyhow::Error {
     match error {
         mcap::McapError::BadMagic => {
-            // Try to read the actual bytes at the start of the file to show what was found
+            // Read the actual file header to show what was found instead of expected MCAP magic
             match std::fs::File::open(file_path) {
                 Ok(mut file) => {
                     use std::io::Read;
                     let mut buffer = [0u8; 8];
                     match file.read_exact(&mut buffer) {
                         Ok(_) => {
-                            anyhow::anyhow!("Invalid magic at start of file, found: {:?}", buffer)
+                            let error_msg =
+                                format!("Invalid magic at start of file, found: {:?}", buffer)
+                                    .red()
+                                    .to_string();
+                            anyhow::anyhow!("{}", error_msg)
                         }
                         Err(_) => {
-                            anyhow::anyhow!("Invalid magic at start of file (could not read bytes)")
+                            anyhow::anyhow!(
+                                "{}",
+                                "Invalid magic at start of file (could not read bytes)".red()
+                            )
                         }
                     }
                 }
-                Err(_) => anyhow::anyhow!("Invalid magic at start of file (could not open file)"),
+                Err(_) => anyhow::anyhow!(
+                    "{}",
+                    "Invalid magic at start of file (could not open file)".red()
+                ),
             }
         }
         other => anyhow::anyhow!("MCAP error: {}", other),
     }
 }
 
-/// Create an enhanced error result from an MCAP result
+/// Convert MCAP library results to enhanced CLI errors with better context
 pub fn from_mcap_result<T>(result: mcap::McapResult<T>, file_path: &str) -> anyhow::Result<T> {
     result.map_err(|err| enhance_mcap_error(err, file_path))
 }
