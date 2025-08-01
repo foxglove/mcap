@@ -33,6 +33,10 @@ type McapDemoState = {
   recordMouse: boolean;
   recordOrientation: boolean;
 
+  // Device selection
+  selectedCameraDeviceId: string;
+  selectedAudioDeviceId: string;
+
   // Media state
   videoStarted: boolean;
   videoError: Error | undefined;
@@ -54,6 +58,8 @@ type McapDemoState = {
     setRecordAudio: (value: { shouldRecord: boolean }) => void;
     setRecordMouse: (value: { shouldRecord: boolean }) => void;
     setRecordOrientation: (value: { shouldRecord: boolean }) => void;
+    setSelectedCameraDeviceId: (deviceId: string) => void;
+    setSelectedAudioDeviceId: (deviceId: string) => void;
     setVideoStarted: (value: { isStarted: boolean }) => void;
     setVideoError: (error: Error | undefined) => void;
     setAudioError: (error: Error | undefined) => void;
@@ -130,6 +136,10 @@ export const useStore = create<McapDemoState>((set) => {
     recordMouse: true,
     recordOrientation: true,
 
+    // Device selection
+    selectedCameraDeviceId: "",
+    selectedAudioDeviceId: "",
+
     // Media state
     videoStarted: false,
     videoError: undefined,
@@ -186,6 +196,12 @@ export const useStore = create<McapDemoState>((set) => {
       },
       setRecordOrientation: ({ shouldRecord }) => {
         set({ recordOrientation: shouldRecord });
+      },
+      setSelectedCameraDeviceId: (deviceId: string) => {
+        set({ selectedCameraDeviceId: deviceId });
+      },
+      setSelectedAudioDeviceId: (deviceId: string) => {
+        set({ selectedAudioDeviceId: deviceId });
       },
       setVideoStarted: ({ isStarted }) => {
         set({ videoStarted: isStarted });
