@@ -9,7 +9,7 @@ pub mod table; // Table output formatting
 pub mod time; // Time formatting utilities // Performance profiling
 
 // Re-export commonly used items
-pub use error::{McapCliError, Result};
-pub use format::{FormatOptions, OutputFormat};
+pub use error::{enhance_mcap_error, from_mcap_result, McapCliError, Result};
+pub use format::{human_bytes, FormatOptions, OutputFormat};
 pub use io::{with_reader, FileInput};
 pub use progress::ProgressReporter;

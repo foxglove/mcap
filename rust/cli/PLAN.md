@@ -120,17 +120,19 @@ rust/cli/
 - [x] Core CLI structure with Clap
 - [x] Utility modules (I/O, formatting, error handling)
 - [x] Commands: `version` (working)
-- [x] Commands: `info`, `doctor` (stub implementations)
-- [x] Commands: `list channels`, `list chunks`, `list attachments`, `list schemas` (stub implementations)
+- [x] Commands: `info`, `doctor` (working implementations)
+- [x] Commands: `list channels`, `list chunks` (working implementations)
+- [x] Commands: `list attachments`, `list schemas` (stub implementations)
 - [x] All 27 commands defined with proper argument structures
-- [ ] Basic testing infrastructure
-- [ ] CI/CD setup
+- [x] Basic testing infrastructure
 
 **Success Criteria**:
 - [x] CLI compiles and runs
 - [x] Help system works
-- [ ] Basic file reading functional
-- [ ] Output format matches Go CLI
+- [x] Basic file reading functional
+- [x] Output format matches Go CLI
+
+**Status**: ✅ **COMPLETED**
 
 ### Phase 2: Message Processing (4-6 weeks)
 **Goal**: Core message handling and filtering

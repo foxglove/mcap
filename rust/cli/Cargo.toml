@@ -8,7 +8,7 @@ repository = "https://github.com/foxglove/mcap"
 authors = ["Foxglove Technologies"]
 
 [[bin]]
-name = "mcap-rs"
+name = "mcap"
 path = "src/main.rs"
 
 [dependencies]

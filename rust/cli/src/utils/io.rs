@@ -1,6 +1,10 @@
 use anyhow::Result;
-use tokio::fs::File;
+use memmap2::Mmap;
+use std::fs::File;
+use tokio::fs::File as AsyncFile;
 use tokio::io::{AsyncRead, AsyncSeek};
+
+use crate::utils::error::from_mcap_result;
 
 pub enum FileInput {
     Local(String),
@@ -44,7 +48,7 @@ where
     let input = FileInput::from_path(path);
     match input {
         FileInput::Local(path) => {
-            let file = File::open(&path).await?;
+            let file = AsyncFile::open(&path).await?;
             let reader: Box<dyn AsyncReadSeek> = Box::new(file);
             f(false, reader).await
         }
@@ -53,4 +57,37 @@ where
             anyhow::bail!("Remote file support not yet implemented");
         }
     }
+}
+
+// Synchronous version for working with memory-mapped files
+pub fn with_sync_reader<T, F>(path: &str, f: F) -> Result<T>
+where
+    F: FnOnce(File) -> Result<T>,
+{
+    let input = FileInput::from_path(path);
+    match input {
+        FileInput::Local(path) => {
+            let file = File::open(&path)?;
+            f(file)
+        }
+        FileInput::Remote { .. } => {
+            anyhow::bail!("Remote file support not yet implemented");
+        }
+    }
+}
+
+// Helper function to memory-map an MCAP file
+pub fn map_mcap_file(path: &str) -> Result<Mmap> {
+    with_sync_reader(path, |file| {
+        let mmap = unsafe { Mmap::map(&file)? };
+        Ok(mmap)
+    })
+}
+
+// Helper function to read MCAP summary from a file path with enhanced error handling
+pub fn read_mcap_summary(path: &str) -> Result<Option<mcap::Summary>> {
+    let mmap = map_mcap_file(path)?;
+    let summary_result = mcap::Summary::read(&mmap);
+    let summary = from_mcap_result(summary_result, path)?;
+    Ok(summary)
 }
