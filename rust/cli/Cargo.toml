@@ -40,15 +40,18 @@ bytes = "1.0"
 # Memory mapping for MCAP files
 memmap2 = "0.9"
 
+# Regular expressions
+regex = "1.0"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
 # Protobuf support
 prost = "0.12"
 prost-types = "0.12"
 
 # Cloud storage (if needed)
 cloud-storage = { version = "0.11", optional = true }
-
-# Time handling
-chrono = { version = "0.4", features = ["serde"] }
 
 # Config management
 config = "0.14"
