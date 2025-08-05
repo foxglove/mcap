@@ -109,6 +109,20 @@ Refer to the API documentation in
 for full details. The high-level interfaces for reading and writing are
 `McapReader` and `McapWriter`.
 
+### Visibility
+
+By default, the MCAP library will attempt to export its symbols from the translation unit where
+`MCAP_IMPLEMENTATION` is defined, and import them elsewhere. See `mcap/visibility.hpp` for exact
+semantics. If your application requires something different, you can define the `MCAP_PUBLIC` macro
+before including the library.
+
+```cpp
+// use the MCAP library internally but keep all symbols hidden
+#define MCAP_IMPLEMENTATION
+#define MCAP_PUBLIC __attribute__((visibility("hidden")))
+#include <mcap/writer.hpp>
+```
+
 ## Releasing new versions
 
 1. Update the `#define MCAP_LIBRARY_VERSION` and all other occurrences of the same version number, e.g. in `conanfile.py`, `build.sh`, and others.
