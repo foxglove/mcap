@@ -238,7 +238,7 @@ impl IndexedReader {
 
     /// Returns the next event from the reader. Call this repeatedly and act on the resulting
     /// events in order to read messages from the MCAP.
-    pub fn next_event(&mut self) -> Option<McapResult<IndexedReadEvent>> {
+    pub fn next_event(&mut self) -> Option<McapResult<IndexedReadEvent<'_>>> {
         // If this reader is aware of messages that haven't been yielded yet, try to yield them.
         if self.cur_message_index < self.message_indexes.len() {
             let message_index = &self.message_indexes[self.cur_message_index];

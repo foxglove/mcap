@@ -664,7 +664,7 @@ impl Summary {
         &self,
         mcap: &[u8],
         index: &records::ChunkIndex,
-    ) -> McapResult<HashMap<Arc<Channel>, Vec<records::MessageIndexEntry>>> {
+    ) -> McapResult<HashMap<Arc<Channel<'_>>, Vec<records::MessageIndexEntry>>> {
         if index.message_index_offsets.is_empty() {
             // Message indexing is optional... should we be more descriptive here?
             return Err(McapError::BadIndex);
@@ -724,7 +724,7 @@ impl Summary {
         mcap: &'a [u8],
         index: &records::ChunkIndex,
         message: &records::MessageIndexEntry,
-    ) -> McapResult<Message> {
+    ) -> McapResult<Message<'_>> {
         // Get the chunk (as a header and its data) out of the file at the given offset.
         let end = (index.chunk_start_offset + index.chunk_length) as usize;
         if mcap.len() < end {
