@@ -325,7 +325,7 @@ impl LinearReader {
     }
 
     /// Yields the next event the caller should take to progress through the file.
-    pub fn next_event(&mut self) -> Option<McapResult<LinearReadEvent>> {
+    pub fn next_event(&mut self) -> Option<McapResult<LinearReadEvent<'_>>> {
         if self.at_eof {
             // at EOF. If the reader is not expecting end magic, and it isn't in the middle of a
             // record or chunk, this is OK.
