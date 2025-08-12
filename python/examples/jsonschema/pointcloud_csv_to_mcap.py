@@ -6,7 +6,7 @@ The original dataset can be downloaded from here:
 https://www.acfr.usyd.edu.au/papers/SydneyUrbanObjectsDataset.shtml
 
 usage:
-  curl https://www.acfr.usyd.edu.au/papers/data/sydney-urban-objects-dataset.tar.gz | tar -x
+  curl https://www.acfr.usyd.edu.au/papers/data/sydney-urban-objects-dataset.tar.gz | tar -xz
   pip install mcap
   python3 pointcloud_csv_to_mcap.py sydney-urban-objects-dataset/objects/4wd.0.2299.csv -o out.mcap
 """
