@@ -6,7 +6,7 @@ description: Read, write, and visualize MCAP files containing ROS 2 data.
 
 ## Record with MCAP
 
-ROS2 supports recording directly to MCAP using the [rosbag2 MCAP storage plugin](https://github.com/ros-tooling/rosbag2_storage_mcap). To get started, install the plugin:
+ROS 2 supports recording directly to MCAP using the [rosbag2 MCAP storage plugin](https://github.com/ros-tooling/rosbag2_storage_mcap). To get started, install the plugin:
 
 ```
 $ sudo apt-get install ros-$ROS_DISTRO-rosbag2-storage-mcap
@@ -32,7 +32,7 @@ $ ros2 bag record -s mcap --all --storage-config-file my_storage_config.yaml
 
 ### Using `ros2 bag convert`
 
-To convert your existing ROS 2 `.db3` files into MCAP files, you can use `ros2 bag convert` from within your ROS2 workspace.
+To convert your existing ROS 2 `.db3` files into MCAP files, you can use `ros2 bag convert` from within your ROS 2 workspace.
 
 ```bash
 $ cat << EOF > convert.yaml
