@@ -1130,7 +1130,7 @@ impl<W: Write + Seek> Writer<W> {
 
 impl<W: Write + Seek> Drop for Writer<W> {
     fn drop(&mut self) {
-        self.finish().unwrap();
+        let _ = self.finish();
     }
 }
 
