@@ -152,6 +152,8 @@ pub enum McapError {
     TooManySchemas,
     #[error("indexed reader received chunk data with unexpected offset or length")]
     UnexpectedChunkDataInserted,
+    #[error("attempted another write after a write method failed")]
+    AttemptedWriteAfterFailure,
 }
 
 pub type McapResult<T> = Result<T, McapError>;

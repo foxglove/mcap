@@ -48,17 +48,19 @@ impl<W: Write> ChunkSink<W> {
         }
     }
 
-    pub fn finish(self) -> std::io::Result<(W, ChunkMode)> {
+    pub fn finish(self) -> (W, std::io::Result<ChunkMode>) {
         let ChunkSink { mut inner, buffer } = self;
         let mode = match buffer {
             Some(buffer) => {
                 let buffer = buffer.into_inner();
-                inner.write_all(&buffer)?;
+                if let Err(err) = inner.write_all(&buffer) {
+                    return (inner, Err(err));
+                }
                 ChunkMode::Buffered { buffer }
             }
             None => ChunkMode::Direct,
         };
-        Ok((inner, mode))
+        (inner, Ok(mode))
     }
 }
 

@@ -31,6 +31,7 @@ enum WriteMode<W: Write + Seek> {
     Raw(CountingCrcWriter<W>),
     Chunk(ChunkWriter<W>),
     Attachment(AttachmentWriter<CountingCrcWriter<W>>),
+    Failed(W),
 }
 
 #[derive(EnumSetType, Debug)]
@@ -816,7 +817,9 @@ impl<W: Write + Seek> Writer<W> {
         header: AttachmentHeader,
     ) -> McapResult<()> {
         self.finish_chunk()?;
-
+        if let Some(WriteMode::Failed(_)) = &self.writer {
+            return Err(McapError::AttemptedWriteAfterFailure);
+        }
         let WriteMode::Raw(w) = self.writer.take().expect(Self::WRITER_IS_NONE) else {
             unreachable!(
                 "since finish_chunk was called, write mode is guaranteed to be raw at this point"
@@ -980,6 +983,9 @@ impl<W: Write + Seek> Writer<W> {
             }
             chunk => chunk,
         });
+        if let Some(WriteMode::Failed(_)) = &self.writer {
+            return Err(McapError::AttemptedWriteAfterFailure);
+        }
 
         let Some(WriteMode::Chunk(c)) = &mut self.writer else {
             unreachable!("we're not in an attachment and write mode was set to chunk above")
@@ -998,15 +1004,24 @@ impl<W: Write + Seek> Writer<W> {
         }
 
         // See start_chunk() for why we use take() here.
-        self.writer = Some(match self.writer.take().expect(Self::WRITER_IS_NONE) {
-            WriteMode::Chunk(c) => {
-                let (w, mode, index) = c.finish()?;
-                self.chunk_indexes.push(index);
-                self.chunk_mode = mode;
-                WriteMode::Raw(w)
+        match self.writer.take().expect(Self::WRITER_IS_NONE) {
+            WriteMode::Chunk(c) => match c.finish() {
+                Ok((w, mode, index)) => {
+                    self.chunk_indexes.push(index);
+                    self.chunk_mode = mode;
+                    self.writer = Some(WriteMode::Raw(w))
+                }
+                Err((w, err)) => {
+                    self.writer = Some(WriteMode::Failed(w));
+                    return Err(err);
+                }
+            },
+            WriteMode::Failed(w) => {
+                self.writer = Some(WriteMode::Failed(w));
+                return Err(McapError::AttemptedWriteAfterFailure);
             }
-            mode => mode,
-        });
+            mode => self.writer = Some(mode),
+        };
 
         let Some(WriteMode::Raw(w)) = &mut self.writer else {
             unreachable!("we're not in an attachment and write mode raw was set above")
@@ -1124,6 +1139,7 @@ impl<W: Write + Seek> Writer<W> {
             WriteMode::Raw(w) => w.finalize().0,
             WriteMode::Attachment(w) => w.writer.finalize().0.finalize().0,
             WriteMode::Chunk(w) => w.compressor.finalize().0.into_inner().finalize().0.inner,
+            WriteMode::Failed(w) => w,
         }
     }
 }
@@ -1311,21 +1327,17 @@ enum Compressor<W: Write> {
 }
 
 impl<W: Write> Compressor<W> {
-    fn finish(self) -> io::Result<W> {
-        Ok(match self {
-            Compressor::Null(w) => w,
+    fn finish(self) -> (W, std::io::Result<()>) {
+        match self {
+            Compressor::Null(w) => (w, Ok(())),
             #[cfg(feature = "zstd")]
             Compressor::Zstd(mut w) => {
-                w.finish()?;
-                w.into_inner().0
+                let result = w.finish();
+                (w.into_inner().0, result)
             }
             #[cfg(feature = "lz4")]
-            Compressor::Lz4(w) => {
-                let (output, result) = w.finish();
-                result?;
-                output
-            }
-        })
+            Compressor::Lz4(w) => w.finish(),
+        }
     }
 
     fn into_inner(self) -> W {
@@ -1496,27 +1508,43 @@ impl<W: Write + Seek> ChunkWriter<W> {
         Ok(())
     }
 
-    fn finish(self) -> McapResult<(CountingCrcWriter<W>, ChunkMode, records::ChunkIndex)> {
+    fn finish(
+        self,
+    ) -> Result<(CountingCrcWriter<W>, ChunkMode, records::ChunkIndex), (W, McapError)> {
         // Get the number of uncompressed bytes written and the CRC.
+        fn unwrap_writer<W>(writer: CountingCrcWriter<ChunkSink<W>>) -> W {
+            writer.finalize().0.inner
+        }
 
         let uncompressed_size = self.compressor.position();
         let (stream, uncompressed_crc) = self.compressor.finalize();
 
         // Finalize the compression stream - it maintains an internal buffer.
-        let writer = stream.finish()?;
+        let (writer, result) = stream.finish();
+
+        if let Err(err) = result {
+            return Err((unwrap_writer(writer), err.into()));
+        }
         let compressed_size = writer.position();
         let (mut sink, compressed_crc) = writer.finalize();
-
-        let data_end = sink.stream_position()?;
+        let data_end = match sink.stream_position() {
+            Ok(v) => v,
+            Err(err) => return Err((sink.inner, err.into())),
+        };
         // let compressed_size =  data_end - self.data_start;
         let record_size = (data_end - self.header_start) - 9; // 1 byte op, 8 byte len
 
         // Now that we know the size of the chunk data and the CRC of the uncompressed data, we
         // rewind the stream and overwrite the dummy chunk header with the true header.
-        sink.seek(SeekFrom::Start(self.header_start))?;
+        if let Err(err) = sink.seek(SeekFrom::Start(self.header_start)) {
+            return Err((sink.inner, err.into()));
+        }
         // Compute the CRC of the pre-chunk data concatenated with the chunk header.
         let mut writer = CountingCrcWriter::with_hasher(sink, self.pre_chunk_crc);
-        op_and_len(&mut writer, op::CHUNK, record_size)?;
+
+        if let Err(err) = op_and_len(&mut writer, op::CHUNK, record_size) {
+            return Err((unwrap_writer(writer), err.into()));
+        }
         let message_bounds = self.message_bounds.unwrap_or((0, 0));
         let header = records::ChunkHeader {
             message_start_time: message_bounds.0,
@@ -1528,14 +1556,26 @@ impl<W: Write + Seek> ChunkWriter<W> {
             compression: String::from(self.compression_name),
             compressed_size,
         };
-        writer.write_le(&header)?;
+        if let Err(err) = writer.write_le(&header) {
+            return Err((unwrap_writer(writer), err.into()));
+        }
         let (mut sink, mut post_chunk_header_crc) = writer.finalize();
-        assert_eq!(self.data_start, sink.stream_position()?);
+        let position = match sink.stream_position() {
+            Ok(v) => v,
+            Err(err) => return Err((sink.inner, err.into())),
+        };
+        assert_eq!(self.data_start, position);
         // We're done with all the chunk data. Move the cursor past the end and go back to just
         // appending records.
-        assert_eq!(sink.seek(SeekFrom::End(0))?, data_end);
+        if let Err(err) = sink.seek(SeekFrom::End(0)) {
+            return Err((sink.inner, err.into()));
+        }
         let chunk_length = data_end - self.header_start;
-        let (writer, mode) = sink.finish()?;
+        let (writer, mode_result) = sink.finish();
+        let mode = match mode_result {
+            Ok(mode) => mode,
+            Err(err) => return Err((writer, err.into())),
+        };
 
         // Compute the CRC of the pre-chunk data + chunk header + compressed chunk data. That is,
         // the CRC of the entire MCAP file up to the end of this chunk. This is necessary because
@@ -1545,14 +1585,21 @@ impl<W: Write + Seek> ChunkWriter<W> {
             hasher.combine(compressed_crc);
         }
         let mut writer = CountingCrcWriter::with_hasher(writer, post_chunk_header_crc);
-
         // Write our message indexes
-        let data_end = writer.stream_position()?;
+        let data_end = match writer.stream_position() {
+            Ok(v) => v,
+            Err(err) => {
+                return Err((writer.finalize().0, err.into()));
+            }
+        };
         let mut message_index_offsets: BTreeMap<u16, u64> = BTreeMap::new();
         let mut index_buf = Vec::new();
         for (channel_id, records) in self.indexes {
-            let existing_offset =
-                message_index_offsets.insert(channel_id, writer.stream_position()?);
+            let position = match writer.stream_position() {
+                Ok(v) => v,
+                Err(err) => return Err((writer.finalize().0, err.into())),
+            };
+            let existing_offset = message_index_offsets.insert(channel_id, position);
             assert!(existing_offset.is_none());
 
             index_buf.clear();
@@ -1560,11 +1607,23 @@ impl<W: Write + Seek> ChunkWriter<W> {
                 channel_id,
                 records,
             };
-            Cursor::new(&mut index_buf).write_le(&index)?;
-            op_and_len(&mut writer, op::MESSAGE_INDEX, index_buf.len() as _)?;
-            writer.write_all(&index_buf)?;
+            if let Err(err) = Cursor::new(&mut index_buf).write_le(&index) {
+                return Err((writer.finalize().0, err.into()));
+            }
+            if let Err(err) = op_and_len(&mut writer, op::MESSAGE_INDEX, index_buf.len() as _) {
+                return Err((writer.finalize().0, err.into()));
+            }
+            if let Err(err) = writer.write_all(&index_buf) {
+                return Err((writer.finalize().0, err.into()));
+            }
         }
-        let message_index_length = writer.stream_position()? - data_end;
+        let position = match writer.stream_position() {
+            Ok(pos) => pos,
+            Err(err) => {
+                return Err((writer.finalize().0, err.into()));
+            }
+        };
+        let message_index_length = position - data_end;
 
         let index = records::ChunkIndex {
             message_start_time: header.message_start_time,
@@ -1687,6 +1746,7 @@ impl<W: Write + Seek> AttachmentWriter<W> {
 
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
     use std::sync::Arc;
 
     use crate::read::LinearReader;
@@ -2152,6 +2212,53 @@ mod tests {
         assert_eq!(
             e.to_string(),
             "Private records must have an opcode >= 0x80, got 0x01"
+        );
+    }
+
+    #[test]
+    fn test_write_failure_does_not_cause_panic() {
+        #[derive(Default)]
+        struct FailingWriter {
+            write_count: i32,
+        }
+
+        impl std::io::Write for FailingWriter {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                if self.write_count > 5 {
+                    return Err(std::io::Error::other("writes now fail"));
+                }
+                self.write_count += 1;
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut writer = WriteOptions::new()
+            .disable_seeking(true)
+            .use_chunks(true)
+            .chunk_size(Some(10))
+            .create(NoSeek::new(FailingWriter::default()))
+            .expect("writer should construct");
+
+        let message = Message {
+            channel: Arc::new(Channel {
+                id: 0,
+                topic: "chat".into(),
+                schema: None,
+                message_encoding: "json".into(),
+                metadata: Default::default(),
+            }),
+            sequence: 0,
+            log_time: 0,
+            publish_time: 0,
+            data: Cow::Borrowed(b"hello"),
+        };
+        writer.write(&message).expect("first should not fail");
+        assert_matches!(writer.write(&message), Err(McapError::Io(_)));
+        assert_matches!(
+            writer.write(&message),
+            Err(McapError::AttemptedWriteAfterFailure)
         );
     }
 }
