@@ -6,7 +6,7 @@
 //! further system calls.
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap},
+    collections::{hash_map::Entry, BTreeMap, HashMap},
     fmt,
     io::Cursor,
     sync::Arc,
@@ -307,22 +307,29 @@ impl<'a> ChannelAccumulator<'a> {
         if header.id == 0 {
             return Err(McapError::InvalidSchemaId);
         }
-
-        let schema = Arc::new(Schema {
-            id: header.id,
-            name: header.name.clone(),
-            encoding: header.encoding,
-            data,
-        });
-
-        if let Some(preexisting) = self.schemas.insert(header.id, schema.clone()) {
-            // Oh boy, we have this schema already.
-            // It had better be identital.
-            if schema != preexisting {
-                return Err(McapError::ConflictingSchemas(header.name));
+        match self.schemas.entry(header.id) {
+            Entry::Occupied(entry) => {
+                // If we already have this schema, it must be identical.
+                let schema = entry.get();
+                if schema.name == header.name
+                    && schema.encoding == header.encoding
+                    && schema.data == data
+                {
+                    Ok(())
+                } else {
+                    Err(McapError::ConflictingSchemas(header.name))
+                }
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(Arc::new(Schema {
+                    id: header.id,
+                    name: header.name.clone(),
+                    encoding: header.encoding,
+                    data,
+                }));
+                Ok(())
             }
         }
-        Ok(())
     }
 
     pub(crate) fn add_channel(&mut self, chan: records::Channel) -> McapResult<()> {
@@ -338,22 +345,31 @@ impl<'a> ChannelAccumulator<'a> {
                 }
             }
         };
-
-        let channel = Arc::new(Channel {
-            id: chan.id,
-            topic: chan.topic.clone(),
-            schema,
-            message_encoding: chan.message_encoding,
-            metadata: chan.metadata,
-        });
-        if let Some(preexisting) = self.channels.insert(chan.id, channel.clone()) {
-            // Oh boy, we have this channel already.
-            // It had better be identital.
-            if preexisting != channel {
-                return Err(McapError::ConflictingChannels(chan.topic));
+        match self.channels.entry(chan.id) {
+            Entry::Occupied(entry) => {
+                // If we already have this channel, it must be identical.
+                let channel = entry.get();
+                if channel.topic == chan.topic
+                    && channel.schema.as_ref().map(|s| s.id).unwrap_or(0) == chan.schema_id
+                    && channel.message_encoding == chan.message_encoding
+                    && channel.metadata == chan.metadata
+                {
+                    Ok(())
+                } else {
+                    Err(McapError::ConflictingChannels(chan.topic))
+                }
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(Arc::new(Channel {
+                    id: chan.id,
+                    topic: chan.topic.clone(),
+                    schema,
+                    message_encoding: chan.message_encoding,
+                    metadata: chan.metadata,
+                }));
+                Ok(())
             }
         }
-        Ok(())
     }
 
     pub(crate) fn get(&self, chan_id: u16) -> Option<Arc<Channel<'a>>> {
