@@ -49,6 +49,8 @@ type indexedMessageIterator struct {
 	end    uint64
 	order  ReadOrder
 
+	info *Info
+
 	channels          slicemap[Channel]
 	schemas           slicemap[Schema]
 	statistics        *Statistics
@@ -116,6 +118,57 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 	err = it.seekTo(footer.SummaryStart)
 	if err != nil {
 		return fmt.Errorf("failed to seek to summary start: %w", err)
+	}
+
+	if it.info != nil {
+		for _, schema := range it.info.Schemas {
+			it.schemas.Set(schema.ID, schema)
+		}
+		for _, channel := range it.info.Channels {
+			if len(it.topics) == 0 || it.topics[channel.Topic] {
+				it.channels.Set(channel.ID, channel)
+			}
+		}
+		for _, idx := range it.info.ChunkIndexes {
+			// copy by under section
+			if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
+				if len(idx.MessageIndexOffsets) == 0 {
+					it.chunkIndexes = append(it.chunkIndexes, idx)
+					continue
+				}
+				for chanID := range idx.MessageIndexOffsets {
+					if it.channels.Get(chanID) != nil {
+						it.chunkIndexes = append(it.chunkIndexes, idx)
+						break
+					}
+				}
+			}
+		}
+		it.attachmentIndexes = it.info.AttachmentIndexes
+		it.metadataIndexes = it.info.MetadataIndexes
+		it.statistics = it.info.Statistics
+		switch it.order {
+		case FileOrder:
+			sort.Slice(it.chunkIndexes, func(i, j int) bool {
+				return it.chunkIndexes[i].ChunkStartOffset < it.chunkIndexes[j].ChunkStartOffset
+			})
+		case LogTimeOrder:
+			sort.Slice(it.chunkIndexes, func(i, j int) bool {
+				if it.chunkIndexes[i].MessageStartTime == it.chunkIndexes[j].MessageStartTime {
+					return it.chunkIndexes[i].ChunkStartOffset < it.chunkIndexes[j].ChunkStartOffset
+				}
+				return it.chunkIndexes[i].MessageStartTime < it.chunkIndexes[j].MessageStartTime
+			})
+		case ReverseLogTimeOrder:
+			sort.Slice(it.chunkIndexes, func(i, j int) bool {
+				if it.chunkIndexes[i].MessageEndTime == it.chunkIndexes[j].MessageEndTime {
+					return it.chunkIndexes[i].ChunkStartOffset > it.chunkIndexes[j].ChunkStartOffset
+				}
+				return it.chunkIndexes[i].MessageEndTime > it.chunkIndexes[j].MessageEndTime
+			})
+		}
+		it.hasReadSummarySection = true
+		return nil
 	}
 
 	lexer, err := NewLexer(bufio.NewReader(it.rs), &LexerOptions{
@@ -498,6 +551,14 @@ func (it *indexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *Me
 func (it *indexedMessageIterator) Next(buf []byte) (*Schema, *Channel, *Message, error) {
 	msg := &Message{Data: buf}
 	return it.NextInto(msg)
+}
+
+func (it *indexedMessageIterator) SetBaseInfo(info *Info) error {
+	if info == nil {
+		return fmt.Errorf("info is nil")
+	}
+	it.info = info
+	return nil
 }
 
 // returns the sum of two uint64s, with a boolean indicating if the sum overflowed.

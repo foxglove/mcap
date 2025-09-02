@@ -12,6 +12,8 @@ type unindexedMessageIterator struct {
 	start    uint64
 	end      uint64
 
+	info *Info
+
 	recordBuf []byte
 
 	metadataCallback func(*Metadata) error
@@ -85,4 +87,12 @@ func (it *unindexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *
 			// skip all other tokens
 		}
 	}
+}
+
+func (it *unindexedMessageIterator) SetBaseInfo(info *Info) error {
+	if info == nil {
+		return fmt.Errorf("info is nil")
+	}
+	it.info = info
+	return nil
 }

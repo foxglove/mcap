@@ -71,6 +71,9 @@ type MessageIterator interface {
 	// return the same pointer, re-using or resizing `msg.Data` as needed.
 	// If `msg` is nil, NextInto will allocate and return a new Message on the heap.
 	NextInto(msg *Message) (*Schema, *Channel, *Message, error)
+	// SetBaseInfo make you less time to parse summary section
+	// make sure using the same MCAP info
+	SetBaseInfo(*Info) error
 }
 
 func Range(it MessageIterator, f func(*Schema, *Channel, *Message) error) error {
