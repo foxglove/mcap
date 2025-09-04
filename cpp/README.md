@@ -92,6 +92,11 @@ To simplify installation of dependencies, the [Conan](https://conan.io/) package
 manager can be used with the included
 [conanfile.py](https://github.com/foxglove/mcap/blob/main/cpp/mcap/conanfile.py).
 
+### vcpkg
+
+To simplify installation of dependencies, the [vcpkg](https://vcpkg.io/en/) package
+manager can be used via the [`mcap` port](https://vcpkg.io/en/package/mcap).
+
 ### CMake
 
 For using MCAP with CMake, the third-party [olympus-robotics/mcap_builder](https://github.com/olympus-robotics/mcap_builder) repository provides a helpful wrapper.
