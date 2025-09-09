@@ -64,3 +64,35 @@ func TestPassesIndexedMessagesWithRepeatedSchemas(t *testing.T) {
 	diagnosis := doctor.Examine()
 	assert.Empty(t, diagnosis.Errors)
 }
+
+func TestNoErrorOnSchemalessMessages(t *testing.T) {
+	buf := bytes.Buffer{}
+	writer, err := mcap.NewWriter(&buf, &mcap.WriterOptions{
+		Chunked:   true,
+		ChunkSize: 10,
+	})
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&mcap.Header{
+		Profile: "",
+		Library: "",
+	}))
+	require.NoError(t, writer.WriteChannel(&mcap.Channel{
+		ID:       1,
+		SchemaID: 0,
+		Topic:    "schemaless_topic",
+	}))
+	require.NoError(t, writer.WriteMessage(&mcap.Message{
+		ChannelID:   1,
+		Sequence:    0,
+		LogTime:     0,
+		PublishTime: 0,
+		Data:        []byte{0, 1, 2},
+	}))
+	require.NoError(t, writer.Close())
+
+	rs := bytes.NewReader(buf.Bytes())
+
+	doctor := newMcapDoctor(rs)
+	diagnosis := doctor.Examine()
+	assert.Empty(t, diagnosis.Errors)
+}
