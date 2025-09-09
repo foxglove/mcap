@@ -567,6 +567,9 @@ func (doctor *mcapDoctor) Examine() Diagnosis {
 				// message with unknown channel, this is checked when that message is scanned
 				continue
 			}
+			if channel.SchemaID == 0 {
+				continue
+			}
 			if present := doctor.schemaIDsInSummarySection[channel.SchemaID]; !present {
 				doctor.error(
 					"Indexed chunk at offset %d contains messages referencing schema (%d) not duplicated in summary section",
