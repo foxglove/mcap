@@ -104,6 +104,7 @@ words:
   - typedoc
   - unchunked
   - unindexed
+  - vcpkg
   - velodyne
   - waabi
   - Wayve

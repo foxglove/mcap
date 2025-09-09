@@ -96,6 +96,8 @@ manager can be used with the included
 
 For using MCAP with CMake, the third-party [olympus-robotics/mcap_builder](https://github.com/olympus-robotics/mcap_builder) repository provides a helpful wrapper.
 
+There is also a third party-maintained [vcpkg](https://vcpkg.io/en/) package for [`mcap`](https://vcpkg.io/en/package/mcap), which provides a CMake package.
+
 ### Alternatives
 
 If you use an alternative approach, such as CMake's FetchContent or directly
