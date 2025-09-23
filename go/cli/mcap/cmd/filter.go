@@ -310,16 +310,16 @@ func filter(
 			if err != nil {
 				return err
 			}
-			for _, lastPerChannelMatcher := range opts.includeLastPerChannelTopics {
-				lastPerChannelMatcher := lastPerChannelMatcher
-				if lastPerChannelMatcher.MatchString(channel.Topic) {
+			for i := range opts.includeLastPerChannelTopics {
+				matcher := opts.includeLastPerChannelTopics[i]
+				if matcher.MatchString(channel.Topic) {
 					mostRecentMessageBeforeRangeStart[channel.ID] = nil
 				}
 			}
 			// if any topics match an includeTopic, add it.
-			for _, includeTopicMatcher := range opts.includeTopics {
-				includeTopicMatcher := includeTopicMatcher
-				if includeTopicMatcher.MatchString(channel.Topic) {
+			for i := range opts.includeTopics {
+				matcher := opts.includeTopics[i]
+				if matcher.MatchString(channel.Topic) {
 					channels[channel.ID] = markableChannel{channel, false}
 				}
 			}
@@ -362,7 +362,7 @@ func filter(
 			}
 			if !messagesBeforeRangeStartWritten {
 				messagesBeforeRangeStartWritten = true
-				// We have reached the start of the record, so here we need to add the latched topics
+				// We have reached the start of the record, so add any stored messages here
 				for _, mostRecent := range mostRecentMessageBeforeRangeStart {
 					if mostRecent == nil {
 						continue
