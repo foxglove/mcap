@@ -17,35 +17,36 @@ import (
 )
 
 type filterFlags struct {
-	output             string
-	includeTopics      []string
-	excludeTopics      []string
-	latchedTopics      []string
-	startSec           uint64
-	endSec             uint64
-	startNano          uint64
-	endNano            uint64
-	start              string
-	end                string
-	includeMetadata    bool
-	includeAttachments bool
-	outputCompression  string
-	chunkSize          int64
-	unchunked          bool
+	output                      string
+	includeTopics               []string
+	excludeTopics               []string
+	includeLastPerChannelTopics []string
+	startSec                    uint64
+	endSec                      uint64
+	startNano                   uint64
+	endNano                     uint64
+	start                       string
+	end                         string
+	includeMetadata             bool
+	includeAttachments          bool
+	outputCompression           string
+	chunkSize                   int64
+	unchunked                   bool
 }
 
 type filterOpts struct {
-	output             string
-	includeTopics      []regexp.Regexp
-	excludeTopics      []regexp.Regexp
-	latchedTopics      []regexp.Regexp
-	start              uint64
-	end                uint64
-	includeMetadata    bool
-	includeAttachments bool
-	compressionFormat  mcap.CompressionFormat
-	chunkSize          int64
-	unchunked          bool
+	recover                     bool
+	output                      string
+	includeTopics               []regexp.Regexp
+	excludeTopics               []regexp.Regexp
+	includeLastPerChannelTopics []regexp.Regexp
+	start                       uint64
+	end                         uint64
+	includeMetadata             bool
+	includeAttachments          bool
+	compressionFormat           mcap.CompressionFormat
+	chunkSize                   int64
+	unchunked                   bool
 }
 
 // parseDateOrNanos parses a string containing either an RFC3339-formatted date with timezone
@@ -117,21 +118,21 @@ func buildFilterOptions(flags *filterFlags) (*filterOpts, error) {
 
 	includeTopics, err := compileMatchers(flags.includeTopics)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid included topic regex: %w", err)
 	}
 	opts.includeTopics = includeTopics
 
 	excludeTopics, err := compileMatchers(flags.excludeTopics)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid excluded topic regex: %w", err)
 	}
 	opts.excludeTopics = excludeTopics
 
-	latchedTopics, err := compileMatchers(flags.latchedTopics)
+	includeLastPerChannelTopics, err := compileMatchers(flags.includeLastPerChannelTopics)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid last-per-channel topic regex: %w", err)
 	}
-	opts.latchedTopics = latchedTopics
+	opts.includeLastPerChannelTopics = includeLastPerChannelTopics
 
 	opts.chunkSize = flags.chunkSize
 	opts.unchunked = flags.unchunked
@@ -201,7 +202,7 @@ func compileMatchers(regexStrings []string) ([]regexp.Regexp, error) {
 		}
 		regex, err := regexp.Compile(regexString)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%s is not a valid regex: %w", regexString, err)
 		}
 		matchers[i] = *regex
 	}
@@ -275,8 +276,8 @@ func filter(
 	buf := make([]byte, 1024)
 	schemas := make(map[uint16]markableSchema)
 	channels := make(map[uint16]markableChannel)
-	mostRecentLatched := make(map[uint16]*mcap.Message)
-	handledLatched := false
+	mostRecentMessageBeforeRangeStart := make(map[uint16]*mcap.Message)
+	messagesBeforeRangeStartWritten := false
 
 	for {
 		token, data, err := lexer.Next(buf)
@@ -309,16 +310,16 @@ func filter(
 			if err != nil {
 				return err
 			}
-			for i := range opts.latchedTopics {
-				matcher := opts.latchedTopics[i]
-				if matcher.MatchString(channel.Topic) {
-					mostRecentLatched[channel.ID] = nil
+			for _, lastPerChannelMatcher := range opts.includeLastPerChannelTopics {
+				lastPerChannelMatcher := lastPerChannelMatcher
+				if lastPerChannelMatcher.MatchString(channel.Topic) {
+					mostRecentMessageBeforeRangeStart[channel.ID] = nil
 				}
 			}
 			// if any topics match an includeTopic, add it.
-			for i := range opts.includeTopics {
-				matcher := opts.includeTopics[i]
-				if matcher.MatchString(channel.Topic) {
+			for _, includeTopicMatcher := range opts.includeTopics {
+				includeTopicMatcher := includeTopicMatcher
+				if includeTopicMatcher.MatchString(channel.Topic) {
 					channels[channel.ID] = markableChannel{channel, false}
 				}
 			}
@@ -344,14 +345,14 @@ func filter(
 			if err != nil {
 				return err
 			}
-			mostRecent, ok := mostRecentLatched[message.ChannelID]
+			mostRecent, ok := mostRecentMessageBeforeRangeStart[message.ChannelID]
 			if message.LogTime < opts.start {
 				if ok {
-					if mostRecent == nil || mostRecent.LogTime < message.LogTime {
-						mostRecentLatched[message.ChannelID] = message
-						oldData := message.Data
-						mostRecentLatched[message.ChannelID].Data = make([]byte, len(message.Data))
-						copy(mostRecentLatched[message.ChannelID].Data, oldData)
+					if mostRecent == nil || mostRecent.LogTime <= message.LogTime {
+						mostRecentMessageBeforeRangeStart[message.ChannelID] = message
+						// Copy the data buffer explicitly, to avoid keeping a reference to the greater
+						// `buf` array that underlies `message.Data`.
+						mostRecentMessageBeforeRangeStart[message.ChannelID].Data = append([]byte{}, message.Data...)
 					}
 				}
 				continue
@@ -359,10 +360,10 @@ func filter(
 			if message.LogTime >= opts.end {
 				continue
 			}
-			if !handledLatched {
-				handledLatched = true
+			if !messagesBeforeRangeStartWritten {
+				messagesBeforeRangeStartWritten = true
 				// We have reached the start of the record, so here we need to add the latched topics
-				for _, mostRecent := range mostRecentLatched {
+				for _, mostRecent := range mostRecentMessageBeforeRangeStart {
 					if mostRecent == nil {
 						continue
 					}
@@ -471,8 +472,8 @@ usage:
 			[]string{},
 			"messages with topic names matching this regex will be excluded, can be supplied multiple times",
 		)
-		latchedTopics := filterCmd.PersistentFlags().StringArrayP(
-			"latched-topic-regex",
+		includeLastPerChannelTopics := filterCmd.PersistentFlags().StringArrayP(
+			"last-per-channel-topic-regex",
 			"l",
 			[]string{},
 			"For included topics matching this regex, the most recent message previous to the start time"+
@@ -535,20 +536,20 @@ usage:
 		)
 		filterCmd.Run = func(_ *cobra.Command, args []string) {
 			filterOptions, err := buildFilterOptions(&filterFlags{
-				output:             *output,
-				includeTopics:      *includeTopics,
-				excludeTopics:      *excludeTopics,
-				latchedTopics:      *latchedTopics,
-				start:              *start,
-				startSec:           *startSec,
-				startNano:          *startNano,
-				end:                *end,
-				endSec:             *endSec,
-				endNano:            *endNano,
-				chunkSize:          *chunkSize,
-				includeMetadata:    *includeMetadata,
-				includeAttachments: *includeAttachments,
-				outputCompression:  *outputCompression,
+				output:                      *output,
+				includeTopics:               *includeTopics,
+				excludeTopics:               *excludeTopics,
+				includeLastPerChannelTopics: *includeLastPerChannelTopics,
+				start:                       *start,
+				startSec:                    *startSec,
+				startNano:                   *startNano,
+				end:                         *end,
+				endSec:                      *endSec,
+				endNano:                     *endNano,
+				chunkSize:                   *chunkSize,
+				includeMetadata:             *includeMetadata,
+				includeAttachments:          *includeAttachments,
+				outputCompression:           *outputCompression,
 			})
 			if err != nil {
 				die("configuration error: %s", err)

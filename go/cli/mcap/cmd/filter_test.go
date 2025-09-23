@@ -311,3 +311,95 @@ func TestBuildFilterOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestLastPerChannelBehavior(t *testing.T) {
+	cases := []struct {
+		name                 string
+		flags                *filterFlags
+		expectedMessageCount map[uint16]int
+	}{
+		{name: "noop",
+			flags: &filterFlags{
+				startNano: 50,
+			},
+			expectedMessageCount: map[uint16]int{
+				1: 50,
+				2: 50,
+				3: 50,
+			},
+		},
+		{name: "last per channel on all topics",
+			flags: &filterFlags{
+				startNano:                   50,
+				includeLastPerChannelTopics: []string{".*"},
+			},
+			expectedMessageCount: map[uint16]int{
+				1: 51,
+				2: 51,
+				3: 51,
+			},
+		},
+		{name: "last per channel on camera topics only",
+			flags: &filterFlags{
+				startNano:                   50,
+				includeLastPerChannelTopics: []string{"camera_.*"},
+			},
+			expectedMessageCount: map[uint16]int{
+				1: 51,
+				2: 51,
+				3: 50,
+			},
+		},
+		{name: "does not override include topics",
+			flags: &filterFlags{
+				startNano:                   50,
+				includeLastPerChannelTopics: []string{"camera_.*"},
+				includeTopics:               []string{"camera_a"},
+			},
+			expectedMessageCount: map[uint16]int{
+				1: 51,
+				2: 0,
+				3: 0,
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			opts, err := buildFilterOptions(c.flags)
+			require.NoError(t, err)
+			writeBuf := bytes.Buffer{}
+			readBuf := bytes.Buffer{}
+
+			writeFilterTestInput(t, &readBuf)
+			require.NoError(t, filter(&readBuf, &writeBuf, opts))
+			lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{})
+			require.NoError(t, err)
+			defer lexer.Close()
+			messageCounter := map[uint16]int{
+				1: 0,
+				2: 0,
+				3: 0,
+			}
+			for {
+				token, record, err := lexer.Next(nil)
+				if err != nil {
+					require.ErrorIs(t, err, io.EOF)
+					break
+				}
+				if token == mcap.TokenMessage {
+					message, err := mcap.ParseMessage(record)
+					require.NoError(t, err)
+					messageCounter[message.ChannelID]++
+				}
+			}
+			for channelID, count := range messageCounter {
+				require.Equal(
+					t,
+					c.expectedMessageCount[channelID],
+					count,
+					"message count incorrect on channel %d", channelID,
+				)
+			}
+		})
+	}
+}
