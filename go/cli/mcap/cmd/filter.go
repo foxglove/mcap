@@ -472,7 +472,7 @@ usage:
 		includeLastPerChannelTopics := filterCmd.PersistentFlags().StringArray(
 			"include-last-per-channel-topic-regex",
 			[]string{},
-			"For included topics matching this regex, the most recent message previous to the start time"+
+			"For included topics matching this regex, the most recent message prior to the start time"+
 				" will still be included.",
 		)
 		start := filterCmd.PersistentFlags().StringP(
