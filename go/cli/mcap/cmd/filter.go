@@ -474,7 +474,7 @@ usage:
 			"last-per-channel-topic-regex",
 			"l",
 			[]string{},
-			"For included topics matching this regex, the most recent message previous to the start time"+
+			"For included topics matching this regex, the most recent message prior to the start time"+
 				" will still be included.",
 		)
 		start := filterCmd.PersistentFlags().StringP(
