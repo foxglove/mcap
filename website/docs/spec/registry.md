@@ -122,20 +122,22 @@ The `omgidl` schema encoding stores [OMG IDL](https://www.omg.org/spec/IDL/4.2/A
 
 #### Producing `schema.data` for the `omgidl` schema encoding
 
-Most commonly, IDL definitions for separate types are stored in separate files, and use C++ preprocessor `#include` statements to include definitions for types referenced in that definition.
+`.idl` files usually contain only one definition each, and use C preprocessor
+`#include` directives when referring to other definitions. However, the `data`
+field must be the text of a single, self-contained OMG IDL source file. That is,
+all referenced type definitions must be present, and there must be no
+preprocessor directives.
 
-For the `omgidl` schema encoding, the `data` field needs to contain all of those definitions. In
-other words, the `data` field should read as a single source file containing definitions for the
-message type and all referenced types.
-
-One way to produce this is to use a C++ compiler to resolve those `#include` directives:
+You can produce the required format with a C preprocessor. For example, with GCC
+or Clang:
 
 ```bash
-# Run from the root of your IDL definition tree, or use additional `-I` arguments to indicate your
-# full include path to the compiler.
-# The `gcc` output may contain debugging lines such as "# 1 "top_level_module/my_module/MyType.idl",
-# the grep command here is intended to filter those out.
-$ gcc -E -I. top_level_module/my_module/MyType.idl | grep -v "^# \d" > all_definitions.idl
+# -x c: treat input as C to avoid guessing based on the extension.
+# -E: run only the preprocessor.
+# -P: remove all #-directives from the output.
+# Run from the root of your IDL definition tree, or change the `-I` flag to the
+# correct directory.
+$ cc -x c -E -P -I . top_level_module/my_module/MyType.idl > combined.idl
 ```
 
 For the following files:
@@ -164,7 +166,7 @@ module top_level_module {
 
 This should produce:
 
-```cpp title=schema.data
+```cpp title=combined.idl
 module top_level_module {
   module other_module {
     struct OtherType {
