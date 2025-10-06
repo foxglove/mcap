@@ -78,8 +78,8 @@ mcap::McapWriterOptions ReadOptions(const json& featuresJson) {
 }
 
 template <typename T>
-T ReadUInt(const json& json) {
-  return T(std::stoull(json.get<std::string>()));
+T ReadUInt(const json& obj) {
+  return T(std::stoull(obj.get<std::string>()));
 }
 
 void ReadBytes(const json& byteArrayJson, mcap::ByteArray& output) {
