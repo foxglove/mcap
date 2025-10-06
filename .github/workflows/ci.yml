@@ -53,7 +53,7 @@ jobs:
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
-      - run: cd cpp && make ci
+      - run: cd cpp && make ci-clang
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner cpp-
@@ -168,6 +168,10 @@ jobs:
 
   cpp:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [clang, gcc]
     defaults:
       run:
         working-directory: cpp
@@ -180,7 +184,7 @@ jobs:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
       - run: make ci-format-check
-      - run: make ci
+      - run: make ci-${{ matrix.compiler }}
       - run: make test-host
       - run: make test-examples-host
       - run: make run-examples-host

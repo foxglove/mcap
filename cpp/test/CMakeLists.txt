@@ -3,6 +3,7 @@ project(McapTest CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CONAN_SYSTEM_INCLUDES ON)
 
 if (MSVC)
   add_compile_options(/W4 /WX
