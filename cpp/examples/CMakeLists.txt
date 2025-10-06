@@ -11,7 +11,7 @@ if (MSVC)
   )
   add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else()
-  add_compile_options(-Wall -Wextra -pedantic -Werror)
+  add_compile_options(-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Werror)
 endif()
 
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
