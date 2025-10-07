@@ -5,6 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
   apt-get install -y --no-install-recommends --no-install-suggests \
+  build-essential \
   ca-certificates \
   curl \
   cmake \

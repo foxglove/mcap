@@ -1,9 +1,11 @@
+.PHONY: default
 default: build
 
 .PHONY: dev-image
 dev-image:
 	docker build -t mcap_cpp_dev -f dev.Dockerfile .
 
+.PHONY: dev-shell
 dev-shell: dev-image
 	docker run --rm -v $(CURDIR):/src -it mcap_cpp_dev /bin/bash
 
@@ -15,6 +17,7 @@ build: dev-image
 build-host:
 	./build.sh
 
+.PHONY: clean
 clean:
 	docker rm -f hdoc
 	docker rmi -f mcap_cpp_dev

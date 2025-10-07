@@ -1218,9 +1218,9 @@ std::optional<Compression> McapReader::ParseCompression(const std::string_view c
 
 // RecordReader ////////////////////////////////////////////////////////////////
 
-RecordReader::RecordReader(IReadable& dataSource, ByteOffset startOffset, ByteOffset endOffset)
+RecordReader::RecordReader(IReadable& dataSource, ByteOffset startOffset, ByteOffset _endOffset)
     : offset(startOffset)
-    , endOffset(endOffset)
+    , endOffset(_endOffset)
     , dataSource_(&dataSource)
     , status_(StatusCode::Success)
     , curRecord_{} {}

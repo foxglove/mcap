@@ -3,7 +3,6 @@ project(McapBenchmarks CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CONAN_SYSTEM_INCLUDES ON)
 
 if (MSVC)
   add_compile_options(/W4 /WX
@@ -11,7 +10,7 @@ if (MSVC)
   )
   add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else()
-  add_compile_options(-Wall -Wextra -pedantic -Werror)
+  add_compile_options(-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Werror)
 endif()
 
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)

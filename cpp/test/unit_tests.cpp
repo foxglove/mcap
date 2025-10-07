@@ -340,8 +340,7 @@ TEST_CASE("McapReader::byteRange()", "[reader]") {
     mcap::McapReader reader;
     Buffer buffer;
     writeExampleFile(buffer);
-    auto status = reader.open(buffer);
-    requireOk(status);
+    requireOk(reader.open(buffer));
 
     auto [startOffset, endOffset] = reader.byteRange(0);
     REQUIRE(startOffset == 25);
@@ -401,8 +400,7 @@ TEST_CASE("McapReader::readMessages()", "[reader]") {
     writer.close();
 
     mcap::McapReader reader;
-    auto status = reader.open(buffer);
-    requireOk(status);
+    requireOk(reader.open(buffer));
 
     for (const auto& msg : reader.readMessages()) {
       FAIL("Shouldn't have gotten a message: topic " + msg.channel->topic + ", schema " +
@@ -608,8 +606,7 @@ TEST_CASE("LZ4 compression", "[reader][writer]") {
     writer.close();
 
     mcap::McapReader reader;
-    auto status = reader.open(buffer);
-    requireOk(status);
+    requireOk(reader.open(buffer));
 
     size_t messageCount = 0;
     const auto onProblem = [](const mcap::Status& status) {
@@ -654,8 +651,7 @@ TEST_CASE("zstd compression", "[reader][writer]") {
     writer.close();
 
     mcap::McapReader reader;
-    auto status = reader.open(buffer);
-    requireOk(status);
+    requireOk(reader.open(buffer));
 
     size_t messageCount = 0;
     const auto onProblem = [](const mcap::Status& status) {
@@ -703,8 +699,7 @@ TEST_CASE("Read Order", "[reader][writer]") {
     writer.close();
 
     mcap::McapReader reader;
-    auto status = reader.open(buffer);
-    requireOk(status);
+    requireOk(reader.open(buffer));
 
     size_t messageCount = 0;
     const auto onProblem = [](const mcap::Status& status) {
@@ -753,8 +748,7 @@ TEST_CASE("Read Order", "[reader][writer]") {
     writer.close();
 
     mcap::McapReader reader;
-    auto status = reader.open(buffer);
-    requireOk(status);
+    requireOk(reader.open(buffer));
 
     size_t messageCount = 0;
     const auto onProblem = [](const mcap::Status& status) {
@@ -807,8 +801,7 @@ TEST_CASE("Read Order", "[reader][writer]") {
     writer.close();
 
     mcap::McapReader reader;
-    auto status = reader.open(buffer);
-    requireOk(status);
+    requireOk(reader.open(buffer));
 
     const auto onProblem = [](const mcap::Status& status) {
       FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
