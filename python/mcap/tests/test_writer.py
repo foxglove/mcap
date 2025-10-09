@@ -7,8 +7,7 @@ from typing import List
 
 import lz4.frame
 import pytest
-
-from mcap.records import Chunk, ChunkIndex, Statistics
+from mcap.records import Channel, Chunk, ChunkIndex, Schema, Statistics
 from mcap.stream_reader import StreamReader
 from mcap.writer import CompressionType, Writer
 
@@ -33,6 +32,68 @@ def generate_sample_data(compression: CompressionType):
         ).encode(),
     )
 
+    channel_id = writer.register_channel(
+        schema_id=schema_id,
+        topic="sample_topic",
+        message_encoding="json",
+    )
+
+    writer.add_message(
+        channel_id=channel_id,
+        log_time=0,
+        data=json.dumps({"sample": "test"}).encode("utf-8"),
+        publish_time=0,
+    )
+
+    writer.finish()
+    file.seek(0)
+
+    yield file
+
+
+@contextlib.contextmanager
+def generate_mcap_schemas_channels(compression: CompressionType):
+    file = TemporaryFile("w+b")
+    writer = Writer(file, compression=compression)
+    writer.start(library="test")
+    schema_id = writer.register_schema(
+        name="sample",
+        encoding="jsonschema",
+        data=json.dumps(
+            {
+                "type": "object",
+                "properties": {
+                    "sample": {
+                        "type": "string",
+                    }
+                },
+            }
+        ).encode(),
+    )
+    # Schema written twice — this should be cached and there should only be one channel record
+    # written to the final MCAP file
+    schema_id = writer.register_schema(
+        name="sample",
+        encoding="jsonschema",
+        data=json.dumps(
+            {
+                "type": "object",
+                "properties": {
+                    "sample": {
+                        "type": "string",
+                    }
+                },
+            }
+        ).encode(),
+    )
+
+    channel_id = writer.register_channel(
+        schema_id=schema_id,
+        topic="sample_topic",
+        message_encoding="json",
+    )
+    # Channel written twice — this should be cached and there should only be one channel record
+    # written to the final MCAP file
     channel_id = writer.register_channel(
         schema_id=schema_id,
         topic="sample_topic",
@@ -115,3 +176,18 @@ def test_out_of_order_messages():
     chunk_index = next(r for r in records if isinstance(r, ChunkIndex))
     assert chunk_index.message_start_time == 0
     assert chunk_index.message_end_time == 100
+
+
+def test_schema_channel_caching():
+    """tests that schema and channel records are cached and not written more than once."""
+    schemas: List[Schema] = []
+    channels: List[Channel] = []
+    with generate_mcap_schemas_channels(CompressionType.LZ4) as t:
+        for record in StreamReader(t, emit_chunks=True).records:
+            if isinstance(record, Schema):
+                schemas.append(record)
+            elif isinstance(record, Channel):
+                channels.append(record)
+
+    assert len(schemas) == 1
+    assert len(channels) == 1
