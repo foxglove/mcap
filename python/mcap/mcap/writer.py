@@ -70,7 +70,7 @@ def _cache_method(func):
     :param func: The function to decorate
     """
 
-    @functools.cache
+    @functools.lru_cache(maxsize=None, typed=False)
     def _func(_self, *args, **kwargs):
         return func(_self(), *args, **kwargs)
 
