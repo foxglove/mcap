@@ -15,7 +15,7 @@ jobs:
         with:
           lfs: false
       - run: corepack enable
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 20.x
           cache: yarn
@@ -30,7 +30,7 @@ jobs:
         with:
           lfs: false
       - run: corepack enable
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 20.x
           cache: yarn
@@ -45,7 +45,7 @@ jobs:
         with:
           lfs: true
       - run: corepack enable
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 20.x
           cache: yarn
@@ -65,7 +65,7 @@ jobs:
         with:
           lfs: true
       - run: corepack enable
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 20.x
           cache: yarn
@@ -84,7 +84,7 @@ jobs:
         with:
           lfs: true
       - run: corepack enable
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 20.x
           cache: yarn
@@ -103,7 +103,7 @@ jobs:
         with:
           lfs: true
       - run: corepack enable
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 20.x
           cache: yarn
@@ -118,7 +118,7 @@ jobs:
         with:
           lfs: true
       - run: corepack enable
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 20.x
           cache: yarn
@@ -133,7 +133,7 @@ jobs:
         with:
           lfs: true
       - run: corepack enable
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 20.x
           cache: yarn
@@ -152,7 +152,7 @@ jobs:
         with:
           lfs: true
       - run: corepack enable
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 20.x
           cache: yarn
@@ -221,7 +221,7 @@ jobs:
         with:
           lfs: false
       - run: corepack enable
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 20.x
           cache: yarn
@@ -278,7 +278,7 @@ jobs:
         with:
           lfs: false
       - run: corepack enable
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 20.x
           cache: yarn
