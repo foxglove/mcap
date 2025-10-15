@@ -4,6 +4,9 @@ go 1.21
 
 require (
 	cloud.google.com/go/storage v1.23.0
+	github.com/aws/aws-sdk-go-v2 v1.7.0
+	github.com/aws/aws-sdk-go-v2/config v1.31.12
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.88.4
 	github.com/fatih/color v1.13.0
 	github.com/foxglove/go-rosbag v0.0.7
 	github.com/foxglove/mcap/go/mcap v1.7.3
