@@ -97,4 +97,3 @@ func (r *GCSReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
 func (r *GCSReadSeekCloser) Close() error {
 	return r.reader.Close()
 }
-

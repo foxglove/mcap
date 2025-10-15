@@ -31,7 +31,7 @@ func newS3Reader(ctx context.Context, bucket, path string) (io.ReadSeekCloser, f
 	return rs, func() error { return nil }, nil
 }
 
-// loadAWSConfig wraps AWS SDK v2 default config
+// loadAWSConfig wraps AWS SDK v2 default config.
 func loadAWSConfig(ctx context.Context) (aws.Config, error) {
 	return config.LoadDefaultConfig(ctx)
 }
