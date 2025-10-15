@@ -15,7 +15,7 @@ func init() {
 	RegisterReader("s3", newS3Reader)
 }
 
-// Factory for S3 readers (called by registry)
+// Factory for S3 readers (called by registry).
 func newS3Reader(ctx context.Context, bucket, path string) (io.ReadSeekCloser, func() error, error) {
 	cfg, err := loadAWSConfig(ctx)
 	if err != nil {

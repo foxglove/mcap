@@ -8,12 +8,12 @@ import (
 	"cloud.google.com/go/storage"
 )
 
-// Automatically register GCS reader on import
+// Automatically register GCS reader on import.
 func init() {
 	RegisterReader("gs", newGCSReader)
 }
 
-// Factory for GCS readers (called from registry)
+// Factory for GCS readers (called from registry).
 func newGCSReader(ctx context.Context, bucket, path string) (io.ReadSeekCloser, func() error, error) {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
@@ -97,3 +97,4 @@ func (r *GCSReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
 func (r *GCSReadSeekCloser) Close() error {
 	return r.reader.Close()
 }
+

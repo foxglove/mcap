@@ -38,6 +38,8 @@ func WithReader(ctx context.Context, scheme, bucket, path string, f func(remote 
 	if err != nil {
 		return err
 	}
-	defer closeReader()
+	defer func() {
+		_ = closeReader()
+	}()
 	return f(scheme != "", rs)
 }
