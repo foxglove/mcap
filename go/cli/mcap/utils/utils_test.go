@@ -35,6 +35,13 @@ func TestGetScheme(t *testing.T) {
 			"foo-bar.com123",
 			"bar/baz.txt",
 		},
+		{
+			"remote file",
+			"s3://foo-bar/bar/baz.txt",
+			"s3",
+			"foo-bar",
+			"bar/baz.txt",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.assertion, func(t *testing.T) {

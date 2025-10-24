@@ -10,16 +10,19 @@ import (
 	"regexp"
 	"time"
 
-	"cloud.google.com/go/storage"
+	"github.com/foxglove/mcap/go/cli/mcap/utils/readers"
+
 	"github.com/olekukonko/tablewriter"
 	"github.com/schollz/progressbar/v3"
 )
 
+// remoteFileRegex parses URIs like "gs://bucket/path/to/file"
 var (
 	remoteFileRegex = regexp.MustCompile(`(?P<Scheme>\w+)://(?P<Bucket>[a-z0-9_.-]+)/(?P<Filename>.*)`)
 )
 
-func GetScheme(filename string) (match1 string, match2 string, match3 string) {
+// GetScheme splits a URI into (scheme, bucket, path).
+func GetScheme(filename string) (scheme, bucket, path string) {
 	match := remoteFileRegex.FindStringSubmatch(filename)
 	if len(match) == 0 {
 		return "", "", filename
@@ -42,66 +45,18 @@ func StdoutRedirected() bool {
 	return true
 }
 
+// GetReader returns a ReadSeekCloser for local or remote sources.
+// It delegates remote handling to the readers registry.
 func GetReader(ctx context.Context, filename string) (func() error, io.ReadSeekCloser, error) {
-	var rs io.ReadSeekCloser
-	var err error
-	closeReader := func() error { return nil }
 	scheme, bucket, path := GetScheme(filename)
-	if scheme != "" {
-		switch scheme {
-		case "gs":
-			client, err := storage.NewClient(ctx)
-			if err != nil {
-				return closeReader, nil, fmt.Errorf("failed to create GCS client: %w", err)
-			}
-			closeReader = client.Close
-			object := client.Bucket(bucket).Object(path)
-			rs, err = NewGCSReadSeekCloser(ctx, object)
-			if err != nil {
-				return closeReader, nil, fmt.Errorf("failed to build read seek closer: %w", err)
-			}
-		default:
-			return closeReader, nil, fmt.Errorf("unsupported remote file scheme: %s", scheme)
-		}
-	} else {
-		rs, err = os.Open(path)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to open local file")
-		}
-	}
-
-	return closeReader, rs, nil
+	return readers.GetReader(ctx, scheme, bucket, path)
 }
 
+// WithReader runs a function with a ReadSeeker for the given source.
+// It automatically closes after use.
 func WithReader(ctx context.Context, filename string, f func(remote bool, rs io.ReadSeeker) error) error {
-	var err error
-	var rs io.ReadSeekCloser
-	var remote bool
 	scheme, bucket, path := GetScheme(filename)
-	if scheme != "" {
-		remote = true
-		switch scheme {
-		case "gs":
-			client, err := storage.NewClient(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to create GCS client: %w", err)
-			}
-			object := client.Bucket(bucket).Object(path)
-			rs, err = NewGCSReadSeekCloser(ctx, object)
-			if err != nil {
-				return fmt.Errorf("failed to build read seek closer: %w", err)
-			}
-		default:
-			return fmt.Errorf("unsupported remote file scheme: %s", scheme)
-		}
-	} else {
-		rs, err = os.Open(path)
-		if err != nil {
-			return fmt.Errorf("failed to open local file")
-		}
-	}
-	defer rs.Close()
-	return f(remote, rs)
+	return readers.WithReader(ctx, scheme, bucket, path, f)
 }
 
 func FormatTable(w io.Writer, rows [][]string) {
