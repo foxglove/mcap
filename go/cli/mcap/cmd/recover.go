@@ -18,6 +18,40 @@ type recoverOptions struct {
 	compression mcap.CompressionFormat
 }
 
+func validateRecoveredFile(r io.ReadSeeker) error {
+	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{
+		SkipMagic: false,
+	})
+	if err != nil {
+		return fmt.Errorf("not a valid MCAP file: %w", err)
+	}
+	defer lexer.Close()
+
+	buf := make([]byte, 1024)
+	hasFooter := false
+	for {
+		token, data, err := lexer.Next(buf)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return fmt.Errorf("cannot be read: %w", err)
+		}
+		if len(data) > len(buf) {
+			buf = data
+		}
+		if token == mcap.TokenFooter {
+			hasFooter = true
+		}
+	}
+
+	if !hasFooter {
+		return errors.New("incomplete: missing footer")
+	}
+
+	return nil
+}
+
 func recoverRun(
 	r io.Reader,
 	w io.Writer,
@@ -300,12 +334,14 @@ usage:
 		}
 
 		var writer io.Writer
+		var outputFile string
 		if *output == "" {
 			if !utils.StdoutRedirected() {
 				die(PleaseRedirect)
 			}
 			writer = os.Stdout
 		} else {
+			outputFile = *output
 			newWriter, err := os.Create(*output)
 			if err != nil {
 				die("failed to open %s for writing: %s", *output, err)
@@ -325,6 +361,21 @@ usage:
 		})
 		if err != nil {
 			die("failed to recover: %s", err)
+		}
+
+		// Validate the recovered file if we wrote to a file (not stdout)
+		if outputFile != "" {
+			file, err := os.Open(outputFile)
+			if err != nil {
+				die("failed to open recovered file for validation: %s", err)
+			}
+			defer file.Close()
+
+			if err := validateRecoveredFile(file); err != nil {
+				die("recovered file validation failed: %s", err)
+			}
+
+			fmt.Fprintf(os.Stderr, "Recovered file validated successfully.\n")
 		}
 	}
 	rootCmd.AddCommand(recoverCmd)
