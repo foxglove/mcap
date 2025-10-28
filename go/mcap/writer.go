@@ -346,7 +346,15 @@ func (w *Writer) WriteStatistics(s *Statistics) error {
 	if w.opts.SkipStatistics {
 		return nil
 	}
-	msglen := 8 + 2 + 4 + 4 + 4 + 4 + 8 + 8 + 4 + len(s.ChannelMessageCounts)*(2+8)
+
+	lenMessageCounts := 0
+	for _, chanID := range w.channelIDs {
+		if _, ok := s.ChannelMessageCounts[chanID]; ok {
+			lenMessageCounts += 1
+		}
+	}
+
+	msglen := 8 + 2 + 4 + 4 + 4 + 4 + 8 + 8 + 4 + lenMessageCounts*(2+8)
 	w.ensureSized(msglen)
 	offset := putUint64(w.msg, s.MessageCount)
 	offset += putUint16(w.msg[offset:], s.SchemaCount)
@@ -356,7 +364,7 @@ func (w *Writer) WriteStatistics(s *Statistics) error {
 	offset += putUint32(w.msg[offset:], s.ChunkCount)
 	offset += putUint64(w.msg[offset:], s.MessageStartTime)
 	offset += putUint64(w.msg[offset:], s.MessageEndTime)
-	offset += putUint32(w.msg[offset:], uint32(len(s.ChannelMessageCounts)*(2+8)))
+	offset += putUint32(w.msg[offset:], uint32(lenMessageCounts*(2+8)))
 	for _, chanID := range w.channelIDs {
 		if messageCount, ok := s.ChannelMessageCounts[chanID]; ok {
 			offset += putUint16(w.msg[offset:], chanID)
