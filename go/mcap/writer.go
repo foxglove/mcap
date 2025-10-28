@@ -350,7 +350,7 @@ func (w *Writer) WriteStatistics(s *Statistics) error {
 	lenMessageCounts := 0
 	for _, chanID := range w.channelIDs {
 		if _, ok := s.ChannelMessageCounts[chanID]; ok {
-			lenMessageCounts += 1
+			lenMessageCounts++
 		}
 	}
 
