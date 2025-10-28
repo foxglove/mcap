@@ -438,7 +438,7 @@ func TestStatistics(t *testing.T) {
 	assert.Equal(t, uint64(1000), info.Statistics.MessageCount)
 	assert.Equal(t, uint32(1), info.Statistics.ChannelCount)
 	assert.Equal(t, uint32(1), info.Statistics.AttachmentCount)
-	assert.Equal(t, int(1), len(info.Statistics.ChannelMessageCounts))
+	assert.Len(t, info.Statistics.ChannelMessageCounts, 1)
 	assert.Equal(t, uint64(1000), info.Statistics.ChannelMessageCounts[1])
 	assert.Equal(t, 42, int(info.Statistics.ChunkCount))
 	assert.Len(t, info.ChunkIndexes, 42)
