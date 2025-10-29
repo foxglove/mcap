@@ -16,19 +16,19 @@ func init() {
 }
 
 // Factory for S3 readers (called by registry).
-func newS3Reader(ctx context.Context, bucket, path string) (io.ReadSeekCloser, func() error, error) {
+func newS3Reader(ctx context.Context, bucket, path string) (func() error, io.ReadSeekCloser, error) {
 	cfg, err := loadAWSConfig(ctx)
 	if err != nil {
-		return nil, func() error { return nil }, fmt.Errorf("failed to load AWS config: %w", err)
+		return func() error { return nil }, nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
 	client := s3.NewFromConfig(cfg)
 	rs, err := NewS3ReadSeekCloser(ctx, client, bucket, path)
 	if err != nil {
-		return nil, func() error { return nil }, fmt.Errorf("failed to create S3 reader: %w", err)
+		return func() error { return nil }, nil, fmt.Errorf("failed to create S3 reader: %w", err)
 	}
 
-	return rs, func() error { return nil }, nil
+	return rs.Close, rs, nil
 }
 
 // loadAWSConfig wraps AWS SDK v2 default config.

@@ -8,7 +8,7 @@ import (
 )
 
 // ReaderFactory creates a ReadSeekCloser for a given resource path.
-type ReaderFactory func(ctx context.Context, bucket, path string) (io.ReadSeekCloser, func() error, error)
+type ReaderFactory func(ctx context.Context, bucket, path string) (func() error, io.ReadSeekCloser, error)
 
 var factories = map[string]ReaderFactory{}
 
@@ -20,7 +20,7 @@ func RegisterReader(scheme string, factory ReaderFactory) {
 // GetReader returns an io.ReadSeekCloser for a given filename.
 func GetReader(ctx context.Context, scheme, bucket, path string) (func() error, io.ReadSeekCloser, error) {
 	if factory, ok := factories[scheme]; ok {
-		rs, closer, err := factory(ctx, bucket, path)
+		closer, rs, err := factory(ctx, bucket, path)
 		return closer, rs, err
 	}
 

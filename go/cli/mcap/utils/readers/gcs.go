@@ -14,20 +14,20 @@ func init() {
 }
 
 // Factory for GCS readers (called from registry).
-func newGCSReader(ctx context.Context, bucket, path string) (io.ReadSeekCloser, func() error, error) {
+func newGCSReader(ctx context.Context, bucket, path string) (func() error, io.ReadSeekCloser, error) {
 	client, err := storage.NewClient(ctx)
 	if err != nil {
-		return nil, func() error { return nil }, fmt.Errorf("failed to create GCS client: %w", err)
+		return func() error { return nil }, nil, fmt.Errorf("failed to create GCS client: %w", err)
 	}
 
 	object := client.Bucket(bucket).Object(path)
 	rs, err := NewGCSReadSeekCloser(ctx, object)
 	if err != nil {
 		_ = client.Close()
-		return nil, func() error { return nil }, fmt.Errorf("failed to create GCS reader: %w", err)
+		return func() error { return nil }, nil, fmt.Errorf("failed to create GCS reader: %w", err)
 	}
 
-	return rs, client.Close, nil
+	return client.Close, rs, nil
 }
 
 // GCSReadSeekCloser provides seekable read access for GCS objects.
