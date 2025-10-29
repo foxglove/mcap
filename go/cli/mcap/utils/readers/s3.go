@@ -17,23 +17,33 @@ func init() {
 
 // Factory for S3 readers (called by registry).
 func newS3Reader(ctx context.Context, bucket, path string) (func() error, io.ReadSeekCloser, error) {
-	cfg, err := loadAWSConfig(ctx)
+	// Try anonymous first
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithCredentialsProvider(aws.AnonymousCredentials{}),
+	)
 	if err != nil {
 		return func() error { return nil }, nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
 	client := s3.NewFromConfig(cfg)
 	rs, err := NewS3ReadSeekCloser(ctx, client, bucket, path)
+	if err == nil {
+		return rs.Close, rs, nil
+	}
+
+	// Fallback to authenticated config
+	cfg, err = config.LoadDefaultConfig(ctx)
+	if err != nil {
+		return func() error { return nil }, nil, fmt.Errorf("failed to load authenticated AWS config: %w", err)
+	}
+
+	client = s3.NewFromConfig(cfg)
+	rs, err = NewS3ReadSeekCloser(ctx, client, bucket, path)
 	if err != nil {
 		return func() error { return nil }, nil, fmt.Errorf("failed to create S3 reader: %w", err)
 	}
 
 	return rs.Close, rs, nil
-}
-
-// loadAWSConfig wraps AWS SDK v2 default config.
-func loadAWSConfig(ctx context.Context) (aws.Config, error) {
-	return config.LoadDefaultConfig(ctx)
 }
 
 // S3ReadSeekCloser implements io.ReadSeekCloser for S3 objects.
