@@ -28,7 +28,7 @@ jobs:
 
       - run: yarn typedoc --out website/build/docs/typescript
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: public
           path: website/build
@@ -43,7 +43,7 @@ jobs:
 
       - run: tar -czf docs-cpp.tgz __docs__/cpp
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: docs-cpp
           path: docs-cpp.tgz
@@ -64,7 +64,7 @@ jobs:
 
       - run: tar -czf docs-python.tgz __docs__/python
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: docs-python
           path: docs-python.tgz
@@ -93,7 +93,7 @@ jobs:
       # https://github.com/actions/upload-artifact/issues/85
       - run: tar -czf docs-swift.tgz __docs__/swift
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: docs-swift
           path: docs-swift.tgz
@@ -114,7 +114,7 @@ jobs:
       # need checkout so that cloudflare can detect git commit
       - uses: actions/checkout@v5
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
 
       - name: Extract API docs
         run: |

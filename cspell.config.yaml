@@ -49,6 +49,7 @@ words:
   - crc
   - crcs
   - datetime
+  - DDSI
   - deserialization
   - distro
   - elems
@@ -90,6 +91,7 @@ words:
   - rosbag
   - rosmsg
   - rostime
+  - RTPS
   - Saronic
   - schemaless
   - serde

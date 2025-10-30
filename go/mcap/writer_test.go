@@ -423,13 +423,26 @@ func TestStatistics(t *testing.T) {
 		DataSize:  4,
 		Data:      bytes.NewReader([]byte{0x01, 0x02, 0x03, 0x04}),
 	}))
+
+	// Write a message count for a channel that doesn't exist.
+	w.Statistics.ChannelMessageCounts[100] = 1000
+
 	require.NoError(t, w.Close())
-	assert.Equal(t, uint64(1000), w.Statistics.MessageCount)
-	assert.Equal(t, uint32(1), w.Statistics.ChannelCount)
-	assert.Equal(t, uint32(1), w.Statistics.AttachmentCount)
-	assert.Equal(t, 42, int(w.Statistics.ChunkCount))
-	assert.Len(t, w.ChunkIndexes, 42)
-	assert.Len(t, w.AttachmentIndexes, 1)
+
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	require.NoError(t, err)
+
+	info, err := reader.Info()
+	require.NoError(t, err)
+
+	assert.Equal(t, uint64(1000), info.Statistics.MessageCount)
+	assert.Equal(t, uint32(1), info.Statistics.ChannelCount)
+	assert.Equal(t, uint32(1), info.Statistics.AttachmentCount)
+	assert.Len(t, info.Statistics.ChannelMessageCounts, 1)
+	assert.Equal(t, uint64(1000), info.Statistics.ChannelMessageCounts[1])
+	assert.Equal(t, 42, int(info.Statistics.ChunkCount))
+	assert.Len(t, info.ChunkIndexes, 42)
+	assert.Len(t, info.AttachmentIndexes, 1)
 }
 
 func TestUnchunkedReadWrite(t *testing.T) {

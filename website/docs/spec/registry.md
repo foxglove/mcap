@@ -24,7 +24,11 @@ The Channel `message_encoding` field describes the encoding for all messages wit
 
 ### cdr
 
-- `message_encoding`: [`cdr`](https://www.omg.org/cgi-bin/doc?formal/02-06-51) (used in ROS 2)
+- `message_encoding`: `cdr`
+
+Used by ROS 2. Each message is an XCDR1 or XCDR2 stream using the usual (RTPS `SerializedPayload`) framing.
+
+XCDR1 and XCDR2 are described in Section 7.4 "Data Representation" of [DDS-XTypes](https://www.omg.org/spec/DDS-XTypes/1.3). Chapter 10 "Serialized Payload Representation" of [DDSI-RTPS](https://www.omg.org/spec/DDSI-RTPS/2.5) has some extra information about the frame format. (Note that the framing differs slightly between the specifications, but they are still compatible.)
 
 ### protobuf
 
@@ -74,43 +78,47 @@ Schema `encoding` may only be omitted for self-describing message encodings such
 
 ### ros1msg
 
-- `name`: A valid [package resource name](http://wiki.ros.org/Names#Package_Resource_Names), e.g. `sensor_msgs/PointCloud2`.
+- `name`: A valid [ROS1 package resource name](http://wiki.ros.org/Names#Package_Resource_Names), e.g. `sensor_msgs/PointCloud2`.
 - `encoding`: `ros1msg`
-- `data`: Delimited concatenated ROS1 .msg files.
+- `data`: Delimited concatenated ROS1 `.msg` files.
 
-#### ros1msg Data Format
+The `data` field contains the concatenated `.msg` file content that is sent in the ROS subscription connection header for this message type.
 
-the `data` field contains the concatenated `.msg` file content that is sent in the ROS subscription connection header for this message type.
+The top-level message definition must appear first, with no delimiter. All following message definitions must be preceded by a two-line delimiter:
 
-The top-level message definition is present first, with no delimiter. All dependent `.msg` definitions are preceded by a two-line delimiter:
-
-- One line containing exactly 80 `=` characters
-- One line containing `MSG: <package resource name>` for that type. The space between `MSG:` and the package resource name is mandatory. The package resource name does not include a file extension.
+1. One line consisting of just 80 `=` characters, then
+2. One line exactly of the form `MSG: <package resource name>`, naming the message definition to follow. The space after `MSG:` is mandatory. The package resource name does not include a file extension.
 
 This format can be reproduced using [`gendeps --cat`](http://wiki.ros.org/roslib/gentools).
+
+No package may have multiple messages with the same name. (This applies even if they have different package resource names.) A definition must be present for each message named anywhere in the schema.
 
 ### ros2msg
 
 - `name`: A valid [package resource name](http://wiki.ros.org/Names#Package_Resource_Names), e.g. `sensor_msgs/msg/PointCloud2`.
 - `encoding`: `ros2msg`
-- `data`: Delimited concatenated ROS2 .msg files
+- `data`: Delimited concatenated ROS 2 .msg files
 
-#### ros2msg Data Format
-
-The `.msg` definition is stored alongside its dependencies in the same format as [ros1msg](#ros1msg-data-format).
+The `data` field stores the `.msg` definition alongside its dependencies in the same format as [ros1msg](#ros1msg).
 
 ### ros2idl
 
-- `name`: A valid [package resource name](http://wiki.ros.org/Names#Package_Resource_Names), e.g. `sensor_msgs/msg/PointCloud2`
+- `name`: A valid ROS 2 package resource name, e.g. `sensor_msgs/msg/PointCloud2`.
 - `encoding`: `ros2idl`
-- `data`: Delimited concatenated ROS2 .idl files
+- `data`: Delimited concatenated ROS 2 `.idl` files
 
-#### ros2idl Data Format
+The `data` field is a concatenation of `.idl` files, in any order, where each file (including the first one) is preceded by a two-line delimiter:
 
-The IDL definition of the type specified by `name` along with all dependent types are stored together. The IDL definitions can be stored in any order. Every definition is preceded by a two-line delimiter:
+1. One line consisting of just 80 `=` characters, then
+2. One line exactly of the form `IDL: <package resource name>`, giving the file its package resource name. The space after `IDL:` is mandatory. The package resource name must be unique. It does not include a file extension.
 
-- a line containing exactly 80 `=` characters, then
-- A line containing only `IDL: <package resource name>` for that definition. The space between `IDL:` and the package resource name is mandatory. The package resource name does not include a file extension.
+The IDL type name of the top-level definition is derived by replacing each `/` in the `name` field with `::`.
+
+#### Interpretation
+
+The final IDL for interpretation is obtained by running a limited C++-style preprocessor on the file named in the `name` field. Each directive of the form `#include "X.idl"` or `#include <X.idl>` includes the IDL file whose package resource name is `X` (as if we had unpacked the contents of this schema). All other preprocessor directives must be ignored.
+
+If more sophisticated preprocessing is required, consider using the `omgidl` schema encoding instead.
 
 ### omgidl
 
@@ -122,22 +130,22 @@ The `omgidl` schema encoding stores [OMG IDL](https://www.omg.org/spec/IDL/4.2/A
 
 #### Producing `schema.data` for the `omgidl` schema encoding
 
-`.idl` files usually contain only one definition each, and use C preprocessor
+`.idl` files usually contain only one definition each, and use C++ preprocessor
 `#include` directives when referring to other definitions. However, the `data`
 field must be the text of a single, self-contained OMG IDL source file. That is,
 all referenced type definitions must be present, and there must be no
 preprocessor directives.
 
-You can produce the required format with a C preprocessor. For example, with GCC
+You can produce the required format with a C++ preprocessor. For example, with GCC
 or Clang:
 
 ```bash
-# -x c: treat input as C to avoid guessing based on the extension.
+# -x c++: treat input as C++ to avoid guessing based on the extension.
 # -E: run only the preprocessor.
 # -P: remove all #-directives from the output.
 # Run from the root of your IDL definition tree, or change the `-I` flag to the
 # correct directory.
-$ cc -x c -E -P -I . top_level_module/my_module/MyType.idl > combined.idl
+$ cc -x c++ -E -P -I . top_level_module/my_module/MyType.idl > combined.idl
 ```
 
 For the following files:
@@ -149,9 +157,9 @@ module top_level_module {
   module my_module {
     struct MyType {
       top_level_module::other_module::OtherType val;
-    }
-  }
-}
+    };
+  };
+};
 ```
 
 ```cpp title=top_level_module/other_module/OtherType.idl
@@ -159,9 +167,9 @@ module top_level_module {
   module other_module {
     struct OtherType {
       float val;
-    }
-  }
-}
+    };
+  };
+};
 ```
 
 This should produce:
@@ -171,17 +179,17 @@ module top_level_module {
   module other_module {
     struct OtherType {
       float val;
-    }
-  }
-}
+    };
+  };
+};
 
 module top_level_module {
   module my_module {
     struct MyType {
       top_level_module::other_module::OtherType val;
-    }
-  }
-}
+    };
+  };
+};
 ```
 
 For this example, `schema.name` should be set to `top_level_module::my_module::MyType`.
