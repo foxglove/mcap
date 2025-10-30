@@ -168,6 +168,7 @@ If that fails (for example, for private buckets), it will automatically try to u
 
 For public buckets, you still need to specify the correct AWS region.  
 Example:
+
 ```bash
 AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
 ```
