@@ -137,7 +137,7 @@ Echo messages for a specific topic to stdout as JSON:
 
 ### Remote file support
 
-All commands except `convert` support reading from remote files stored in GCS:
+All commands except `convert` support reading from remote files stored in **GCS** or **S3**:
 
 <!-- cspell: disable -->
 
@@ -161,6 +161,14 @@ All commands except `convert` support reading from remote files stored in GCS:
     attachments: 0
 
 <!-- cspell: enable -->
+
+#### AWS S3
+
+When reading from S3 you must specify the region of the bucket:
+
+```bash
+AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
+```
 
 Remote reads will use the index at the end of the file to minimize latency and data transfer.
 
