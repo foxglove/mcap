@@ -137,7 +137,7 @@ Echo messages for a specific topic to stdout as JSON:
 
 ### Remote file support
 
-All commands except `convert` support reading from remote files stored in **GCS** and **S3**:
+All commands except `convert` support reading from remote files stored in **GCS** or **S3**:
 
 <!-- cspell: disable -->
 
