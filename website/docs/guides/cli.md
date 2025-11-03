@@ -162,12 +162,9 @@ All commands except `convert` support reading from remote files stored in **GCS*
 
 <!-- cspell: enable -->
 
-S3 support now includes **public buckets**.  
-When accessing S3 objects, the program first attempts an **anonymous connection**.  
-If that fails (for example, for private buckets), it will automatically try to use **local AWS credentials** found on your system (as configured for the AWS CLI).
+#### AWS S3
 
-For public buckets, you still need to specify the correct AWS region.  
-Example:
+When reading from S3 you must specify the region of the bucket:
 
 ```bash
 AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
