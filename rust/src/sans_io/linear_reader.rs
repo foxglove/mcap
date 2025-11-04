@@ -509,8 +509,15 @@ impl LinearReader {
                         &mut self.decompressors,
                         &header.compression
                     ));
+
+                    let chunk_data_len = check!(len
+                        .checked_sub(header_len as u64)
+                        .ok_or(McapError::UnexpectedEoc));
+
                     let padding_after_compressed_data = check!(check_len(
-                        len - (header_len as u64) - header.compressed_size,
+                        check!(chunk_data_len
+                            .checked_sub(header.compressed_size)
+                            .ok_or(McapError::UnexpectedEoc)),
                         self.options.record_length_limit
                     )
                     .ok_or(McapError::ChunkTooLarge(len)));
@@ -706,6 +713,7 @@ impl LinearReader {
 }
 
 /// Events emitted by the linear reader.
+#[derive(Debug)]
 pub enum LinearReadEvent<'a> {
     /// The reader needs more data to provide the next record. Call [`LinearReader::insert`] then
     /// [`LinearReader::notify_read`] to load more data. The value provided here is a hint for how
@@ -985,6 +993,7 @@ mod tests {
         );
         Ok(())
     }
+    use assert_matches::assert_matches;
     use paste::paste;
 
     macro_rules! test_chunked_parametrized {
@@ -1205,5 +1214,32 @@ mod tests {
             }
         }
         assert_eq!(message_count, 12);
+    }
+
+    #[test]
+    fn test_handles_failed_to_close_chunks() {
+        let mut f =
+            std::fs::File::open("tests/data/chunk_not_closed.mcap").expect("failed to open file");
+        let mut output = vec![];
+        f.read_to_end(&mut output).expect("failed to read");
+
+        let mut reader = LinearReader::new();
+        reader.insert(output.len()).copy_from_slice(&output[..]);
+        reader.notify_read(output.len());
+
+        // the first record is the header;
+        let next = reader
+            .next_event()
+            .expect("there should be one event")
+            .expect("first record should be header");
+
+        let LinearReadEvent::Record { opcode: 1, .. } = next else {
+            panic!("expected first record to be header");
+        };
+
+        let next = reader.next_event().expect("there should be one event");
+
+        // test fails with unexpected EOC because sizes are u64::max
+        assert_matches!(next, Err(McapError::UnexpectedEoc));
     }
 }
