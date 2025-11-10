@@ -45,6 +45,19 @@ func StdoutRedirected() bool {
 	return true
 }
 
+// Eprintf formats according to a format specifier and writes to standard error.
+// It returns the number of bytes written and any write error encountered.
+func EprintF(format string, a ...any) (n int, err error) {
+	return fmt.Fprintf(os.Stderr, format, a...)
+}
+
+// Eprintln formats using the default formats for its operands and writes to standard error.
+// Spaces are always added between operands and a newline is appended.
+// It returns the number of bytes written and any write error encountered.
+func Eprintln(a ...any) (n int, err error) {
+	return fmt.Fprintln(os.Stderr, a...)
+}
+
 // GetReader returns a ReadSeekCloser for local or remote sources.
 // It delegates remote handling to the readers registry.
 func GetReader(ctx context.Context, filename string) (func() error, io.ReadSeekCloser, error) {
