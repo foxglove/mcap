@@ -161,7 +161,7 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 		case TokenChunkIndex:
 			idx, err := ParseChunkIndex(record)
 			if err != nil {
-				return fmt.Errorf("failed to parse attachment index: %w", err)
+				return fmt.Errorf("failed to parse chunk index: %w", err)
 			}
 			// if the chunk overlaps with the requested parameters, load it
 			if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
