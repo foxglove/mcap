@@ -56,11 +56,10 @@ func recoverRun(
 
 		err := mcapWriter.Close()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close mcap writer: %v\n", err)
+			utils.EprintF("failed to close mcap writer: %v\n", err)
 			return
 		}
-		fmt.Fprintf(
-			os.Stderr,
+		utils.EprintF(
 			"Recovered %d messages, %d attachments, and %d metadata records.\n",
 			mcapWriter.Statistics.MessageCount,
 			mcapWriter.Statistics.AttachmentCount,
@@ -100,7 +99,7 @@ func recoverRun(
 		token, data, err := lexer.Next(buf)
 		if err != nil {
 			if token == mcap.TokenInvalidChunk {
-				fmt.Printf("Invalid chunk encountered, skipping: %s\n", err)
+				utils.EprintF("Invalid chunk encountered, skipping: %s\n", err)
 				continue
 			}
 			if lastChunk != nil {
@@ -108,11 +107,11 @@ func recoverRun(
 				// message indexes are complete or not.
 				idx, err := utils.UpdateInfoFromChunk(info, lastChunk, nil)
 				if err != nil {
-					fmt.Printf("Failed to update info from chunk, skipping: %s\n", err)
+					utils.EprintF("Failed to update info from chunk, skipping: %s\n", err)
 				} else {
 					err = mcapWriter.WriteChunkWithIndexes(lastChunk, idx)
 					if err != nil {
-						fmt.Printf("Failed to write chunk, skipping: %s\n", err)
+						utils.EprintF("Failed to write chunk, skipping: %s\n", err)
 					}
 				}
 			}
@@ -121,7 +120,7 @@ func recoverRun(
 			}
 			var expected *mcap.ErrTruncatedRecord
 			if errors.As(err, &expected) {
-				fmt.Println(expected.Error())
+				utils.Eprintln(expected.Error())
 				return nil
 			}
 			return nil
@@ -134,11 +133,11 @@ func recoverRun(
 			if lastChunk != nil {
 				lastIndexes, err = utils.UpdateInfoFromChunk(info, lastChunk, lastIndexes)
 				if err != nil {
-					fmt.Printf("Failed to update info from chunk, skipping: %s\n", err)
+					utils.EprintF("Failed to update info from chunk, skipping: %s\n", err)
 				} else {
 					err = mcapWriter.WriteChunkWithIndexes(lastChunk, lastIndexes)
 					if err != nil {
-						fmt.Printf("Failed to write chunk, skipping: %s\n", err)
+						utils.EprintF("Failed to write chunk, skipping: %s\n", err)
 					}
 				}
 				lastIndexes = nil
@@ -157,14 +156,15 @@ func recoverRun(
 			}
 		case mcap.TokenChunk:
 			chunk, err := mcap.ParseChunk(data)
+
 			if decodeChunk {
 				idx, err := utils.UpdateInfoFromChunk(info, chunk, nil)
 				if err != nil {
-					fmt.Printf("Failed to update info from chunk, skipping: %s\n", err)
+					utils.EprintF("Failed to update info from chunk, skipping: %s\n", err)
 				} else {
 					err = mcapWriter.WriteChunkWithIndexes(chunk, idx)
 					if err != nil {
-						fmt.Printf("Failed to write chunk, skipping: %s\n", err)
+						utils.EprintF("Failed to write chunk, skipping: %s\n", err)
 					}
 				}
 			} else {
