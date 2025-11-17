@@ -103,8 +103,8 @@ export function DeviceSelector(): JSX.Element {
   return (
     <div className={styles.deviceSelector}>
       {enableCamera && cameras.length > 0 && (
-        <div className={styles.deviceGroup}>
-          <label className={styles.deviceLabel}>Camera:</label>
+        <>
+          <label className={styles.deviceLabel}>Camera</label>
           <select
             className={styles.deviceSelect}
             value={selectedCameraDeviceId}
@@ -118,12 +118,12 @@ export function DeviceSelector(): JSX.Element {
               </option>
             ))}
           </select>
-        </div>
+        </>
       )}
 
       {enableMicrophone && audioDevices.length > 0 && (
-        <div className={styles.deviceGroup}>
-          <label className={styles.deviceLabel}>Microphone:</label>
+        <>
+          <label className={styles.deviceLabel}>Microphone</label>
           <select
             className={styles.deviceSelect}
             value={selectedAudioDeviceId}
@@ -137,7 +137,7 @@ export function DeviceSelector(): JSX.Element {
               </option>
             ))}
           </select>
-        </div>
+        </>
       )}
     </div>
   );
