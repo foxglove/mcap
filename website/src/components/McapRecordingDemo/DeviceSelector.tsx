@@ -18,8 +18,6 @@ export function DeviceSelector(): JSX.Element {
     enabledVideoFormats,
     selectedCameraDeviceId,
     selectedAudioDeviceId,
-    videoStarted,
-    audioStream,
   } = state;
 
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -34,6 +32,12 @@ export function DeviceSelector(): JSX.Element {
         const deviceList = await navigator.mediaDevices.enumerateDevices();
         setDevices(deviceList);
 
+        // Get current state values at the time of enumeration
+        const currentState = useStore.getState();
+        const currentCameraId = currentState.selectedCameraDeviceId;
+        const currentAudioId = currentState.selectedAudioDeviceId;
+        const currentActions = currentState.actions;
+
         // Set default selections if not already set
         const cameras = deviceList.filter(
           (device) => device.kind === "videoinput",
@@ -42,11 +46,30 @@ export function DeviceSelector(): JSX.Element {
           (device) => device.kind === "audioinput",
         );
 
-        if (cameras.length > 0 && !selectedCameraDeviceId) {
-          actions.setSelectedCameraDeviceId(cameras[0]!.deviceId);
+        // Validate camera selection - fall back to first available if current selection is invalid
+        if (cameras.length > 0) {
+          const cameraExists = cameras.some(
+            (camera) => camera.deviceId === currentCameraId,
+          );
+          if (!currentCameraId || !cameraExists) {
+            currentActions.setSelectedCameraDeviceId(cameras[0]!.deviceId);
+          }
+        } else if (currentCameraId) {
+          // No cameras available, clear selection
+          currentActions.setSelectedCameraDeviceId("");
         }
-        if (audioDevices.length > 0 && !selectedAudioDeviceId) {
-          actions.setSelectedAudioDeviceId(audioDevices[0]!.deviceId);
+
+        // Validate audio selection - fall back to first available if current selection is invalid
+        if (audioDevices.length > 0) {
+          const audioExists = audioDevices.some(
+            (audio) => audio.deviceId === currentAudioId,
+          );
+          if (!currentAudioId || !audioExists) {
+            currentActions.setSelectedAudioDeviceId(audioDevices[0]!.deviceId);
+          }
+        } else if (currentAudioId) {
+          // No audio devices available, clear selection
+          currentActions.setSelectedAudioDeviceId("");
         }
       } catch (error) {
         console.error("Error getting devices:", error);
@@ -67,13 +90,7 @@ export function DeviceSelector(): JSX.Element {
         handleDeviceChange,
       );
     };
-  }, [
-    selectedCameraDeviceId,
-    selectedAudioDeviceId,
-    videoStarted,
-    audioStream,
-    actions,
-  ]);
+  }, []);
 
   const cameras = devices.filter((device) => device.kind === "videoinput");
   const audioDevices = devices.filter((device) => device.kind === "audioinput");
