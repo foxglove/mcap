@@ -1,7 +1,7 @@
-import XCTest
-
 import CRC
+import Foundation
 import MCAP
+import Testing
 
 extension MCAPRandomAccessReader.MessageIterator {
   func readAll() throws -> [Message] {
@@ -24,8 +24,9 @@ extension Message: @retroactive Equatable {
   }
 }
 
-final class MCAPRandomAccessReaderTests: XCTestCase {
-  func testReadsLogTimeOrder() async throws {
+struct MCAPRandomAccessReaderTests {
+  @Test
+  func readsLogTimeOrder() async throws {
     let buffer = Buffer()
     let writer = MCAPWriter(buffer)
     await writer.start(library: "lib", profile: "prof")
@@ -44,10 +45,11 @@ final class MCAPRandomAccessReaderTests: XCTestCase {
     let iterator = reader.messageIterator()
     let messages = try iterator.readAll()
 
-    XCTAssertEqual(messages, [message1, message2])
+    #expect(messages == [message1, message2])
   }
 
-  func testFiltersTopics() async throws {
+  @Test
+  func filtersTopics() async throws {
     let buffer = Buffer()
     let writer = MCAPWriter(buffer)
     await writer.start(library: "lib", profile: "prof")
@@ -65,12 +67,13 @@ final class MCAPRandomAccessReaderTests: XCTestCase {
 
     let reader = try MCAPRandomAccessReader(buffer)
 
-    XCTAssertEqual(try reader.messageIterator().readAll(), [message1, message2])
-    XCTAssertEqual(try reader.messageIterator(topics: ["topic1"]).readAll(), [message1])
-    XCTAssertEqual(try reader.messageIterator(topics: ["topic2"]).readAll(), [message2])
+    #expect(try reader.messageIterator().readAll() == [message1, message2])
+    #expect(try reader.messageIterator(topics: ["topic1"]).readAll() == [message1])
+    #expect(try reader.messageIterator(topics: ["topic2"]).readAll() == [message2])
   }
 
-  func testFiltersByTime() async throws {
+  @Test
+  func filtersByTime() async throws {
     let buffer = Buffer()
     let writer = MCAPWriter(buffer)
     await writer.start(library: "lib", profile: "prof")
@@ -88,37 +91,37 @@ final class MCAPRandomAccessReaderTests: XCTestCase {
 
     let reader = try MCAPRandomAccessReader(buffer)
 
-    XCTAssertEqual(try reader.messageIterator().readAll(), [message1, message2])
-    XCTAssertEqual(try reader.messageIterator(startTime: 1).readAll(), [message1, message2])
-    XCTAssertEqual(try reader.messageIterator(startTime: 2).readAll(), [message1, message2])
-    XCTAssertEqual(try reader.messageIterator(startTime: 3).readAll(), [message2])
-    XCTAssertEqual(try reader.messageIterator(startTime: 4).readAll(), [message2])
-    XCTAssertEqual(try reader.messageIterator(startTime: 5).readAll(), [])
+    #expect(try reader.messageIterator().readAll() == [message1, message2])
+    #expect(try reader.messageIterator(startTime: 1).readAll() == [message1, message2])
+    #expect(try reader.messageIterator(startTime: 2).readAll() == [message1, message2])
+    #expect(try reader.messageIterator(startTime: 3).readAll() == [message2])
+    #expect(try reader.messageIterator(startTime: 4).readAll() == [message2])
+    #expect(try reader.messageIterator(startTime: 5).readAll() == [])
 
-    XCTAssertEqual(try reader.messageIterator(endTime: 1).readAll(), [])
-    XCTAssertEqual(try reader.messageIterator(endTime: 2).readAll(), [message1])
-    XCTAssertEqual(try reader.messageIterator(endTime: 3).readAll(), [message1])
-    XCTAssertEqual(try reader.messageIterator(endTime: 4).readAll(), [message1, message2])
-    XCTAssertEqual(try reader.messageIterator(endTime: 5).readAll(), [message1, message2])
+    #expect(try reader.messageIterator(endTime: 1).readAll() == [])
+    #expect(try reader.messageIterator(endTime: 2).readAll() == [message1])
+    #expect(try reader.messageIterator(endTime: 3).readAll() == [message1])
+    #expect(try reader.messageIterator(endTime: 4).readAll() == [message1, message2])
+    #expect(try reader.messageIterator(endTime: 5).readAll() == [message1, message2])
 
-    XCTAssertEqual(try reader.messageIterator(startTime: 1, endTime: 1).readAll(), [])
-    XCTAssertEqual(try reader.messageIterator(startTime: 1, endTime: 2).readAll(), [message1])
-    XCTAssertEqual(try reader.messageIterator(startTime: 1, endTime: 3).readAll(), [message1])
-    XCTAssertEqual(try reader.messageIterator(startTime: 1, endTime: 4).readAll(), [message1, message2])
-    XCTAssertEqual(try reader.messageIterator(startTime: 1, endTime: 5).readAll(), [message1, message2])
+    #expect(try reader.messageIterator(startTime: 1, endTime: 1).readAll() == [])
+    #expect(try reader.messageIterator(startTime: 1, endTime: 2).readAll() == [message1])
+    #expect(try reader.messageIterator(startTime: 1, endTime: 3).readAll() == [message1])
+    #expect(try reader.messageIterator(startTime: 1, endTime: 4).readAll() == [message1, message2])
+    #expect(try reader.messageIterator(startTime: 1, endTime: 5).readAll() == [message1, message2])
 
-    XCTAssertEqual(try reader.messageIterator(startTime: 2, endTime: 2).readAll(), [message1])
-    XCTAssertEqual(try reader.messageIterator(startTime: 2, endTime: 3).readAll(), [message1])
-    XCTAssertEqual(try reader.messageIterator(startTime: 2, endTime: 4).readAll(), [message1, message2])
-    XCTAssertEqual(try reader.messageIterator(startTime: 2, endTime: 5).readAll(), [message1, message2])
+    #expect(try reader.messageIterator(startTime: 2, endTime: 2).readAll() == [message1])
+    #expect(try reader.messageIterator(startTime: 2, endTime: 3).readAll() == [message1])
+    #expect(try reader.messageIterator(startTime: 2, endTime: 4).readAll() == [message1, message2])
+    #expect(try reader.messageIterator(startTime: 2, endTime: 5).readAll() == [message1, message2])
 
-    XCTAssertEqual(try reader.messageIterator(startTime: 3, endTime: 3).readAll(), [])
-    XCTAssertEqual(try reader.messageIterator(startTime: 3, endTime: 4).readAll(), [message2])
-    XCTAssertEqual(try reader.messageIterator(startTime: 3, endTime: 5).readAll(), [message2])
+    #expect(try reader.messageIterator(startTime: 3, endTime: 3).readAll() == [])
+    #expect(try reader.messageIterator(startTime: 3, endTime: 4).readAll() == [message2])
+    #expect(try reader.messageIterator(startTime: 3, endTime: 5).readAll() == [message2])
 
-    XCTAssertEqual(try reader.messageIterator(startTime: 4, endTime: 4).readAll(), [message2])
-    XCTAssertEqual(try reader.messageIterator(startTime: 4, endTime: 5).readAll(), [message2])
+    #expect(try reader.messageIterator(startTime: 4, endTime: 4).readAll() == [message2])
+    #expect(try reader.messageIterator(startTime: 4, endTime: 5).readAll() == [message2])
 
-    XCTAssertEqual(try reader.messageIterator(startTime: 5, endTime: 5).readAll(), [])
+    #expect(try reader.messageIterator(startTime: 5, endTime: 5).readAll() == [])
   }
 }
