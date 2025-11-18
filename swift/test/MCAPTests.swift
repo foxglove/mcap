@@ -1,20 +1,22 @@
 // swiftlint:disable force_cast
 
-import XCTest
-
 import CRC
+import Foundation
 import MCAP
+import Testing
 
-final class MCAPTests: XCTestCase {
-  func testEmpty() async throws {
+struct MCAPTests {
+  @Test
+  func empty() async throws {
     let buffer = Buffer()
     let writer = MCAPWriter(buffer)
     await writer.start(library: "", profile: "")
     await writer.end()
-    XCTAssertEqual(buffer.data.count, 286)
+    #expect(buffer.data.count == 286)
   }
 
-  func testValidatesChunkCRC() async throws {
+  @Test
+  func validatesChunkCRC() async throws {
     var buffer = Data()
     buffer.append(mcapMagic)
     Header(profile: "", library: "").serialize(to: &buffer)
@@ -32,10 +34,9 @@ final class MCAPTests: XCTestCase {
     let reader = MCAPStreamedReader()
     reader.append(buffer)
     let header = try reader.nextRecord() as! Header
-    XCTAssertEqual(header.profile, "")
-    XCTAssertEqual(header.library, "")
-    XCTAssertThrowsError(try reader.nextRecord()) {
-      XCTAssertEqual($0 as! MCAPReadError, MCAPReadError.invalidCRC(expected: 12345, actual: 1_438_416_925))
-    }
+    #expect(header.profile == "")
+    #expect(header.library == "")
+    let error = #expect(throws: MCAPReadError.self) { try reader.nextRecord() }
+    #expect(error == MCAPReadError.invalidCRC(expected: 12345, actual: 1_438_416_925))
   }
 }
