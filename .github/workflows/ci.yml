@@ -494,8 +494,8 @@ jobs:
       - uses: ./.github/actions/setup-swift
         with:
           swift-version: "6.1"
-      - run: docker run -t --rm -v $(pwd):/work -w /work ghcr.io/realm/swiftlint:0.58.2
-      - run: docker run -t --rm -v $(pwd):/work ghcr.io/nicklockwood/swiftformat:0.55.5 --lint /work
+      - run: docker run -t --rm -v $(pwd):/work -w /work ghcr.io/realm/swiftlint:0.62.2
+      - run: docker run -t --rm -v $(pwd):/work ghcr.io/nicklockwood/swiftformat:0.58.6 --lint /work
       - run: swift build
       - run: swift test
 

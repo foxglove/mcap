@@ -106,7 +106,7 @@ private func readIndexed(file: FileHandle) throws -> Data {
 struct FileHandleReadable: IRandomAccessReadable {
   let fileHandle: FileHandle
 
-  public func size() -> UInt64 {
+  func size() -> UInt64 {
     if #available(macOS 10.15.4, *) {
       return try! fileHandle.seekToEnd()
     } else {
@@ -114,7 +114,7 @@ struct FileHandleReadable: IRandomAccessReadable {
     }
   }
 
-  public func read(offset: UInt64, length: UInt64) -> Data? {
+  func read(offset: UInt64, length: UInt64) -> Data? {
     do {
       if #available(macOS 10.15.4, *) {
         try fileHandle.seek(toOffset: offset)
