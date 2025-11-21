@@ -26,7 +26,7 @@ class RecordReader {
     offset = 0
   }
 
-  public func readMagic() throws -> Bool {
+  func readMagic() throws -> Bool {
     if offset + 8 < buffer.count {
       let prefix = buffer[offset ..< offset + 8]
       if !mcapMagic.elementsEqual(prefix) {
@@ -38,7 +38,7 @@ class RecordReader {
     return false
   }
 
-  public func nextRecord() throws -> Record? {
+  func nextRecord() throws -> Record? {
     try buffer.withUnsafeBytes { buf in
       while offset + 9 < buf.count {
         let op = buf[offset]
