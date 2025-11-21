@@ -36,7 +36,7 @@ export function DeviceSelector(): JSX.Element {
 
         // Get current state values at the time of enumeration
         const currentState = useStore.getState();
-        const currentCameraId = currentState.selectedCameraDeviceId;
+        const currentCameraId = selectedCameraDeviceId; // Intentionally using render scope value
         const currentAudioId = currentState.selectedAudioDeviceId;
         const currentActions = currentState.actions;
 
@@ -92,7 +92,7 @@ export function DeviceSelector(): JSX.Element {
         handleDeviceChange,
       );
     };
-  }, [videoStarted, audioStream]);
+  }, [videoStarted, audioStream, selectedCameraDeviceId]);
 
   const cameras = devices.filter((device) => device.kind === "videoinput");
   const audioDevices = devices.filter((device) => device.kind === "audioinput");

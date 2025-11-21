@@ -6,11 +6,12 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 2022,
   },
-  ignorePatterns: ["dist"],
+  ignorePatterns: ["dist", "node_modules", "build", ".docusaurus"],
   extends: [
     "plugin:@foxglove/base",
     "plugin:@foxglove/react",
     "plugin:@foxglove/jest",
+    "plugin:react-hooks/recommended",
   ],
   overrides: [
     {
