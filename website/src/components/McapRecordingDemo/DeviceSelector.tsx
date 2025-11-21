@@ -18,6 +18,8 @@ export function DeviceSelector(): JSX.Element {
     enabledVideoFormats,
     selectedCameraDeviceId,
     selectedAudioDeviceId,
+    videoStarted,
+    audioStream,
   } = state;
 
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -90,7 +92,7 @@ export function DeviceSelector(): JSX.Element {
         handleDeviceChange,
       );
     };
-  }, []);
+  }, [videoStarted, audioStream]);
 
   const cameras = devices.filter((device) => device.kind === "videoinput");
   const audioDevices = devices.filter((device) => device.kind === "audioinput");
