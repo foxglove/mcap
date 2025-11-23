@@ -11,7 +11,7 @@ jobs:
   spellcheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: false
       - run: corepack enable
@@ -26,7 +26,7 @@ jobs:
   conformance-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: false
       - run: corepack enable
@@ -41,7 +41,7 @@ jobs:
   conformance-cpp:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: true
       - run: corepack enable
@@ -61,7 +61,7 @@ jobs:
   conformance-go:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: true
       - run: corepack enable
@@ -80,7 +80,7 @@ jobs:
   conformance-python:
     runs-on: ubuntu-22.04 # required for python 3.8
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: true
       - run: corepack enable
@@ -99,7 +99,7 @@ jobs:
   conformance-typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: true
       - run: corepack enable
@@ -114,7 +114,7 @@ jobs:
   conformance-kaitai-struct:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: true
       - run: corepack enable
@@ -129,7 +129,7 @@ jobs:
   conformance-swift:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: true
       - run: corepack enable
@@ -148,7 +148,7 @@ jobs:
   conformance-rust:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: true
       - run: corepack enable
@@ -176,7 +176,7 @@ jobs:
       run:
         working-directory: cpp
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: false
       - uses: actions/cache@v4
@@ -195,7 +195,7 @@ jobs:
       run:
         working-directory: cpp
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: false
       - uses: actions/cache@v4
@@ -217,7 +217,7 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: false
       - run: corepack enable
@@ -274,7 +274,7 @@ jobs:
   typescript-examples:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: false
       - run: corepack enable
@@ -304,7 +304,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: true
       - uses: actions/setup-python@v6
@@ -389,7 +389,7 @@ jobs:
       run:
         working-directory: go
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: true
       - uses: actions/setup-go@v6
@@ -454,7 +454,7 @@ jobs:
     env: ${{ matrix.env }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: "0"
       - run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
@@ -488,7 +488,7 @@ jobs:
   swift:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: false
       - uses: ./.github/actions/setup-swift
@@ -505,7 +505,7 @@ jobs:
       run:
         working-directory: rust
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           lfs: true
       - uses: actions-rs/toolchain@v1
