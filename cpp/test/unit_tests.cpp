@@ -5,7 +5,14 @@
 #include <catch2/catch.hpp>
 
 #include <array>
+#include <cstdio>
 #include <numeric>
+
+#if defined _WIN32 || defined __CYGWIN__
+#  include <io.h>
+#  include <ioapiset.h>
+#  include <winioctl.h>
+#endif
 
 std::string_view StringView(const std::byte* data, size_t size) {
   return std::string_view{reinterpret_cast<const char*>(data), size};
@@ -1128,4 +1135,31 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
 
     reader.close();
   }
+}
+
+TEST_CASE("FileReader works on files larger than 2GiB") {
+  std::FILE* file = std::tmpfile();
+#if defined _WIN32 || defined __CYGWIN__
+  // Seeking past the end automatically makes sparse files on POSIX platforms if the filesystem
+  // supports it, but Windows needs an ioctl. Without this, the test runs much slower.
+  {
+    HANDLE hFile = (HANDLE)_get_osfhandle(_fileno(file));
+    REQUIRE(hFile != INVALID_HANDLE_VALUE);
+    REQUIRE(DeviceIoControl(hFile, FSCTL_SET_SPARSE, nullptr, 0, nullptr, 0, nullptr, nullptr) ==
+            TRUE);
+  }
+#endif
+  // 2^30 + 2^30 = 2^31 > 2^31 - 1
+  REQUIRE(std::fseek(file, 1L << 30L, SEEK_CUR) == 0);
+  REQUIRE(std::fseek(file, 1L << 30L, SEEK_CUR) == 0);
+  REQUIRE(std::fwrite("X", 1, 1, file) == 1);
+  REQUIRE(std::ferror(file) == 0);
+  std::rewind(file);
+  auto reader = mcap::FileReader(file);
+  REQUIRE(reader.size() == (1LL << 31LL) + 1);
+  std::byte* output;
+  REQUIRE(reader.read(&output, 1LL << 31LL, 1) == 1);
+  REQUIRE((char)*output == 'X');
+  REQUIRE(std::ferror(file) == 0);
+  std::fclose(file);
 }
