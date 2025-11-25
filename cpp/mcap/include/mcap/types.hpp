@@ -14,7 +14,7 @@
 
 namespace mcap {
 
-#define MCAP_LIBRARY_VERSION "2.1.1"
+#define MCAP_LIBRARY_VERSION "2.1.2"
 
 using SchemaId = uint16_t;
 using ChannelId = uint16_t;
