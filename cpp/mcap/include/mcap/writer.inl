@@ -69,6 +69,20 @@ void FileWriter::flush() {
 
 void FileWriter::end() {
   if (file_) {
+    std::fflush(file_);
+#if defined(_WIN32) || defined(_WIN64)
+    // Windows platform
+    const int fd = _fileno(file_);
+    if (fd != -1) {
+      _commit(fd);
+    }
+#elif defined(__unix__) || defined(__APPLE__) || defined(__linux__)
+    // Unix/Linux/macOS platforms
+    const int fd = ::fileno(file_);
+    if (fd != -1) {
+      ::fsync(fd);
+    }
+#endif
     std::fclose(file_);
     file_ = nullptr;
   }
