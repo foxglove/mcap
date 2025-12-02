@@ -215,6 +215,13 @@ impl LinearReaderOptions {
         self.skip_end_magic = skip_end_magic;
         self
     }
+    pub fn with_check_finishes_after_end_magic(
+        mut self,
+        check_finishes_after_end_magic: bool,
+    ) -> Self {
+        self.check_finishes_after_end_magic = check_finishes_after_end_magic;
+        self
+    }
     pub fn with_emit_chunks(mut self, emit_chunks: bool) -> Self {
         self.emit_chunks = emit_chunks;
         self
@@ -1310,5 +1317,50 @@ mod tests {
 
         // test fails with unexpected EOC because sizes are u64::max
         assert_matches!(next, Err(McapError::UnexpectedEoc));
+    }
+
+    #[test]
+    fn test_notifying_eof_after_writing_whole_file() {
+        let mcap = basic_chunked_file(None).unwrap();
+        let mut reader = LinearReader::new();
+        reader.insert(mcap.len()).copy_from_slice(mcap.as_slice());
+        reader.notify_read(mcap.len());
+        while let Some(event) = reader.next_event() {
+            match event.unwrap() {
+                LinearReadEvent::ReadRequest(_) => {
+                    panic!("should not request read because file is complete");
+                }
+                LinearReadEvent::Record { .. } => {}
+            }
+        }
+        reader.notify_read(0);
+        assert_matches!(reader.next_event(), None);
+    }
+
+    #[test]
+    fn test_trailing_garbage_after_end_magic() {
+        let mcap = basic_chunked_file(None).unwrap();
+        let mut reader = LinearReader::new_with_options(
+            LinearReaderOptions::default().with_check_finishes_after_end_magic(true),
+        );
+        reader.insert(mcap.len()).copy_from_slice(mcap.as_slice());
+        reader.notify_read(mcap.len());
+        while let Some(event) = reader.next_event() {
+            match event.unwrap() {
+                LinearReadEvent::ReadRequest(_) => break,
+                LinearReadEvent::Record { .. } => {}
+            }
+        }
+        assert_matches!(
+            reader.next_event(),
+            Some(Ok(LinearReadEvent::ReadRequest(_)))
+        );
+        let garbage = b"garbage";
+        reader.insert(garbage.len()).copy_from_slice(garbage);
+        reader.notify_read(garbage.len());
+        assert_matches!(
+            reader.next_event(),
+            Some(Err(McapError::BytesAfterEndMagic))
+        );
     }
 }
