@@ -154,6 +154,8 @@ pub enum McapError {
     UnexpectedChunkDataInserted,
     #[error("attempted another write after a write method failed")]
     AttemptedWriteAfterFailure,
+    #[error("file has more bytes after end magic")]
+    BytesAfterEndMagic,
 }
 
 pub type McapResult<T> = Result<T, McapError>;

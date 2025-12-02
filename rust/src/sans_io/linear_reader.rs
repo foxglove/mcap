@@ -35,6 +35,7 @@ enum CurrentlyReading {
     ChunkRecord,
     PaddingAfterChunk,
     EndMagic,
+    AfterEndMagic,
 }
 use CurrentlyReading::*;
 
@@ -60,76 +61,133 @@ struct ChunkState {
 // MCAP records start with an opcode (1 byte) and a 64-bit length (8 bytes).
 const OPCODE_LEN_SIZE: usize = 1 + 8;
 
-/// A private struct that encapsulates a buffer with start and end cursors.
-#[derive(Default)]
-struct RwBuf {
-    data: Vec<u8>,
-    start: usize,
-    end: usize,
-    hasher: Option<crc32fast::Hasher>,
-}
+mod rw_buf {
+    /// A private struct that encapsulates a buffer with start and end cursors.
+    #[derive(Default)]
+    pub struct RwBuf {
+        data: Vec<u8>,
+        start: usize,
+        end: usize,
+        hasher: Option<crc32fast::Hasher>,
+    }
 
-impl RwBuf {
-    fn new(instantiate_hasher: bool) -> Self {
-        Self {
-            hasher: if instantiate_hasher {
-                Some(crc32fast::Hasher::new())
-            } else {
-                None
-            },
-            ..Default::default()
+    impl RwBuf {
+        pub fn new(instantiate_hasher: bool) -> Self {
+            Self {
+                hasher: if instantiate_hasher {
+                    Some(crc32fast::Hasher::new())
+                } else {
+                    None
+                },
+                ..Default::default()
+            }
         }
-    }
 
-    // Marks some bytes of the un-read part as read.
-    fn mark_read(&mut self, read: usize) {
-        if let Some(hasher) = self.hasher.as_mut() {
-            hasher.update(&self.data[self.start..self.start + read]);
+        // Marks some bytes of the un-read part as read.
+        pub fn mark_read(&mut self, read: usize) {
+            assert!(
+                read <= self.end - self.start,
+                "attempted to read past end of buffer"
+            );
+            if let Some(hasher) = self.hasher.as_mut() {
+                hasher.update(&self.data[self.start..self.start + read]);
+            }
+            self.start += read;
         }
-        self.start += read;
-    }
 
-    // returns the length of the unread section.
-    fn len(&self) -> usize {
-        self.end - self.start
-    }
+        pub fn mark_written(&mut self, written: usize) {
+            assert!(
+                written <= self.unwritten().len(),
+                "attempted to write past end of buffer"
+            );
+            self.end += written;
+        }
 
-    // returns an immutable view of the entire unread section.
-    fn unread(&self) -> &[u8] {
-        &self.data[self.start..self.end]
-    }
+        // returns the length of the unread section.
+        pub fn len(&self) -> usize {
+            self.end - self.start
+        }
 
-    // returns a mutable view of the un-written part of the buffer, resizing as needed to ensure
-    // N bytes are available to write into.
-    fn tail_with_size(&mut self, n: usize) -> &mut [u8] {
-        let unread_len = self.end - self.start;
-        // Compact the output buffer if there is sufficient free space and there is more free
-        // than used.
-        if self.start > 4096 && self.start > unread_len {
-            self.data.copy_within(self.start..self.end, 0);
+        // returns an immutable view of the entire unread section.
+        pub fn unread(&self) -> &[u8] {
+            &self.data[self.start..self.end]
+        }
+
+        pub fn unwritten(&self) -> &[u8] {
+            &self.data[self.end..]
+        }
+
+        pub fn unwritten_mut(&mut self) -> &mut [u8] {
+            &mut self.data[self.end..]
+        }
+
+        pub fn reserve_exact(&mut self, additional: usize) {
+            self.data
+                .resize(self.end.checked_add(additional).unwrap(), 0);
+        }
+
+        // returns a mutable view of the un-written part of the buffer, resizing as needed to ensure
+        // N bytes are available to write into.
+        pub fn tail_with_size(&mut self, n: usize) -> &mut [u8] {
+            let unread_len = self.end - self.start;
+            // Compact the output buffer if there is sufficient free space and there is more free
+            // than used.
+            if self.start > 4096 && self.start > unread_len {
+                self.data.copy_within(self.start..self.end, 0);
+                self.start = 0;
+                self.end = unread_len;
+            }
+            let desired_end = self.end + n;
+            self.data.resize(desired_end, 0);
+            &mut self.data[self.end..]
+        }
+
+        // clears the RWBuf. Does not affect hasher state.
+        pub fn clear(&mut self) {
+            self.data.clear();
             self.start = 0;
-            self.end = unread_len;
+            self.end = 0;
         }
-        let desired_end = self.end + n;
-        self.data.resize(desired_end, 0);
-        &mut self.data[self.end..]
-    }
 
-    // clears the RWBuf. Does not affect hasher state.
-    fn clear(&mut self) {
-        self.data.clear();
-        self.start = 0;
-        self.end = 0;
+        pub fn consume(&mut self, n: usize) -> &[u8] {
+            let start = self.start;
+            self.mark_read(n);
+            &self.data[start..start + n]
+        }
+
+        pub fn consume_without_hashing(&mut self, n: usize) -> &[u8] {
+            assert!(
+                self.end - self.start >= n,
+                "attempted to read past end of buffer"
+            );
+            let start = self.start;
+            self.start += n;
+            &self.data[start..start + n]
+        }
+
+        pub fn hasher_mut(&mut self) -> &mut Option<crc32fast::Hasher> {
+            &mut self.hasher
+        }
+
+        #[cfg(test)]
+        pub fn buffer(&self) -> &[u8] {
+            &self.data
+        }
     }
 }
+
+use rw_buf::RwBuf;
 
 /// Options for initializing [`LinearReader`].
 #[derive(Debug, Default, Clone)]
 pub struct LinearReaderOptions {
     /// If true, the reader will not expect the MCAP magic at the start of the stream.
     pub skip_start_magic: bool,
-    /// If true, the reader will not expect the MCAP magic at the end of the stream.
+    /// If true, the reader will not expect the MCAP magic after the footer record.
     pub skip_end_magic: bool,
+    /// If `skip_end_magic` is false and this is true, the reader will check that there are no
+    /// bytes after the end magic.
+    pub check_finishes_after_end_magic: bool,
     /// If true, the reader will yield entire chunk records. Otherwise, the reader will decompress
     /// and read into chunks, yielding the records inside.
     pub emit_chunks: bool,
@@ -155,6 +213,13 @@ impl LinearReaderOptions {
     }
     pub fn with_skip_end_magic(mut self, skip_end_magic: bool) -> Self {
         self.skip_end_magic = skip_end_magic;
+        self
+    }
+    pub fn with_check_finishes_after_end_magic(
+        mut self,
+        check_finishes_after_end_magic: bool,
+    ) -> Self {
+        self.check_finishes_after_end_magic = check_finishes_after_end_magic;
         self
     }
     pub fn with_emit_chunks(mut self, emit_chunks: bool) -> Self {
@@ -318,18 +383,18 @@ impl LinearReader {
         if written == 0 {
             self.at_eof = true;
         }
-        if (self.file_data.data.len() - self.file_data.end) < written {
+        if self.file_data.unwritten().len() < written {
             panic!("notify_read called with n > last inserted length");
         }
-        self.file_data.end += written;
+        self.file_data.mark_written(written);
     }
 
     /// Yields the next event the caller should take to progress through the file.
     pub fn next_event(&mut self) -> Option<McapResult<LinearReadEvent<'_>>> {
         if self.at_eof {
-            // at EOF. If the reader is not expecting end magic, and it isn't in the middle of a
-            // record or chunk, this is OK.
-            if self.options.skip_end_magic
+            // At EOF. If the reader is not expecting end magic or has already seen it, and it isn't
+            // in the middle of a record or chunk, this is OK.
+            if (self.options.skip_end_magic || matches!(self.currently_reading, AfterEndMagic))
                 && self.file_data.len() == 0
                 && self.decompressed_content.len() == 0
                 && self.chunk_state.is_none()
@@ -347,7 +412,7 @@ impl LinearReader {
                 if self.file_data.len() < $n {
                     return Some(Ok(LinearReadEvent::ReadRequest($n - self.file_data.len())));
                 }
-                &self.file_data.data[self.file_data.start..self.file_data.start + $n]
+                &self.file_data.unread()[..$n]
             }};
         }
 
@@ -358,9 +423,7 @@ impl LinearReader {
                 if self.file_data.len() < $n {
                     return Some(Ok(LinearReadEvent::ReadRequest($n - self.file_data.len())));
                 }
-                let start = self.file_data.start;
-                self.file_data.mark_read($n);
-                &self.file_data.data[start..start + $n]
+                self.file_data.consume($n)
             }};
         }
 
@@ -375,10 +438,7 @@ impl LinearReader {
                     &mut $chunk_state.compressed_remaining,
                     &mut $chunk_state.uncompressed_remaining,
                 ) {
-                    Ok(None) => {
-                        &self.decompressed_content.data
-                            [self.decompressed_content.start..self.decompressed_content.start + $n]
-                    }
+                    Ok(None) => &self.decompressed_content.unread()[..$n],
                     Ok(Some(n)) => return Some(Ok(LinearReadEvent::ReadRequest(n))),
                     Err(err) => return Some(Err(err)),
                 }
@@ -421,8 +481,11 @@ impl LinearReader {
                         // up to the end of the previous record. We `take()` the data section hasher
                         // here before calling `mark_read()`, which would otherwise include too
                         // much data in the CRC.
-                        let calculated =
-                            self.file_data.hasher.take().map(|hasher| hasher.finalize());
+                        let calculated = self
+                            .file_data
+                            .hasher_mut()
+                            .take()
+                            .map(|hasher| hasher.finalize());
                         self.file_data.mark_read(OPCODE_LEN_SIZE);
                         self.currently_reading = DataEnd { len, calculated };
                         continue;
@@ -432,7 +495,7 @@ impl LinearReader {
                         self.file_data.mark_read(OPCODE_LEN_SIZE);
                         self.currently_reading = Footer {
                             len,
-                            hasher: self.file_data.hasher.take(),
+                            hasher: self.file_data.hasher_mut().take(),
                         };
                         continue;
                     }
@@ -450,18 +513,19 @@ impl LinearReader {
                             len
                         }
                     ));
-                    let data = consume!(len);
-                    let rec: crate::records::DataEnd = check!(std::io::Cursor::new(data).read_le());
+                    let rec: crate::records::DataEnd =
+                        check!(std::io::Cursor::new(load!(len)).read_le());
                     let saved = rec.data_section_crc;
                     if let Some(calculated) = calculated {
                         if saved != 0 && calculated != saved {
                             return Some(Err(McapError::BadDataCrc { saved, calculated }));
                         }
                     }
-                    self.currently_reading = FileRecord;
                     if self.options.validate_summary_section_crc {
-                        self.file_data.hasher = Some(crc32fast::Hasher::new());
+                        *self.file_data.hasher_mut() = Some(crc32fast::Hasher::new());
                     }
+                    let data = self.file_data.consume_without_hashing(len);
+                    self.currently_reading = FileRecord;
                     return Some(Ok(LinearReadEvent::Record {
                         data,
                         opcode: op::DATA_END,
@@ -540,7 +604,7 @@ impl LinearReader {
                         crc: header.uncompressed_crc,
                     };
                     self.decompressed_content.clear();
-                    self.decompressed_content.hasher = if self.options.validate_chunk_crcs
+                    *self.decompressed_content.hasher_mut() = if self.options.validate_chunk_crcs
                         && !self.options.prevalidate_chunk_crcs
                         && state.crc != 0
                         && !header.compression.is_empty()
@@ -658,12 +722,7 @@ impl LinearReader {
                                 .ok_or(McapError::RecordTooLarge { opcode, len }));
                             let _ = decompress!(OPCODE_LEN_SIZE + len, state, decompressor);
                             self.decompressed_content.mark_read(OPCODE_LEN_SIZE);
-                            let (start, end) = (
-                                self.decompressed_content.start,
-                                self.decompressed_content.start + len,
-                            );
-                            self.decompressed_content.mark_read(len);
-                            let data = &self.decompressed_content.data[start..end];
+                            let data = self.decompressed_content.consume(len);
                             return Some(Ok(LinearReadEvent::Record { data, opcode }));
                         }
                     }
@@ -680,7 +739,7 @@ impl LinearReader {
                         check!(decompressor.reset());
                         self.decompressors
                             .insert(decompressor.name().into(), decompressor);
-                        if let Some(hasher) = self.decompressed_content.hasher.take() {
+                        if let Some(hasher) = self.decompressed_content.hasher_mut().take() {
                             let calculated = hasher.finalize();
                             let saved = state.crc;
                             if saved != 0 && saved != calculated {
@@ -698,14 +757,30 @@ impl LinearReader {
                     self.currently_reading = FileRecord;
                 }
                 EndMagic => {
-                    if !self.options.skip_end_magic {
+                    if self.options.skip_end_magic {
+                        return None;
+                    } else {
                         let data = consume!(MAGIC.len());
-                        if *data != *MAGIC {
+                        if *data == *MAGIC {
+                            self.currently_reading = AfterEndMagic;
+                            continue;
+                        } else {
                             return Some(Err(McapError::BadMagic));
                         }
-                        self.file_data.mark_read(MAGIC.len());
                     }
-                    return None;
+                }
+                AfterEndMagic => {
+                    if self.options.check_finishes_after_end_magic {
+                        if self.file_data.len() > 0 {
+                            return Some(Err(McapError::BytesAfterEndMagic));
+                        } else if self.at_eof {
+                            return None;
+                        } else {
+                            return Some(Ok(LinearReadEvent::ReadRequest(1)));
+                        }
+                    } else {
+                        return None;
+                    }
                 }
             }
         }
@@ -756,28 +831,29 @@ fn decompress_inner(
     compressed_remaining: &mut u64,
     uncompressed_remaining: &mut u64,
 ) -> McapResult<Option<usize>> {
-    if dest_buf.len() >= n {
+    let additional = n.saturating_sub(dest_buf.len());
+    if additional == 0 {
         return Ok(None);
     }
-    dest_buf.data.resize(dest_buf.start + n, 0);
+    dest_buf.reserve_exact(additional);
     loop {
         let need = decompressor.next_read_size();
         let have = src_buf.len();
         if need > have {
             return Ok(Some(need - have));
         }
-        let dst = &mut dest_buf.data[dest_buf.end..];
+        let dst = dest_buf.unwritten_mut();
         if dst.is_empty() {
             return Ok(None);
         }
         if *uncompressed_remaining == 0 {
             return Err(McapError::UnexpectedEoc);
         }
-        let src_len = std::cmp::min(have, clamp_to_usize(*compressed_remaining));
-        let src = &src_buf.data[src_buf.start..src_buf.start + src_len];
+        let src_len = have.min(clamp_to_usize(*compressed_remaining));
+        let src = &src_buf.unread()[..src_len];
         let res = decompressor.decompress(src, dst)?;
         src_buf.mark_read(res.consumed);
-        dest_buf.end += res.wrote;
+        dest_buf.mark_written(res.wrote);
         *compressed_remaining -= res.consumed as u64;
         *uncompressed_remaining -= res.wrote as u64;
     }
@@ -1173,7 +1249,7 @@ mod tests {
                     // hit zero after the next event.
                     let written = cursor.read(reader.insert(n + 1))?;
                     reader.notify_read(written);
-                    let buffer_size = reader.file_data.data.len();
+                    let buffer_size = reader.file_data.buffer().len();
                     assert!(
                         buffer_size < std::cmp::max(max_needed * 2, 4096),
                         "max needed: {max_needed}, buffer size: {buffer_size}",
@@ -1241,5 +1317,50 @@ mod tests {
 
         // test fails with unexpected EOC because sizes are u64::max
         assert_matches!(next, Err(McapError::UnexpectedEoc));
+    }
+
+    #[test]
+    fn test_notifying_eof_after_writing_whole_file() {
+        let mcap = basic_chunked_file(None).unwrap();
+        let mut reader = LinearReader::new();
+        reader.insert(mcap.len()).copy_from_slice(mcap.as_slice());
+        reader.notify_read(mcap.len());
+        while let Some(event) = reader.next_event() {
+            match event.unwrap() {
+                LinearReadEvent::ReadRequest(_) => {
+                    panic!("should not request read because file is complete");
+                }
+                LinearReadEvent::Record { .. } => {}
+            }
+        }
+        reader.notify_read(0);
+        assert_matches!(reader.next_event(), None);
+    }
+
+    #[test]
+    fn test_trailing_garbage_after_end_magic() {
+        let mcap = basic_chunked_file(None).unwrap();
+        let mut reader = LinearReader::new_with_options(
+            LinearReaderOptions::default().with_check_finishes_after_end_magic(true),
+        );
+        reader.insert(mcap.len()).copy_from_slice(mcap.as_slice());
+        reader.notify_read(mcap.len());
+        while let Some(event) = reader.next_event() {
+            match event.unwrap() {
+                LinearReadEvent::ReadRequest(_) => break,
+                LinearReadEvent::Record { .. } => {}
+            }
+        }
+        assert_matches!(
+            reader.next_event(),
+            Some(Ok(LinearReadEvent::ReadRequest(_)))
+        );
+        let garbage = b"garbage";
+        reader.insert(garbage.len()).copy_from_slice(garbage);
+        reader.notify_read(garbage.len());
+        assert_matches!(
+            reader.next_event(),
+            Some(Err(McapError::BytesAfterEndMagic))
+        );
     }
 }
