@@ -35,6 +35,7 @@ enum CurrentlyReading {
     ChunkRecord,
     PaddingAfterChunk,
     EndMagic,
+    AfterEndMagic,
 }
 use CurrentlyReading::*;
 
@@ -182,8 +183,11 @@ use rw_buf::RwBuf;
 pub struct LinearReaderOptions {
     /// If true, the reader will not expect the MCAP magic at the start of the stream.
     pub skip_start_magic: bool,
-    /// If true, the reader will not expect the MCAP magic at the end of the stream.
+    /// If true, the reader will not expect the MCAP magic after the footer record.
     pub skip_end_magic: bool,
+    /// If `skip_end_magic` is false and this is true, the reader will check that there are no
+    /// bytes after the end magic.
+    pub check_finishes_after_end_magic: bool,
     /// If true, the reader will yield entire chunk records. Otherwise, the reader will decompress
     /// and read into chunks, yielding the records inside.
     pub emit_chunks: bool,
@@ -381,9 +385,9 @@ impl LinearReader {
     /// Yields the next event the caller should take to progress through the file.
     pub fn next_event(&mut self) -> Option<McapResult<LinearReadEvent<'_>>> {
         if self.at_eof {
-            // at EOF. If the reader is not expecting end magic, and it isn't in the middle of a
-            // record or chunk, this is OK.
-            if self.options.skip_end_magic
+            // At EOF. If the reader is not expecting end magic or has already seen it, and it isn't
+            // in the middle of a record or chunk, this is OK.
+            if (self.options.skip_end_magic || matches!(self.currently_reading, AfterEndMagic))
                 && self.file_data.len() == 0
                 && self.decompressed_content.len() == 0
                 && self.chunk_state.is_none()
@@ -746,13 +750,30 @@ impl LinearReader {
                     self.currently_reading = FileRecord;
                 }
                 EndMagic => {
-                    if !self.options.skip_end_magic {
+                    if self.options.skip_end_magic {
+                        return None;
+                    } else {
                         let data = consume!(MAGIC.len());
-                        if *data != *MAGIC {
+                        if *data == *MAGIC {
+                            self.currently_reading = AfterEndMagic;
+                            continue;
+                        } else {
                             return Some(Err(McapError::BadMagic));
                         }
                     }
-                    return None;
+                }
+                AfterEndMagic => {
+                    if self.options.check_finishes_after_end_magic {
+                        if self.file_data.len() > 0 {
+                            return Some(Err(McapError::BytesAfterEndMagic));
+                        } else if self.at_eof {
+                            return None;
+                        } else {
+                            return Some(Ok(LinearReadEvent::ReadRequest(1)));
+                        }
+                    } else {
+                        return None;
+                    }
                 }
             }
         }
