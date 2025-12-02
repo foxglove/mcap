@@ -7,7 +7,7 @@ categories = [ "science::robotics", "compression" ]
 repository = "https://github.com/foxglove/mcap"
 documentation = "https://docs.rs/mcap"
 readme = "README.md"
-version = "0.23.4"
+version = "0.24.0"
 edition = "2021"
 license = "MIT"
 
