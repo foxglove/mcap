@@ -174,7 +174,7 @@ fn parse_vec<T: BinRead<Args<'static> = ()>>() -> BinResult<Vec<T>> {
     Ok(parsed)
 }
 
-#[allow(clippy::ptr_arg)]
+#[expect(clippy::ptr_arg)]
 #[binrw::writer(writer, endian)]
 fn write_vec<T: BinWrite<Args<'static> = ()>>(v: &Vec<T>) -> BinResult<()> {
     use std::io::SeekFrom;
