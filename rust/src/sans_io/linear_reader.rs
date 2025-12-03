@@ -305,7 +305,7 @@ pub struct LinearReader {
     // The core state of the LinearReader state machine. Describes the part of the MCAP
     // file currently being read.
     currently_reading: CurrentlyReading,
-    // Auxilliary state specific to reading records out of chunks. This is stored outside of
+    // Auxiliary state specific to reading records out of chunks. This is stored outside of
     // CurrentlyReading to avoid needing to clone() it on every iteration.
     chunk_state: Option<ChunkState>,
     // MCAP data loaded from the file
@@ -560,7 +560,7 @@ impl LinearReader {
                 CurrentlyReading::ChunkHeader { len } => {
                     // Load the chunk header from the file. The chunk header is of variable length,
                     // depending on the length of the compression string field, so we load
-                    // enough bytes to read that length, then load more if neccessary.
+                    // enough bytes to read that length, then load more if necessary.
                     const MIN_CHUNK_HEADER_SIZE: usize = 8 + 8 + 8 + 4 + 4 + 8;
                     let min_header_buf = load!(MIN_CHUNK_HEADER_SIZE);
                     let compression_len =
@@ -729,7 +729,7 @@ impl LinearReader {
                 }
                 PaddingAfterChunk => {
                     // discard any padding bytes after the chunk records and validate CRCs if
-                    // neccessary
+                    // necessary
                     let state = self
                         .chunk_state
                         .as_mut()

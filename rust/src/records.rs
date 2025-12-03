@@ -4,7 +4,7 @@
 //!
 //! You probably want to user higher-level interfaces, like
 //! [`Message`](crate::Message), [`Channel`](crate::Channel), and [`Schema`](crate::Schema),
-//! read from iterators like [`MesssageStream`](crate::MessageStream).
+//! read from iterators like [`MessageStream`](crate::MessageStream).
 
 use std::{borrow::Cow, collections::BTreeMap};
 

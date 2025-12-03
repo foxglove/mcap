@@ -114,7 +114,7 @@ func DefaultString(strings ...string) string {
 	return ""
 }
 
-// NewProgressBar returns an instance of progressbar.ProgresBar.
+// NewProgressBar returns an instance of progressbar.ProgressBar.
 // `max` is the denominator of the progress.
 func NewProgressBar(max int64) *progressbar.ProgressBar {
 	return progressbar.NewOptions64(

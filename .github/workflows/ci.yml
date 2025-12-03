@@ -22,6 +22,10 @@ jobs:
       - run: yarn install --immutable
       - run: echo '::add-matcher::.github/cspell-problem-matcher.json'
       - run: yarn spellcheck --no-progress
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: typos
+      - run: typos
 
   conformance-lint:
     runs-on: ubuntu-latest

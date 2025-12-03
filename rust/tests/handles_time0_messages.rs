@@ -27,7 +27,7 @@ fn handles_time0_messages() -> Result<()> {
             log_time: 42,
             publish_time: 42,
         },
-        b"Is it really that time agian?",
+        b"Is it really that time again?",
     )?;
 
     out.finish()?;
