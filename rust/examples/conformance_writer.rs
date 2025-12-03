@@ -91,13 +91,13 @@ fn write_file(spec: &conformance_writer_spec::WriterSpec) {
                 // write data end
             }
             "Footer" => {
-                let summmary_offet_start = record.get_field_u64("summary_start");
-                let summmary_crc = record.get_field_u32("summary_crc");
-                let summmary_start = record.get_field_u64("summary_start");
+                let summary_offset_start = record.get_field_u64("summary_start");
+                let summary_crc = record.get_field_u32("summary_crc");
+                let summary_start = record.get_field_u64("summary_start");
                 let _footer = mcap::records::Footer {
-                    summary_crc: summmary_crc,
-                    summary_offset_start: summmary_offet_start,
-                    summary_start: summmary_start,
+                    summary_crc,
+                    summary_offset_start,
+                    summary_start,
                 };
                 // write footer
             }

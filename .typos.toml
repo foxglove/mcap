@@ -1,0 +1,19 @@
+[files]
+# Ignore vendored code from other projects
+extend-exclude = [
+  "**/vendor/**",
+  "**/_vendor/**",
+]
+
+[default.extend-words]
+# Intentional variable names and test data
+typ = "typ"
+ser = "ser"
+seeked = "seeked"
+wrold = "wrold"  # Intentional test data in buf_read_write_seeker_test.go
+
+[default.extend-identifiers]
+# Intentional variable names in code
+typ = "typ"
+ser = "ser"
+seeked = "seeked"

@@ -535,7 +535,7 @@ const FOOTER_RECORD_LEN: usize = 1 // opcode
 /// then index into the rest of the file with
 /// [`Summary::stream_chunk`], [`attachment`], [`metadata`], etc.
 pub fn footer(mcap: &[u8]) -> McapResult<records::Footer> {
-    // an MCAP must be at least large enough to accomodate a header magic, a footer record and a
+    // an MCAP must be at least large enough to accommodate a header magic, a footer record and a
     // footer magic.
     if mcap.len() < (MAGIC.len() + FOOTER_RECORD_LEN + MAGIC.len()) {
         return Err(McapError::UnexpectedEof);
@@ -671,7 +671,7 @@ impl Summary {
         Ok(messages)
     }
 
-    /// Read the mesage indexes for the given indexed chunk.
+    /// Read the message indexes for the given indexed chunk.
     ///
     /// Channels and their schemas are pulled from this summary.
     /// The offsets in each [`MessageIndexEntry`](records::MessageIndexEntry)

@@ -94,9 +94,9 @@ pub enum McapError {
     BadMagic,
     #[error("Footer record couldn't be found at the end of the file, before the magic bytes")]
     BadFooter,
-    #[error("Attachment CRC failed (expeted {saved:08X}, got {calculated:08X}")]
+    #[error("Attachment CRC failed (expected {saved:08X}, got {calculated:08X}")]
     BadAttachmentCrc { saved: u32, calculated: u32 },
-    #[error("Chunk CRC failed (expected {saved:08X}, got {calculated:08X}")]
+    #[error("Chunk CRC failed (expected {saved:08X}, got {calculated:08X})")]
     BadChunkCrc { saved: u32, calculated: u32 },
     #[error("Data section CRC failed (expected {saved:08X}, got {calculated:08X})")]
     BadDataCrc { saved: u32, calculated: u32 },
@@ -112,9 +112,9 @@ pub enum McapError {
     BadSchemaLength { header: u32, available: u32 },
     #[error("Private records must have an opcode >= 0x80, got {opcode:#04x}")]
     PrivateRecordOpcodeIsReserved { opcode: u8 },
-    #[error("Channel `{0}` has mulitple records that don't match.")]
+    #[error("Channel `{0}` has multiple records that don't match.")]
     ConflictingChannels(String),
-    #[error("Schema `{0}` has mulitple records that don't match.")]
+    #[error("Schema `{0}` has multiple records that don't match.")]
     ConflictingSchemas(String),
     #[error("Record parse failed")]
     Parse(#[from] binrw::Error),
