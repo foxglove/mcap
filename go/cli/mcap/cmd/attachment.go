@@ -164,7 +164,7 @@ var addAttachmentCmd = &cobra.Command{
 		}
 		logTime := uint64(time.Now().UTC().UnixNano())
 		if addAttachmentLogTime != "" {
-			date, err := parseDateOrNanos(addAttachmentCreationTime)
+			date, err := parseDateOrNanos(addAttachmentLogTime)
 			if err != nil {
 				die("failed to parse log date: %s", err)
 			}
@@ -203,7 +203,7 @@ func init() {
 		"attachment log time in nanoseconds or RFC3339 format (defaults to current timestamp)",
 	)
 	addAttachmentCmd.PersistentFlags().StringVarP(
-		&addAttachmentLogTime,
+		&addAttachmentCreationTime,
 		"creation-time",
 		"",
 		"",
