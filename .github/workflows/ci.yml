@@ -472,7 +472,7 @@ jobs:
         env:
           GOARCH: ${{ matrix.arch }}
           OUTPUT: mcap-${{ matrix.os }}-${{ matrix.arch }}
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: mcap-cli-${{ matrix.os }}-${{ matrix.arch }}
           path: go/cli/mcap/bin/mcap-${{ matrix.os }}-${{ matrix.arch }}
