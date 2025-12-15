@@ -114,7 +114,7 @@ jobs:
       # need checkout so that cloudflare can detect git commit
       - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
 
       - name: Extract API docs
         run: |
