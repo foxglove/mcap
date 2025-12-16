@@ -192,17 +192,56 @@ func (r *Reader) Info() (*Info, error) {
 		return nil, err
 	}
 	info := &Info{
-		Statistics:        it.statistics,
-		Channels:          it.channels.ToMap(),
-		ChunkIndexes:      it.chunkIndexes,
-		AttachmentIndexes: it.attachmentIndexes,
-		MetadataIndexes:   it.metadataIndexes,
-		Schemas:           it.schemas.ToMap(),
-		Footer:            it.footer,
-		Header:            r.header,
+		Statistics:               it.statistics,
+		Channels:                 it.channels.ToMap(),
+		ChunkIndexes:             it.chunkIndexes,
+		AttachmentIndexes:        it.attachmentIndexes,
+		MetadataIndexes:          it.metadataIndexes,
+		Schemas:                  it.schemas.ToMap(),
+		Footer:                   it.footer,
+		Header:                   r.header,
+		ChannelMessageStartTimes: make(map[uint16]uint64),
+		ChannelMessageEndTimes:   make(map[uint16]uint64),
+	}
+	err = r.getChannelTimings(info)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute channel timings: %w", err)
 	}
 	r.info = info
 	return info, nil
+}
+
+func (r *Reader) getChannelTimings(info *Info) error {
+	for _, chunkIndex := range info.ChunkIndexes {
+		for chanID, offset := range chunkIndex.MessageIndexOffsets {
+			_, err := r.rs.Seek(int64(offset), io.SeekStart)
+			if err != nil {
+				return err
+			}
+			tokenType, record, err := r.l.Next(nil)
+			if err != nil {
+				return err
+			}
+			if tokenType != TokenMessageIndex {
+				return fmt.Errorf("expected message index, got %v", tokenType)
+			}
+			messageIndex, err := ParseMessageIndex(record)
+			if err != nil {
+				return err
+			}
+			if len(messageIndex.Records) > 0 {
+				firstTime := messageIndex.Records[0].Timestamp
+				lastTime := messageIndex.Records[len(messageIndex.Records)-1].Timestamp
+				if startTime, exists := info.ChannelMessageStartTimes[chanID]; !exists || firstTime < startTime {
+					info.ChannelMessageStartTimes[chanID] = firstTime
+				}
+				if endTime, exists := info.ChannelMessageEndTimes[chanID]; !exists || lastTime > endTime {
+					info.ChannelMessageEndTimes[chanID] = lastTime
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // GetAttachmentReader returns an attachment reader located at the specific offset.

@@ -237,12 +237,16 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		}
 		if info.Statistics != nil {
 			channelMessageCount := info.Statistics.ChannelMessageCounts[chanID]
+			msgStr := fmt.Sprintf("%*d msgs", maxCountWidth, channelMessageCount)
 			if channelMessageCount > 1 {
-				frequency := 1e9 * float64(channelMessageCount-1) / float64(end-start)
-				row = append(row, fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency))
-			} else {
-				row = append(row, fmt.Sprintf("%*d msgs", maxCountWidth, channelMessageCount))
+				chanStart := info.ChannelMessageStartTimes[chanID]
+				chanEnd := info.ChannelMessageEndTimes[chanID]
+				if chanEnd > chanStart {
+					frequency := 1e9 * float64(channelMessageCount-1) / float64(chanEnd-chanStart)
+					msgStr += fmt.Sprintf(" (%.2f Hz)", frequency)
+				}
 			}
+			row = append(row, msgStr)
 		}
 		switch {
 		case schema != nil:

@@ -318,14 +318,16 @@ type DataEnd struct {
 // Info represents the result of an "info" operation, for gathering information
 // from the summary section of a file.
 type Info struct {
-	Statistics        *Statistics
-	Channels          map[uint16]*Channel
-	Schemas           map[uint16]*Schema
-	ChunkIndexes      []*ChunkIndex
-	MetadataIndexes   []*MetadataIndex
-	AttachmentIndexes []*AttachmentIndex
-	Header            *Header
-	Footer            *Footer
+	Statistics               *Statistics
+	Channels                 map[uint16]*Channel
+	Schemas                  map[uint16]*Schema
+	ChunkIndexes             []*ChunkIndex
+	MetadataIndexes          []*MetadataIndex
+	AttachmentIndexes        []*AttachmentIndex
+	Header                   *Header
+	Footer                   *Footer
+	ChannelMessageStartTimes map[uint16]uint64
+	ChannelMessageEndTimes   map[uint16]uint64
 }
 
 // ChannelCounts counts the number of messages on each channel in an Info.
