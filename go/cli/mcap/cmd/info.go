@@ -238,7 +238,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		if info.Statistics != nil {
 			channelMessageCount := info.Statistics.ChannelMessageCounts[chanID]
 			if channelMessageCount > 1 {
-				frequency := 1e9 * float64(channelMessageCount) / float64(end-start)
+				frequency := 1e9 * float64(channelMessageCount-1) / float64(end-start)
 				row = append(row, fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency))
 			} else {
 				row = append(row, fmt.Sprintf("%*d msgs", maxCountWidth, channelMessageCount))
