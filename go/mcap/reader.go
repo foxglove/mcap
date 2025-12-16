@@ -230,13 +230,21 @@ func (r *Reader) getChannelTimings(info *Info) error {
 				return err
 			}
 			if len(messageIndex.Records) > 0 {
-				firstTime := messageIndex.Records[0].Timestamp
-				lastTime := messageIndex.Records[len(messageIndex.Records)-1].Timestamp
-				if startTime, exists := info.ChannelMessageStartTimes[chanID]; !exists || firstTime < startTime {
-					info.ChannelMessageStartTimes[chanID] = firstTime
+				minTime := uint64(math.MaxUint64)
+				maxTime := uint64(0)
+				for _, record := range messageIndex.Records {
+					if record.Timestamp < minTime {
+						minTime = record.Timestamp
+					}
+					if record.Timestamp > maxTime {
+						maxTime = record.Timestamp
+					}
 				}
-				if endTime, exists := info.ChannelMessageEndTimes[chanID]; !exists || lastTime > endTime {
-					info.ChannelMessageEndTimes[chanID] = lastTime
+				if startTime, exists := info.ChannelMessageStartTimes[chanID]; !exists || minTime < startTime {
+					info.ChannelMessageStartTimes[chanID] = minTime
+				}
+				if endTime, exists := info.ChannelMessageEndTimes[chanID]; !exists || maxTime > endTime {
+					info.ChannelMessageEndTimes[chanID] = maxTime
 				}
 			}
 		}
