@@ -241,8 +241,8 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 				// Estimate frequency from statistics.
 				// This assumes the underlying channel is logged at a quasi-constant rate with
 				// random jitter.  Since we don't know where the MCAP start and end land in the
-				// message's period, we calculate an upper bound (assuming the MCAP ends just
-				// before the next message is logged) and a lower bound (assuming the MCAP ends
+				// message's period, we calculate a lower bound (assuming the MCAP ends just
+				// before the next message is logged) and an upper bound (assuming the MCAP ends
 				// immediately after the last message was logged).
 				// NOTE: We could make a better estimate by seeking to and inspecting message
 				// indexes. However, these aren't present in all MCAPs, and seeking to each one can
@@ -250,9 +250,16 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 				seconds := float64(end-start) / 1e9
 				maxHz := float64(channelMessageCount) / seconds
 				minHz := float64(channelMessageCount-1) / seconds
+				precision := int(max(0, math.Ceil(-math.Log10(maxHz-minHz))))
 				row = append(
 					row,
-					fmt.Sprintf("%*d msgs [%.2fHz..%.2fHz]", maxCountWidth, channelMessageCount, minHz, maxHz),
+					fmt.Sprintf("%*d msgs (%.*f..%.*fHz)",
+						maxCountWidth,
+						channelMessageCount,
+						precision,
+						minHz,
+						precision,
+						maxHz),
 				)
 			} else {
 				row = append(row, fmt.Sprintf("%*d msgs", maxCountWidth, channelMessageCount))
