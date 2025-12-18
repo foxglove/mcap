@@ -237,7 +237,7 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		}
 		if info.Statistics != nil {
 			channelMessageCount := info.Statistics.ChannelMessageCounts[chanID]
-			if channelMessageCount > 1 {
+			if channelMessageCount > 1 && durationInSeconds > 0 {
 				// Estimate frequency from statistics.
 				// This assumes the underlying channel is logged at a quasi-constant rate with
 				// random jitter.  Since we don't know where the MCAP start and end land in the
@@ -247,9 +247,8 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 				// NOTE: We could make a better estimate by seeking to and inspecting message
 				// indexes. However, these aren't present in all MCAPs, and seeking to each one can
 				// be prohibitively slow, especially when accessing a remote file.
-				seconds := float64(end-start) / 1e9
-				maxHz := float64(channelMessageCount) / seconds
-				minHz := float64(channelMessageCount-1) / seconds
+				maxHz := float64(channelMessageCount) / durationInSeconds
+				minHz := float64(channelMessageCount-1) / durationInSeconds
 				precision := int(max(0, math.Ceil(-math.Log10(maxHz-minHz))))
 				row = append(
 					row,
