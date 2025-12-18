@@ -32,28 +32,53 @@ func toType(s string) string {
 	return strings.ToLower(strings.TrimPrefix(s, "TYPE_"))
 }
 
+func printDescriptorEnum(w io.Writer, enum *descriptorpb.EnumDescriptorProto, pkg string, indent int) {
+	spacer := strings.Repeat("  ", indent)
+	fmt.Fprintf(w, "%senum %s.%s {\n", spacer, pkg, enum.GetName())
+	for _, value := range enum.GetValue() {
+		fmt.Fprintf(w, "%s  %s = %d;\n", spacer, value.GetName(), value.GetNumber())
+	}
+	fmt.Fprintf(w, "%s}\n", spacer)
+}
+
+func printDescriptorMessage(w io.Writer, message *descriptorpb.DescriptorProto, pkg string, indent int) {
+	spacer := strings.Repeat("  ", indent)
+	fmt.Fprintf(w, "%smessage %s.%s {\n", spacer, pkg, message.GetName())
+	for _, enum := range message.GetEnumType() {
+		printDescriptorEnum(w, enum, pkg, indent+1)
+	}
+	for _, nested := range message.GetNestedType() {
+		printDescriptorMessage(w, nested, pkg, indent+1)
+	}
+	for _, field := range message.GetField() {
+		fieldType := field.GetTypeName()
+		if fieldType == "" {
+			fieldType = toType(field.GetType().String())
+		}
+		fmt.Fprintf(
+			w,
+			"%s  %s %s %s = %d;\n",
+			spacer,
+			toLabel(field.GetLabel().String()),
+			fieldType,
+			field.GetName(),
+			field.GetNumber(),
+		)
+	}
+	fmt.Fprintf(w, "%s}\n", spacer)
+}
+
 func printDescriptor(w io.Writer, desc *descriptorpb.FileDescriptorSet) {
 	for i, file := range desc.File {
+		pkg := file.GetPackage()
 		if i == 0 {
 			fmt.Fprintf(w, "syntax = \"%s\";\n\n", file.GetSyntax())
 		}
+		for _, enum := range file.GetEnumType() {
+			printDescriptorEnum(w, enum, pkg, 0)
+		}
 		for _, message := range file.GetMessageType() {
-			fmt.Fprintf(w, "message %s.%s {\n", file.GetPackage(), message.GetName())
-			for _, field := range message.GetField() {
-				fieldType := field.GetTypeName()
-				if fieldType == "" {
-					fieldType = toType(field.GetType().String())
-				}
-				fmt.Fprintf(
-					w,
-					"  %s %s %s = %d;\n",
-					toLabel(field.GetLabel().String()),
-					field.GetName(),
-					fieldType,
-					field.GetNumber(),
-				)
-			}
-			fmt.Fprintf(w, "}\n")
+			printDescriptorMessage(w, message, pkg, 0)
 		}
 	}
 }
