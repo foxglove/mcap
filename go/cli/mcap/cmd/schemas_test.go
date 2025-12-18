@@ -17,18 +17,20 @@ func TestPrintDescriptor(t *testing.T) {
 	printDescriptor(buf, descriptor)
 	require.Equal(t, `syntax = "proto3";
 
-message cardboard.Cost {
+package cardboard;
+
+message Cost {
   optional int32 dollars = 1;
   optional int32 cents = 2;
 }
-message cardboard.Box {
-  message cardboard.Aesthetics {
-    enum cardboard.Color {
+message Box {
+  message Aesthetics {
+    enum Color {
       RED = 0;
       BLUE = 1;
       GREEN = 2;
     }
-    enum cardboard.Shape {
+    enum Shape {
       SQUARE = 0;
       RECTANGULAR = 1;
       HEXAGONAL = 2;

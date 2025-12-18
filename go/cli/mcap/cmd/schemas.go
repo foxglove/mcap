@@ -32,23 +32,23 @@ func toType(s string) string {
 	return strings.ToLower(strings.TrimPrefix(s, "TYPE_"))
 }
 
-func printDescriptorEnum(w io.Writer, enum *descriptorpb.EnumDescriptorProto, pkg string, indent int) {
+func printDescriptorEnum(w io.Writer, enum *descriptorpb.EnumDescriptorProto, indent int) {
 	spacer := strings.Repeat("  ", indent)
-	fmt.Fprintf(w, "%senum %s.%s {\n", spacer, pkg, enum.GetName())
+	fmt.Fprintf(w, "%senum %s {\n", spacer, enum.GetName())
 	for _, value := range enum.GetValue() {
 		fmt.Fprintf(w, "%s  %s = %d;\n", spacer, value.GetName(), value.GetNumber())
 	}
 	fmt.Fprintf(w, "%s}\n", spacer)
 }
 
-func printDescriptorMessage(w io.Writer, message *descriptorpb.DescriptorProto, pkg string, indent int) {
+func printDescriptorMessage(w io.Writer, message *descriptorpb.DescriptorProto, indent int) {
 	spacer := strings.Repeat("  ", indent)
-	fmt.Fprintf(w, "%smessage %s.%s {\n", spacer, pkg, message.GetName())
+	fmt.Fprintf(w, "%smessage %s {\n", spacer, message.GetName())
 	for _, enum := range message.GetEnumType() {
-		printDescriptorEnum(w, enum, pkg, indent+1)
+		printDescriptorEnum(w, enum, indent+1)
 	}
 	for _, nested := range message.GetNestedType() {
-		printDescriptorMessage(w, nested, pkg, indent+1)
+		printDescriptorMessage(w, nested, indent+1)
 	}
 	for _, field := range message.GetField() {
 		fieldType := field.GetTypeName()
@@ -70,15 +70,16 @@ func printDescriptorMessage(w io.Writer, message *descriptorpb.DescriptorProto, 
 
 func printDescriptor(w io.Writer, desc *descriptorpb.FileDescriptorSet) {
 	for i, file := range desc.File {
-		pkg := file.GetPackage()
-		if i == 0 {
-			fmt.Fprintf(w, "syntax = \"%s\";\n\n", file.GetSyntax())
+		if i != 0 {
+			fmt.Fprintf(w, "%s\n", strings.Repeat("-", 20))
 		}
+		fmt.Fprintf(w, "syntax = \"%s\";\n\n", file.GetSyntax())
+		fmt.Fprintf(w, "package %s;\n\n", file.GetPackage())
 		for _, enum := range file.GetEnumType() {
-			printDescriptorEnum(w, enum, pkg, 0)
+			printDescriptorEnum(w, enum, 0)
 		}
 		for _, message := range file.GetMessageType() {
-			printDescriptorMessage(w, message, pkg, 0)
+			printDescriptorMessage(w, message, 0)
 		}
 	}
 }
