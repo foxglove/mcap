@@ -237,9 +237,42 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 		}
 		if info.Statistics != nil {
 			channelMessageCount := info.Statistics.ChannelMessageCounts[chanID]
-			if channelMessageCount > 1 {
-				frequency := 1e9 * float64(channelMessageCount) / float64(end-start)
-				row = append(row, fmt.Sprintf("%*d msgs (%.2f Hz)", maxCountWidth, channelMessageCount, frequency))
+			if channelMessageCount > 1 && durationInSeconds > 0 {
+				// Estimate frequency from statistics.
+				// This assumes the underlying channel is logged at a quasi-constant rate with
+				// random jitter.  Since we don't know where the MCAP start and end land in the
+				// message's period, we calculate a lower bound (assuming the MCAP ends just
+				// before the next message is logged) and an upper bound (assuming the MCAP ends
+				// immediately after the last message was logged).
+				// NOTE: We could make a better estimate by seeking to and inspecting message
+				// indexes. However, these aren't present in all MCAPs, and seeking to each one can
+				// be prohibitively slow, especially when accessing a remote file.
+				maxHz := float64(channelMessageCount) / durationInSeconds
+				minHz := float64(channelMessageCount-1) / durationInSeconds
+				precision := int(max(0, math.Ceil(-math.Log10(maxHz-minHz))))
+				// Cap precision at two decimal places.
+				if precision > 2 {
+					row = append(
+						row,
+						fmt.Sprintf("%*d msgs (%.2fHz)",
+							maxCountWidth,
+							channelMessageCount,
+							maxHz,
+						),
+					)
+				} else {
+					row = append(
+						row,
+						fmt.Sprintf("%*d msgs (%.*f..%.*fHz)",
+							maxCountWidth,
+							channelMessageCount,
+							precision,
+							minHz,
+							precision,
+							maxHz,
+						),
+					)
+				}
 			} else {
 				row = append(row, fmt.Sprintf("%*d msgs", maxCountWidth, channelMessageCount))
 			}
