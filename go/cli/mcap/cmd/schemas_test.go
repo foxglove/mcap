@@ -8,17 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPrintDescriptor(t *testing.T) {
-	descriptorBytes, err := os.ReadFile("../testdata/nested.pb.bin")
-	require.NoError(t, err)
-	descriptor, err := parseDescriptor(descriptorBytes)
-	require.NoError(t, err)
-	buf := bytes.NewBuffer(nil)
-	printDescriptor(buf, descriptor)
-	require.Equal(t, `syntax = "proto3";
-
+const cardboardProto = `// file: cardboard.proto
+syntax = "proto3";
 package cardboard;
-
 message Cost {
   optional int32 dollars = 1;
   optional int32 cents = 2;
@@ -40,6 +32,34 @@ message Box {
   }
   optional .cardboard.Box.Aesthetics aesthetics = 1;
   optional .cardboard.Cost cost = 2;
+}
+`
+
+func TestPrintDescriptor(t *testing.T) {
+	descriptorBytes, err := os.ReadFile("../testdata/cardboard.pb.bin")
+	require.NoError(t, err)
+	descriptor, err := parseDescriptor(descriptorBytes)
+	require.NoError(t, err)
+	buf := bytes.NewBuffer(nil)
+	printDescriptor(buf, descriptor)
+	require.Equal(t, cardboardProto, buf.String())
+}
+
+func TestPrintDescriptorWithDependency(t *testing.T) {
+	descriptorBytes, err := os.ReadFile("../testdata/shipping.pb.bin")
+	require.NoError(t, err)
+	descriptor, err := parseDescriptor(descriptorBytes)
+	require.NoError(t, err)
+	buf := bytes.NewBuffer(nil)
+	printDescriptor(buf, descriptor)
+	require.Equal(t, cardboardProto+`--------------------
+// file: shipping.proto
+syntax = "proto3";
+package shipping;
+import "cardboard.proto";
+message Item {
+  optional .cardboard.Box box = 1;
+  optional int32 grams = 2;
 }
 `, buf.String())
 }

@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+
+package shipping;
+
+import "cardboard.proto";
+
+message Item {
+    cardboard.Box box = 1;
+    int32 grams = 2;
+}
