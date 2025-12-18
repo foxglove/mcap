@@ -250,16 +250,29 @@ func printInfo(w io.Writer, info *mcap.Info) error {
 				maxHz := float64(channelMessageCount) / durationInSeconds
 				minHz := float64(channelMessageCount-1) / durationInSeconds
 				precision := int(max(0, math.Ceil(-math.Log10(maxHz-minHz))))
-				row = append(
-					row,
-					fmt.Sprintf("%*d msgs (%.*f..%.*fHz)",
-						maxCountWidth,
-						channelMessageCount,
-						precision,
-						minHz,
-						precision,
-						maxHz),
-				)
+				// Cap precision at two decimal places.
+				if precision > 2 {
+					row = append(
+						row,
+						fmt.Sprintf("%*d msgs (%.2fHz)",
+							maxCountWidth,
+							channelMessageCount,
+							maxHz,
+						),
+					)
+				} else {
+					row = append(
+						row,
+						fmt.Sprintf("%*d msgs (%.*f..%.*fHz)",
+							maxCountWidth,
+							channelMessageCount,
+							precision,
+							minHz,
+							precision,
+							maxHz,
+						),
+					)
+				}
 			} else {
 				row = append(row, fmt.Sprintf("%*d msgs", maxCountWidth, channelMessageCount))
 			}
