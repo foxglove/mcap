@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package cardboard;
+
+message Cost {
+    int32 dollars = 1;
+    int32 cents = 2;
+}
+
+message Box {
+    message Aesthetics {
+        enum Color {
+            RED = 0;
+            BLUE = 1;
+            GREEN = 2;
+        }
+        enum Shape {
+            SQUARE = 0;
+            RECTANGULAR = 1;
+            HEXAGONAL = 2;
+        }
+        Color color = 1;
+        Shape shape = 2;
+    }
+    Aesthetics aesthetics = 1;
+    Cost cost = 2;
+}
