@@ -13,6 +13,7 @@ from typing import (
     NamedTuple,
     Optional,
     Tuple,
+    Union,
 )
 
 from ._message_queue import make_message_queue
@@ -127,7 +128,7 @@ class McapReader(ABC):
     @abstractmethod
     def iter_messages(
         self,
-        topics: Optional[Iterable[str]] = None,
+        topics: Union[Iterable[str], str, None] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
         log_time_order: bool = True,
@@ -149,7 +150,7 @@ class McapReader(ABC):
 
     def iter_decoded_messages(
         self,
-        topics: Optional[Iterable[str]] = None,
+        topics: Union[Iterable[str], str, None] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
         log_time_order: bool = True,
@@ -263,7 +264,7 @@ class SeekingReader(McapReader):
 
     def iter_messages(
         self,
-        topics: Optional[Iterable[str]] = None,
+        topics: Union[Iterable[str], str, None] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
         log_time_order: bool = True,
@@ -282,6 +283,8 @@ class SeekingReader(McapReader):
             yielded in descending log time order.
 
         """
+        if isinstance(topics, str):
+            topics = [topics]
         summary = self.get_summary()
         if summary is None or len(summary.chunk_indexes) == 0:
             # No chunk indices available, so there is no index to search for messages.
@@ -467,7 +470,7 @@ class NonSeekingReader(McapReader):
 
     def iter_messages(
         self,
-        topics: Optional[Iterable[str]] = None,
+        topics: Union[Iterable[str], str, None] = None,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
         log_time_order: bool = True,
@@ -489,6 +492,8 @@ class NonSeekingReader(McapReader):
             setting log_time_order to True on a non-seekable stream will cause the entire content
             of the MCAP to be loaded into memory.
         """
+        if isinstance(topics, str):
+            topics = [topics]
         if not log_time_order:
             for t in self._iter_messages_internal(topics, start_time, end_time):
                 yield t

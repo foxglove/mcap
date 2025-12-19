@@ -1,8 +1,8 @@
 """ROS2 message definition parsing and message deserialization."""
 
+import array as py_array
 import re
 from io import BytesIO
-import array as py_array
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 

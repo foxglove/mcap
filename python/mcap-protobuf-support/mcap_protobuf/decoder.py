@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, Optional, Type
 
 from google.protobuf.descriptor_pb2 import FileDescriptorProto, FileDescriptorSet
 from google.protobuf.descriptor_pool import DescriptorPool
-from google.protobuf.message_factory import GetMessageClassesForFiles, GetMessageClass
+from google.protobuf.message_factory import GetMessageClass, GetMessageClassesForFiles
 
 from mcap.decoder import DecoderFactory as McapDecoderFactory
 from mcap.exceptions import McapError

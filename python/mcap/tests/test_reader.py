@@ -116,6 +116,22 @@ def test_only_diagnostics(reader_cls: AnyReaderSubclass):
         assert count == 1
 
 
+@pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
+def test_only_diagnostics_str(reader_cls: AnyReaderSubclass):
+    """test that we can filter by topic string with all reader implementations."""
+    with open(DEMO_MCAP, "rb") as f:
+        reader: McapReader = reader_cls(f)
+        count = 0
+        for schema, channel, message in reader.iter_messages(topics="/diagnostics"):
+            assert isinstance(schema, Schema)
+            assert isinstance(channel, Channel)
+            assert channel.topic == "/diagnostics"
+            assert isinstance(message, Message)
+            count += 1
+
+        assert count == 1
+
+
 def write_json_mcap(filepath: Path):
     with open(filepath, "wb") as f:
         writer = Writer(f)
