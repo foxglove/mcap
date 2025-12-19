@@ -72,9 +72,9 @@ func printDescriptor(w io.Writer, desc *descriptorpb.FileDescriptorSet) {
 	for i, file := range desc.File {
 		if i != 0 {
 			// add a separator between files
-			fmt.Fprintf(w, "%s\n", strings.Repeat("-", 20))
+			fmt.Fprintf(w, "%s\n", strings.Repeat("=", 80))
 		}
-		fmt.Fprintf(w, "// file: %s\n", file.GetName())
+		fmt.Fprintf(w, "// %s\n", file.GetName())
 		fmt.Fprintf(w, "syntax = \"%s\";\n", file.GetSyntax())
 		fmt.Fprintf(w, "package %s;\n", file.GetPackage())
 		for _, dependency := range file.GetDependency() {

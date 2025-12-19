@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const cardboardProto = `// file: cardboard.proto
+const cardboardProto = `// cardboard.proto
 syntax = "proto3";
 package cardboard;
 message Cost {
@@ -52,8 +52,8 @@ func TestPrintDescriptorWithDependency(t *testing.T) {
 	require.NoError(t, err)
 	buf := bytes.NewBuffer(nil)
 	printDescriptor(buf, descriptor)
-	require.Equal(t, cardboardProto+`--------------------
-// file: shipping.proto
+	require.Equal(t, cardboardProto+`================================================================================
+// shipping.proto
 syntax = "proto3";
 package shipping;
 import "cardboard.proto";
