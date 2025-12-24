@@ -1,5 +1,5 @@
-from io import BytesIO
 from array import array
+from io import BytesIO
 
 from mcap_ros2.decoder import DecoderFactory
 from mcap_ros2.writer import Writer as Ros2Writer

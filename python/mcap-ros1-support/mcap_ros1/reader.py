@@ -25,7 +25,7 @@ warnings.warn(__doc__, DeprecationWarning)
 
 def read_ros1_messages(
     source: Union[str, bytes, "PathLike[str]", McapReader, IO[bytes]],
-    topics: Optional[Iterable[str]] = None,
+    topics: Union[Iterable[str], str, None] = None,
     start_time: Optional[Union[int, datetime]] = None,
     end_time: Optional[Union[int, datetime]] = None,
     log_time_order: bool = True,
