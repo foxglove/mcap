@@ -73,7 +73,7 @@ There are several python packages; updating any follows a similar process.
 
 1. Update the version in the appropriate `__init__.py` file
 2. Tag a release matching `releases/python/PACKAGE/vX.Y.Z`
-    - For example, `releases/python/mcap/v1.2.3`
+   - For example, `releases/python/mcap/v1.2.3`
 
 ### TypeScript
 
