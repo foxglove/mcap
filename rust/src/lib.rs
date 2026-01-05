@@ -82,8 +82,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum McapError {
-    #[error("tried to write to output while attachment is in progress")]
-    AttachmentInProgress,
     #[error("tried to write bytes to an attachment but no attachment was in progress")]
     AttachmentNotInProgress,
     #[error("tried to write {excess} more bytes to attachment than the requested attachment length {attachment_length}")]
@@ -126,14 +124,10 @@ pub enum McapError {
     UnexpectedEof,
     #[error("Chunk ended in the middle of a record")]
     UnexpectedEoc,
-    #[error("Record with opcode {opcode:02X} has length {len}, need at least {expected} to parse")]
-    RecordTooShort { opcode: u8, len: u64, expected: u64 },
     #[error("Message {0} referenced unknown channel {1}")]
     UnknownChannel(u32, u16),
     #[error("Channel `{0}` referenced unknown schema {1}")]
     UnknownSchema(String, u16),
-    #[error("Found record with opcode {0:02X} in a chunk")]
-    UnexpectedChunkRecord(u8),
     #[error("Unsupported compression format `{0}`")]
     UnsupportedCompression(String),
     #[error("Error during decompression: `{0}`")]

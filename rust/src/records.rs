@@ -407,7 +407,7 @@ pub struct ChunkIndex {
 impl ChunkIndex {
     /// Returns the offset in the file to the start of compressed chunk data.
     /// This can be useful for retrieving just the compressed content of a chunk given its index.
-    /// Returns [`McapError::TooLong`] if the resulting offset would be greater than [`u64::MAX`].
+    /// Returns [`McapError::BadChunkStartOffset`] if the resulting offset would be greater than [`u64::MAX`].
     pub fn compressed_data_offset(&self) -> McapResult<u64> {
         let res = self.chunk_start_offset.checked_add(
             1 // opcode
