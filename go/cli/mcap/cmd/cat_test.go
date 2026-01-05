@@ -47,6 +47,23 @@ func TestCat(t *testing.T) {
 	}
 }
 
+func TestGetReadOptsUseIndex(t *testing.T) {
+	// getReadOpts(false) must set UseIndex=false to allow non-seekable readers (stdin).
+	opts := mcap.ReadOptions{UseIndex: true} // default
+	for _, opt := range getReadOpts(false) {
+		require.NoError(t, opt(&opts))
+	}
+	assert.False(t, opts.UseIndex)
+
+	// getReadOpts(true) must set UseIndex=true and Order=LogTimeOrder for seekable readers.
+	opts = mcap.ReadOptions{}
+	for _, opt := range getReadOpts(true) {
+		require.NoError(t, opt(&opts))
+	}
+	assert.True(t, opts.UseIndex)
+	assert.Equal(t, mcap.LogTimeOrder, opts.Order)
+}
+
 func BenchmarkCat(b *testing.B) {
 	cases := []struct {
 		assertion  string
