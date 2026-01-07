@@ -223,6 +223,19 @@ func filter(
 	w io.Writer,
 	opts *filterOpts,
 ) error {
+	// Dispatch to an indexed-reader path when the input is seekable; otherwise fall back
+	// to the streaming lexer path.
+	if rs, ok := r.(io.ReadSeeker); ok {
+		return filterSeekable(rs, w, opts)
+	}
+	return filterStreaming(r, w, opts)
+}
+
+func filterSeekable(
+	rs io.ReadSeeker,
+	w io.Writer,
+	opts *filterOpts,
+) error {
 	mcapWriter, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Compression: opts.compressionFormat,
 		Chunked:     !opts.unchunked,
@@ -231,8 +244,212 @@ func filter(
 	if err != nil {
 		return err
 	}
+	defer func() {
+		err := mcapWriter.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to close mcap writer: %v\n", err)
+			return
+		}
+	}()
 
-	var numMessages, numAttachments, numMetadata uint64
+	reader, err := mcap.NewReader(rs)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	// Write header from source
+	if err := mcapWriter.WriteHeader(reader.Header()); err != nil {
+		return err
+	}
+
+	info, err := reader.Info()
+	if err != nil {
+		return err
+	}
+
+	// Build concrete topic list from regex include/exclude
+	topicSet := map[string]struct{}{}
+	includeAll := len(opts.includeTopics) == 0 && len(opts.excludeTopics) == 0
+	for _, ch := range info.Channels {
+		include := includeAll
+		if !include && len(opts.includeTopics) > 0 {
+			for i := range opts.includeTopics {
+				if opts.includeTopics[i].MatchString(ch.Topic) {
+					include = true
+					break
+				}
+			}
+		}
+		if !include && len(opts.excludeTopics) > 0 {
+			include = true
+			for i := range opts.excludeTopics {
+				if opts.excludeTopics[i].MatchString(ch.Topic) {
+					include = false
+					break
+				}
+			}
+		}
+		if include {
+			topicSet[ch.Topic] = struct{}{}
+		}
+	}
+
+	readOpts := []mcap.ReadOpt{
+		mcap.AfterNanos(opts.start),
+		mcap.BeforeNanos(opts.end),
+		mcap.InOrder(mcap.LogTimeOrder),
+		mcap.UsingIndex(true),
+	}
+	if !includeAll {
+		var topics []string
+		if !includeAll {
+			for t := range topicSet {
+				topics = append(topics, t)
+			}
+		}
+		readOpts = append(readOpts, mcap.WithTopics(topics))
+	}
+	if opts.includeMetadata {
+		readOpts = append(readOpts, mcap.WithMetadataCallback(func(md *mcap.Metadata) error {
+			if err := mcapWriter.WriteMetadata(md); err != nil {
+				return err
+			}
+			return nil
+		}))
+	}
+
+	writtenSchemas := make(map[uint16]bool)
+	writtenChannels := make(map[uint16]bool)
+
+	addMessage := func(schema *mcap.Schema, channel *mcap.Channel, msg *mcap.Message) error {
+		// Ensure schema and channel are written before messages
+		if channel != nil && !writtenChannels[channel.ID] {
+			if channel.SchemaID != 0 && schema != nil && !writtenSchemas[channel.SchemaID] {
+				if err := mcapWriter.WriteSchema(schema); err != nil {
+					return err
+				}
+				writtenSchemas[channel.SchemaID] = true
+			}
+			if err := mcapWriter.WriteChannel(channel); err != nil {
+				return err
+			}
+			writtenChannels[channel.ID] = true
+		}
+		// If the channel was previously written but schema somehow not yet written, write it now.
+		if channel != nil && channel.SchemaID != 0 && schema != nil && !writtenSchemas[channel.SchemaID] {
+			if err := mcapWriter.WriteSchema(schema); err != nil {
+				return err
+			}
+			writtenSchemas[channel.SchemaID] = true
+		}
+		if err := mcapWriter.WriteMessage(msg); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	msg := &mcap.Message{Data: make([]byte, 1024)}
+	// If any lastPerChannelTopics are specified, we iterate backwards from the start time to find them.
+	if len(opts.includeLastPerChannelTopics) > 0 {
+		lastPerChannelChannelSet := map[uint16]struct{}{}
+		for _, ch := range info.Channels {
+			if _, ok := topicSet[ch.Topic]; ok {
+				for i := range opts.includeLastPerChannelTopics {
+					matcher := opts.includeLastPerChannelTopics[i]
+					if matcher.MatchString(ch.Topic) {
+						lastPerChannelChannelSet[ch.ID] = struct{}{}
+					}
+				}
+			}
+		}
+		topics := make([]string, 0, len(lastPerChannelChannelSet))
+		for id, _ := range lastPerChannelChannelSet {
+			topics = append(topics, info.Channels[id].Topic)
+		}
+
+		it, err := reader.Messages(mcap.BeforeNanos(opts.start), mcap.InOrder(mcap.ReverseLogTimeOrder), mcap.UsingIndex(true), mcap.WithTopics(topics))
+		if err != nil {
+			return err
+		}
+		for {
+			schema, channel, newMsg, err := it.NextInto(msg)
+			msg = newMsg
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				return err
+			}
+			if _, ok := lastPerChannelChannelSet[channel.ID]; ok {
+				addMessage(schema, channel, msg)
+				delete(lastPerChannelChannelSet, channel.ID)
+			}
+			if len(lastPerChannelChannelSet) == 0 {
+				break
+			}
+		}
+	}
+
+	it, err := reader.Messages(readOpts...)
+	if err != nil {
+		return err
+	}
+
+	for {
+		schema, channel, newMsg, err := it.NextInto(msg)
+		msg = newMsg
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return err
+		}
+		addMessage(schema, channel, msg)
+	}
+
+	// Attachments via index
+	if opts.includeAttachments {
+		for _, aidx := range info.AttachmentIndexes {
+			if aidx.LogTime < opts.start || aidx.LogTime >= opts.end {
+				continue
+			}
+			ar, err := reader.GetAttachmentReader(aidx.Offset)
+			if err != nil {
+				return err
+			}
+			if err := mcapWriter.WriteAttachment(&mcap.Attachment{
+				LogTime:    ar.LogTime,
+				CreateTime: ar.CreateTime,
+				Name:       ar.Name,
+				MediaType:  ar.MediaType,
+				DataSize:   ar.DataSize,
+				Data:       ar.Data(),
+			}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func filterStreaming(
+	r io.Reader,
+	w io.Writer,
+	opts *filterOpts,
+) error {
+	if len(opts.includeLastPerChannelTopics) > 0 {
+		return errors.New("including last-per-channel topics is not supported for streaming input")
+	}
+
+	mcapWriter, err := mcap.NewWriter(w, &mcap.WriterOptions{
+		Compression: opts.compressionFormat,
+		Chunked:     !opts.unchunked,
+		ChunkSize:   opts.chunkSize,
+	})
+	if err != nil {
+		return err
+	}
 
 	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{
 		ValidateChunkCRCs: true,
@@ -257,7 +474,6 @@ func filter(
 			if err != nil {
 				return err
 			}
-			numAttachments++
 			return nil
 		},
 	})
@@ -276,8 +492,6 @@ func filter(
 	buf := make([]byte, 1024)
 	schemas := make(map[uint16]markableSchema)
 	channels := make(map[uint16]markableChannel)
-	mostRecentMessageBeforeRangeStart := make(map[uint16]*mcap.Message)
-	messagesBeforeRangeStartWritten := false
 
 	for {
 		token, data, err := lexer.Next(buf)
@@ -310,12 +524,6 @@ func filter(
 			if err != nil {
 				return err
 			}
-			for i := range opts.includeLastPerChannelTopics {
-				matcher := opts.includeLastPerChannelTopics[i]
-				if matcher.MatchString(channel.Topic) {
-					mostRecentMessageBeforeRangeStart[channel.ID] = nil
-				}
-			}
 			// if any topics match an includeTopic, add it.
 			for i := range opts.includeTopics {
 				matcher := opts.includeTopics[i]
@@ -345,57 +553,11 @@ func filter(
 			if err != nil {
 				return err
 			}
-			mostRecent, ok := mostRecentMessageBeforeRangeStart[message.ChannelID]
 			if message.LogTime < opts.start {
-				if ok {
-					if mostRecent == nil || mostRecent.LogTime <= message.LogTime {
-						mostRecentMessageBeforeRangeStart[message.ChannelID] = message
-						// Copy the data buffer explicitly, to avoid keeping a reference to the greater
-						// `buf` array that underlies `message.Data`.
-						mostRecentMessageBeforeRangeStart[message.ChannelID].Data = append([]byte{}, message.Data...)
-					}
-				}
 				continue
 			}
 			if message.LogTime >= opts.end {
 				continue
-			}
-			if !messagesBeforeRangeStartWritten {
-				messagesBeforeRangeStartWritten = true
-				// We have reached the start of the record, so add any stored messages here
-				for _, mostRecent := range mostRecentMessageBeforeRangeStart {
-					if mostRecent == nil {
-						continue
-					}
-					// We might still need to write the channel
-					channel, ok := channels[mostRecent.ChannelID]
-					if !ok {
-						continue
-					}
-					if !channel.written {
-						if channel.SchemaID != 0 {
-							schema, ok := schemas[channel.SchemaID]
-							if !ok {
-								return fmt.Errorf("encountered channel with topic %s with unknown schema ID %d",
-									channel.Topic, channel.SchemaID)
-							}
-							if !schema.written {
-								if err := mcapWriter.WriteSchema(schema.Schema); err != nil {
-									return err
-								}
-								schemas[channel.SchemaID] = markableSchema{schema.Schema, true}
-							}
-						}
-						if err := mcapWriter.WriteChannel(channel.Channel); err != nil {
-							return err
-						}
-						channels[mostRecent.ChannelID] = markableChannel{channel.Channel, true}
-					}
-					if err := mcapWriter.WriteMessage(mostRecent); err != nil {
-						return err
-					}
-					numMessages++
-				}
 			}
 			channel, ok := channels[message.ChannelID]
 			if !ok {
@@ -422,7 +584,6 @@ func filter(
 			if err := mcapWriter.WriteMessage(message); err != nil {
 				return err
 			}
-			numMessages++
 		case mcap.TokenMetadata:
 			if !opts.includeMetadata {
 				continue
@@ -434,7 +595,6 @@ func filter(
 			if err := mcapWriter.WriteMetadata(metadata); err != nil {
 				return err
 			}
-			numMetadata++
 		case mcap.TokenDataEnd, mcap.TokenFooter:
 			// data section is over, either because the file is over or the summary section starts.
 			return nil
