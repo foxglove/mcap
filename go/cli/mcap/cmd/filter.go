@@ -617,6 +617,7 @@ func init() {
 			Short: "Copy some filtered MCAP data to a new file",
 			Long: `This subcommand filters an MCAP by topic and time range to a new file.
 When multiple regexes are used, topics that match any regex are included (or excluded).
+For inputs that support seeking, this command will also put messages in log time order.
 
 usage:
   mcap filter in.mcap -o out.mcap -y /diagnostics -y /tf -y /camera_(front|back)`,
@@ -639,7 +640,7 @@ usage:
 			"l",
 			[]string{},
 			"For included topics matching this regex, the most recent message prior to the start time"+
-				" will still be included.",
+				" will still be included. Not supported for streaming input.",
 		)
 		start := filterCmd.PersistentFlags().StringP(
 			"start",
