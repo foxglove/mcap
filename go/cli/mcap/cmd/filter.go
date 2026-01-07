@@ -36,7 +36,6 @@ type filterFlags struct {
 }
 
 type filterOpts struct {
-	recover                     bool
 	output                      string
 	includeTopics               []regexp.Regexp
 	excludeTopics               []regexp.Regexp
@@ -346,7 +345,11 @@ func filterSeekable(
 		}
 		if channel.SchemaID != 0 && !writtenSchemas[channel.SchemaID] {
 			// This invariant should be upheld by the reader, assert on it here.
-			die("message iterator returned second channel record with ID %d that has a differing schema ID %d", channel.ID, channel.SchemaID)
+			die(
+				"found repeated channel record with ID %d and differing schema ID %d",
+				channel.ID,
+				channel.SchemaID,
+			)
 		}
 		return mcapWriter.WriteMessage(msg)
 	}
@@ -367,7 +370,7 @@ func filterSeekable(
 			}
 		}
 		topics := make([]string, 0, len(channelsToWrite))
-		for id, _ := range channelsToWrite {
+		for id := range channelsToWrite {
 			topics = append(topics, info.Channels[id].Topic)
 		}
 
@@ -411,7 +414,6 @@ func filterSeekable(
 				return err
 			}
 		}
-
 	}
 
 	it, err := reader.Messages(readOpts...)
