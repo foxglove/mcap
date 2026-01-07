@@ -382,7 +382,9 @@ func filterSeekable(
 				return err
 			}
 			if _, ok := lastPerChannelChannelSet[channel.ID]; ok {
-				addMessage(schema, channel, msg)
+				if err := addMessage(schema, channel, msg); err != nil {
+					return err
+				}
 				delete(lastPerChannelChannelSet, channel.ID)
 			}
 			if len(lastPerChannelChannelSet) == 0 {
@@ -405,7 +407,9 @@ func filterSeekable(
 			}
 			return err
 		}
-		addMessage(schema, channel, msg)
+		if err := addMessage(schema, channel, msg); err != nil {
+			return err
+		}
 	}
 
 	// Attachments via index
