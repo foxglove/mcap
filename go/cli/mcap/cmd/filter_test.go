@@ -282,6 +282,97 @@ func TestCompileMatchers(t *testing.T) {
 	assert.True(t, matchers[1].MatchString("lights"))
 }
 
+func TestIncludeTopic(t *testing.T) {
+	must := func(pats []string) []regexp.Regexp {
+		out := make([]regexp.Regexp, len(pats))
+		for i, p := range pats {
+			out[i] = *regexp.MustCompile(p)
+		}
+		return out
+	}
+	cases := []struct {
+		name    string
+		include []string
+		exclude []string
+		checks  map[string]bool
+	}{
+		{
+			name:    "no filters include all",
+			include: nil,
+			exclude: nil,
+			checks: map[string]bool{
+				"camera_a": true,
+				"radar_a":  true,
+				"":         true,
+			},
+		},
+		{
+			name:    "include only matches",
+			include: []string{`^camera_.*$`},
+			exclude: nil,
+			checks: map[string]bool{
+				"camera_a": true,
+				"camera_b": true,
+				"radar_a":  false,
+			},
+		},
+		{
+			name:    "include only multiple patterns OR semantics",
+			include: []string{`^camera_a$`, `^radar_.*$`},
+			exclude: nil,
+			checks: map[string]bool{
+				"camera_a": true,
+				"camera_b": false,
+				"radar_a":  true,
+				"radar_b":  true,
+			},
+		},
+		{
+			name:    "exclude only excludes matches",
+			include: nil,
+			exclude: []string{`^camera.*$`},
+			checks: map[string]bool{
+				"camera_a": false,
+				"camera_b": false,
+				"radar_a":  true,
+			},
+		},
+		{
+			name:    "exclude only multiple patterns",
+			include: nil,
+			exclude: []string{`^camera_a$`, `^radar_.*$`},
+			checks: map[string]bool{
+				"camera_a": false,
+				"camera_b": true,
+				"radar_a":  false,
+				"radar_b":  false,
+			},
+		},
+		{
+			name:    "both include and exclude (include takes precedence in helper)",
+			include: []string{`^camera_.*$`},
+			exclude: []string{`^camera_a$`},
+			checks: map[string]bool{
+				"camera_a": true, // include rules apply when include is present
+				"camera_b": true,
+				"radar_a":  false,
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			opts := &filterOpts{
+				includeTopics: must(c.include),
+				excludeTopics: must(c.exclude),
+			}
+			for topic, expected := range c.checks {
+				actual := includeTopic(topic, opts)
+				assert.Equal(t, expected, actual, "topic=%q", topic)
+			}
+		})
+	}
+}
+
 func TestParseDateOrNanos(t *testing.T) {
 	expected := uint64(1690298850132545471)
 	zulu, err := parseDateOrNanos("2023-07-25T15:27:30.132545471Z")

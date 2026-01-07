@@ -210,6 +210,31 @@ func compileMatchers(regexStrings []string) ([]regexp.Regexp, error) {
 	return matchers, nil
 }
 
+// includeTopic determines whether a topic should be included given the filter options.
+// Precedence:
+// - If include regexes are provided, only topics matching any include are included.
+// - Else if exclude regexes are provided, topics not matching any exclude are included.
+// - Else (no filters), include all topics.
+func includeTopic(topic string, opts *filterOpts) bool {
+	if len(opts.includeTopics) > 0 {
+		for i := range opts.includeTopics {
+			if opts.includeTopics[i].MatchString(topic) {
+				return true
+			}
+		}
+		return false
+	}
+	if len(opts.excludeTopics) > 0 {
+		for i := range opts.excludeTopics {
+			if opts.excludeTopics[i].MatchString(topic) {
+				return false
+			}
+		}
+		return true
+	}
+	return true
+}
+
 type markableSchema struct {
 	*mcap.Schema
 	written bool
@@ -270,29 +295,13 @@ func filterSeekable(
 	}
 
 	// Build concrete topic list from regex include/exclude
-	topicSet := map[string]struct{}{}
 	includeAll := len(opts.includeTopics) == 0 && len(opts.excludeTopics) == 0
-	for _, ch := range info.Channels {
-		include := includeAll
-		if !include && len(opts.includeTopics) > 0 {
-			for i := range opts.includeTopics {
-				if opts.includeTopics[i].MatchString(ch.Topic) {
-					include = true
-					break
-				}
+	topicSet := map[string]struct{}{}
+	if !includeAll {
+		for _, ch := range info.Channels {
+			if includeTopic(ch.Topic, opts) {
+				topicSet[ch.Topic] = struct{}{}
 			}
-		}
-		if !include && len(opts.excludeTopics) > 0 {
-			include = true
-			for i := range opts.excludeTopics {
-				if opts.excludeTopics[i].MatchString(ch.Topic) {
-					include = false
-					break
-				}
-			}
-		}
-		if include {
-			topicSet[ch.Topic] = struct{}{}
 		}
 	}
 
@@ -304,10 +313,8 @@ func filterSeekable(
 	}
 	if !includeAll {
 		var topics []string
-		if !includeAll {
-			for t := range topicSet {
-				topics = append(topics, t)
-			}
+		for t := range topicSet {
+			topics = append(topics, t)
 		}
 		readOpts = append(readOpts, mcap.WithTopics(topics))
 	}
@@ -350,8 +357,7 @@ func filterSeekable(
 		channelsToWrite := map[uint16]bool{}
 		for _, ch := range info.Channels {
 			// make sure the topic is not separately excluded by topic filters
-			_, inTopicSet := topicSet[ch.Topic]
-			if includeAll || inTopicSet {
+			if includeAll || includeTopic(ch.Topic, opts) {
 				for i := range opts.includeLastPerChannelTopics {
 					matcher := opts.includeLastPerChannelTopics[i]
 					if matcher.MatchString(ch.Topic) {
@@ -543,28 +549,7 @@ func filterStreaming(
 			if err != nil {
 				return err
 			}
-			// if any topics match an includeTopic, add it.
-			for i := range opts.includeTopics {
-				matcher := opts.includeTopics[i]
-				if matcher.MatchString(channel.Topic) {
-					channels[channel.ID] = markableChannel{channel, false}
-				}
-			}
-			// if a topic does not match any excludeTopic, add it.
-			if len(opts.excludeTopics) != 0 {
-				shouldInclude := true
-				for i := range opts.excludeTopics {
-					matcher := opts.excludeTopics[i]
-					if matcher.MatchString(channel.Topic) {
-						shouldInclude = false
-					}
-				}
-				if shouldInclude {
-					channels[channel.ID] = markableChannel{channel, false}
-				}
-			}
-			// if neither exclude or include topics are specified, add all channels.
-			if len(opts.includeTopics) == 0 && len(opts.excludeTopics) == 0 {
+			if includeTopic(channel.Topic, opts) {
 				channels[channel.ID] = markableChannel{channel, false}
 			}
 		case mcap.TokenMessage:
