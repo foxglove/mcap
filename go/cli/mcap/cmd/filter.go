@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"time"
 
@@ -324,8 +325,8 @@ func filterSeekable(
 
 	addMessage := func(schema *mcap.Schema, channel *mcap.Channel, msg *mcap.Message) error {
 		// Ensure schema and channel are written before messages
-		if channel != nil && !writtenChannels[channel.ID] {
-			if channel.SchemaID != 0 && schema != nil && !writtenSchemas[channel.SchemaID] {
+		if !writtenChannels[channel.ID] {
+			if channel.SchemaID != 0 && !writtenSchemas[channel.SchemaID] {
 				if err := mcapWriter.WriteSchema(schema); err != nil {
 					return err
 				}
@@ -336,61 +337,75 @@ func filterSeekable(
 			}
 			writtenChannels[channel.ID] = true
 		}
-		// If the channel was previously written but schema somehow not yet written, write it now.
-		if channel != nil && channel.SchemaID != 0 && schema != nil && !writtenSchemas[channel.SchemaID] {
-			if err := mcapWriter.WriteSchema(schema); err != nil {
-				return err
-			}
-			writtenSchemas[channel.SchemaID] = true
+		if channel.SchemaID != 0 && !writtenSchemas[channel.SchemaID] {
+			// This invariant should be upheld by the reader, assert on it here.
+			die("message iterator returned second channel record with ID %d that has a differing schema ID %d", channel.ID, channel.SchemaID)
 		}
-		if err := mcapWriter.WriteMessage(msg); err != nil {
-			return err
-		}
-		return nil
+		return mcapWriter.WriteMessage(msg)
 	}
 
 	msg := &mcap.Message{Data: make([]byte, 1024)}
 	// If any lastPerChannelTopics are specified, we iterate backwards from the start time to find them.
 	if len(opts.includeLastPerChannelTopics) > 0 {
-		lastPerChannelChannelSet := map[uint16]struct{}{}
+		channelsToWrite := map[uint16]bool{}
 		for _, ch := range info.Channels {
-			if _, ok := topicSet[ch.Topic]; ok {
+			// make sure the topic is not separately excluded by topic filters
+			_, inTopicSet := topicSet[ch.Topic]
+			if includeAll || inTopicSet {
 				for i := range opts.includeLastPerChannelTopics {
 					matcher := opts.includeLastPerChannelTopics[i]
 					if matcher.MatchString(ch.Topic) {
-						lastPerChannelChannelSet[ch.ID] = struct{}{}
+						channelsToWrite[ch.ID] = true
 					}
 				}
 			}
 		}
-		topics := make([]string, 0, len(lastPerChannelChannelSet))
-		for id, _ := range lastPerChannelChannelSet {
+		topics := make([]string, 0, len(channelsToWrite))
+		for id, _ := range channelsToWrite {
 			topics = append(topics, info.Channels[id].Topic)
 		}
 
-		it, err := reader.Messages(mcap.BeforeNanos(opts.start), mcap.InOrder(mcap.ReverseLogTimeOrder), mcap.UsingIndex(true), mcap.WithTopics(topics))
+		it, err := reader.Messages(
+			mcap.BeforeNanos(opts.start),
+			mcap.InOrder(mcap.ReverseLogTimeOrder),
+			mcap.UsingIndex(true),
+			mcap.WithTopics(topics),
+		)
 		if err != nil {
 			return err
 		}
+		messagesToWrite := make([]*mcap.Message, 0, len(channelsToWrite))
 		for {
-			schema, channel, newMsg, err := it.NextInto(msg)
-			msg = newMsg
+			_, channel, msg, err := it.NextInto(nil)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					break
 				}
 				return err
 			}
-			if _, ok := lastPerChannelChannelSet[channel.ID]; ok {
-				if err := addMessage(schema, channel, msg); err != nil {
-					return err
-				}
-				delete(lastPerChannelChannelSet, channel.ID)
+			if _, ok := channelsToWrite[channel.ID]; ok {
+				messagesToWrite = append(messagesToWrite, msg)
+				delete(channelsToWrite, channel.ID)
 			}
-			if len(lastPerChannelChannelSet) == 0 {
+			if len(channelsToWrite) == 0 {
 				break
 			}
 		}
+		// we now have all of the messages we need to write, but they should be written in log time order.
+		sort.Slice(messagesToWrite, func(i, j int) bool {
+			return messagesToWrite[i].LogTime < messagesToWrite[j].LogTime
+		})
+		for _, message := range messagesToWrite {
+			channel := info.Channels[message.ChannelID]
+			var schema *mcap.Schema
+			if channel.SchemaID != 0 {
+				schema = info.Schemas[channel.SchemaID]
+			}
+			if err := addMessage(schema, channel, message); err != nil {
+				return err
+			}
+		}
+
 	}
 
 	it, err := reader.Messages(readOpts...)

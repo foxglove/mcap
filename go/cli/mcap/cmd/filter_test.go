@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"regexp"
 	"testing"
@@ -71,59 +72,67 @@ func TestPassthrough(t *testing.T) {
 		includeMetadata:    true,
 	}
 
-	writeBuf := bytes.Buffer{}
-	readBuf := bytes.Buffer{}
+	for _, seekable := range []bool{false, true} {
+		t.Run(fmt.Sprintf("seekable=%v", seekable), func(t *testing.T) {
+			writeBuf := bytes.Buffer{}
+			readBuf := bytes.Buffer{}
 
-	writeFilterTestInput(t, &readBuf)
-	require.NoError(t, filter(&readBuf, &writeBuf, opts))
-	attachmentCounter := 0
-	metadataCounter := 0
-	schemaCounter := 0
-	messageCounter := map[uint16]int{
-		1: 0,
-		2: 0,
-		3: 0,
-	}
-	channelCounter := map[uint16]int{
-		1: 0,
-		2: 0,
-		3: 0,
-	}
-	lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
-		AttachmentCallback: func(*mcap.AttachmentReader) error {
-			attachmentCounter++
-			return nil
-		},
-	})
-	require.NoError(t, err)
-	defer lexer.Close()
-	for {
-		token, record, err := lexer.Next(nil)
-		if err != nil {
-			require.ErrorIs(t, err, io.EOF)
-			break
-		}
-		switch token {
-		case mcap.TokenMessage:
-			message, err := mcap.ParseMessage(record)
+			writeFilterTestInput(t, &readBuf)
+			var src io.Reader = &readBuf
+			if seekable {
+				src = bytes.NewReader(readBuf.Bytes())
+			}
+			require.NoError(t, filter(src, &writeBuf, opts))
+			attachmentCounter := 0
+			metadataCounter := 0
+			schemaCounter := 0
+			messageCounter := map[uint16]int{
+				1: 0,
+				2: 0,
+				3: 0,
+			}
+			channelCounter := map[uint16]int{
+				1: 0,
+				2: 0,
+				3: 0,
+			}
+			lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
+				AttachmentCallback: func(*mcap.AttachmentReader) error {
+					attachmentCounter++
+					return nil
+				},
+			})
 			require.NoError(t, err)
-			messageCounter[message.ChannelID]++
-		case mcap.TokenChannel:
-			channel, err := mcap.ParseChannel(record)
-			require.NoError(t, err)
-			channelCounter[channel.ID]++
-		case mcap.TokenSchema:
-			schemaCounter++
-		case mcap.TokenMetadata:
-			metadataCounter++
-		}
+			defer lexer.Close()
+			for {
+				token, record, err := lexer.Next(nil)
+				if err != nil {
+					require.ErrorIs(t, err, io.EOF)
+					break
+				}
+				switch token {
+				case mcap.TokenMessage:
+					message, err := mcap.ParseMessage(record)
+					require.NoError(t, err)
+					messageCounter[message.ChannelID]++
+				case mcap.TokenChannel:
+					channel, err := mcap.ParseChannel(record)
+					require.NoError(t, err)
+					channelCounter[channel.ID]++
+				case mcap.TokenSchema:
+					schemaCounter++
+				case mcap.TokenMetadata:
+					metadataCounter++
+				}
+			}
+			assert.Equal(t, 1, attachmentCounter)
+			assert.Equal(t, 1, metadataCounter)
+			assert.InDeltaMapValues(t, map[uint16]int{1: 100, 2: 100, 3: 100}, messageCounter, 0.0)
+			// schemas and channels should be duplicated once into the summary section
+			assert.Equal(t, 2, schemaCounter)
+			assert.InDeltaMapValues(t, map[uint16]int{1: 2, 2: 2, 3: 2}, channelCounter, 0.0)
+		})
 	}
-	assert.Equal(t, 1, attachmentCounter)
-	assert.Equal(t, 1, metadataCounter)
-	assert.InDeltaMapValues(t, map[uint16]int{1: 100, 2: 100, 3: 100}, messageCounter, 0.0)
-	// schemas and channels should be duplicated once into the summary section
-	assert.Equal(t, 2, schemaCounter)
-	assert.InDeltaMapValues(t, map[uint16]int{1: 2, 2: 2, 3: 2}, channelCounter, 0.0)
 }
 
 func TestFiltering(t *testing.T) {
@@ -215,44 +224,52 @@ func TestFiltering(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			writeBuf := bytes.Buffer{}
-			readBuf := bytes.Buffer{}
+			for _, seekable := range []bool{false, true} {
+				t.Run(fmt.Sprintf("seekable=%v", seekable), func(t *testing.T) {
+					writeBuf := bytes.Buffer{}
+					readBuf := bytes.Buffer{}
 
-			writeFilterTestInput(t, &readBuf)
-			require.NoError(t, filter(&readBuf, &writeBuf, c.opts))
-			attachmentCounter := 0
-			metadataCounter := 0
-			lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
-				AttachmentCallback: func(*mcap.AttachmentReader) error {
-					attachmentCounter++
-					return nil
-				},
-			})
-			require.NoError(t, err)
-			defer lexer.Close()
-			messageCounter := map[uint16]int{
-				1: 0,
-				2: 0,
-				3: 0,
-			}
-			for {
-				token, record, err := lexer.Next(nil)
-				if err != nil {
-					require.ErrorIs(t, err, io.EOF)
-					break
-				}
-				switch token {
-				case mcap.TokenMessage:
-					message, err := mcap.ParseMessage(record)
+					writeFilterTestInput(t, &readBuf)
+					var src io.Reader = &readBuf
+					if seekable {
+						src = bytes.NewReader(readBuf.Bytes())
+					}
+					require.NoError(t, filter(src, &writeBuf, c.opts))
+					attachmentCounter := 0
+					metadataCounter := 0
+					lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
+						AttachmentCallback: func(*mcap.AttachmentReader) error {
+							attachmentCounter++
+							return nil
+						},
+					})
 					require.NoError(t, err)
-					messageCounter[message.ChannelID]++
-				case mcap.TokenMetadata:
-					metadataCounter++
-				}
+					defer lexer.Close()
+					messageCounter := map[uint16]int{
+						1: 0,
+						2: 0,
+						3: 0,
+					}
+					for {
+						token, record, err := lexer.Next(nil)
+						if err != nil {
+							require.ErrorIs(t, err, io.EOF)
+							break
+						}
+						switch token {
+						case mcap.TokenMessage:
+							message, err := mcap.ParseMessage(record)
+							require.NoError(t, err)
+							messageCounter[message.ChannelID]++
+						case mcap.TokenMetadata:
+							metadataCounter++
+						}
+					}
+					assert.Equal(t, c.expectedAttachmentCount, attachmentCounter)
+					assert.Equal(t, c.expectedMetadataCount, metadataCounter)
+					assert.InDeltaMapValues(t, c.expectedMessageCount, messageCounter, 0.0)
+				})
 			}
-			assert.Equal(t, c.expectedAttachmentCount, attachmentCounter)
-			assert.Equal(t, c.expectedMetadataCount, metadataCounter)
-			assert.InDeltaMapValues(t, c.expectedMessageCount, messageCounter, 0.0)
 		})
 	}
 }
@@ -365,40 +382,54 @@ func TestLastPerChannelBehavior(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			opts, err := buildFilterOptions(c.flags)
-			require.NoError(t, err)
-			writeBuf := bytes.Buffer{}
-			readBuf := bytes.Buffer{}
-
-			writeFilterTestInput(t, &readBuf)
-			require.NoError(t, filter(&readBuf, &writeBuf, opts))
-			lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{})
-			require.NoError(t, err)
-			defer lexer.Close()
-			messageCounter := map[uint16]int{
-				1: 0,
-				2: 0,
-				3: 0,
-			}
-			for {
-				token, record, err := lexer.Next(nil)
-				if err != nil {
-					require.ErrorIs(t, err, io.EOF)
-					break
-				}
-				if token == mcap.TokenMessage {
-					message, err := mcap.ParseMessage(record)
+			for _, seekable := range []bool{false, true} {
+				t.Run(fmt.Sprintf("seekable=%v", seekable), func(t *testing.T) {
+					opts, err := buildFilterOptions(c.flags)
 					require.NoError(t, err)
-					messageCounter[message.ChannelID]++
-				}
-			}
-			for channelID, count := range messageCounter {
-				require.Equal(
-					t,
-					c.expectedMessageCount[channelID],
-					count,
-					"message count incorrect on channel %d", channelID,
-				)
+					writeBuf := bytes.Buffer{}
+					readBuf := bytes.Buffer{}
+
+					writeFilterTestInput(t, &readBuf)
+					var src io.Reader = &readBuf
+					if seekable {
+						src = bytes.NewReader(readBuf.Bytes())
+					}
+					err = filter(src, &writeBuf, opts)
+					// When streaming (non-seekable) and last-per-channel is requested, expect error.
+					if !seekable && len(c.flags.includeLastPerChannelTopics) > 0 {
+						require.Error(t, err)
+						return
+					}
+					require.NoError(t, err)
+					lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{})
+					require.NoError(t, err)
+					defer lexer.Close()
+					messageCounter := map[uint16]int{
+						1: 0,
+						2: 0,
+						3: 0,
+					}
+					for {
+						token, record, err := lexer.Next(nil)
+						if err != nil {
+							require.ErrorIs(t, err, io.EOF)
+							break
+						}
+						if token == mcap.TokenMessage {
+							message, err := mcap.ParseMessage(record)
+							require.NoError(t, err)
+							messageCounter[message.ChannelID]++
+						}
+					}
+					for channelID, count := range messageCounter {
+						require.Equal(
+							t,
+							c.expectedMessageCount[channelID],
+							count,
+							"message count incorrect on channel %d", channelID,
+						)
+					}
+				})
 			}
 		})
 	}
