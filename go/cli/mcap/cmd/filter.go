@@ -216,16 +216,16 @@ func compileMatchers(regexStrings []string) ([]regexp.Regexp, error) {
 // - Else (no filters), include all topics.
 func includeTopic(topic string, opts *filterOpts) bool {
 	if len(opts.includeTopics) > 0 {
-		for _, matcher := range opts.includeTopics {
-			if matcher.MatchString(topic) {
+		for i := range opts.includeTopics {
+			if opts.includeTopics[i].MatchString(topic) {
 				return true
 			}
 		}
 		return false
 	}
 	if len(opts.excludeTopics) > 0 {
-		for _, matcher := range opts.excludeTopics {
-			if matcher.MatchString(topic) {
+		for i := range opts.excludeTopics {
+			if opts.excludeTopics[i].MatchString(topic) {
 				return false
 			}
 		}
@@ -338,8 +338,8 @@ func filterSeekable(
 		for _, ch := range info.Channels {
 			// make sure the topic is not separately excluded by topic filters
 			if includeAll || includeTopic(ch.Topic, opts) {
-				for _, matcher := range opts.includeLastPerChannelTopics {
-					if matcher.MatchString(ch.Topic) {
+				for i := range opts.includeLastPerChannelTopics {
+					if opts.includeLastPerChannelTopics[i].MatchString(ch.Topic) {
 						channelsToWrite[ch.ID] = true
 					}
 				}
