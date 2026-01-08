@@ -216,16 +216,16 @@ func compileMatchers(regexStrings []string) ([]regexp.Regexp, error) {
 // - Else (no filters), include all topics.
 func includeTopic(topic string, opts *filterOpts) bool {
 	if len(opts.includeTopics) > 0 {
-		for i := range opts.includeTopics {
-			if opts.includeTopics[i].MatchString(topic) {
+		for _, matcher := range opts.includeTopics {
+			if matcher.MatchString(topic) {
 				return true
 			}
 		}
 		return false
 	}
 	if len(opts.excludeTopics) > 0 {
-		for i := range opts.excludeTopics {
-			if opts.excludeTopics[i].MatchString(topic) {
+		for _, matcher := range opts.excludeTopics {
+			if matcher.MatchString(topic) {
 				return false
 			}
 		}
@@ -338,8 +338,7 @@ func filterSeekable(
 		for _, ch := range info.Channels {
 			// make sure the topic is not separately excluded by topic filters
 			if includeAll || includeTopic(ch.Topic, opts) {
-				for i := range opts.includeLastPerChannelTopics {
-					matcher := opts.includeLastPerChannelTopics[i]
+				for _, matcher := range opts.includeLastPerChannelTopics {
 					if matcher.MatchString(ch.Topic) {
 						channelsToWrite[ch.ID] = true
 					}
@@ -362,16 +361,16 @@ func filterSeekable(
 		}
 		messagesToWrite := make([]*mcap.Message, 0, len(channelsToWrite))
 		for {
-			_, channel, msg, err := it.NextInto(nil)
+			_, _, msg, err := it.NextInto(nil)
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					break
 				}
 				return err
 			}
-			if _, ok := channelsToWrite[channel.ID]; ok {
+			if _, ok := channelsToWrite[msg.ChannelID]; ok {
 				messagesToWrite = append(messagesToWrite, msg)
-				delete(channelsToWrite, channel.ID)
+				delete(channelsToWrite, msg.ChannelID)
 			}
 			if len(channelsToWrite) == 0 {
 				break
@@ -385,7 +384,15 @@ func filterSeekable(
 			channel := info.Channels[message.ChannelID]
 			var schema *mcap.Schema
 			if channel.SchemaID != 0 {
-				schema = info.Schemas[channel.SchemaID]
+				it, ok := info.Schemas[channel.SchemaID]
+				if !ok {
+					return fmt.Errorf(
+						"found channel with topic %s and unknown schema ID %d",
+						channel.Topic,
+						channel.SchemaID,
+					)
+				}
+				schema = it
 			}
 			if err := addMessage(schema, channel, message); err != nil {
 				return err
