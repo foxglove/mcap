@@ -1,7 +1,7 @@
 use binrw::BinRead;
 
 use crate::{
-    records::{op, ChunkIndex, MessageHeader},
+    records::{op, sizes, ChunkIndex, MessageHeader},
     sans_io::check_len,
     McapError, McapResult,
 };
@@ -521,10 +521,7 @@ fn index_messages(
             return Err(McapError::UnexpectedEoc);
         }
         let record_data = &buf[..len];
-        let next_offset = offset
-          + 1 // opcode
-          + 8 // record length
-          + len;
+        let next_offset = offset + sizes::OPCODE_AND_LENGTH + len;
         if opcode != op::MESSAGE {
             offset = next_offset;
             continue;

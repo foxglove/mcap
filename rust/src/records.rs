@@ -1,6 +1,6 @@
 //! Raw records parsed from an MCAP file
 //!
-//! See <https://github.com/foxglove/mcap/tree/main/docs/specification>
+//! See <https://mcap.dev/spec>
 //!
 //! You probably want to user higher-level interfaces, like
 //! [`Message`](crate::Message), [`Channel`](crate::Channel), and [`Schema`](crate::Schema),
@@ -33,6 +33,293 @@ pub mod op {
     pub const METADATA_INDEX: u8 = 0x0D;
     pub const SUMMARY_OFFSET: u8 = 0x0E;
     pub const DATA_END: u8 = 0x0F;
+}
+
+/// Size constants for MCAP record format fields.
+///
+/// These constants define the byte sizes of fields in the MCAP binary format,
+/// as specified in the MCAP specification:
+/// <https://mcap.dev/spec>
+///
+/// Using named constants instead of magic numbers improves code clarity,
+/// maintainability, and helps prevent errors when parsing binary data.
+pub(crate) mod sizes {
+    /// Size of the opcode field in bytes (1 byte for all records)
+    pub const OPCODE: usize = 1;
+
+    /// Size of the record length field in bytes (u64 = 8 bytes)
+    pub const RECORD_LENGTH: usize = 8;
+
+    /// Combined size of opcode + record length header (9 bytes total)
+    ///
+    /// Every MCAP record starts with this 9-byte header:
+    /// - 1 byte opcode (which record type)
+    /// - 8 byte length (size of the record body)
+    pub const OPCODE_AND_LENGTH: usize = OPCODE + RECORD_LENGTH;
+
+    /// Message header field sizes (MessageHeader struct)
+    pub mod message {
+        /// Channel ID field size (u16 = 2 bytes)
+        pub const CHANNEL_ID: usize = 2;
+
+        /// Sequence number field size (u32 = 4 bytes)
+        pub const SEQUENCE: usize = 4;
+
+        /// Log time field size (u64 = 8 bytes)
+        pub const LOG_TIME: usize = 8;
+
+        /// Publish time field size (u64 = 8 bytes)
+        pub const PUBLISH_TIME: usize = 8;
+
+        /// Total size of message header (22 bytes)
+        pub const HEADER: usize = CHANNEL_ID + SEQUENCE + LOG_TIME + PUBLISH_TIME;
+    }
+
+    /// Chunk header field sizes (ChunkHeader struct)
+    pub mod chunk {
+        /// Message start time field size (u64 = 8 bytes)
+        pub const START_TIME: usize = 8;
+
+        /// Message end time field size (u64 = 8 bytes)
+        pub const END_TIME: usize = 8;
+
+        /// Uncompressed size field size (u64 = 8 bytes)
+        pub const UNCOMPRESSED_SIZE: usize = 8;
+
+        /// Uncompressed CRC field size (u32 = 4 bytes)
+        pub const CRC: usize = 4;
+
+        /// Compression string length field size (u32 = 4 bytes)
+        pub const COMPRESSION_LEN: usize = 4;
+
+        /// Compressed size field size (u64 = 8 bytes)
+        pub const COMPRESSED_SIZE: usize = 8;
+
+        /// Minimum chunk header size, without variable-length compression string (40 bytes)
+        ///
+        /// The actual chunk header size is: MIN_HEADER + compression_string.len()
+        pub const MIN_HEADER: usize =
+            START_TIME + END_TIME + UNCOMPRESSED_SIZE + CRC + COMPRESSION_LEN + COMPRESSED_SIZE;
+
+        /// Offset to the compression length field within chunk header (28 bytes)
+        ///
+        /// This is used to read the compression string length before reading the full header.
+        pub const COMPRESSION_LEN_OFFSET: usize = START_TIME + END_TIME + UNCOMPRESSED_SIZE + CRC;
+
+        /// End offset of compression length field (32 bytes)
+        pub const COMPRESSION_LEN_END: usize = COMPRESSION_LEN_OFFSET + COMPRESSION_LEN;
+    }
+
+    /// Footer field sizes (Footer struct)
+    pub mod footer {
+        /// Summary start offset field size (u64 = 8 bytes)
+        pub const SUMMARY_START: usize = 8;
+
+        /// Summary offset start field size (u64 = 8 bytes)
+        pub const SUMMARY_OFFSET_START: usize = 8;
+
+        /// Summary section CRC field size (u32 = 4 bytes)
+        pub const CRC: usize = 4;
+
+        /// Total footer body size (20 bytes)
+        pub const BODY: usize = SUMMARY_START + SUMMARY_OFFSET_START + CRC;
+
+        /// Total footer record size including opcode and length (29 bytes)
+        pub const RECORD: usize = super::OPCODE + super::RECORD_LENGTH + BODY;
+    }
+
+    /// Message index record sizes
+    pub mod message_index {
+        /// Channel ID field size in message index (u16 = 2 bytes)
+        pub const CHANNEL_ID: usize = 2;
+
+        /// Records array length field size (u32 = 4 bytes)
+        pub const ARRAY_LEN: usize = 4;
+
+        /// Minimum message index record size (15 bytes)
+        ///
+        /// This is opcode + length + channel_id + array_len, before any index records
+        pub const MIN: usize = super::OPCODE + super::RECORD_LENGTH + CHANNEL_ID + ARRAY_LEN;
+    }
+
+    /// String and map encoding sizes
+    pub mod encoding {
+        /// Size of string length prefix field (u32 = 4 bytes)
+        pub const STRING_LENGTH: usize = 4;
+
+        /// Overhead per entry in string map (8 bytes = two length fields)
+        ///
+        /// Each map entry has a key length (4 bytes) + value length (4 bytes)
+        pub const STRING_MAP_ENTRY_OVERHEAD: usize = STRING_LENGTH + STRING_LENGTH;
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_constant_relationships() {
+            // Verify OPCODE_AND_LENGTH is correct sum
+            assert_eq!(OPCODE_AND_LENGTH, OPCODE + RECORD_LENGTH);
+
+            // Verify chunk MIN_HEADER is correct sum
+            assert_eq!(
+                chunk::MIN_HEADER,
+                chunk::START_TIME
+                    + chunk::END_TIME
+                    + chunk::UNCOMPRESSED_SIZE
+                    + chunk::CRC
+                    + chunk::COMPRESSION_LEN
+                    + chunk::COMPRESSED_SIZE
+            );
+
+            // Verify message header size
+            assert_eq!(
+                message::HEADER,
+                message::CHANNEL_ID + message::SEQUENCE + message::LOG_TIME + message::PUBLISH_TIME
+            );
+
+            // Verify footer sizes
+            assert_eq!(
+                footer::BODY,
+                footer::SUMMARY_START + footer::SUMMARY_OFFSET_START + footer::CRC
+            );
+            assert_eq!(footer::RECORD, OPCODE + RECORD_LENGTH + footer::BODY);
+
+            // Verify message index minimum size
+            assert_eq!(
+                message_index::MIN,
+                OPCODE + RECORD_LENGTH + message_index::CHANNEL_ID + message_index::ARRAY_LEN
+            );
+
+            // Verify encoding overhead
+            assert_eq!(
+                encoding::STRING_MAP_ENTRY_OVERHEAD,
+                encoding::STRING_LENGTH + encoding::STRING_LENGTH
+            );
+        }
+
+        #[test]
+        fn test_mcap_format_spec_compliance() {
+            // Document and verify expected sizes per MCAP specification
+            // https://mcap.dev/spec
+            assert_eq!(OPCODE, 1, "MCAP spec: opcode is 1 byte");
+            assert_eq!(
+                RECORD_LENGTH, 8,
+                "MCAP spec: record length is u64 (8 bytes)"
+            );
+            assert_eq!(
+                OPCODE_AND_LENGTH, 9,
+                "MCAP spec: opcode + length header is 9 bytes"
+            );
+
+            // Chunk header field sizes
+            assert_eq!(
+                chunk::START_TIME,
+                8,
+                "MCAP spec: chunk start time is u64 (8 bytes)"
+            );
+            assert_eq!(
+                chunk::END_TIME,
+                8,
+                "MCAP spec: chunk end time is u64 (8 bytes)"
+            );
+            assert_eq!(
+                chunk::UNCOMPRESSED_SIZE,
+                8,
+                "MCAP spec: uncompressed size is u64 (8 bytes)"
+            );
+            assert_eq!(chunk::CRC, 4, "MCAP spec: CRC is u32 (4 bytes)");
+            assert_eq!(
+                chunk::COMPRESSION_LEN,
+                4,
+                "MCAP spec: compression length is u32 (4 bytes)"
+            );
+            assert_eq!(
+                chunk::COMPRESSED_SIZE,
+                8,
+                "MCAP spec: compressed size is u64 (8 bytes)"
+            );
+            assert_eq!(
+                chunk::MIN_HEADER,
+                40,
+                "MCAP spec: minimum chunk header is 40 bytes"
+            );
+            assert_eq!(
+                chunk::COMPRESSION_LEN_OFFSET,
+                28,
+                "Compression length field starts at byte 28"
+            );
+            assert_eq!(
+                chunk::COMPRESSION_LEN_END,
+                32,
+                "Compression length field ends at byte 32"
+            );
+
+            // Message header field sizes
+            assert_eq!(
+                message::CHANNEL_ID,
+                2,
+                "MCAP spec: channel ID is u16 (2 bytes)"
+            );
+            assert_eq!(message::SEQUENCE, 4, "MCAP spec: sequence is u32 (4 bytes)");
+            assert_eq!(message::LOG_TIME, 8, "MCAP spec: log time is u64 (8 bytes)");
+            assert_eq!(
+                message::PUBLISH_TIME,
+                8,
+                "MCAP spec: publish time is u64 (8 bytes)"
+            );
+            assert_eq!(message::HEADER, 22, "MCAP spec: message header is 22 bytes");
+
+            // Footer field sizes
+            assert_eq!(
+                footer::SUMMARY_START,
+                8,
+                "MCAP spec: summary start is u64 (8 bytes)"
+            );
+            assert_eq!(
+                footer::SUMMARY_OFFSET_START,
+                8,
+                "MCAP spec: summary offset start is u64 (8 bytes)"
+            );
+            assert_eq!(footer::CRC, 4, "MCAP spec: footer CRC is u32 (4 bytes)");
+            assert_eq!(footer::BODY, 20, "MCAP spec: footer body is 20 bytes");
+            assert_eq!(
+                footer::RECORD,
+                29,
+                "MCAP spec: footer record (with opcode+len) is 29 bytes"
+            );
+
+            // Message index field sizes
+            assert_eq!(
+                message_index::CHANNEL_ID,
+                2,
+                "MCAP spec: message index channel ID is u16 (2 bytes)"
+            );
+            assert_eq!(
+                message_index::ARRAY_LEN,
+                4,
+                "MCAP spec: message index array length is u32 (4 bytes)"
+            );
+            assert_eq!(
+                message_index::MIN,
+                15,
+                "MCAP spec: minimum message index record is 15 bytes"
+            );
+
+            // Encoding sizes
+            assert_eq!(
+                encoding::STRING_LENGTH,
+                4,
+                "MCAP spec: string length prefix is u32 (4 bytes)"
+            );
+            assert_eq!(
+                encoding::STRING_MAP_ENTRY_OVERHEAD,
+                8,
+                "String map entry has two u32 length fields"
+            );
+        }
+    }
 }
 
 /// A raw record from an MCAP file.
@@ -249,7 +536,7 @@ fn write_string_map(s: &BTreeMap<String, String>) -> BinResult<()> {
     // Ugh: figure out total number of bytes to write:
     let mut byte_len = 0;
     for (k, v) in s {
-        byte_len += 8; // Four bytes each for lengths of key and value
+        byte_len += sizes::encoding::STRING_MAP_ENTRY_OVERHEAD;
         byte_len += k.len();
         byte_len += v.len();
     }
@@ -342,7 +629,7 @@ pub struct MessageHeader {
 
 impl MessageHeader {
     pub(crate) fn serialized_len(&self) -> u64 {
-        2 + 4 + 8 + 8
+        sizes::message::HEADER as u64
     }
 }
 
@@ -410,15 +697,15 @@ impl ChunkIndex {
     /// Returns [`McapError::BadChunkStartOffset`] if the resulting offset would be greater than [`u64::MAX`].
     pub fn compressed_data_offset(&self) -> McapResult<u64> {
         let res = self.chunk_start_offset.checked_add(
-            1 // opcode
-            + 8 // chunk record length
-            + 8 // start time
-            + 8 // end time
-            + 8 // uncompressed size
-            + 4 // CRC
-            + 4 // compression string length
-            + (self.compression.len() as u64) // 32-bit compression string length
-            + 8, // compressed size
+            sizes::OPCODE as u64
+                + sizes::RECORD_LENGTH as u64
+                + sizes::chunk::START_TIME as u64
+                + sizes::chunk::END_TIME as u64
+                + sizes::chunk::UNCOMPRESSED_SIZE as u64
+                + sizes::chunk::CRC as u64
+                + sizes::chunk::COMPRESSION_LEN as u64
+                + (self.compression.len() as u64)
+                + sizes::chunk::COMPRESSED_SIZE as u64,
         );
         match res {
             Some(n) => Ok(n),

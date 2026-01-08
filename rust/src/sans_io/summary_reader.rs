@@ -2,18 +2,13 @@ use binrw::BinRead;
 
 use crate::{
     parse_record,
-    records::{Footer, Record},
+    records::{sizes, Footer, Record},
     sans_io::linear_reader::{LinearReadEvent, LinearReader, LinearReaderOptions},
     McapError, McapResult, Summary, MAGIC,
 };
 use std::io::SeekFrom;
 
-const FOOTER_RECORD_AND_END_MAGIC: usize = 1 // footer opcode
-    + 8 // footer length
-    + 8 // footer summary start field
-    + 8 // footer summary offset start field
-    + 4 // footer summary CRC field
-    + 8; // end magic
+const FOOTER_RECORD_AND_END_MAGIC: usize = sizes::footer::RECORD + MAGIC.len();
 
 /// Events returned by the summary reader. The summary reader yields
 pub enum SummaryReadEvent {
@@ -183,10 +178,10 @@ impl SummaryReader {
                 State::ReadingFooter { loaded_bytes } => {
                     if *loaded_bytes >= FOOTER_RECORD_AND_END_MAGIC {
                         let opcode = self.footer_buf[0];
-                        // Ignore the length, it must always be 20 bytes
-                        let footer_body = &self.footer_buf[1 + 8..FOOTER_RECORD_AND_END_MAGIC - 8];
-                        let end_magic =
-                            &self.footer_buf[FOOTER_RECORD_AND_END_MAGIC - 8..*loaded_bytes];
+                        let footer_body_start = sizes::OPCODE + sizes::RECORD_LENGTH;
+                        let footer_body_end = FOOTER_RECORD_AND_END_MAGIC - MAGIC.len();
+                        let footer_body = &self.footer_buf[footer_body_start..footer_body_end];
+                        let end_magic = &self.footer_buf[footer_body_end..*loaded_bytes];
                         if end_magic != MAGIC {
                             return Err(McapError::BadMagic);
                         }

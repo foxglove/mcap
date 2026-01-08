@@ -18,7 +18,7 @@ use zstd::stream::{raw as zraw, zio};
 use crate::{
     chunk_sink::{ChunkMode, ChunkSink},
     io_utils::CountingCrcWriter,
-    records::{self, op, AttachmentHeader, AttachmentIndex, MessageHeader, Record},
+    records::{self, op, sizes, AttachmentHeader, AttachmentIndex, MessageHeader, Record},
     Attachment, Channel, Compression, McapError, McapResult, Message, Schema, Summary, MAGIC,
 };
 
@@ -1303,7 +1303,7 @@ fn write_summary_and_footer_magic<W: Write + Seek>(
     };
 
     // The CRC in the footer _includes_ part of the footer.
-    op_and_len(&mut ccw, op::FOOTER, 20)?;
+    op_and_len(&mut ccw, op::FOOTER, sizes::footer::BODY as u64)?;
     ccw.write_u64::<LE>(summary_start)?;
     ccw.write_u64::<LE>(summary_offset_start)?;
     let (writer, summary_hasher) = ccw.finalize();
@@ -1532,7 +1532,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
             Err(err) => return Err((sink.inner, err.into())),
         };
         // let compressed_size =  data_end - self.data_start;
-        let record_size = (data_end - self.header_start) - 9; // 1 byte op, 8 byte len
+        let record_size = (data_end - self.header_start) - sizes::OPCODE_AND_LENGTH as u64;
 
         // Now that we know the size of the chunk data and the CRC of the uncompressed data, we
         // rewind the stream and overwrite the dummy chunk header with the true header.
