@@ -299,6 +299,9 @@ jobs:
       - run: yarn workspace @foxglove/mcap-example-flatbufferswriter typecheck
       - run: yarn workspace @foxglove/mcap-example-text-annotation-demo lint:ci
       - run: yarn workspace @foxglove/mcap-example-text-annotation-demo typecheck
+      - run: yarn workspace @foxglove/mcap-example-ulog2mcap lint:ci
+      - run: yarn workspace @foxglove/mcap-example-ulog2mcap typecheck
+      - run: yarn workspace @foxglove/mcap-example-ulog2mcap typescript:test
 
   python:
     runs-on: ubuntu-22.04 # required for python 3.8
