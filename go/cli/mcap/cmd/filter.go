@@ -304,28 +304,6 @@ func filterSeekable(
 		}
 	}
 
-	readOpts := []mcap.ReadOpt{
-		mcap.AfterNanos(opts.start),
-		mcap.BeforeNanos(opts.end),
-		mcap.InOrder(mcap.LogTimeOrder),
-		mcap.UsingIndex(true),
-	}
-	if !includeAll {
-		var topics []string
-		for t := range topicSet {
-			topics = append(topics, t)
-		}
-		readOpts = append(readOpts, mcap.WithTopics(topics))
-	}
-	if opts.includeMetadata {
-		readOpts = append(readOpts, mcap.WithMetadataCallback(func(md *mcap.Metadata) error {
-			if err := mcapWriter.WriteMetadata(md); err != nil {
-				return err
-			}
-			return nil
-		}))
-	}
-
 	writtenSchemas := make(map[uint16]bool)
 	writtenChannels := make(map[uint16]bool)
 
@@ -345,8 +323,8 @@ func filterSeekable(
 		}
 		if channel.SchemaID != 0 && !writtenSchemas[channel.SchemaID] {
 			// This invariant should be upheld by the reader, assert on it here.
-			die(
-				"found repeated channel record with ID %d and differing schema ID %d",
+			return fmt.Errorf(
+				"found repeated channel record with ID %d and unknown schema ID %d",
 				channel.ID,
 				channel.SchemaID,
 			)
@@ -354,7 +332,6 @@ func filterSeekable(
 		return mcapWriter.WriteMessage(msg)
 	}
 
-	msg := &mcap.Message{Data: make([]byte, 1024)}
 	// If any lastPerChannelTopics are specified, we iterate backwards from the start time to find them.
 	if len(opts.includeLastPerChannelTopics) > 0 {
 		channelsToWrite := map[uint16]bool{}
@@ -415,6 +392,31 @@ func filterSeekable(
 			}
 		}
 	}
+
+	// Read the selected messages out of the input.
+	readOpts := []mcap.ReadOpt{
+		mcap.AfterNanos(opts.start),
+		mcap.BeforeNanos(opts.end),
+		mcap.InOrder(mcap.LogTimeOrder),
+		mcap.UsingIndex(true),
+	}
+	if !includeAll {
+		var topics []string
+		for t := range topicSet {
+			topics = append(topics, t)
+		}
+		readOpts = append(readOpts, mcap.WithTopics(topics))
+	}
+	if opts.includeMetadata {
+		readOpts = append(readOpts, mcap.WithMetadataCallback(func(md *mcap.Metadata) error {
+			if err := mcapWriter.WriteMetadata(md); err != nil {
+				return err
+			}
+			return nil
+		}))
+	}
+
+	msg := &mcap.Message{Data: make([]byte, 1024)}
 
 	it, err := reader.Messages(readOpts...)
 	if err != nil {
