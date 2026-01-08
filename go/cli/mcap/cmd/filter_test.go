@@ -470,6 +470,18 @@ func TestLastPerChannelBehavior(t *testing.T) {
 				3: 0,
 			},
 		},
+		{name: "does not override exclude topics",
+			flags: &filterFlags{
+				startNano:                   50,
+				includeLastPerChannelTopics: []string{"camera_.*"},
+				excludeTopics:               []string{"camera_a"},
+			},
+			expectedMessageCount: map[uint16]int{
+				1: 0,
+				2: 51,
+				3: 50,
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
