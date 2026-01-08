@@ -159,10 +159,10 @@ describe("Create MCAP files from ULog", () => {
       for await (const msg of mcapReader.readMessages()) {
         const channel = mcapReader.channelsById.get(msg.channelId);
         const schema = mcapReader.schemasById.get(channel!.schemaId);
-        const protos = protobufFromBinaryDescriptor(schema!.data).lookupType(schema!.name);
+        const protobufSchema = protobufFromBinaryDescriptor(schema!.data).lookupType(schema!.name);
         logTimes.push(msg.publishTime);
         topics.push(mcapReader.channelsById.get(msg.channelId)?.topic);
-        messageData.push(protos.toObject(protos.decode(msg.data)));
+        messageData.push(protobufSchema.toObject(protobufSchema.decode(msg.data)));
         sequence.push(msg.sequence);
       }
       expect(messageData.length).toBe(messageFixture.length);
@@ -263,10 +263,10 @@ describe("Create MCAP files from ULog", () => {
       for await (const msg of mcapReader.readMessages()) {
         const channel = mcapReader.channelsById.get(msg.channelId);
         const schema = mcapReader.schemasById.get(channel!.schemaId);
-        const protos = protobufFromBinaryDescriptor(schema!.data).lookupType(schema!.name);
+        const protobufSchema = protobufFromBinaryDescriptor(schema!.data).lookupType(schema!.name);
         logTimes.push(msg.publishTime);
         topics.push(mcapReader.channelsById.get(msg.channelId)?.topic);
-        messageData.push(protos.toObject(protos.decode(msg.data)));
+        messageData.push(protobufSchema.toObject(protobufSchema.decode(msg.data)));
         sequence.push(msg.sequence);
       }
       expect(messageData.length).toBe(5);
@@ -352,8 +352,10 @@ describe("Create MCAP files from ULog", () => {
       for await (const msg of mcapReader.readMessages()) {
         const channel = mcapReader.channelsById.get(msg.channelId);
         const schema = mcapReader.schemasById.get(channel!.schemaId);
-        const protos = protobufFromBinaryDescriptor(schema!.data).lookupType(schema!.name);
-        messageData.push(protos.toObject(protos.decode(msg.data), { longs: BigInt }));
+        const protobufSchema = protobufFromBinaryDescriptor(schema!.data).lookupType(schema!.name);
+        messageData.push(
+          protobufSchema.toObject(protobufSchema.decode(msg.data), { longs: BigInt }),
+        );
       }
       expect(messageData.length).toBe(1);
       expect(messageData).toStrictEqual([{ value: Long.fromString("18446744073709551615", true) }]);

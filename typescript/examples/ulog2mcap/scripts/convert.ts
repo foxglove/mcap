@@ -41,7 +41,7 @@ function ulogDefinitionsToProtobufTypes(definitions: Map<string, MessageDefiniti
   const dependencies = new Map<string, Array<string>>();
   for (const [schemaName, definition] of definitions) {
     const fieldTypeProto = new protobufjs.Type(schemaName);
-    let id = 0;
+    let id = 1;
     for (const field of definition.fields) {
       // Omit special fields
       // Timestamp is used for message log time so it's not required in the message body
@@ -126,7 +126,7 @@ export async function convertULogFileToMCAP(
     throw new Error("Invalid ULog file: missing header");
   }
   if (inputFile.header.version !== 1) {
-    throw new Error(`Unknown ULog file verion: ${inputFile.header.version}`);
+    throw new Error(`Unknown ULog file version: ${inputFile.header.version}`);
   }
 
   await outputFile.start({
@@ -139,7 +139,7 @@ export async function convertULogFileToMCAP(
     }
   }
 
-  // Ulog records the timestamp at the start of recording and the timestamps of each message as microseconnds since device startup
+  // Ulog records the timestamp at the start of recording and the timestamps of each message as microseconds since device startup
   // When absolute start time is provided, we subtract the recording start timestamp from each message timestamp to get microseconds
   // since recording start and add that to the new start time to get microseconds since epoch
   const deviceRecordingStartTime = inputFile.header.timestamp;

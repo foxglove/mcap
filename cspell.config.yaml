@@ -19,6 +19,7 @@ ignorePaths:
   - "*.Dockerfile"
   - Dockerfile
   - "*.mcap"
+  - "*.ulg"
   - "*.egg-info"
   - "*.patch"
   - package.json
@@ -104,6 +105,7 @@ words:
   - tfmessage
   - typecheck
   - typedoc
+  - ulog
   - unchunked
   - unindexed
   - vcpkg

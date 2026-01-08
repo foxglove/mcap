@@ -9,7 +9,7 @@ import { open } from "fs/promises";
 import { convertULogFileToMCAP } from "./convert";
 
 type ConvertOptions = {
-  metadata: string[];
+  metadata?: string[];
   metadataName: string;
   startDate?: bigint;
 };
@@ -27,7 +27,7 @@ async function convert(inputFilePath: string, outputFilePath: string, options: C
   });
 
   let metadata: Metadata | undefined = undefined;
-  if (options.metadata != undefined) {
+  if (options.metadata != undefined && options.metadata.length > 0) {
     const metadataFields = new Map<string, string>();
     for (const field of options.metadata) {
       const [key, value] = field.split("=", 2);
@@ -54,7 +54,7 @@ function parseMicrosecondsDate(value: string): bigint {
 }
 
 program
-  .description("Convert a PX4 ULog file to an MCAP file using protobug schemas")
+  .description("Convert a PX4 ULog file to an MCAP file using protobuf schemas")
   .argument("<input-file>", "Path to a ULog file")
   .argument("<output-file>", "Path for the output MCAP file")
   .option(
