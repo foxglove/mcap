@@ -1,5 +1,8 @@
 {
   "testMatch": ["<rootDir>/scripts/**/*.test.ts"],
+  "moduleNameMapper": {
+    "^@mcap/(.*)$": "<rootDir>/../../$1/src"
+  },
   "transform": {
     "^.+\\.ts$": [
       "ts-jest",

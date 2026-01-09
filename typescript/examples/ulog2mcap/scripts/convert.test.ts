@@ -353,9 +353,7 @@ describe("Create MCAP files from ULog", () => {
         const channel = mcapReader.channelsById.get(msg.channelId);
         const schema = mcapReader.schemasById.get(channel!.schemaId);
         const protobufSchema = protobufFromBinaryDescriptor(schema!.data).lookupType(schema!.name);
-        messageData.push(
-          protobufSchema.toObject(protobufSchema.decode(msg.data), { longs: BigInt }),
-        );
+        messageData.push(protobufSchema.toObject(protobufSchema.decode(msg.data)));
       }
       expect(messageData.length).toBe(1);
       expect(messageData).toStrictEqual([{ value: Long.fromString("18446744073709551615", true) }]);

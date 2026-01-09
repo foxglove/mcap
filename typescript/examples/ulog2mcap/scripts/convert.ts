@@ -32,16 +32,12 @@ function ulogFieldTypeToProtobufFieldType(fieldType: string): string | undefined
   }
 }
 
-/** Convert ULog message definitions to a Protobuf root and dependencies map. */
-function ulogDefinitionsToProtobufTypes(definitions: Map<string, MessageDefinition>): {
-  typeMap: Map<string, protobufjs.Type>;
-  dependencies: Map<string, Array<string>>;
-} {
-  const typeMap = new Map<string, protobufjs.Type>();
+// ** Construct a map of dependencies between schema definitions so we can build a minimal tree of types later */
+function getSchemaDependencies(
+  definitions: Map<string, MessageDefinition>,
+): Map<string, Array<string>> {
   const dependencies = new Map<string, Array<string>>();
   for (const [schemaName, definition] of definitions) {
-    const fieldTypeProto = new protobufjs.Type(schemaName);
-    let id = 1;
     for (const field of definition.fields) {
       // Omit special fields
       // Timestamp is used for message log time so it's not required in the message body
@@ -49,32 +45,49 @@ function ulogDefinitionsToProtobufTypes(definitions: Map<string, MessageDefiniti
       if (field.name === "timestamp" || field.name.startsWith("_padding")) {
         continue;
       }
-
-      const primitiveType = ulogFieldTypeToProtobufFieldType(field.type);
-      const fieldType = primitiveType ?? field.type;
-      if (primitiveType == undefined) {
+      if (definitions.has(field.type)) {
         // Record dependency
         if (!dependencies.has(schemaName)) {
           dependencies.set(schemaName, []);
         }
         dependencies.get(schemaName)!.push(field.type);
       }
-      const rule =
-        field.arrayLength != undefined && primitiveType !== "string" ? "repeated" : "required";
-
-      fieldTypeProto.add(new protobufjs.Field(field.name, id, fieldType, rule));
-      id += 1;
     }
-    typeMap.set(schemaName, fieldTypeProto);
+  }
+  return dependencies;
+}
+
+/** Convert ULog message definitions to a Protobuf root and dependencies map. */
+function ulogDefinitionToProtobufType(
+  schemaName: string,
+  definition: MessageDefinition,
+): protobufjs.Type {
+  const fieldTypeProto = new protobufjs.Type(schemaName);
+  let id = 1;
+  for (const field of definition.fields) {
+    // Omit special fields
+    // Timestamp is used for message log time so it's not required in the message body
+    // _padding0 is a padding field and contains no data
+    if (field.name === "timestamp" || field.name.startsWith("_padding")) {
+      continue;
+    }
+
+    const primitiveType = ulogFieldTypeToProtobufFieldType(field.type);
+    const fieldType = primitiveType ?? field.type;
+    const rule =
+      field.arrayLength != undefined && primitiveType !== "string" ? "repeated" : "required";
+
+    fieldTypeProto.add(new protobufjs.Field(field.name, id, fieldType, rule));
+    id += 1;
   }
 
-  return { typeMap, dependencies };
+  return fieldTypeProto;
 }
 
 /** Create a new protobuf Root with only the types required for one root schema */
 function getMinimalProtobufRoot(
   rootName: string,
-  typeMap: Map<string, protobufjs.Type>,
+  definitions: Map<string, MessageDefinition>,
   dependencies: Map<string, Array<string>>,
 ): protobufjs.Root {
   const minimalRoot = new protobufjs.Root();
@@ -89,10 +102,10 @@ function getMinimalProtobufRoot(
     }
     const typeName = iterator.value;
     typesToProcess.delete(typeName);
-    const type = typeMap.get(typeName);
-    if (type == undefined) {
+    if (!definitions.has(typeName)) {
       throw new Error(`Type ${typeName} not found in type map`);
     }
+    const type = ulogDefinitionToProtobufType(typeName, definitions.get(typeName)!);
     minimalRoot.add(type);
     processed.add(typeName);
     for (const dependentType of dependencies.get(typeName) ?? []) {
@@ -146,34 +159,44 @@ export async function convertULogFileToMCAP(
   const startTimestampOffset =
     options?.startTime != undefined ? options.startTime - deviceRecordingStartTime : 0n;
 
-  const { typeMap, dependencies } = ulogDefinitionsToProtobufTypes(inputFile.header.definitions);
-  // Register schemas and channels
+  // Count subscriptions with the same name so we know when to append multiId to channel name
   const numSubscriptions = new Map<string, number>();
   for (const subscription of inputFile.subscriptions.values()) {
     const count = numSubscriptions.get(subscription.name) ?? 0;
     numSubscriptions.set(subscription.name, count + 1);
   }
 
+  // Register schemas and channels
+  const dependencies = getSchemaDependencies(inputFile.header.definitions);
+
   const msgIdToChannelId = new Map<number, number>();
   const msgIdToSchema = new Map<number, protobufjs.Type>();
   const schemaNameToSchemaId = new Map<string, number>();
+  const schemaNameToSchema = new Map<string, protobufjs.Type>();
+
+  // For each subscription, create a minimal protobuf root and register a new schema (if needed) and channel
   for (const [msgId, subscription] of inputFile.subscriptions.entries()) {
     const channelName =
       (numSubscriptions.get(subscription.name) ?? 1) === 1
         ? subscription.name
         : `${subscription.name}/${subscription.multiId}`;
-    const minimalRoot = getMinimalProtobufRoot(subscription.name, typeMap, dependencies);
-    const descriptorSet = protobufToDescriptor(minimalRoot);
-    const msgType = minimalRoot.lookupType(subscription.name);
 
     let schemaId = schemaNameToSchemaId.get(subscription.name);
     if (schemaId == undefined) {
+      const minimalRoot = getMinimalProtobufRoot(
+        subscription.name,
+        inputFile.header.definitions,
+        dependencies,
+      );
+      const descriptorSet = protobufToDescriptor(minimalRoot);
       schemaId = await outputFile.registerSchema({
         name: subscription.name,
         encoding: "protobuf",
         data: descriptor.FileDescriptorSet.encode(descriptorSet).finish(),
       });
+      const msgType = minimalRoot.lookupType(subscription.name);
       schemaNameToSchemaId.set(subscription.name, schemaId);
+      schemaNameToSchema.set(subscription.name, msgType);
     }
 
     const channelId = await outputFile.registerChannel({
@@ -183,11 +206,11 @@ export async function convertULogFileToMCAP(
       metadata: new Map(),
     });
     msgIdToChannelId.set(msgId, channelId);
-    msgIdToSchema.set(msgId, msgType);
+    msgIdToSchema.set(msgId, schemaNameToSchema.get(subscription.name)!);
   }
 
-  const channelIdToSequence = new Map<number, number>();
   // Read messages and write to MCAP
+  const channelIdToSequence = new Map<number, number>();
   for await (const msg of inputFile.readMessages()) {
     if (msg.type === MessageType.Data) {
       const channelId = msgIdToChannelId.get(msg.msgId);
