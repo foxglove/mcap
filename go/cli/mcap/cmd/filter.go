@@ -270,7 +270,10 @@ func filter(
 		}
 		return fmt.Errorf("failed to close writer: %w", closeErr)
 	}
-	return fmt.Errorf("filter failed: %w", err)
+	if err != nil {
+		return fmt.Errorf("filter failed: %w", err)
+	}
+	return nil
 }
 
 func filterSeekable(
