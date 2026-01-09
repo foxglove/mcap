@@ -2,13 +2,18 @@ use binrw::BinRead;
 
 use crate::{
     parse_record,
-    records::{sizes, Footer, Record},
+    records::{Footer, Record},
     sans_io::linear_reader::{LinearReadEvent, LinearReader, LinearReaderOptions},
     McapError, McapResult, Summary, MAGIC,
 };
 use std::io::SeekFrom;
 
-const FOOTER_RECORD_AND_END_MAGIC: usize = sizes::footer::RECORD + MAGIC.len();
+const FOOTER_RECORD_AND_END_MAGIC: usize = 1 // footer opcode
+    + 8 // footer length
+    + 8 // footer summary start field
+    + 8 // footer summary offset start field
+    + 4 // footer summary CRC field
+    + 8; // end magic
 
 /// Events returned by the summary reader. The summary reader yields
 pub enum SummaryReadEvent {
@@ -162,6 +167,7 @@ impl SummaryReader {
                             -(FOOTER_RECORD_AND_END_MAGIC as i64),
                         ))));
                     };
+                    // trailing end-magic is 8 bytes
                     if file_size < FOOTER_RECORD_AND_END_MAGIC as u64 + 8 {
                         return Err(crate::McapError::UnexpectedEof);
                     }
@@ -178,10 +184,14 @@ impl SummaryReader {
                 State::ReadingFooter { loaded_bytes } => {
                     if *loaded_bytes >= FOOTER_RECORD_AND_END_MAGIC {
                         let opcode = self.footer_buf[0];
-                        let footer_body_start = sizes::OPCODE + sizes::RECORD_LENGTH;
-                        let footer_body_end = FOOTER_RECORD_AND_END_MAGIC - MAGIC.len();
-                        let footer_body = &self.footer_buf[footer_body_start..footer_body_end];
-                        let end_magic = &self.footer_buf[footer_body_end..*loaded_bytes];
+                        // Footer record bodies are fixed-size (20 bytes): summary_start(u64) + summary_offset_start(u64) + crc(u32).
+                        // We ignore the encoded length and slice the known body range.
+                        // | 1          | 8                  | 20           | 8              |
+                        // | opcode(u8) | record_length(u64) | footer_body  | magic(8 bytes) |
+                        let footer_body = &self.footer_buf[9..FOOTER_RECORD_AND_END_MAGIC - 8];
+                        let end_magic =
+                            &self.footer_buf[FOOTER_RECORD_AND_END_MAGIC - 8..*loaded_bytes];
+
                         if end_magic != MAGIC {
                             return Err(McapError::BadMagic);
                         }

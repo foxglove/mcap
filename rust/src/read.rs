@@ -18,7 +18,7 @@ use crc32fast::hash as crc32;
 use enumset::{enum_set, EnumSet, EnumSetType};
 
 use crate::{
-    records::{self, op, sizes, Footer, Record},
+    records::{self, op, Footer, Record},
     sans_io::{
         LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions, SummaryReadEvent,
         SummaryReader, SummaryReaderOptions,
@@ -621,8 +621,9 @@ impl Summary {
         }
 
         // Get the chunk (as a header and its data) out of the file at the given offset.
-        let chunk_record_buf =
-            &mcap[(index.chunk_start_offset as usize) + sizes::OPCODE_AND_LENGTH..end];
+        let chunk_record_buf = &mcap[(index.chunk_start_offset as usize)
+            + 9 // opcode + record length
+            ..end];
         let chunk = parse_record(op::CHUNK, chunk_record_buf);
 
         let (h, d) = match chunk {
@@ -692,9 +693,13 @@ impl Summary {
         for (channel_id, offset) in &index.message_index_offsets {
             let offset = *offset as usize;
 
-            // Message indexes are at least MIN bytes:
-            // opcode + length + channel ID + array len
-            if mcap.len() < offset + sizes::message_index::MIN {
+            // Message indexes are at least 15 bytes:
+            const MIN_MESSAGE_INDEX_BYTES: usize = 1  // opcode
+                                                 + 8  // record length
+                                                 + 2  // channel ID
+                                                 + 4; // records array length
+
+            if mcap.len() < offset + MIN_MESSAGE_INDEX_BYTES {
                 return Err(McapError::BadIndex);
             }
 
@@ -749,7 +754,9 @@ impl Summary {
         }
         let chunk = parse_record(
             op::CHUNK,
-            &mcap[(index.chunk_start_offset + sizes::OPCODE_AND_LENGTH as u64) as usize..end],
+            &mcap[(index.chunk_start_offset) as usize
+                  + 9// opcode + record length
+                ..end],
         );
         let (h, d) = match chunk {
             Ok(records::Record::Chunk { header, data }) => (header, data),
@@ -777,7 +784,8 @@ impl Summary {
                 }
                 Ok(LinearReadEvent::Record { data, opcode }) => {
                     if (uncompressed_offset as u64) < message.offset {
-                        uncompressed_offset += sizes::OPCODE_AND_LENGTH + data.len();
+                        uncompressed_offset += 9 // opcode + record length
+                            + data.len();
                     } else {
                         if uncompressed_offset as u64 != message.offset {
                             return Err(McapError::BadIndex);

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use super::decompressor::Decompressor;
 use crate::{
-    records::{op, sizes, ChunkHeader},
+    records::{op, ChunkHeader},
     sans_io::check_len,
     McapError, McapResult, MAGIC,
 };
@@ -561,14 +561,17 @@ impl LinearReader {
                     // Load the chunk header from the file. The chunk header is of variable length,
                     // depending on the length of the compression string field, so we load
                     // enough bytes to read that length, then load more if necessary.
-                    let min_header_buf = load!(sizes::chunk::MIN_HEADER);
-                    let compression_len = u32::from_le_bytes(
-                        min_header_buf[sizes::chunk::COMPRESSION_LEN_OFFSET
-                            ..sizes::chunk::COMPRESSION_LEN_END]
-                            .try_into()
-                            .unwrap(),
-                    );
-                    let header_len = sizes::chunk::MIN_HEADER + compression_len as usize;
+                    const MIN_CHUNK_HEADER_SIZE: usize = 8  // start time
+                                                       + 8  // end time
+                                                       + 8  // uncompressed size
+                                                       + 4  // uncompressed CRC
+                                                       + 4  // compression string length
+                                                       + 8; // compressed size
+
+                    let min_header_buf = load!(MIN_CHUNK_HEADER_SIZE);
+                    let compression_len =
+                        u32::from_le_bytes(min_header_buf[28..32].try_into().unwrap());
+                    let header_len = MIN_CHUNK_HEADER_SIZE + compression_len as usize;
                     let header_buf = consume!(header_len);
                     let header: ChunkHeader = check!(std::io::Cursor::new(header_buf).read_le());
                     // Re-use or construct a compressor
