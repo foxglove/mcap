@@ -130,6 +130,38 @@ func TestReaderFallsBackToLinearScan(t *testing.T) {
 	}
 }
 
+func TestReaderRequiresIndexForNonFileOrderReads(t *testing.T) {
+	buf := &bytes.Buffer{}
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked: false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&Header{}))
+	require.NoError(t, writer.WriteChannel(&Channel{
+		ID:              0,
+		SchemaID:        0,
+		Topic:           "/foo",
+		MessageEncoding: "",
+		Metadata: map[string]string{
+			"": "",
+		},
+	}))
+	require.NoError(t, writer.WriteMessage(&Message{
+		ChannelID:   0,
+		Sequence:    0,
+		LogTime:     0,
+		PublishTime: 0,
+		Data:        []byte("hello"),
+	}))
+	writer.Close()
+
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	require.NoError(t, err)
+
+	_, err = reader.Messages(UsingIndex(true), InOrder(LogTimeOrder))
+	require.Error(t, err, "no index available, only file-order reads are supported")
+}
+
 func TestReadPrefixedBytes(t *testing.T) {
 	cases := []struct {
 		assertion      string

@@ -159,6 +159,9 @@ func (r *Reader) Messages(
 		// if there are no chunk index records present, but there are messages, we need to
 		// scan the file linearly to find them.
 		if len(info.ChunkIndexes) == 0 && info.Statistics != nil && info.Statistics.MessageCount > 0 {
+			if options.Order != FileOrder {
+				return nil, fmt.Errorf("no index available, only file-order reads are supported")
+			}
 			_, err = r.rs.Seek(startPos, io.SeekStart)
 			if err != nil {
 				return nil, fmt.Errorf("failed to seek to start: %w", err)
