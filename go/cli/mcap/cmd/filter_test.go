@@ -373,6 +373,113 @@ func TestIncludeTopic(t *testing.T) {
 	}
 }
 
+func TestLastPerChannelOutOfOrderProducesLogTimeOrder(t *testing.T) {
+	// Build an MCAP whose file order is out-of-order with respect to log time.
+	var srcBuf bytes.Buffer
+	writer, err := mcap.NewWriter(&srcBuf, &mcap.WriterOptions{
+		Chunked:   true,
+		ChunkSize: 10,
+	})
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&mcap.Header{}))
+	require.NoError(t, writer.WriteSchema(&mcap.Schema{ID: 1}))
+	require.NoError(t, writer.WriteChannel(&mcap.Channel{ID: 1, SchemaID: 1, Topic: "camera_a"}))
+	require.NoError(t, writer.WriteChannel(&mcap.Channel{ID: 2, SchemaID: 1, Topic: "camera_b"}))
+	require.NoError(t, writer.WriteChannel(&mcap.Channel{ID: 3, SchemaID: 0, Topic: "radar"}))
+	// Out-of-order writes across channels
+	writeMsg := func(ch uint16, ts uint64) {
+		require.NoError(t, writer.WriteMessage(&mcap.Message{ChannelID: ch, LogTime: ts}))
+	}
+	writeMsg(1, 25) // camera_a
+	writeMsg(2, 30) // camera_b
+	writeMsg(3, 21) // radar
+	writeMsg(1, 5)  // camera_a
+	writeMsg(2, 7)  // camera_b
+	writeMsg(3, 6)  // radar
+	writeMsg(1, 18) // camera_a
+	writeMsg(2, 19) // camera_b
+	writeMsg(3, 40) // radar
+	writeMsg(3, 17) // radar
+	require.NoError(t, writer.Close())
+
+	// Set start=20 and include last-per-channel for camera topics only.
+	opts, err := buildFilterOptions(&filterFlags{
+		startNano:                   20,
+		includeLastPerChannelTopics: []string{"camera_.*"},
+	})
+	require.NoError(t, err)
+
+	var outBuf bytes.Buffer
+	// Seekable input required for last-per-channel behavior.
+	require.NoError(t, filter(bytes.NewReader(srcBuf.Bytes()), &outBuf, opts))
+
+	// Parse output and verify:
+	// - Entire message stream is in ascending log time order
+	// - Exactly two pre-start messages (one per camera_* topic) with times 18 and 19
+	// - Remaining messages are >= 20 and in ascending order
+	channelByID := map[uint16]string{}
+	type m struct {
+		topic string
+		ts    uint64
+	}
+	var msgs []m
+	lexer, err := mcap.NewLexer(&outBuf, &mcap.LexerOptions{})
+	require.NoError(t, err)
+	defer lexer.Close()
+	for {
+		token, record, err := lexer.Next(nil)
+		if err != nil {
+			require.ErrorIs(t, err, io.EOF)
+			break
+		}
+		switch token {
+		case mcap.TokenChannel:
+			ch, err := mcap.ParseChannel(record)
+			require.NoError(t, err)
+			channelByID[ch.ID] = ch.Topic
+		case mcap.TokenMessage:
+			msg, err := mcap.ParseMessage(record)
+			require.NoError(t, err)
+			msgs = append(msgs, m{topic: channelByID[msg.ChannelID], ts: msg.LogTime})
+		}
+	}
+	require.GreaterOrEqual(t, len(msgs), 2)
+	// Check global ascending log time order
+	var prev uint64
+	for i, mm := range msgs {
+		if i > 0 {
+			assert.LessOrEqual(t, prev, mm.ts, "messages must be in non-decreasing log time order")
+		}
+		prev = mm.ts
+	}
+	// Identify pre-start messages
+	pre := []m{}
+	for _, mm := range msgs {
+		if mm.ts < 20 {
+			pre = append(pre, mm)
+		}
+	}
+	require.Len(t, pre, 2, "expected exactly two pre-start messages (one per camera topic)")
+	// Expect the specific pre-start times and topics
+	assert.ElementsMatch(t,
+		[]m{{topic: "camera_a", ts: 18}, {topic: "camera_b", ts: 19}},
+		pre,
+	)
+	// Post-start should be all >= 20 and include expected times in ascending order
+	post := []uint64{}
+	for _, mm := range msgs {
+		if mm.ts >= 20 {
+			post = append(post, mm.ts)
+		}
+	}
+	require.NotEmpty(t, post)
+	for _, ts := range post {
+		require.GreaterOrEqual(t, ts, uint64(20))
+	}
+	// Expected >=20 times from input: 21(radar), 25(camera_a), 30(camera_b), 40(radar)
+	assert.Equal(t, []uint64{21, 25, 30, 40}, post)
+}
+
 func TestParseDateOrNanos(t *testing.T) {
 	expected := uint64(1690298850132545471)
 	zulu, err := parseDateOrNanos("2023-07-25T15:27:30.132545471Z")
