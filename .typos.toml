@@ -11,6 +11,7 @@ typ = "typ"
 ser = "ser"
 seeked = "seeked"
 wrold = "wrold"  # Intentional test data in buf_read_write_seeker_test.go
+bimap = "bimap"
 
 [default.extend-identifiers]
 # Intentional variable names in code
