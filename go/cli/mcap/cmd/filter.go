@@ -248,35 +248,36 @@ func filter(
 	w io.Writer,
 	opts *filterOpts,
 ) error {
-	// Dispatch to an indexed-reader path when the input is seekable; otherwise fall back
-	// to the streaming lexer path.
-	if rs, ok := r.(io.ReadSeeker); ok {
-		return filterSeekable(rs, w, opts)
-	}
-	return filterStreaming(r, w, opts)
-}
-
-func filterSeekable(
-	rs io.ReadSeeker,
-	w io.Writer,
-	opts *filterOpts,
-) error {
 	mcapWriter, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Compression: opts.compressionFormat,
 		Chunked:     !opts.unchunked,
 		ChunkSize:   opts.chunkSize,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create mcap writer: %w", err)
 	}
-	defer func() {
-		err := mcapWriter.Close()
+	// Dispatch to an indexed-reader path when the input is seekable; otherwise fall back
+	// to the streaming lexer path.
+	if rs, ok := r.(io.ReadSeeker); ok {
+		err = filterSeekable(rs, mcapWriter, opts)
+	} else {
+		err = filterStreaming(r, mcapWriter, opts)
+	}
+	closeErr := mcapWriter.Close()
+	if closeErr != nil {
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close mcap writer: %v\n", err)
-			return
+			return fmt.Errorf("filter failed: %w, also failed to close writer: %w", err, closeErr)
 		}
-	}()
+		return fmt.Errorf("failed to close writer: %w", closeErr)
+	}
+	return fmt.Errorf("filter failed: %w", err)
+}
 
+func filterSeekable(
+	rs io.ReadSeeker,
+	mcapWriter *mcap.Writer,
+	opts *filterOpts,
+) error {
 	reader, err := mcap.NewReader(rs)
 	if err != nil {
 		return err
@@ -336,8 +337,9 @@ func filterSeekable(
 	if len(opts.includeLastPerChannelTopics) > 0 {
 		channelsToWrite := map[uint16]bool{}
 		for _, ch := range info.Channels {
+			_, includesTopic := topicSet[ch.Topic]
 			// make sure the topic is not separately excluded by topic filters
-			if includeAll || includeTopic(ch.Topic, opts) {
+			if includeAll || includesTopic {
 				for i := range opts.includeLastPerChannelTopics {
 					if opts.includeLastPerChannelTopics[i].MatchString(ch.Topic) {
 						channelsToWrite[ch.ID] = true
@@ -471,20 +473,11 @@ func filterSeekable(
 
 func filterStreaming(
 	r io.Reader,
-	w io.Writer,
+	mcapWriter *mcap.Writer,
 	opts *filterOpts,
 ) error {
 	if len(opts.includeLastPerChannelTopics) > 0 {
 		return errors.New("including last-per-channel topics is not supported for streaming input")
-	}
-
-	mcapWriter, err := mcap.NewWriter(w, &mcap.WriterOptions{
-		Compression: opts.compressionFormat,
-		Chunked:     !opts.unchunked,
-		ChunkSize:   opts.chunkSize,
-	})
-	if err != nil {
-		return err
 	}
 
 	lexer, err := mcap.NewLexer(r, &mcap.LexerOptions{
@@ -499,7 +492,7 @@ func filterStreaming(
 			if ar.LogTime >= opts.end {
 				return nil
 			}
-			err = mcapWriter.WriteAttachment(&mcap.Attachment{
+			err := mcapWriter.WriteAttachment(&mcap.Attachment{
 				LogTime:    ar.LogTime,
 				CreateTime: ar.CreateTime,
 				Name:       ar.Name,
