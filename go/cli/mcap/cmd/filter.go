@@ -263,15 +263,12 @@ func filter(
 	} else {
 		err = filterStreaming(r, mcapWriter, opts)
 	}
-	closeErr := mcapWriter.Close()
-	if closeErr != nil {
-		if err != nil {
-			return fmt.Errorf("filter failed: %w, also failed to close writer: %w", err, closeErr)
-		}
-		return fmt.Errorf("failed to close writer: %w", closeErr)
-	}
 	if err != nil {
 		return fmt.Errorf("filter failed: %w", err)
+	}
+	err = mcapWriter.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close writer: %w", err)
 	}
 	return nil
 }
@@ -512,14 +509,6 @@ func filterStreaming(
 	if err != nil {
 		return err
 	}
-
-	defer func() {
-		err := mcapWriter.Close()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to close mcap writer: %v\n", err)
-			return
-		}
-	}()
 
 	buf := make([]byte, 1024)
 	schemas := make(map[uint16]markableSchema)
