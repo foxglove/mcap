@@ -258,6 +258,7 @@ func filter(
 	}
 	// Dispatch to an indexed-reader path when the input is seekable; otherwise fall back
 	// to the streaming lexer path.
+	var filterError error
 	if rs, ok := r.(io.ReadSeeker); ok {
 		reader, err := mcap.NewReader(rs)
 		if err != nil {
@@ -279,15 +280,15 @@ func filter(
 			// if we get here, the input file has no index.
 			// We can still filter it (since no last-per-channel topics are specified),
 			// but we need to do it in streaming mode.
-			err = filterStreaming(rs, mcapWriter, opts)
+			filterError = filterStreaming(rs, mcapWriter, opts)
 		} else {
-			err = filterSeekable(reader, info, mcapWriter, opts)
+			filterError = filterSeekable(reader, info, mcapWriter, opts)
 		}
 	} else {
-		err = filterStreaming(r, mcapWriter, opts)
+		filterError = filterStreaming(r, mcapWriter, opts)
 	}
-	if err != nil {
-		return fmt.Errorf("filter failed: %w", err)
+	if filterError != nil {
+		return fmt.Errorf("filter failed: %w", filterError)
 	}
 	err = mcapWriter.Close()
 	if err != nil {
