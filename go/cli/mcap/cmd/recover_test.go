@@ -14,7 +14,7 @@ func TestRecover(t *testing.T) {
 	t.Run("recover data from truncated file", func(t *testing.T) {
 		writeBuf := bytes.Buffer{}
 		readBuf := bytes.Buffer{}
-		writeFilterTestInput(t, &readBuf)
+		writeFilterTestInput(t, &readBuf, true)
 		readBuf.Truncate(readBuf.Len() / 2)
 
 		require.NoError(t, recoverRun(&readBuf, &writeBuf, &recoverOptions{}))
@@ -61,7 +61,7 @@ func TestRecover(t *testing.T) {
 	t.Run("recover data from chunk with invalid crc", func(t *testing.T) {
 		writeBuf := bytes.Buffer{}
 		readBuf := bytes.Buffer{}
-		writeFilterTestInput(t, &readBuf)
+		writeFilterTestInput(t, &readBuf, true)
 		readBuf.Bytes()[0x12b] = 1 // overwrite crc
 
 		require.NoError(t, recoverRun(&readBuf, &writeBuf, &recoverOptions{}))

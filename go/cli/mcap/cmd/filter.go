@@ -272,6 +272,10 @@ func filter(
 			if opts.includeLastPerChannelTopics != nil {
 				return errors.New("file contains no message index, cannot filter with last-per-channel topics")
 			}
+			_, err := rs.Seek(0, io.SeekStart)
+			if err != nil {
+				return fmt.Errorf("failed to seek to start: %w", err)
+			}
 			// if we get here, the input file has no index.
 			// We can still filter it (since no last-per-channel topics are specified),
 			// but we need to do it in streaming mode.
