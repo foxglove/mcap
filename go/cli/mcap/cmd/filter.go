@@ -270,7 +270,7 @@ func filter(
 			return fmt.Errorf("failed to get file info: %w", err)
 		}
 		if !info.CanReadMessagesUsingIndex() {
-			if opts.includeLastPerChannelTopics != nil {
+			if len(opts.includeLastPerChannelTopics) > 0 {
 				return errors.New("file contains no message index, cannot filter with last-per-channel topics")
 			}
 			_, err := rs.Seek(0, io.SeekStart)
