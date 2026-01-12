@@ -217,6 +217,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
+      contents: read
       # https://docs.npmjs.com/generating-provenance-statements#publishing-packages-with-provenance-via-github-actions
       id-token: write
 
@@ -227,7 +228,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: yarn
           registry-url: https://registry.npmjs.org
       - run: yarn install --immutable
@@ -246,34 +247,22 @@ jobs:
       - run: yarn workspace @mcap/core pack
       - name: Publish @mcap/core to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/core/v') }}
-        # `yarn npm publish` does not currently support --provenance: https://github.com/yarnpkg/berry/issues/5430
-        run: npm publish typescript/core/package.tgz --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+        run: npx npm@latest publish typescript/core/package.tgz --provenance --access public
 
       - run: yarn workspace @mcap/support pack
       - name: Publish @mcap/support to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/support/v') }}
-        # `yarn npm publish` does not currently support --provenance: https://github.com/yarnpkg/berry/issues/5430
-        run: npm publish typescript/support/package.tgz --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+        run: npx npm@latest publish typescript/support/package.tgz --provenance --access public
 
       - run: yarn workspace @mcap/nodejs pack
       - name: Publish @mcap/nodejs to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/nodejs/v') }}
-        # `yarn npm publish` does not currently support --provenance: https://github.com/yarnpkg/berry/issues/5430
-        run: npm publish typescript/nodejs/package.tgz --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+        run: npx npm@latest publish typescript/nodejs/package.tgz --provenance --access public
 
       - run: yarn workspace @mcap/browser pack
       - name: Publish @mcap/browser to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/browser/v') }}
-        # `yarn npm publish` does not currently support --provenance: https://github.com/yarnpkg/berry/issues/5430
-        run: npm publish typescript/browser/package.tgz --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+        run: npx npm@latest publish typescript/browser/package.tgz --provenance --access public
 
   typescript-examples:
     runs-on: ubuntu-latest
@@ -284,7 +273,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: yarn
       - run: yarn install --immutable
       - run: yarn workspace @foxglove/mcap-benchmarks lint:ci
