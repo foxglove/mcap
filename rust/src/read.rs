@@ -621,7 +621,9 @@ impl Summary {
         }
 
         // Get the chunk (as a header and its data) out of the file at the given offset.
-        let chunk_record_buf = &mcap[(index.chunk_start_offset as usize) + 9..end];
+        let chunk_record_buf = &mcap[(index.chunk_start_offset as usize)
+            + 9 // opcode + record length
+            ..end];
         let chunk = parse_record(op::CHUNK, chunk_record_buf);
 
         let (h, d) = match chunk {
@@ -692,8 +694,12 @@ impl Summary {
             let offset = *offset as usize;
 
             // Message indexes are at least 15 bytes:
-            // 1 byte opcode, 8 byte length, 2 byte channel ID, 4 byte array len
-            if mcap.len() < offset + 15 {
+            const MIN_MESSAGE_INDEX_BYTES: usize = 1  // opcode
+                                                 + 8  // record length
+                                                 + 2  // channel ID
+                                                 + 4; // records array length
+
+            if mcap.len() < offset + MIN_MESSAGE_INDEX_BYTES {
                 return Err(McapError::BadIndex);
             }
 
@@ -748,7 +754,9 @@ impl Summary {
         }
         let chunk = parse_record(
             op::CHUNK,
-            &mcap[(index.chunk_start_offset + 9) as usize..end],
+            &mcap[(index.chunk_start_offset) as usize
+                  + 9// opcode + record length
+                ..end],
         );
         let (h, d) = match chunk {
             Ok(records::Record::Chunk { header, data }) => (header, data),
@@ -776,7 +784,8 @@ impl Summary {
                 }
                 Ok(LinearReadEvent::Record { data, opcode }) => {
                     if (uncompressed_offset as u64) < message.offset {
-                        uncompressed_offset += 9 + data.len();
+                        uncompressed_offset += 9 // opcode + record length
+                            + data.len();
                     } else {
                         if uncompressed_offset as u64 != message.offset {
                             return Err(McapError::BadIndex);

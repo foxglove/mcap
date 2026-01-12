@@ -1,6 +1,6 @@
 //! Raw records parsed from an MCAP file
 //!
-//! See <https://github.com/foxglove/mcap/tree/main/docs/specification>
+//! See <https://mcap.dev/spec>
 //!
 //! You probably want to user higher-level interfaces, like
 //! [`Message`](crate::Message), [`Channel`](crate::Channel), and [`Schema`](crate::Schema),
@@ -342,7 +342,10 @@ pub struct MessageHeader {
 
 impl MessageHeader {
     pub(crate) fn serialized_len(&self) -> u64 {
-        2 + 4 + 8 + 8
+        2  // channel ID
+        + 4  // sequence
+        + 8  // log time
+        + 8 // publish time
     }
 }
 
@@ -410,15 +413,15 @@ impl ChunkIndex {
     /// Returns [`McapError::BadChunkStartOffset`] if the resulting offset would be greater than [`u64::MAX`].
     pub fn compressed_data_offset(&self) -> McapResult<u64> {
         let res = self.chunk_start_offset.checked_add(
-            1 // opcode
-            + 8 // chunk record length
-            + 8 // start time
-            + 8 // end time
-            + 8 // uncompressed size
-            + 4 // CRC
-            + 4 // compression string length
-            + (self.compression.len() as u64) // 32-bit compression string length
-            + 8, // compressed size
+            1                                     // opcode
+                + 8                               // chunk record length
+                + 8                               // start time
+                + 8                               // end time
+                + 8                               // uncompressed size
+                + 4                               // CRC
+                + 4                               // compression string length
+                + (self.compression.len() as u64) // 32-bit compression string length
+                + 8, // compressed size
         );
         match res {
             Some(n) => Ok(n),

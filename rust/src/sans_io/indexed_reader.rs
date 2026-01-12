@@ -521,10 +521,8 @@ fn index_messages(
             return Err(McapError::UnexpectedEoc);
         }
         let record_data = &buf[..len];
-        let next_offset = offset
-          + 1 // opcode
-          + 8 // record length
-          + len;
+        let next_offset = offset + 9 // opcode + record length
+            + len;
         if opcode != op::MESSAGE {
             offset = next_offset;
             continue;

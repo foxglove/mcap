@@ -1303,7 +1303,13 @@ fn write_summary_and_footer_magic<W: Write + Seek>(
     };
 
     // The CRC in the footer _includes_ part of the footer.
-    op_and_len(&mut ccw, op::FOOTER, 20)?;
+    op_and_len(
+        &mut ccw,
+        op::FOOTER,
+        8   // summary start
+            + 8   // summary offset start
+            + 4, // summary CRC
+    )?;
     ccw.write_u64::<LE>(summary_start)?;
     ccw.write_u64::<LE>(summary_offset_start)?;
     let (writer, summary_hasher) = ccw.finalize();
@@ -1532,7 +1538,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
             Err(err) => return Err((sink.inner, err.into())),
         };
         // let compressed_size =  data_end - self.data_start;
-        let record_size = (data_end - self.header_start) - 9; // 1 byte op, 8 byte len
+        let record_size = (data_end - self.header_start) - 9; // opcode + record length
 
         // Now that we know the size of the chunk data and the CRC of the uncompressed data, we
         // rewind the stream and overwrite the dummy chunk header with the true header.

@@ -561,7 +561,13 @@ impl LinearReader {
                     // Load the chunk header from the file. The chunk header is of variable length,
                     // depending on the length of the compression string field, so we load
                     // enough bytes to read that length, then load more if necessary.
-                    const MIN_CHUNK_HEADER_SIZE: usize = 8 + 8 + 8 + 4 + 4 + 8;
+                    const MIN_CHUNK_HEADER_SIZE: usize = 8  // start time
+                                                       + 8  // end time
+                                                       + 8  // uncompressed size
+                                                       + 4  // uncompressed CRC
+                                                       + 4  // compression string length
+                                                       + 8; // compressed size
+
                     let min_header_buf = load!(MIN_CHUNK_HEADER_SIZE);
                     let compression_len =
                         u32::from_le_bytes(min_header_buf[28..32].try_into().unwrap());

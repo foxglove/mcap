@@ -167,6 +167,7 @@ impl SummaryReader {
                             -(FOOTER_RECORD_AND_END_MAGIC as i64),
                         ))));
                     };
+                    // trailing end-magic is 8 bytes
                     if file_size < FOOTER_RECORD_AND_END_MAGIC as u64 + 8 {
                         return Err(crate::McapError::UnexpectedEof);
                     }
@@ -183,10 +184,14 @@ impl SummaryReader {
                 State::ReadingFooter { loaded_bytes } => {
                     if *loaded_bytes >= FOOTER_RECORD_AND_END_MAGIC {
                         let opcode = self.footer_buf[0];
-                        // Ignore the length, it must always be 20 bytes
-                        let footer_body = &self.footer_buf[1 + 8..FOOTER_RECORD_AND_END_MAGIC - 8];
+                        // Footer record bodies are fixed-size (20 bytes): summary_start(u64) + summary_offset_start(u64) + crc(u32).
+                        // We ignore the encoded length and slice the known body range.
+                        // | 1          | 8                  | 20           | 8              |
+                        // | opcode(u8) | record_length(u64) | footer_body  | magic(8 bytes) |
+                        let footer_body = &self.footer_buf[9..FOOTER_RECORD_AND_END_MAGIC - 8];
                         let end_magic =
                             &self.footer_buf[FOOTER_RECORD_AND_END_MAGIC - 8..*loaded_bytes];
+
                         if end_magic != MAGIC {
                             return Err(McapError::BadMagic);
                         }
