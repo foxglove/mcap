@@ -258,13 +258,37 @@ func filter(
 	}
 	// Dispatch to an indexed-reader path when the input is seekable; otherwise fall back
 	// to the streaming lexer path.
+	var filterError error
 	if rs, ok := r.(io.ReadSeeker); ok {
-		err = filterSeekable(rs, mcapWriter, opts)
+		reader, err := mcap.NewReader(rs)
+		if err != nil {
+			return fmt.Errorf("failed to create reader: %w", err)
+		}
+		defer reader.Close()
+		info, err := reader.Info()
+		if err != nil {
+			return fmt.Errorf("failed to get file info: %w", err)
+		}
+		if !info.CanReadMessagesUsingIndex() {
+			if len(opts.includeLastPerChannelTopics) > 0 {
+				return errors.New("file contains no message index, cannot filter with last-per-channel topics")
+			}
+			_, err := rs.Seek(0, io.SeekStart)
+			if err != nil {
+				return fmt.Errorf("failed to seek to start: %w", err)
+			}
+			// if we get here, the input file has no index.
+			// We can still filter it (since no last-per-channel topics are specified),
+			// but we need to do it in streaming mode.
+			filterError = filterStreaming(rs, mcapWriter, opts)
+		} else {
+			filterError = filterSeekable(reader, info, mcapWriter, opts)
+		}
 	} else {
-		err = filterStreaming(r, mcapWriter, opts)
+		filterError = filterStreaming(r, mcapWriter, opts)
 	}
-	if err != nil {
-		return fmt.Errorf("filter failed: %w", err)
+	if filterError != nil {
+		return fmt.Errorf("filter failed: %w", filterError)
 	}
 	err = mcapWriter.Close()
 	if err != nil {
@@ -274,26 +298,15 @@ func filter(
 }
 
 func filterSeekable(
-	rs io.ReadSeeker,
+	reader *mcap.Reader,
+	info *mcap.Info,
 	mcapWriter *mcap.Writer,
 	opts *filterOpts,
 ) error {
-	reader, err := mcap.NewReader(rs)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-
 	// Write header from source
 	if err := mcapWriter.WriteHeader(reader.Header()); err != nil {
 		return err
 	}
-
-	info, err := reader.Info()
-	if err != nil {
-		return err
-	}
-
 	// Build concrete topic list from regex include/exclude
 	includeAll := len(opts.includeTopics) == 0 && len(opts.excludeTopics) == 0
 	topicSet := map[string]struct{}{}

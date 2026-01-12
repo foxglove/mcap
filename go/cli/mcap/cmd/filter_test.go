@@ -12,12 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func writeFilterTestInput(t *testing.T, w io.Writer) {
+func writeFilterTestInput(t *testing.T, w io.Writer, withIndex bool) {
 	mcap.Version = "1"
-	writer, err := mcap.NewWriter(w, &mcap.WriterOptions{
-		Chunked:   true,
-		ChunkSize: 10,
-	})
+	opts := &mcap.WriterOptions{}
+	if withIndex {
+		opts.Chunked = true
+		opts.ChunkSize = 10
+	}
+
+	writer, err := mcap.NewWriter(w, opts)
+
 	require.NoError(t, err)
 
 	require.NoError(t, writer.WriteHeader(&mcap.Header{}))
@@ -73,65 +77,67 @@ func TestPassthrough(t *testing.T) {
 	}
 
 	for _, seekable := range []bool{false, true} {
-		t.Run(fmt.Sprintf("seekable=%v", seekable), func(t *testing.T) {
-			writeBuf := bytes.Buffer{}
-			readBuf := bytes.Buffer{}
+		for _, chunked := range []bool{false, true} {
+			t.Run(fmt.Sprintf("seekable=%v, chunked=%v", seekable, chunked), func(t *testing.T) {
+				writeBuf := bytes.Buffer{}
+				readBuf := bytes.Buffer{}
 
-			writeFilterTestInput(t, &readBuf)
-			var src io.Reader = &readBuf
-			if seekable {
-				src = bytes.NewReader(readBuf.Bytes())
-			}
-			require.NoError(t, filter(src, &writeBuf, opts))
-			attachmentCounter := 0
-			metadataCounter := 0
-			schemaCounter := 0
-			messageCounter := map[uint16]int{
-				1: 0,
-				2: 0,
-				3: 0,
-			}
-			channelCounter := map[uint16]int{
-				1: 0,
-				2: 0,
-				3: 0,
-			}
-			lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
-				AttachmentCallback: func(*mcap.AttachmentReader) error {
-					attachmentCounter++
-					return nil
-				},
+				writeFilterTestInput(t, &readBuf, chunked)
+				var src io.Reader = &readBuf
+				if seekable {
+					src = bytes.NewReader(readBuf.Bytes())
+				}
+				require.NoError(t, filter(src, &writeBuf, opts))
+				attachmentCounter := 0
+				metadataCounter := 0
+				schemaCounter := 0
+				messageCounter := map[uint16]int{
+					1: 0,
+					2: 0,
+					3: 0,
+				}
+				channelCounter := map[uint16]int{
+					1: 0,
+					2: 0,
+					3: 0,
+				}
+				lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
+					AttachmentCallback: func(*mcap.AttachmentReader) error {
+						attachmentCounter++
+						return nil
+					},
+				})
+				require.NoError(t, err)
+				defer lexer.Close()
+				for {
+					token, record, err := lexer.Next(nil)
+					if err != nil {
+						require.ErrorIs(t, err, io.EOF)
+						break
+					}
+					switch token {
+					case mcap.TokenMessage:
+						message, err := mcap.ParseMessage(record)
+						require.NoError(t, err)
+						messageCounter[message.ChannelID]++
+					case mcap.TokenChannel:
+						channel, err := mcap.ParseChannel(record)
+						require.NoError(t, err)
+						channelCounter[channel.ID]++
+					case mcap.TokenSchema:
+						schemaCounter++
+					case mcap.TokenMetadata:
+						metadataCounter++
+					}
+				}
+				assert.Equal(t, 1, attachmentCounter)
+				assert.Equal(t, 1, metadataCounter)
+				assert.InDeltaMapValues(t, map[uint16]int{1: 100, 2: 100, 3: 100}, messageCounter, 0.0)
+				// schemas and channels should be duplicated once into the summary section
+				assert.Equal(t, 2, schemaCounter)
+				assert.InDeltaMapValues(t, map[uint16]int{1: 2, 2: 2, 3: 2}, channelCounter, 0.0)
 			})
-			require.NoError(t, err)
-			defer lexer.Close()
-			for {
-				token, record, err := lexer.Next(nil)
-				if err != nil {
-					require.ErrorIs(t, err, io.EOF)
-					break
-				}
-				switch token {
-				case mcap.TokenMessage:
-					message, err := mcap.ParseMessage(record)
-					require.NoError(t, err)
-					messageCounter[message.ChannelID]++
-				case mcap.TokenChannel:
-					channel, err := mcap.ParseChannel(record)
-					require.NoError(t, err)
-					channelCounter[channel.ID]++
-				case mcap.TokenSchema:
-					schemaCounter++
-				case mcap.TokenMetadata:
-					metadataCounter++
-				}
-			}
-			assert.Equal(t, 1, attachmentCounter)
-			assert.Equal(t, 1, metadataCounter)
-			assert.InDeltaMapValues(t, map[uint16]int{1: 100, 2: 100, 3: 100}, messageCounter, 0.0)
-			// schemas and channels should be duplicated once into the summary section
-			assert.Equal(t, 2, schemaCounter)
-			assert.InDeltaMapValues(t, map[uint16]int{1: 2, 2: 2, 3: 2}, channelCounter, 0.0)
-		})
+		}
 	}
 }
 
@@ -225,50 +231,52 @@ func TestFiltering(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			for _, seekable := range []bool{false, true} {
-				t.Run(fmt.Sprintf("seekable=%v", seekable), func(t *testing.T) {
-					writeBuf := bytes.Buffer{}
-					readBuf := bytes.Buffer{}
+				for _, chunked := range []bool{false, true} {
+					t.Run(fmt.Sprintf("seekable=%v, chunked=%v", seekable, chunked), func(t *testing.T) {
+						writeBuf := bytes.Buffer{}
+						readBuf := bytes.Buffer{}
 
-					writeFilterTestInput(t, &readBuf)
-					var src io.Reader = &readBuf
-					if seekable {
-						src = bytes.NewReader(readBuf.Bytes())
-					}
-					require.NoError(t, filter(src, &writeBuf, c.opts))
-					attachmentCounter := 0
-					metadataCounter := 0
-					lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
-						AttachmentCallback: func(*mcap.AttachmentReader) error {
-							attachmentCounter++
-							return nil
-						},
+						writeFilterTestInput(t, &readBuf, chunked)
+						var src io.Reader = &readBuf
+						if seekable {
+							src = bytes.NewReader(readBuf.Bytes())
+						}
+						require.NoError(t, filter(src, &writeBuf, c.opts))
+						attachmentCounter := 0
+						metadataCounter := 0
+						lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{
+							AttachmentCallback: func(*mcap.AttachmentReader) error {
+								attachmentCounter++
+								return nil
+							},
+						})
+						require.NoError(t, err)
+						defer lexer.Close()
+						messageCounter := map[uint16]int{
+							1: 0,
+							2: 0,
+							3: 0,
+						}
+						for {
+							token, record, err := lexer.Next(nil)
+							if err != nil {
+								require.ErrorIs(t, err, io.EOF)
+								break
+							}
+							switch token {
+							case mcap.TokenMessage:
+								message, err := mcap.ParseMessage(record)
+								require.NoError(t, err)
+								messageCounter[message.ChannelID]++
+							case mcap.TokenMetadata:
+								metadataCounter++
+							}
+						}
+						assert.Equal(t, c.expectedAttachmentCount, attachmentCounter)
+						assert.Equal(t, c.expectedMetadataCount, metadataCounter)
+						assert.InDeltaMapValues(t, c.expectedMessageCount, messageCounter, 0.0)
 					})
-					require.NoError(t, err)
-					defer lexer.Close()
-					messageCounter := map[uint16]int{
-						1: 0,
-						2: 0,
-						3: 0,
-					}
-					for {
-						token, record, err := lexer.Next(nil)
-						if err != nil {
-							require.ErrorIs(t, err, io.EOF)
-							break
-						}
-						switch token {
-						case mcap.TokenMessage:
-							message, err := mcap.ParseMessage(record)
-							require.NoError(t, err)
-							messageCounter[message.ChannelID]++
-						case mcap.TokenMetadata:
-							metadataCounter++
-						}
-					}
-					assert.Equal(t, c.expectedAttachmentCount, attachmentCounter)
-					assert.Equal(t, c.expectedMetadataCount, metadataCounter)
-					assert.InDeltaMapValues(t, c.expectedMessageCount, messageCounter, 0.0)
-				})
+				}
 			}
 		})
 	}
@@ -599,7 +607,7 @@ func TestLastPerChannelBehavior(t *testing.T) {
 					writeBuf := bytes.Buffer{}
 					readBuf := bytes.Buffer{}
 
-					writeFilterTestInput(t, &readBuf)
+					writeFilterTestInput(t, &readBuf, true)
 					var src io.Reader = &readBuf
 					if seekable {
 						src = bytes.NewReader(readBuf.Bytes())

@@ -338,6 +338,15 @@ func (i *Info) ChannelCounts() map[string]uint64 {
 	return counts
 }
 
+// CanReadMessagesUsingIndex returns true if messages can be read from this file efficiently using
+// the index.
+func (i *Info) CanReadMessagesUsingIndex() bool {
+	// If there are chunk indexes, we can read messages using the index.
+	// if there are none, but the statistics indicate that there are messages, then we know
+	// that a read using the indexed message iterator will still yield the correct set of messages.
+	return len(i.ChunkIndexes) > 0 || (i.Statistics != nil && i.Statistics.MessageCount == 0)
+}
+
 type MessageIndexEntry struct {
 	Timestamp uint64
 	Offset    uint64
