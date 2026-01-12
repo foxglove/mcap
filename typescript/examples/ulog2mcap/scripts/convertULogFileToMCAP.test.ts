@@ -12,7 +12,7 @@ import { Metadata } from "@mcap/core/src/types";
 import { protobufFromBinaryDescriptor } from "@mcap/support";
 import Long from "long";
 
-import { convertULogFileToMCAP } from "./convert";
+import { convertULogFileToMCAP } from "./convertULogFileToMCAP";
 
 type MockMessage = ParsedMessage & { topic: string; multiId?: number };
 
@@ -179,6 +179,51 @@ describe("Create MCAP files from ULog", () => {
         },
         { value: 84.0 },
       ]);
+    });
+
+    it("should handle string fields", async () => {
+      const mockULog = createULogMock({
+        messageFields: new Map([
+          [
+            "text_topic",
+            [
+              { name: "timestamp", type: "uint64_t", isComplex: false },
+              { name: "text", type: "char", arrayLength: 10, isComplex: false },
+            ],
+          ],
+        ]),
+        subscriptions: [{ name: "text_topic" }],
+        messages: [
+          {
+            topic: "text_topic",
+            timestamp: 1000n,
+            text: "Message 1!",
+          } as MockMessage,
+          {
+            topic: "text_topic",
+            timestamp: 2000n,
+            text: "Message 2!",
+          } as MockMessage,
+        ],
+      });
+
+      const mockOutputFile = new TempBuffer();
+      await convertULogFileToMCAP(mockULog, new McapWriter({ writable: mockOutputFile }));
+
+      const mcapReader = await McapIndexedReader.Initialize({
+        readable: mockOutputFile,
+      });
+      const logTimes = [];
+      const messageData = [];
+      for await (const msg of mcapReader.readMessages()) {
+        const channel = mcapReader.channelsById.get(msg.channelId);
+        const schema = mcapReader.schemasById.get(channel!.schemaId);
+        const protobufSchema = protobufFromBinaryDescriptor(schema!.data).lookupType(schema!.name);
+        logTimes.push(msg.publishTime);
+        messageData.push(protobufSchema.toObject(protobufSchema.decode(msg.data)));
+      }
+      expect(logTimes).toStrictEqual([1000000n, 2000000n]);
+      expect(messageData).toStrictEqual([{ text: "Message 1!" }, { text: "Message 2!" }]);
     });
 
     it("should add messages with correct timestamps", async () => {

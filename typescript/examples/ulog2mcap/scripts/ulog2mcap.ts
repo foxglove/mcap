@@ -6,7 +6,7 @@ import { FileHandleWritable } from "@mcap/nodejs";
 import { program } from "commander";
 import { open } from "fs/promises";
 
-import { convertULogFileToMCAP } from "./convert";
+import { convertULogFileToMCAP } from "./convertULogFileToMCAP";
 
 type ConvertOptions = {
   metadata?: string[];
@@ -14,7 +14,7 @@ type ConvertOptions = {
   startDate?: bigint;
 };
 
-async function convert(inputFilePath: string, outputFilePath: string, options: ConvertOptions) {
+async function main(inputFilePath: string, outputFilePath: string, options: ConvertOptions) {
   const inputFileHandle = new FileReader(inputFilePath);
   const ulogReader = new ULog(inputFileHandle);
 
@@ -69,6 +69,6 @@ program
     "ulog-metadata",
   )
   .action(async (inputFilePath: string, outputFilePath: string, options: ConvertOptions) => {
-    await convert(inputFilePath, outputFilePath, options);
+    await main(inputFilePath, outputFilePath, options);
   });
 program.parse();

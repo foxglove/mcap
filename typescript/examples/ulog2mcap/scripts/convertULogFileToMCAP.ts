@@ -5,11 +5,13 @@ import { protobufToDescriptor } from "@mcap/support";
 import protobufjs from "protobufjs";
 import descriptor from "protobufjs/ext/descriptor";
 
+import { version } from "../package.json";
+
 function ulogFieldTypeToProtobufFieldType(fieldType: string): string | undefined {
   switch (fieldType) {
     case "bool":
       return "bool";
-    case "char":
+    case "char": // ULog strings are char[length] arrays
       return "string";
     case "float":
       return "float";
@@ -95,12 +97,7 @@ function getMinimalProtobufRoot(
   typesToProcess.add(rootName);
   const processed = new Set<string>();
 
-  while (typesToProcess.size > 0) {
-    const iterator = typesToProcess.values().next();
-    if (iterator.done === true) {
-      break;
-    }
-    const typeName = iterator.value;
+  for (const typeName of typesToProcess) {
     typesToProcess.delete(typeName);
     if (!definitions.has(typeName)) {
       throw new Error(`Type ${typeName} not found in type map`);
@@ -144,7 +141,7 @@ export async function convertULogFileToMCAP(
 
   await outputFile.start({
     profile: "",
-    library: "ulog conversion 0.0.1",
+    library: `ulog2mcap ${version}`,
   });
   if (options?.metadata != undefined) {
     for (const metadataItem of options.metadata) {
@@ -212,30 +209,34 @@ export async function convertULogFileToMCAP(
   // Read messages and write to MCAP
   const channelIdToSequence = new Map<number, number>();
   for await (const msg of inputFile.readMessages()) {
-    if (msg.type === MessageType.Data) {
-      const channelId = msgIdToChannelId.get(msg.msgId);
-      if (channelId == undefined) {
-        throw new Error(`No channel ID found for message ID: ${msg.msgId}`);
-      }
-
-      const sequenceNumber = channelIdToSequence.get(channelId) ?? 0;
-      const { timestamp, ...msgData } = msg.value;
-      const msgTimestamp = (startTimestampOffset + timestamp) * 1000n; // convert microseconds to nanoseconds
-
-      const msgType = msgIdToSchema.get(msg.msgId);
-      if (msgType == undefined) {
-        throw new Error(`No message schema found for message ID: ${msg.msgId}`);
-      }
-      const protoMsg = msgType.fromObject(msgData);
-      await outputFile.addMessage({
-        channelId,
-        sequence: sequenceNumber,
-        publishTime: msgTimestamp,
-        logTime: msgTimestamp,
-        data: msgType.encode(protoMsg).finish(),
-      });
-      channelIdToSequence.set(channelId, sequenceNumber + 1);
+    if (msg.type === MessageType.Dropout) {
+      console.warn(`Warning: message dropout of ${msg.duration} microseconds detected`);
     }
+    if (msg.type !== MessageType.Data) {
+      continue;
+    }
+    const channelId = msgIdToChannelId.get(msg.msgId);
+    if (channelId == undefined) {
+      throw new Error(`No channel ID found for message ID: ${msg.msgId}`);
+    }
+
+    const sequenceNumber = channelIdToSequence.get(channelId) ?? 0;
+    const { timestamp, ...msgData } = msg.value;
+    const msgTimestamp = (startTimestampOffset + timestamp) * 1000n; // convert microseconds to nanoseconds
+
+    const msgType = msgIdToSchema.get(msg.msgId);
+    if (msgType == undefined) {
+      throw new Error(`No message schema found for message ID: ${msg.msgId}`);
+    }
+    const protoMsg = msgType.fromObject(msgData);
+    await outputFile.addMessage({
+      channelId,
+      sequence: sequenceNumber,
+      publishTime: msgTimestamp,
+      logTime: msgTimestamp,
+      data: msgType.encode(protoMsg).finish(),
+    });
+    channelIdToSequence.set(channelId, sequenceNumber + 1);
   }
 
   await outputFile.end();
