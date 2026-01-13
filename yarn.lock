@@ -2965,6 +2965,7 @@ __metadata:
   resolution: "@foxglove/mcap-example-ulog2mcap@workspace:typescript/examples/ulog2mcap"
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
+    "@foxglove/schemas": "npm:1.8.0"
     "@foxglove/tsconfig": "npm:1.1.0"
     "@foxglove/ulog": "npm:2.3.1"
     "@mcap/core": "workspace:*"
@@ -3033,6 +3034,13 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@foxglove/message-definition@npm:0.5.0":
+  version: 0.5.0
+  resolution: "@foxglove/message-definition@npm:0.5.0"
+  checksum: 10c0/a6562326e1b59a8f8d6ff3e60145d487e5136fb4e67fb588b7cbc4d1d7e969fd0f6d1eadcef97f52ecd9326c684e7bfdb465c7d3adc22896a7a84981a5a1a891
+  languageName: node
+  linkType: hard
+
 "@foxglove/message-definition@npm:^0.2.0":
   version: 0.2.0
   resolution: "@foxglove/message-definition@npm:0.2.0"
@@ -3059,6 +3067,16 @@ __metadata:
     "@foxglove/message-definition": "npm:^0.2.0"
     "@foxglove/rosmsg": "npm:^4.0.0"
   checksum: 10c0/152e81d576ef407138b12ec4e90df8dde49db4ccfe282b47912ba4c964d17ddb0680e4388ac1b08d400e8c7ac07c716389690f00ede52adbe50df6be2555d833
+  languageName: node
+  linkType: hard
+
+"@foxglove/rosmsg-msgs-common@npm:^3.2.2":
+  version: 3.2.3
+  resolution: "@foxglove/rosmsg-msgs-common@npm:3.2.3"
+  dependencies:
+    "@foxglove/message-definition": "npm:0.5.0"
+    "@foxglove/rosmsg": "npm:^5.0.5"
+  checksum: 10c0/daf015a8f9a3604bf29391ea5deab64a214942724a30b479cd8891552c8c0c8d2c640ec7f9a984b770db5d401ff5138d1768e124a7e6b148c5ca743bc4917bca
   languageName: node
   linkType: hard
 
@@ -3103,6 +3121,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@foxglove/rosmsg@npm:^5.0.5":
+  version: 5.0.5
+  resolution: "@foxglove/rosmsg@npm:5.0.5"
+  dependencies:
+    "@foxglove/message-definition": "npm:0.5.0"
+    md5-typescript: "npm:^1.0.5"
+  checksum: 10c0/be54349eede72317bf42f7b5706804fdc7152d6e0af43ad1e9f0ee4b5a2f92f6a218453e4f9c22fd1571ad0528bd7d0be80f6f2640fbcdb53778422b4372fc1a
+  languageName: node
+  linkType: hard
+
 "@foxglove/rostime@npm:1.1.2, @foxglove/rostime@npm:^1.1.2":
   version: 1.1.2
   resolution: "@foxglove/rostime@npm:1.1.2"
@@ -3126,6 +3154,16 @@ __metadata:
   dependencies:
     tslib: "npm:^2"
   checksum: 10c0/40754a7acc581f89d225e4d499739204e985d6c73e804e5ffb02732c328d4fd8c2afb1f01d8d7669949d115f23277ec1f147bee44db6426d82cef41607cfc07a
+  languageName: node
+  linkType: hard
+
+"@foxglove/schemas@npm:1.8.0":
+  version: 1.8.0
+  resolution: "@foxglove/schemas@npm:1.8.0"
+  dependencies:
+    "@foxglove/rosmsg-msgs-common": "npm:^3.2.2"
+    tslib: "npm:^2"
+  checksum: 10c0/c039d4eef47c40de8be77d6084f927f419ce7b41c61d6c41c8d6d5280a9816e0733bf9961f49f56864d17d9957b61c05b7b509a0c0c8dec4a7e88a3abe95118c
   languageName: node
   linkType: hard
 

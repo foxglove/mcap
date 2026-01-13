@@ -1,3 +1,4 @@
+import { Log, LogLevel as FoxLogLevel } from "@foxglove/schemas";
 import {
   ULog,
   MessageDefinition,
@@ -15,26 +16,26 @@ import descriptor from "protobufjs/ext/descriptor";
 
 import { version } from "../package.json";
 
-function logLevelToString(level: LogLevel): string {
+function ulogLevelToFoxLogLevel(level: LogLevel): FoxLogLevel {
   switch (level) {
     case LogLevel.Emerg:
-      return "EMERG";
+      return FoxLogLevel.FATAL;
     case LogLevel.Alert:
-      return "ALERT";
+      return FoxLogLevel.ERROR;
     case LogLevel.Crit:
-      return "CRIT";
+      return FoxLogLevel.ERROR;
     case LogLevel.Err:
-      return "ERR";
+      return FoxLogLevel.ERROR;
     case LogLevel.Warning:
-      return "WARNING";
+      return FoxLogLevel.WARNING;
     case LogLevel.Notice:
-      return "NOTICE";
+      return FoxLogLevel.WARNING;
     case LogLevel.Info:
-      return "INFO";
+      return FoxLogLevel.INFO;
     case LogLevel.Debug:
-      return "DEBUG";
+      return FoxLogLevel.DEBUG;
     default:
-      return "UNKNOWN";
+      return FoxLogLevel.UNKNOWN;
   }
 }
 
@@ -145,25 +146,27 @@ function getMinimalProtobufRoot(
   return minimalRoot;
 }
 
+function microsecondToNanosecondTimestamp(startOffset: bigint, timestamp: bigint): bigint {
+  return (startOffset + timestamp) * 1000n;
+}
+
 async function writeMessageToMCAP(
   mcapWriterInfo: {
     writer: McapWriter;
     channelIdToSequence: Map<number, number>;
-    startTimestampOffset: bigint;
   },
   channelId: number,
-  logTimestamp: bigint, // microseconds
+  timestamp: bigint,
   messageType: protobufjs.Type,
-  msgData: Record<string, FieldStruct | FieldPrimitive | FieldArray | undefined>,
+  msgData: Record<string, FieldStruct | FieldPrimitive | FieldArray | Date>,
 ) {
   const sequenceNumber = mcapWriterInfo.channelIdToSequence.get(channelId) ?? 0;
-  const msgTimestamp = (mcapWriterInfo.startTimestampOffset + logTimestamp) * 1000n; // convert microseconds to nanoseconds
   const protoMsg = messageType.fromObject(msgData);
   await mcapWriterInfo.writer.addMessage({
     channelId,
     sequence: sequenceNumber,
-    publishTime: msgTimestamp,
-    logTime: msgTimestamp,
+    publishTime: timestamp,
+    logTime: timestamp,
     data: messageType.encode(protoMsg).finish(),
   });
   mcapWriterInfo.channelIdToSequence.set(channelId, sequenceNumber + 1);
@@ -262,14 +265,10 @@ export async function convertULogFileToMCAP(
   }
 
   // Add an additional channel for log messages
-  const logType = new protobufjs.Type("log_message")
-    .add(new protobufjs.Field("log_level", 1, "string", "required"))
-    .add(new protobufjs.Field("message", 2, "string", "required"))
-    .add(new protobufjs.Field("tag", 3, "uint32", "optional"));
-  const root = new protobufjs.Root();
-  root.add(logType);
+  const root = await protobufjs.load(__dirname + "/Log.proto");
+  const logType = root.lookupType("foxglove.Log");
   const logSchema = await outputFile.registerSchema({
-    name: "log_message",
+    name: "foxglove.Log",
     encoding: "protobuf",
     data: descriptor.FileDescriptorSet.encode(protobufToDescriptor(root)).finish(),
   });
@@ -283,7 +282,6 @@ export async function convertULogFileToMCAP(
   const mcapWriterInfo = {
     writer: outputFile,
     channelIdToSequence: new Map<number, number>(),
-    startTimestampOffset,
   };
 
   // Read messages and write to MCAP
@@ -299,15 +297,20 @@ export async function convertULogFileToMCAP(
       if (messageType == undefined) {
         throw new Error(`No message schema found for message ID: ${msg.msgId}`);
       }
-      await writeMessageToMCAP(mcapWriterInfo, channelId, timestamp, messageType, message);
+      const nanoTimestamp = microsecondToNanosecondTimestamp(startTimestampOffset, timestamp);
+      await writeMessageToMCAP(mcapWriterInfo, channelId, nanoTimestamp, messageType, message);
     } else if (msg.type === MessageType.Log || msg.type === MessageType.LogTagged) {
+      const nanoTimestamp = microsecondToNanosecondTimestamp(startTimestampOffset, msg.timestamp);
       // Log message
       const msgData = {
-        log_level: logLevelToString(msg.logLevel),
+        timestamp: {
+          sec: Number(nanoTimestamp / 1000000000n),
+          nsec: Number(nanoTimestamp % 1000000000n),
+        },
+        level: ulogLevelToFoxLogLevel(msg.logLevel),
         message: msg.message,
-        tag: msg.type === MessageType.LogTagged ? msg.tag : undefined,
-      };
-      await writeMessageToMCAP(mcapWriterInfo, logChannel, msg.timestamp, logType, msgData);
+      } as Log;
+      await writeMessageToMCAP(mcapWriterInfo, logChannel, nanoTimestamp, logType, msgData);
     } else if (msg.type === MessageType.Dropout) {
       console.warn(`Warning: message dropout of ${msg.duration} microseconds detected`);
     }

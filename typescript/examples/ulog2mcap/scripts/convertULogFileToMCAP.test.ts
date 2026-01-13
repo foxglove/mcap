@@ -1,3 +1,4 @@
+import { LogLevel as FoxLevel } from "@foxglove/schemas";
 import {
   MessageDefinition,
   Subscription,
@@ -390,10 +391,10 @@ describe("Create MCAP files from ULog", () => {
       expect(sequence).toStrictEqual([0, 1, 2, 3]);
       expect(topics).toStrictEqual(["log_message", "log_message", "log_message", "log_message"]);
       expect(messageData).toStrictEqual([
-        { log_level: "DEBUG", message: "one" },
-        { log_level: "INFO", message: "two", tag: 2 },
-        { log_level: "WARNING", message: "three" },
-        { log_level: "ERR", message: "four", tag: 4 },
+        { timestamp: { sec: 0, nsec: 1000000 }, level: FoxLevel.DEBUG, message: "one" },
+        { timestamp: { sec: 0, nsec: 2000000 }, level: FoxLevel.INFO, message: "two" },
+        { timestamp: { sec: 0, nsec: 3000000 }, level: FoxLevel.WARNING, message: "three" },
+        { timestamp: { sec: 0, nsec: 4000000 }, level: FoxLevel.ERROR, message: "four" },
       ]);
     });
 
