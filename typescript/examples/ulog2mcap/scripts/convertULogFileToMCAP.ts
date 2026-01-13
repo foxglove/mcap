@@ -154,7 +154,7 @@ async function writeMessageToMCAP(
   channelId: number,
   logTimestamp: bigint, // microseconds
   messageType: protobufjs.Type,
-  msgData: Record<string, FieldStruct | FieldPrimitive | FieldArray>,
+  msgData: Record<string, FieldStruct | FieldPrimitive | FieldArray | undefined>,
 ) {
   const sequenceNumber = mcapWriterInfo.channelIdToSequence.get(channelId) ?? 0;
   const msgTimestamp = (mcapWriterInfo.startTimestampOffset + logTimestamp) * 1000n; // convert microseconds to nanoseconds
@@ -264,7 +264,8 @@ export async function convertULogFileToMCAP(
   // Add an additional channel for log messages
   const logType = new protobufjs.Type("log_message")
     .add(new protobufjs.Field("log_level", 1, "string", "required"))
-    .add(new protobufjs.Field("message", 2, "string", "required"));
+    .add(new protobufjs.Field("message", 2, "string", "required"))
+    .add(new protobufjs.Field("tag", 3, "uint32", "optional"));
   const root = new protobufjs.Root();
   root.add(logType);
   const logSchema = await outputFile.registerSchema({
@@ -294,8 +295,8 @@ export async function convertULogFileToMCAP(
       if (channelId == undefined) {
         throw new Error(`No channel ID found for message ID: ${msg.msgId}`);
       }
-      const messageType = msgIdToSchema.get(msg.msgId)!;
-      if (!msgIdToSchema.has(msg.msgId)) {
+      const messageType = msgIdToSchema.get(msg.msgId);
+      if (messageType == undefined) {
         throw new Error(`No message schema found for message ID: ${msg.msgId}`);
       }
       await writeMessageToMCAP(mcapWriterInfo, channelId, timestamp, messageType, message);
@@ -304,6 +305,7 @@ export async function convertULogFileToMCAP(
       const msgData = {
         log_level: logLevelToString(msg.logLevel),
         message: msg.message,
+        tag: msg.type === MessageType.LogTagged ? msg.tag : undefined,
       };
       await writeMessageToMCAP(mcapWriterInfo, logChannel, msg.timestamp, logType, msgData);
     } else if (msg.type === MessageType.Dropout) {

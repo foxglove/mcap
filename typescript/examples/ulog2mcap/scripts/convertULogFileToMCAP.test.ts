@@ -350,15 +350,14 @@ describe("Create MCAP files from ULog", () => {
         subscriptions: new Map<number, Subscription>(),
         readMessages: jest.fn().mockImplementation(async function* () {
           const msgData = [
-            { logLevel: LogLevel.Debug, message: "one" },
-            { logLevel: LogLevel.Info, message: "two" },
-            { logLevel: LogLevel.Warning, message: "three" },
-            { logLevel: LogLevel.Err, message: "four" },
+            { type: MessageType.Log, logLevel: LogLevel.Debug, message: "one" },
+            { type: MessageType.LogTagged, tag: 2, logLevel: LogLevel.Info, message: "two" },
+            { type: MessageType.Log, logLevel: LogLevel.Warning, message: "three" },
+            { type: MessageType.LogTagged, tag: 4, logLevel: LogLevel.Err, message: "four" },
           ];
           let timestamp = 1000n;
           for (const msg of msgData) {
             yield {
-              type: MessageType.Log,
               timestamp,
               ...msg,
             };
@@ -392,9 +391,9 @@ describe("Create MCAP files from ULog", () => {
       expect(topics).toStrictEqual(["log_message", "log_message", "log_message", "log_message"]);
       expect(messageData).toStrictEqual([
         { log_level: "DEBUG", message: "one" },
-        { log_level: "INFO", message: "two" },
+        { log_level: "INFO", message: "two", tag: 2 },
         { log_level: "WARNING", message: "three" },
-        { log_level: "ERR", message: "four" },
+        { log_level: "ERR", message: "four", tag: 4 },
       ]);
     });
 
