@@ -5,6 +5,7 @@ import {
   ULog,
   ParsedMessage,
   MessageType,
+  LogLevel,
 } from "@foxglove/ulog";
 import { FileReader } from "@foxglove/ulog/node";
 import { McapIndexedReader, TempBuffer, McapWriter } from "@mcap/core";
@@ -121,7 +122,7 @@ describe("Create MCAP files from ULog", () => {
       ).rejects.toThrow("Invalid ULog file: missing header");
     });
 
-    it("should add channels for all subscriptions", async () => {
+    it("should add channels for all subscriptions plus log messages", async () => {
       const mockULog = createULogMock({
         messageFields: topicFixture,
         subscriptions: [{ name: "sensor_data" }, { name: "item_list" }],
@@ -136,7 +137,7 @@ describe("Create MCAP files from ULog", () => {
       const channelNames = Array.from(mcapReader.channelsById.values())
         .map((ch) => ch.topic)
         .sort();
-      expect(channelNames).toStrictEqual(["item_list", "sensor_data"]);
+      expect(channelNames).toStrictEqual(["item_list", "log_message", "sensor_data"]);
     });
 
     it("should add messages to MCAP with same content", async () => {
@@ -338,6 +339,65 @@ describe("Create MCAP files from ULog", () => {
       ]);
     });
 
+    it("should write logs to a separate log channel", async () => {
+      const mockULog = {
+        open: jest.fn().mockResolvedValue(undefined),
+        header: {
+          timestamp: 0n,
+          definitions: new Map<string, MessageDefinition>(),
+          version: 1,
+        },
+        subscriptions: new Map<number, Subscription>(),
+        readMessages: jest.fn().mockImplementation(async function* () {
+          const msgData = [
+            { logLevel: LogLevel.Debug, message: "one" },
+            { logLevel: LogLevel.Info, message: "two" },
+            { logLevel: LogLevel.Warning, message: "three" },
+            { logLevel: LogLevel.Err, message: "four" },
+          ];
+          let timestamp = 1000n;
+          for (const msg of msgData) {
+            yield {
+              type: MessageType.Log,
+              timestamp,
+              ...msg,
+            };
+            timestamp += 1000n;
+          }
+        }),
+      } as unknown as jest.Mocked<ULog>;
+
+      const mockOutputFile = new TempBuffer();
+      await convertULogFileToMCAP(mockULog, new McapWriter({ writable: mockOutputFile }));
+
+      const mcapReader = await McapIndexedReader.Initialize({
+        readable: mockOutputFile,
+      });
+      const logTimes = [];
+      const messageData = [];
+      const topics = [];
+      const sequence = [];
+      for await (const msg of mcapReader.readMessages()) {
+        const channel = mcapReader.channelsById.get(msg.channelId);
+        const schema = mcapReader.schemasById.get(channel!.schemaId);
+        const protobufSchema = protobufFromBinaryDescriptor(schema!.data).lookupType(schema!.name);
+        logTimes.push(msg.publishTime);
+        topics.push(mcapReader.channelsById.get(msg.channelId)?.topic);
+        messageData.push(protobufSchema.toObject(protobufSchema.decode(msg.data)));
+        sequence.push(msg.sequence);
+      }
+      expect(messageData.length).toBe(4);
+      expect(logTimes).toStrictEqual([1000000n, 2000000n, 3000000n, 4000000n]);
+      expect(sequence).toStrictEqual([0, 1, 2, 3]);
+      expect(topics).toStrictEqual(["log_message", "log_message", "log_message", "log_message"]);
+      expect(messageData).toStrictEqual([
+        { log_level: "DEBUG", message: "one" },
+        { log_level: "INFO", message: "two" },
+        { log_level: "WARNING", message: "three" },
+        { log_level: "ERR", message: "four" },
+      ]);
+    });
+
     it("should add metadata to the mcap file", async () => {
       const mockULog = createULogMock({
         messageFields: topicFixture,
@@ -419,6 +479,6 @@ describe("Create MCAP files from ULog", () => {
     });
 
     const channelTopics = Array.from(mcapReader.channelsById.values()).map((ch) => ch.topic);
-    expect(channelTopics.length).toBe(114);
+    expect(channelTopics.length).toBe(115);
   });
 });

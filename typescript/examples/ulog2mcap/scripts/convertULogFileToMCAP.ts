@@ -1,4 +1,12 @@
-import { ULog, MessageDefinition, MessageType } from "@foxglove/ulog";
+import {
+  ULog,
+  MessageDefinition,
+  MessageType,
+  LogLevel,
+  FieldStruct,
+  FieldPrimitive,
+  FieldArray,
+} from "@foxglove/ulog";
 import { McapWriter } from "@mcap/core";
 import { Metadata } from "@mcap/core/src/types";
 import { protobufToDescriptor } from "@mcap/support";
@@ -6,6 +14,29 @@ import protobufjs from "protobufjs";
 import descriptor from "protobufjs/ext/descriptor";
 
 import { version } from "../package.json";
+
+function logLevelToString(level: LogLevel): string {
+  switch (level) {
+    case LogLevel.Emerg:
+      return "EMERG";
+    case LogLevel.Alert:
+      return "ALERT";
+    case LogLevel.Crit:
+      return "CRIT";
+    case LogLevel.Err:
+      return "ERR";
+    case LogLevel.Warning:
+      return "WARNING";
+    case LogLevel.Notice:
+      return "NOTICE";
+    case LogLevel.Info:
+      return "INFO";
+    case LogLevel.Debug:
+      return "DEBUG";
+    default:
+      return "UNKNOWN";
+  }
+}
 
 function ulogFieldTypeToProtobufFieldType(fieldType: string): string | undefined {
   switch (fieldType) {
@@ -114,6 +145,30 @@ function getMinimalProtobufRoot(
   return minimalRoot;
 }
 
+async function writeMessageToMCAP(
+  mcapWriterInfo: {
+    writer: McapWriter;
+    channelIdToSequence: Map<number, number>;
+    startTimestampOffset: bigint;
+  },
+  channelId: number,
+  logTimestamp: bigint, // microseconds
+  messageType: protobufjs.Type,
+  msgData: Record<string, FieldStruct | FieldPrimitive | FieldArray>,
+) {
+  const sequenceNumber = mcapWriterInfo.channelIdToSequence.get(channelId) ?? 0;
+  const msgTimestamp = (mcapWriterInfo.startTimestampOffset + logTimestamp) * 1000n; // convert microseconds to nanoseconds
+  const protoMsg = messageType.fromObject(msgData);
+  await mcapWriterInfo.writer.addMessage({
+    channelId,
+    sequence: sequenceNumber,
+    publishTime: msgTimestamp,
+    logTime: msgTimestamp,
+    data: messageType.encode(protoMsg).finish(),
+  });
+  mcapWriterInfo.channelIdToSequence.set(channelId, sequenceNumber + 1);
+}
+
 /**
  * Read a ULog file and convert it to MCAP format.
  * @param inputFile - The ULog file handle to convert
@@ -206,37 +261,54 @@ export async function convertULogFileToMCAP(
     msgIdToSchema.set(msgId, schemaNameToSchema.get(subscription.name)!);
   }
 
+  // Add an additional channel for log messages
+  const logType = new protobufjs.Type("log_message")
+    .add(new protobufjs.Field("log_level", 1, "string", "required"))
+    .add(new protobufjs.Field("message", 2, "string", "required"));
+  const root = new protobufjs.Root();
+  root.add(logType);
+  const logSchema = await outputFile.registerSchema({
+    name: "log_message",
+    encoding: "protobuf",
+    data: descriptor.FileDescriptorSet.encode(protobufToDescriptor(root)).finish(),
+  });
+  const logChannel = await outputFile.registerChannel({
+    schemaId: logSchema,
+    topic: "log_message",
+    messageEncoding: "protobuf",
+    metadata: new Map(),
+  });
+
+  const mcapWriterInfo = {
+    writer: outputFile,
+    channelIdToSequence: new Map<number, number>(),
+    startTimestampOffset,
+  };
+
   // Read messages and write to MCAP
-  const channelIdToSequence = new Map<number, number>();
   for await (const msg of inputFile.readMessages()) {
-    if (msg.type === MessageType.Dropout) {
+    if (msg.type === MessageType.Data) {
+      // Structured data message
+      const { timestamp, ...message } = msg.value;
+      const channelId = msgIdToChannelId.get(msg.msgId);
+      if (channelId == undefined) {
+        throw new Error(`No channel ID found for message ID: ${msg.msgId}`);
+      }
+      const messageType = msgIdToSchema.get(msg.msgId)!;
+      if (!msgIdToSchema.has(msg.msgId)) {
+        throw new Error(`No message schema found for message ID: ${msg.msgId}`);
+      }
+      await writeMessageToMCAP(mcapWriterInfo, channelId, timestamp, messageType, message);
+    } else if (msg.type === MessageType.Log || msg.type === MessageType.LogTagged) {
+      // Log message
+      const msgData = {
+        log_level: logLevelToString(msg.logLevel),
+        message: msg.message,
+      };
+      await writeMessageToMCAP(mcapWriterInfo, logChannel, msg.timestamp, logType, msgData);
+    } else if (msg.type === MessageType.Dropout) {
       console.warn(`Warning: message dropout of ${msg.duration} microseconds detected`);
     }
-    if (msg.type !== MessageType.Data) {
-      continue;
-    }
-    const channelId = msgIdToChannelId.get(msg.msgId);
-    if (channelId == undefined) {
-      throw new Error(`No channel ID found for message ID: ${msg.msgId}`);
-    }
-
-    const sequenceNumber = channelIdToSequence.get(channelId) ?? 0;
-    const { timestamp, ...msgData } = msg.value;
-    const msgTimestamp = (startTimestampOffset + timestamp) * 1000n; // convert microseconds to nanoseconds
-
-    const msgType = msgIdToSchema.get(msg.msgId);
-    if (msgType == undefined) {
-      throw new Error(`No message schema found for message ID: ${msg.msgId}`);
-    }
-    const protoMsg = msgType.fromObject(msgData);
-    await outputFile.addMessage({
-      channelId,
-      sequence: sequenceNumber,
-      publishTime: msgTimestamp,
-      logTime: msgTimestamp,
-      data: msgType.encode(protoMsg).finish(),
-    });
-    channelIdToSequence.set(channelId, sequenceNumber + 1);
   }
 
   await outputFile.end();
