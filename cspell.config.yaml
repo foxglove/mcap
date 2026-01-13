@@ -19,6 +19,7 @@ ignorePaths:
   - "*.Dockerfile"
   - Dockerfile
   - "*.mcap"
+  - "*.ulg"
   - "*.egg-info"
   - "*.patch"
   - package.json
@@ -53,6 +54,7 @@ words:
   - deserialization
   - distro
   - elems
+  - emerg
   - flatbuffer
   - flatbuffers
   - flatc
@@ -104,6 +106,7 @@ words:
   - tfmessage
   - typecheck
   - typedoc
+  - ulog
   - unchunked
   - unindexed
   - vcpkg
