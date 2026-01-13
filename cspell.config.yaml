@@ -54,6 +54,7 @@ words:
   - deserialization
   - distro
   - elems
+  - emerg
   - flatbuffer
   - flatbuffers
   - flatc
