@@ -341,7 +341,6 @@ void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
 
 Status McapWriter::open(const std::string_view filename, const McapWriterOptions& options) {
   // If the writer was opened, close it first
-  close();
   fileOutput_ = std::make_unique<FileWriter>();
   const auto status = fileOutput_->open(filename);
   if (!status.ok()) {
@@ -354,7 +353,6 @@ Status McapWriter::open(const std::string_view filename, const McapWriterOptions
 
 void McapWriter::open(std::ostream& stream, const McapWriterOptions& options) {
   // If the writer was opened, close it first
-  close();
   streamOutput_ = std::make_unique<StreamWriter>(stream);
   open(*streamOutput_, options);
 }
