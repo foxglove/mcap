@@ -3041,13 +3041,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/message-definition@npm:^0.2.0":
-  version: 0.2.0
-  resolution: "@foxglove/message-definition@npm:0.2.0"
-  checksum: 10c0/d9b873ae2b358882a58abab5d081fd37cb63e8c9005f333f5b635019eebe2b73e5d805797c79c2e3aef5acf6c80efd585c8be212c9a8527c121d5fd5b61f100d
-  languageName: node
-  linkType: hard
-
 "@foxglove/rosbag@npm:0.2.3":
   version: 0.2.3
   resolution: "@foxglove/rosbag@npm:0.2.3"
@@ -3060,17 +3053,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/rosmsg-msgs-common@npm:^3.0.0":
-  version: 3.0.0
-  resolution: "@foxglove/rosmsg-msgs-common@npm:3.0.0"
-  dependencies:
-    "@foxglove/message-definition": "npm:^0.2.0"
-    "@foxglove/rosmsg": "npm:^4.0.0"
-  checksum: 10c0/152e81d576ef407138b12ec4e90df8dde49db4ccfe282b47912ba4c964d17ddb0680e4388ac1b08d400e8c7ac07c716389690f00ede52adbe50df6be2555d833
-  languageName: node
-  linkType: hard
-
-"@foxglove/rosmsg-msgs-common@npm:^3.2.2":
+"@foxglove/rosmsg-msgs-common@npm:^3.0.0, @foxglove/rosmsg-msgs-common@npm:^3.2.2":
   version: 3.2.3
   resolution: "@foxglove/rosmsg-msgs-common@npm:3.2.3"
   dependencies:
@@ -3109,18 +3092,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/rosmsg@npm:^4.0.0":
-  version: 4.2.2
-  resolution: "@foxglove/rosmsg@npm:4.2.2"
-  dependencies:
-    "@foxglove/message-definition": "npm:^0.2.0"
-    md5-typescript: "npm:^1.0.5"
-  bin:
-    gendeps2: bin/gendeps2
-  checksum: 10c0/0b0c1980ede4ce8a1a97b692811e3199d3fc4d1a3c432475d651327e1f264cb58c2f846be38b14599993b27d6e9791ed40b466625f122d98807d01c333068717
-  languageName: node
-  linkType: hard
-
 "@foxglove/rosmsg@npm:^5.0.5":
   version: 5.0.5
   resolution: "@foxglove/rosmsg@npm:5.0.5"
@@ -3148,7 +3119,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/schemas@npm:1.7.0, @foxglove/schemas@npm:^1.0.0":
+"@foxglove/schemas@npm:1.7.0":
   version: 1.7.0
   resolution: "@foxglove/schemas@npm:1.7.0"
   dependencies:
@@ -3157,7 +3128,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/schemas@npm:1.8.0":
+"@foxglove/schemas@npm:1.8.0, @foxglove/schemas@npm:^1.0.0":
   version: 1.8.0
   resolution: "@foxglove/schemas@npm:1.8.0"
   dependencies:
