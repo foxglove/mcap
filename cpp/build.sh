@@ -24,6 +24,7 @@ configure_and_build() {
     exit 1
   fi
 
+  build_dir="$(cd "${build_dir}" && pwd)"
   cmake -S "${target}" -B "${build_dir}" -DCMAKE_BUILD_TYPE="${build_type}" \
     -DCMAKE_TOOLCHAIN_FILE="${build_dir}/generators/conan_toolchain.cmake"
   cmake --build "${build_dir}" --config "${build_type}"

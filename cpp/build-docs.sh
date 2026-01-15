@@ -11,6 +11,7 @@ if [ -f "docs/build/generators/conan_toolchain.cmake" ]; then
   build_dir="docs/build"
 fi
 
+build_dir="$(cd "${build_dir}" && pwd)"
 cmake -S docs -B "${build_dir}" -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_TOOLCHAIN_FILE="${build_dir}/generators/conan_toolchain.cmake"
 cmake --build "${build_dir}" --config Release
