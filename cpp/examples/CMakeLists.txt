@@ -3,7 +3,6 @@ project(McapExamples CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CONAN_SYSTEM_INCLUDES ON) # avoid warnings in protobuf headers
 
 if (MSVC)
   add_compile_options(/W4 /WX
@@ -14,17 +13,16 @@ else()
   add_compile_options(-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Werror)
 endif()
 
-include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-conan_basic_setup()
+find_package(mcap CONFIG REQUIRED)
 
 add_executable(bag2mcap bag2mcap.cpp)
-target_link_libraries(bag2mcap ${CONAN_LIBS})
+target_link_libraries(bag2mcap PRIVATE mcap::mcap)
 
 add_executable(mcapdump mcapdump.cpp)
-target_link_libraries(mcapdump ${CONAN_LIBS})
+target_link_libraries(mcapdump PRIVATE mcap::mcap)
 
 add_executable(rotatemcap rotatemcap.cpp)
-target_link_libraries(rotatemcap ${CONAN_LIBS})
+target_link_libraries(rotatemcap PRIVATE mcap::mcap)
 
 add_subdirectory(protobuf)
 add_subdirectory(jsonschema)

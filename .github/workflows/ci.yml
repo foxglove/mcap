@@ -55,7 +55,7 @@ jobs:
           cache: yarn
       - uses: actions/cache@v4
         with:
-          path: ~/.conan/data
+          path: ~/.conan2
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
       - run: cd cpp && make ci-clang
       - run: yarn install --immutable
@@ -185,7 +185,7 @@ jobs:
           lfs: false
       - uses: actions/cache@v4
         with:
-          path: ~/.conan/data
+          path: ~/.conan2
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
       - run: make ci-format-check
       - run: make ci-${{ matrix.compiler }}
@@ -204,12 +204,12 @@ jobs:
           lfs: false
       - uses: actions/cache@v4
         with:
-          path: ~/.conan/data
+          path: ~/.conan2
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
       - uses: actions/setup-python@v6
         with:
           python-version: 3.8
-      - run: pip install conan~=1.0
+      - run: pip install conan
       - run: bash build.sh --build-tests-only
       - run: ./test/build/Debug/bin/unit-tests
 
