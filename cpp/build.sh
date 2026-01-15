@@ -26,7 +26,8 @@ configure_and_build() {
 
   build_dir="$(cd "${build_dir}" && pwd)"
   cmake -S "${target}" -B "${build_dir}" -DCMAKE_BUILD_TYPE="${build_type}" \
-    -DCMAKE_TOOLCHAIN_FILE="${build_dir}/generators/conan_toolchain.cmake"
+    -DCMAKE_TOOLCHAIN_FILE="${build_dir}/generators/conan_toolchain.cmake" \
+    -DCMAKE_POLICY_DEFAULT_CMP0091=NEW
   cmake --build "${build_dir}" --config "${build_type}"
 }
 

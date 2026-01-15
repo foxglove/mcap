@@ -13,7 +13,8 @@ fi
 
 build_dir="$(cd "${build_dir}" && pwd)"
 cmake -S docs -B "${build_dir}" -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_TOOLCHAIN_FILE="${build_dir}/generators/conan_toolchain.cmake"
+  -DCMAKE_TOOLCHAIN_FILE="${build_dir}/generators/conan_toolchain.cmake" \
+  -DCMAKE_POLICY_DEFAULT_CMP0091=NEW
 cmake --build "${build_dir}" --config Release
 
 hdoc --verbose
