@@ -146,7 +146,9 @@ overrides:
   - filename: "cpp/**"
     words:
       - cppstd
+      - DCMAKE
       - hdoc
+      - includedirs
       - nlohmann
       # Windows-specific functions and includes
       - ftelli
