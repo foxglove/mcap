@@ -14,7 +14,7 @@ configure_and_build() {
   conan install "${target}" -s compiler.cppstd=17 -s build_type="${build_type}" --build=missing
   cmake -S "${target}" -B "${build_dir}" -DCMAKE_BUILD_TYPE="${build_type}" \
     -DCMAKE_TOOLCHAIN_FILE="${build_dir}/generators/conan_toolchain.cmake"
-  cmake --build "${build_dir}"
+  cmake --build "${build_dir}" --config "${build_type}"
 }
 
 if [ "$1" != "--build-tests-only" ]; then
