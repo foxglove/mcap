@@ -40,3 +40,12 @@ CMake-only configuration so CI is faster and simpler.
     `catch2/2.13.8`, `mcap`
   - `cpp/bench/conanfile.py`: `benchmark/1.7.0`, `mcap`
   - `cpp/docs/conanfile.py`: `mcap`
+
+## Notes from discussion (no decisions yet)
+- Catch2 is header-only; possible approach is to vendor it into a `vendor/`
+  directory and add the include path in CMake.
+- nlohmann/json is header-only; possible approach is to vendor it into a
+  `vendor/` directory and add the include path in CMake.
+- zstd, lz4, and protobuf could be treated as system dependencies: install
+  them in `ci.Dockerfile`, then link using CMake `find_package` targets in the
+  relevant binaries.
