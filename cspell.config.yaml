@@ -3,6 +3,7 @@ version: "0.2"
 ignorePaths:
   - __docs__
   - cspell.config.yaml
+  - cpp/vendor
   - node_modules
   - go.mod
   - go.sum
@@ -52,6 +53,7 @@ words:
   - crcs
   - datetime
   - DDSI
+  - DCMAKE
   - deserialization
   - distro
   - elems
@@ -70,6 +72,10 @@ words:
   - jsonschema
   - kaitai
   - libmcap
+  - libbenchmark
+  - liblz4
+  - libprotobuf
+  - libzstd
   - magick
   - matplotlib
   - mcap
