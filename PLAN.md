@@ -23,7 +23,7 @@ CMake-only configuration so CI is faster and simpler.
 - CI workflows cache `~/.conan/data` for C++ jobs and install Conan on Windows
   (`conformance-cpp`, `cpp`, `cpp-windows`). C++ Windows uses `pip install
   conan~=1.0` then runs `build.sh --build-tests-only`.
-- `cpp/Makefile` runs Dockerized C++ CI (`ci-clang`, `ci-gcc`, `ci-docs`,
+- `cpp/Makefile` runs Docker-based C++ CI (`ci-clang`, `ci-gcc`, `ci-docs`,
   `ci-format-check`) and mounts `~/.conan/data` into the container.
 - `cpp/build.sh` and `cpp/build-docs.sh` drive Conan: `conan config init`,
   `conan editable add`, `conan install`, and `conan build` for tests, examples,
