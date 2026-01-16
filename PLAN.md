@@ -46,6 +46,9 @@ CMake-only configuration so CI is faster and simpler.
   directory and add the include path in CMake.
 - nlohmann/json is header-only; possible approach is to vendor it into a
   `vendor/` directory and add the include path in CMake.
-- zstd, lz4, and protobuf could be treated as system dependencies: install
-  them in `ci.Dockerfile`, then link using CMake `find_package` targets in the
-  relevant binaries.
+- zstd, lz4, protobuf, and benchmark could be treated as system dependencies:
+  install them in `ci.Dockerfile`, then link using CMake `find_package` targets
+  in the relevant binaries.
+- Vendor directory location: `cpp/vendor`.
+- Windows testing assumption: run tests in the Linux Docker container (no native
+  Windows dependency strategy planned).
