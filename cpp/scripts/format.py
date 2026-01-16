@@ -5,7 +5,7 @@ import subprocess
 import sys
 from typing import List
 
-IGNORE_DIRS = ["build"]
+IGNORE_DIRS = ["build", "vendor"]
 EXTENSIONS = [".cpp", ".hpp"]
 
 

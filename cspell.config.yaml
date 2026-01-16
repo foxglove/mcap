@@ -4,6 +4,7 @@ ignorePaths:
   - __docs__
   - cspell.config.yaml
   - cpp/vendor
+  - "**/vendor/**"
   - node_modules
   - go.mod
   - go.sum
