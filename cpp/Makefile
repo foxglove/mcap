@@ -78,17 +78,17 @@ ci-image: hdoc-build
 
 .PHONY: ci-clang
 ci-clang: ci-image
-	docker run -t --rm -v $(CURDIR):/mcap/cpp -v $(HOME)/.conan/data:/root/.conan/data -e CC=clang-13 -e CXX=clang++-13 mcap_cpp_ci ./build.sh
+	docker run -t --rm -v $(CURDIR):/mcap/cpp -e CC=clang-13 -e CXX=clang++-13 mcap_cpp_ci ./build.sh
 
 .PHONY: ci-gcc
 ci-gcc: ci-image
-	docker run -t --rm -v $(CURDIR):/mcap/cpp -v $(HOME)/.conan/data:/root/.conan/data -e CC=gcc -e CXX=g++ mcap_cpp_ci ./build.sh
+	docker run -t --rm -v $(CURDIR):/mcap/cpp -e CC=gcc -e CXX=g++ mcap_cpp_ci ./build.sh
 
 .PHONY: ci-docs
 ci-docs: ci-image
 	docker build -t mcap_cpp_ci_jammy -f ci.Dockerfile .
-	docker run -t --rm -v $(CURDIR):/mcap/cpp -v $(CURDIR)/../__docs__/cpp:/hdoc-output -v $(HOME)/.conan/data:/root/.conan/data mcap_cpp_ci_jammy ./build-docs.sh
+	docker run -t --rm -v $(CURDIR):/mcap/cpp -v $(CURDIR)/../__docs__/cpp:/hdoc-output mcap_cpp_ci_jammy ./build-docs.sh
 
 .PHONY: ci-format-check
 ci-format-check: ci-image
-	docker run -t --rm -v $(CURDIR):/mcap/cpp -v $(HOME)/.conan/data:/root/.conan/data mcap_cpp_ci python3 scripts/format.py .
+	docker run -t --rm -v $(CURDIR):/mcap/cpp mcap_cpp_ci python3 scripts/format.py .

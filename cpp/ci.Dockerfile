@@ -13,8 +13,13 @@ RUN apt-get update && \
   curl \
   cmake \
   gnupg \
+  libbenchmark-dev \
+  liblz4-dev \
+  libprotobuf-dev \
+  libzstd-dev \
   make \
   perl \
+  protobuf-compiler \
   python3 \
   python3-pip \
   clang \
@@ -37,8 +42,6 @@ RUN if [ "$IMAGE" = "ubuntu:focal" ]; then \
   update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-13 100; \
   update-alternatives --install /usr/bin/git-clang-format git-clang-format /usr/bin/git-clang-format-13 100 \
   ; fi
-
-RUN pip --no-cache-dir install conan~=1.0
 
 WORKDIR /mcap/cpp
 

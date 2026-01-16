@@ -2,19 +2,13 @@
 
 set -e
 
-conan config init
-
-conan editable add ./mcap mcap/2.1.2
-conan install test --install-folder test/build/Debug \
-  -s compiler.cppstd=17 -s build_type=Debug --build missing
+cmake -S test -B test/build/Debug -DCMAKE_BUILD_TYPE=Debug
 
 if [ "$1" != "--build-tests-only" ]; then
-  conan install bench --install-folder bench/build/Release \
-    -s compiler.cppstd=17 -s build_type=Release --build missing
-  conan install examples --install-folder examples/build/Release \
-    -s compiler.cppstd=17 -s build_type=Release --build missing
-  conan build examples --build-folder examples/build/Release
-  conan build bench --build-folder bench/build/Release
+  cmake -S bench -B bench/build/Release -DCMAKE_BUILD_TYPE=Release
+  cmake -S examples -B examples/build/Release -DCMAKE_BUILD_TYPE=Release
+  cmake --build examples/build/Release
+  cmake --build bench/build/Release
 fi
 
-conan build test --build-folder test/build/Debug
+cmake --build test/build/Debug

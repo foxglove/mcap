@@ -10,8 +10,13 @@ RUN apt-get update && \
   curl \
   cmake \
   gnupg \
+  libbenchmark-dev \
+  liblz4-dev \
+  libprotobuf-dev \
+  libzstd-dev \
   make \
   perl \
+  protobuf-compiler \
   python3 \
   python3-pip
 
@@ -30,7 +35,5 @@ ENV CC=clang-13
 ENV CXX=clang++-13
 
 WORKDIR /src
-
-RUN pip --no-cache-dir install conan~=1.0
 
 CMD [ "./build.sh" ]

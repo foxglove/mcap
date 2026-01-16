@@ -67,7 +67,10 @@ Run `make` to build the library using a Docker container. This requires Docker
 to be installed, and will produce Linux (ELF) binaries compiled in an Ubuntu
 container with the clang compiler. If you want to build binaries for another
 platform or using your own compiler, run `make build-host`. This requires a
-working C++ compiler toolchain and [Conan](https://conan.io/) to be installed.
+working C++ compiler toolchain, CMake, and system packages for lz4/zstd,
+protobuf, and benchmark (for example: `liblz4-dev`, `libzstd-dev`,
+`protobuf-compiler`, `libprotobuf-dev`, `libbenchmark-dev`). Catch2 and
+nlohmann/json are vendored under `cpp/vendor`.
 
 Output binaries can be found in:
 
@@ -88,9 +91,8 @@ If your project does not need `lz4` or `zstd` support, you can optionally disabl
 
 ### Conan
 
-To simplify installation of dependencies, the [Conan](https://conan.io/) package
-manager can be used with the included
-[conanfile.py](https://github.com/foxglove/mcap/blob/main/cpp/mcap/conanfile.py).
+Conan recipes remain available for external consumers, but CI and local builds
+use vendored header-only dependencies and system packages instead of Conan.
 
 ### CMake
 
@@ -127,7 +129,7 @@ before including the library.
 
 ## Releasing new versions
 
-1. Update the `#define MCAP_LIBRARY_VERSION` and all other occurrences of the same version number, e.g. in `conanfile.py`, `build.sh`, and others.
+1. Update the `#define MCAP_LIBRARY_VERSION` and all other occurrences of the same version number, e.g. in `conanfile.py` and other release files.
 1. Once the version number has been updated, create and push a git tag named `releases/cpp/vX.Y.Z` matching the new version number.
 1. Make a pull request to [conan-io/conan-center-index](https://github.com/conan-io/conan-center-index) to update the [mcap recipe](https://github.com/conan-io/conan-center-index/tree/master/recipes/mcap):
    - Update [`config.yml`](https://github.com/conan-io/conan-center-index/blob/master/recipes/mcap/config.yml) to add the new version.
