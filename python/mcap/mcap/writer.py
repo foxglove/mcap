@@ -1,9 +1,10 @@
+import io
 import struct
 import zlib
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from enum import Enum, Flag, auto
 from io import BufferedWriter, RawIOBase
-from typing import IO, Any, Dict, List, OrderedDict, Union
+from typing import IO, Any, Dict, List, Union
 
 from .exceptions import UnsupportedCompressionError
 
@@ -20,8 +21,9 @@ except ImportError:
 from mcap import __version__
 
 from ._chunk_builder import ChunkBuilder
-from .data_stream import RecordBuilder
+from .data_stream import ReadDataStream, RecordBuilder
 from .opcode import Opcode
+from .reader import FOOTER_SIZE, SeekingReader
 from .records import (
     Attachment,
     AttachmentIndex,
@@ -38,6 +40,7 @@ from .records import (
     Statistics,
     SummaryOffset,
 )
+from .stream_reader import MAGIC_SIZE, StreamReader, read_magic
 
 MCAP0_MAGIC = struct.pack("<8B", 137, 77, 67, 65, 80, 48, 13, 10)
 LIBRARY_IDENTIFIER = f"python mcap {__version__}"
@@ -126,6 +129,9 @@ class Writer:
         self.__enable_crcs = enable_crcs
         self.__enable_data_crcs = enable_data_crcs
         self.__data_section_crc = 0
+        self.__append_mode = False
+        self.__channel_lookup: Dict[str, int] = {}
+        self.__schema_lookup: Dict[str, int] = {}
 
         # validate compression
         if self.__compression == CompressionType.LZ4:
@@ -235,6 +241,79 @@ class Writer:
             )
             self.__metadata_indexes.append(index)
         self.__flush()
+
+    @classmethod
+    def open_append(cls, path: str, **kwargs) -> "Writer":
+        """
+        Initializes a new Writer for appending to an existing MCAP file.
+        The existing file must be indexed.
+
+        Accepts the same keyword arguments as Writer.__init__ (chunk_size,
+        compression, index_types, etc.), except for enable_data_crcs which
+        is automatically inherited from the existing file.
+        """
+        stream = open(path, "r+b")
+        # Given: An existing MCAP file path
+        # When: Initializing for append
+        # Then: Validate header and read summary
+        read_magic(ReadDataStream(stream, calculate_crc=False))
+        stream.seek(0)
+        reader = SeekingReader(stream)
+        summary = reader.get_summary()
+        if summary is None:
+            raise ValueError("cannot append to MCAP without summary")
+
+        # Find DataEnd record at the end of the data section
+        stream.seek(-(FOOTER_SIZE + MAGIC_SIZE), io.SEEK_END)
+        footer_record = next(StreamReader(stream, skip_magic=True).records)
+        if not isinstance(footer_record, Footer):
+            raise ValueError("expected footer at end of MCAP file")
+        if footer_record.summary_start == 0:
+            raise ValueError("cannot append to MCAP without summary")
+
+        # DataEnd record size is fixed at 13 bytes (1 byte opcode + 8 bytes length + 4 bytes CRC)
+        data_end_offset = footer_record.summary_start - 13
+        stream.seek(data_end_offset)
+        if stream.read(1) != bytes([Opcode.DATA_END]):
+            raise ValueError("expected data end record before summary")
+
+        # Read DataEnd to get the existing CRC
+        stream.seek(data_end_offset + 1 + 8)
+        data_end = DataEnd.read(ReadDataStream(stream, calculate_crc=False))
+
+        # Override enable_data_crcs based on existing file
+        kwargs["enable_data_crcs"] = data_end.data_section_crc != 0
+
+        writer = cls(stream, **kwargs)
+        writer.__append_mode = True
+        writer.__data_section_crc = data_end.data_section_crc
+        writer.__schemas = OrderedDict(summary.schemas)
+        for sch in summary.schemas.values():
+            writer.__schema_lookup[sch.name] = sch.id
+
+        writer.__channels = OrderedDict(summary.channels)
+        for ch in summary.channels.values():
+            writer.__channel_lookup[ch.topic] = ch.id
+
+        writer.__chunk_indices = list(summary.chunk_indexes)
+        writer.__attachment_indexes = list(summary.attachment_indexes)
+        writer.__metadata_indexes = list(summary.metadata_indexes)
+
+        if summary.statistics is None:
+            writer.__use_statistics = False
+        else:
+            summary_stats = summary.statistics
+            summary_stats.channel_message_counts = defaultdict(
+                int, summary_stats.channel_message_counts
+            )
+            writer.__statistics = summary_stats
+
+        # Truncate at DataEnd offset to start appending new records
+        stream.seek(data_end_offset)
+        stream.truncate()
+        stream.flush()
+        writer.__should_close = True
+        return writer
 
     def finish(self):
         """
@@ -354,6 +433,7 @@ class Writer:
 
         self.__flush()
         self.__stream.write(MCAP0_MAGIC)
+        self.__stream.flush()
         if self.__should_close:
             self.__stream.close()
 
@@ -374,7 +454,26 @@ class Writer:
             message encodings for common values.
         :param metadata: Metadata about this channel.
         """
-        channel_id = len(self.__channels) + 1
+        if self.__append_mode:
+            # Given: A channel topic, encoding, schema_id, and metadata
+            # When: Registering in append mode
+            # Then: Return existing ID if exact match found, or raise if conflict
+            existing_id = self.__channel_lookup.get(topic)
+            if existing_id is not None:
+                existing = self.__channels[existing_id]
+                if (
+                    existing.message_encoding == message_encoding
+                    and existing.schema_id == schema_id
+                    and existing.metadata == metadata
+                ):
+                    return existing_id
+                else:
+                    raise ValueError(
+                        f"Channel record for topic {topic} "
+                        "differs from previous channel record of the same topic."
+                    )
+
+        channel_id = max(self.__channels.keys(), default=0) + 1
         channel = Channel(
             id=channel_id,
             topic=topic,
@@ -383,6 +482,7 @@ class Writer:
             metadata=metadata,
         )
         self.__channels[channel_id] = channel
+        self.__channel_lookup[topic] = channel_id
         self.__statistics.channel_count += 1
         if self.__chunk_builder:
             self.__chunk_builder.add_channel(channel)
@@ -401,9 +501,25 @@ class Writer:
         :param data: Schema data. Must conform to the schema encoding. If `encoding` is an empty
             string, `data` should be 0 length.
         """
-        schema_id = len(self.__schemas) + 1
+        if self.__append_mode:
+            # Given: A schema name, encoding, and data
+            # When: Registering in append mode
+            # Then: Return existing ID if exact match found, or raise if conflict
+            existing_id = self.__schema_lookup.get(name)
+            if existing_id is not None:
+                existing = self.__schemas[existing_id]
+                if existing.encoding == encoding and existing.data == data:
+                    return existing_id
+                else:
+                    raise ValueError(
+                        f"Schema record for name {name} "
+                        "differs from previous schema record of the same name."
+                    )
+
+        schema_id = max(self.__schemas.keys(), default=0) + 1
         schema = Schema(id=schema_id, data=data, encoding=encoding, name=name)
         self.__schemas[schema_id] = schema
+        self.__schema_lookup[name] = schema_id
         self.__statistics.schema_count += 1
         if self.__chunk_builder:
             self.__chunk_builder.add_schema(schema)
@@ -421,6 +537,8 @@ class Writer:
         :param library: Free-form string for writer to specify its name, version, or other
             information for use in debugging.
         """
+        if self.__append_mode:
+            raise RuntimeError("Cannot call start() when writer is in append mode")
         self.__stream.write(MCAP0_MAGIC)
         if self.__enable_data_crcs:
             self.__data_section_crc = zlib.crc32(MCAP0_MAGIC, self.__data_section_crc)
