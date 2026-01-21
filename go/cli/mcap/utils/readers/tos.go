@@ -175,7 +175,6 @@ func ensureEnvVarFromAliases(target string, aliases []string) error {
 		if value := os.Getenv(alias); value != "" {
 			return os.Setenv(target, value)
 		}
-
 	}
 	return nil
 }
