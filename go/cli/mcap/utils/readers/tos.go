@@ -45,7 +45,7 @@ func newTOSReader(ctx context.Context, bucket, path string) (func() error, io.Re
 
 	client, err := tos.NewClientV2(endpoint, opts...)
 	if err != nil {
-		return func() error { return nil }, nil, fmt.Errorf("failed to create TOS client: %v", err)
+		return func() error { return nil }, nil, fmt.Errorf("failed to create TOS client: %w", err)
 	}
 	rs, err := NewTOSReadSeekCloser(ctx, client, bucket, path)
 	if err != nil {
