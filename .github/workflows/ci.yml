@@ -244,25 +244,21 @@ jobs:
       - run: yarn workspace @mcap/browser build
       - run: yarn typescript:test
 
-      - run: yarn workspace @mcap/core pack
       - name: Publish @mcap/core to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/core/v') }}
-        run: npx npm@11.7.0 publish typescript/core/package.tgz --provenance --access public
+        run: yarn workspace @mcap/core npm publish --provenance --access public
 
-      - run: yarn workspace @mcap/support pack
       - name: Publish @mcap/support to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/support/v') }}
-        run: npx npm@11.7.0 publish typescript/support/package.tgz --provenance --access public
+        run: yarn workspace @mcap/support npm publish --provenance --access public
 
-      - run: yarn workspace @mcap/nodejs pack
       - name: Publish @mcap/nodejs to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/nodejs/v') }}
-        run: npx npm@11.7.0 publish typescript/nodejs/package.tgz --provenance --access public
+        run: yarn workspace @mcap/nodejs npm publish --provenance --access public
 
-      - run: yarn workspace @mcap/browser pack
       - name: Publish @mcap/browser to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/browser/v') }}
-        run: npx npm@11.7.0 publish typescript/browser/package.tgz --provenance --access public
+        run: yarn workspace @mcap/browser npm publish --provenance --access public
 
   typescript-examples:
     runs-on: ubuntu-latest
