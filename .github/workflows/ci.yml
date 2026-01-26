@@ -17,7 +17,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version: 20.x
+          node-version: 24.x
           cache: yarn
       - run: yarn install --immutable
       - run: echo '::add-matcher::.github/cspell-problem-matcher.json'
@@ -36,7 +36,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version: 20.x
+          node-version: 24.x
           cache: yarn
       - run: yarn install --immutable
       - run: yarn workspace @foxglove/mcap-conformance lint:ci
@@ -51,7 +51,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version: 20.x
+          node-version: 24.x
           cache: yarn
       - uses: actions/cache@v4
         with:
@@ -71,7 +71,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version: 20.x
+          node-version: 24.x
           cache: yarn
       - uses: actions/setup-go@v6
         with:
@@ -90,7 +90,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version: 20.x
+          node-version: 24.x
           cache: yarn
       - uses: actions/setup-python@v6
         with:
@@ -109,7 +109,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version: 20.x
+          node-version: 24.x
           cache: yarn
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
@@ -124,7 +124,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version: 20.x
+          node-version: 24.x
           cache: yarn
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
@@ -139,7 +139,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version: 20.x
+          node-version: 24.x
           cache: yarn
       - uses: ./.github/actions/setup-swift
         with:
@@ -158,7 +158,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version: 20.x
+          node-version: 24.x
           cache: yarn
       - uses: actions-rs/toolchain@v1
         with:
@@ -228,7 +228,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: yarn
           registry-url: https://registry.npmjs.org
       - run: yarn install --immutable
@@ -269,7 +269,7 @@ jobs:
       - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.x
+          node-version: 24.x
           cache: yarn
       - run: yarn install --immutable
       - run: yarn workspace @foxglove/mcap-benchmarks lint:ci
