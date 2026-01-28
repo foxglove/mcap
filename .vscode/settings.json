@@ -50,5 +50,12 @@
   },
   "[rust]": {
     "editor.defaultFormatter": "rust-lang.rust-analyzer"
-  }
+  },
+  "cursorpyright.analysis.extraPaths": [
+    "./python/mcap",
+    "./python/mcap-protobuf-support",
+    "./python/mcap-ros1-support",
+    "./python/mcap-ros2-support"
+  ],
+  "cursorpyright.analysis.typeCheckingMode": "strict"
 }
