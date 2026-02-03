@@ -37,7 +37,7 @@ conan test ./test_package $VERSION \
     --build=missing
 rm -rf ./test_package/build
 
-# Build full test suite wiith compression disabled. Run basic self tests.
+# Build full test suite with compression disabled. Run basic self tests.
 rm -rf ./test/build
 conan test ./test $VERSION \
   -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
