@@ -65,11 +65,11 @@ run-examples-host:
 
 .PHONY: test-examples
 test-examples: dev-image
-	docker run -t --rm -v $(CURDIR):/src mcap_cpp_ci examples/build/protobuf/Release/example_protobuf_unit_tests
+	docker run -t --rm -v $(CURDIR):/src mcap_cpp_ci examples/build/Release/protobuf/example_protobuf_unit_tests
 
 .PHONY: test-examples-host
 test-examples-host:
-	./examples/build/protobuf/Release/example_protobuf_unit_tests
+	./examples/build/Release/protobuf/example_protobuf_unit_tests
 
 .PHONY: ci-image
 ci-image: hdoc-build

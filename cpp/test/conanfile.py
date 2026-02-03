@@ -30,5 +30,5 @@ class McapTestConan(ConanFile):
         if can_run(self):
             # Only the unit-tests executable can be run directly.
             # The conformance test executables are require additional input.
-            bin_path = os.path.join(self.cpp.build.bindirs[0], "unit-tests")
+            bin_path = os.path.join(*self.cpp.build.bindirs, "unit-tests")
             self.run(bin_path, env="conanrun")

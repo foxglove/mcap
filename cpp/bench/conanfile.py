@@ -27,5 +27,5 @@ class McapBenchmarksConan(ConanFile):
 
     def test(self):
         if can_run(self):
-            bin_path = os.path.join(self.cpp.build.bindirs[0], "bench-tests")
+            bin_path = os.path.join(*self.cpp.build.bindirs, "bench-tests")
             self.run(bin_path, env="conanrun")
