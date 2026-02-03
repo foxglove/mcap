@@ -11,11 +11,16 @@ file(GLOB_RECURSE public_sources "include/mcap/*.hpp")
 
 add_library(mcap)
 target_sources(mcap
-    PUBLIC
-        FILE_SET public_headers TYPE HEADERS BASE_DIRS include FILES ${public_sources}
     PRIVATE
+        ${public_sources}
         ${private_sources}
         mcap.cpp
+)
+
+target_include_directories(mcap
+    PUBLIC
+         $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
+         $<INSTALL_INTERFACE:include>
 )
 
 if(MCAP_COMPRESSION_LZ4)
@@ -42,7 +47,8 @@ install(TARGETS mcap
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
     ARCHIVE DESTINATION lib
-    FILE_SET public_headers DESTINATION include
 )
+
+install(FILES ${public_sources} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/mcap)
 
 install(EXPORT mcap NAMESPACE mcap DESTINATION lib/cmake/mcap)
