@@ -10,7 +10,7 @@ export default class CppStreamedWriterTestRunner extends WriteTestRunner {
 
   async runWriteTest(filePath: string): Promise<Uint8Array> {
     const { stdout } = await promisify(exec)(`./streamed-writer-conformance ${filePath}`, {
-      cwd: join(__dirname, "../../../../../cpp/test/build/Debug/bin"),
+      cwd: join(__dirname, "../../../../../cpp/test/build/Debug"),
       encoding: undefined,
     });
     return stdout as unknown as Uint8Array;

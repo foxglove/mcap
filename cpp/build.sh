@@ -35,12 +35,21 @@ conan test ./test_package $VERSION \
     -pr:b $PROFILE -pr:h $PROFILE \
     -s compiler.cppstd=17 -s build_type=Release \
     --build=missing
+rm -rf ./test_package/build
+
+# Build full test suite wiith compression disabled. Run basic self tests.
+rm -rf ./test/build
+conan test ./test $VERSION \
+  -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
+  -o mcap:with_lz4=False -o mcap:with_zstd=False \
+  --build=missing
 
 # Build full test suite. Run basic self tests.
 rm -rf ./test/build
 conan test ./test $VERSION \
   -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
   --build=missing
+# Keep the binaries from the last test configuration sticking around, will be picked up by conformance test.
 
 if [ "$1" != "--build-tests-only" ]; then
   # Build and run benchmark.
