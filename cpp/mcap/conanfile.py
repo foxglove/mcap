@@ -2,7 +2,7 @@ from conan import ConanFile
 from conan.errors import ConanInvalidConfiguration
 from conan.tools.build import check_min_cppstd
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
-from conan.tools.files import copy, get, rmdir
+from conan.tools.files import copy, rmdir
 from conan.tools.scm import Version
 import os
 
@@ -15,7 +15,7 @@ class McapConan(ConanFile):
         "primarily intended for use in robotics applications."
     )
     license = "MIT"
-    url = "https://github.com/conan-io/conan-center-index"
+    url = "https://github.com/foxglove/mcap"
     homepage = "https://github.com/foxglove/mcap"
     topics = ("mcap", "serialization", "deserialization", "recording")
     package_type = "library"
