@@ -48,7 +48,7 @@ if [ "$1" != "--build-tests-only" ]; then
   conan test ./bench $VERSION \
     -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Release \
     --build=missing
-  # Build examples. Run example selftests.
+  # Build examples. Run example self tests.
   rm -rf ./examples/build
   conan test ./examples $VERSION \
     -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Release \

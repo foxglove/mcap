@@ -38,5 +38,4 @@
 #      define MCAP_PUBLIC
 #    endif
 #  endif
-#  undef MCAP_INLINE_IMPLEMENTATION
 #endif

@@ -49,6 +49,6 @@ install(TARGETS mcap
     ARCHIVE DESTINATION lib
 )
 
-install(FILES ${public_sources} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/mcap)
+install(FILES ${public_sources} DESTINATION include/mcap)
 
 install(EXPORT mcap NAMESPACE mcap DESTINATION lib/cmake/mcap)
