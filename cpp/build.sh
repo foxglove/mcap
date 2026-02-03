@@ -39,7 +39,7 @@ conan test ./test_package $VERSION \
 # Build full test suite. Run basic self tests.
 rm -rf ./test/build
 conan test ./test $VERSION \
-  -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Release \
+  -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
   --build=missing
 
 if [ "$1" != "--build-tests-only" ]; then
