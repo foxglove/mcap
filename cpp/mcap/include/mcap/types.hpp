@@ -77,8 +77,7 @@ enum struct OpCode : uint8_t {
 /**
  * @brief Get the string representation of an OpCode.
  */
-MCAP_PUBLIC
-constexpr std::string_view OpCodeString(OpCode opcode);
+MCAP_PUBLIC std::string_view OpCodeString(OpCode opcode);
 
 /**
  * @brief A generic Type-Length-Value record using a uint8 type and uint64
