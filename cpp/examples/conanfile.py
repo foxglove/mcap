@@ -29,5 +29,6 @@ class McapExamplesConan(ConanFile):
 
     def test(self):
         if can_run(self):
+            print(repr(self.cpp.build.bindirs))
             bin_path = os.path.join("protobuf", self.cpp.build.bindirs[0], "example_protobuf_unit_tests")
             self.run(bin_path, env="conanrun")
