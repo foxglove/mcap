@@ -2,8 +2,9 @@
 // protobuf headers.
 // Try it out by generating some PointCloud messages with the protobuf writer example,
 // and running this executable with the resulting MCAP file.
-#include <foxglove/PointCloud.pb.h>
 #include <mcap/reader.hpp>
+
+#include <foxglove/PointCloud.pb.h>
 
 int main(int argc, char** argv) {
   if (argc != 2) {

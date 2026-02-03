@@ -2,11 +2,12 @@
 // from within the MCAP, with no dependency on generated headers.
 // Try it out by generating some PointCloud messages with the protobuf writer example,
 // and running this executable with the resulting MCAP file.
+#include <mcap/reader.hpp>
+
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/descriptor_database.h>
 #include <google/protobuf/dynamic_message.h>
 
-#include <mcap/reader.hpp>
 #include <memory>
 #include <vector>
 
