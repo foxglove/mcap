@@ -3,48 +3,49 @@
 namespace mcap {
 
 constexpr std::string_view OpCodeString(OpCode opcode) {
+  using namespace std::literals;
   switch (opcode) {
     case OpCode::Header:
-      return "Header";
+      return "Header"sv;
     case OpCode::Footer:
-      return "Footer";
+      return "Footer"sv;
     case OpCode::Schema:
-      return "Schema";
+      return "Schema"sv;
     case OpCode::Channel:
-      return "Channel";
+      return "Channel"sv;
     case OpCode::Message:
-      return "Message";
+      return "Message"sv;
     case OpCode::Chunk:
-      return "Chunk";
+      return "Chunk"sv;
     case OpCode::MessageIndex:
-      return "MessageIndex";
+      return "MessageIndex"sv;
     case OpCode::ChunkIndex:
-      return "ChunkIndex";
+      return "ChunkIndex"sv;
     case OpCode::Attachment:
-      return "Attachment";
+      return "Attachment"sv;
     case OpCode::AttachmentIndex:
-      return "AttachmentIndex";
+      return "AttachmentIndex"sv;
     case OpCode::Statistics:
-      return "Statistics";
+      return "Statistics"sv;
     case OpCode::Metadata:
-      return "Metadata";
+      return "Metadata"sv;
     case OpCode::MetadataIndex:
-      return "MetadataIndex";
+      return "MetadataIndex"sv;
     case OpCode::SummaryOffset:
-      return "SummaryOffset";
+      return "SummaryOffset"sv;
     case OpCode::DataEnd:
-      return "DataEnd";
+      return "DataEnd"sv;
     default:
-      return "Unknown";
+      return "Unknown"sv;
   }
 }
 
-MetadataIndex::MetadataIndex(const Metadata& metadata, ByteOffset fileOffset)
+MCAP_PUBLIC_INLINE MetadataIndex::MetadataIndex(const Metadata& metadata, ByteOffset fileOffset)
     : offset(fileOffset)
     , length(9 + 4 + metadata.name.size() + 4 + internal::KeyValueMapSize(metadata.metadata))
     , name(metadata.name) {}
 
-bool RecordOffset::operator==(const RecordOffset& other) const {
+MCAP_PUBLIC_INLINE bool RecordOffset::operator==(const RecordOffset& other) const {
   if (chunkOffset != std::nullopt && other.chunkOffset != std::nullopt) {
     if (*chunkOffset != *other.chunkOffset) {
       // messages are in separate chunks, cannot be equal.
@@ -61,7 +62,7 @@ bool RecordOffset::operator==(const RecordOffset& other) const {
   return (offset == other.offset);
 }
 
-bool RecordOffset::operator>(const RecordOffset& other) const {
+MCAP_PUBLIC_INLINE bool RecordOffset::operator>(const RecordOffset& other) const {
   if (chunkOffset != std::nullopt) {
     if (other.chunkOffset != std::nullopt) {
       if (*chunkOffset == *other.chunkOffset) {

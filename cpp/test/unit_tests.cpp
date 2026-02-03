@@ -1,5 +1,6 @@
-#define MCAP_IMPLEMENTATION
 #include <mcap/mcap.hpp>
+#include <mcap/crc32.hpp>
+#include <mcap/internal.hpp>
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>

@@ -3,18 +3,54 @@
 set -e
 
 conan config init
+# Keep it out of the reserved _/_ user/channel!
+export VERSION=mcap/2.1.2@local/testing
+#TODO For Conan 1.x only. Explicit -pr:b and -pr:h with default can be removed for Conan 2.x.
+export PROFILE=default
+# Export version under test to local cache.
+conan export ./mcap $VERSION
 
-conan editable add ./mcap mcap/2.1.2
-conan install test --install-folder test/build/Debug \
-  -s compiler.cppstd=17 -s build_type=Debug --build missing
+# Build and run basic package tests for the different supported package configurations.
+rm -rf ./test_package/build
+conan test ./test_package $VERSION \
+    -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
+    --build=missing
+rm -rf ./test_package/build
+conan test ./test_package $VERSION \
+    -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
+    -o mcap:with_lz4=False -o mcap:with_zstd=False \
+    --build=missing
+rm -rf ./test_package/build
+conan test ./test_package $VERSION \
+    -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
+    -o mcap:shared=True \
+    --build=missing
+rm -rf ./test_package/build
+conan test ./test_package $VERSION \
+    -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
+    -o mcap:header_only=True \
+    --build=missing
+rm -rf ./test_package/build
+conan test ./test_package $VERSION \
+    -pr:b $PROFILE -pr:h $PROFILE \
+    -s compiler.cppstd=17 -s build_type=Release \
+    --build=missing
+
+# Build full test suite. Run basic self tests.
+rm -rf ./test/build
+conan test ./test $VERSION \
+  -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Release \
+  --build=missing
 
 if [ "$1" != "--build-tests-only" ]; then
-  conan install bench --install-folder bench/build/Release \
-    -s compiler.cppstd=17 -s build_type=Release --build missing
-  conan install examples --install-folder examples/build/Release \
-    -s compiler.cppstd=17 -s build_type=Release --build missing
-  conan build examples --build-folder examples/build/Release
-  conan build bench --build-folder bench/build/Release
+  # Build and run benchmark.
+  rm -rf ./bench/build
+  conan test ./bench $VERSION \
+    -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Release \
+    --build=missing
+  # Build examples. Run example selftests.
+  rm -rf ./examples/build
+  conan test ./examples $VERSION \
+    -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Release \
+    --build=missing
 fi
-
-conan build test --build-folder test/build/Debug

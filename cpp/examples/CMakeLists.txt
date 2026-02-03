@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 4.1)
 project(McapExamples CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -14,17 +14,16 @@ else()
   add_compile_options(-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Werror)
 endif()
 
-include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-conan_basic_setup()
+find_package(mcap REQUIRED CONFIG)
 
 add_executable(bag2mcap bag2mcap.cpp)
-target_link_libraries(bag2mcap ${CONAN_LIBS})
+target_link_libraries(bag2mcap mcap::mcap)
 
 add_executable(mcapdump mcapdump.cpp)
-target_link_libraries(mcapdump ${CONAN_LIBS})
+target_link_libraries(mcapdump mcap::mcap)
 
 add_executable(rotatemcap rotatemcap.cpp)
-target_link_libraries(rotatemcap ${CONAN_LIBS})
+target_link_libraries(rotatemcap mcap::mcap)
 
 add_subdirectory(protobuf)
 add_subdirectory(jsonschema)

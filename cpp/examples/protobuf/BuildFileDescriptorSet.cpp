@@ -19,8 +19,7 @@ google::protobuf::FileDescriptorSet BuildFileDescriptorSet(
     next->CopyTo(fdSet.add_file());
     for (int i = 0; i < next->dependency_count(); ++i) {
       const auto& dep = next->dependency(i);
-      if (seenDependencies.find(dep->name()) == seenDependencies.end()) {
-        seenDependencies.insert(dep->name());
+      if (seenDependencies.emplace(dep->name()).second) {
         toAdd.push(dep);
       }
     }

@@ -1,4 +1,3 @@
-#define MCAP_IMPLEMENTATION
 #include <mcap/writer.hpp>
 
 #include <nlohmann/json.hpp>
