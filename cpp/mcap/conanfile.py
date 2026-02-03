@@ -1,4 +1,7 @@
-from conans import ConanFile, tools
+from conan import ConanFile
+from conan.tools.files import copy
+from conan.tools.build import check_min_cppstd
+from os import path
 
 
 class McapConan(ConanFile):
@@ -12,17 +15,27 @@ class McapConan(ConanFile):
 
     settings = ("os", "compiler", "build_type", "arch")
     requires = ("lz4/1.9.4", "zstd/1.5.2")
-    generators = "cmake"
+    generators = ("CMakeToolchain", "CMakeDeps")
 
     def validate(self):
-        tools.check_min_cppstd(self, "17")
+        check_min_cppstd(self, "17")
 
     def configure(self):
         pass
 
     def package(self):
-        self.copy(pattern="LICENSE", dst="licenses")
-        self.copy("include/*")
+        copy(
+            self,
+            pattern="LICENSE",
+            src=self.recipe_folder,
+            dst=path.join(self.package_folder, "licenses"),
+        )
+        copy(
+            self,
+            "*",
+            src=path.join(self.recipe_folder, "include"),
+            dst=path.join(self.package_folder, "include"),
+        )
 
     def package_id(self):
-        self.info.header_only()
+        self.info.clear()

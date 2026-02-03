@@ -74,11 +74,11 @@ test-examples-host:
 
 .PHONY: ci-image
 ci-image: hdoc-build
-	docker build -t mcap_cpp_ci -f ci.Dockerfile --build-arg .
+	docker build -t mcap_cpp_ci -f ci.Dockerfile .
 
 .PHONY: ci-clang
 ci-clang: ci-image
-	docker run -t --rm -v $(CURDIR):/mcap/cpp -v $(HOME)/.conan/data:/root/.conan/data -e CC=clang-13 -e CXX=clang++-13 mcap_cpp_ci ./build.sh
+	docker run -t --rm -v $(CURDIR):/mcap/cpp -v $(HOME)/.conan/data:/root/.conan/data -e CC=clang -e CXX=clang++ mcap_cpp_ci ./build.sh
 
 .PHONY: ci-gcc
 ci-gcc: ci-image

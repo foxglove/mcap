@@ -21,7 +21,7 @@ RUN apt-get update && \
   clang-format \
   && rm -rf /var/lib/apt/lists/*
 
-RUN pip --no-cache-dir install conan~=1.0
+RUN pip --no-cache-dir install --break-system-packages conan~=2.25.1
 
 WORKDIR /mcap/cpp
 
