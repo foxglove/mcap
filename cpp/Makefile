@@ -74,7 +74,7 @@ test-examples-host:
 
 .PHONY: ci-image
 ci-image: hdoc-build
-	docker build -t mcap_cpp_ci -f ci.Dockerfile --build-arg IMAGE=ubuntu:focal .
+	docker build -t mcap_cpp_ci -f ci.Dockerfile --build-arg .
 
 .PHONY: ci-clang
 ci-clang: ci-image
