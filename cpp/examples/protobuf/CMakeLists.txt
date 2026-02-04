@@ -27,7 +27,7 @@ target_include_directories(foxglove_proto_lib PUBLIC ${CMAKE_CURRENT_BINARY_DIR}
 if (MSVC)
     target_compile_options(foxglove_proto_lib PUBLIC /wd4100 /wd4267 /wd4244)
 else()
-    target_compile_options(foxglove_proto_lib PUBLIC -Wno-error=unused-parameter)
+    target_compile_options(foxglove_proto_lib PUBLIC -Wno-error=unused-parameter -Wno-error=shadow)
 endif()
 
 add_executable(example_protobuf_writer writer.cpp BuildFileDescriptorSet.cpp)
