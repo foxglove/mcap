@@ -71,9 +71,9 @@ working C++ compiler toolchain and [Conan](https://conan.io/) to be installed.
 
 Output binaries can be found in:
 
-- `cpp/bench/build/Release/bin/`,
-- `cpp/examples/build/Release/bin/`
-- `cpp/test/build/Debug/bin/`.
+- `cpp/bench/build/Release/`,
+- `cpp/examples/build/Release/`
+- `cpp/test/build/Debug/`.
 
 ## Including in your project
 

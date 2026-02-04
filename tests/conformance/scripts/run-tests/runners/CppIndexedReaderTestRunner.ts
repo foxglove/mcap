@@ -11,7 +11,7 @@ export default class CppIndexedReaderTestRunner extends IndexedReadTestRunner {
 
   async runReadTest(filePath: string): Promise<IndexedReadTestResult> {
     const { stdout } = await promisify(exec)(`./indexed-reader-conformance ${filePath}`, {
-      cwd: join(__dirname, "../../../../../cpp/test/build/Debug/bin"),
+      cwd: join(__dirname, "../../../../../cpp/test/build/Debug"),
     });
     return JSON.parse(stdout) as IndexedReadTestResult;
   }
