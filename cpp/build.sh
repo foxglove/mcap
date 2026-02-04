@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -e
+set -x
 
 conan config init
 # Keep it out of the reserved _/_ user/channel!
@@ -10,41 +11,36 @@ export PROFILE=default
 # Export version under test to local cache.
 conan export ./mcap $VERSION
 
-# Build and run basic package tests for the different supported package configurations.
-rm -rf ./test_package/build
-conan test ./test_package $VERSION \
+# Build and run tests for the different supported package configurations.
+rm -rf ./test/build
+conan test ./test $VERSION \
     -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
     --build=missing
-rm -rf ./test_package/build
-conan test ./test_package $VERSION \
+
+rm -rf ./test/build
+conan test ./test $VERSION \
     -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
     -o mcap:with_lz4=False -o mcap:with_zstd=False \
     --build=missing
-rm -rf ./test_package/build
-conan test ./test_package $VERSION \
+
+rm -rf ./test/build
+conan test ./test $VERSION \
     -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
     -o mcap:shared=True \
     --build=missing
-rm -rf ./test_package/build
-conan test ./test_package $VERSION \
+
+rm -rf ./test/build
+conan test ./test $VERSION \
     -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
     -o mcap:header_only=True \
     --build=missing
-rm -rf ./test_package/build
-conan test ./test_package $VERSION \
-    -pr:b $PROFILE -pr:h $PROFILE \
-    -s compiler.cppstd=17 -s build_type=Release \
-    --build=missing
-rm -rf ./test_package/build
 
-# Build full test suite with compression disabled. Run basic self tests.
 rm -rf ./test/build
 conan test ./test $VERSION \
-  -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
-  -o mcap:with_lz4=False -o mcap:with_zstd=False \
-  --build=missing
+    -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Release \
+    --build=missing
 
-# Build full test suite. Run basic self tests.
+
 rm -rf ./test/build
 conan test ./test $VERSION \
   -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
@@ -57,6 +53,7 @@ if [ "$1" != "--build-tests-only" ]; then
   conan test ./bench $VERSION \
     -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Release \
     --build=missing
+
   # Build examples. Run example self tests.
   rm -rf ./examples/build
   conan test ./examples $VERSION \

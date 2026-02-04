@@ -1,5 +1,6 @@
 // Example of writing JSON messages to an MCAP file in C++.
 // Writes a topic of Point2 messages.
+#define MCAP_IMPLEMENTATION
 #include <mcap/writer.hpp>
 
 #include <nlohmann/json.hpp>

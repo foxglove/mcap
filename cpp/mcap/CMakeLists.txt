@@ -19,8 +19,16 @@ target_sources(mcap
 
 target_include_directories(mcap
     PUBLIC
-         $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
-         $<INSTALL_INTERFACE:include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
+
+target_compile_definitions(mcap
+    PRIVATE
+        MCAP_IMPLEMENTATION=1
+    INTERFACE
+        # Disable MCAP_IMPLEMENTATION for consumers
+        MCAP_EXTERN_IMPLEMENTATION=1
 )
 
 if(MCAP_COMPRESSION_LZ4)

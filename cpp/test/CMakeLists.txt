@@ -26,5 +26,5 @@ target_link_libraries(indexed-reader-conformance mcap::mcap nlohmann_json::nlohm
 add_executable(streamed-writer-conformance streamed_writer_conformance.cpp)
 target_link_libraries(streamed-writer-conformance mcap::mcap nlohmann_json::nlohmann_json)
 
-add_executable(unit-tests unit_tests.cpp)
+add_executable(unit-tests unit_tests.cpp test_odr.cpp)
 target_link_libraries(unit-tests mcap::mcap Catch2::Catch2)

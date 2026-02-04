@@ -401,6 +401,6 @@ struct MCAP_PUBLIC MessageView {
 
 }  // namespace mcap
 
-#ifdef MCAP_IMPLEMENTATION
+#if defined(MCAP_IMPLEMENTATION) && !defined(MCAP_EXTERNAL_IMPLEMENTATION)
 #  include "types.inl"
 #endif

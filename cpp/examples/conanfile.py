@@ -1,6 +1,7 @@
 from conan import ConanFile
 from conan.tools.build import can_run
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
+from conan.tools.env import VirtualRunEnv
 import os
 
 class McapExamplesConan(ConanFile):
@@ -21,6 +22,8 @@ class McapExamplesConan(ConanFile):
         tc.generate()
         deps = CMakeDeps(self)
         deps.generate()
+        ms = VirtualRunEnv(self)
+        ms.generate()
 
     def build(self):
         cmake = CMake(self)

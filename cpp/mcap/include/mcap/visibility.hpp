@@ -1,24 +1,11 @@
-/** Enable inlining of mcap implementation in multiple compilation units.
- *  This can be defined before including `mcap.hpp` to directly control symbol visibility.
- */
-#ifdef MCAP_INLINE_IMPLEMENTATION
-#  ifndef MCAP_IMPLEMENTATION
-#    define MCAP_IMPLEMENTATION
-#  endif
-#  define MCAP_PUBLIC_INLINE inline
-#  define MCAP_PUBLIC
-#else
-#  define MCAP_PUBLIC_INLINE
-#endif
-
 /** Defines an MCAP_PUBLIC visibility attribute macro, which is used on all public interfaces.
  *  This can be defined before including `mcap.hpp` to directly control symbol visibility.
  *  If not defined externally, this library attempts to export symbols from the translation unit
  *  where MCAP_IMPLEMENTATION is defined, and import them anywhere else.
  */
 #ifndef MCAP_PUBLIC
-#  if defined _WIN32 || defined __CYGWIN__
-#    ifdef MCAP_IMPLEMENTATION
+#  if defined(_WIN32) || defined(__CYGWIN__)
+#    if defined(MCAP_IMPLEMENTATION) && !defined(MCAP_EXTERNAL_IMPLEMENTATION)
 #      ifdef __GNUC__
 #        define MCAP_PUBLIC __attribute__((dllexport))
 #      else

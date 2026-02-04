@@ -2,7 +2,7 @@
 
 namespace mcap {
 
-MCAP_PUBLIC_INLINE std::string_view OpCodeString(OpCode opcode) {
+std::string_view OpCodeString(OpCode opcode) {
   using namespace std::literals;
   switch (opcode) {
     case OpCode::Header:
@@ -40,12 +40,12 @@ MCAP_PUBLIC_INLINE std::string_view OpCodeString(OpCode opcode) {
   }
 }
 
-MCAP_PUBLIC_INLINE MetadataIndex::MetadataIndex(const Metadata& metadata, ByteOffset fileOffset)
+MetadataIndex::MetadataIndex(const Metadata& metadata, ByteOffset fileOffset)
     : offset(fileOffset)
     , length(9 + 4 + metadata.name.size() + 4 + internal::KeyValueMapSize(metadata.metadata))
     , name(metadata.name) {}
 
-MCAP_PUBLIC_INLINE bool RecordOffset::operator==(const RecordOffset& other) const {
+bool RecordOffset::operator==(const RecordOffset& other) const {
   if (chunkOffset != std::nullopt && other.chunkOffset != std::nullopt) {
     if (*chunkOffset != *other.chunkOffset) {
       // messages are in separate chunks, cannot be equal.
@@ -62,7 +62,7 @@ MCAP_PUBLIC_INLINE bool RecordOffset::operator==(const RecordOffset& other) cons
   return (offset == other.offset);
 }
 
-MCAP_PUBLIC_INLINE bool RecordOffset::operator>(const RecordOffset& other) const {
+bool RecordOffset::operator>(const RecordOffset& other) const {
   if (chunkOffset != std::nullopt) {
     if (other.chunkOffset != std::nullopt) {
       if (*chunkOffset == *other.chunkOffset) {

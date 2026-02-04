@@ -82,9 +82,9 @@ class McapConan(ConanFile):
 
     def requirements(self):
         if self.options.with_lz4:
-            self.requires("lz4/[>=1.9.4]")
+            self.requires("lz4/[>=1.9.4]", transitive_headers=self.options.header_only)
         if self.options.with_zstd:
-            self.requires("zstd/[>=1.5.2]")
+            self.requires("zstd/[>=1.5.2]", transitive_headers=self.options.header_only)
 
     def generate(self):
         if self.options.header_only:
@@ -120,9 +120,8 @@ class McapConan(ConanFile):
     def package_info(self):
         self.cpp_info.set_property("cmake_target_name", "mcap::mcap")
         self.cpp_info.set_property("pkg_config_name", "mcap")
-        if self.options.header_only:
-            self.cpp_info.defines.append("MCAP_INLINE_IMPLEMENTATION=1")
-        else:
+        if not self.options.header_only:
+            self.cpp_info.defines.append("MCAP_EXTERNAL_IMPLEMENTATION=1")
             self.cpp_info.libs = ["mcap"]
         if not self.options.shared:
             self.cpp_info.defines.append("MCAP_PUBLIC=")
