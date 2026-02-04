@@ -3,6 +3,9 @@
 set -ex
 
 conan profile detect
+# On Windows the default cppstd is 14
+sed -i.bak 's/compiler\.cppstd=14/compiler\.cppstd=17/' ~/.conan2/profiles/default
+conan profile show -pr default
 
 conan editable add ./mcap
 conan install test --output-folder test/build/Debug \
