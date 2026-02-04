@@ -15,11 +15,6 @@ conan export ./mcap $VERSION
 rm -rf ./test/build
 conan test ./test $VERSION \
     -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
-    --build=missing
-
-rm -rf ./test/build
-conan test ./test $VERSION \
-    -pr:b $PROFILE -pr:h $PROFILE -s compiler.cppstd=17 -s build_type=Debug \
     -o mcap:with_lz4=False -o mcap:with_zstd=False \
     --build=missing
 

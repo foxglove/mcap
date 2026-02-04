@@ -28,7 +28,7 @@ target_compile_definitions(mcap
         MCAP_IMPLEMENTATION=1
     INTERFACE
         # Disable MCAP_IMPLEMENTATION for consumers
-        MCAP_EXTERN_IMPLEMENTATION=1
+        MCAP_EXTERNAL_IMPLEMENTATION=1
 )
 
 if(MCAP_COMPRESSION_LZ4)
