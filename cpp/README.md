@@ -91,7 +91,7 @@ If your project does not need `lz4` or `zstd` support, you can optionally disabl
 To simplify installation of dependencies, the [Conan](https://conan.io/) package
 manager can be used with the included
 [conanfile.py](https://github.com/foxglove/mcap/blob/main/cpp/mcap/conanfile.py).
-No definitions are required in this case, the symbol visibility and type of the packaged library can be controlled via the options `-o mcap:shared=True` or `-o mcap:header_only=True`.
+The symbol visibility and type of the packaged library can be controlled via the options `-o mcap:shared=True` or `-o mcap:header_only=True`.
 By default, the Conan package is linked as a static library.
 
 ### CMake
@@ -126,9 +126,6 @@ before including the library.
 #define MCAP_PUBLIC __attribute__((visibility("hidden")))
 #include <mcap/writer.hpp>
 ```
-
-Full inlining in multiple translation units is supported by defining `MCAP_INLINE_IMPLEMENTATION`.
-In this case, `MCAP_IMPLEMENTATION` and `MCAP_PUBLIC` should not be defined externally.
 
 ## Releasing new versions
 
