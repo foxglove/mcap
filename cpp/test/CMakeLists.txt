@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 project(McapTest CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -13,21 +13,18 @@ else()
   add_compile_options(-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Werror)
 endif()
 
-include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-conan_basic_setup()
+find_package(mcap REQUIRED CONFIG)
+find_package(Catch2 REQUIRED CONFIG)
+find_package(nlohmann_json REQUIRED CONFIG)
 
 add_executable(streamed-reader-conformance streamed_reader_conformance.cpp)
-target_link_libraries(streamed-reader-conformance ${CONAN_LIBS})
+target_link_libraries(streamed-reader-conformance mcap::mcap nlohmann_json::nlohmann_json)
 
 add_executable(indexed-reader-conformance indexed_reader_conformance.cpp)
-target_link_libraries(indexed-reader-conformance ${CONAN_LIBS})
+target_link_libraries(indexed-reader-conformance mcap::mcap nlohmann_json::nlohmann_json)
 
 add_executable(streamed-writer-conformance streamed_writer_conformance.cpp)
-target_link_libraries(streamed-writer-conformance ${CONAN_LIBS})
+target_link_libraries(streamed-writer-conformance mcap::mcap nlohmann_json::nlohmann_json)
 
-add_executable(unit-tests unit_tests.cpp)
-target_link_libraries(unit-tests ${CONAN_LIBS})
-
-add_executable(unit-tests-nocompress unit_tests.cpp)
-target_link_libraries(unit-tests-nocompress ${CONAN_LIBS})
-target_compile_definitions(unit-tests-nocompress PRIVATE MCAP_COMPRESSION_NO_LZ4 MCAP_COMPRESSION_NO_ZSTD)
+add_executable(unit-tests unit_tests.cpp test_odr.cpp)
+target_link_libraries(unit-tests mcap::mcap Catch2::Catch2)

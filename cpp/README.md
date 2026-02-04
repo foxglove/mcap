@@ -91,6 +91,8 @@ If your project does not need `lz4` or `zstd` support, you can optionally disabl
 To simplify installation of dependencies, the [Conan](https://conan.io/) package
 manager can be used with the included
 [conanfile.py](https://github.com/foxglove/mcap/blob/main/cpp/mcap/conanfile.py).
+The symbol visibility and type of the packaged library can be controlled via the options `-o mcap:shared=True` or `-o mcap:header_only=True`.
+By default, the Conan package is linked as a static library.
 
 ### CMake
 

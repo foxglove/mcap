@@ -1,6 +1,6 @@
 // Example code for reading JSON messages from an MCAP file.
 #define MCAP_IMPLEMENTATION
-#include "mcap/reader.hpp"
+#include <mcap/reader.hpp>
 
 #include <nlohmann/json.hpp>
 

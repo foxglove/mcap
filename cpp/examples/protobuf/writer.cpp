@@ -2,7 +2,7 @@
 // writes a sequence of foxglove.PointCloud messages to an MCAP which should
 // show an expanding sphere when viewed in Foxglove.
 #define MCAP_IMPLEMENTATION
-#include "mcap/writer.hpp"
+#include <mcap/writer.hpp>
 
 #include "BuildFileDescriptorSet.h"
 #include "foxglove/PointCloud.pb.h"

@@ -4,8 +4,8 @@
  *  where MCAP_IMPLEMENTATION is defined, and import them anywhere else.
  */
 #ifndef MCAP_PUBLIC
-#if defined _WIN32 || defined __CYGWIN__
-#  ifdef MCAP_IMPLEMENTATION
+#if defined(_WIN32) || defined(__CYGWIN__)
+#  if defined(MCAP_IMPLEMENTATION) && !defined(MCAP_EXTERNAL_IMPLEMENTATION)
 #    ifdef __GNUC__
 #      define MCAP_PUBLIC __attribute__((dllexport))
 #    else

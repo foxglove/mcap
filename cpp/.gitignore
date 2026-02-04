@@ -6,3 +6,4 @@ build/
 CMakeCache.txt
 CMakeFiles/
 CMakeSettings.json
+CMakeUserPresets.json

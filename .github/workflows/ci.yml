@@ -211,7 +211,7 @@ jobs:
           python-version: 3.8
       - run: pip install conan~=1.0
       - run: bash build.sh --build-tests-only
-      - run: ./test/build/Debug/bin/unit-tests
+      - run: ./test/build/Debug/unit-tests
 
   typescript:
     runs-on: ubuntu-latest

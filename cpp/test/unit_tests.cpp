@@ -1,5 +1,10 @@
 #define MCAP_IMPLEMENTATION
+#include <mcap/crc32.hpp>
 #include <mcap/mcap.hpp>
+// clang-format off
+// Must not be included before mcap/types.hpp
+#include <mcap/internal.hpp>
+// clang-format on
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>

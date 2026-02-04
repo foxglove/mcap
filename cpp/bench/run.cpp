@@ -1,4 +1,5 @@
 #define MCAP_IMPLEMENTATION
+#include <mcap/crc32.hpp>
 #include <mcap/writer.hpp>
 
 #include <benchmark/benchmark.h>

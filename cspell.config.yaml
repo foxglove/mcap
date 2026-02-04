@@ -46,7 +46,6 @@ words:
   - cmake
   - colcon
   - conanfile
-  - conans
   - crc
   - crcs
   - datetime
@@ -190,6 +189,14 @@ overrides:
       - ivar
       - rclpy
       - rosidl
+
+  - filename: "**/conanfile.py"
+    words:
+      - bindirs
+      - conanrun
+      - conans
+      - fpic
+      - msvc
 
   - filename: "**/*.swift"
     ignoreRegExpList:
