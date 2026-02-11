@@ -35,6 +35,8 @@ examples: pipenv
 	make -C examples/ros2 clean
 	make -C examples/ros2 write
 	make -C examples/ros2 read
+	pipenv install --categories ulog2mcap-example
+	pipenv run pytest examples/ulog2mcap/test_convert.py -v
 
 .PHONY: lint
 lint: pipenv
