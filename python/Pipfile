@@ -37,3 +37,7 @@ isort = "*"
 
 [requires]
 python_version = "3.10"
+
+[ulog2mcap-example]
+numpy = "*"
+pyulog = "*"
