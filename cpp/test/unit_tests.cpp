@@ -1096,13 +1096,21 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
 
     const auto& schemas = reader.schemas();
     REQUIRE(schemas.size() == 2);
-    REQUIRE(std::find_if(schemas.begin(), schemas.end(), [](const auto& x){return x.second->name == "Schema1";}) != schemas.end());
-    REQUIRE(std::find_if(schemas.begin(), schemas.end(), [](const auto& x){return x.second->name == "Schema2";}) != schemas.end());
+    REQUIRE(std::find_if(schemas.begin(), schemas.end(), [](const auto& x) {
+              return x.second->name == "Schema1";
+            }) != schemas.end());
+    REQUIRE(std::find_if(schemas.begin(), schemas.end(), [](const auto& x) {
+              return x.second->name == "Schema2";
+            }) != schemas.end());
 
     const auto& channels = reader.channels();
     REQUIRE(channels.size() == 2);
-    REQUIRE(std::find_if(channels.begin(), channels.end(), [](const auto& x){return x.second->topic == "topic1";}) != channels.end());
-    REQUIRE(std::find_if(channels.begin(), channels.end(), [](const auto& x){return x.second->topic == "topic2";}) != channels.end());
+    REQUIRE(std::find_if(channels.begin(), channels.end(), [](const auto& x) {
+              return x.second->topic == "topic1";
+            }) != channels.end());
+    REQUIRE(std::find_if(channels.begin(), channels.end(), [](const auto& x) {
+              return x.second->topic == "topic2";
+            }) != channels.end());
 
     reader.close();
   }
@@ -1129,13 +1137,21 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
 
     const auto& schemas = reader.schemas();
     REQUIRE(schemas.size() == 2);
-    REQUIRE(std::find_if(schemas.begin(), schemas.end(), [](const auto& x){return x.second->name == "Schema1";}) != schemas.end());
-    REQUIRE(std::find_if(schemas.begin(), schemas.end(), [](const auto& x){return x.second->name == "Schema2";}) != schemas.end());
+    REQUIRE(std::find_if(schemas.begin(), schemas.end(), [](const auto& x) {
+              return x.second->name == "Schema1";
+            }) != schemas.end());
+    REQUIRE(std::find_if(schemas.begin(), schemas.end(), [](const auto& x) {
+              return x.second->name == "Schema2";
+            }) != schemas.end());
 
     const auto& channels = reader.channels();
     REQUIRE(channels.size() == 2);
-    REQUIRE(std::find_if(channels.begin(), channels.end(), [](const auto& x){return x.second->topic == "topic1";}) != channels.end());
-    REQUIRE(std::find_if(channels.begin(), channels.end(), [](const auto& x){return x.second->topic == "topic2";}) != channels.end());
+    REQUIRE(std::find_if(channels.begin(), channels.end(), [](const auto& x) {
+              return x.second->topic == "topic1";
+            }) != channels.end());
+    REQUIRE(std::find_if(channels.begin(), channels.end(), [](const auto& x) {
+              return x.second->topic == "topic2";
+            }) != channels.end());
 
     reader.close();
   }
@@ -1205,20 +1221,28 @@ TEST_CASE("Multiple empty channels and schemas are preserved", "[reader][writer]
     const auto& schemas = reader.schemas();
     REQUIRE(schemas.size() == 2);
 
-    const auto& imu_schema = std::find_if(schemas.begin(), schemas.end(), [](const auto& x){return x.second->name == "sensor_msgs/Imu";});
+    const auto& imu_schema = std::find_if(schemas.begin(), schemas.end(), [](const auto& x) {
+      return x.second->name == "sensor_msgs/Imu";
+    });
     REQUIRE(imu_schema != schemas.end());
 
-    const auto& twist_schema = std::find_if(schemas.begin(), schemas.end(), [](const auto& x){return x.second->name == "geometry_msgs/Twist";});
+    const auto& twist_schema = std::find_if(schemas.begin(), schemas.end(), [](const auto& x) {
+      return x.second->name == "geometry_msgs/Twist";
+    });
     REQUIRE(twist_schema != schemas.end());
 
     // Verify channels
     const auto& channels = reader.channels();
     REQUIRE(channels.size() == 2);
 
-    const auto& imu_channel = std::find_if(channels.begin(), channels.end(), [](const auto& x){return x.second->topic == "/imu/data";});
+    const auto& imu_channel = std::find_if(channels.begin(), channels.end(), [](const auto& x) {
+      return x.second->topic == "/imu/data";
+    });
     REQUIRE(imu_channel != channels.end());
 
-    const auto& cmd_vel_channel = std::find_if(channels.begin(), channels.end(), [](const auto& x){return x.second->topic == "/cmd_vel";});
+    const auto& cmd_vel_channel = std::find_if(channels.begin(), channels.end(), [](const auto& x) {
+      return x.second->topic == "/cmd_vel";
+    });
     REQUIRE(cmd_vel_channel != channels.end());
 
     reader.close();
