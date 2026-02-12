@@ -500,6 +500,8 @@ void McapWriter::terminate() {
   statistics_.channelMessageCounts.clear();
   statistics_.metadataCount = 0;
   statistics_.attachmentCount = 0;
+  statistics_.messageStartTime = 0;
+  statistics_.messageEndTime = 0;
   writtenSchemas_.clear();
   currentMessageIndex_.clear();
   currentChunkStart_ = MaxTime;
