@@ -1085,7 +1085,7 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
     writer.close();
   }
 
-  // Verify first file only has Schema1 and Channel1
+  // Verify first file has all schemas and all channels, but only one message
   {
     mcap::McapReader reader;
     auto status = reader.open(buffer1);
@@ -1093,6 +1093,16 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
 
     status = reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan);
     requireOk(status);
+
+    const auto maybeStats = reader.statistics();
+    REQUIRE(maybeStats.has_value());
+    const auto& stats = *maybeStats;
+    REQUIRE(stats.messageCount == 1);
+    REQUIRE(stats.schemaCount == 2);
+    REQUIRE(stats.channelCount == 2);
+    REQUIRE(stats.attachmentCount == 0);
+    REQUIRE(stats.metadataCount == 0);
+    REQUIRE(stats.channelMessageCounts.size() == 1);
 
     const auto& schemas = reader.schemas();
     REQUIRE(schemas.size() == 2);
@@ -1126,7 +1136,7 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
     writer.close();
   }
 
-  // Verify second file only has Schema2 and Channel2
+  // Verify second file has all schemas and all channels, but only one message
   {
     mcap::McapReader reader;
     auto status = reader.open(buffer2);
@@ -1134,6 +1144,16 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
 
     status = reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan);
     requireOk(status);
+
+    const auto maybeStats = reader.statistics();
+    REQUIRE(maybeStats.has_value());
+    const auto& stats = *maybeStats;
+    REQUIRE(stats.messageCount == 1);
+    REQUIRE(stats.schemaCount == 2);
+    REQUIRE(stats.channelCount == 2);
+    REQUIRE(stats.attachmentCount == 0);
+    REQUIRE(stats.metadataCount == 0);
+    REQUIRE(stats.channelMessageCounts.size() == 1);
 
     const auto& schemas = reader.schemas();
     REQUIRE(schemas.size() == 2);
@@ -1216,6 +1236,16 @@ TEST_CASE("Multiple empty channels and schemas are preserved", "[reader][writer]
 
     status = reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan);
     REQUIRE(status.ok());
+
+    const auto maybeStats = reader.statistics();
+    REQUIRE(maybeStats.has_value());
+    const auto& stats = *maybeStats;
+    REQUIRE(stats.messageCount == 0);
+    REQUIRE(stats.schemaCount == 2);
+    REQUIRE(stats.channelCount == 2);
+    REQUIRE(stats.attachmentCount == 0);
+    REQUIRE(stats.metadataCount == 0);
+    REQUIRE(stats.channelMessageCounts.size() == 0);
 
     // Verify schemas
     const auto& schemas = reader.schemas();

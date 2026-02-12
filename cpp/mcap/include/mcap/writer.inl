@@ -495,7 +495,11 @@ void McapWriter::terminate() {
   attachmentIndex_.clear();
   metadataIndex_.clear();
   chunkIndex_.clear();
-  statistics_ = {};
+  statistics_.messageCount = 0;
+  statistics_.chunkCount = 0;
+  statistics_.channelMessageCounts.clear();
+  statistics_.metadataCount = 0;
+  statistics_.attachmentCount = 0;
   writtenSchemas_.clear();
   currentMessageIndex_.clear();
   currentChunkStart_ = MaxTime;
@@ -512,11 +516,13 @@ void McapWriter::terminate() {
 void McapWriter::addSchema(Schema& schema) {
   schema.id = uint16_t(schemas_.size() + 1);
   schemas_.push_back(schema);
+  ++statistics_.schemaCount;
 }
 
 void McapWriter::addChannel(Channel& channel) {
   channel.id = uint16_t(channels_.size() + 1);
   channels_.push_back(channel);
+  ++statistics_.channelCount;
 }
 
 Status McapWriter::write(const Message& message) {
@@ -548,9 +554,6 @@ Status McapWriter::write(const Message& message) {
       // Write the Schema record
       uncompressedSize_ += write(output, schemas_[schemaIndex]);
       writtenSchemas_.insert(channel.schemaId);
-
-      // Update schema statistics
-      ++statistics_.schemaCount;
     }
 
     // Write the Channel record
@@ -558,7 +561,6 @@ Status McapWriter::write(const Message& message) {
 
     // Update channel statistics
     channelMessageCounts.emplace(message.channelId, 0);
-    ++statistics_.channelCount;
   }
 
   // Before writing a message that would overflow the current chunk, close it.
