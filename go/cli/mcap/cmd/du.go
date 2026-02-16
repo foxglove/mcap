@@ -372,7 +372,7 @@ func computeTopicSizesFromIndex(
 	rs io.ReadSeeker,
 	chunkIndexes []*mcap.ChunkIndex,
 	channelTopics map[uint16]string,
-) (map[string]uint64, uint64, error) {
+) (topicSizes map[string]uint64, totalSize uint64, err error) {
 	// Try to use io.ReaderAt for goroutine-safe parallel reads.
 	ra, isReaderAt := rs.(io.ReaderAt)
 
@@ -386,7 +386,7 @@ func computeTopicSizesParallel(
 	ra io.ReaderAt,
 	chunkIndexes []*mcap.ChunkIndex,
 	channelTopics map[uint16]string,
-) (map[string]uint64, uint64, error) {
+) (topicSizes map[string]uint64, totalSize uint64, err error) {
 	numWorkers := runtime.NumCPU()
 	if numWorkers > len(chunkIndexes) {
 		numWorkers = len(chunkIndexes)
@@ -423,8 +423,7 @@ func computeTopicSizesParallel(
 		close(results)
 	}()
 
-	topicSizes := make(map[string]uint64)
-	var totalMsgSize uint64
+	topicSizes = make(map[string]uint64)
 
 	for r := range results {
 		if r.err != nil {
@@ -433,19 +432,18 @@ func computeTopicSizesParallel(
 		for topic, size := range r.topicSizes {
 			topicSizes[topic] += size
 		}
-		totalMsgSize += r.totalSize
+		totalSize += r.totalSize
 	}
 
-	return topicSizes, totalMsgSize, nil
+	return topicSizes, totalSize, nil
 }
 
 func computeTopicSizesSequential(
 	rs io.ReadSeeker,
 	chunkIndexes []*mcap.ChunkIndex,
 	channelTopics map[uint16]string,
-) (map[string]uint64, uint64, error) {
-	topicSizes := make(map[string]uint64)
-	var totalMsgSize uint64
+) (topicSizes map[string]uint64, totalSize uint64, err error) {
+	topicSizes = make(map[string]uint64)
 	var buf []byte
 
 	for _, ci := range chunkIndexes {
@@ -464,17 +462,17 @@ func computeTopicSizesSequential(
 		if _, err := io.ReadFull(rs, buf); err != nil {
 			return nil, 0, fmt.Errorf("failed to read message indexes: %w", err)
 		}
-		ts, total, err := parseChunkMessageIndexes(buf, ci.UncompressedSize, channelTopics)
-		if err != nil {
-			return nil, 0, err
+		ts, total, parseErr := parseChunkMessageIndexes(buf, ci.UncompressedSize, channelTopics)
+		if parseErr != nil {
+			return nil, 0, parseErr
 		}
 		for topic, size := range ts {
 			topicSizes[topic] += size
 		}
-		totalMsgSize += total
+		totalSize += total
 	}
 
-	return topicSizes, totalMsgSize, nil
+	return topicSizes, totalSize, nil
 }
 
 // processChunkMessageIndexesAt reads MessageIndex records for a single chunk
@@ -483,7 +481,7 @@ func processChunkMessageIndexesAt(
 	ra io.ReaderAt,
 	ci *mcap.ChunkIndex,
 	channelTopics map[uint16]string,
-) (map[string]uint64, uint64, error) {
+) (topicSizes map[string]uint64, totalSize uint64, err error) {
 	if ci.MessageIndexLength == 0 {
 		return nil, 0, nil
 	}
@@ -519,7 +517,7 @@ func parseChunkMessageIndexes(
 	buf []byte,
 	uncompressedSize uint64,
 	channelTopics map[uint16]string,
-) (map[string]uint64, uint64, error) {
+) (topicSizes map[string]uint64, totalSize uint64, err error) {
 	type offsetEntry struct {
 		offset    uint64
 		channelID uint16
@@ -564,8 +562,7 @@ func parseChunkMessageIndexes(
 	// (channelID 2 + sequence 4 + logTime 8 + publishTime 8).
 	const messageOverhead = 31
 
-	topicSizes := make(map[string]uint64)
-	var totalSize uint64
+	topicSizes = make(map[string]uint64)
 
 	for i, entry := range entries {
 		var recordSize uint64
@@ -623,6 +620,7 @@ are interleaved between messages within a chunk.`,
 
 func init() {
 	duCmd.PersistentFlags().BoolVar(&duRough, "rough", false,
-		"Fast approximation using message indexes (skips decompression, may over-count if non-message records are interleaved in chunks)")
+		"Fast approximation using message indexes "+
+			"(skips decompression, may over-count if non-message records are interleaved in chunks)")
 	rootCmd.AddCommand(duCmd)
 }
