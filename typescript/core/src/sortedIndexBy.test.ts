@@ -1,4 +1,4 @@
-import { sortedIndexBy } from "./sortedIndexBy";
+import { sortedIndexBy } from "./sortedIndexBy.ts";
 
 describe("sortedIndexBy", () => {
   it("handles an empty array", () => {

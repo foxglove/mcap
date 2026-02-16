@@ -1,13 +1,10 @@
 {
-  "extends": "@foxglove/tsconfig/base",
-  "include": ["./**/*"],
+  "extends": "@foxglove/tsconfig/node.json",
+  "include": ["./src/**/*"],
   "compilerOptions": {
-    "rootDir": ".",
+    "rootDir": "./src",
     "outDir": "./dist/esm",
-    "module": "es2022",
-    "target": "es2022",
-    "lib": ["es2022", "dom"],
     "composite": true,
-    "incremental": true
+    "erasableSyntaxOnly": false
   }
 }

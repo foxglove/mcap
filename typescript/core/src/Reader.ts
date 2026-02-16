@@ -1,4 +1,4 @@
-import { getBigUint64 } from "./getBigUint64";
+import { getBigUint64 } from "./getBigUint64.ts";
 
 // For performance reasons we use a single TextDecoder instance whose internal state is merely
 // the encoding (defaults to UTF-8). This means that a TextDecoder.decode() call is not affected

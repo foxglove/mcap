@@ -1,4 +1,4 @@
-import { ChunkBuilder } from "./ChunkBuilder";
+import { ChunkBuilder } from "./ChunkBuilder.ts";
 
 describe("ChunkBuilder", () => {
   it("generates correct messageStartTime/messageEndTime for messages with logTime 0", () => {

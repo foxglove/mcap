@@ -1,8 +1,8 @@
-import Reader from "./Reader";
-import { parseRecord } from "./parse";
-import { sortedIndexBy } from "./sortedIndexBy";
-import { sortedLastIndexBy } from "./sortedLastIndex";
-import { IReadable, TypedMcapRecords } from "./types";
+import Reader from "./Reader.ts";
+import { parseRecord } from "./parse.ts";
+import { sortedIndexBy } from "./sortedIndexBy.ts";
+import { sortedLastIndexBy } from "./sortedLastIndex.ts";
+import type { IReadable, TypedMcapRecords } from "./types.ts";
 
 type ChunkCursorParams = {
   chunkIndex: TypedMcapRecords["ChunkIndex"];

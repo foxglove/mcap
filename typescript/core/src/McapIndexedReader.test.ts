@@ -1,11 +1,11 @@
 import { crc32 } from "@foxglove/crc";
 
-import { ChunkBuilder } from "./ChunkBuilder";
-import { McapIndexedReader } from "./McapIndexedReader";
-import { McapRecordBuilder } from "./McapRecordBuilder";
-import { McapWriter } from "./McapWriter";
-import { TempBuffer } from "./TempBuffer";
-import { MCAP_MAGIC, Opcode } from "./constants";
+import { ChunkBuilder } from "./ChunkBuilder.ts";
+import { McapIndexedReader } from "./McapIndexedReader.ts";
+import { McapRecordBuilder } from "./McapRecordBuilder.ts";
+import { McapWriter } from "./McapWriter.ts";
+import { TempBuffer } from "./TempBuffer.ts";
+import { MCAP_MAGIC, Opcode } from "./constants.ts";
 import {
   record,
   uint64LE,
@@ -15,8 +15,8 @@ import {
   collect,
   uint16LE,
   uint32PrefixedBytes,
-} from "./testUtils";
-import { Channel, TypedMcapRecord, TypedMcapRecords } from "./types";
+} from "./testUtils.ts";
+import type { Channel, TypedMcapRecord, TypedMcapRecords } from "./types.ts";
 
 /**
  * Create an IReadable from a buffer. Simulates small buffer reuse to help test that readers aren't

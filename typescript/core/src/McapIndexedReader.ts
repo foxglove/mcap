@@ -1,11 +1,11 @@
 import { crc32, crc32Final, crc32Init, crc32Update } from "@foxglove/crc";
-import Heap from "heap-js";
+import { Heap } from "heap-js";
 
-import { ChunkCursor } from "./ChunkCursor";
-import Reader from "./Reader";
-import { MCAP_MAGIC } from "./constants";
-import { parseMagic, parseRecord } from "./parse";
-import { DecompressHandlers, IReadable, TypedMcapRecords } from "./types";
+import { ChunkCursor } from "./ChunkCursor.ts";
+import Reader from "./Reader.ts";
+import { MCAP_MAGIC } from "./constants.ts";
+import { parseMagic, parseRecord } from "./parse.ts";
+import type { DecompressHandlers, IReadable, TypedMcapRecords } from "./types.ts";
 
 type McapIndexedReaderArgs = {
   readable: IReadable;

@@ -1,14 +1,14 @@
-export { McapIndexedReader } from "./McapIndexedReader";
-export { default as McapStreamReader } from "./McapStreamReader";
-export { McapWriter } from "./McapWriter";
-export type { McapWriterOptions } from "./McapWriter";
-export { McapRecordBuilder } from "./McapRecordBuilder";
-export { ChunkBuilder as McapChunkBuilder } from "./ChunkBuilder";
-export * as McapTypes from "./types";
-export * as McapConstants from "./constants";
-export type { IWritable } from "./IWritable";
-export type { ISeekableWriter } from "./ISeekableWriter";
+export { McapIndexedReader } from "./McapIndexedReader.ts";
+export { default as McapStreamReader } from "./McapStreamReader.ts";
+export { McapWriter } from "./McapWriter.ts";
+export type { McapWriterOptions } from "./McapWriter.ts";
+export { McapRecordBuilder } from "./McapRecordBuilder.ts";
+export { ChunkBuilder as McapChunkBuilder } from "./ChunkBuilder.ts";
+export * as McapTypes from "./types.ts";
+export * as McapConstants from "./constants.ts";
+export type { IWritable } from "./IWritable.ts";
+export type { ISeekableWriter } from "./ISeekableWriter.ts";
 
-export * from "./hasMcapPrefix";
-export * from "./parse";
-export * from "./TempBuffer";
+export * from "./hasMcapPrefix.ts";
+export * from "./parse.ts";
+export * from "./TempBuffer.ts";

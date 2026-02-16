@@ -1,8 +1,8 @@
 import { crc32 } from "@foxglove/crc";
 
-import { McapRecordBuilder } from "./McapRecordBuilder";
-import McapStreamReader from "./McapStreamReader";
-import { MCAP_MAGIC, Opcode } from "./constants";
+import { McapRecordBuilder } from "./McapRecordBuilder.ts";
+import McapStreamReader from "./McapStreamReader.ts";
+import { MCAP_MAGIC, Opcode } from "./constants.ts";
 import {
   record,
   uint64LE,
@@ -12,8 +12,8 @@ import {
   keyValues,
   crcSuffix,
   uint64PrefixedBytes,
-} from "./testUtils";
-import { TypedMcapRecords } from "./types";
+} from "./testUtils.ts";
+import type { TypedMcapRecords } from "./types.ts";
 
 describe("McapStreamReader", () => {
   it("rejects invalid header", () => {

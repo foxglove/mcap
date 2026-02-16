@@ -1,6 +1,6 @@
-import { ISeekableWriter } from "./ISeekableWriter";
-import { IWritable } from "./IWritable";
-import { IReadable } from "./types";
+import type { ISeekableWriter } from "./ISeekableWriter.ts";
+import type { IWritable } from "./IWritable.ts";
+import type { IReadable } from "./types.ts";
 
 /**
  * In-memory buffer used for reading and writing MCAP files in tests. Can be used as both an IReadable and an IWritable.
@@ -13,7 +13,9 @@ export class TempBuffer implements IReadable, IWritable, ISeekableWriter {
     if (source instanceof ArrayBuffer) {
       this.#buffer = source;
     } else if (source) {
-      this.#buffer = new Uint8Array(source.buffer, source.byteOffset, source.byteLength).buffer;
+      const copy = new Uint8Array(source.byteLength);
+      copy.set(new Uint8Array(source.buffer, source.byteOffset, source.byteLength));
+      this.#buffer = copy.buffer;
     }
   }
 
