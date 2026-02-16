@@ -1,5 +1,5 @@
 import type { McapTypes } from "@mcap/core";
-import { FileHandle } from "fs/promises";
+import type { FileHandle } from "node:fs/promises";
 
 /**
  * IReadable implementation for FileHandle.

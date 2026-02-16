@@ -1,5 +1,5 @@
 import type { IWritable } from "@mcap/core";
-import { FileHandle } from "fs/promises";
+import type { FileHandle } from "node:fs/promises";
 
 /**
  * IWritable implementation for FileHandle.
