@@ -11,6 +11,6 @@ site/
 .pnp.*
 .yarn/*
 *.tgz
-
+*.tsbuildinfo
 *.db3-shm
 *.db3-wal
