@@ -12,6 +12,7 @@
     "email": "support@foxglove.dev"
   },
   "homepage": "https://foxglove.dev/",
+  "type": "module",
   "module": "dist/esm/src/index.js",
   "main": "dist/cjs/src/index.js",
   "typings": "dist/esm/src/index.d.ts",
@@ -27,7 +28,7 @@
     "nodejs.js"
   ],
   "scripts": {
-    "build": "tsc -b tsconfig.json tsconfig.cjs.json",
+    "build": "tsc -b tsconfig.json tsconfig.cjs.json && echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
     "prepack": "yarn build",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
@@ -35,7 +36,7 @@
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",
-    "@foxglove/tsconfig": "1.1.0",
+    "@foxglove/tsconfig": "3.2.0",
     "@mcap/core": "workspace:*",
     "@types/jest": "29.5.8",
     "@types/node": "18.13.0",
@@ -51,7 +52,7 @@
     "jest": "29.7.0",
     "prettier": "3.1.0",
     "ts-jest": "29.1.1",
-    "typescript": "5.2.2"
+    "typescript": "5.9.3"
   },
   "dependencies": {
     "@foxglove/wasm-bz2": "^0.1.1",

@@ -13,6 +13,7 @@
     "email": "support@foxglove.dev"
   },
   "homepage": "https://foxglove.dev/",
+  "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint:ci": "eslint --report-unused-disable-directives .",
@@ -34,6 +35,6 @@
     "flatbuffers": "^23.1.21",
     "prettier": "3.1.0",
     "ts-node": "10.9.1",
-    "typescript": "5.2.2"
+    "typescript": "5.9.3"
   }
 }

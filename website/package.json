@@ -2,6 +2,7 @@
   "name": "website",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "docusaurus start --host 0.0.0.0",
@@ -21,7 +22,7 @@
     "@foxglove/eslint-plugin": "1.0.1",
     "@foxglove/rostime": "1.1.2",
     "@foxglove/schemas": "1.7.0",
-    "@foxglove/tsconfig": "2.0.0",
+    "@foxglove/tsconfig": "3.2.0",
     "@mcap/core": "workspace:*",
     "@mdx-js/react": "1.6.22",
     "@tsconfig/docusaurus": "1.0.7",
@@ -48,7 +49,7 @@
     "react": "17.0.2",
     "react-async": "10.0.1",
     "react-dom": "17.0.2",
-    "typescript": "5.2.2",
+    "typescript": "5.9.3",
     "zustand": "4.3.8"
   },
   "browserslist": {

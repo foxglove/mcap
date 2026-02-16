@@ -13,6 +13,7 @@
     "email": "support@foxglove.dev"
   },
   "homepage": "https://foxglove.dev/",
+  "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint:ci": "eslint --report-unused-disable-directives .",
@@ -22,7 +23,7 @@
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",
-    "@foxglove/tsconfig": "1.1.0",
+    "@foxglove/tsconfig": "3.2.0",
     "@mcap/core": "*",
     "@types/node": "18.13.0",
     "@typescript-eslint/eslint-plugin": "6.11.0",
@@ -37,6 +38,6 @@
     "prettier": "3.1.0",
     "ts-node": "10.9.1",
     "tsconfig-paths": "4.1.2",
-    "typescript": "5.2.2"
+    "typescript": "5.9.3"
   }
 }

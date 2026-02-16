@@ -12,6 +12,7 @@
       "website"
     ]
   },
+  "type": "module",
   "scripts": {
     "prettier": "prettier --write .",
     "prettier:check": "prettier --check .",
@@ -19,6 +20,7 @@
     "typedoc": "yarn typescript:build && typedoc --out __docs__/typescript --options typescript/typedoc.json",
     "start": "yarn workspace website start",
     "spellcheck": "cspell --relative '**'",
+    "tsc:all": "tsc --build --incremental --verbose $(git ls-files -- 'tsconfig*.json' '**/tsconfig*.json')",
     "typescript:test": "yarn jest --config typescript/jest.config.json",
     "typescript:build": "yarn workspace @mcap/core build && yarn workspace @mcap/support build && yarn workspace @mcap/nodejs build && yarn workspace @mcap/browser build",
     "typescript:clean": "yarn workspace @mcap/core build --clean && yarn workspace @mcap/support build --clean && yarn workspace @mcap/nodejs build --clean && yarn workspace @mcap/browser build --clean",
@@ -34,6 +36,6 @@
     "ts-jest": "29.1.1",
     "ts-node": "10.9.1",
     "typedoc": "0.25.3",
-    "typescript": "5.2.2"
+    "typescript": "5.9.3"
   }
 }

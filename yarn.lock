@@ -2804,7 +2804,7 @@ __metadata:
   resolution: "@foxglove/mcap-benchmarks@workspace:typescript/benchmarks"
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@mcap/core": "npm:*"
     "@types/node": "npm:18.13.0"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
@@ -2819,7 +2819,7 @@ __metadata:
     prettier: "npm:3.1.0"
     ts-node: "npm:10.9.1"
     tsconfig-paths: "npm:4.1.2"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -2829,7 +2829,7 @@ __metadata:
   dependencies:
     "@foxglove/crc": "npm:^0.0.3"
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@mcap/core": "workspace:*"
     "@mcap/support": "workspace:*"
     "@types/diff": "npm:^5.0.2"
@@ -2856,7 +2856,7 @@ __metadata:
     prettier: "npm:3.1.0"
     ts-node: "npm:10.9.1"
     tsconfig-paths: "npm:^4.1.2"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -2869,7 +2869,7 @@ __metadata:
     "@foxglove/rosmsg": "npm:3.1.0"
     "@foxglove/rosmsg-serialization": "npm:1.5.3"
     "@foxglove/rosmsg2-serialization": "npm:1.1.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@foxglove/wasm-bz2": "npm:0.1.1"
     "@foxglove/wasm-lz4": "npm:1.0.2"
     "@foxglove/wasm-zstd": "npm:1.0.1"
@@ -2892,7 +2892,7 @@ __metadata:
     protobufjs: "npm:7.2.5"
     ts-node: "npm:10.9.1"
     tsconfig-paths: "npm:4.1.2"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -2913,7 +2913,7 @@ __metadata:
     eslint-plugin-prettier: "npm:5.0.1"
     prettier: "npm:3.1.0"
     ts-node: "npm:10.9.1"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -2935,7 +2935,7 @@ __metadata:
     flatbuffers: "npm:^23.1.21"
     prettier: "npm:3.1.0"
     ts-node: "npm:10.9.1"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -2956,7 +2956,7 @@ __metadata:
     eslint-plugin-prettier: "npm:5.0.1"
     prettier: "npm:3.1.0"
     ts-node: "npm:10.9.1"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -2966,7 +2966,7 @@ __metadata:
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
     "@foxglove/schemas": "npm:1.8.0"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@foxglove/ulog": "npm:2.3.1"
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
@@ -2990,7 +2990,7 @@ __metadata:
     ts-jest: "npm:29.4.6"
     ts-node: "npm:10.9.1"
     tsconfig-paths: "npm:4.1.2"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -3003,7 +3003,7 @@ __metadata:
     "@foxglove/rosmsg": "npm:3.1.0"
     "@foxglove/rosmsg-serialization": "npm:1.5.3"
     "@foxglove/rosmsg2-serialization": "npm:1.1.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@foxglove/wasm-bz2": "npm:0.1.1"
     "@foxglove/wasm-lz4": "npm:1.0.2"
     "@foxglove/wasm-zstd": "npm:1.0.1"
@@ -3030,7 +3030,7 @@ __metadata:
     ts-jest: "npm:29.1.1"
     ts-node: "npm:10.9.1"
     tsconfig-paths: "npm:4.1.2"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -3138,17 +3138,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/tsconfig@npm:1.1.0":
-  version: 1.1.0
-  resolution: "@foxglove/tsconfig@npm:1.1.0"
-  checksum: 10c0/e4386d68520fa9dcc191f499f1beedcedbafd7a77dfaa3a9294694e3e557dd2863dcf656d97d3425edca2921d977be7aefcbdfcb86d5885b9c9e55cf716d4159
-  languageName: node
-  linkType: hard
-
-"@foxglove/tsconfig@npm:2.0.0":
-  version: 2.0.0
-  resolution: "@foxglove/tsconfig@npm:2.0.0"
-  checksum: 10c0/fccd3d2a67b85cc4532653930f6e0c311628458b489ee2e1e0aa0aa60d11b57bc2567b65344ff4007e238f42037eff22ec83f41d948e3be1a1d856ef207ac3d8
+"@foxglove/tsconfig@npm:3.2.0":
+  version: 3.2.0
+  resolution: "@foxglove/tsconfig@npm:3.2.0"
+  checksum: 10c0/7df6e49fe8c2e0b891554370dbbfc1d4bf394939e7414cee35f5a68282239240878c4f6fbaaf7b65cc86834bc5420879505b631585f6737214e1a14109ed562e
   languageName: node
   linkType: hard
 
@@ -3836,7 +3829,7 @@ __metadata:
   resolution: "@mcap/browser@workspace:typescript/browser"
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@mcap/core": "workspace:*"
     "@types/jest": "npm:29.5.8"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
@@ -3853,7 +3846,7 @@ __metadata:
     prettier: "npm:3.1.0"
     ts-jest: "npm:29.1.1"
     tslib: "npm:^2.5.0"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -3863,7 +3856,7 @@ __metadata:
   dependencies:
     "@foxglove/crc": "npm:^0.0.3"
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@types/jest": "npm:29.5.8"
     "@types/lodash": "npm:4.14.191"
     "@types/node": "npm:18.13.0"
@@ -3883,7 +3876,7 @@ __metadata:
     ts-jest: "npm:29.1.1"
     ts-node: "npm:10.9.1"
     tslib: "npm:^2.5.0"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -3892,7 +3885,7 @@ __metadata:
   resolution: "@mcap/nodejs@workspace:typescript/nodejs"
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@mcap/core": "workspace:*"
     "@types/jest": "npm:29.5.8"
     "@types/node": "npm:18.13.0"
@@ -3910,7 +3903,7 @@ __metadata:
     prettier: "npm:3.1.0"
     ts-jest: "npm:29.1.1"
     tslib: "npm:^2.5.0"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -3919,7 +3912,7 @@ __metadata:
   resolution: "@mcap/support@workspace:typescript/support"
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@foxglove/wasm-bz2": "npm:^0.1.1"
     "@foxglove/wasm-lz4": "npm:^1.0.2"
     "@foxglove/wasm-zstd": "npm:^1.0.1"
@@ -3940,7 +3933,7 @@ __metadata:
     protobufjs: "npm:^7.2.5"
     ts-jest: "npm:29.1.1"
     tslib: "npm:^2.5.0"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -14698,7 +14691,7 @@ __metadata:
     ts-jest: "npm:29.1.1"
     ts-node: "npm:10.9.1"
     typedoc: "npm:0.25.3"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -16100,23 +16093,23 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@npm:5.2.2, typescript@npm:^4 || ^5":
-  version: 5.2.2
-  resolution: "typescript@npm:5.2.2"
+"typescript@npm:5.9.3, typescript@npm:^4 || ^5":
+  version: 5.9.3
+  resolution: "typescript@npm:5.9.3"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 10c0/91ae3e6193d0ddb8656d4c418a033f0f75dec5e077ebbc2bd6d76439b93f35683936ee1bdc0e9cf94ec76863aa49f27159b5788219b50e1cd0cd6d110aa34b07
+  checksum: 10c0/6bd7552ce39f97e711db5aa048f6f9995b53f1c52f7d8667c1abdc1700c68a76a308f579cd309ce6b53646deb4e9a1be7c813a93baaf0a28ccd536a30270e1c5
   languageName: node
   linkType: hard
 
-"typescript@patch:typescript@npm%3A5.2.2#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^4 || ^5#optional!builtin<compat/typescript>":
-  version: 5.2.2
-  resolution: "typescript@patch:typescript@npm%3A5.2.2#optional!builtin<compat/typescript>::version=5.2.2&hash=f3b441"
+"typescript@patch:typescript@npm%3A5.9.3#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^4 || ^5#optional!builtin<compat/typescript>":
+  version: 5.9.3
+  resolution: "typescript@patch:typescript@npm%3A5.9.3#optional!builtin<compat/typescript>::version=5.9.3&hash=5786d5"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 10c0/062c1cee1990e6b9419ce8a55162b8dc917eb87f807e4de0327dbc1c2fa4e5f61bc0dd4e034d38ff541d1ed0479b53bcee8e4de3a4075c51a1724eb6216cb6f5
+  checksum: 10c0/ad09fdf7a756814dce65bc60c1657b40d44451346858eea230e10f2e95a289d9183b6e32e5c11e95acc0ccc214b4f36289dcad4bf1886b0adb84d711d336a430
   languageName: node
   linkType: hard
 
@@ -16875,7 +16868,7 @@ __metadata:
     "@foxglove/eslint-plugin": "npm:1.0.1"
     "@foxglove/rostime": "npm:1.1.2"
     "@foxglove/schemas": "npm:1.7.0"
-    "@foxglove/tsconfig": "npm:2.0.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@mcap/core": "workspace:*"
     "@mdx-js/react": "npm:1.6.22"
     "@tsconfig/docusaurus": "npm:1.0.7"
@@ -16902,7 +16895,7 @@ __metadata:
     react: "npm:17.0.2"
     react-async: "npm:10.0.1"
     react-dom: "npm:17.0.2"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
     zustand: "npm:4.3.8"
   languageName: unknown
   linkType: soft

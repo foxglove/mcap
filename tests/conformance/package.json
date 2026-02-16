@@ -2,6 +2,7 @@
   "name": "@foxglove/mcap-conformance",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "tsc -b tsconfig.json tsconfig.cjs.json",
     "lint:ci": "eslint --report-unused-disable-directives .",
@@ -12,7 +13,7 @@
   "devDependencies": {
     "@foxglove/crc": "^0.0.3",
     "@foxglove/eslint-plugin": "1.0.1",
-    "@foxglove/tsconfig": "1.1.0",
+    "@foxglove/tsconfig": "3.2.0",
     "@mcap/core": "workspace:*",
     "@mcap/support": "workspace:*",
     "@types/diff": "^5.0.2",
@@ -39,6 +40,6 @@
     "prettier": "3.1.0",
     "ts-node": "10.9.1",
     "tsconfig-paths": "^4.1.2",
-    "typescript": "5.2.2"
+    "typescript": "5.9.3"
   }
 }
