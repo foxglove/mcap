@@ -1,0 +1,15 @@
+name: PR Review
+
+on:
+  pull_request: {}
+
+jobs:
+  review:
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+      id-token: write
+    uses: foxglove/actions/.github/workflows/review.yml@main
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
