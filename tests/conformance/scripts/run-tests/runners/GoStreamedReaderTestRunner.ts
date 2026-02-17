@@ -11,7 +11,7 @@ export default class GoStreamedReaderTestRunner extends StreamedReadTestRunner {
 
   async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const { stdout } = await promisify(exec)(`./bin/test-read-conformance ${filePath} streamed`, {
-      cwd: join(__dirname, "../../../../../go/conformance"),
+      cwd: join(import.meta.dirname, "../../../../../go/conformance"),
     });
     return JSON.parse(stdout) as StreamedReadTestResult;
   }

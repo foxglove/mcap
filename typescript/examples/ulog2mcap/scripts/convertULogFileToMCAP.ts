@@ -268,7 +268,7 @@ export async function convertULogFileToMCAP(
   }
 
   // Add an additional channel for log messages
-  const root = await protobufjs.load(__dirname + "/Log.proto");
+  const root = await protobufjs.load(`${import.meta.dirname}/Log.proto`);
   const logType = root.lookupType("foxglove.Log");
   const logSchema = await outputFile.registerSchema({
     name: "foxglove.Log",

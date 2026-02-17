@@ -466,7 +466,7 @@ describe("Create MCAP files from ULog", () => {
   });
 
   it("should perform full ULog to MCAP conversion with sample files", async () => {
-    const inputFileHandle = new FileReader(__dirname + "/../fixtures/test_ulog.ulg");
+    const inputFileHandle = new FileReader(`${import.meta.dirname}/../fixtures/test_ulog.ulg`);
 
     const mockOutputFile = new TempBuffer();
     await convertULogFileToMCAP(

@@ -13,12 +13,12 @@ export default class SwiftWriterTestRunner extends WriteTestRunner {
     const { stdout, stderr } = await promisify(exec)(
       `./.build/debug/conformance write ${filePath}`,
       {
-        cwd: path.join(__dirname, "../../../../.."),
+        cwd: path.join(import.meta.dirname, "../../../../.."),
         encoding: undefined,
       },
     );
 
-    if (stderr instanceof Buffer) {
+    if (Buffer.isBuffer(stderr)) {
       const errText = new TextDecoder().decode(stderr);
       if (errText.length > 0) {
         console.error(errText);

@@ -151,7 +151,7 @@ async function compileMcapClass(): Promise<Mcap> {
     }
     return originalReadBytes.call(this, Number(len));
   };
-  const ksy = await fs.readFile(path.join(__dirname, "../../../../../website/docs/spec/mcap.ksy"), {
+  const ksy = await fs.readFile(path.join(import.meta.dirname, "../../../../../website/docs/spec/mcap.ksy"), {
     encoding: "utf-8",
   });
   const compiler = new KaitaiStructCompiler();

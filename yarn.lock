@@ -2979,7 +2979,7 @@ __metadata:
     "@foxglove/eslint-plugin": "npm:1.0.1"
     "@foxglove/tsconfig": "npm:3.2.0"
     "@mcap/core": "npm:*"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     commander: "npm:12.1.0"
@@ -3007,7 +3007,7 @@ __metadata:
     "@types/diff": "npm:^5.0.2"
     "@types/js-yaml": "npm:^4.0.5"
     "@types/lodash-es": "npm:4.17.12"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     colors: "npm:1.4.0"
@@ -3048,7 +3048,7 @@ __metadata:
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
     "@mcap/support": "workspace:*"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     commander: "npm:11.1.0"
@@ -3072,7 +3072,7 @@ __metadata:
     "@foxglove/eslint-plugin": "npm:1.0.1"
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     eslint: "npm:8.54.0"
     eslint-config-prettier: "npm:9.0.0"
     eslint-plugin-es: "npm:4.1.0"
@@ -3093,7 +3093,7 @@ __metadata:
     "@foxglove/schemas": "npm:1.8.0"
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     eslint: "npm:8.54.0"
     eslint-config-prettier: "npm:9.0.0"
     eslint-plugin-es: "npm:4.1.0"
@@ -3115,7 +3115,7 @@ __metadata:
     "@foxglove/schemas": "npm:1.8.0"
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     eslint: "npm:8.54.0"
     eslint-config-prettier: "npm:9.0.0"
     eslint-plugin-es: "npm:4.1.0"
@@ -3139,7 +3139,7 @@ __metadata:
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
     "@mcap/support": "workspace:*"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     commander: "npm:11.1.0"
@@ -3177,7 +3177,7 @@ __metadata:
     "@mcap/support": "workspace:*"
     "@types/jest": "npm:29.5.8"
     "@types/lodash-es": "npm:4.17.12"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     commander: "npm:11.1.0"
@@ -3993,7 +3993,7 @@ __metadata:
     "@foxglove/eslint-plugin": "npm:1.0.1"
     "@foxglove/tsconfig": "npm:3.2.0"
     "@types/jest": "npm:29.5.8"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     eslint: "npm:8.54.0"
@@ -4020,7 +4020,7 @@ __metadata:
     "@foxglove/tsconfig": "npm:3.2.0"
     "@mcap/core": "workspace:*"
     "@types/jest": "npm:29.5.8"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     eslint: "npm:8.54.0"
@@ -4050,7 +4050,7 @@ __metadata:
     "@foxglove/wasm-zstd": "npm:^1.0.1"
     "@mcap/core": "workspace:*"
     "@types/jest": "npm:29.5.8"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     eslint: "npm:8.54.0"
@@ -4854,10 +4854,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:*, @types/node@npm:18.13.0, @types/node@npm:>=13.7.0":
-  version: 18.13.0
-  resolution: "@types/node@npm:18.13.0"
-  checksum: 10c0/985ca4e6e19fb0ee8bf5618f96f0b6d96a434c28a9123c93f25a3dcc202c3fa903cf234fcee649e10977b057ccb3b796e81b094d9c84eadbaa2b7c4b97a8866e
+"@types/node@npm:*, @types/node@npm:20.19.33, @types/node@npm:>=13.7.0":
+  version: 20.19.33
+  resolution: "@types/node@npm:20.19.33"
+  dependencies:
+    undici-types: "npm:~6.21.0"
+  checksum: 10c0/a1a6234a2b6fa577fbb1ccc471e5e54a79c6e1a51be10a67b034461b752a50017854810e943494f20b3c3c6d14df84c93757e0a2ec57aa81c830d6faeab72cf2
   languageName: node
   linkType: hard
 
@@ -14872,7 +14874,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "root-workspace-0b6124@workspace:."
   dependencies:
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     cspell: "npm:8.0.0"
     jest: "npm:29.7.0"
     prettier: "npm:3.1.0"
@@ -16292,6 +16294,13 @@ __metadata:
     has-symbols: "npm:^1.0.3"
     which-boxed-primitive: "npm:^1.0.2"
   checksum: 10c0/81ca2e81134167cc8f75fa79fbcc8a94379d6c61de67090986a2273850989dd3bae8440c163121b77434b68263e34787a675cbdcb34bb2f764c6b9c843a11b66
+  languageName: node
+  linkType: hard
+
+"undici-types@npm:~6.21.0":
+  version: 6.21.0
+  resolution: "undici-types@npm:6.21.0"
+  checksum: 10c0/c01ed51829b10aa72fc3ce64b747f8e74ae9b60eafa19a7b46ef624403508a54c526ffab06a14a26b3120d055e1104d7abe7c9017e83ced038ea5cf52f8d5e04
   languageName: node
   linkType: hard
 

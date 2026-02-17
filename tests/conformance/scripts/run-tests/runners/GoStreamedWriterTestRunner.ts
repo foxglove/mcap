@@ -11,7 +11,7 @@ export default class GoStreamedWriterTestRunner extends WriteTestRunner {
 
   async runWriteTest(filePath: string): Promise<Uint8Array> {
     const { stdout } = await promisify(exec)(`./bin/test-write-conformance ${filePath}`, {
-      cwd: join(__dirname, "../../../../../go/conformance"),
+      cwd: join(import.meta.dirname, "../../../../../go/conformance"),
       encoding: undefined,
     });
     return stdout as unknown as Uint8Array;

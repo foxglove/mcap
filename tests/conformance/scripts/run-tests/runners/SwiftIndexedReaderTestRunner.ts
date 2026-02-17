@@ -14,7 +14,7 @@ export default class SwiftIndexedReaderTestRunner extends IndexedReadTestRunner 
     const { stdout } = await promisify(exec)(
       `./.build/debug/conformance read-indexed ${filePath}`,
       {
-        cwd: path.join(__dirname, "../../../../.."),
+        cwd: path.join(import.meta.dirname, "../../../../.."),
       },
     );
 

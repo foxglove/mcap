@@ -13,7 +13,7 @@ export default class SwiftStreamedReaderTestRunner extends StreamedReadTestRunne
     const { stdout } = await promisify(exec)(
       `./.build/debug/conformance read-streamed ${filePath}`,
       {
-        cwd: path.join(__dirname, "../../../../.."),
+        cwd: path.join(import.meta.dirname, "../../../../.."),
       },
     );
 

@@ -11,7 +11,7 @@ export default class CppStreamedReaderTestRunner extends StreamedReadTestRunner 
 
   async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const { stdout } = await promisify(exec)(`./streamed-reader-conformance ${filePath}`, {
-      cwd: join(__dirname, "../../../../../cpp/test/build/Debug/bin"),
+      cwd: join(import.meta.dirname, "../../../../../cpp/test/build/Debug/bin"),
     });
     return JSON.parse(stdout) as StreamedReadTestResult;
   }

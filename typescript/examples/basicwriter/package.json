@@ -24,7 +24,7 @@
     "@foxglove/eslint-plugin": "1.0.1",
     "@mcap/core": "workspace:*",
     "@mcap/nodejs": "workspace:*",
-    "@types/node": "18.13.0",
+    "@types/node": "20.19.33",
     "eslint": "8.54.0",
     "eslint-config-prettier": "9.0.0",
     "eslint-plugin-es": "4.1.0",

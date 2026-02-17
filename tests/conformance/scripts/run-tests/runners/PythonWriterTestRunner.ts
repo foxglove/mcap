@@ -17,7 +17,7 @@ export default class PythonWriterTestRunner extends WriteTestRunner {
       },
     );
 
-    if (stderr instanceof Buffer) {
+    if (Buffer.isBuffer(stderr)) {
       const errText = new TextDecoder().decode(stderr);
       if (errText.length > 0) {
         console.error(errText);

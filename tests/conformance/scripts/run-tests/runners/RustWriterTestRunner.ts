@@ -11,11 +11,11 @@ export default class RustWriterTestRunner extends WriteTestRunner {
 
   async runWriteTest(filePath: string): Promise<Uint8Array> {
     const { stdout, stderr } = await promisify(exec)(`./conformance_writer ${filePath}`, {
-      cwd: join(__dirname, "../../../../../rust/target/debug/examples"),
+      cwd: join(import.meta.dirname, "../../../../../rust/target/debug/examples"),
       encoding: undefined,
     });
 
-    if (stderr instanceof Buffer) {
+    if (Buffer.isBuffer(stderr)) {
       const errText = new TextDecoder().decode(stderr);
       if (errText.length > 0) {
         console.error(errText);

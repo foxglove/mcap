@@ -12,7 +12,7 @@ export default class GoIndexedReaderTestRunner extends IndexedReadTestRunner {
 
   async runReadTest(filePath: string): Promise<IndexedReadTestResult> {
     const { stdout } = await promisify(exec)(`./bin/test-read-conformance ${filePath} indexed`, {
-      cwd: join(__dirname, "../../../../../go/conformance"),
+      cwd: join(import.meta.dirname, "../../../../../go/conformance"),
     });
     return JSON.parse(stdout) as IndexedReadTestResult;
   }

@@ -12,7 +12,7 @@ export default class RustIndexedReaderTestRunner extends IndexedReadTestRunner {
 
   async runReadTest(filePath: string): Promise<IndexedReadTestResult> {
     const { stdout } = await promisify(exec)(`./conformance_indexed_reader ${filePath}`, {
-      cwd: join(__dirname, "../../../../../rust/target/debug/examples"),
+      cwd: join(import.meta.dirname, "../../../../../rust/target/debug/examples"),
     });
     return JSON.parse(stdout) as IndexedReadTestResult;
   }
