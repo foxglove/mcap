@@ -1,20 +1,21 @@
-import { Log, LogLevel as FoxLogLevel } from "@foxglove/schemas";
+import { LogLevel as FoxLogLevel } from "@foxglove/schemas";
+import type { Log } from "@foxglove/schemas";
 import {
   ULog,
-  MessageDefinition,
+  type MessageDefinition,
   MessageType,
   LogLevel,
-  FieldStruct,
-  FieldPrimitive,
-  FieldArray,
+  type FieldArray,
+  type FieldPrimitive,
+  type FieldStruct,
 } from "@foxglove/ulog";
 import { McapWriter } from "@mcap/core";
-import { Metadata } from "@mcap/core/src/types";
+import type { Metadata } from "@mcap/core";
 import { protobufToDescriptor } from "@mcap/support";
-import protobufjs from "protobufjs";
-import descriptor from "protobufjs/ext/descriptor";
+import * as protobufjs from "protobufjs";
+import { FileDescriptorSet } from "protobufjs/ext/descriptor/index.js";
 
-import { version } from "../package.json";
+import packageJson from "../package.json" with { type: "json" };
 
 function ulogLevelToFoxLogLevel(level: LogLevel): FoxLogLevel {
   switch (level) {
@@ -199,7 +200,7 @@ export async function convertULogFileToMCAP(
 
   await outputFile.start({
     profile: "",
-    library: `ulog2mcap ${version}`,
+    library: `ulog2mcap ${packageJson.version}`,
   });
   if (options?.metadata != undefined) {
     for (const metadataItem of options.metadata) {
@@ -247,7 +248,7 @@ export async function convertULogFileToMCAP(
       schemaId = await outputFile.registerSchema({
         name: subscription.name,
         encoding: "protobuf",
-        data: descriptor.FileDescriptorSet.encode(descriptorSet).finish(),
+        data: FileDescriptorSet.encode(descriptorSet).finish(),
       });
       const msgType = minimalRoot.lookupType(subscription.name);
       schemaNameToSchemaId.set(subscription.name, schemaId);
@@ -270,7 +271,7 @@ export async function convertULogFileToMCAP(
   const logSchema = await outputFile.registerSchema({
     name: "foxglove.Log",
     encoding: "protobuf",
-    data: descriptor.FileDescriptorSet.encode(protobufToDescriptor(root)).finish(),
+    data: FileDescriptorSet.encode(protobufToDescriptor(root)).finish(),
   });
   const logChannel = await outputFile.registerChannel({
     schemaId: logSchema,
