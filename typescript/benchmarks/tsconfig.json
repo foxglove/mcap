@@ -1,5 +1,5 @@
 {
-  "extends": "@foxglove/tsconfig/base",
+  "extends": "@foxglove/tsconfig/node.json",
   "include": ["./**/*"],
   "compilerOptions": {
     "noEmit": true,
@@ -14,6 +14,7 @@
     // required for tsconfig-paths https://github.com/dividab/tsconfig-paths/issues/143
     "baseUrl": "."
   },
+  "references": [{ "path": "../core" }],
   "ts-node": {
     "require": ["tsconfig-paths/register"]
   }

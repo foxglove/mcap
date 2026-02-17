@@ -15,11 +15,11 @@
   "homepage": "https://foxglove.dev/",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -b",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
-    "bench": "TS_NODE_TRANSPILE_ONLY=true TS_NODE_FILES=true TS_NODE_PROJECT=tsconfig.cjs.json node --huge-max-old-generation-size --expose-gc -r 'ts-node/register' index.ts",
-    "bench:debug": "TS_NODE_FILES=true TS_NODE_PROJECT=tsconfig.cjs.json node --huge-max-old-generation-size --inspect-brk --expose-gc -r 'ts-node/register' index.ts"
+    "bench": "TS_NODE_TRANSPILE_ONLY=true TS_NODE_FILES=true TS_NODE_PROJECT=tsconfig.json node --huge-max-old-generation-size --expose-gc -r 'ts-node/register' index.ts",
+    "bench:debug": "TS_NODE_FILES=true TS_NODE_PROJECT=tsconfig.json node --huge-max-old-generation-size --inspect-brk --expose-gc -r 'ts-node/register' index.ts"
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",
