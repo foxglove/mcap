@@ -4,13 +4,7 @@
   "compilerOptions": {
     "rootDir": "../..",
     "noEmit": true,
-    "lib": ["es2020", "dom"],
-
-    // required for tsconfig-paths https://github.com/dividab/tsconfig-paths/issues/143
-    "baseUrl": "."
+    "lib": ["es2020", "dom"]
   },
-  "references": [{ "path": "../../typescript/core" }, { "path": "../../typescript/nodejs" }],
-  "ts-node": {
-    "require": ["tsconfig-paths/register"]
-  }
+  "references": [{ "path": "../../typescript/core" }, { "path": "../../typescript/nodejs" }]
 }
