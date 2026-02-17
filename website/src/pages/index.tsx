@@ -10,8 +10,9 @@ import * as icons from "../icons/index.ts";
 
 // Async import is needed to avoid errors from WASM loading during Docusaurus build.
 const McapRecordingDemo = React.lazy(async () => ({
-  default: (await import("../components/McapRecordingDemo/McapRecordingDemo.tsx"))
-    .McapRecordingDemo,
+  default: (
+    await import("../components/McapRecordingDemo/McapRecordingDemo.tsx")
+  ).McapRecordingDemo,
 }));
 
 type FeatureItem = {

@@ -1,12 +1,7 @@
 import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import { LazyMessageReader as ROS1LazyMessageReader } from "@foxglove/rosmsg-serialization";
 import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
-import {
-  hasMcapPrefix,
-  MCAP_MAGIC,
-  McapIndexedReader,
-  McapStreamReader,
-} from "@mcap/core";
+import { hasMcapPrefix, MCAP_MAGIC, McapIndexedReader, McapStreamReader } from "@mcap/core";
 import type { Channel, TypedMcapRecord, TypedMcapRecords } from "@mcap/core";
 import { FileHandleReadable } from "@mcap/nodejs";
 import { loadDecompressHandlers } from "@mcap/support";

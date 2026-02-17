@@ -11,11 +11,7 @@
     // required for tsconfig-paths https://github.com/dividab/tsconfig-paths/issues/143
     "baseUrl": "."
   },
-  "references": [
-    { "path": "../../core" },
-    { "path": "../../support" },
-    { "path": "../../nodejs" }
-  ],
+  "references": [{ "path": "../../core" }, { "path": "../../support" }, { "path": "../../nodejs" }],
   "ts-node": {
     "require": ["tsconfig-paths/register"]
   }

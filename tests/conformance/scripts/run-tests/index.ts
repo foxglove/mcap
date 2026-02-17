@@ -143,7 +143,9 @@ async function runWriterTest(
       hadError = true;
       continue;
     }
-    const expectedParts = splitMcapRecords(new Uint8Array(expectedOutput)).map(spaceHexString).join("\n");
+    const expectedParts = splitMcapRecords(new Uint8Array(expectedOutput))
+      .map(spaceHexString)
+      .join("\n");
     const outputParts = splitMcapRecords(output).map(spaceHexString).join("\n");
     if (!expectedOutput.equals(output)) {
       console.error(colors.red("fail       "), path.basename(testCasePath));

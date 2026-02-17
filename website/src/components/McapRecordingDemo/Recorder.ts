@@ -13,7 +13,10 @@ import { McapWriter } from "@mcap/core";
 import { EventEmitter } from "eventemitter3";
 import Queue from "promise-queue";
 
-import { ProtobufChannelInfo, addProtobufChannel } from "./addProtobufChannel.ts";
+import {
+  ProtobufChannelInfo,
+  addProtobufChannel,
+} from "./addProtobufChannel.ts";
 import { CompressedVideoFrame } from "./videoCapture.ts";
 
 export type ProtobufObject<Message> = {
@@ -86,7 +89,10 @@ export class Recorder extends EventEmitter<RecorderEvents> {
       this.#writer = new McapWriter({
         chunkSize: 5 * 1024,
         compressChunk(data) {
-          return { compression: "zstd", compressedData: new Uint8Array(zstd.compress(data)) };
+          return {
+            compression: "zstd",
+            compressedData: new Uint8Array(zstd.compress(data)),
+          };
         },
         writable: {
           position: () => this.bytesWritten,
