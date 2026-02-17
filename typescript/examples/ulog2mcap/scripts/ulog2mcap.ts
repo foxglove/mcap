@@ -4,9 +4,9 @@ import { McapWriter } from "@mcap/core";
 import { Metadata } from "@mcap/core/src/types";
 import { FileHandleWritable } from "@mcap/nodejs";
 import { program } from "commander";
-import { open } from "fs/promises";
+import { open } from "node:fs/promises";
 
-import { convertULogFileToMCAP } from "./convertULogFileToMCAP";
+import { convertULogFileToMCAP } from "./convertULogFileToMCAP.ts";
 
 type ConvertOptions = {
   metadata?: string[];

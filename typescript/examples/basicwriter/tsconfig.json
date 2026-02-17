@@ -1,5 +1,5 @@
 {
-  "extends": "@foxglove/tsconfig/base",
+  "extends": "@foxglove/tsconfig/node.json",
   "include": ["./**/*"],
   "compilerOptions": {
     "noEmit": true,
@@ -7,15 +7,14 @@
     "outDir": "./dist/esm",
     "target": "es2022",
     "lib": ["es2022", "dom"],
-    "paths": {
-      "@mcap/core": ["../../core/src"],
-      "@mcap/support": ["../../support/src"],
-      "@mcap/nodejs": ["../../nodejs/src"]
-    },
 
     // required for tsconfig-paths https://github.com/dividab/tsconfig-paths/issues/143
     "baseUrl": "."
   },
+  "references": [
+    { "path": "../../core" },
+    { "path": "../../nodejs" }
+  ],
   "ts-node": {
     "require": ["tsconfig-paths/register"]
   }

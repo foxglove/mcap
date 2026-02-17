@@ -14,13 +14,13 @@ import {
   Quaternion as FbQuaternion,
   Time as FbTime,
   Vector3 as FbVector3,
-} from "../../flatbuffer/output/FrameTransform_generated";
+} from "../../flatbuffer/output/FrameTransform_generated.ts";
 import {
   PackedElementField as FbPackedElementField,
   Pose as FbPose,
   Grid as FbGrid,
   Vector2 as FbVector2,
-} from "../../flatbuffer/output/Grid_generated";
+} from "../../flatbuffer/output/Grid_generated.ts";
 
 export function buildQuaternion(builder: Builder, quatJson: Quaternion): number {
   FbQuaternion.startQuaternion(builder);

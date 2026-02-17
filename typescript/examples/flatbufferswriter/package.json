@@ -15,10 +15,10 @@
   "homepage": "https://foxglove.dev/",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -b",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
-    "main": "yarn typescript:build && ts-node --files --project tsconfig.cjs.json scripts/main.ts"
+    "main": "yarn typescript:build && ts-node --files --project tsconfig.json scripts/main.ts"
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",

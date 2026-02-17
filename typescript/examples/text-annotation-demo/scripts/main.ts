@@ -6,9 +6,9 @@ import {
 import { Time } from "@foxglove/schemas/schemas/typescript/Time";
 import { McapWriter } from "@mcap/core";
 import { FileHandleWritable } from "@mcap/nodejs";
-import { open } from "fs/promises";
+import { open } from "node:fs/promises";
 
-import Scene from "./Scene";
+import Scene from "./Scene.ts";
 
 const framesPerSecond = 30;
 const lengthSeconds = 10; // seconds

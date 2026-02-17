@@ -15,10 +15,10 @@
   "homepage": "https://foxglove.dev/",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -b",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
-    "validate": "yarn typescript:build && ts-node --files --project tsconfig.cjs.json scripts/validate.ts"
+    "validate": "yarn typescript:build && ts-node --files --project tsconfig.json scripts/validate.ts"
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",
@@ -27,7 +27,7 @@
     "@foxglove/rosmsg-serialization": "1.5.3",
     "@foxglove/rosmsg2-serialization": "1.1.1",
     "@foxglove/tsconfig": "3.2.0",
-    "@foxglove/wasm-bz2": "0.1.1",
+    "@foxglove/wasm-bz2": "0.2.0",
     "@foxglove/wasm-lz4": "1.0.2",
     "@foxglove/wasm-zstd": "1.0.1",
     "@mcap/core": "workspace:*",

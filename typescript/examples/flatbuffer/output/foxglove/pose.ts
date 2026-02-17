@@ -2,8 +2,8 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { Quaternion } from '../foxglove/quaternion';
-import { Vector3 } from '../foxglove/vector3';
+import { Quaternion } from '../foxglove/quaternion.ts';
+import { Vector3 } from '../foxglove/vector3.ts';
 
 
 /**

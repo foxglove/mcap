@@ -2,10 +2,10 @@ import { Grid, NumericType } from "@foxglove/schemas";
 import { McapWriter } from "@mcap/core";
 import { FileHandleWritable } from "@mcap/nodejs";
 import { Builder } from "flatbuffers";
-import fs from "fs";
-import { open } from "fs/promises";
+import fs from "node:fs";
+import { open } from "node:fs/promises";
 
-import { buildGridMessage, buildTfMessage } from "./flatbufferUtils";
+import { buildGridMessage, buildTfMessage } from "./flatbufferUtils.ts";
 
 const QUAT_IDENTITY = { x: 0, y: 0, z: 0, w: 1 };
 

@@ -12,7 +12,7 @@ import { McapWriter, McapTypes } from "@mcap/core";
 import { FileHandleWritable } from "@mcap/nodejs";
 import { ProtobufDescriptor, protobufToDescriptor } from "@mcap/support";
 import { program } from "commander";
-import { open } from "fs/promises";
+import { open } from "node:fs/promises";
 import protobufjs from "protobufjs";
 import descriptor from "protobufjs/ext/descriptor";
 

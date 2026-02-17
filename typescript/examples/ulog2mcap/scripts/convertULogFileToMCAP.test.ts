@@ -14,7 +14,7 @@ import { Metadata } from "@mcap/core/src/types";
 import { protobufFromBinaryDescriptor } from "@mcap/support";
 import Long from "long";
 
-import { convertULogFileToMCAP } from "./convertULogFileToMCAP";
+import { convertULogFileToMCAP } from "./convertULogFileToMCAP.ts";
 
 type MockMessage = ParsedMessage & { topic: string; multiId?: number };
 

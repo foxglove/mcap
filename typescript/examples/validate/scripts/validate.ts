@@ -11,10 +11,10 @@ import {
 import { FileHandleReadable } from "@mcap/nodejs";
 import { loadDecompressHandlers } from "@mcap/support";
 import { program } from "commander";
-import { createReadStream } from "fs";
-import fs from "fs/promises";
+import { createReadStream } from "node:fs";
+import fs from "node:fs/promises";
 import { isEqual } from "lodash";
-import { performance } from "perf_hooks";
+import { performance } from "node:perf_hooks";
 import protobufjs from "protobufjs";
 import { FileDescriptorSet } from "protobufjs/ext/descriptor";
 

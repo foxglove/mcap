@@ -15,11 +15,11 @@
   "homepage": "https://foxglove.dev/",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -b",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
     "typescript:test": "yarn jest --config jest.config.json",
-    "ulog2mcap": "yarn typescript:build && ts-node --files --project tsconfig.cjs.json scripts/ulog2mcap.ts"
+    "ulog2mcap": "yarn typescript:build && ts-node --files --project tsconfig.json scripts/ulog2mcap.ts"
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",

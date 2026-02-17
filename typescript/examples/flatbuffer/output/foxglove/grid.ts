@@ -2,10 +2,10 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { PackedElementField } from '../foxglove/packed-element-field';
-import { Pose } from '../foxglove/pose';
-import { Time } from '../foxglove/time';
-import { Vector2 } from '../foxglove/vector2';
+import { PackedElementField } from '../foxglove/packed-element-field.ts';
+import { Pose } from '../foxglove/pose.ts';
+import { Time } from '../foxglove/time.ts';
+import { Vector2 } from '../foxglove/vector2.ts';
 
 
 /**
