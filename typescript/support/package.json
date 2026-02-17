@@ -58,7 +58,7 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
-    "@foxglove/wasm-bz2": "^0.2.0",
+    "@foxglove/wasm-bz2": "^0.3.0",
     "@foxglove/wasm-lz4": "^1.0.2",
     "@foxglove/wasm-zstd": "^1.0.1",
     "protobufjs": "^7.2.5",

@@ -3042,7 +3042,7 @@ __metadata:
     "@foxglove/rosmsg-serialization": "npm:1.5.3"
     "@foxglove/rosmsg2-serialization": "npm:1.1.1"
     "@foxglove/tsconfig": "npm:3.2.0"
-    "@foxglove/wasm-bz2": "npm:0.2.0"
+    "@foxglove/wasm-bz2": "npm:0.3.0"
     "@foxglove/wasm-lz4": "npm:1.0.2"
     "@foxglove/wasm-zstd": "npm:1.0.1"
     "@mcap/core": "workspace:*"
@@ -3169,7 +3169,7 @@ __metadata:
     "@foxglove/rosmsg-serialization": "npm:1.5.3"
     "@foxglove/rosmsg2-serialization": "npm:1.1.1"
     "@foxglove/tsconfig": "npm:3.2.0"
-    "@foxglove/wasm-bz2": "npm:0.2.0"
+    "@foxglove/wasm-bz2": "npm:0.3.0"
     "@foxglove/wasm-lz4": "npm:1.0.2"
     "@foxglove/wasm-zstd": "npm:1.0.1"
     "@mcap/core": "workspace:*"
@@ -3297,12 +3297,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/wasm-bz2@npm:0.2.0, @foxglove/wasm-bz2@npm:^0.2.0":
-  version: 0.2.0
-  resolution: "@foxglove/wasm-bz2@npm:0.2.0"
+"@foxglove/wasm-bz2@npm:0.3.0, @foxglove/wasm-bz2@npm:^0.3.0":
+  version: 0.3.0
+  resolution: "@foxglove/wasm-bz2@npm:0.3.0"
   dependencies:
     tslib: "npm:^2"
-  checksum: 10c0/e445c2c8e9514ced6f4ef737a6ed02c559d7433b665236d8e08316843648599881db7df640805ff8cece6a6e9aa0715475f2353e889b04f75c55e01c8e29b400
+  checksum: 10c0/cd47184aeec8da1fb613a30f162f2d26a0650d4f73a25ce739227094d25da3518400d9a4b6ee0ce474be622abfa4fe85403985c44f059db72a422ea0baa38f0a
   languageName: node
   linkType: hard
 
@@ -4045,7 +4045,7 @@ __metadata:
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
     "@foxglove/tsconfig": "npm:3.2.0"
-    "@foxglove/wasm-bz2": "npm:^0.2.0"
+    "@foxglove/wasm-bz2": "npm:^0.3.0"
     "@foxglove/wasm-lz4": "npm:^1.0.2"
     "@foxglove/wasm-zstd": "npm:^1.0.1"
     "@mcap/core": "workspace:*"

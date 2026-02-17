@@ -196,7 +196,7 @@ function convertTypedArrays(msg: Record<string, unknown>): Record<string, unknow
 async function convert(filePath: string, options: { indexed: boolean }) {
   await decompressLZ4.isLoaded;
   await zstd.isLoaded;
-  const bzip2 = await Bzip2.default.init();
+  const bzip2 = await Bzip2.init();
 
   const bag = new Bag(new FileReader(filePath));
   await bag.open();

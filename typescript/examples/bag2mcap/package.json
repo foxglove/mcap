@@ -27,7 +27,7 @@
     "@foxglove/rosmsg-serialization": "1.5.3",
     "@foxglove/rosmsg2-serialization": "1.1.1",
     "@foxglove/tsconfig": "3.2.0",
-    "@foxglove/wasm-bz2": "0.2.0",
+    "@foxglove/wasm-bz2": "0.3.0",
     "@foxglove/wasm-lz4": "1.0.2",
     "@foxglove/wasm-zstd": "1.0.1",
     "@mcap/core": "workspace:*",

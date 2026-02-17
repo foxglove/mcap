@@ -1,7 +1,20 @@
 import type { DecompressHandlers } from "@mcap/core";
 
-type Bzip2Module = (typeof import("@foxglove/wasm-bz2"))["default"];
+type Bzip2Module = typeof import("@foxglove/wasm-bz2");
 type Lz4Module = (typeof import("@foxglove/wasm-lz4"))["default"];
+type ZstdModule = typeof import("@foxglove/wasm-zstd");
+
+/**
+ * Unwraps default exports from dynamic imports so the same code works
+ * with ESM modules and CommonJS modules wrapped by Node's ESM interop.
+ */
+function unwrapDefaultExports<T>(mod: unknown): T {
+  if (mod != undefined && typeof mod === "object" && "default" in mod && mod.default != undefined) {
+    return mod.default as T;
+  }
+
+  return mod as T;
+}
 
 let handlersPromise: Promise<DecompressHandlers> | undefined;
 export async function loadDecompressHandlers(): Promise<DecompressHandlers> {
@@ -10,30 +23,32 @@ export async function loadDecompressHandlers(): Promise<DecompressHandlers> {
 
 // eslint-disable-next-line no-underscore-dangle
 async function _loadDecompressHandlers(): Promise<DecompressHandlers> {
-  const [decompressZstd, decompressLZ4, bzip2] = await Promise.all([
-    // Conditional default imports are required to support both ESM and CJS
-    import("@foxglove/wasm-zstd").then(async (mod) => {
-      await mod.isLoaded;
-      return mod.decompress;
+  const [decompressBzip2, decompressLZ4, decompressZstd] = await Promise.all([
+    import("@foxglove/wasm-bz2").then(async (mod) => {
+      const bzip2 = unwrapDefaultExports<Bzip2Module>(mod);
+      const instance = await bzip2.init();
+      return instance.decompress.bind(instance);
     }),
+
     import("@foxglove/wasm-lz4").then(async (mod) => {
-      const lz4 = ((mod as { default?: unknown }).default ?? mod) as Lz4Module;
+      const lz4 = unwrapDefaultExports<Lz4Module>(mod);
       await lz4.isLoaded;
       return lz4;
     }),
 
-    import("@foxglove/wasm-bz2").then(async (mod) => {
-      const bz2 = ((mod.default as { default?: unknown }).default ?? mod.default) as Bzip2Module;
-      return await bz2.init();
+    import("@foxglove/wasm-zstd").then(async (mod) => {
+      const zstd = unwrapDefaultExports<ZstdModule>(mod);
+      await zstd.isLoaded;
+      return zstd.decompress;
     }),
   ]);
 
   return {
+    bz2: (buffer, decompressedSize) =>
+      decompressBzip2(buffer, Number(decompressedSize), { small: false }),
+
     lz4: (buffer, decompressedSize) =>
       new Uint8Array(decompressLZ4(buffer, Number(decompressedSize))),
-
-    bz2: (buffer, decompressedSize) =>
-      bzip2.decompress(buffer, Number(decompressedSize), { small: false }),
 
     zstd: (buffer, decompressedSize) =>
       new Uint8Array(decompressZstd(buffer, Number(decompressedSize))),
