@@ -19,7 +19,7 @@
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
     "typescript:test": "yarn jest --config jest.config.json",
-    "ulog2mcap": "yarn typescript:build && ts-node --files --project tsconfig.json scripts/ulog2mcap.ts"
+    "ulog2mcap": "yarn typescript:build && tsx scripts/ulog2mcap.ts"
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",
@@ -45,7 +45,7 @@
     "prettier": "3.1.0",
     "protobufjs": "^7.2.5",
     "ts-jest": "29.4.6",
-    "ts-node": "10.9.1",
+    "tsx": "4.21.0",
     "typescript": "5.9.3"
   },
   "dependencies": {

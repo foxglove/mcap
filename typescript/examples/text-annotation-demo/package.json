@@ -18,7 +18,7 @@
     "typecheck": "tsc -b",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
-    "main": "ts-node --files --project tsconfig.json scripts/main.ts"
+    "main": "tsx scripts/main.ts"
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",
@@ -32,7 +32,7 @@
     "eslint-plugin-import": "2.29.0",
     "eslint-plugin-prettier": "5.0.1",
     "prettier": "3.1.0",
-    "ts-node": "10.9.1",
+    "tsx": "4.21.0",
     "typescript": "5.9.3"
   },
   "dependencies": {

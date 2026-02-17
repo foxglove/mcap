@@ -7,8 +7,8 @@
     "build": "tsc -b",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
-    "generate-inputs": "ts-node --files --project tsconfig.json scripts/generate-inputs",
-    "run-tests": "tsc -b && ts-node --files --project tsconfig.json scripts/run-tests"
+    "generate-inputs": "tsx scripts/generate-inputs.ts",
+    "run-tests": "tsc -b && tsx scripts/run-tests/index.ts"
   },
   "devDependencies": {
     "@foxglove/crc": "^0.0.3",
@@ -38,7 +38,7 @@
     "kaitai-struct-compiler": "0.10.0",
     "lodash": "4.17.21",
     "prettier": "3.1.0",
-    "ts-node": "10.9.1",
+    "tsx": "4.21.0",
     "typescript": "5.9.3"
   }
 }
